@@ -8,6 +8,17 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dry-run": "pnpm run build && node dist/cli/dry-run.js",
+    "run": "pnpm run build && node dist/cli/run.js",
+    "reconcile": "pnpm run build && node dist/cli/reconcile.js"
+  },
+  "dependencies": {
+    "@datum/basket": "workspace:*",
+    "@datum/sdk": "workspace:*",
+    "decimal.js": "^10.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0"
   }
 }

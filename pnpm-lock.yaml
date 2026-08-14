@@ -42,7 +42,21 @@ importers:
         specifier: ^26.2.0
         version: 26.2.0
 
-  packages/harness: {}
+  packages/harness:
+    dependencies:
+      '@datum/basket':
+        specifier: workspace:*
+        version: link:../basket
+      '@datum/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      decimal.js:
+        specifier: ^10.6.0
+        version: 10.6.0
+    devDependencies:
+      '@types/node':
+        specifier: ^26.2.0
+        version: 26.2.0
 
   packages/mcp-server: {}
 
