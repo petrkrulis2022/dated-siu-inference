@@ -40,7 +40,11 @@
             "minLength": 1
           },
           "price_in_usd_per_1m": { "$ref": "#/definitions/decimalString" },
-          "price_out_usd_per_1m": { "$ref": "#/definitions/decimalString" }
+          "price_out_usd_per_1m": { "$ref": "#/definitions/decimalString" },
+          "subsidised": {
+            "type": "boolean",
+            "description": "true when this price is observed below the computed hardware floor — build1-spec.md §5's subsidised-supply policy. Included in the exchange-rate table but excluded from the headline reference set."
+          }
         },
         "required": ["model_id", "price_in_usd_per_1m", "price_out_usd_per_1m"]
       }

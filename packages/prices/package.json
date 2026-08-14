@@ -8,6 +8,17 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "seed:registry": "pnpm run build && node dist/cli/seed-registry.js",
+    "fetch:prices": "pnpm run build && node dist/cli/fetch-prices.js",
+    "fetch:gpu-rates": "pnpm run build && node dist/cli/fetch-gpu-rates.js",
+    "prices:diff": "pnpm run build && node dist/cli/diff.js"
+  },
+  "dependencies": {
+    "@datum/sdk": "workspace:*",
+    "decimal.js": "^10.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0"
   }
 }

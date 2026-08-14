@@ -1,0 +1,62 @@
+[
+  {
+    "id": "deepseek-v3.2",
+    "provider": "openrouter",
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "model_string": "deepseek/deepseek-v3.2",
+    "tier": "open-weight-hosted",
+    "open_weights": true,
+    "host": "deepinfra",
+    "notes": "Catalog breadth: distinct model family from the Llama provider-spread trio."
+  },
+  {
+    "id": "llama-3.3-70b-cloudflare",
+    "provider": "openrouter",
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "model_string": "meta-llama/llama-3.3-70b-instruct",
+    "tier": "open-weight-hosted",
+    "open_weights": true,
+    "host": "cloudflare",
+    "notes": "Provider-spread demo: same weights as llama-3.3-70b-deepinfra/novita."
+  },
+  {
+    "id": "llama-3.3-70b-deepinfra",
+    "provider": "openrouter",
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "model_string": "meta-llama/llama-3.3-70b-instruct",
+    "tier": "open-weight-hosted",
+    "open_weights": true,
+    "host": "deepinfra",
+    "notes": "Provider-spread demo: same weights as llama-3.3-70b-novita/cloudflare."
+  },
+  {
+    "id": "llama-3.3-70b-novita",
+    "provider": "openrouter",
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "model_string": "meta-llama/llama-3.3-70b-instruct",
+    "tier": "open-weight-hosted",
+    "open_weights": true,
+    "host": "novita",
+    "notes": "Provider-spread demo: same weights as llama-3.3-70b-deepinfra/cloudflare."
+  },
+  {
+    "id": "mistral-small-3.2-24b-instruct",
+    "provider": "openrouter",
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "model_string": "mistralai/mistral-small-3.2-24b-instruct",
+    "tier": "open-weight-hosted",
+    "open_weights": true,
+    "host": "parasail",
+    "notes": "Cheapest-tier contrast point in the registry."
+  },
+  {
+    "id": "qwen-2.5-72b-instruct",
+    "provider": "openrouter",
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "model_string": "qwen/qwen-2.5-72b-instruct",
+    "tier": "open-weight-hosted",
+    "open_weights": true,
+    "host": "novita",
+    "notes": "Catalog breadth: distinct model family from the Llama provider-spread trio."
+  }
+]

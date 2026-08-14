@@ -1,0 +1,19 @@
+{
+  "snapshot_id": "2026-08-14T12:17:48.834Z",
+  "timestamp": "2026-08-14T12:17:48.834Z",
+  "reference_gpu": "NVIDIA H100 SXM 80GB",
+  "entries": [
+    {
+      "source": "akash",
+      "gpu_model": "nvidia h100 80Gi SXM5",
+      "rate_usd_per_hour": "2.71",
+      "sample_size": 4
+    },
+    {
+      "source": "vastai",
+      "gpu_model": "H100 SXM",
+      "rate_usd_per_hour": "1.602222222222222",
+      "sample_size": 20
+    }
+  ]
+}

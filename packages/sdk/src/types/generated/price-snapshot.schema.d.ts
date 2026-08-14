@@ -34,11 +34,19 @@ export interface PriceSnapshot {
       model_id: string;
       price_in_usd_per_1m: DecimalString;
       price_out_usd_per_1m: DecimalString;
+      /**
+       * true when this price is observed below the computed hardware floor — build1-spec.md §5's subsidised-supply policy. Included in the exchange-rate table but excluded from the headline reference set.
+       */
+      subsidised?: boolean;
     },
     ...{
       model_id: string;
       price_in_usd_per_1m: DecimalString;
       price_out_usd_per_1m: DecimalString;
+      /**
+       * true when this price is observed below the computed hardware floor — build1-spec.md §5's subsidised-supply policy. Included in the exchange-rate table but excluded from the headline reference set.
+       */
+      subsidised?: boolean;
     }[]
   ];
 }
