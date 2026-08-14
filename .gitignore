@@ -1,0 +1,18 @@
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+
+.env
+.env.*
+
+# private key material — never commit signing/wallet keys
+*.pem
+*.key
+*private-key*
+
+# data/prints/ and data/runs/ are intentionally NOT excluded here —
+# they are git-tracked on purpose. Publication is the product.
+
+# Windows/WSL "mark of the web" sidecar files from downloaded docs
+*:Zone.Identifier
