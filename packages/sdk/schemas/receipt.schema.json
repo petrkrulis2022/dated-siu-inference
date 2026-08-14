@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "receipt.schema.json",
+  "title": "Receipt",
+  "description": "verify_receipt's signed attestation: quoted vs paid vs matched — build1-spec.md §9.",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "decimalString": {
+      "type": "string",
+      "pattern": "^-?[0-9]+(\\.[0-9]+)?$",
+      "description": "A decimal number encoded as a string. Never a JSON number — no floats in money maths."
+    }
+  },
+  "properties": {
+    "quote_hash": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{64}$",
+      "description": "bytes32 — matches DatumEscrow.openAndFund's quoteHash param, build1-spec.md §10."
+    },
+    "chain": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tx_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "amount_quoted_usd": { "$ref": "#/definitions/decimalString" },
+    "amount_paid_usd": { "$ref": "#/definitions/decimalString" },
+    "matched": {
+      "type": "boolean"
+    },
+    "print_ref": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "quote_hash",
+    "chain",
+    "tx_ref",
+    "amount_quoted_usd",
+    "amount_paid_usd",
+    "matched",
+    "print_ref"
+  ]
+}

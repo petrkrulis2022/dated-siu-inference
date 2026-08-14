@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "datum-quote.schema.json",
+  "title": "DatumQuote",
+  "description": "The datum-quote extension riding inside an x402/MPP payment-required response — build1-spec.md §8.",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "decimalString": {
+      "type": "string",
+      "pattern": "^-?[0-9]+(\\.[0-9]+)?$",
+      "description": "A decimal number encoded as a string. Never a JSON number — no floats in money maths."
+    },
+    "hexString": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]+$"
+    }
+  },
+  "properties": {
+    "siu": { "$ref": "#/definitions/decimalString" },
+    "pattern": {
+      "type": "string",
+      "enum": ["estimate", "cap", "fixed"]
+    },
+    "siu_max": { "$ref": "#/definitions/decimalString" },
+    "model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rate_usd_per_siu": { "$ref": "#/definitions/decimalString" },
+    "amount_usd_max": { "$ref": "#/definitions/decimalString" },
+    "index_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "print_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "print_hash": { "$ref": "#/definitions/hexString" },
+    "seller_id": {
+      "type": "string",
+      "pattern": "^erc8004:.+$"
+    },
+    "sig": { "$ref": "#/definitions/hexString" }
+  },
+  "required": [
+    "siu",
+    "pattern",
+    "model",
+    "rate_usd_per_siu",
+    "amount_usd_max",
+    "index_version",
+    "print_id",
+    "print_hash",
+    "seller_id",
+    "sig"
+  ],
+  "if": {
+    "properties": { "pattern": { "enum": ["estimate", "cap"] } }
+  },
+  "then": {
+    "required": ["siu_max"]
+  }
+}

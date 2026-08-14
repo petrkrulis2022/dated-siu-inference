@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "run-record.schema.json",
+  "title": "RunRecord",
+  "description": "One executed basket-task attempt — build1-spec.md §3, §4. Feeds print cost computation; never uses list prices.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_class": {
+      "type": "string",
+      "enum": ["T1", "T2", "T3"]
+    },
+    "instance_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "seed": {
+      "type": "integer"
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "input": { "type": "integer", "minimum": 0 },
+        "output": { "type": "integer", "minimum": 0 },
+        "cached_input": { "type": "integer", "minimum": 0 },
+        "reasoning": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["input", "output", "cached_input", "reasoning"]
+    },
+    "latency_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "gate_passed": {
+      "type": "boolean"
+    },
+    "raw_response_ref": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Pointer to the stored raw provider response, not the payload itself."
+    },
+    "deviations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Every deviation a provider forced from standard execution settings — build1-spec.md §3. Empty if none."
+    }
+  },
+  "required": [
+    "run_id",
+    "model_id",
+    "task_class",
+    "instance_id",
+    "seed",
+    "attempt",
+    "usage",
+    "latency_ms",
+    "gate_passed",
+    "raw_response_ref",
+    "deviations"
+  ]
+}

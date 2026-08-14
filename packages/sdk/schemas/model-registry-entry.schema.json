@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "model-registry-entry.schema.json",
+  "title": "ModelRegistryEntry",
+  "description": "One entry in data/registry/models.json — build1-spec.md §4.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Registry id, referenced by run records, exchange-rate tables, and quotes."
+    },
+    "provider": {
+      "type": "string",
+      "minLength": 1
+    },
+    "endpoint": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model_string": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tier": {
+      "type": "string",
+      "enum": ["frontier", "mid", "open-weight-hosted"],
+      "description": "Cost tier per build1-spec.md §12."
+    },
+    "open_weights": {
+      "type": "boolean"
+    },
+    "host": {
+      "type": "string",
+      "minLength": 1
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": ["id", "provider", "endpoint", "model_string", "tier", "open_weights", "host"]
+}
