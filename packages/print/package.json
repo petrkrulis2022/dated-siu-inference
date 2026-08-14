@@ -8,6 +8,19 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "compute": "pnpm run build && node dist/cli/compute.js",
+    "verify": "pnpm run build && node dist/cli/verify.js"
+  },
+  "dependencies": {
+    "@datum/basket": "workspace:*",
+    "@datum/sdk": "workspace:*",
+    "@noble/curves": "^2.3.0",
+    "@noble/hashes": "^2.3.0",
+    "canonicalize": "^4.0.0",
+    "decimal.js": "^10.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0"
   }
 }

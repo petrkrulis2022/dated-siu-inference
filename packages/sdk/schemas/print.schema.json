@@ -38,9 +38,16 @@
         "additionalProperties": false,
         "properties": {
           "model_id": { "type": "string", "minLength": 1 },
-          "cost_usd": { "$ref": "#/definitions/decimalString" }
+          "cost_usd": {
+            "$ref": "#/definitions/decimalString",
+            "description": "Absent when any class was undefined — build1-spec.md §6.2: that model is excluded from the reference set and appears in the table with a gap."
+          },
+          "excluded_reason": {
+            "type": "string",
+            "description": "Why cost_usd is absent, e.g. which class failed its quality gate."
+          }
         },
-        "required": ["model_id", "cost_usd"]
+        "required": ["model_id"]
       }
     },
     "weights": {
@@ -78,22 +85,33 @@
         "properties": {
           "model_id": { "type": "string", "minLength": 1 },
           "usd_per_siu": { "$ref": "#/definitions/decimalString" },
-          "spread_to_index": { "$ref": "#/definitions/decimalString" },
-          "siu_per_usd": { "$ref": "#/definitions/decimalString" }
+          "spread_to_index": {
+            "$ref": "#/definitions/decimalString",
+            "description": "basket ÷ print − 1, as a ratio (0.26 means +26%)."
+          },
+          "siu_per_usd": { "$ref": "#/definitions/decimalString" },
+          "excluded_reason": {
+            "type": "string",
+            "description": "Present instead of the rate fields when the model has no defined basket cost — the §6.2 gap row."
+          }
         },
-        "required": ["model_id", "usd_per_siu", "spread_to_index", "siu_per_usd"]
+        "required": ["model_id"]
       }
     },
     "floor": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Hardware cost of producing one basket — build1-spec.md §5. Optional: a print may be published before a measured floor exists, in which case the floor and market_spread columns are absent rather than filled with an invented figure.",
       "properties": {
         "value": { "$ref": "#/definitions/decimalString" },
         "notes": { "type": "string" }
       },
       "required": ["value"]
     },
-    "market_spread": { "$ref": "#/definitions/decimalString" },
+    "market_spread": {
+      "$ref": "#/definitions/decimalString",
+      "description": "print ÷ floor. Absent whenever floor is absent."
+    },
     "sensitivity_block": {
       "type": "array",
       "minItems": 1,
@@ -103,10 +121,42 @@
         "properties": {
           "policy_variant": { "type": "string", "minLength": 1 },
           "dated_siu": { "$ref": "#/definitions/decimalString" },
-          "delta": { "$ref": "#/definitions/decimalString" }
+          "delta": {
+            "$ref": "#/definitions/decimalString",
+            "description": "(variant − base) ÷ base, as a ratio (−0.1233 means −12.33%)."
+          },
+          "applies_to": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Model ids the variant policy was applied to. Stated explicitly because a policy that only some providers offer must not be silently applied to all."
+          }
         },
         "required": ["policy_variant", "dated_siu", "delta"]
       }
+    },
+    "rounding": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The publication rounding rules this print applied. Rounding happens at publication only — every intermediate value is computed at full decimal precision.",
+      "properties": {
+        "dated_siu_dp": { "type": "integer" },
+        "basket_cost_dp": { "type": "integer" },
+        "usd_per_siu_dp": { "type": "integer" },
+        "spread_dp": { "type": "integer" },
+        "siu_per_usd_dp": { "type": "integer" },
+        "mode": { "type": "string" },
+        "siu_per_usd_mode": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": [
+        "dated_siu_dp",
+        "basket_cost_dp",
+        "usd_per_siu_dp",
+        "spread_dp",
+        "siu_per_usd_dp",
+        "mode",
+        "siu_per_usd_mode"
+      ]
     },
     "price_snapshot_ref": {
       "type": "string",
@@ -134,9 +184,8 @@
     "weights",
     "dated_siu",
     "exchange_rate_table",
-    "floor",
-    "market_spread",
     "sensitivity_block",
+    "rounding",
     "price_snapshot_ref",
     "methodology_version",
     "signature",

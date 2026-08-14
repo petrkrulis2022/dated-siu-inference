@@ -27,11 +27,25 @@ export interface Print {
   basket_costs: [
     {
       model_id: string;
-      cost_usd: DecimalString;
+      /**
+       * Absent when any class was undefined — build1-spec.md §6.2: that model is excluded from the reference set and appears in the table with a gap.
+       */
+      cost_usd?: string;
+      /**
+       * Why cost_usd is absent, e.g. which class failed its quality gate.
+       */
+      excluded_reason?: string;
     },
     ...{
       model_id: string;
-      cost_usd: DecimalString;
+      /**
+       * Absent when any class was undefined — build1-spec.md §6.2: that model is excluded from the reference set and appears in the table with a gap.
+       */
+      cost_usd?: string;
+      /**
+       * Why cost_usd is absent, e.g. which class failed its quality gate.
+       */
+      excluded_reason?: string;
     }[]
   ];
   weights: {
@@ -60,22 +74,42 @@ export interface Print {
   exchange_rate_table: [
     {
       model_id: string;
-      usd_per_siu: DecimalString;
-      spread_to_index: DecimalString;
-      siu_per_usd: DecimalString;
+      usd_per_siu?: DecimalString;
+      /**
+       * A decimal number encoded as a string. Never a JSON number — no floats in money maths.
+       */
+      spread_to_index?: string;
+      siu_per_usd?: DecimalString;
+      /**
+       * Present instead of the rate fields when the model has no defined basket cost — the §6.2 gap row.
+       */
+      excluded_reason?: string;
     },
     ...{
       model_id: string;
-      usd_per_siu: DecimalString;
-      spread_to_index: DecimalString;
-      siu_per_usd: DecimalString;
+      usd_per_siu?: DecimalString;
+      /**
+       * A decimal number encoded as a string. Never a JSON number — no floats in money maths.
+       */
+      spread_to_index?: string;
+      siu_per_usd?: DecimalString;
+      /**
+       * Present instead of the rate fields when the model has no defined basket cost — the §6.2 gap row.
+       */
+      excluded_reason?: string;
     }[]
   ];
-  floor: {
+  /**
+   * Hardware cost of producing one basket — build1-spec.md §5. Optional: a print may be published before a measured floor exists, in which case the floor and market_spread columns are absent rather than filled with an invented figure.
+   */
+  floor?: {
     value: DecimalString;
     notes?: string;
   };
-  market_spread: DecimalString;
+  /**
+   * A decimal number encoded as a string. Never a JSON number — no floats in money maths.
+   */
+  market_spread?: string;
   /**
    * @minItems 1
    */
@@ -83,14 +117,41 @@ export interface Print {
     {
       policy_variant: string;
       dated_siu: DecimalString;
-      delta: DecimalString;
+      /**
+       * A decimal number encoded as a string. Never a JSON number — no floats in money maths.
+       */
+      delta: string;
+      /**
+       * Model ids the variant policy was applied to. Stated explicitly because a policy that only some providers offer must not be silently applied to all.
+       */
+      applies_to?: string[];
     },
     ...{
       policy_variant: string;
       dated_siu: DecimalString;
-      delta: DecimalString;
+      /**
+       * A decimal number encoded as a string. Never a JSON number — no floats in money maths.
+       */
+      delta: string;
+      /**
+       * Model ids the variant policy was applied to. Stated explicitly because a policy that only some providers offer must not be silently applied to all.
+       */
+      applies_to?: string[];
     }[]
   ];
+  /**
+   * The publication rounding rules this print applied. Rounding happens at publication only — every intermediate value is computed at full decimal precision.
+   */
+  rounding: {
+    dated_siu_dp: number;
+    basket_cost_dp: number;
+    usd_per_siu_dp: number;
+    spread_dp: number;
+    siu_per_usd_dp: number;
+    mode: string;
+    siu_per_usd_mode: string;
+    notes?: string;
+  };
   price_snapshot_ref: string;
   methodology_version: string;
   signature: string;
