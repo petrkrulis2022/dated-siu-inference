@@ -1,10 +1,10 @@
 # Methodology — v0-draft
 
-*This is the published methodology, versioned. `methodology_version` on every print refers to a
+_This is the published methodology, versioned. `methodology_version` on every print refers to a
 section heading in this file; `methodology_url` links here. This document is the authority once
 it is filled in — until then, `docs/build1-spec.md` states the normative rules (basket
 composition, gates, cache/batch/subsidy policy, rounding) that this file will restate in public,
-versioned form as each is implemented.*
+versioned form as each is implemented._
 
 **Status:** stub. No print has been marked `final` yet, so no methodology version here has been
 used to produce a published number.
@@ -30,7 +30,7 @@ pipeline is built and exercised against a real print:
 
 Every print is signed with a secp256k1 key (`DATUM_PUBLISHER_KEY`, never committed) and carries
 its own `public_key` field, so a single print verifies against itself. What that print's
-`public_key` does *not* prove on its own is that it's *Datum's* key rather than an
+`public_key` does _not_ prove on its own is that it's _Datum's_ key rather than an
 impersonator's — that requires an independent, out-of-band record of the real fingerprint, kept
 stable across every print rather than regenerated per print.
 

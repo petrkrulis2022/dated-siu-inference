@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { validateDatumQuote } from "./datum-quote.js";
 
 const validQuote = {
+  schema_version: "1.0",
   siu: "1.000",
   pattern: "fixed",
   model: "anthropic-sonnet-5",
@@ -11,6 +12,15 @@ const validQuote = {
   print_id: "2026-08-14",
   print_hash: "0xabc123",
   seller_id: "erc8004:0xSellerAddress",
+  expiry: "2026-08-16T00:00:00Z",
+  settlement: [
+    {
+      asset: "usdc",
+      chain: "base",
+      address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      amount_max: "67600",
+    },
+  ],
   sig: "0xdeadbeef",
 };
 

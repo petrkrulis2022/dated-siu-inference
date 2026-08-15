@@ -15,6 +15,10 @@ export type HexString = string;
  * The datum-quote extension riding inside an x402/MPP payment-required response — build1-spec.md §8.
  */
 export interface DatumQuote {
+  /**
+   * Build 1 emits "1.0". A same-major bump is additive and safe for an existing consumer to accept; a major bump is not.
+   */
+  schema_version: string;
   siu: DecimalString;
   pattern: "estimate" | "cap" | "fixed";
   siu_max?: DecimalString;
@@ -25,5 +29,36 @@ export interface DatumQuote {
   print_id: string;
   print_hash: HexString;
   seller_id: string;
+  /**
+   * RFC3339 UTC, seller-set. A payer MUST reject an expired quote.
+   */
+  expiry: string;
+  /**
+   * Accepted settlement methods, ordered by seller preference — mirrors x402's accepted-payment-methods structure rather than inventing a new shape.
+   *
+   * @minItems 1
+   */
+  settlement: [SettlementEntry, ...SettlementEntry[]];
   sig: HexString;
+}
+/**
+ * One accepted settlement method, x402-style. Build 1 permits exactly one entry and it must be USDC — enforced by the quote validator, not this schema, so wSIU/SIUSD can be added as further entries in build 2 with no format change.
+ */
+export interface SettlementEntry {
+  /**
+   * Illustrative example: "usdc".
+   */
+  asset: string;
+  /**
+   * Illustrative example: "base".
+   */
+  chain: string;
+  /**
+   * The settlement asset's contract address on `chain`.
+   */
+  address: string;
+  /**
+   * Integer minor units as a string (e.g. USDC has 6 decimals) — drops straight into DatumEscrow.openAndFund's uint256 maxAmount with no conversion at the contract boundary.
+   */
+  amount_max: string;
 }

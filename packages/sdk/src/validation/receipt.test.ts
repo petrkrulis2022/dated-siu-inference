@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { validateReceipt } from "./receipt.js";
 
 const validReceipt = {
+  schema_version: "1.0",
   quote_hash: `0x${"a".repeat(64)}`,
   chain: "base",
   tx_ref: `0x${"b".repeat(64)}`,
@@ -9,6 +10,8 @@ const validReceipt = {
   amount_paid_usd: "0.0676",
   matched: true,
   print_ref: "2026-08-14",
+  signature: `0x${"c".repeat(64)}`,
+  public_key: `0x${"d".repeat(66)}`,
 };
 
 describe("validateReceipt", () => {

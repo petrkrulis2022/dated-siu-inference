@@ -9,11 +9,16 @@
  * A decimal number encoded as a string. Never a JSON number — no floats in money maths.
  */
 export type DecimalString = string;
+export type HexString = string;
 
 /**
  * verify_receipt's signed attestation: quoted vs paid vs matched — build1-spec.md §9.
  */
 export interface Receipt {
+  /**
+   * Build 1 emits "1.0". A same-major bump is additive and safe for an existing consumer to accept; a major bump is not.
+   */
+  schema_version: string;
   /**
    * bytes32 — matches DatumEscrow.openAndFund's quoteHash param, build1-spec.md §10.
    */
@@ -21,7 +26,12 @@ export interface Receipt {
   chain: string;
   tx_ref: string;
   amount_quoted_usd: DecimalString;
-  amount_paid_usd: DecimalString;
+  /**
+   * A decimal number encoded as a string. Never a JSON number — no floats in money maths.
+   */
+  amount_paid_usd: string;
   matched: boolean;
   print_ref: string;
+  signature: HexString;
+  public_key: HexString;
 }
