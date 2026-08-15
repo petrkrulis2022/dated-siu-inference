@@ -3,6 +3,10 @@ dist/
 *.tsbuildinfo
 coverage/
 
+# site's deployable build output (tsc compiles to dist/ like every other package; the
+# generated static HTML/CSS site is a separate, deployable artifact, not committed)
+site/public/
+
 .env
 .env.*
 

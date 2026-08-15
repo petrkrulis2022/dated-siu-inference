@@ -154,6 +154,24 @@ export interface Print {
   };
   price_snapshot_ref: string;
   methodology_version: string;
+  /**
+   * build1-spec.md §7 publishes 'methodology version and link'.
+   */
+  methodology_url?: string;
+  /**
+   * A decimal number encoded as a string. Never a JSON number — no floats in money maths.
+   */
+  cost_of_production_usd: string;
+  /**
+   * build1-spec.md §6 Signing: DatumAttestation.postPrint(bodyHash, version) on Base, timestamping the hash via a third party. 'stub' until the real contract (P13) exists — never presented as a real transaction.
+   */
+  anchor?: {
+    chain: string;
+    status: "anchored" | "stub" | "failed";
+    tx_hash?: string;
+    posted_at?: string;
+    notes?: string;
+  };
   signature: string;
   public_key: string;
 }

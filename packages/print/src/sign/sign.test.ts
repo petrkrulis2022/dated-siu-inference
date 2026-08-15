@@ -86,6 +86,31 @@ describe("signPrintBody / verifyPrintSignature", () => {
     expect(verifyPrintSignature(tampered).valid).toBe(false);
   });
 
+  it(
+    "stays valid after `anchor` is added post-signing — anchoring happens after signing " +
+      "and cannot be part of what was signed",
+    () => {
+      const signed = signPrintBody(body, TEST_KEY);
+      const anchored = {
+        ...signed,
+        anchor: { chain: "base", status: "stub" as const },
+      } satisfies Print;
+      expect(verifyPrintSignature(anchored).valid).toBe(true);
+    },
+  );
+
+  it("DETECTS TAMPERING even so: a forged anchor cannot be used to smuggle a changed dated_siu", () => {
+    // anchor is unsigned, but everything else still is — an attacker cannot hide a change to
+    // dated_siu behind an unrelated field being legitimately mutable.
+    const signed = signPrintBody(body, TEST_KEY);
+    const tampered = {
+      ...signed,
+      dated_siu: "0.9999",
+      anchor: { chain: "base", status: "stub" as const },
+    } satisfies Print;
+    expect(verifyPrintSignature(tampered).valid).toBe(false);
+  });
+
   it("rejects a signature made by a different key", () => {
     const signed = signPrintBody(body, OTHER_KEY);
     const mismatched = { ...signed, public_key: publicKeyFor(TEST_KEY) } as Print;

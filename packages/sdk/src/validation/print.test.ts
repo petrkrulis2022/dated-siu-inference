@@ -32,6 +32,7 @@ const validPrint = {
     mode: "ROUND_HALF_UP",
     siu_per_usd_mode: "ROUND_DOWN",
   },
+  cost_of_production_usd: "2.87",
   price_snapshot_ref: "2026-08-14T00:00:00Z-openrouter",
   methodology_version: "v0",
   signature: "0xabc123",

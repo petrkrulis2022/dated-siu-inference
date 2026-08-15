@@ -166,6 +166,28 @@
       "type": "string",
       "minLength": 1
     },
+    "methodology_url": {
+      "type": "string",
+      "minLength": 1,
+      "description": "build1-spec.md §7 publishes 'methodology version and link'."
+    },
+    "cost_of_production_usd": {
+      "$ref": "#/definitions/decimalString",
+      "description": "build1-spec.md §7's round-2 decision: what producing this print actually cost, summed across every recorded attempt for every measured model — not just the qualifying, weighted subset. Published beside the print, not folded into it."
+    },
+    "anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "build1-spec.md §6 Signing: DatumAttestation.postPrint(bodyHash, version) on Base, timestamping the hash via a third party. 'stub' until the real contract (P13) exists — never presented as a real transaction.",
+      "properties": {
+        "chain": { "type": "string", "minLength": 1 },
+        "status": { "type": "string", "enum": ["anchored", "stub", "failed"] },
+        "tx_hash": { "type": "string" },
+        "posted_at": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["chain", "status"]
+    },
     "signature": {
       "type": "string",
       "pattern": "^0x[0-9a-fA-F]+$"
@@ -186,6 +208,7 @@
     "exchange_rate_table",
     "sensitivity_block",
     "rounding",
+    "cost_of_production_usd",
     "price_snapshot_ref",
     "methodology_version",
     "signature",

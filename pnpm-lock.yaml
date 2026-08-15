@@ -78,6 +78,9 @@ importers:
       '@datum/basket':
         specifier: workspace:*
         version: link:../basket
+      '@datum/harness':
+        specifier: workspace:*
+        version: link:../harness
       '@datum/sdk':
         specifier: workspace:*
         version: link:../sdk
@@ -110,6 +113,16 @@ importers:
       json-schema-to-typescript:
         specifier: ^15.0.4
         version: 15.0.4
+
+  site:
+    dependencies:
+      '@datum/sdk':
+        specifier: workspace:*
+        version: link:../packages/sdk
+    devDependencies:
+      '@types/node':
+        specifier: ^26.2.0
+        version: 26.2.0
 
 packages:
 

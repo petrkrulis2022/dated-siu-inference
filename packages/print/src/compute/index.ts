@@ -6,12 +6,14 @@ import { computeBasketCost, type ClassWeights, type TaskClass } from "./basket-c
 import { computeDatedSiu, resolveWeights } from "./weights.js";
 import { computeExchangeRateTable } from "./exchange-rate.js";
 import { applyAdjustment, type PolicyVariant } from "./sensitivity.js";
+import { computeCostOfProduction } from "./cost-of-production.js";
 
 export * from "./class-cost.js";
 export * from "./basket-cost.js";
 export * from "./weights.js";
 export * from "./exchange-rate.js";
 export * from "./sensitivity.js";
+export * from "./cost-of-production.js";
 
 const TASK_CLASSES: TaskClass[] = ["T1", "T2", "T3"];
 
@@ -34,6 +36,7 @@ export interface PrintInput {
   floor?: { value: string; notes?: string };
   price_snapshot_ref: string;
   methodology_version: string;
+  methodology_url?: string;
   rounding?: RoundingRules;
   sensitivityVariants?: PolicyVariant[];
 }
@@ -156,9 +159,19 @@ export function computePrint(input: PrintInput): ComputePrintResult {
     exchange_rate_table,
     sensitivity_block,
     rounding,
+    // Deliberately every measured attempt for every model, not the qualifying/weighted
+    // subset the index itself is built from — see cost-of-production.ts.
+    cost_of_production_usd: roundHalfUp(
+      computeCostOfProduction(input.models),
+      rounding.usd_per_siu_dp,
+    ),
     price_snapshot_ref: input.price_snapshot_ref,
     methodology_version: input.methodology_version,
   };
+
+  if (input.methodology_url) {
+    body.methodology_url = input.methodology_url;
+  }
 
   // Floor and market spread are omitted entirely when no measured floor is supplied, rather
   // than defaulted — build1-spec.md §5's floor needs measured GPU-seconds per basket, and an

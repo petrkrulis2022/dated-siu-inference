@@ -2,7 +2,7 @@ import canonicalizeDefault from "canonicalize";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import type { Print } from "@datum/sdk";
 
-export type PrintBody = Omit<Print, "signature" | "public_key">;
+export type PrintBody = Omit<Print, "signature" | "public_key" | "anchor">;
 
 /**
  * RFC 8785 (JSON Canonicalisation Scheme). Two independent implementations must serialise the
@@ -34,13 +34,20 @@ export function fromHex(hex: string): Uint8Array {
 }
 
 /**
- * Strips the signature fields before canonicalising: a signature cannot cover itself. The
- * signed bytes are the print body exactly as published, minus `signature` and `public_key`.
+ * Strips the signature fields, and `anchor`, before canonicalising.
+ *
+ * A signature cannot cover itself (`signature`, `public_key`). `anchor` is excluded for a
+ * different reason: build1-spec.md §6 anchors AFTER signing, calling
+ * DatumAttestation.postPrint(bodyHash, version) with the hash signing just produced — so the
+ * anchor transaction reference cannot possibly be part of what was signed; it is written into
+ * the print file afterward, alongside but outside the signature's coverage. Including it here
+ * would make every anchored print fail its own signature check.
  */
 export function printBodyOf(print: Print | PrintBody): PrintBody {
   const copy = { ...(print as Print) } as Partial<Print>;
   delete copy.signature;
   delete copy.public_key;
+  delete copy.anchor;
   return copy as PrintBody;
 }
 
