@@ -30,6 +30,17 @@ jobs:
 
       - uses: foundry-rs/foundry-toolchain@v1
 
+      # Runs before Typecheck deliberately: every package's `typecheck` is `tsc --noEmit`, which
+      # emits nothing, so a downstream package that imports another workspace package (resolved
+      # via that package's compiled `dist/*.d.ts`, not its source) cannot type-check until the
+      # dependency has actually been built at least once. `pnpm -r run build` runs in topological
+      # dependency order and does emit, so by the time a consumer package builds, its workspace
+      # dependencies' `dist/` already exists. Confirmed live: every CI run before this one failed
+      # at Typecheck for exactly this reason (`site` couldn't resolve `@datum/sdk`'s types),
+      # reproduced locally by deleting every `dist/` and running `pnpm run typecheck` cold.
+      - name: Build
+        run: pnpm run build
+
       - name: Typecheck
         run: pnpm run typecheck
 
@@ -46,9 +57,6 @@ jobs:
         # Gating, unlike the general format check: a stale README address is exactly the kind
         # of silent second-source-of-truth drift this generator exists to prevent.
         run: pnpm run docs:deployments:check
-
-      - name: Build
-        run: pnpm run build
 
       # Runs the TypeScript suite and the Foundry suite. `test:all` chains them with `&&`, so a
       # Solidity failure fails the job even when every JS test passes.
