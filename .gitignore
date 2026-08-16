@@ -15,6 +15,9 @@ site/public/
 *.key
 *private-key*
 
+# contains a live GITHUB_TOKEN in plaintext — never commit
+docs/keys_needed_datum.md
+
 # data/prints/ and data/runs/ are intentionally NOT excluded here —
 # they are git-tracked on purpose. Publication is the product.
 
