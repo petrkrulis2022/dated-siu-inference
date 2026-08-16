@@ -58,6 +58,19 @@ jobs:
         # of silent second-source-of-truth drift this generator exists to prevent.
         run: pnpm run docs:deployments:check
 
+      # packages/basket's T3 grader refuses to run candidate code without `unshare --net`
+      # network isolation (by design — see grade.ts) rather than silently falling back to an
+      # unsandboxed execution. GitHub's ubuntu-latest runner image (Ubuntu 24.04) restricts
+      # unprivileged user-namespace creation via AppArmor by default, which is exactly what
+      # `unshare --net --map-root-user` needs, so it fails as "not available" without this.
+      # Scoped to this ephemeral, single-use runner VM only — does not weaken the sandbox itself,
+      # only what's needed for the sandbox mechanism to function at all in this environment.
+      - name: Allow unprivileged user namespaces (needed for T3's unshare --net sandbox)
+        run: |
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+
       # Runs the TypeScript suite and the Foundry suite. `test:all` chains them with `&&`, so a
       # Solidity failure fails the job even when every JS test passes.
       #
