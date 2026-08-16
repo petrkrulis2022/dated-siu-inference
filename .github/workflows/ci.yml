@@ -52,7 +52,14 @@ jobs:
 
       # Runs the TypeScript suite and the Foundry suite. `test:all` chains them with `&&`, so a
       # Solidity failure fails the job even when every JS test passes.
+      #
+      # BASE_SEPOLIA_RPC_URL is a public endpoint, not a secret — set here (unlike
+      # CIRCLE_TESTNET_PRIVATE_KEY/DATUM_PUBLISHER_KEY below, which stay unset in CI and leave
+      # testnet.live.test.ts skipped) so packages/mcp-server/src/settlement/on-chain.test.ts's
+      # read-only live-Base-Sepolia assertions actually run here rather than only locally.
       - name: Test (TypeScript + Solidity)
+        env:
+          BASE_SEPOLIA_RPC_URL: https://sepolia.base.org
         run: pnpm run test:all
 
       - name: Contract coverage

@@ -8,9 +8,7 @@ describe("StubSettlementReader", () => {
     );
   });
 
-  it("names exactly what's missing, so a future implementer knows what to build", async () => {
-    await expect(new StubSettlementReader().read()).rejects.toThrow(
-      /DatumEscrow's deployed address.*ABI.*RPC endpoint/s,
-    );
+  it("names what to do instead, so a caller with no reader configured isn't left guessing", async () => {
+    await expect(new StubSettlementReader().read()).rejects.toThrow(/OnChainSettlementReader/);
   });
 });

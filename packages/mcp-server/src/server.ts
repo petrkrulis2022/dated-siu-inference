@@ -108,7 +108,11 @@ export function createDatumMcpServer(options: McpServerOptions): McpServer {
     "verify_receipt",
     {
       description: "Reads an on-chain settlement and returns a signed attestation.",
-      inputSchema: { chain: z.string(), tx_hash: z.string() },
+      inputSchema: {
+        chain: z.string(),
+        tx_hash: z.string(),
+        quote: z.record(z.string(), z.unknown()),
+      },
     },
     async (args) => {
       try {

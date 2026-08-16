@@ -1,4 +1,12 @@
-import { minorUnitsToUsd, D, signReceipt, type ReceiptBody, type Receipt } from "@datum/sdk";
+import {
+  minorUnitsToUsd,
+  D,
+  signReceipt,
+  validateDatumQuote,
+  type DatumQuote,
+  type ReceiptBody,
+  type Receipt,
+} from "@datum/sdk";
 import type { SettlementReader } from "../settlement/reader.js";
 
 /** Same v1 scoping docs/plan.md risk 6 states for the DatumEscrow contract itself: multi-chain
@@ -9,13 +17,18 @@ export const SUPPORTED_VERIFY_RECEIPT_CHAINS = ["base", "base-sepolia"] as const
 export interface VerifyReceiptInput {
   chain: string;
   tx_hash: string;
+  /** The full signed quote this settlement is claimed to be for. verify_receipt is stateless —
+   * there is no off-chain quote index — so the caller supplies it and `reader` cryptographically
+   * binds it to the on-chain settlement via quoteHashHex, rejecting any mismatch. */
+  quote: unknown;
 }
 
 /**
- * verify_receipt(chain, tx_hash) — build1-spec.md §9: "reads an on-chain settlement, matches it
- * against the referenced quote hash, and returns a signed attestation." Reading the chain is
- * `reader`'s job (stubbed until P13 — settlement/reader.ts); everything here — turning what was
- * read into a checked, signed Receipt — is real.
+ * verify_receipt(chain, tx_hash, quote) — build1-spec.md §9: "reads an on-chain settlement,
+ * matches it against the referenced quote hash, and returns a signed attestation." Reading the
+ * chain is `reader`'s job (settlement/on-chain.ts, against the deployed DatumEscrow); everything
+ * here — validating the caller's quote, then turning what was read into a checked, signed
+ * Receipt — is real.
  */
 export async function verifyReceiptTool(
   input: VerifyReceiptInput,
@@ -32,7 +45,15 @@ export async function verifyReceiptTool(
     );
   }
 
-  const settlement = await reader.read(input.chain, input.tx_hash);
+  const validation = validateDatumQuote(input.quote);
+  if (!validation.valid) {
+    throw new Error(
+      `quote fails the published datum-quote schema: ${validation.errors.join("; ")}`,
+    );
+  }
+  const quote: DatumQuote = validation.data;
+
+  const settlement = await reader.read(input.chain, input.tx_hash, quote);
   if (!settlement) {
     throw new Error(`No settlement found for ${input.chain}/${input.tx_hash}.`);
   }

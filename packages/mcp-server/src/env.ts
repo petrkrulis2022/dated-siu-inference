@@ -1,3 +1,7 @@
+import { loadDeployment, type DeploymentRecord } from "@datum/sdk";
+import { OnChainSettlementReader } from "./settlement/on-chain.js";
+import type { SettlementReader } from "./settlement/reader.js";
+
 /**
  * A minimal, local copy of packages/print/src/sign/sign.ts's env-key convention — reading
  * `DATUM_PUBLISHER_KEY` directly rather than importing @datum/print for one helper function,
@@ -6,6 +10,7 @@
  */
 export const PUBLISHER_KEY_ENV = "DATUM_PUBLISHER_KEY";
 export const SELLER_ADDRESS_ENV = "DATUM_SELLER_ADDRESS";
+export const CHAIN_NAME_ENV = "DATUM_CHAIN_NAME";
 
 export function loadPublisherKeyFromEnv(env: NodeJS.ProcessEnv = process.env): string {
   const key = env[PUBLISHER_KEY_ENV];
@@ -28,4 +33,29 @@ export function loadSellerAddressFromEnv(env: NodeJS.ProcessEnv = process.env): 
     );
   }
   return address;
+}
+
+/**
+ * Builds the real `SettlementReader` for `verify_receipt`, resolving `DatumEscrow`'s address
+ * from `data/deployments/<chain>.json` (@datum/sdk's `loadDeployment`) rather than hardcoding it
+ * here — the deployment record is canonical, this is just a caller of it (README's Deployments
+ * section is the other caller, generated the same way).
+ */
+export function loadSettlementReaderFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): SettlementReader {
+  const chainName = env[CHAIN_NAME_ENV] ?? "base-sepolia";
+  const rpcEnvVar = `${chainName.toUpperCase().replaceAll("-", "_")}_RPC_URL`;
+  const rpcUrl = env[rpcEnvVar];
+  if (!rpcUrl) {
+    throw new Error(
+      `${rpcEnvVar} is not set — cannot read on-chain settlements for chain "${chainName}".`,
+    );
+  }
+  const deployment: DeploymentRecord = loadDeployment(chainName);
+  return new OnChainSettlementReader({
+    chainName,
+    rpcUrl,
+    escrowAddress: deployment.contracts.DatumEscrow.address,
+  });
 }

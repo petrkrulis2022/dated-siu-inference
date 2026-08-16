@@ -1,16 +1,19 @@
+import type { DatumQuote } from "@datum/sdk";
+
 /**
  * What verify_receipt needs from an on-chain DatumEscrow settlement — build1-spec.md §10:
  * `Settled(quoteHash, actualAmount, receiptRef)`, plus the `maxAmount` the matching
- * `openAndFund` call authorised (escrow's own state, readable at the same address), so
- * `matched = actualAmount ≤ maxAmount` can be checked against the chain rather than trusted.
+ * `openAndFund` call authorised (escrow's own state — `settle()` never clears `maxAmount`, so
+ * it stays readable after settlement — confirmed by reading the deployed source rather than
+ * assumed).
  *
- * `printRef` is a genuine open gap, flagged rather than invented: the Receipt schema requires
- * it (build1-spec.md §9's "signed attestation" carries which print priced the settlement), but
- * §10's `Settled` event as specified carries no print reference at all — only `quoteHash`,
- * `actualAmount`, `receiptRef`. A real SettlementReader implementation needs *some* way to
- * resolve `quoteHash` back to the print it was quoted against (an off-chain quote index, or a
- * print reference encoded into `receiptRef` at settle time) — a decision for whoever builds
- * P13, not settled here.
+ * `printRef` closes a gap flagged since P12: the Receipt schema requires it, but §10's `Settled`
+ * event carries no print reference at all. Closed here without touching the contract: the caller
+ * supplies the full `datum-quote` being settled, `read()` cryptographically binds it to the
+ * on-chain settlement by recomputing `quoteHashHex(quote)` and asserting it equals the on-chain
+ * `quoteHash` — reject otherwise — and only then trusts the quote's own `print_id` as `printRef`.
+ * No off-chain quote index is needed; the binding is the hash, which is exactly why this reader
+ * needs no database and is safe to call statelessly, from anywhere, with no prior state.
  */
 export interface OnChainSettlement {
   quoteHash: string;
@@ -21,25 +24,24 @@ export interface OnChainSettlement {
 }
 
 export interface SettlementReader {
-  read(chain: string, txHash: string): Promise<OnChainSettlement | null>;
+  /** `quote` is the full signed datum-quote the caller claims this settlement is for — required
+   * so the reader can verify that claim cryptographically rather than trust it. */
+  read(chain: string, txHash: string, quote: DatumQuote): Promise<OnChainSettlement | null>;
 }
 
 /**
- * `DatumEscrow` doesn't exist until P13 (build1-spec.md §10), and this environment has no chain
- * RPC credentials regardless. Throwing here rather than fabricating a plausible-looking
- * settlement is the same choice packages/print/src/anchor/attestation.ts's
- * `StubAttestationClient` and packages/sdk/src/quote/identity.ts's `Erc8004Resolver` made: a
- * stub that invents data indistinguishable from a real reading would be worse than no reading
- * at all. Everything downstream of a successful `read()` — turning an `OnChainSettlement` into
- * a signed `Receipt` — is real and fully tested against this interface.
+ * `DatumEscrow` is now deployed (see data/deployments/base-sepolia.json), so
+ * `OnChainSettlementReader` in ./on-chain.ts is the real implementation. This stub remains for
+ * tests and for running the server with no chain configured — throwing rather than fabricating a
+ * plausible-looking settlement, the same choice `StubAttestationClient` and `Erc8004Resolver`
+ * made elsewhere in this project.
  */
 export class StubSettlementReader implements SettlementReader {
   read(): Promise<OnChainSettlement | null> {
     return Promise.reject(
       new Error(
-        "StubSettlementReader cannot read on-chain settlements. Needs: DatumEscrow's deployed " +
-          "address per chain (P13), its ABI, and an RPC endpoint for that chain. Until then, " +
-          "verify_receipt has nothing real to attest to.",
+        "StubSettlementReader cannot read on-chain settlements. No SettlementReader was " +
+          "configured for this server. Pass an OnChainSettlementReader (settlement/on-chain.js).",
       ),
     );
   }
