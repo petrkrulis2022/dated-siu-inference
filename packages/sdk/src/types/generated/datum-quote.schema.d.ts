@@ -34,6 +34,10 @@ export interface DatumQuote {
    */
   expiry: string;
   /**
+   * Optional. An address the buyer additionally authorises to call DatumEscrow.settle for this quote. Absent means seller-only settlement. Added in schema_version 1.1. The seller MUST verify this against the on-chain settler before performing work — see docs/datum-quote.md.
+   */
+  settler?: string;
+  /**
    * Accepted settlement methods, ordered by seller preference — mirrors x402's accepted-payment-methods structure rather than inventing a new shape.
    *
    * @minItems 1

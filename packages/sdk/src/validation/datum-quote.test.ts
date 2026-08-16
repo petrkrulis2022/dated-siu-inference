@@ -39,4 +39,14 @@ describe("validateDatumQuote", () => {
     const result = validateDatumQuote({ ...validQuote, amount_usd_max: 0.0676 });
     expect(result.valid).toBe(false);
   });
+
+  it("accepts an optional settler address (schema_version 1.1)", () => {
+    const result = validateDatumQuote({ ...validQuote, settler: `0x${"ab".repeat(20)}` });
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects a settler that is not a 20-byte hex address", () => {
+    const result = validateDatumQuote({ ...validQuote, settler: "0xnope" });
+    expect(result.valid).toBe(false);
+  });
 });

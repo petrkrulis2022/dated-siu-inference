@@ -21,7 +21,7 @@ incommensurable against; the dollars that actually move are `amount_usd_max`, co
 
 | Field              | Type                                   | Meaning                                                                                                                             |
 | ------------------ | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `schema_version`   | string, `"1.0"` in build 1             | See "Forward compatibility" below.                                                                                                  |
+| `schema_version`   | string, `"1.1"` in build 1             | See "Forward compatibility" below.                                                                                                  |
 | `siu`              | decimal string                         | The point-estimate SIU quantity this quote is for.                                                                                  |
 | `pattern`          | `"estimate"` \| `"cap"` \| `"fixed"`   | See "Patterns" below.                                                                                                               |
 | `siu_max`          | decimal string, conditionally required | The upper bound on SIU this quote can consume. Required for `estimate` and `cap`; absent for `fixed`.                               |
@@ -33,6 +33,7 @@ incommensurable against; the dollars that actually move are `amount_usd_max`, co
 | `print_hash`       | hex string                             | That print's body hash, so a payer can verify the referenced print without trusting the seller's claim about it.                    |
 | `seller_id`        | string, `erc8004:...`                  | The seller's claimed identity. See "Signature semantics" below — this field is a claim, not a verified fact.                        |
 | `expiry`           | RFC3339 UTC timestamp                  | Seller-set. See rule 4.                                                                                                             |
+| `settler`          | address, optional                      | An address the buyer additionally authorises to settle. Absent means seller-only. See rule 9.                                       |
 | `settlement`       | array, ≥1 entry                        | Accepted settlement methods, ordered by seller preference. See "Settlement".                                                        |
 | `sig`              | hex string                             | The seller's signature over every other field (JCS-canonicalised, keccak256-hashed, secp256k1-signed — the same scheme prints use). |
 
@@ -120,16 +121,43 @@ later, never a rewrite."
    same construction a print uses, excluding its own `signature`/`public_key`. This is the
    `quoteHash` `DatumEscrow.openAndFund` and `receipt.quote_hash` both refer to, and it is
    computable before a seller signs anything, since it's a property of the offer, not of the
-   signer. `packages/contracts`' Solidity (P13) must reproduce this exact construction — that
-   coordination point was flagged during planning as the one place `sdk` and the contract must
-   agree, and it is a five-minute conversation, not a shared dependency.
+   signer. `DatumEscrow` never recomputes it — the contract takes `quoteHash` as an opaque
+   `bytes32` key — so there is no risk of the two implementations disagreeing about how it is
+   derived; the SDK is its single source.
+
+9. **The seller MUST verify the on-chain settler before performing any work.** `settler` on the
+   quote is what the seller agreed to; `DatumEscrow.settlerOf(quoteHash)` is what the buyer
+   actually funded. Before starting work the seller MUST read the on-chain value and confirm it
+   matches the settler in their own signed quote. **On mismatch the seller MUST NOT perform the
+   work, and MUST let the escrow expire** so the buyer's funds return untouched.
+
+   This matters because a settler is an address the buyer chose. A buyer who funds escrow naming
+   a settler the quote never agreed to could take delivery of completed work and then have that
+   settler settle at zero, paying nothing. The contract cannot detect this — `settler` is fixed
+   at funding time and `DatumEscrow` has no way to know what a signed quote said — so the check
+   has to happen off-chain, before the work is done, and it is the seller's responsibility. The
+   contract makes the check cheap by exposing `settlerOf(quoteHash)` directly.
+
+10. **The fee is charged on `actualAmount`, never on `maxAmount`, and is deducted from the
+    seller's proceeds.** The seller receives `actualAmount - fee`; the treasury receives `fee`;
+    the buyer is refunded `maxAmount - actualAmount` in full, with no fee taken from the portion
+    being returned to them. **Sellers must price accordingly** — the headline
+    `rate_usd_per_siu` in a quote is gross, and the seller's realised revenue is that figure
+    less `feeBps`. `feeBps` is immutable on the deployed escrow and capped at
+    `MAX_FEE_BPS = 100` (1%) by the contract's constructor, so this deduction cannot be changed
+    after deployment.
 
 ## Forward compatibility
 
-`schema_version` (`"1.0"` in build 1) lets a consumer detect additive changes without a schema
+`schema_version` (`"1.1"` in build 1) lets a consumer detect additive changes without a schema
 rewrite: a same-major bump (`1.1`, `1.2`, …) is additive and safe for an existing consumer to
 accept and ignore unknown fields on; a major bump (`2.0`) is not, and an unrecognised major
 version MUST be rejected rather than guessed at.
+
+The move from `1.0` to `1.1` added the optional `settler` field alongside `DatumEscrow`. Note
+that because the schema is `additionalProperties: false`, a consumer still holding the `1.0`
+schema file will _reject_ a quote carrying `settler` rather than ignore it — which is exactly why
+the version had to move: the rejection is then explicable rather than mysterious.
 
 ## Signature semantics
 
@@ -144,10 +172,26 @@ allowlist (for known counterparties — demo agents, tests), and `Erc8004Resolve
 than silently returning `null`, naming exactly what real ERC-8004 resolution needs and stating
 plainly that it isn't built yet.
 
+## Known limitation: the contract cannot verify the work
+
+`DatumEscrow` enforces `actualAmount <= maxAmount` and nothing more. It has no way to observe how
+many tokens a model actually consumed, so **a seller can settle for anything up to `maxAmount`
+regardless of the work performed.** This is a property of any on-chain escrow over off-chain
+work, not an oversight in this design, and it is stated here rather than left for someone to
+discover.
+
+What bounds it:
+
+- **The buyer's exposure is capped by `amount_usd_max`**, which is the number a spending mandate
+  checks (rule 4). The worst case is bounded and known before funding.
+- **Detection is off-chain**, by comparing the settlement against the signed quote — that is what
+  `verify_receipt` (build1-spec.md §9) produces a signed attestation about, and what
+  `docs/settlement-metadata.md`'s `matched` flag records.
+- **Enforcement is reputational**, through the seller's ERC-8004 identity. A seller that settles
+  at max for work it did not do accumulates receipts that say so.
+
 ## Open items, recorded rather than invented
 
-- **No settler field.** `DatumEscrow.settle` (build1-spec.md §10) is "callable by seller (or a
-  settler the buyer authorised in the quote)" — but no field on this quote carries a settler
-  address. This is a genuine gap between §8 and §10, not resolved here; whoever implements P13's
-  contract-facing settlement flow needs to either add a `settler` field or find another channel
-  for that authorisation.
+- **ERC-8004 identity resolution is not implemented.** See "Signature semantics" above: a
+  signature proves key custody, not that the key belongs to `seller_id`. `Erc8004Resolver`
+  throws rather than pretending otherwise.

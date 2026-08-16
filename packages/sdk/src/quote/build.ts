@@ -6,7 +6,15 @@ import { D, roundHalfUp, usdToMinorUnits, usdcAddressFor } from "../money/index.
  * and print's usd_per_siu_dp default. `quote/validate.ts` reconciles against the same constant. */
 export const QUOTE_AMOUNT_DP = 4;
 
-export const QUOTE_SCHEMA_VERSION = "1.0";
+/**
+ * Bumped from "1.0" when the optional `settler` field was added alongside `DatumEscrow`
+ * (build1-spec.md §10). A minor bump is the correct signal: the field is purely additive, and
+ * `validateQuote`'s major-version check still accepts it. A 1.0-era consumer holding the old
+ * schema will reject a quote carrying `settler` because the schema is `additionalProperties:
+ * false` — which is why the version has to move, so the rejection is explicable rather than
+ * mysterious.
+ */
+export const QUOTE_SCHEMA_VERSION = "1.1";
 
 export type QuoteBody = Omit<DatumQuote, "sig">;
 
@@ -22,6 +30,14 @@ interface QuoteBuildInputBase {
   chain: string;
   expiresInSeconds: number;
   now?: Date;
+  /**
+   * Optional address the buyer additionally authorises to call `DatumEscrow.settle`. Omit for
+   * seller-only settlement. Carried on the quote so the seller can compare it against the
+   * on-chain `settlerOf(quoteHash)` before doing any work — a buyer who funds escrow naming a
+   * different settler than the signed quote agreed could otherwise settle at zero after
+   * receiving the completed work. docs/datum-quote.md makes that check normative.
+   */
+  settler?: string;
 }
 
 /**
@@ -85,6 +101,12 @@ export function buildQuoteBody(input: QuoteBuildInput): QuoteBody {
   };
   if (input.pattern !== "fixed") {
     body.siu_max = input.siuMax;
+  }
+  // Omitted entirely rather than set to the zero address when absent: the schema treats an
+  // absent settler as seller-only, and an explicit 0x000…0 would be a different claim requiring
+  // its own validation.
+  if (input.settler !== undefined) {
+    body.settler = input.settler;
   }
   return body;
 }

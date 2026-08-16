@@ -1,0 +1,43 @@
+[profile.default]
+src = "src"
+out = "out"
+test = "test"
+libs = ["lib"]
+solc_version = "0.8.24"
+
+# PUSH0 (Shanghai) is universally available, but Cancun opcodes (TSTORE/MCOPY) are not yet on
+# every chain this may later deploy to. Shanghai is the portable floor that keeps Arc a
+# deployment target rather than a rewrite — see CLAUDE.md's stack conventions. OpenZeppelin's
+# plain ReentrancyGuard is storage-based (not the transient-storage variant), so nothing here
+# needs Cancun.
+evm_version = "shanghai"
+
+optimizer = true
+optimizer_runs = 200
+bytecode_hash = "none"
+
+# DatumEscrow.abi.t.sol reads the compiled artifact to assert, from the ABI itself, that no
+# state-mutating function exists beyond the three known-safe ones.
+fs_permissions = [{ access = "read", path = "./out" }]
+
+[lint]
+# `token`, `treasury` and `feeBps` are public getters, so their names are part of the published
+# ABI that off-chain code and build1-spec.md §10 both refer to by those exact spellings.
+# Renaming them to SCREAMING_SNAKE_CASE would rename the getters and diverge from the spec.
+exclude_lints = ["screaming-snake-case-immutable"]
+
+[fuzz]
+runs = 512
+
+[invariant]
+runs = 256
+depth = 64
+# The handler deliberately attempts invalid operations (settling an expired escrow, expiring an
+# open one); those must revert harmlessly rather than fail the run.
+fail_on_revert = false
+
+[fmt]
+line_length = 100
+tab_width = 4
+bracket_spacing = false
+int_types = "long"

@@ -36,6 +36,18 @@ describe("buildQuoteBody", () => {
     expect(body.schema_version).toBe(QUOTE_SCHEMA_VERSION);
   });
 
+  it("carries an authorised settler when one is given", () => {
+    const settler = `0x${"ab".repeat(20)}`;
+    const body = buildQuoteBody({ ...BASE, pattern: "fixed", settler });
+    expect(body.settler).toBe(settler);
+  });
+
+  it("omits settler entirely when none is given, rather than emitting the zero address", () => {
+    const body = buildQuoteBody({ ...BASE, pattern: "fixed" });
+    expect(body.settler).toBeUndefined();
+    expect("settler" in body).toBe(false);
+  });
+
   it("computes expiry as now + expiresInSeconds, RFC3339 UTC", () => {
     const body = buildQuoteBody({ ...BASE, pattern: "fixed", expiresInSeconds: 60 });
     expect(body.expiry).toBe("2026-08-15T00:01:00.000Z");

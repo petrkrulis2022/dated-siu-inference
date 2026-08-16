@@ -1,0 +1,9 @@
+# Foundry build artifacts and caches
+out/
+cache/
+
+# Deployment broadcast logs — these carry chain state and sender addresses from real runs.
+broadcast/
+
+# forge coverage output
+lcov.info

@@ -1,2 +1,14 @@
 pnpm-lock.yaml
 **/generated/**
+
+# Vendored Foundry dependencies (git submodules) — not ours to reformat.
+packages/contracts/lib/
+
+# Foundry build output and caches (also gitignored).
+packages/contracts/out/
+packages/contracts/cache/
+packages/contracts/broadcast/
+
+# Solidity is formatted by `forge fmt` (configured in packages/contracts/foundry.toml),
+# not by prettier, which has no Solidity parser without an extra plugin.
+*.sol
