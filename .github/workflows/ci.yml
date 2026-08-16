@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# The whole point of this workflow is that a change to packages/contracts cannot pass on a green
+# JavaScript suite alone. The TypeScript and Solidity suites use different toolchains, so both
+# are installed and both must pass before the run is green.
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # packages/contracts/lib is vendored as git submodules (forge-std, openzeppelin-contracts).
+          # Without this the Solidity build cannot resolve its imports.
+          submodules: recursive
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      - uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Format check
+        # Three pre-existing documents predate the formatter and are deliberately untouched;
+        # this step is expected to report them and is therefore not gating.
+        run: pnpm run format
+        continue-on-error: true
+
+      - name: Build
+        run: pnpm run build
+
+      # Runs the TypeScript suite and the Foundry suite. `test:all` chains them with `&&`, so a
+      # Solidity failure fails the job even when every JS test passes.
+      - name: Test (TypeScript + Solidity)
+        run: pnpm run test:all
+
+      - name: Contract coverage
+        run: forge coverage --root packages/contracts --report summary

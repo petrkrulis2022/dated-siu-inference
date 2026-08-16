@@ -5,5 +5,6 @@ export * from "./sign/index.js";
 export * from "./verify.js";
 export * from "./publication.js";
 export * from "./anchor/attestation.js";
+export * from "./anchor/on-chain.js";
 export * from "./publish.js";
 export * from "./cli/load-inputs.js";

@@ -1,0 +1,204 @@
+{
+  "network": {
+    "name": "Base Sepolia",
+    "chainId": 84532,
+    "explorer": "https://base-sepolia.blockscout.com",
+    "note": "Testnet only. Mainnet deployment is out of scope; see mainnetRequirements below."
+  },
+  "source": {
+    "gitCommit": "5ba46453e19d4c1f725ba75cc62ca295a8d2f63f",
+    "gitCommitShort": "5ba4645",
+    "treeCleanAtDeploy": true,
+    "path": "packages/contracts"
+  },
+  "compiler": {
+    "solc": "0.8.24+commit.e11b9ed9",
+    "evmVersion": "shanghai",
+    "optimizer": {
+      "enabled": true,
+      "runs": 200
+    },
+    "bytecodeHash": "none",
+    "evmVersionRationale": "PUSH0 is universally available but Cancun opcodes are not; shanghai is the portable floor that keeps Arc a future deployment target rather than a rewrite."
+  },
+  "deployedAt": {
+    "unix": 1786862195,
+    "iso": "2026-08-16T06:36:35Z"
+  },
+  "deployer": "0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e",
+  "usdc": {
+    "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    "symbol": "USDC",
+    "decimals": 6,
+    "source": "Circle official documentation, resolved via Circle's MCP server on 2026-08-16",
+    "sourceUrl": "https://developers.circle.com/stablecoins/usdc-contract-addresses",
+    "corroboration": [
+      "https://developers.circle.com/wallets/modular/android-sdk (BaseSepolia_USDC)",
+      "https://developers.circle.com/wallets/modular/ios-sdk (BaseSepoliaToken.USDC)"
+    ],
+    "verifiedOnChain": "symbol() == 'USDC' and decimals() == 6 queried live before deployment"
+  },
+  "contracts": {
+    "DatumAttestation": {
+      "address": "0xBd8C6F2A9B71DaB2E4b7B3a0e9efA0a0F25301fF",
+      "deploymentTx": "0x3bb0a3ef895b7a3545766fd3ac831ba8e3efd0b7b1d6e12ad24ae08d0b8c78a4",
+      "blockNumber": 45546954,
+      "gasUsed": 231496,
+      "constructorArgs": {
+        "publisher_": "0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a"
+      },
+      "constructorArgsEncoded": "0x000000000000000000000000284ff2f8605ff8afeda6959b856bb7e6d48f845a",
+      "verified": {
+        "explorer": "Blockscout",
+        "status": "Pass - Verified"
+      },
+      "explorerUrl": "https://base-sepolia.blockscout.com/address/0xBd8C6F2A9B71DaB2E4b7B3a0e9efA0a0F25301fF",
+      "notes": "publisher is the EOA of DATUM_PUBLISHER_KEY, the same key packages/print signs prints with (compressed pubkey 0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299), so the key that signs a print is the key that anchors it. Immutable: rotating the publisher means deploying a new instance."
+    },
+    "DatumEscrow": {
+      "address": "0xb9708BC05B15efC9dB494b2013125A44dc614757",
+      "deploymentTx": "0x74067f562e8e27ebd79ea08113dd5932f677dd4f5d5bd65cf5ed48051752afda",
+      "blockNumber": 45546954,
+      "gasUsed": 863865,
+      "constructorArgs": {
+        "token_": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        "treasury_": "0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e",
+        "feeBps_": 50
+      },
+      "constructorArgOrder": ["token_", "treasury_", "feeBps_"],
+      "verified": {
+        "explorer": "Blockscout",
+        "status": "Pass - Verified"
+      },
+      "explorerUrl": "https://base-sepolia.blockscout.com/address/0xb9708BC05B15efC9dB494b2013125A44dc614757",
+      "feeBpsMeaning": "50 basis points = 0.50%, charged on actualAmount only and deducted from seller proceeds. Contract cap MAX_FEE_BPS = 100 (1%).",
+      "notes": "treasury and feeBps are immutable with no setter. Treasury here is the deployer EOA, acceptable on testnet only."
+    }
+  },
+  "mainnetRequirements": [
+    "treasury MUST be a Safe/multisig, not an EOA. It is immutable with no setter, so a lost key makes fee revenue permanently unrecoverable and the only remedy is redeploying the escrow and migrating every integrator.",
+    "Generate DATUM_PUBLISHER_KEY on an air-gapped machine. The testnet key used here has passed through repository-adjacent files.",
+    "Deploy.s.sol is chain-guarded to 84532; a mainnet deployment needs its own script and its own review."
+  ],
+  "smokeTests": {
+    "ranAgainst": "live Base Sepolia with real testnet USDC",
+    "seller": {
+      "address": "0xBF55C0d8764762d8aCd2F8c2D9680Da34BFd68dd",
+      "note": "Throwaway testnet-only EOA generated for these tests; its key was never written to the repository."
+    },
+    "fundingTxs": {
+      "publisherGas": "0xd813358939444e6b33fc15eec8343d34a3b8947ba4d58b56613c0852b688a2c0",
+      "sellerGas": "0x5845cd94cf2c21f6b1ded4c6f97023dd01698c3c2e0b04af7cd6dcef3e23f1fa"
+    },
+    "1_anchorRealPrint": {
+      "description": "Signed a real print locally (worked example, reproduces Dated SIU $0.0383), anchored it, confirmed the event and stored timestamp, then confirmed re-anchoring reverts.",
+      "printId": "2026-08-16-smoke",
+      "bodyHash": "0xe5fb1ef345df5652346d72a958e55adc43b1722876bde8127c0cab16870408a4",
+      "postPrintTx": "0x037582a3530d5a9576737e0d91ee2d42aa146ed64934118d7d77be2b03c4ec85",
+      "blockNumber": 45547062,
+      "storedTimestamp": 1786862412,
+      "storedTimestampIso": "2026-08-16T06:40:12Z",
+      "eventTopic0": "0xecf1a9acd77fd19e418f714b9dfeb703873f7f27677eb00ebf17fdbcab06b999",
+      "eventDecoded": {
+        "version": "SIU-2026a",
+        "timestamp": 1786862412
+      },
+      "reAnchorReverted": "AlreadyPosted() 0xe9f155db",
+      "nonPublisherReverted": "NotPublisher() 0x6cc8883a"
+    },
+    "2_escrowSettleBelowMax": {
+      "description": "Full cycle with real USDC, settler = address(0). Fee charged on actualAmount only; buyer refund excludes fee.",
+      "quoteHash": "0x970f95d7dd7e9ad052dd0f68d80d95f671ca8db58bcb40d331369bc7f0efe026",
+      "quoteHashSource": "packages/sdk quoteHashHex over a real signed datum-quote",
+      "approveTx": "0xf24a9e13cf39944b43ab4ff89fe68b768a309159501735d47d5dd5e7937560bb",
+      "openAndFundTx": "0x432cd1d48645c85b0c85790a1215498e108d688629ea636da0cbd4054d7ad30e",
+      "openAndFundBlock": 45547109,
+      "settleTx": "0x070d6d181e7c09c2044ca8450de11e76ec8a613fbaf2c4846021b16d5e36c379",
+      "settleBlock": 45547127,
+      "maxAmount": 1000000,
+      "actualAmount": 400000,
+      "assertedOnChain": {
+        "feeToTreasury": 2000,
+        "toSeller": 398000,
+        "refundToBuyer": 600000,
+        "escrowBalanceAfter": 0,
+        "conservation": "toSeller + feeToTreasury + refundToBuyer == maxAmount (1000000)",
+        "provenBy": "three distinct USDC Transfer events emitted from the escrow in the settle tx, one per destination"
+      }
+    },
+    "3_escrowExpiryReclaim": {
+      "description": "Second quote taken to expiry, then expire() reclaimed by the buyer. No fee is taken on an expiry refund.",
+      "quoteHash": "0x716d3bad9eba3c06adac79e81c362aa00d84905fd16f53664312358a70efcd23",
+      "openAndFundTx": "0x2462acd647a991db4a3039e290df4786c9dc52915850e8062768e7c89c355c5e",
+      "openAndFundBlock": 45547107,
+      "expireTx": "0x4d29e145e8fe772fb83dfca48966f51c0b74f7f286f14609f28a6bf9899c58bf",
+      "expireBlock": 45547198,
+      "maxAmount": 500000,
+      "assertedOnChain": {
+        "refundToBuyer": 500000,
+        "toSeller": 0,
+        "toTreasury": 0,
+        "escrowBalanceAfter": 0
+      }
+    },
+    "4_quoteHashNotReusable": {
+      "description": "A quoteHash is single-use forever, whether it was settled or expired.",
+      "settledHashReuseReverted": "EscrowExists() 0x1e76f791",
+      "expiredHashReuseReverted": "EscrowExists() 0x1e76f791",
+      "doubleExpireReverted": "EscrowNotOpen() 0x80818813"
+    },
+    "5_idempotentAnchoring": {
+      "description": "Verified live that re-running anchoring is safe: the first run anchors, subsequent runs report already-anchored and send no transaction. This is the 'dropped client after a landed transaction' case.",
+      "implementedBy": "packages/print/src/anchor/attestation.ts (anchorIdempotently) and anchor/on-chain.ts (OnChainAttestationClient)",
+      "verifiedWith": {
+        "bodyHash": "0x1b352de926198640aa43e472aa2f44b209c3ec44d4f7945737ce8404586aca3a",
+        "printId": "2026-08-16-idem2",
+        "run1": {
+          "status": "anchored",
+          "tx": "0xc0de7a370534495408bce34dc5b2dd583917975f3718a4ebd553706731816454",
+          "postedAt": "2026-08-16T06:52:26.000Z"
+        },
+        "run2": {
+          "status": "already-anchored",
+          "tx": null,
+          "postedAt": "2026-08-16T06:52:26.000Z"
+        },
+        "run3": {
+          "status": "already-anchored",
+          "tx": null
+        }
+      },
+      "bugsFoundOnLiveChainAndFixed": [
+        {
+          "bug": "A reverted transaction was reported as a successful anchor.",
+          "cause": "viem's waitForTransactionReceipt resolves for reverted transactions too \u2014 a receipt means mined, not succeeded \u2014 and the receipt status was never checked.",
+          "evidence": "First idempotency attempt sent a duplicate postPrint (tx 0xab519e1ff6135e837574de77917ede8a62c94a1a19eb1aa22102224bd5f7bfc4) which mined with status 0, yet was reported as anchored.",
+          "fix": "on-chain.ts throws unless receipt.status === 'success'; anchorIdempotently then decides from contract state rather than from the transaction outcome.",
+          "regressionTest": "packages/print/src/anchor/idempotent.test.ts \u2014 'does not report a reverted transaction as anchored'"
+        },
+        {
+          "bug": "Reading postedAt immediately after a mined transaction returned 0, so the next run re-sent.",
+          "cause": "Public RPC endpoints are load-balanced across nodes at different heights; a read can be served by one that has not caught up.",
+          "evidence": "Run 1 recorded a wall-clock posted_at with milliseconds (2026-08-16T06:49:54.026Z) instead of the on-chain second-precision timestamp, showing the read had answered 0.",
+          "fix": "readPostedAtWithRetry polls until the read is conclusive; only a non-zero answer is trusted.",
+          "regressionTest": "packages/print/src/anchor/idempotent.test.ts \u2014 'tolerates RPC read lag right after a send instead of re-sending next run'"
+        }
+      ],
+      "supersededAttempt": {
+        "note": "An earlier print (2026-08-16-idem, hash 0x7b270f36d9be823db8027ab4d55623f6442c411d99aa2be48ca18af3379ffed5) was anchored by tx 0xc7ae882ce92451598c5d465267cf268adc47fed3751772305c0186f617265201 while exposing the bugs above. Its duplicate send reverted on-chain and moved no state.",
+        "anchoredAt": 1786862996
+      }
+    }
+  },
+  "noAdminPathCheckedOnLiveBytecode": {
+    "absent": [
+      "owner()",
+      "transferOwnership(address)",
+      "setFeeBps(uint16)",
+      "setTreasury(address)",
+      "emergencyWithdraw(address,uint256)",
+      "pause()"
+    ],
+    "note": "Each call fails against the deployed contract because no such function exists. test/NoAdminPath.t.sol asserts the same property structurally from the compiled ABI and bytecode."
+  }
+}

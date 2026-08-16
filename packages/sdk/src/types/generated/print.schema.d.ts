@@ -167,7 +167,7 @@ export interface Print {
    */
   anchor?: {
     chain: string;
-    status: "anchored" | "stub" | "failed";
+    status: "anchored" | "already-anchored" | "stub" | "failed";
     tx_hash?: string;
     posted_at?: string;
     notes?: string;
