@@ -7,6 +7,17 @@ import { D, roundHalfUp, usdToMinorUnits, usdcAddressFor } from "../money/index.
 export const QUOTE_AMOUNT_DP = 4;
 
 /**
+ * The smallest nonzero value representable at `QUOTE_AMOUNT_DP`'s precision — docs/datum-quote.md's
+ * "Minimum quotable amount". Below this, `amount_usd_max` rounds to `"0.0000"` and
+ * `DatumEscrow.openAndFund` reverts on a zero `maxAmount` — hit live in P14's demo agents.
+ * Computed from `QUOTE_AMOUNT_DP` rather than hand-typed again, so the two can never drift.
+ */
+export const MINIMUM_QUOTABLE_USD = roundHalfUp(
+  new D(1).dividedBy(new D(10).pow(QUOTE_AMOUNT_DP)),
+  QUOTE_AMOUNT_DP,
+);
+
+/**
  * Bumped from "1.0" when the optional `settler` field was added alongside `DatumEscrow`
  * (build1-spec.md §10). A minor bump is the correct signal: the field is purely additive, and
  * `validateQuote`'s major-version check still accepts it. A 1.0-era consumer holding the old

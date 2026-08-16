@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { TASK_CLASSES, BASKET_VERSION } from "@datum/basket";
 import { computePrint } from "../compute/index.js";
@@ -15,7 +15,9 @@ import {
 
 const printId = process.argv[2];
 if (!printId) {
-  console.error("Usage: compute <print-id> [price-snapshot-file] [date=YYYY-MM-DD]");
+  console.error(
+    "Usage: compute <print-id> [price-snapshot-file] [date=YYYY-MM-DD] [floor-record=<path>]",
+  );
   process.exit(1);
 }
 
@@ -30,6 +32,32 @@ const printDate =
 if (!DATE_PATTERN.test(printDate)) {
   console.error(`Invalid date "${printDate}" — expected YYYY-MM-DD.`);
   process.exit(1);
+}
+
+// Optional: a scripts/measure-floor.ts-produced floor record. Absent by default — the floor and
+// market_spread columns stay absent when no measurement exists, per CLAUDE.md's invariant against
+// invented figures; computePrint already enforces this (see compute/index.ts).
+interface FloorRecordFile {
+  floor_usd_per_basket: string;
+  timestamp: string;
+  reference_gpu: string;
+  rate_source: string;
+  rate_usd_per_hour: string;
+  utilisation_assumption: string;
+  vllm_version: string;
+  model: string;
+}
+const floorRecordArg = process.argv.find((a) => a.startsWith("floor-record="))?.slice(13);
+let floor: { value: string; notes: string } | undefined;
+if (floorRecordArg) {
+  const record = JSON.parse(await readFile(floorRecordArg, "utf-8")) as FloorRecordFile;
+  floor = {
+    value: record.floor_usd_per_basket,
+    notes:
+      `Measured ${record.timestamp} on ${record.reference_gpu} (${record.rate_source} rate ` +
+      `$${record.rate_usd_per_hour}/hr, utilisation ${record.utilisation_assumption}). vLLM ` +
+      `${record.vllm_version} serving ${record.model}. Record: ${floorRecordArg}.`,
+  };
 }
 
 const snapshotFile = process.argv[3] ?? (await latestPriceSnapshotFile("openrouter"));
@@ -69,6 +97,7 @@ const { body } = computePrint({
   // print says so in weights.source. Inventing shares would be worse than declaring equal.
   price_snapshot_ref: snapshotFile,
   methodology_version: "v0-draft",
+  floor,
   sensitivityVariants: [
     cachePolicyVariant({
       cachedFraction: "0.40",

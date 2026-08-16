@@ -91,3 +91,50 @@ describe("validateQuote", () => {
     expect(result.valid).toBe(false);
   });
 });
+
+describe("validateQuote — minimum quotable amount", () => {
+  // pattern "fixed" with rate_usd_per_siu "1.0000" makes amount_usd_max directly controllable
+  // via siu (amount_usd_max = siu, rounded half-up to 4dp), isolating the floor check from the
+  // amount_usd_max reconciliation check tested above. amount_usd_max is always a multiple of
+  // 0.0001 in this format, so "0.0000" is the only possible below-the-floor value — there is no
+  // representable step between it and the floor itself.
+  function quoteWithSiu(siu: string) {
+    return signQuote(
+      buildQuoteBody({
+        siu,
+        pattern: "fixed",
+        model: "registry-id",
+        rateUsdPerSiu: "1.0000",
+        indexVersion: "SIU-2026a",
+        printId: "2026-08-14",
+        printHash: "0xabc123",
+        sellerId: "erc8004:0xSellerAddress",
+        chain: "base",
+        expiresInSeconds: 300,
+      }),
+      TEST_KEY,
+    );
+  }
+
+  it("rejects a quote just below the floor (rounds to 0.0000, the real live bug)", () => {
+    const quote = quoteWithSiu("0.00004");
+    expect(quote.amount_usd_max).toBe("0.0000");
+    const result = validateQuote(quote);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.join(" ")).toMatch(/below the minimum quotable amount/);
+    }
+  });
+
+  it("accepts a quote exactly at the floor", () => {
+    const quote = quoteWithSiu("0.00010");
+    expect(quote.amount_usd_max).toBe("0.0001");
+    expect(validateQuote(quote).valid).toBe(true);
+  });
+
+  it("accepts a quote just above the floor", () => {
+    const quote = quoteWithSiu("0.00020");
+    expect(quote.amount_usd_max).toBe("0.0002");
+    expect(validateQuote(quote).valid).toBe(true);
+  });
+});

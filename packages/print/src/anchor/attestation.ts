@@ -1,3 +1,5 @@
+import { retryUntilConclusive, type RetryUntilConclusiveOptions } from "@datum/sdk";
+
 /**
  * build1-spec.md §6 Signing: "call DatumAttestation.postPrint(bodyHash, version) on Base so
  * the hash is timestamped by a third party."
@@ -54,37 +56,25 @@ function isoFromUnixSeconds(seconds: bigint): string {
   return new Date(Number(seconds) * 1000).toISOString();
 }
 
-export interface ReadRetryOptions {
-  attempts?: number;
-  delayMs?: number;
-}
+/** Alias kept for every existing caller/import of this name — the retry logic itself now lives
+ * in `@datum/sdk`'s `retryUntilConclusive`, shared with `@datum/agents`' escrow reads. */
+export type ReadRetryOptions = RetryUntilConclusiveOptions;
 
 /**
- * Reads `postedAt`, retrying while it reads zero.
- *
- * Public RPC endpoints are load-balanced across nodes at slightly different heights, so a read
- * issued immediately after a transaction was mined can be served by a node that has not yet
- * caught up and will answer 0. Trusting that single read is what made an earlier version of
- * this code send a second, duplicate transaction on the very next run — the exact failure this
- * function exists to prevent. Only a non-zero answer is conclusive; zero is retried.
+ * Reads `postedAt`, retrying while it reads zero — see `@datum/sdk`'s `retryUntilConclusive` for
+ * why: trusting a single read immediately after a transaction was mined is what made an earlier
+ * version of this code send a second, duplicate transaction on the very next run.
  */
 export async function readPostedAtWithRetry(
   chain: AttestationChain,
   bodyHash: string,
   options: ReadRetryOptions = {},
 ): Promise<bigint> {
-  const attempts = options.attempts ?? 5;
-  const delayMs = options.delayMs ?? 1500;
-
-  let seen = 0n;
-  for (let i = 0; i < attempts; i++) {
-    seen = await chain.readPostedAt(bodyHash);
-    if (seen > 0n) return seen;
-    if (i < attempts - 1) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
-  }
-  return seen;
+  return retryUntilConclusive(
+    () => chain.readPostedAt(bodyHash),
+    (seen) => seen > 0n,
+    options,
+  );
 }
 
 /**

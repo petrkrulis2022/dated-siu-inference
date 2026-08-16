@@ -61,6 +61,33 @@ _Illustrative, matching build1-spec.md §8's own example:_ `siu_max: "1.400"`,
 `rate_usd_per_siu: "0.0483"` → `amount_usd_max: "0.0676"` (1.400 × 0.0483 = 0.06762, rounded
 half-up to 4dp).
 
+### Minimum quotable amount
+
+**The floor is `$0.0001`** — the smallest nonzero value representable at `amount_usd_max`'s own
+4dp rounding precision (`QUOTE_AMOUNT_DP`), equal to 100 USDC minor units at USDC's real 6
+decimals. This is not USDC's own floor (`$0.000001`, 1 minor unit) — widening `amount_usd_max`'s
+precision to match that would be a bigger change to an already-shipped format than what actually
+broke. The floor is simply the existing format's own smallest step: below it, `amount_usd_max`
+has nowhere to round to but `"0.0000"`.
+
+This was discovered live, not designed in advance: a real sub-cent inference call in P14's demo
+agents priced to a true cost small enough that `amount_usd_max` rounded to `"0.0000"`, and
+`DatumEscrow.openAndFund` reverted on a zero `maxAmount` — an unpayable quote that had already
+been signed and accepted before the transaction was attempted.
+
+**Below the floor, a quote is rejected — never rounded up.** Rounding up would charge the buyer
+more than the seller's real cost; that is an invented number, the same category of thing
+`CLAUDE.md`'s "never invent numbers in documentation or UI copy" and the no-floats money-maths
+invariant already rule out elsewhere. `quote/validate.ts`'s `validateQuote` enforces this: any
+quote whose `amount_usd_max` is below `MINIMUM_QUOTABLE_USD` (`quote/build.ts`) fails validation.
+
+**When a seller's true cost rounds to zero, it must not issue an individual quote for that call
+at that price.** Two honest ways out, both already real code in this repo's own demo seller
+(`packages/agents/src/pricing.ts`/`seller.ts`): batch multiple calls into one quote whose combined
+committed amount clears the floor, or — for `cap`/`estimate` patterns — widen the `siu_max`
+ceiling (for example, raise the output-token budget a seller commits to enforcing) so the
+worst-case cost, not just the point estimate, clears `$0.0001`.
+
 ### Settlement
 
 `settlement` is an array — deliberately, even though build 1 permits exactly one entry — mirroring
@@ -108,16 +135,21 @@ later, never a rewrite."
    accepted after its own stated expiry is a quote the seller never actually offered at that
    moment.
 
-6. **The escrow `expiry` passed to `openAndFund` MUST be ≥ the quote's `expiry` plus a settlement
+6. **`amount_usd_max` MUST be at least `MINIMUM_QUOTABLE_USD` (`$0.0001`).** See "Minimum
+   quotable amount" above. Enforced by `validateQuote`, not by the schema — a below-floor quote is
+   internally consistent (its arithmetic can still be honest) but unpayable, since
+   `DatumEscrow.openAndFund` reverts on a zero `maxAmount`.
+
+7. **The escrow `expiry` passed to `openAndFund` MUST be ≥ the quote's `expiry` plus a settlement
    window.** The work the quote pays for happens _after_ payment; an escrow that expires at or
    before the quote's own expiry could reclaim funds out from under work already in flight. This
    document does not fix the settlement window's length — that is an operational parameter for
    whoever funds escrow, not a property of the quote itself.
 
-7. **Build 1 permits exactly one `settlement` entry and it MUST be USDC.** See "Settlement"
+8. **Build 1 permits exactly one `settlement` entry and it MUST be USDC.** See "Settlement"
    above.
 
-8. **`quoteHash`** is keccak256 of the JCS-canonicalised quote body with `sig` excluded — the
+9. **`quoteHash`** is keccak256 of the JCS-canonicalised quote body with `sig` excluded — the
    same construction a print uses, excluding its own `signature`/`public_key`. This is the
    `quoteHash` `DatumEscrow.openAndFund` and `receipt.quote_hash` both refer to, and it is
    computable before a seller signs anything, since it's a property of the offer, not of the
@@ -125,20 +157,20 @@ later, never a rewrite."
    `bytes32` key — so there is no risk of the two implementations disagreeing about how it is
    derived; the SDK is its single source.
 
-9. **The seller MUST verify the on-chain settler before performing any work.** `settler` on the
-   quote is what the seller agreed to; `DatumEscrow.settlerOf(quoteHash)` is what the buyer
-   actually funded. Before starting work the seller MUST read the on-chain value and confirm it
-   matches the settler in their own signed quote. **On mismatch the seller MUST NOT perform the
-   work, and MUST let the escrow expire** so the buyer's funds return untouched.
+10. **The seller MUST verify the on-chain settler before performing any work.** `settler` on the
+    quote is what the seller agreed to; `DatumEscrow.settlerOf(quoteHash)` is what the buyer
+    actually funded. Before starting work the seller MUST read the on-chain value and confirm it
+    matches the settler in their own signed quote. **On mismatch the seller MUST NOT perform the
+    work, and MUST let the escrow expire** so the buyer's funds return untouched.
 
-   This matters because a settler is an address the buyer chose. A buyer who funds escrow naming
-   a settler the quote never agreed to could take delivery of completed work and then have that
-   settler settle at zero, paying nothing. The contract cannot detect this — `settler` is fixed
-   at funding time and `DatumEscrow` has no way to know what a signed quote said — so the check
-   has to happen off-chain, before the work is done, and it is the seller's responsibility. The
-   contract makes the check cheap by exposing `settlerOf(quoteHash)` directly.
+    This matters because a settler is an address the buyer chose. A buyer who funds escrow naming
+    a settler the quote never agreed to could take delivery of completed work and then have that
+    settler settle at zero, paying nothing. The contract cannot detect this — `settler` is fixed
+    at funding time and `DatumEscrow` has no way to know what a signed quote said — so the check
+    has to happen off-chain, before the work is done, and it is the seller's responsibility. The
+    contract makes the check cheap by exposing `settlerOf(quoteHash)` directly.
 
-10. **The fee is charged on `actualAmount`, never on `maxAmount`, and is deducted from the
+11. **The fee is charged on `actualAmount`, never on `maxAmount`, and is deducted from the
     seller's proceeds.** The seller receives `actualAmount - fee`; the treasury receives `fee`;
     the buyer is refunded `maxAmount - actualAmount` in full, with no fee taken from the portion
     being returned to them. **Sellers must price accordingly** — the headline

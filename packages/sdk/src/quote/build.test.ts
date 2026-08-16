@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildQuoteBody, QUOTE_SCHEMA_VERSION, type QuoteBuildInput } from "./build.js";
+import {
+  buildQuoteBody,
+  QUOTE_SCHEMA_VERSION,
+  MINIMUM_QUOTABLE_USD,
+  type QuoteBuildInput,
+} from "./build.js";
 
 const BASE: Omit<QuoteBuildInput, "pattern" | "siuMax"> = {
   siu: "1.000",
@@ -68,5 +73,11 @@ describe("buildQuoteBody", () => {
     expect(() => buildQuoteBody({ ...BASE, pattern: "fixed", chain: "ethereum" })).toThrow(
       /No known USDC address/,
     );
+  });
+});
+
+describe("MINIMUM_QUOTABLE_USD", () => {
+  it("is the smallest nonzero value representable at QUOTE_AMOUNT_DP's precision", () => {
+    expect(MINIMUM_QUOTABLE_USD).toBe("0.0001");
   });
 });

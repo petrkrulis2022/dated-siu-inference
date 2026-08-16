@@ -2,7 +2,7 @@ import type { DatumQuote } from "../types/generated/datum-quote.schema.js";
 import type { ValidationResult } from "../validation/types.js";
 import { validateDatumQuote } from "../validation/datum-quote.js";
 import { D, roundHalfUp, usdToMinorUnits, usdcAddressFor } from "../money/index.js";
-import { QUOTE_AMOUNT_DP } from "./build.js";
+import { QUOTE_AMOUNT_DP, MINIMUM_QUOTABLE_USD } from "./build.js";
 
 /**
  * Everything ajv's schema check (`validateDatumQuote`) cannot express: `if/then` covers
@@ -61,6 +61,20 @@ export function validateQuote(data: unknown): ValidationResult<DatumQuote> {
           `rounded to ${QUOTE_AMOUNT_DP}dp (expected ${expectedAmount})`,
       );
     }
+  }
+
+  // docs/datum-quote.md's "Minimum quotable amount": below MINIMUM_QUOTABLE_USD, amount_usd_max
+  // rounds to "0.0000" at this format's own precision and DatumEscrow.openAndFund reverts on a
+  // zero maxAmount — hit live in P14. Rejected rather than rounded up: rounding up would charge
+  // the buyer more than the seller's real cost, an invented number. A seller whose true cost
+  // rounds to zero must batch calls into one quote or widen a cap/estimate ceiling instead.
+  if (new D(quote.amount_usd_max).lessThan(MINIMUM_QUOTABLE_USD)) {
+    errors.push(
+      `amount_usd_max (${quote.amount_usd_max}) is below the minimum quotable amount ` +
+        `(${MINIMUM_QUOTABLE_USD}) — see docs/datum-quote.md's "Minimum quotable amount". Batch ` +
+        `multiple calls into one quote, or widen a cap/estimate pattern's ceiling, instead of ` +
+        `issuing an unpayable quote.`,
+    );
   }
 
   // Build 1 permits exactly one settlement entry and it MUST be USDC at a known contract
