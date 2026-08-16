@@ -44,6 +44,41 @@ export const DATUM_ATTESTATION_ABI = [
   },
 ] as const;
 
+/**
+ * Reads the immutable `publisher` address directly — no private key needed. Used by the
+ * independent-verification loop (packages/print/src/cli/verify-onchain.ts): compare this
+ * against the address recovered from a print's own signature, never against the print's own
+ * claimed `public_key` field.
+ */
+export async function readAttestationPublisher(
+  rpcUrl: string,
+  contractAddress: string,
+): Promise<string> {
+  const publicClient = createPublicClient({ transport: http(rpcUrl) });
+  return publicClient.readContract({
+    address: contractAddress as Hex,
+    abi: DATUM_ATTESTATION_ABI,
+    functionName: "publisher",
+  });
+}
+
+/** Reads `postedAt` directly, no private key needed — the other half of independent
+ * verification: is this exact body hash actually anchored, regardless of who anchored it? */
+export async function readAttestationPostedAt(
+  rpcUrl: string,
+  contractAddress: string,
+  bodyHash: string,
+): Promise<bigint> {
+  const publicClient = createPublicClient({ transport: http(rpcUrl) });
+  const result = await publicClient.readContract({
+    address: contractAddress as Hex,
+    abi: DATUM_ATTESTATION_ABI,
+    functionName: "postedAt",
+    args: [bodyHash as Hex],
+  });
+  return BigInt(result);
+}
+
 export interface OnChainAttestationOptions {
   rpcUrl: string;
   /** Deployed DatumAttestation address — see data/deployments/<network>.json. */

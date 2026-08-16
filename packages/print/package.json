@@ -11,7 +11,8 @@
     "test": "vitest run",
     "compute": "pnpm run build && node dist/cli/compute.js",
     "verify": "pnpm run build && node dist/cli/verify.js",
-    "publish-print": "pnpm run build && node dist/cli/publish.js"
+    "publish-print": "pnpm run build && node dist/cli/publish.js",
+    "verify-onchain": "pnpm run build && node dist/cli/verify-onchain.js"
   },
   "dependencies": {
     "@datum/basket": "workspace:*",
