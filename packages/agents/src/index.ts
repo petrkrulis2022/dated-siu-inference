@@ -25,3 +25,4 @@ export { pickCheaperQuote } from "./quote-compare.js";
 export { createSellerApp, type SellerOptions, type SellerDeps } from "./seller.js";
 export { runBuyerDemo, type BuyerRunOptions, type SellerEndpoint } from "./buyer.js";
 export { callVerifyReceipt } from "./mcp-client.js";
+export { logIssuedQuote, quotesCacheDir } from "./quote-log.js";

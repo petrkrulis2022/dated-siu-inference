@@ -1,0 +1,32 @@
+{
+  "name": "@datum/console",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/server/index.js",
+  "types": "./dist/server/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && vite build --config web/vite.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
+    "test": "vitest run",
+    "dev": "node dev.mjs",
+    "index": "pnpm run build && node dist/server/indexer/rebuild-cli.js"
+  },
+  "dependencies": {
+    "@datum/print": "workspace:*",
+    "@datum/sdk": "workspace:*",
+    "express": "^5.2.1",
+    "viem": "^2.55.16"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "recharts": "^3.10.1",
+    "vite": "^8.2.1"
+  }
+}

@@ -21,5 +21,9 @@ docs/keys_needed_datum.md
 # data/prints/ and data/runs/ are intentionally NOT excluded here —
 # they are git-tracked on purpose. Publication is the product.
 
+# Derived, regenerable local caches (packages/console's event index and agents' local quote
+# log) — never a source of truth, never committed.
+data/.cache/
+
 # Windows/WSL "mark of the web" sidecar files from downloaded docs
 *:Zone.Identifier

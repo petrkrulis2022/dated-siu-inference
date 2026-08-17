@@ -19,10 +19,11 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    // Plain Node scripts outside the TypeScript packages (e.g. the README generator) — no
-    // @types/node ambient declarations reach here, so `no-undef` needs the Node globals stated
-    // explicitly rather than picking them up implicitly the way TS files do.
-    files: ["scripts/**/*.mjs"],
+    // Plain Node scripts outside a TypeScript package's own tsconfig (e.g. the README
+    // generator, packages/console's dual-process dev launcher) — no @types/node ambient
+    // declarations reach here, so `no-undef` needs the Node globals stated explicitly rather
+    // than picking them up implicitly the way TS files do.
+    files: ["**/*.mjs"],
     languageOptions: {
       globals: { process: "readonly", console: "readonly" },
     },

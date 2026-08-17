@@ -11,6 +11,7 @@ import {
 } from "@datum/sdk";
 import { readEscrowUntilMatch, escrowMatchesQuote, settle } from "./escrow-client.js";
 import { estimatedCeiling, realizedCost, type PriceSnapshotEntryPrices } from "./pricing.js";
+import { logIssuedQuote } from "./quote-log.js";
 import type { ChainClients } from "./wallets.js";
 
 /** Neither a real print (`data/prints/` is empty in this environment) nor a real ERC-8004
@@ -43,13 +44,14 @@ function sellerIdFor(clients: ChainClients): string {
   return `erc8004:${clients.account.address}`;
 }
 
-/** Real chain/model calls, injectable so `seller.test.ts` can assert the 402-vs-funded HTTP
- * branching without touching live chain or a real model — the underlying real implementations
- * (`readEscrowUntilMatch`, `settle`) are proven separately, against live Base Sepolia, in
- * `live.test.ts`. */
+/** Real chain/model/filesystem calls, injectable so `seller.test.ts` can assert the
+ * 402-vs-funded HTTP branching without touching live chain, a real model, or the real
+ * filesystem — the underlying real implementations (`readEscrowUntilMatch`, `settle`,
+ * `logIssuedQuote`) are proven separately, against live Base Sepolia, in `live.test.ts`. */
 export interface SellerDeps {
   readEscrowUntilMatch: typeof readEscrowUntilMatch;
   settle: typeof settle;
+  logIssuedQuote: typeof logIssuedQuote;
   adapter: Adapter;
 }
 
@@ -57,6 +59,7 @@ function defaultDeps(options: SellerOptions): SellerDeps {
   return {
     readEscrowUntilMatch,
     settle,
+    logIssuedQuote,
     adapter: createAdapterFor(options.registryEntry, { openrouter: options.openrouterApiKey }),
   };
 }
@@ -115,6 +118,12 @@ export function createSellerApp(
         `[${options.label}] issuing quote: siu=${quote.siu} (cap ${quote.siu_max}), ` +
           `amount_usd_max=$${quote.amount_usd_max}`,
       );
+      // Best-effort: a console-convenience side effect must never break a real quote response.
+      await deps.logIssuedQuote(quote).catch((err: unknown) => {
+        options.log(
+          `[${options.label}] (non-fatal) failed to log quote for the console: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
       res.status(402).json({
         x402Version: 2,
         error: "Payment Required",
