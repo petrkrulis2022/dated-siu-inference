@@ -3,7 +3,7 @@ import {
   generateT2Instances,
   generateT3Instances,
   toSeed,
-} from "@datum/basket";
+} from "@touchstone/basket";
 import { estimateCost, formatDryRunReport } from "../dry-run.js";
 import { loadLatestPriceSnapshot, loadRegistry } from "./load-data.js";
 

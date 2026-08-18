@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { loadDeployment } from "@datum/sdk";
+import { loadDeployment } from "@touchstone/sdk";
 
 /** pnpm always runs package scripts (and this repo's `dev.mjs`/`tsx` invocations) with cwd =
  * the package directory. */
@@ -11,7 +11,7 @@ function repoRoot(): string {
  * Every value here is either read from `.env` (already sourced into the shell before this
  * process starts — same convention every other script in this repo uses; no `dotenv` dependency)
  * or from `data/deployments/<chain>.json` via `loadDeployment` (never hardcoded). No key material
- * is ever read: `DATUM_PUBLISHER_KEY`/`DEPLOYER_PRIVATE_KEY` are never touched by this package.
+ * is ever read: `TOUCHSTONE_PUBLISHER_KEY`/`DEPLOYER_PRIVATE_KEY` are never touched by this package.
  */
 export interface ConsoleConfig {
   port: number;
@@ -41,13 +41,14 @@ function requireEnv(name: string): string {
 }
 
 export function loadConfig(): ConsoleConfig {
-  const chainName = process.env.DATUM_CHAIN_NAME ?? "base-sepolia";
+  const chainName = process.env.TOUCHSTONE_CHAIN_NAME ?? "base-sepolia";
   const rpcEnvVar = `${chainName.toUpperCase().replaceAll("-", "_")}_RPC_URL`;
   const rpcUrl = requireEnv(rpcEnvVar);
 
   const deployment = loadDeployment(chainName);
-  const escrowBlock = (deployment.contracts.DatumEscrow as { blockNumber?: number }).blockNumber;
-  const attestationBlock = (deployment.contracts.DatumAttestation as { blockNumber?: number })
+  const escrowBlock = (deployment.contracts.TouchstoneEscrow as { blockNumber?: number })
+    .blockNumber;
+  const attestationBlock = (deployment.contracts.TouchstoneAttestation as { blockNumber?: number })
     .blockNumber;
   if (escrowBlock === undefined || attestationBlock === undefined) {
     throw new Error(
@@ -63,11 +64,11 @@ export function loadConfig(): ConsoleConfig {
     chainId: deployment.network.chainId,
     rpcUrl,
     explorerBaseUrl: deployment.network.explorer,
-    escrowAddress: deployment.contracts.DatumEscrow.address,
+    escrowAddress: deployment.contracts.TouchstoneEscrow.address,
     escrowDeployBlock: BigInt(escrowBlock),
-    attestationAddress: deployment.contracts.DatumAttestation.address,
+    attestationAddress: deployment.contracts.TouchstoneAttestation.address,
     attestationDeployBlock: BigInt(attestationBlock),
-    publisherAddress: process.env.DATUM_PUBLISHER_ADDRESS ?? null,
+    publisherAddress: process.env.TOUCHSTONE_PUBLISHER_ADDRESS ?? null,
     printsDir: resolve(repoRoot(), "data/prints"),
     runsDirRoot: resolve(repoRoot(), "data/runs"),
     registryDir: resolve(repoRoot(), "data/registry"),

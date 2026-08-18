@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DatumQuote } from "@datum/sdk";
+import type { TouchstoneQuote } from "@touchstone/sdk";
 import { OnChainSettlementReader, QuoteHashMismatchError } from "./on-chain.js";
 
 /**
@@ -18,7 +18,7 @@ const describeLive = RPC_URL ? describe : describe.skip;
 
 /** The exact signed quote settled by SETTLE_TX below — captured verbatim at the moment it was
  * built and settled live, so quoteHashHex(quote) reproduces the real on-chain quoteHash. */
-const SETTLED_QUOTE: DatumQuote = {
+const SETTLED_QUOTE: TouchstoneQuote = {
   schema_version: "1.1",
   siu: "0.100",
   pattern: "fixed",
@@ -45,7 +45,7 @@ const SETTLE_TX = "0x1285be1ee4c0e88594228c9735ff6cdcf83e5b8b08574cfcb7b3362d469
 /** A well-formed but different quote (different `siu`, hence a different `sig` and quoteHash),
  * paired deliberately with SETTLE_TX above to prove the reader rejects a mismatch rather than
  * trusting the caller's label for a real settlement. */
-const WRONG_QUOTE: DatumQuote = {
+const WRONG_QUOTE: TouchstoneQuote = {
   ...SETTLED_QUOTE,
   siu: "0.999",
   sig: `0x${"ab".repeat(64)}`,
@@ -54,7 +54,7 @@ const WRONG_QUOTE: DatumQuote = {
 /** A genuinely mined but Expired escrow — expire() emits no Settled event, so a correct reader
  * must return null here, not fabricate a settlement. */
 const EXPIRED_TX = "0x4d29e145e8fe772fb83dfca48966f51c0b74f7f286f14609f28a6bf9899c58bf";
-const EXPIRED_QUOTE: DatumQuote = { ...SETTLED_QUOTE, print_id: "2026-08-16-smoke" };
+const EXPIRED_QUOTE: TouchstoneQuote = { ...SETTLED_QUOTE, print_id: "2026-08-16-smoke" };
 
 /** A real double-settle attempt against the already-settled escrow above — EscrowNotOpen causes
  * a genuine on-chain revert. Mined with an explicit gas limit (bypassing simulation) specifically

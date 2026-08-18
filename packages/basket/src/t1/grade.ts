@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import type { GradeResult, TaskInstance } from "../types.js";
 import { T1_SCHEMA, type T1Expected } from "./generate.js";
 
-// Same ajv/NodeNext ESM interop issue documented in @datum/sdk's ajv-instance.ts.
+// Same ajv/NodeNext ESM interop issue documented in @touchstone/sdk's ajv-instance.ts.
 const require = createRequire(import.meta.url);
 const Ajv = require("ajv").default as typeof import("ajv").default;
 const ajv = new Ajv({ allErrors: true });

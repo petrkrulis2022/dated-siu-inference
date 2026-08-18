@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Print } from "@datum/sdk";
+import type { Print } from "@touchstone/sdk";
 import { computePrint } from "../compute/index.js";
 import { publishableWorkedExampleInput, workedExampleInput } from "../worked-example.fixture.js";
 import { canonicalise, printBodyHashHex, printBodyOf } from "./canonicalise.js";
@@ -137,10 +137,10 @@ describe("signPrintBody / verifyPrintSignature", () => {
 
 describe("loadPublisherKeyFromEnv", () => {
   it("returns the key when set", () => {
-    expect(loadPublisherKeyFromEnv({ DATUM_PUBLISHER_KEY: TEST_KEY })).toBe(TEST_KEY);
+    expect(loadPublisherKeyFromEnv({ TOUCHSTONE_PUBLISHER_KEY: TEST_KEY })).toBe(TEST_KEY);
   });
 
   it("throws rather than defaulting when unset — never silently sign with a dummy key", () => {
-    expect(() => loadPublisherKeyFromEnv({})).toThrow(/DATUM_PUBLISHER_KEY/);
+    expect(() => loadPublisherKeyFromEnv({})).toThrow(/TOUCHSTONE_PUBLISHER_KEY/);
   });
 });

@@ -10,7 +10,7 @@ import { fromHex, toHex } from "../sign/canonicalise.js";
  * tampered file from carrying a signature and a public key that are internally consistent with
  * each other but belong to nobody real. `verifyPrintSignature` (sign/sign.ts) checks internal
  * consistency; this function is the other half, used to check the signature against a truth
- * that lives outside the file — `DatumAttestation.publisher()` on chain.
+ * that lives outside the file — `TouchstoneAttestation.publisher()` on chain.
  *
  * The signatures this package produces (secp256k1.sign with `{ prehash: false }`) are the plain
  * 64-byte compact `{r, s}` form with no recovery bit attached — confirmed empirically against

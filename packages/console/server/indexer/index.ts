@@ -34,13 +34,13 @@ async function withRpcBackoff<T>(fn: () => Promise<T>, maxRetries = 6): Promise<
   }
 }
 
-/** Only the members the indexer actually decodes — `DatumEscrow`'s/`DatumAttestation`'s full
+/** Only the members the indexer actually decodes — `TouchstoneEscrow`'s/`TouchstoneAttestation`'s full
  * ABIs live in `packages/contracts`, outside the pnpm workspace. Same minimal-fragment approach
  * `settlement/on-chain.ts` (mcp-server) already established for point reads; this is the first
  * *historical log scan* anywhere in the repo (every existing on-chain reader only does point
  * `readContract`/single-tx-receipt decodes), so there's no existing scan to copy, only the
  * ABI-fragment style. */
-export const DATUM_ESCROW_EVENTS_ABI = [
+export const TOUCHSTONE_ESCROW_EVENTS_ABI = [
   {
     type: "event",
     name: "Opened",
@@ -87,7 +87,7 @@ export const DATUM_ESCROW_EVENTS_ABI = [
   },
 ] as const;
 
-export const DATUM_ATTESTATION_EVENTS_ABI = [
+export const TOUCHSTONE_ATTESTATION_EVENTS_ABI = [
   {
     type: "event",
     name: "PrintPosted",
@@ -214,14 +214,14 @@ export async function indexNewEvents(
           withRpcBackoff(() =>
             client.readContract({
               address: escrowAddress,
-              abi: DATUM_ESCROW_EVENTS_ABI,
+              abi: TOUCHSTONE_ESCROW_EVENTS_ABI,
               functionName: "feeBps",
             }),
           ),
           withRpcBackoff(() =>
             client.readContract({
               address: escrowAddress,
-              abi: DATUM_ESCROW_EVENTS_ABI,
+              abi: TOUCHSTONE_ESCROW_EVENTS_ABI,
               functionName: "treasury",
             }),
           ),
@@ -232,7 +232,7 @@ export async function indexNewEvents(
       ? await scanRange(
           client,
           escrowAddress,
-          DATUM_ESCROW_EVENTS_ABI.filter((item) => item.type === "event"),
+          TOUCHSTONE_ESCROW_EVENTS_ABI.filter((item) => item.type === "event"),
           escrowFrom,
           latest,
           chunkSize,
@@ -253,7 +253,7 @@ export async function indexNewEvents(
       ? await scanRange(
           client,
           attestationAddress,
-          DATUM_ATTESTATION_EVENTS_ABI,
+          TOUCHSTONE_ATTESTATION_EVENTS_ABI,
           attestationFrom,
           latest,
           chunkSize,

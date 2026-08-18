@@ -1,6 +1,6 @@
-# @datum/contracts
+# @touchstone/contracts
 
-Solidity: `DatumAttestation`, `DatumEscrow` (Foundry, Base) — build1-spec.md §10.
+Solidity: `TouchstoneAttestation`, `TouchstoneEscrow` (Foundry, Base) — build1-spec.md §10.
 
 Not a pnpm workspace member: separate toolchain, per CLAUDE.md's stack conventions. `pnpm test`
 at the repo root does **not** run these tests — run `forge test` here instead. That is a
@@ -27,7 +27,7 @@ forge coverage        # 100% line/branch/function on both src contracts
 forge fmt             # Solidity formatting; prettier does not touch this package
 ```
 
-## `DatumAttestation`
+## `TouchstoneAttestation`
 
 `postPrint(bytes32 bodyHash, string version)`, restricted to an immutable `publisher`. Stores
 `bodyHash => timestamp` and emits `PrintPosted`. Re-anchoring an already-anchored hash reverts —
@@ -38,7 +38,7 @@ No upgradeability, no admin, and no publisher rotation: rotating the key means d
 instance and naming the new address in the published methodology. A mutable publisher would let
 whoever controls the mutation retroactively change who is trusted to have anchored past prints.
 
-## `DatumEscrow`
+## `TouchstoneEscrow`
 
 ```solidity
 openAndFund(bytes32 quoteHash, address seller, address settler, uint256 maxAmount, uint64 expiry)
@@ -97,13 +97,13 @@ ERC-8004. See `docs/datum-quote.md`.
 Every test category was mutation-checked — the property was broken deliberately and the suite
 confirmed to fail — because a security test that cannot fail is worse than no test:
 
-- **Reentrancy** (`DatumEscrow.reentrancy.t.sol`): a hostile token re-enters from its transfer
+- **Reentrancy** (`TouchstoneEscrow.reentrancy.t.sol`): a hostile token re-enters from its transfer
   hook. The nested call targets a _second, still-open_ escrow whose authorised settler is the
   token itself, and the token holds a balance and approval — so neither CEI, nor the
   authorisation check, nor a missing allowance can be what refuses it. Only the guard can.
 - **No admin path** (`NoAdminPath.t.sol`): verified by injecting an `emergencyWithdraw` and
   confirming three tests fail.
-- **Conservation** (`DatumEscrow.invariant.t.sol`): 256 runs × 64 calls of arbitrary
+- **Conservation** (`TouchstoneEscrow.invariant.t.sol`): 256 runs × 64 calls of arbitrary
   open/settle/expire/warp sequences. The headline invariant sums balances across every possible
   legitimate holder and asserts it equals the total minted, so any token reaching any other
   address breaks it. `afterInvariant` guards against the suite passing vacuously — an earlier
@@ -118,10 +118,10 @@ the contracts take every environment-dependent value as a constructor parameter,
 Base mainnet later is a new script, never a contract change.
 
 ```bash
-export DATUM_PUBLISHER_ADDRESS=0x...   # address of the print-signing publisher key
-export DATUM_TREASURY=0x...            # fee destination — immutable, use a Safe
-export DATUM_FEE_BPS=50                # 0.5%, must be <= 100
-# optional: DATUM_USDC to override Base Sepolia's USDC address
+export TOUCHSTONE_PUBLISHER_ADDRESS=0x...   # address of the print-signing publisher key
+export TOUCHSTONE_TREASURY=0x...            # fee destination — immutable, use a Safe
+export TOUCHSTONE_FEE_BPS=50                # 0.5%, must be <= 100
+# optional: TOUCHSTONE_USDC to override Base Sepolia's USDC address
 
 forge script script/Deploy.s.sol --rpc-url "$BASE_SEPOLIA_RPC_URL"                 # simulate
 forge script script/Deploy.s.sol --rpc-url "$BASE_SEPOLIA_RPC_URL" --broadcast     # deploy

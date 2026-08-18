@@ -113,7 +113,7 @@ export async function gradeT3(
 
   const code = ensureExported(extractCode(rawResponse), instance.expected.functionName);
 
-  const tempDir = await mkdtemp(join(tmpdir(), "datum-t3-sandbox-"));
+  const tempDir = await mkdtemp(join(tmpdir(), "touchstone-t3-sandbox-"));
   try {
     await writeFile(join(tempDir, "candidate.mjs"), code, "utf-8");
     await writeFile(join(tempDir, "runner.mjs"), RUNNER_SOURCE, "utf-8");

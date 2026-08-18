@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PriceSnapshot, Print } from "@datum/sdk";
+import type { PriceSnapshot, Print } from "@touchstone/sdk";
 import { computeHealthReport } from "./health-checks.js";
 
 function fakePrint(overrides: Partial<Print> = {}): Print {

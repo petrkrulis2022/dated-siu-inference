@@ -1,8 +1,8 @@
 import type { Server } from "node:http";
 import type { Express } from "express";
-import { buildApp } from "@datum/mcp-server";
-import { loadDeployment } from "@datum/sdk";
-import { loadRegistry, latestPriceSnapshotFile, loadPriceSnapshot } from "@datum/print";
+import { buildApp } from "@touchstone/mcp-server";
+import { loadDeployment } from "@touchstone/sdk";
+import { loadRegistry, latestPriceSnapshotFile, loadPriceSnapshot } from "@touchstone/print";
 import { clientsFor, generateAndFundSeller } from "../wallets.js";
 import { createSellerApp } from "../seller.js";
 import { runBuyerDemo } from "../buyer.js";
@@ -48,19 +48,21 @@ function closeServer(server: Server): Promise<void> {
 
 async function main(): Promise<void> {
   console.log("=".repeat(78));
-  console.log("Datum demo agents — TESTBED, not traction. These are our own agents on our");
+  console.log(
+    "Touchstone Assay demo agents — TESTBED, not traction. These are our own agents on our",
+  );
   console.log("own testnet wallets; this run demonstrates the protocol, not market demand.");
   console.log("=".repeat(78));
 
-  const chainName = process.env.DATUM_CHAIN_NAME ?? "base-sepolia";
+  const chainName = process.env.TOUCHSTONE_CHAIN_NAME ?? "base-sepolia";
   const rpcEnvVar = `${chainName.toUpperCase().replaceAll("-", "_")}_RPC_URL`;
   const rpcUrl = requireEnv(rpcEnvVar);
   const deployerKey = requireEnv("DEPLOYER_PRIVATE_KEY");
-  const publisherKey = requireEnv("DATUM_PUBLISHER_KEY");
+  const publisherKey = requireEnv("TOUCHSTONE_PUBLISHER_KEY");
   const openrouterKey = requireEnv("OPENROUTER_API_KEY");
 
   const deployment = loadDeployment(chainName);
-  const escrowAddress = deployment.contracts.DatumEscrow.address;
+  const escrowAddress = deployment.contracts.TouchstoneEscrow.address;
   const usdcAddress = deployment.usdc.address;
 
   const registry = await loadRegistry();
@@ -85,8 +87,8 @@ async function main(): Promise<void> {
   log(`[setup] seller-b wallet funded: ${sellerBFunded.account.address}`);
 
   const prompt = "In one short sentence, what is a benchmark price index?";
-  // Large enough that the real USD ceiling doesn't round to $0.0000 at datum-quote's 4dp
-  // precision (DatumEscrow.openAndFund rejects a zero maxAmount) — confirmed by first running
+  // Large enough that the real USD ceiling doesn't round to $0.0000 at touchstone-quote's 4dp
+  // precision (TouchstoneEscrow.openAndFund rejects a zero maxAmount) — confirmed by first running
   // this demo with 64 and hitting exactly that revert.
   const maxOutputTokens = 2000;
   const quoteTtlSeconds = 3600;

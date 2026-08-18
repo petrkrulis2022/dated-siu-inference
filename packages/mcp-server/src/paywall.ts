@@ -81,7 +81,7 @@ export function createToolPaywall(options: PaywallOptions = {}) {
     sellerAddress,
     networks: options.networks,
     facilitatorUrl: options.facilitatorUrl,
-    description: "Datum — Dated SIU pricing tools (build1-spec.md §9)",
+    description: "Touchstone Assay — Dated SIU pricing tools (build1-spec.md §9)",
   });
 
   return createDispatcher((price) => gateway.require(price) as ToolMiddleware);

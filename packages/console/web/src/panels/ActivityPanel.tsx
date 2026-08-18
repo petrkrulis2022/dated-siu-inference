@@ -22,7 +22,7 @@ export function ActivityPanel({ config }: { config: ConfigResponse | null }): Re
     <div className="panel">
       <h2>Agent activity</h2>
       <p className="muted">
-        Reconstructed entirely from <code>DatumEscrow</code>'s on-chain <code>Opened</code>/
+        Reconstructed entirely from <code>TouchstoneEscrow</code>'s on-chain <code>Opened</code>/
         <code>Settled</code>/<code>Expired</code> events. Run <code>pnpm console:index</code> to
         refresh from live chain.
       </p>

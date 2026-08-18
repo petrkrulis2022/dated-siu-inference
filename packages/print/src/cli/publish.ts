@@ -1,5 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
+import { loadDeployment } from "@touchstone/sdk";
 import {
   BASKET_VERSION,
   TASK_CLASSES,
@@ -12,16 +13,17 @@ import {
   toSeed,
   type Grader,
   type TaskClass,
-} from "@datum/basket";
+} from "@touchstone/basket";
 import {
   estimateCost,
   formatDryRunReport,
   loadApiKeysFromEnv,
   runOrchestrator,
   type OrchestratorTask,
-} from "@datum/harness";
+} from "@touchstone/harness";
 import { batchDiscountVariant, cachePolicyVariant } from "../compute/sensitivity.js";
 import { loadPublisherKeyFromEnv } from "../sign/sign.js";
+import { OnChainAttestationClient } from "../anchor/on-chain.js";
 import { publishPrint } from "../publish.js";
 import {
   buildModelInputs,
@@ -42,6 +44,28 @@ const skipConfirm = process.argv.includes("--yes");
 // Fail before anything else if there is no key to sign with — better to find out now than
 // after spending on a harness run that then has nothing to sign the result with.
 const privateKeyHex = loadPublisherKeyFromEnv();
+
+// Same fail-fast reasoning for the anchor: if no chain is configured, StubAttestationClient is
+// used deliberately (e.g. local dry runs with no RPC access), but if a chain IS configured, a
+// misconfigured RPC URL or deployment record should surface before spending on the harness run,
+// not after. Convention matches verify-onchain.ts: network from $TOUCHSTONE_CHAIN_NAME (default
+// "base-sepolia"), RPC URL from <NETWORK>_RPC_URL.
+const chainName = process.env.TOUCHSTONE_CHAIN_NAME ?? "base-sepolia";
+const rpcEnvVar = `${chainName.toUpperCase().replaceAll("-", "_")}_RPC_URL`;
+const rpcUrl = process.env[rpcEnvVar];
+const attestationClient = rpcUrl
+  ? new OnChainAttestationClient({
+      rpcUrl,
+      contractAddress: loadDeployment(chainName).contracts.TouchstoneAttestation.address,
+      privateKeyHex,
+      chainName,
+    })
+  : undefined;
+if (!attestationClient) {
+  console.warn(
+    `${rpcEnvVar} is not set — publishing with StubAttestationClient (no on-chain anchor).`,
+  );
+}
 
 const snapshotFile = await latestPriceSnapshotFile("openrouter");
 const registry = await loadRegistry();
@@ -118,6 +142,7 @@ const result = await publishPrint(printsDir(), {
   price_snapshot_ref: snapshotFile,
   methodology_version: "v0-draft",
   privateKeyHex,
+  attestationClient,
   sensitivityVariants: [
     cachePolicyVariant({
       cachedFraction: "0.40",

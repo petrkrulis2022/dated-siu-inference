@@ -10,7 +10,7 @@ export const USDC_DECIMALS = 6;
 /**
  * The single shared USD-decimal-string ↔ integer-minor-units conversion, per
  * docs/plan.md's flagged risk: a quote's `amount_usd_max` (decimal string) and
- * `DatumEscrow.openAndFund`'s `maxAmount` (uint256 minor units) must never be converted
+ * `TouchstoneEscrow.openAndFund`'s `maxAmount` (uint256 minor units) must never be converted
  * ad hoc in more than one place, or the two can silently drift.
  *
  * Rounds UP (ceiling), not half-up or down: `amount_usd_max` is a cap, and rounding down

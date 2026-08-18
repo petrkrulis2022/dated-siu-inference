@@ -6,7 +6,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 /**
  * @notice A token that burns 1% on every transfer, so the recipient receives less than was sent.
  *
- * DatumEscrow must reject this at funding time. If it did not, the contract would record an
+ * TouchstoneEscrow must reject this at funding time. If it did not, the contract would record an
  * escrow of `maxAmount` while holding less than that, and the shortfall would silently be paid
  * out of some other buyer's escrow at settlement.
  */

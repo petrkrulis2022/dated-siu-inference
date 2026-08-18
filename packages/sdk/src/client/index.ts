@@ -1,8 +1,8 @@
 export {
-  createDatumClient,
+  createTouchstoneClient,
   type CallToolFn,
-  type DatumClient,
-  type DatumClientOptions,
+  type TouchstoneClient,
+  type TouchstoneClientOptions,
   type GetIndexParams,
   type GetQuoteParams,
   type GetQuoteResult,

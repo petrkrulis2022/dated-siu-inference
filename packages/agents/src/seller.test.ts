@@ -87,15 +87,17 @@ describe("createSellerApp", () => {
   describe("unpaid request", () => {
     beforeAll(() => startServer(fakeDeps()));
 
-    it("responds 402 with a signed datum-quote in extensions.datum_quote", async () => {
+    it("responds 402 with a signed touchstone-quote in extensions.touchstone_quote", async () => {
       const res = await fetch(`${baseUrl}/infer`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: "{}",
       });
       expect(res.status).toBe(402);
-      const body = (await res.json()) as { extensions: { datum_quote: Record<string, unknown> } };
-      const quote = body.extensions.datum_quote;
+      const body = (await res.json()) as {
+        extensions: { touchstone_quote: Record<string, unknown> };
+      };
+      const quote = body.extensions.touchstone_quote;
       expect(quote.pattern).toBe("cap");
       expect(quote.sig).toBeTypeOf("string");
       expect(quote.seller_id).toBe(`erc8004:${account.address}`);
@@ -111,12 +113,14 @@ describe("createSellerApp", () => {
         headers: { "content-type": "application/json" },
         body: "{}",
       });
-      const { extensions } = (await quoteRes.json()) as { extensions: { datum_quote: unknown } };
+      const { extensions } = (await quoteRes.json()) as {
+        extensions: { touchstone_quote: unknown };
+      };
 
       const fulfillRes = await fetch(`${baseUrl}/infer`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ quote: extensions.datum_quote }),
+        body: JSON.stringify({ quote: extensions.touchstone_quote }),
       });
       expect(fulfillRes.status).toBe(200);
       const body = (await fulfillRes.json()) as { text: string; settle_tx_hash: string };
@@ -136,12 +140,14 @@ describe("createSellerApp", () => {
         headers: { "content-type": "application/json" },
         body: "{}",
       });
-      const { extensions } = (await quoteRes.json()) as { extensions: { datum_quote: unknown } };
+      const { extensions } = (await quoteRes.json()) as {
+        extensions: { touchstone_quote: unknown };
+      };
 
       const fulfillRes = await fetch(`${baseUrl}/infer`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ quote: extensions.datum_quote }),
+        body: JSON.stringify({ quote: extensions.touchstone_quote }),
       });
       expect(fulfillRes.status).toBe(402);
     });

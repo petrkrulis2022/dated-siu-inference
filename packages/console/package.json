@@ -1,5 +1,5 @@
 {
-  "name": "@datum/console",
+  "name": "@touchstone/console",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,8 +13,8 @@
     "index": "pnpm run build && node dist/server/indexer/rebuild-cli.js"
   },
   "dependencies": {
-    "@datum/print": "workspace:*",
-    "@datum/sdk": "workspace:*",
+    "@touchstone/print": "workspace:*",
+    "@touchstone/sdk": "workspace:*",
     "express": "^5.2.1",
     "viem": "^2.55.16"
   },

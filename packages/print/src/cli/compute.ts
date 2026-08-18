@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { TASK_CLASSES, BASKET_VERSION } from "@datum/basket";
+import { TASK_CLASSES, BASKET_VERSION } from "@touchstone/basket";
 import { computePrint } from "../compute/index.js";
 import { cachePolicyVariant, batchDiscountVariant } from "../compute/sensitivity.js";
 import { loadPublisherKeyFromEnv, signPrintBody } from "../sign/sign.js";

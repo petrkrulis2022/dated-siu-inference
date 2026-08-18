@@ -9,7 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@datum/sdk": "workspace:*"
+    "@touchstone/sdk": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.2.0"

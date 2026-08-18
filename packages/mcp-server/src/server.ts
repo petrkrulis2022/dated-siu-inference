@@ -3,8 +3,8 @@ import express, { type Express, type NextFunction, type Request, type Response }
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-import type { Print, RunRecord } from "@datum/sdk";
-import { loadPrint, loadPriceSnapshot, loadRunRecords, printsDir } from "@datum/print";
+import type { Print, RunRecord } from "@touchstone/sdk";
+import { loadPrint, loadPriceSnapshot, loadRunRecords, printsDir } from "@touchstone/print";
 import { getIndexTool, type GetIndexInput } from "./tools/get-index.js";
 import { getQuoteTool, type GetQuoteInput } from "./tools/get-quote.js";
 import { convertTool, type ConvertInput } from "./tools/convert.js";
@@ -25,7 +25,7 @@ function toolError(err: unknown) {
 
 const NOT_PUBLISHED_MESSAGE =
   "No print has been published yet — data/prints/ has no latest.json. Publish one with " +
-  "`pnpm --filter @datum/print run publish-print` first.";
+  "`pnpm --filter @touchstone/print run publish-print` first.";
 
 async function loadLatestPrintOrThrow(printsDirPath: string): Promise<Print> {
   return loadPrint(join(printsDirPath, "latest.json")).catch(() => {
@@ -43,8 +43,8 @@ export interface McpServerOptions {
  * ../paywall.ts dispatching in front of the transport; a tool handler here never checks payment
  * itself, it only does the work the caller already paid (or didn't need to pay) for. Each
  * handler is thin I/O glue over the pure, independently-tested functions in ./tools/. */
-export function createDatumMcpServer(options: McpServerOptions): McpServer {
-  const server = new McpServer({ name: "datum", version: "1.0.0" });
+export function createTouchstoneMcpServer(options: McpServerOptions): McpServer {
+  const server = new McpServer({ name: "touchstone-assay", version: "1.0.0" });
   const printsDirPath = options.printsDirPath ?? printsDir();
 
   server.registerTool(
@@ -163,7 +163,7 @@ export function buildApp(options: BuildAppOptions): Express {
   app.use(express.json());
 
   const paywall = options.skipPaywall ? NO_PAYWALL : createToolPaywall(options.paywall);
-  const mcpServer = createDatumMcpServer({
+  const mcpServer = createTouchstoneMcpServer({
     settlementReader: options.settlementReader ?? new StubSettlementReader(),
     publisherPrivateKeyHex: options.publisherPrivateKeyHex,
     printsDirPath: options.printsDirPath,

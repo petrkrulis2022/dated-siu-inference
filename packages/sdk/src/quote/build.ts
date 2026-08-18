@@ -1,4 +1,4 @@
-import type { DatumQuote } from "../types/generated/datum-quote.schema.js";
+import type { TouchstoneQuote } from "../types/generated/datum-quote.schema.js";
 import { D, roundHalfUp, usdToMinorUnits, usdcAddressFor } from "../money/index.js";
 
 /** Build-1's fixed convention for amount_usd_max's precision — matches build1-spec.md §8's own
@@ -9,7 +9,7 @@ export const QUOTE_AMOUNT_DP = 4;
 /**
  * The smallest nonzero value representable at `QUOTE_AMOUNT_DP`'s precision — docs/datum-quote.md's
  * "Minimum quotable amount". Below this, `amount_usd_max` rounds to `"0.0000"` and
- * `DatumEscrow.openAndFund` reverts on a zero `maxAmount` — hit live in P14's demo agents.
+ * `TouchstoneEscrow.openAndFund` reverts on a zero `maxAmount` — hit live in P14's demo agents.
  * Computed from `QUOTE_AMOUNT_DP` rather than hand-typed again, so the two can never drift.
  */
 export const MINIMUM_QUOTABLE_USD = roundHalfUp(
@@ -18,16 +18,20 @@ export const MINIMUM_QUOTABLE_USD = roundHalfUp(
 );
 
 /**
- * Bumped from "1.0" when the optional `settler` field was added alongside `DatumEscrow`
- * (build1-spec.md §10). A minor bump is the correct signal: the field is purely additive, and
- * `validateQuote`'s major-version check still accepts it. A 1.0-era consumer holding the old
- * schema will reject a quote carrying `settler` because the schema is `additionalProperties:
- * false` — which is why the version has to move, so the rejection is explicable rather than
- * mysterious.
+ * Bumped to "2.0" for the Datum → Touchstone Assay rename: the extension itself is renamed from
+ * `datum-quote` to `touchstone-quote`, which is a change to the format's identity, not an
+ * additive field — exactly the kind of change a major-version bump exists to signal (see
+ * docs/datum-quote.md's "Forward compatibility"). `validateQuote`'s major-version check below
+ * moves in lockstep, so a 1.x-era consumer correctly rejects a `touchstone-quote` it doesn't
+ * understand rather than silently misreading it as a `datum-quote`.
+ *
+ * Earlier history: bumped from "1.0" to "1.1" when the optional `settler` field was added
+ * alongside `TouchstoneEscrow` (build1-spec.md §10) — that was a minor bump because the field was
+ * purely additive.
  */
-export const QUOTE_SCHEMA_VERSION = "1.1";
+export const QUOTE_SCHEMA_VERSION = "2.0";
 
-export type QuoteBody = Omit<DatumQuote, "sig">;
+export type QuoteBody = Omit<TouchstoneQuote, "sig">;
 
 interface QuoteBuildInputBase {
   siu: string;
@@ -42,7 +46,7 @@ interface QuoteBuildInputBase {
   expiresInSeconds: number;
   now?: Date;
   /**
-   * Optional address the buyer additionally authorises to call `DatumEscrow.settle`. Omit for
+   * Optional address the buyer additionally authorises to call `TouchstoneEscrow.settle`. Omit for
    * seller-only settlement. Carried on the quote so the seller can compare it against the
    * on-chain `settlerOf(quoteHash)` before doing any work — a buyer who funds escrow naming a
    * different settler than the signed quote agreed could otherwise settle at zero after
@@ -52,7 +56,7 @@ interface QuoteBuildInputBase {
 }
 
 /**
- * A discriminated union closing, at compile time, the gap the generated `DatumQuote` type
+ * A discriminated union closing, at compile time, the gap the generated `TouchstoneQuote` type
  * leaves open: the schema's `if pattern in [estimate, cap] then required: siu_max` is invisible
  * to json-schema-to-typescript's output (`siu_max` is just optional there), so nothing stops a
  * caller of the raw type from building an unbounded estimate. A caller who goes through
@@ -67,7 +71,7 @@ export type QuoteBuildInput =
 
 /**
  * Builds an unsigned quote body — build1-spec.md §8. `signQuote` (quote/sign.ts) turns this
- * into a signed `DatumQuote`.
+ * into a signed `TouchstoneQuote`.
  *
  * `amount_usd_max` is computed from `siu_max` when the pattern has one (`estimate`/`cap`),
  * never from the point-estimate `siu` — escrow must hold enough to cover the worst case the

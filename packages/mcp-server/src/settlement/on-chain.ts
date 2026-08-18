@@ -1,11 +1,11 @@
 import { createPublicClient, decodeEventLog, http, type Hex } from "viem";
-import { quoteHashHex, retryUntilConclusive, type DatumQuote } from "@datum/sdk";
+import { quoteHashHex, retryUntilConclusive, type TouchstoneQuote } from "@touchstone/sdk";
 import type { OnChainSettlement, SettlementReader } from "./reader.js";
 
-/** Only the two members `read()` actually touches — `DatumEscrow`'s full ABI lives in
+/** Only the two members `read()` actually touches — `TouchstoneEscrow`'s full ABI lives in
  * packages/contracts; this reader has no build-time dependency on that package (contracts sit
  * outside the pnpm workspace), so the minimal slice it needs is declared here instead. */
-export const DATUM_ESCROW_ABI = [
+export const TOUCHSTONE_ESCROW_ABI = [
   {
     type: "event",
     name: "Settled",
@@ -53,7 +53,7 @@ export interface OnChainSettlementReaderOptions {
 }
 
 /**
- * Reads real settlements from the deployed `DatumEscrow` (data/deployments/base-sepolia.json).
+ * Reads real settlements from the deployed `TouchstoneEscrow` (data/deployments/base-sepolia.json).
  * Stateless by design — see reader.ts's module doc for why the caller-supplied `quote` and the
  * hash check replace an off-chain quote index.
  */
@@ -68,7 +68,11 @@ export class OnChainSettlementReader implements SettlementReader {
     this.escrowAddress = options.escrowAddress as Hex;
   }
 
-  async read(chain: string, txHash: string, quote: DatumQuote): Promise<OnChainSettlement | null> {
+  async read(
+    chain: string,
+    txHash: string,
+    quote: TouchstoneQuote,
+  ): Promise<OnChainSettlement | null> {
     if (chain !== this.chainName) {
       throw new Error(
         `This OnChainSettlementReader serves "${this.chainName}" only; got chain "${chain}".`,
@@ -91,7 +95,7 @@ export class OnChainSettlementReader implements SettlementReader {
       if (log.address.toLowerCase() !== this.escrowAddress.toLowerCase()) continue;
       try {
         const event = decodeEventLog({
-          abi: DATUM_ESCROW_ABI,
+          abi: TOUCHSTONE_ESCROW_ABI,
           data: log.data,
           topics: log.topics,
           eventName: "Settled",
@@ -108,16 +112,16 @@ export class OnChainSettlementReader implements SettlementReader {
       throw new QuoteHashMismatchError(decoded.quoteHash, expectedHash);
     }
 
-    // settle() never clears maxAmount (confirmed by reading DatumEscrow.sol's source, not
+    // settle() never clears maxAmount (confirmed by reading TouchstoneEscrow.sol's source, not
     // assumed) — it stays readable from the escrow's own storage after settlement. Retried via
-    // @datum/sdk's retryUntilConclusive: this read can hit the same RPC-lag gap already found
+    // @touchstone/sdk's retryUntilConclusive: this read can hit the same RPC-lag gap already found
     // live in escrow-funding reads (see escrow-client.ts) — a receipt confirming the settle tx
     // mined on one node doesn't guarantee a subsequent read hits a node that's caught up.
     const maxAmount = await retryUntilConclusive(
       async () => {
         const escrow = await publicClient.readContract({
           address: this.escrowAddress,
-          abi: DATUM_ESCROW_ABI,
+          abi: TOUCHSTONE_ESCROW_ABI,
           functionName: "escrows",
           args: [decoded.quoteHash],
         });

@@ -3,7 +3,7 @@ import { bodyHash, fromHex, toHex } from "./canonicalise.js";
 
 /**
  * Generic secp256k1 sign/verify over a JCS-canonicalised, keccak256-hashed body — the same
- * scheme `@datum/print` uses for prints (build1-spec.md §6), reused here so quotes and receipts
+ * scheme `@touchstone/print` uses for prints (build1-spec.md §6), reused here so quotes and receipts
  * are signed and verified the same way. `quote/sign.ts` and `receipt/sign.ts` build on this with
  * their own body-shape stripping (excluding `sig`, or `signature`/`public_key`) and their own
  * schema validation.

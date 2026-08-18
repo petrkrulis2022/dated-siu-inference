@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Print, PriceSnapshot } from "@datum/sdk";
+import type { Print, PriceSnapshot } from "@touchstone/sdk";
 import { convertTool } from "./convert.js";
 
 function fixturePrint(overrides: Partial<Print> = {}): Print {

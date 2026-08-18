@@ -1,5 +1,5 @@
 {
-  "name": "@datum/prices",
+  "name": "@touchstone/prices",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
     "prices:diff": "pnpm run build && node dist/cli/diff.js"
   },
   "dependencies": {
-    "@datum/sdk": "workspace:*",
+    "@touchstone/sdk": "workspace:*",
     "decimal.js": "^10.6.0"
   },
   "devDependencies": {

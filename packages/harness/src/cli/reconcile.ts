@@ -1,6 +1,6 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { RunRecord } from "@datum/sdk";
+import type { RunRecord } from "@touchstone/sdk";
 import { sumCosts, tokenCost } from "../decimal.js";
 import { formatReconciliationReport, reconcile } from "../reconcile.js";
 import { loadLatestPriceSnapshot } from "./load-data.js";

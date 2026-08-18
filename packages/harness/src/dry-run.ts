@@ -1,5 +1,5 @@
-import type { ModelRegistryEntry, PriceSnapshot } from "@datum/sdk";
-import type { TaskInstance } from "@datum/basket";
+import type { ModelRegistryEntry, PriceSnapshot } from "@touchstone/sdk";
+import type { TaskInstance } from "@touchstone/basket";
 import { sumCosts, tokenCost } from "./decimal.js";
 
 export interface DryRunLineItem {

@@ -2,10 +2,10 @@
 pragma solidity 0.8.24;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {DatumEscrow} from "../../src/DatumEscrow.sol";
+import {TouchstoneEscrow} from "../../src/TouchstoneEscrow.sol";
 
 /**
- * @notice A hostile ERC-20 that re-enters DatumEscrow from inside its own transfer hook.
+ * @notice A hostile ERC-20 that re-enters TouchstoneEscrow from inside its own transfer hook.
  *
  * This is the realistic shape of the attack: the escrow's only external calls are token
  * transfers, so a malicious or compromised settlement token is the attacker's foothold.
@@ -23,7 +23,7 @@ contract ReentrantToken is ERC20 {
         OpenAndFund
     }
 
-    DatumEscrow public escrow;
+    TouchstoneEscrow public escrow;
     bytes32 public targetQuoteHash;
     Mode public mode;
     bool public armed;
@@ -37,7 +37,7 @@ contract ReentrantToken is ERC20 {
         _mint(to, amount);
     }
 
-    function arm(DatumEscrow escrow_, bytes32 targetQuoteHash_, Mode mode_) external {
+    function arm(TouchstoneEscrow escrow_, bytes32 targetQuoteHash_, Mode mode_) external {
         escrow = escrow_;
         targetQuoteHash = targetQuoteHash_;
         mode = mode_;

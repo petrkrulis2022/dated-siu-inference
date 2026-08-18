@@ -1,5 +1,5 @@
-import type { Print, PriceSnapshot, RunRecord } from "@datum/sdk";
-import { D, computeClassCost, printBodyHashHex, type TaskClass } from "@datum/print";
+import type { Print, PriceSnapshot, RunRecord } from "@touchstone/sdk";
+import { D, computeClassCost, printBodyHashHex, type TaskClass } from "@touchstone/print";
 
 type ExchangeRateRow = Print["exchange_rate_table"][number];
 type PriceEntry = PriceSnapshot["entries"][number];
@@ -23,7 +23,7 @@ const TASK_CLASSES = new Set<string>(["T1", "T2", "T3"]);
  * get_quote(task_class, model) — build1-spec.md §9: "SIU price, exchange rate, index refs."
  *
  * `Print.exchange_rate_table`/`basket_costs` are whole-basket aggregates; there is no published
- * per-class figure. `siu_per_call` is derived, not invented: `@datum/print`'s `computeClassCost`
+ * per-class figure. `siu_per_call` is derived, not invented: `@touchstone/print`'s `computeClassCost`
  * — the same function that builds the print itself — run fresh against the print's own
  * referenced run records for this (task_class, model), divided by the model's own published
  * `usd_per_siu` (one call's cost as a fraction of one whole SIU basket).

@@ -1,6 +1,6 @@
 import { readFile, access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { D, type RunRecord } from "@datum/sdk";
+import { D, type RunRecord } from "@touchstone/sdk";
 import type { GpuRateSnapshot } from "./gpu-rate-snapshot.js";
 
 /**
@@ -23,9 +23,9 @@ export interface QualityGateSummary {
 
 /**
  * A class "passes" iff at least one run record for it has `gate_passed: true` — the same
- * semantics `@datum/print`'s `computeClassCost` already uses ("if NO instance passed, the class
+ * semantics `@touchstone/print`'s `computeClassCost` already uses ("if NO instance passed, the class
  * is undefined"). Reuses the harness's own recorded grading rather than re-invoking
- * `@datum/basket`'s graders: `gate_passed` was already set by the real basket run this record
+ * `@touchstone/basket`'s graders: `gate_passed` was already set by the real basket run this record
  * describes, and re-grading here would be a second, divergence-prone copy of that judgment.
  */
 export function checkQualityGatesPassed(records: RunRecord[]): QualityGateSummary {

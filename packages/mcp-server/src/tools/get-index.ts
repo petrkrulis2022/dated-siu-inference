@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { Print } from "@datum/sdk";
-import { loadPrint } from "@datum/print";
+import type { Print } from "@touchstone/sdk";
+import { loadPrint } from "@touchstone/print";
 
 export interface GetIndexInput {
   version?: string;
@@ -16,9 +16,9 @@ export interface GetIndexInput {
  * `date` and `version`: a print file is named `YYYY-MM-DD.json` and a print's own `version`
  * field is the basket version (e.g. "SIU-2026a"), not the filename — so `version` alone cannot
  * resolve a specific file without reading candidates and filtering. With no params, serves
- * `latest.json` (a byte-identical copy of the newest print — @datum/print's `writePrint`).
+ * `latest.json` (a byte-identical copy of the newest print — @touchstone/print's `writePrint`).
  *
- * Takes `printsDirPath` explicitly (mirroring @datum/print's `writePrint(printsDir, print)`)
+ * Takes `printsDirPath` explicitly (mirroring @touchstone/print's `writePrint(printsDir, print)`)
  * rather than resolving it internally, so this is testable against a temp directory.
  */
 export async function getIndexTool(input: GetIndexInput, printsDirPath: string): Promise<Print> {
@@ -50,7 +50,7 @@ export async function getIndexTool(input: GetIndexInput, printsDirPath: string):
   return loadPrint(join(printsDirPath, "latest.json")).catch(() => {
     throw new Error(
       "No print has been published yet — data/prints/ has no latest.json. Publish one with " +
-        "`pnpm --filter @datum/print run publish-print` first.",
+        "`pnpm --filter @touchstone/print run publish-print` first.",
     );
   });
 }

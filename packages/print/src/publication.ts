@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Print } from "@datum/sdk";
+import type { Print } from "@touchstone/sdk";
 
 export interface WritePrintResult {
   path: string;

@@ -36,7 +36,7 @@ jobs:
       # dependency has actually been built at least once. `pnpm -r run build` runs in topological
       # dependency order and does emit, so by the time a consumer package builds, its workspace
       # dependencies' `dist/` already exists. Confirmed live: every CI run before this one failed
-      # at Typecheck for exactly this reason (`site` couldn't resolve `@datum/sdk`'s types),
+      # at Typecheck for exactly this reason (`site` couldn't resolve `@touchstone/sdk`'s types),
       # reproduced locally by deleting every `dist/` and running `pnpm run typecheck` cold.
       - name: Build
         run: pnpm run build
@@ -75,7 +75,7 @@ jobs:
       # Solidity failure fails the job even when every JS test passes.
       #
       # BASE_SEPOLIA_RPC_URL is a public endpoint, not a secret — set here (unlike
-      # CIRCLE_TESTNET_PRIVATE_KEY/DATUM_PUBLISHER_KEY below, which stay unset in CI and leave
+      # CIRCLE_TESTNET_PRIVATE_KEY/TOUCHSTONE_PUBLISHER_KEY below, which stay unset in CI and leave
       # testnet.live.test.ts skipped) so packages/mcp-server/src/settlement/on-chain.test.ts's
       # read-only live-Base-Sepolia assertions actually run here rather than only locally.
       - name: Test (TypeScript + Solidity)

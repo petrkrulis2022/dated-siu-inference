@@ -1,4 +1,4 @@
-import type { RunRecord } from "@datum/sdk";
+import type { RunRecord } from "@touchstone/sdk";
 import type { ModelInput, PrintInput } from "./compute/index.js";
 import type { TaskClass } from "./compute/basket-cost.js";
 import { cachePolicyVariant } from "./compute/sensitivity.js";

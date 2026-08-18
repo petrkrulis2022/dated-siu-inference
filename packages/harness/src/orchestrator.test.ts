@@ -2,8 +2,8 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ModelRegistryEntry, RunRecord } from "@datum/sdk";
-import type { Grader, TaskInstance } from "@datum/basket";
+import type { ModelRegistryEntry, RunRecord } from "@touchstone/sdk";
+import type { Grader, TaskInstance } from "@touchstone/basket";
 import { runOrchestrator, type OrchestratorTask } from "./orchestrator.js";
 import type { Adapter, AdapterResult } from "./adapters/types.js";
 
@@ -16,7 +16,7 @@ import { createAdapterFor } from "./adapters/index.js";
 let runsDir: string;
 
 beforeEach(async () => {
-  runsDir = await mkdtemp(join(tmpdir(), "datum-harness-orchestrator-"));
+  runsDir = await mkdtemp(join(tmpdir(), "touchstone-harness-orchestrator-"));
 });
 
 afterEach(async () => {

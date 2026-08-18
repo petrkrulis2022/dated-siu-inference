@@ -1,4 +1,4 @@
-import { D, minorUnitsToUsd } from "@datum/sdk";
+import { D, minorUnitsToUsd } from "@touchstone/sdk";
 import type { EscrowLifecycle } from "./escrow-lifecycle.js";
 
 export interface QuotedVsPaidRow {
@@ -21,8 +21,8 @@ export interface QuotedVsPaidResult {
  * The honest-seller check — "the thing verify_receipt exists to prove," made visible across all
  * activity at a glance. Uses the exact `matched` formula `docs/settlement-metadata.md` and
  * `verifyReceiptTool` already define (`amount_paid_usd ≤ amount_quoted_usd`, i.e.
- * `actualAmount ≤ maxAmount`) via `@datum/sdk`'s `minorUnitsToUsd`/`D` — arithmetic only. Does
- * NOT call `verifyReceiptTool` itself, which requires `DATUM_PUBLISHER_KEY` to sign a receipt;
+ * `actualAmount ≤ maxAmount`) via `@touchstone/sdk`'s `minorUnitsToUsd`/`D` — arithmetic only. Does
+ * NOT call `verifyReceiptTool` itself, which requires `TOUCHSTONE_PUBLISHER_KEY` to sign a receipt;
  * this read-only package must never hold or use a signing key.
  */
 export function computeQuotedVsPaid(lifecycles: EscrowLifecycle[]): QuotedVsPaidResult {

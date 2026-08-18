@@ -6,8 +6,8 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
- * @title DatumEscrow
- * @notice Non-custodial escrow for datum-quote settlements — build1-spec.md §10.
+ * @title TouchstoneEscrow
+ * @notice Non-custodial escrow for touchstone-quote settlements — build1-spec.md §10.
  *
  * A buyer funds an escrow against a `quoteHash` (keccak256 of the JCS-canonicalised quote body
  * excluding its signature — see docs/datum-quote.md). The seller, or a settler the buyer
@@ -21,8 +21,8 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  * the recorded seller, the recorded buyer, or the immutable fee treasury. There is no owner, no
  * admin role, no pause, no sweep, no upgrade path, and no setter for any immutable. Nothing in
  * this contract can redirect, freeze, or withdraw a user's funds, because no code path exists
- * that could. `test/DatumEscrow.abi.t.sol` asserts that from the compiled ABI rather than from
- * this comment.
+ * that could. `test/NoAdminPath.t.sol` asserts that from the compiled ABI rather than from this
+ * comment.
  *
  * There is deliberately no `receive()` or `fallback()`: ETH sent to this contract reverts rather
  * than becoming permanently stranded, which is also why no ETH-rescue function is needed.
@@ -41,7 +41,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  * settlement token and fee treasury are constructor parameters, so deploying to another chain is
  * a deployment decision rather than a code change.
  */
-contract DatumEscrow is ReentrancyGuard {
+contract TouchstoneEscrow is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     enum Status {
@@ -67,6 +67,12 @@ contract DatumEscrow is ReentrancyGuard {
     uint16 public constant MAX_FEE_BPS = 100; // 1%
 
     uint16 private constant BPS_DENOMINATOR = 10_000;
+
+    /// @notice Below this, `settle` reverts outright rather than accepting a fee that integer
+    ///         division would truncate to nothing. At `MIN_SETTLEMENT` itself, the fee floor
+    ///         below charges exactly 1 unit — 1% of 100, the same rate `MAX_FEE_BPS` caps — so
+    ///         the effective minimum rate never exceeds what the contract already allows.
+    uint256 public constant MIN_SETTLEMENT = 100;
 
     /// @notice The settlement token. USDC in build 1, but never assumed to be.
     IERC20 public immutable token;
@@ -106,6 +112,7 @@ contract DatumEscrow is ReentrancyGuard {
     error NotYetExpired();
     error NotAuthorisedToSettle();
     error AmountExceedsMax(uint256 actualAmount, uint256 maxAmount);
+    error SettlementTooSmall(uint256 actualAmount, uint256 minSettlement);
 
     constructor(IERC20 token_, address treasury_, uint16 feeBps_) {
         if (address(token_) == address(0)) revert TokenZero();
@@ -182,6 +189,15 @@ contract DatumEscrow is ReentrancyGuard {
      * funds that are refunded to them — and is deducted from the seller's proceeds, so the
      * seller receives `actualAmount - fee`.
      *
+     * Below `MIN_SETTLEMENT`, integer division would silently truncate a real configured fee to
+     * zero (e.g. any `actualAmount` under 200 at 50bps), so a nonzero-`actualAmount` settlement
+     * below the floor reverts outright rather than settling fee-free. `actualAmount == 0` is
+     * exempt — that is a legitimate full-refund settlement, not a fee ever being owed, and must
+     * keep working exactly as before. At or above the floor, a configured nonzero `feeBps` always
+     * takes at least 1 unit, even where `actualAmount * feeBps / BPS_DENOMINATOR` alone would
+     * still round to zero. A contract deployed with `feeBps == 0` has chosen no fee, not a
+     * rounding error, so the floor never manufactures one there.
+     *
      * Conservation holds exactly:
      *   (actualAmount - fee) + fee + (maxAmount - actualAmount) == maxAmount
      */
@@ -204,6 +220,9 @@ contract DatumEscrow is ReentrancyGuard {
 
         uint256 maxAmount = escrow.maxAmount;
         if (actualAmount > maxAmount) revert AmountExceedsMax(actualAmount, maxAmount);
+        if (actualAmount > 0 && actualAmount < MIN_SETTLEMENT) {
+            revert SettlementTooSmall(actualAmount, MIN_SETTLEMENT);
+        }
 
         address buyer = escrow.buyer;
 
@@ -211,7 +230,8 @@ contract DatumEscrow is ReentrancyGuard {
         // to re-enter finds nothing left to settle even before nonReentrant rejects it.
         escrow.status = Status.Settled;
 
-        uint256 fee = (actualAmount * feeBps) / BPS_DENOMINATOR;
+        uint256 rawFee = (actualAmount * feeBps) / BPS_DENOMINATOR;
+        uint256 fee = (actualAmount == 0 || feeBps == 0) ? 0 : (rawFee == 0 ? 1 : rawFee);
         uint256 sellerAmount = actualAmount - fee;
         uint256 refund = maxAmount - actualAmount;
 

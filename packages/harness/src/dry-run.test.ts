@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ModelRegistryEntry, PriceSnapshot } from "@datum/sdk";
-import type { TaskInstance } from "@datum/basket";
+import type { ModelRegistryEntry, PriceSnapshot } from "@touchstone/sdk";
+import type { TaskInstance } from "@touchstone/basket";
 import { estimateCost, estimateInputTokens } from "./dry-run.js";
 
 const registry: ModelRegistryEntry[] = [

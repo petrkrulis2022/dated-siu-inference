@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import type { ModelRegistryEntry } from "@datum/sdk";
+import type { ModelRegistryEntry } from "@touchstone/sdk";
 import {
   buildPriceSnapshotFromLiteLLM,
   buildPriceSnapshotFromOpenRouter,

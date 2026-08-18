@@ -1,5 +1,5 @@
-import type { Print, PriceSnapshot } from "@datum/sdk";
-import { D, callCost } from "@datum/print";
+import type { Print, PriceSnapshot } from "@touchstone/sdk";
+import { D, callCost } from "@touchstone/print";
 
 type ExchangeRateRow = Print["exchange_rate_table"][number];
 type PriceEntry = PriceSnapshot["entries"][number];
@@ -18,7 +18,7 @@ export interface ConvertOutput {
 /**
  * convert(model, input_tokens, output_tokens) — build1-spec.md §9: "SIU + USD equivalent." No
  * new pricing logic: the dollar cost comes from the print's own referenced price snapshot (the
- * same `callCost` arithmetic @datum/print uses to build a print in the first place), and the
+ * same `callCost` arithmetic @touchstone/print uses to build a print in the first place), and the
  * SIU figure comes from the print's own published `usd_per_siu` for that model — never a
  * separately-invented rate.
  *

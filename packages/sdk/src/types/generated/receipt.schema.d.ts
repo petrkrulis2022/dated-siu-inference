@@ -20,7 +20,7 @@ export interface Receipt {
    */
   schema_version: string;
   /**
-   * bytes32 — matches DatumEscrow.openAndFund's quoteHash param, build1-spec.md §10.
+   * bytes32 — matches TouchstoneEscrow.openAndFund's quoteHash param, build1-spec.md §10.
    */
   quote_hash: string;
   chain: string;

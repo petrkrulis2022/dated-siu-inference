@@ -32,8 +32,8 @@ export function App(): React.JSX.Element {
   return (
     <div className="app">
       <div className="banner">
-        Datum operator console — read-only, localhost-only. Never writes to <code>data/</code>,
-        never signs, never sends a transaction.
+        Touchstone Assay operator console — read-only, localhost-only. Never writes to{" "}
+        <code>data/</code>, never signs, never sends a transaction.
         {config ? ` Chain: ${config.chainName} (${config.chainId}).` : ""}
       </div>
 

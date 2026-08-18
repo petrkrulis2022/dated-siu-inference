@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Print } from "../types/generated/print.schema.js";
 import type { Receipt } from "../types/generated/receipt.schema.js";
-import { createDatumClient, type CallToolFn } from "./client.js";
+import { createTouchstoneClient, type CallToolFn } from "./client.js";
 
 const validPrint: Print = {
   version: "SIU-2026a",
@@ -45,10 +45,10 @@ const validReceipt: Receipt = {
 };
 
 function clientWith(callTool: CallToolFn) {
-  return createDatumClient({ callTool });
+  return createTouchstoneClient({ callTool });
 }
 
-describe("createDatumClient", () => {
+describe("createTouchstoneClient", () => {
   it("getIndex validates the server's result and returns a typed Print", async () => {
     const client = clientWith(async () => validPrint);
     const print = await client.getIndex();

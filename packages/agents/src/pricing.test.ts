@@ -32,7 +32,7 @@ describe("estimatedCeiling", () => {
 });
 
 describe("realizedCost", () => {
-  it("matches @datum/print's callCost arithmetic directly", () => {
+  it("matches @touchstone/print's callCost arithmetic directly", () => {
     // 1000 input @ $1/1M + 500 output @ $2/1M = 0.001 + 0.001 = 0.002
     expect(realizedCost(1000, 500, PRICES)).toBe("0.002");
   });

@@ -3,7 +3,7 @@
 _build1-spec.md §11's first paragraph: "Register as a seller: the four MCP tools as paid
 endpoints, USDC settlement, listed in the marketplace where Claude, Codex, Cursor and OpenClaw
 agents discover services." This is separate from `docs/demo.md`'s demo agents — this document is
-about listing the real, already-implemented `@datum/mcp-server` itself._
+about listing the real, already-implemented `@touchstone/mcp-server` itself._
 
 ---
 
@@ -21,23 +21,23 @@ about listing the real, already-implemented `@datum/mcp-server` itself._
 - The dispatcher (`createDispatcher`) correctly routes payment checks per-tool despite every MCP
   tool call sharing one `POST /mcp` route — verified in `paywall.test.ts`.
 - `loadSellerAddressFromEnv` (`packages/mcp-server/src/env.ts`) — the wallet address Gateway pays
-  out to, read from `DATUM_SELLER_ADDRESS`.
+  out to, read from `TOUCHSTONE_SELLER_ADDRESS`.
 
 **Not yet available in this environment, and required before a real listing can go live:**
 
-- A real `DATUM_SELLER_ADDRESS` funded/configured with Circle Gateway (a Circle Agent Wallet, or
+- A real `TOUCHSTONE_SELLER_ADDRESS` funded/configured with Circle Gateway (a Circle Agent Wallet, or
   any EOA registered with Gateway as a payout destination).
 - Circle API credentials for whichever facilitator/network configuration the listing targets
   (`.env` in this environment has none — same gap `docs/demo.md` documents for the demo agents).
 - A public, always-on deployment of `packages/mcp-server` — the four tools currently only run
-  locally (`pnpm --filter @datum/mcp-server run start`) or in this demo's own short-lived local
+  locally (`pnpm --filter @touchstone/mcp-server run start`) or in this demo's own short-lived local
   instance; a marketplace listing needs a stable public URL.
 
 ## Steps to list as a seller
 
-1. **Deploy `@datum/mcp-server` publicly.** `pnpm --filter @datum/mcp-server run start` (reads
-   `DATUM_PUBLISHER_KEY`, `DATUM_SELLER_ADDRESS`, and — once P14 step 2's wiring is in place —
-   resolves `DatumEscrow`'s address from `data/deployments/<chain>.json` via
+1. **Deploy `@touchstone/mcp-server` publicly.** `pnpm --filter @touchstone/mcp-server run start` (reads
+   `TOUCHSTONE_PUBLISHER_KEY`, `TOUCHSTONE_SELLER_ADDRESS`, and — once P14 step 2's wiring is in place —
+   resolves `TouchstoneEscrow`'s address from `data/deployments/<chain>.json` via
    `loadSettlementReaderFromEnv`) behind a public host with TLS. `server.json` under
    `packages/mcp-server/src/manifest/` already describes the four tools for discovery — confirm
    its contents match the deployed endpoint before publishing anywhere.
@@ -50,7 +50,7 @@ about listing the real, already-implemented `@datum/mcp-server` itself._
    each paid tool unpaid (expect `402`), then with a valid signed payment (expect `200` and a
    `PAYMENT-RESPONSE` header). `packages/mcp-server/src/integration/testnet.live.test.ts` already
    contains this exact check, gated on real `CIRCLE_TESTNET_PRIVATE_KEY` /
-   `DATUM_SELLER_ADDRESS` / `DATUM_PUBLISHER_KEY` credentials — run it for real once they exist,
+   `TOUCHSTONE_SELLER_ADDRESS` / `TOUCHSTONE_PUBLISHER_KEY` credentials — run it for real once they exist,
    rather than trusting the local `skipPaywall` path as a stand-in for this step.
 4. **List on the MCP registries build1-spec.md §9 names** — the official MCP registry, Smithery,
    Glama, PulseMCP, mcp.so — each with its own submission flow (typically: a public manifest URL
@@ -66,11 +66,11 @@ about listing the real, already-implemented `@datum/mcp-server` itself._
 
 _Illustrative — for use once a real public endpoint and Gateway-provisioned seller address exist._
 
-> **Datum — Dated SIU price index**
+> **Touchstone Assay — Dated SIU price index**
 > The benchmark price of AI inference work, published as a signed, versioned print. Four tools:
 > `get_index` (free) returns the signed print; `get_quote` and `convert` ($0.001 each) price a
 > task or a token count in SIU and USD against the current print; `verify_receipt` ($0.01) reads
-> an on-chain `DatumEscrow` settlement and returns a signed attestation of what was quoted versus
+> an on-chain `TouchstoneEscrow` settlement and returns a signed attestation of what was quoted versus
 > what was actually paid. Settles in USDC via Circle Gateway nanopayments. Method: verified, not
 > surveyed — the index is measured by actually buying inference, not by surveying list prices.
 
@@ -81,4 +81,4 @@ SIU prices the completed task."_
 
 Per `CLAUDE.md`'s hard invariants: never "backed by," "peg," "invest," "real-time," or "oracle."
 The print is signed and hash-anchored — that's integrity of publication, not oracle computation.
-Nothing here is for sale; Datum publishes a measurement, not an instrument.
+Nothing here is for sale; Touchstone Assay publishes a measurement, not an instrument.

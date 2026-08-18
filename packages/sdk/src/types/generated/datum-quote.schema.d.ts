@@ -12,9 +12,9 @@ export type DecimalString = string;
 export type HexString = string;
 
 /**
- * The datum-quote extension riding inside an x402/MPP payment-required response — build1-spec.md §8.
+ * The touchstone-quote extension riding inside an x402/MPP payment-required response — build1-spec.md §8.
  */
-export interface DatumQuote {
+export interface TouchstoneQuote {
   /**
    * Build 1 emits "1.0". A same-major bump is additive and safe for an existing consumer to accept; a major bump is not.
    */
@@ -34,7 +34,7 @@ export interface DatumQuote {
    */
   expiry: string;
   /**
-   * Optional. An address the buyer additionally authorises to call DatumEscrow.settle for this quote. Absent means seller-only settlement. Added in schema_version 1.1. The seller MUST verify this against the on-chain settler before performing work — see docs/datum-quote.md.
+   * Optional. An address the buyer additionally authorises to call TouchstoneEscrow.settle for this quote. Absent means seller-only settlement. Added in schema_version 1.1. The seller MUST verify this against the on-chain settler before performing work — see docs/datum-quote.md.
    */
   settler?: string;
   /**
@@ -62,7 +62,7 @@ export interface SettlementEntry {
    */
   address: string;
   /**
-   * Integer minor units as a string (e.g. USDC has 6 decimals) — drops straight into DatumEscrow.openAndFund's uint256 maxAmount with no conversion at the contract boundary.
+   * Integer minor units as a string (e.g. USDC has 6 decimals) — drops straight into TouchstoneEscrow.openAndFund's uint256 maxAmount with no conversion at the contract boundary.
    */
   amount_max: string;
 }

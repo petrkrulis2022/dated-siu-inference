@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { RunRecord } from "@datum/sdk";
+import type { RunRecord } from "@touchstone/sdk";
 import {
   checkQualityGatesPassed,
   computeFloorUsdPerBasket,
@@ -191,7 +191,7 @@ describe("writeFloorRecord / readGpuRateSnapshot", () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), "datum-floor-"));
+    dir = await mkdtemp(join(tmpdir(), "touchstone-floor-"));
   });
 
   afterEach(async () => {

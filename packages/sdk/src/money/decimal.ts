@@ -2,9 +2,9 @@ import { Decimal as GlobalDecimal } from "decimal.js";
 
 /**
  * A package-scoped Decimal constructor, NOT the global one, NOT an import of
- * `@datum/print`'s clone (same clone config, deliberately duplicated).
+ * `@touchstone/print`'s clone (same clone config, deliberately duplicated).
  *
- * `@datum/print` depends on `@datum/sdk`, never the reverse — importing print's `D` here
+ * `@touchstone/print` depends on `@touchstone/sdk`, never the reverse — importing print's `D` here
  * would create a dependency cycle. decimal.js's precision is a constructor-level setting, so
  * cloning pins this module's arithmetic against any other package in the process calling
  * `Decimal.set(...)`.

@@ -12,8 +12,8 @@ function validRecord() {
       explorer: "https://base-sepolia.blockscout.com",
     },
     contracts: {
-      DatumAttestation: { address: "0xAAA", explorerUrl: "https://example/AAA" },
-      DatumEscrow: { address: "0xBBB", explorerUrl: "https://example/BBB" },
+      TouchstoneAttestation: { address: "0xAAA", explorerUrl: "https://example/AAA" },
+      TouchstoneEscrow: { address: "0xBBB", explorerUrl: "https://example/BBB" },
     },
     usdc: { address: "0xCCC", decimals: 6, source: "test" },
   };
@@ -23,7 +23,7 @@ describe("loadDeployment", () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), "datum-deployments-"));
+    dir = await mkdtemp(join(tmpdir(), "touchstone-deployments-"));
   });
 
   afterEach(async () => {
@@ -34,8 +34,8 @@ describe("loadDeployment", () => {
     await writeFile(join(dir, "base-sepolia.json"), JSON.stringify(validRecord()));
     const record = loadDeployment("base-sepolia", dir);
     expect(record.network.chainId).toBe(84532);
-    expect(record.contracts.DatumAttestation.address).toBe("0xAAA");
-    expect(record.contracts.DatumEscrow.address).toBe("0xBBB");
+    expect(record.contracts.TouchstoneAttestation.address).toBe("0xAAA");
+    expect(record.contracts.TouchstoneEscrow.address).toBe("0xBBB");
     expect(record.usdc.address).toBe("0xCCC");
   });
 
@@ -53,10 +53,12 @@ describe("loadDeployment", () => {
   it("loads the real committed base-sepolia.json", () => {
     const record = loadDeployment("base-sepolia", "../../data/deployments");
     expect(record.network.chainId).toBe(84532);
-    expect(record.contracts.DatumAttestation.address).toBe(
-      "0xBd8C6F2A9B71DaB2E4b7B3a0e9efA0a0F25301fF",
+    expect(record.contracts.TouchstoneAttestation.address).toBe(
+      "0xF60701793eD168ffd6e818e1DCcb600393297190",
     );
-    expect(record.contracts.DatumEscrow.address).toBe("0xb9708BC05B15efC9dB494b2013125A44dc614757");
+    expect(record.contracts.TouchstoneEscrow.address).toBe(
+      "0x3eC06FFe8d5250d5Edf8Fff26b163aaaD65c8a00",
+    );
     expect(record.usdc.address).toBe("0x036CbD53842c5426634e7929541eC2318f3dCF7e");
   });
 });

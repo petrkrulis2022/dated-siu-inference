@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { TASK_CLASSES, BASKET_VERSION } from "@datum/basket";
+import { TASK_CLASSES, BASKET_VERSION } from "@touchstone/basket";
 import { cachePolicyVariant, batchDiscountVariant } from "../compute/sensitivity.js";
 import { formatVerifyReport, verifyPrint } from "../verify.js";
 import {

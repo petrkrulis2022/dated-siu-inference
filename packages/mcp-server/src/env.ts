@@ -1,16 +1,16 @@
-import { loadDeployment, type DeploymentRecord } from "@datum/sdk";
+import { loadDeployment, type DeploymentRecord } from "@touchstone/sdk";
 import { OnChainSettlementReader } from "./settlement/on-chain.js";
 import type { SettlementReader } from "./settlement/reader.js";
 
 /**
  * A minimal, local copy of packages/print/src/sign/sign.ts's env-key convention — reading
- * `DATUM_PUBLISHER_KEY` directly rather than importing @datum/print for one helper function,
- * which would pull @datum/basket and @datum/harness in as transitive workspace deps for no
+ * `TOUCHSTONE_PUBLISHER_KEY` directly rather than importing @touchstone/print for one helper function,
+ * which would pull @touchstone/basket and @touchstone/harness in as transitive workspace deps for no
  * other reason.
  */
-export const PUBLISHER_KEY_ENV = "DATUM_PUBLISHER_KEY";
-export const SELLER_ADDRESS_ENV = "DATUM_SELLER_ADDRESS";
-export const CHAIN_NAME_ENV = "DATUM_CHAIN_NAME";
+export const PUBLISHER_KEY_ENV = "TOUCHSTONE_PUBLISHER_KEY";
+export const SELLER_ADDRESS_ENV = "TOUCHSTONE_SELLER_ADDRESS";
+export const CHAIN_NAME_ENV = "TOUCHSTONE_CHAIN_NAME";
 
 export function loadPublisherKeyFromEnv(env: NodeJS.ProcessEnv = process.env): string {
   const key = env[PUBLISHER_KEY_ENV];
@@ -36,8 +36,8 @@ export function loadSellerAddressFromEnv(env: NodeJS.ProcessEnv = process.env): 
 }
 
 /**
- * Builds the real `SettlementReader` for `verify_receipt`, resolving `DatumEscrow`'s address
- * from `data/deployments/<chain>.json` (@datum/sdk's `loadDeployment`) rather than hardcoding it
+ * Builds the real `SettlementReader` for `verify_receipt`, resolving `TouchstoneEscrow`'s address
+ * from `data/deployments/<chain>.json` (@touchstone/sdk's `loadDeployment`) rather than hardcoding it
  * here — the deployment record is canonical, this is just a caller of it (README's Deployments
  * section is the other caller, generated the same way).
  */
@@ -56,6 +56,6 @@ export function loadSettlementReaderFromEnv(
   return new OnChainSettlementReader({
     chainName,
     rpcUrl,
-    escrowAddress: deployment.contracts.DatumEscrow.address,
+    escrowAddress: deployment.contracts.TouchstoneEscrow.address,
   });
 }

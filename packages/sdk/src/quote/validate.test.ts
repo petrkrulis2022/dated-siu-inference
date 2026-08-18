@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DatumQuote } from "../types/generated/datum-quote.schema.js";
+import type { TouchstoneQuote } from "../types/generated/datum-quote.schema.js";
 import { buildQuoteBody } from "./build.js";
 import { signQuote } from "./sign.js";
 import { validateQuote } from "./validate.js";
@@ -35,7 +35,7 @@ describe("validateQuote", () => {
   });
 
   it("rejects an unsupported schema_version major", () => {
-    const result = validateQuote({ ...validQuote, schema_version: "2.0" });
+    const result = validateQuote({ ...validQuote, schema_version: "3.0" });
     expect(result.valid).toBe(false);
   });
 
@@ -87,7 +87,10 @@ describe("validateQuote", () => {
   });
 
   it("rejects an unparseable expiry", () => {
-    const result = validateQuote({ ...validQuote, expiry: "not-a-date" } as unknown as DatumQuote);
+    const result = validateQuote({
+      ...validQuote,
+      expiry: "not-a-date",
+    } as unknown as TouchstoneQuote);
     expect(result.valid).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
-import type { ModelRegistryEntry } from "@datum/sdk";
-import { validateModelRegistryEntry } from "@datum/sdk";
+import type { ModelRegistryEntry } from "@touchstone/sdk";
+import { validateModelRegistryEntry } from "@touchstone/sdk";
 import { fetchOpenRouterEndpoints } from "../sources/openrouter.js";
 import {
   resolveAnthropicModels,

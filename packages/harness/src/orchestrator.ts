@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ModelRegistryEntry, RunRecord } from "@datum/sdk";
-import type { Grader, TaskInstance } from "@datum/basket";
+import type { ModelRegistryEntry, RunRecord } from "@touchstone/sdk";
+import type { Grader, TaskInstance } from "@touchstone/basket";
 import {
   createAdapterFor,
   loadApiKeysFromEnv,

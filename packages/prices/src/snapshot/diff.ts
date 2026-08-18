@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { PriceSnapshot } from "@datum/sdk";
+import type { PriceSnapshot } from "@touchstone/sdk";
 
 export interface PriceDiffEntry {
   model_id: string;

@@ -3,12 +3,12 @@ pragma solidity 0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {DatumEscrow} from "../src/DatumEscrow.sol";
+import {TouchstoneEscrow} from "../src/TouchstoneEscrow.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
 import {FeeOnTransferToken} from "./mocks/FeeOnTransferToken.sol";
 
-contract DatumEscrowTest is Test {
-    DatumEscrow internal escrow;
+contract TouchstoneEscrowTest is Test {
+    TouchstoneEscrow internal escrow;
     MockUSDC internal usdc;
 
     address internal buyer = makeAddr("buyer");
@@ -26,7 +26,7 @@ contract DatumEscrowTest is Test {
 
     function setUp() public {
         usdc = new MockUSDC();
-        escrow = new DatumEscrow(IERC20(address(usdc)), treasury, FEE_BPS);
+        escrow = new TouchstoneEscrow(IERC20(address(usdc)), treasury, FEE_BPS);
         expiry = uint64(block.timestamp + 1 days);
 
         usdc.mint(buyer, 100 * MAX_AMOUNT);
@@ -49,33 +49,33 @@ contract DatumEscrowTest is Test {
     }
 
     function test_constructor_revertsOnZeroToken() public {
-        vm.expectRevert(DatumEscrow.TokenZero.selector);
-        new DatumEscrow(IERC20(address(0)), treasury, FEE_BPS);
+        vm.expectRevert(TouchstoneEscrow.TokenZero.selector);
+        new TouchstoneEscrow(IERC20(address(0)), treasury, FEE_BPS);
     }
 
     function test_constructor_revertsOnZeroTreasury() public {
-        vm.expectRevert(DatumEscrow.TreasuryZero.selector);
-        new DatumEscrow(IERC20(address(usdc)), address(0), FEE_BPS);
+        vm.expectRevert(TouchstoneEscrow.TreasuryZero.selector);
+        new TouchstoneEscrow(IERC20(address(usdc)), address(0), FEE_BPS);
     }
 
     function test_constructor_revertsWhenFeeExceedsMax() public {
         vm.expectRevert(
-            abi.encodeWithSelector(DatumEscrow.FeeTooHigh.selector, uint16(101), uint16(100))
+            abi.encodeWithSelector(TouchstoneEscrow.FeeTooHigh.selector, uint16(101), uint16(100))
         );
-        new DatumEscrow(IERC20(address(usdc)), treasury, 101);
+        new TouchstoneEscrow(IERC20(address(usdc)), treasury, 101);
     }
 
     function test_constructor_acceptsFeeAtExactlyMax() public {
-        DatumEscrow atMax = new DatumEscrow(IERC20(address(usdc)), treasury, 100);
+        TouchstoneEscrow atMax = new TouchstoneEscrow(IERC20(address(usdc)), treasury, 100);
         assertEq(atMax.feeBps(), 100);
     }
 
     function testFuzz_constructor_revertsForAnyFeeAboveMax(uint16 feeBps_) public {
         feeBps_ = uint16(bound(feeBps_, 101, type(uint16).max));
         vm.expectRevert(
-            abi.encodeWithSelector(DatumEscrow.FeeTooHigh.selector, feeBps_, uint16(100))
+            abi.encodeWithSelector(TouchstoneEscrow.FeeTooHigh.selector, feeBps_, uint16(100))
         );
-        new DatumEscrow(IERC20(address(usdc)), treasury, feeBps_);
+        new TouchstoneEscrow(IERC20(address(usdc)), treasury, feeBps_);
     }
 
     // ---------------------------------------------------------------- openAndFund
@@ -84,11 +84,11 @@ contract DatumEscrowTest is Test {
         uint256 buyerBefore = usdc.balanceOf(buyer);
         _open(settler);
 
-        (address b, uint64 e, DatumEscrow.Status s, address sl, address st, uint256 m) =
+        (address b, uint64 e, TouchstoneEscrow.Status s, address sl, address st, uint256 m) =
             escrow.escrows(QUOTE_HASH);
         assertEq(b, buyer);
         assertEq(e, expiry);
-        assertEq(uint8(s), uint8(DatumEscrow.Status.Open));
+        assertEq(uint8(s), uint8(TouchstoneEscrow.Status.Open));
         assertEq(sl, seller);
         assertEq(st, settler);
         assertEq(m, MAX_AMOUNT);
@@ -99,20 +99,20 @@ contract DatumEscrowTest is Test {
 
     function test_openAndFund_emitsOpened() public {
         vm.expectEmit(true, true, true, true, address(escrow));
-        emit DatumEscrow.Opened(QUOTE_HASH, buyer, seller, settler, MAX_AMOUNT, expiry);
+        emit TouchstoneEscrow.Opened(QUOTE_HASH, buyer, seller, settler, MAX_AMOUNT, expiry);
         _open(settler);
     }
 
     function test_openAndFund_revertsOnZeroQuoteHash() public {
         vm.prank(buyer);
-        vm.expectRevert(DatumEscrow.QuoteHashZero.selector);
+        vm.expectRevert(TouchstoneEscrow.QuoteHashZero.selector);
         escrow.openAndFund(bytes32(0), seller, settler, MAX_AMOUNT, expiry);
     }
 
     function test_openAndFund_revertsOnDuplicateWhileOpen() public {
         _open(address(0));
         vm.prank(buyer);
-        vm.expectRevert(DatumEscrow.EscrowExists.selector);
+        vm.expectRevert(TouchstoneEscrow.EscrowExists.selector);
         escrow.openAndFund(QUOTE_HASH, seller, address(0), MAX_AMOUNT, expiry);
     }
 
@@ -123,7 +123,7 @@ contract DatumEscrowTest is Test {
         escrow.settle(QUOTE_HASH, MAX_AMOUNT, RECEIPT_REF);
 
         vm.prank(buyer);
-        vm.expectRevert(DatumEscrow.EscrowExists.selector);
+        vm.expectRevert(TouchstoneEscrow.EscrowExists.selector);
         escrow.openAndFund(QUOTE_HASH, seller, address(0), MAX_AMOUNT, expiry);
     }
 
@@ -133,7 +133,7 @@ contract DatumEscrowTest is Test {
         escrow.expire(QUOTE_HASH);
 
         vm.prank(buyer);
-        vm.expectRevert(DatumEscrow.EscrowExists.selector);
+        vm.expectRevert(TouchstoneEscrow.EscrowExists.selector);
         escrow.openAndFund(
             QUOTE_HASH, seller, address(0), MAX_AMOUNT, uint64(block.timestamp + 1 days)
         );
@@ -141,27 +141,27 @@ contract DatumEscrowTest is Test {
 
     function test_openAndFund_revertsOnZeroSeller() public {
         vm.prank(buyer);
-        vm.expectRevert(DatumEscrow.SellerZero.selector);
+        vm.expectRevert(TouchstoneEscrow.SellerZero.selector);
         escrow.openAndFund(QUOTE_HASH, address(0), settler, MAX_AMOUNT, expiry);
     }
 
     function test_openAndFund_revertsOnZeroAmount() public {
         vm.prank(buyer);
-        vm.expectRevert(DatumEscrow.AmountZero.selector);
+        vm.expectRevert(TouchstoneEscrow.AmountZero.selector);
         escrow.openAndFund(QUOTE_HASH, seller, settler, 0, expiry);
     }
 
     function test_openAndFund_revertsOnPastExpiry() public {
         vm.warp(1000);
         vm.prank(buyer);
-        vm.expectRevert(DatumEscrow.ExpiryNotInFuture.selector);
+        vm.expectRevert(TouchstoneEscrow.ExpiryNotInFuture.selector);
         escrow.openAndFund(QUOTE_HASH, seller, settler, MAX_AMOUNT, uint64(999));
     }
 
     function test_openAndFund_revertsWhenExpiryEqualsNow() public {
         vm.warp(1000);
         vm.prank(buyer);
-        vm.expectRevert(DatumEscrow.ExpiryNotInFuture.selector);
+        vm.expectRevert(TouchstoneEscrow.ExpiryNotInFuture.selector);
         escrow.openAndFund(QUOTE_HASH, seller, settler, MAX_AMOUNT, uint64(1000));
     }
 
@@ -169,14 +169,14 @@ contract DatumEscrowTest is Test {
     /// relative to the escrow it recorded, silently draining other buyers at settlement.
     function test_openAndFund_rejectsFeeOnTransferToken() public {
         FeeOnTransferToken fot = new FeeOnTransferToken();
-        DatumEscrow fotEscrow = new DatumEscrow(IERC20(address(fot)), treasury, FEE_BPS);
+        TouchstoneEscrow fotEscrow = new TouchstoneEscrow(IERC20(address(fot)), treasury, FEE_BPS);
         fot.mint(buyer, MAX_AMOUNT);
 
         vm.startPrank(buyer);
         fot.approve(address(fotEscrow), type(uint256).max);
         vm.expectRevert(
             abi.encodeWithSelector(
-                DatumEscrow.UnexpectedAmountReceived.selector,
+                TouchstoneEscrow.UnexpectedAmountReceived.selector,
                 MAX_AMOUNT,
                 MAX_AMOUNT - MAX_AMOUNT / 100
             )
@@ -250,7 +250,7 @@ contract DatumEscrowTest is Test {
     function test_settle_emitsSettled() public {
         _open(address(0));
         vm.expectEmit(true, true, true, true, address(escrow));
-        emit DatumEscrow.Settled(QUOTE_HASH, MAX_AMOUNT, RECEIPT_REF);
+        emit TouchstoneEscrow.Settled(QUOTE_HASH, MAX_AMOUNT, RECEIPT_REF);
         vm.prank(seller);
         escrow.settle(QUOTE_HASH, MAX_AMOUNT, RECEIPT_REF);
     }
@@ -260,20 +260,101 @@ contract DatumEscrowTest is Test {
         vm.prank(seller);
         vm.expectRevert(
             abi.encodeWithSelector(
-                DatumEscrow.AmountExceedsMax.selector, MAX_AMOUNT + 1, MAX_AMOUNT
+                TouchstoneEscrow.AmountExceedsMax.selector, MAX_AMOUNT + 1, MAX_AMOUNT
             )
         );
         escrow.settle(QUOTE_HASH, MAX_AMOUNT + 1, RECEIPT_REF);
     }
 
-    function testFuzz_settle_neverPaysOutMoreThanEscrowed(uint256 actual) public {
+    // -------------------------------------------------------- fee-floor boundaries
+
+    /// Below MIN_SETTLEMENT, a nonzero actualAmount reverts rather than settling with a fee
+    /// integer division would otherwise truncate to zero.
+    function test_settle_belowMinSettlement_reverts() public {
         _open(address(0));
-        actual = bound(actual, 0, MAX_AMOUNT);
+        vm.prank(seller);
+        vm.expectRevert(
+            abi.encodeWithSelector(TouchstoneEscrow.SettlementTooSmall.selector, 99, 100)
+        );
+        escrow.settle(QUOTE_HASH, 99, RECEIPT_REF);
+    }
+
+    /// At exactly the floor, raw division gives zero (100 * 50 / 10_000 == 0) but the floor
+    /// forces a 1-unit fee — 1%, the same rate MAX_FEE_BPS caps.
+    function test_settle_atMinSettlement_paysOneUnitFee() public {
+        _assertSettlesWithFee(100, 1);
+    }
+
+    /// Still below the naive truncation point (199 * 50 / 10_000 == 0 without the floor).
+    function test_settle_justBelowTruncationPoint_paysOneUnitFee() public {
+        _assertSettlesWithFee(199, 1);
+    }
+
+    /// The first amount where raw division alone yields a nonzero fee (200 * 50 / 10_000 == 1) —
+    /// confirms the floor and the raw formula agree exactly at their crossover.
+    function test_settle_atTruncationPoint_paysOneUnitFee() public {
+        _assertSettlesWithFee(200, 1);
+    }
+
+    /// Comfortably above the floor: the floor is inactive and the raw formula alone governs.
+    function test_settle_wellAboveFloor_paysRawFee() public {
+        _assertSettlesWithFee(1000, 5);
+    }
+
+    /// Shared assertion for the boundary tests above: exact fee, exact seller proceeds, and
+    /// conservation to the last unit — (actual - fee) + fee + (max - actual) == max.
+    function _assertSettlesWithFee(uint256 actual, uint256 expectedFee) internal {
+        _open(address(0));
+        uint256 buyerBefore = usdc.balanceOf(buyer);
 
         vm.prank(seller);
         escrow.settle(QUOTE_HASH, actual, RECEIPT_REF);
 
-        uint256 fee = (actual * FEE_BPS) / 10_000;
+        uint256 expectedSeller = actual - expectedFee;
+        uint256 expectedRefund = MAX_AMOUNT - actual;
+
+        assertEq(usdc.balanceOf(seller), expectedSeller, "seller receives actual - fee");
+        assertEq(usdc.balanceOf(treasury), expectedFee, "treasury receives exactly the floor fee");
+        assertEq(usdc.balanceOf(buyer) - buyerBefore, expectedRefund, "buyer refund excludes fee");
+        assertEq(usdc.balanceOf(address(escrow)), 0, "escrow retains nothing");
+        assertEq(
+            expectedSeller + expectedFee + expectedRefund,
+            MAX_AMOUNT,
+            "conservation holds to the last unit"
+        );
+    }
+
+    /// A feeBps == 0 deployment has chosen no fee; the floor must never manufacture one, even at
+    /// an actualAmount (exactly MIN_SETTLEMENT) where a nonzero feeBps would be forced to 1.
+    /// MIN_SETTLEMENT itself still applies regardless of feeBps — it is a dust floor on
+    /// settlement size, not a fee-floor artefact — so this test settles at the floor, not below
+    /// it, isolating the fee-formula exemption from the separate size-floor revert.
+    function test_settle_zeroFeeContract_floorNeverManufacturesAFee() public {
+        TouchstoneEscrow noFee = new TouchstoneEscrow(IERC20(address(usdc)), treasury, 0);
+        vm.startPrank(buyer);
+        usdc.approve(address(noFee), type(uint256).max);
+        noFee.openAndFund(QUOTE_HASH, seller, address(0), MAX_AMOUNT, expiry);
+        vm.stopPrank();
+
+        vm.prank(seller);
+        noFee.settle(QUOTE_HASH, 100, RECEIPT_REF); // == MIN_SETTLEMENT
+
+        assertEq(usdc.balanceOf(seller), 100, "seller receives the full 100, no phantom fee");
+        assertEq(usdc.balanceOf(treasury), 0, "zero-fee contract never charges a floor fee");
+    }
+
+    function testFuzz_settle_neverPaysOutMoreThanEscrowed(uint256 actual) public {
+        _open(address(0));
+        actual = bound(actual, 0, MAX_AMOUNT);
+        // Below MIN_SETTLEMENT, only actual == 0 (a full refund) is accepted; anything else in
+        // that range now reverts by design (see the fee-floor boundary tests above).
+        vm.assume(actual == 0 || actual >= escrow.MIN_SETTLEMENT());
+
+        vm.prank(seller);
+        escrow.settle(QUOTE_HASH, actual, RECEIPT_REF);
+
+        uint256 rawFee = (actual * FEE_BPS) / 10_000;
+        uint256 fee = actual == 0 ? 0 : (rawFee == 0 ? 1 : rawFee);
         assertEq(
             usdc.balanceOf(seller) + usdc.balanceOf(treasury), actual, "seller + fee == actual"
         );
@@ -283,7 +364,7 @@ contract DatumEscrowTest is Test {
 
     function test_settle_revertsOnUnknownQuote() public {
         vm.prank(seller);
-        vm.expectRevert(DatumEscrow.EscrowNotOpen.selector);
+        vm.expectRevert(TouchstoneEscrow.EscrowNotOpen.selector);
         escrow.settle(keccak256("never-opened"), 1, RECEIPT_REF);
     }
 
@@ -293,7 +374,7 @@ contract DatumEscrowTest is Test {
         escrow.settle(QUOTE_HASH, MAX_AMOUNT / 2, RECEIPT_REF);
 
         vm.prank(seller);
-        vm.expectRevert(DatumEscrow.EscrowNotOpen.selector);
+        vm.expectRevert(TouchstoneEscrow.EscrowNotOpen.selector);
         escrow.settle(QUOTE_HASH, MAX_AMOUNT / 2, RECEIPT_REF);
     }
 
@@ -301,7 +382,7 @@ contract DatumEscrowTest is Test {
         _open(address(0));
         vm.warp(expiry + 1);
         vm.prank(seller);
-        vm.expectRevert(DatumEscrow.PastExpiry.selector);
+        vm.expectRevert(TouchstoneEscrow.PastExpiry.selector);
         escrow.settle(QUOTE_HASH, MAX_AMOUNT, RECEIPT_REF);
     }
 
@@ -322,12 +403,12 @@ contract DatumEscrowTest is Test {
 
         vm.warp(expiry); // even if time were rolled back, the escrow is terminal
         vm.prank(seller);
-        vm.expectRevert(DatumEscrow.EscrowNotOpen.selector);
+        vm.expectRevert(TouchstoneEscrow.EscrowNotOpen.selector);
         escrow.settle(QUOTE_HASH, MAX_AMOUNT, RECEIPT_REF);
     }
 
     function test_settle_zeroFeeContractPaysSellerInFull() public {
-        DatumEscrow noFee = new DatumEscrow(IERC20(address(usdc)), treasury, 0);
+        TouchstoneEscrow noFee = new TouchstoneEscrow(IERC20(address(usdc)), treasury, 0);
         vm.startPrank(buyer);
         usdc.approve(address(noFee), type(uint256).max);
         noFee.openAndFund(QUOTE_HASH, seller, address(0), MAX_AMOUNT, expiry);
@@ -353,7 +434,7 @@ contract DatumEscrowTest is Test {
     function test_settle_settlerCannotSettleWhenNotAuthorised() public {
         _open(address(0));
         vm.prank(settler);
-        vm.expectRevert(DatumEscrow.NotAuthorisedToSettle.selector);
+        vm.expectRevert(TouchstoneEscrow.NotAuthorisedToSettle.selector);
         escrow.settle(QUOTE_HASH, MAX_AMOUNT, RECEIPT_REF);
     }
 
@@ -377,21 +458,21 @@ contract DatumEscrowTest is Test {
     function test_settle_thirdPartyCannotSettleWhenSettlerAuthorised() public {
         _open(settler);
         vm.prank(stranger);
-        vm.expectRevert(DatumEscrow.NotAuthorisedToSettle.selector);
+        vm.expectRevert(TouchstoneEscrow.NotAuthorisedToSettle.selector);
         escrow.settle(QUOTE_HASH, MAX_AMOUNT, RECEIPT_REF);
     }
 
     function test_settle_thirdPartyCannotSettleWhenNoSettlerAuthorised() public {
         _open(address(0));
         vm.prank(stranger);
-        vm.expectRevert(DatumEscrow.NotAuthorisedToSettle.selector);
+        vm.expectRevert(TouchstoneEscrow.NotAuthorisedToSettle.selector);
         escrow.settle(QUOTE_HASH, MAX_AMOUNT, RECEIPT_REF);
     }
 
     function test_settle_buyerCannotSettleUnlessAuthorisedAsSettler() public {
         _open(address(0));
         vm.prank(buyer);
-        vm.expectRevert(DatumEscrow.NotAuthorisedToSettle.selector);
+        vm.expectRevert(TouchstoneEscrow.NotAuthorisedToSettle.selector);
         escrow.settle(QUOTE_HASH, MAX_AMOUNT, RECEIPT_REF);
     }
 
@@ -399,7 +480,7 @@ contract DatumEscrowTest is Test {
         vm.assume(caller != seller && caller != settler && caller != address(0));
         _open(settler);
         vm.prank(caller);
-        vm.expectRevert(DatumEscrow.NotAuthorisedToSettle.selector);
+        vm.expectRevert(TouchstoneEscrow.NotAuthorisedToSettle.selector);
         escrow.settle(QUOTE_HASH, MAX_AMOUNT, RECEIPT_REF);
     }
 
@@ -443,20 +524,20 @@ contract DatumEscrowTest is Test {
         _open(address(0));
         vm.warp(expiry + 1);
         vm.expectEmit(true, true, true, true, address(escrow));
-        emit DatumEscrow.Expired(QUOTE_HASH, buyer, MAX_AMOUNT);
+        emit TouchstoneEscrow.Expired(QUOTE_HASH, buyer, MAX_AMOUNT);
         escrow.expire(QUOTE_HASH);
     }
 
     function test_expire_revertsBeforeExpiry() public {
         _open(address(0));
-        vm.expectRevert(DatumEscrow.NotYetExpired.selector);
+        vm.expectRevert(TouchstoneEscrow.NotYetExpired.selector);
         escrow.expire(QUOTE_HASH);
     }
 
     function test_expire_revertsAtExactlyExpiry() public {
         _open(address(0));
         vm.warp(expiry);
-        vm.expectRevert(DatumEscrow.NotYetExpired.selector);
+        vm.expectRevert(TouchstoneEscrow.NotYetExpired.selector);
         escrow.expire(QUOTE_HASH);
     }
 
@@ -473,7 +554,7 @@ contract DatumEscrowTest is Test {
         escrow.settle(QUOTE_HASH, MAX_AMOUNT, RECEIPT_REF);
 
         vm.warp(expiry + 1);
-        vm.expectRevert(DatumEscrow.EscrowNotOpen.selector);
+        vm.expectRevert(TouchstoneEscrow.EscrowNotOpen.selector);
         escrow.expire(QUOTE_HASH);
     }
 
@@ -482,7 +563,7 @@ contract DatumEscrowTest is Test {
         vm.warp(expiry + 1);
         escrow.expire(QUOTE_HASH);
 
-        vm.expectRevert(DatumEscrow.EscrowNotOpen.selector);
+        vm.expectRevert(TouchstoneEscrow.EscrowNotOpen.selector);
         escrow.expire(QUOTE_HASH);
     }
 

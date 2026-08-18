@@ -16,7 +16,7 @@ optimizer = true
 optimizer_runs = 200
 bytecode_hash = "none"
 
-# DatumEscrow.abi.t.sol reads the compiled artifact to assert, from the ABI itself, that no
+# NoAdminPath.t.sol reads the compiled artifact to assert, from the ABI itself, that no
 # state-mutating function exists beyond the three known-safe ones.
 fs_permissions = [{ access = "read", path = "./out" }]
 

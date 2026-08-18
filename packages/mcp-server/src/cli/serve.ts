@@ -16,7 +16,7 @@ async function main(): Promise<void> {
   const port = Number(process.env.PORT ?? 3000);
 
   app.listen(port, () => {
-    console.log(`Datum MCP server listening on http://localhost:${port}/mcp`);
+    console.log(`Touchstone Assay MCP server listening on http://localhost:${port}/mcp`);
   });
 }
 

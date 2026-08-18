@@ -1,4 +1,4 @@
-import type { RunRecord } from "@datum/sdk";
+import type { RunRecord } from "@touchstone/sdk";
 import { D, callCost, mean, type DecimalValue } from "../decimal.js";
 
 export interface ModelPrice {

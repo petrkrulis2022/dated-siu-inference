@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DatumQuote } from "../types/generated/datum-quote.schema.js";
+import type { TouchstoneQuote } from "../types/generated/datum-quote.schema.js";
 import { publicKeyFor } from "../crypto/sign.js";
 import { buildQuoteBody } from "./build.js";
 import { quoteBodyOf, quoteHashHex, signQuote, verifyQuoteSignature } from "./sign.js";
@@ -33,7 +33,7 @@ describe("signQuote / verifyQuoteSignature", () => {
 
   it("DETECTS TAMPERING: a changed amount_usd_max invalidates the signature", () => {
     const quote = signQuote(body, TEST_KEY);
-    const tampered = { ...quote, amount_usd_max: "999.0000" } as DatumQuote;
+    const tampered = { ...quote, amount_usd_max: "999.0000" } as TouchstoneQuote;
     expect(verifyQuoteSignature(tampered, publicKeyFor(TEST_KEY)).valid).toBe(false);
   });
 
@@ -52,7 +52,7 @@ describe("signQuote / verifyQuoteSignature", () => {
 describe("quoteBodyOf / quoteHashHex", () => {
   it("strips sig before hashing", () => {
     const quote = signQuote(body, TEST_KEY);
-    expect((quoteBodyOf(quote) as Partial<DatumQuote>).sig).toBeUndefined();
+    expect((quoteBodyOf(quote) as Partial<TouchstoneQuote>).sig).toBeUndefined();
   });
 
   it("gives the same hash before and after signing", () => {

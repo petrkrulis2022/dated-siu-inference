@@ -8,18 +8,18 @@ importers:
 
   .:
     devDependencies:
-      '@datum/prices':
-        specifier: workspace:*
-        version: link:packages/prices
-      '@datum/print':
-        specifier: workspace:*
-        version: link:packages/print
-      '@datum/sdk':
-        specifier: workspace:*
-        version: link:packages/sdk
       '@eslint/js':
         specifier: 10.0.1
         version: 10.0.1(eslint@10.8.1)
+      '@touchstone/prices':
+        specifier: workspace:*
+        version: link:packages/prices
+      '@touchstone/print':
+        specifier: workspace:*
+        version: link:packages/print
+      '@touchstone/sdk':
+        specifier: workspace:*
+        version: link:packages/sdk
       eslint:
         specifier: 10.8.1
         version: 10.8.1
@@ -44,21 +44,21 @@ importers:
 
   packages/agents:
     dependencies:
-      '@datum/harness':
-        specifier: workspace:*
-        version: link:../harness
-      '@datum/mcp-server':
-        specifier: workspace:*
-        version: link:../mcp-server
-      '@datum/print':
-        specifier: workspace:*
-        version: link:../print
-      '@datum/sdk':
-        specifier: workspace:*
-        version: link:../sdk
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
         version: 1.30.0(zod@3.25.76)
+      '@touchstone/harness':
+        specifier: workspace:*
+        version: link:../harness
+      '@touchstone/mcp-server':
+        specifier: workspace:*
+        version: link:../mcp-server
+      '@touchstone/print':
+        specifier: workspace:*
+        version: link:../print
+      '@touchstone/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       express:
         specifier: ^5.2.1
         version: 5.2.1
@@ -85,10 +85,10 @@ importers:
 
   packages/console:
     dependencies:
-      '@datum/print':
+      '@touchstone/print':
         specifier: workspace:*
         version: link:../print
-      '@datum/sdk':
+      '@touchstone/sdk':
         specifier: workspace:*
         version: link:../sdk
       express:
@@ -128,10 +128,10 @@ importers:
 
   packages/harness:
     dependencies:
-      '@datum/basket':
+      '@touchstone/basket':
         specifier: workspace:*
         version: link:../basket
-      '@datum/sdk':
+      '@touchstone/sdk':
         specifier: workspace:*
         version: link:../sdk
       decimal.js:
@@ -147,15 +147,15 @@ importers:
       '@circle-fin/x402-batching':
         specifier: ^3.3.0
         version: 3.3.0(@x402/core@2.22.0)(@x402/evm@2.22.0(typescript@6.0.3))(viem@2.55.16(typescript@6.0.3)(zod@3.25.76))
-      '@datum/print':
-        specifier: workspace:*
-        version: link:../print
-      '@datum/sdk':
-        specifier: workspace:*
-        version: link:../sdk
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
         version: 1.30.0(zod@3.25.76)
+      '@touchstone/print':
+        specifier: workspace:*
+        version: link:../print
+      '@touchstone/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       '@x402/evm':
         specifier: ^2.22.0
         version: 2.22.0(typescript@6.0.3)
@@ -178,7 +178,7 @@ importers:
 
   packages/prices:
     dependencies:
-      '@datum/sdk':
+      '@touchstone/sdk':
         specifier: workspace:*
         version: link:../sdk
       decimal.js:
@@ -191,21 +191,21 @@ importers:
 
   packages/print:
     dependencies:
-      '@datum/basket':
-        specifier: workspace:*
-        version: link:../basket
-      '@datum/harness':
-        specifier: workspace:*
-        version: link:../harness
-      '@datum/sdk':
-        specifier: workspace:*
-        version: link:../sdk
       '@noble/curves':
         specifier: ^2.3.0
         version: 2.3.0
       '@noble/hashes':
         specifier: ^2.3.0
         version: 2.3.0
+      '@touchstone/basket':
+        specifier: workspace:*
+        version: link:../basket
+      '@touchstone/harness':
+        specifier: workspace:*
+        version: link:../harness
+      '@touchstone/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       canonicalize:
         specifier: ^4.0.0
         version: 4.0.0
@@ -247,7 +247,7 @@ importers:
 
   site:
     dependencies:
-      '@datum/sdk':
+      '@touchstone/sdk':
         specifier: workspace:*
         version: link:../packages/sdk
     devDependencies:

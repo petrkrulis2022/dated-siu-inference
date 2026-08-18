@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Print } from "@datum/sdk";
+import type { Print } from "@touchstone/sdk";
 import { renderPrintPage } from "./print-page.js";
 
 function basePrint(overrides: Partial<Print> = {}): Print {

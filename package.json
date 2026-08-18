@@ -1,5 +1,5 @@
 {
-  "name": "datum",
+  "name": "touchstone-assay",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.34.5",
@@ -17,13 +17,13 @@
     "docs:deployments": "node scripts/generate-readme-deployments.mjs",
     "docs:deployments:check": "node scripts/generate-readme-deployments.mjs --check",
     "measure-floor": "tsx scripts/measure-floor.ts",
-    "console": "pnpm --filter @datum/console run dev",
-    "console:index": "pnpm --filter @datum/console run index"
+    "console": "pnpm --filter @touchstone/console run dev",
+    "console:index": "pnpm --filter @touchstone/console run index"
   },
   "devDependencies": {
-    "@datum/prices": "workspace:*",
-    "@datum/print": "workspace:*",
-    "@datum/sdk": "workspace:*",
+    "@touchstone/prices": "workspace:*",
+    "@touchstone/print": "workspace:*",
+    "@touchstone/sdk": "workspace:*",
     "@eslint/js": "10.0.1",
     "eslint": "10.8.1",
     "eslint-config-prettier": "10.1.8",

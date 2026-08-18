@@ -11,7 +11,7 @@ const TEST_KEY = `0x${"55".repeat(32)}`;
 let dir: string;
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "datum-print-publish-"));
+  dir = await mkdtemp(join(tmpdir(), "touchstone-print-publish-"));
 });
 
 afterEach(async () => {

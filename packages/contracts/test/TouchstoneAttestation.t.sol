@@ -2,10 +2,10 @@
 pragma solidity 0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {DatumAttestation} from "../src/DatumAttestation.sol";
+import {TouchstoneAttestation} from "../src/TouchstoneAttestation.sol";
 
-contract DatumAttestationTest is Test {
-    DatumAttestation internal attestation;
+contract TouchstoneAttestationTest is Test {
+    TouchstoneAttestation internal attestation;
 
     address internal publisher = makeAddr("publisher");
     address internal stranger = makeAddr("stranger");
@@ -14,7 +14,7 @@ contract DatumAttestationTest is Test {
     string internal constant VERSION = "SIU-2026a";
 
     function setUp() public {
-        attestation = new DatumAttestation(publisher);
+        attestation = new TouchstoneAttestation(publisher);
     }
 
     function test_constructor_setsPublisher() public view {
@@ -22,8 +22,8 @@ contract DatumAttestationTest is Test {
     }
 
     function test_constructor_revertsOnZeroPublisher() public {
-        vm.expectRevert(DatumAttestation.PublisherZero.selector);
-        new DatumAttestation(address(0));
+        vm.expectRevert(TouchstoneAttestation.PublisherZero.selector);
+        new TouchstoneAttestation(address(0));
     }
 
     function test_postPrint_recordsTimestamp() public {
@@ -38,33 +38,33 @@ contract DatumAttestationTest is Test {
     function test_postPrint_emitsPrintPosted() public {
         vm.warp(1_700_000_000);
         vm.expectEmit(true, true, true, true, address(attestation));
-        emit DatumAttestation.PrintPosted(BODY_HASH, VERSION, 1_700_000_000);
+        emit TouchstoneAttestation.PrintPosted(BODY_HASH, VERSION, 1_700_000_000);
         vm.prank(publisher);
         attestation.postPrint(BODY_HASH, VERSION);
     }
 
     function test_postPrint_revertsForNonPublisher() public {
         vm.prank(stranger);
-        vm.expectRevert(DatumAttestation.NotPublisher.selector);
+        vm.expectRevert(TouchstoneAttestation.NotPublisher.selector);
         attestation.postPrint(BODY_HASH, VERSION);
     }
 
     function testFuzz_postPrint_revertsForEveryNonPublisher(address caller) public {
         vm.assume(caller != publisher);
         vm.prank(caller);
-        vm.expectRevert(DatumAttestation.NotPublisher.selector);
+        vm.expectRevert(TouchstoneAttestation.NotPublisher.selector);
         attestation.postPrint(BODY_HASH, VERSION);
     }
 
     function test_postPrint_revertsOnZeroBodyHash() public {
         vm.prank(publisher);
-        vm.expectRevert(DatumAttestation.BodyHashZero.selector);
+        vm.expectRevert(TouchstoneAttestation.BodyHashZero.selector);
         attestation.postPrint(bytes32(0), VERSION);
     }
 
     function test_postPrint_revertsOnEmptyVersion() public {
         vm.prank(publisher);
-        vm.expectRevert(DatumAttestation.VersionEmpty.selector);
+        vm.expectRevert(TouchstoneAttestation.VersionEmpty.selector);
         attestation.postPrint(BODY_HASH, "");
     }
 
@@ -75,7 +75,7 @@ contract DatumAttestationTest is Test {
         attestation.postPrint(BODY_HASH, VERSION);
 
         vm.warp(block.timestamp + 1 days);
-        vm.expectRevert(DatumAttestation.AlreadyPosted.selector);
+        vm.expectRevert(TouchstoneAttestation.AlreadyPosted.selector);
         attestation.postPrint(BODY_HASH, VERSION);
         vm.stopPrank();
     }
@@ -87,7 +87,7 @@ contract DatumAttestationTest is Test {
 
         vm.warp(1_800_000_000);
         vm.prank(publisher);
-        vm.expectRevert(DatumAttestation.AlreadyPosted.selector);
+        vm.expectRevert(TouchstoneAttestation.AlreadyPosted.selector);
         attestation.postPrint(BODY_HASH, VERSION);
 
         assertEq(attestation.postedAt(BODY_HASH), 1_700_000_000, "first anchor time is preserved");

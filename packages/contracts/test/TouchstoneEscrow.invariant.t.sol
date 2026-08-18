@@ -3,7 +3,7 @@ pragma solidity 0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {DatumEscrow} from "../src/DatumEscrow.sol";
+import {TouchstoneEscrow} from "../src/TouchstoneEscrow.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
 import {EscrowHandler} from "./handlers/EscrowHandler.sol";
 
@@ -19,8 +19,8 @@ import {EscrowHandler} from "./handlers/EscrowHandler.sol";
  * sum. That is the literal on-chain statement of "funds can reach only the seller, the buyer, or
  * the fee treasury", checked rather than asserted in a comment.
  */
-contract DatumEscrowInvariantTest is Test {
-    DatumEscrow internal escrow;
+contract TouchstoneEscrowInvariantTest is Test {
+    TouchstoneEscrow internal escrow;
     MockUSDC internal usdc;
     EscrowHandler internal handler;
 
@@ -36,7 +36,7 @@ contract DatumEscrowInvariantTest is Test {
         sellers = [makeAddr("seller1"), makeAddr("seller2")];
 
         usdc = new MockUSDC();
-        escrow = new DatumEscrow(IERC20(address(usdc)), treasury, 50); // 0.5%
+        escrow = new TouchstoneEscrow(IERC20(address(usdc)), treasury, 50); // 0.5%
         handler = new EscrowHandler(escrow, usdc, buyers, sellers);
 
         for (uint256 i = 0; i < buyers.length; i++) {
@@ -114,7 +114,7 @@ contract EscrowHandlerCoverageTest is Test {
         address[2] memory sellers = [makeAddr("s1"), makeAddr("s2")];
 
         MockUSDC usdc = new MockUSDC();
-        DatumEscrow escrow = new DatumEscrow(IERC20(address(usdc)), makeAddr("treasury"), 50);
+        TouchstoneEscrow escrow = new TouchstoneEscrow(IERC20(address(usdc)), makeAddr("treasury"), 50);
         EscrowHandler handler = new EscrowHandler(escrow, usdc, buyers, sellers);
 
         for (uint256 i = 0; i < buyers.length; i++) {

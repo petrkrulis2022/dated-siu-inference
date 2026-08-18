@@ -12,7 +12,7 @@ export function usd(value: string): string {
   return `$${value}`;
 }
 
-/** A ratio like "0.26" or "-0.65" -> "+26%" / "-65%". Matches @datum/print's own rounding. */
+/** A ratio like "0.26" or "-0.65" -> "+26%" / "-65%". Matches @touchstone/print's own rounding. */
 export function percent(ratio: string, decimals = 0): string {
   const n = Number(ratio) * 100;
   const s = n.toFixed(decimals);

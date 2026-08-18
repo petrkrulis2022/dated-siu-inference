@@ -10,8 +10,8 @@ export interface DeploymentContract {
 export interface DeploymentRecord {
   network: { name: string; chainId: number; explorer: string };
   contracts: {
-    DatumAttestation: DeploymentContract;
-    DatumEscrow: DeploymentContract;
+    TouchstoneAttestation: DeploymentContract;
+    TouchstoneEscrow: DeploymentContract;
   };
   usdc: { address: string; decimals: number; source: string };
   [key: string]: unknown;
@@ -45,13 +45,13 @@ export function loadDeployment(network: string, dir?: string): DeploymentRecord 
   const record = raw as Partial<DeploymentRecord>;
   if (
     !record.network?.chainId ||
-    !record.contracts?.DatumAttestation?.address ||
-    !record.contracts?.DatumEscrow?.address ||
+    !record.contracts?.TouchstoneAttestation?.address ||
+    !record.contracts?.TouchstoneEscrow?.address ||
     !record.usdc?.address
   ) {
     throw new Error(
       `Malformed deployment record at ${path}: missing network.chainId, ` +
-        `contracts.DatumAttestation.address, contracts.DatumEscrow.address, or usdc.address.`,
+        `contracts.TouchstoneAttestation.address, contracts.TouchstoneEscrow.address, or usdc.address.`,
     );
   }
 

@@ -1,12 +1,12 @@
 import { parseAbi, type Hex } from "viem";
-import { retryUntilConclusive, type RetryUntilConclusiveOptions } from "@datum/sdk";
+import { retryUntilConclusive, type RetryUntilConclusiveOptions } from "@touchstone/sdk";
 import type { ChainClients } from "./wallets.js";
 
-/** No reusable write-side ABI/wrapper for `DatumEscrow` exists anywhere in the repo — the full
+/** No reusable write-side ABI/wrapper for `TouchstoneEscrow` exists anywhere in the repo — the full
  * ABI lives only in the Foundry build artifact (`packages/contracts/out/`), which sits outside
  * the pnpm workspace. Same minimal hand-written-fragment approach `settlement/on-chain.ts`
  * already established for the read side. */
-const DATUM_ESCROW_WRITE_ABI = parseAbi([
+const TOUCHSTONE_ESCROW_WRITE_ABI = parseAbi([
   "function openAndFund(bytes32 quoteHash, address seller, address settler, uint256 maxAmount, uint64 expiry) external",
   "function settle(bytes32 quoteHash, uint256 actualAmount, bytes32 receiptRef) external",
   "function escrows(bytes32) view returns (address buyer, uint64 expiry, uint8 status, address seller, address settler, uint256 maxAmount)",
@@ -36,7 +36,7 @@ export async function readEscrow(
   const [buyer, expiry, status, seller, settler, maxAmount] =
     await clients.publicClient.readContract({
       address: escrowAddress as Hex,
-      abi: DATUM_ESCROW_WRITE_ABI,
+      abi: TOUCHSTONE_ESCROW_WRITE_ABI,
       functionName: "escrows",
       args: [quoteHash as Hex],
     });
@@ -60,7 +60,7 @@ export function escrowMatchesQuote(
 
 /**
  * Public RPC endpoints are load-balanced across nodes at slightly different heights — see
- * `@datum/sdk`'s `retryUntilConclusive`, the shared home for this lesson (also applied to print
+ * `@touchstone/sdk`'s `retryUntilConclusive`, the shared home for this lesson (also applied to print
  * anchoring's `postedAt` reads). Confirmed live during this demo's first real run: the buyer's
  * funding transaction had genuinely succeeded (re-querying moments later showed the correct
  * funded state), but the seller's immediate, unretried read saw stale state and rejected a real,
@@ -110,15 +110,31 @@ export async function openAndFund(
     });
     const approveReceipt = await buyer.publicClient.waitForTransactionReceipt({ hash: approveTx });
     if (approveReceipt.status !== "success") {
-      throw new Error(`USDC approve for DatumEscrow reverted on-chain.`);
+      throw new Error(`USDC approve for TouchstoneEscrow reverted on-chain.`);
     }
+    // Same RPC-lag family as postedAt/escrow-status reads elsewhere in this repo (see
+    // @touchstone/sdk's retryUntilConclusive): a load-balanced public RPC node can still report
+    // the pre-approve allowance right after this receipt confirms, and openAndFund's own
+    // pre-flight simulation would then read that stale node and revert with "exceeds allowance"
+    // even though the approve genuinely landed. Confirmed live: a fresh TouchstoneEscrow
+    // deployment's first-ever approve for a buyer hit this on real Base Sepolia.
+    await retryUntilConclusive(
+      () =>
+        buyer.publicClient.readContract({
+          address: usdcAddress as Hex,
+          abi: USDC_APPROVE_ABI,
+          functionName: "allowance",
+          args: [buyer.account.address, escrowAddress as Hex],
+        }),
+      (seen) => seen >= args.maxAmount,
+    );
   }
 
   const txHash = await buyer.walletClient.writeContract({
     account: buyer.account,
     chain: undefined,
     address: escrowAddress as Hex,
-    abi: DATUM_ESCROW_WRITE_ABI,
+    abi: TOUCHSTONE_ESCROW_WRITE_ABI,
     functionName: "openAndFund",
     args: [
       args.quoteHash as Hex,
@@ -147,7 +163,7 @@ export async function settle(
     account: seller.account,
     chain: undefined,
     address: escrowAddress as Hex,
-    abi: DATUM_ESCROW_WRITE_ABI,
+    abi: TOUCHSTONE_ESCROW_WRITE_ABI,
     functionName: "settle",
     args: [args.quoteHash as Hex, args.actualAmount, args.receiptRef as Hex],
   });

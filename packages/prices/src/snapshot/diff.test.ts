@@ -2,14 +2,14 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { PriceSnapshot } from "@datum/sdk";
+import type { PriceSnapshot } from "@touchstone/sdk";
 import { writeSnapshot } from "./write-snapshot.js";
 import { diffLatestSnapshots } from "./diff.js";
 
 let dir: string;
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "datum-prices-diff-test-"));
+  dir = await mkdtemp(join(tmpdir(), "touchstone-prices-diff-test-"));
 });
 
 afterEach(async () => {

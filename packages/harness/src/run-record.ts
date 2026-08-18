@@ -1,6 +1,6 @@
-import type { RunRecord } from "@datum/sdk";
-import { validateRunRecord } from "@datum/sdk";
-import type { GradeResult, TaskInstance } from "@datum/basket";
+import type { RunRecord } from "@touchstone/sdk";
+import { validateRunRecord } from "@touchstone/sdk";
+import type { GradeResult, TaskInstance } from "@touchstone/basket";
 import type { AdapterResult } from "./adapters/types.js";
 
 /**

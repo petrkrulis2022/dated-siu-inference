@@ -19,7 +19,7 @@ of ones already published.
 One **SIU** (Standard Inference Unit) is a fixed quantity of AI work: a versioned benchmark
 basket of inference tasks, completed at a defined quality threshold. The current basket version
 is **`SIU-2026a`** — three task classes, weighted `T1: 0.50, T2: 0.30, T3: 0.20`
-(`@datum/basket`'s `TASK_CLASSES`). Dated SIU is the dollar price of one basket, published as a
+(`@touchstone/basket`'s `TASK_CLASSES`). Dated SIU is the dollar price of one basket, published as a
 signed, dated print. It is a measurement, not an instrument: nothing described in this document
 is for sale, and the print is not a peg, an oracle computation, or a claim about real-time market
 conditions — see `CLAUDE.md`'s vocabulary for the exact terms this project holds to.
@@ -33,7 +33,7 @@ the dollar settles.
 **The print is computed from executed runs only.** Three kinds of evidence exist, in strict
 descending order, and only the first is ever an input to the print itself:
 
-1. **Executed runs and reconciled invoices.** `@datum/harness` actually calls each registered
+1. **Executed runs and reconciled invoices.** `@touchstone/harness` actually calls each registered
    model with the real basket, captures real token usage, and prices it against a pinned price
    snapshot. This is the only tier that ever produces a number in `exchange_rate_table` or
    `dated_siu`.
@@ -55,7 +55,7 @@ never from a list price) are the only thing `packages/print`'s cost computation 
 
 Prompt caching changes the real cost of a call, so it must be either uniformly disabled or
 explicitly modelled — never left to vary silently by provider. **T2 (the long-context class)
-generates every instance with `cache_control: "disabled"`** (`@datum/basket/src/t2/generate.ts`);
+generates every instance with `cache_control: "disabled"`** (`@touchstone/basket/src/t2/generate.ts`);
 T1 and T3 never set caching-related parameters at all, since their contexts aren't long enough for
 caching to be a live policy question. Where a provider cannot honour an explicit disable request,
 that is logged as a deviation on the run record (`RunRecord.deviations`) rather than silently
@@ -206,9 +206,9 @@ gets to silently change.
 
 A print's body is canonicalised (RFC 8785 JCS, every field except `signature`/`public_key`
 excluded from the hash), hashed with keccak256, and signed with secp256k1 by
-`DATUM_PUBLISHER_KEY`. The signed print carries its own `signature` and `public_key`, so it is
+`TOUCHSTONE_PUBLISHER_KEY`. The signed print carries its own `signature` and `public_key`, so it is
 internally self-consistent — but a print's own fields proving internal consistency is not the
-same as proving the signer is really Datum's key rather than an impersonator's who signed a
+same as proving the signer is really Touchstone Assay's key rather than an impersonator's who signed a
 self-consistent but fabricated file. Closing that gap is exactly what §"Publisher identity and
 verification" below does, and is why the publisher key is coupled to an on-chain contract rather
 than distributed out of band.
@@ -234,7 +234,7 @@ presenting an estimate as a measured fact.
 (§ below), which means adding one cheap model or dropping one expensive one moves the headline
 number materially, with no computation error involved at all. Composition decisions therefore
 need to be as objective and auditable as the arithmetic itself — this section is what stands
-between Datum and a fair accusation that it can move its own number by curating who's in the
+between Touchstone Assay and a fair accusation that it can move its own number by curating who's in the
 basket.
 
 **Admission — objective criteria, no discretion:**
@@ -319,8 +319,8 @@ pressure.
 
 ## Publisher identity and verification
 
-`DatumAttestation.publisher()` — an immutable address set at contract deployment — is the
-canonical record of Datum's publisher key. Verification is a closed loop requiring no out-of-band
+`TouchstoneAttestation.publisher()` — an immutable address set at contract deployment — is the
+canonical record of Touchstone Assay's publisher key. Verification is a closed loop requiring no out-of-band
 key distribution or trusted third party beyond the chain itself:
 
 1. Recompute a print's canonical body hash independently (JCS-canonicalise the body minus its
@@ -329,37 +329,37 @@ key distribution or trusted third party beyond the chain itself:
    print's own `public_key` field, which a tampered file could carry self-consistently over a
    different key entirely. (Recovery yields two address candidates, since the stored signature
    carries no recovery bit; exactly one matches a real signer.)
-3. Compare the recovered address against `DatumAttestation.publisher()`, read live from chain.
+3. Compare the recovered address against `TouchstoneAttestation.publisher()`, read live from chain.
 4. Confirm the same body hash is anchored on-chain (`postedAt(bodyHash) > 0`).
 
 ```bash
-pnpm --filter @datum/print run verify-onchain <print-id> base-sepolia
+pnpm --filter @touchstone/print run verify-onchain <print-id> base-sepolia
 ```
 
-reads nothing but the chain and the print file — no `DATUM_PUBLISHER_KEY`, no trusted API. See
+reads nothing but the chain and the print file — no `TOUCHSTONE_PUBLISHER_KEY`, no trusted API. See
 `packages/print/src/anchor/recover.ts` and `packages/print/src/cli/verify-onchain.ts` for the
 implementation, and the README's own "Verify a print independently" section (generated from
 `data/deployments/base-sepolia.json`) for a live worked example against a real anchored print.
 
 **Deployed address (testnet — Base Sepolia, chain 84532):**
-`DatumAttestation` at
-[`0xBd8C6F2A9B71DaB2E4b7B3a0e9efA0a0F25301fF`](https://base-sepolia.blockscout.com/address/0xBd8C6F2A9B71DaB2E4b7B3a0e9efA0a0F25301fF),
+`TouchstoneAttestation` at
+[`0xF60701793eD168ffd6e818e1DCcb600393297190`](https://base-sepolia.blockscout.com/address/0xF60701793eD168ffd6e818e1DCcb600393297190),
 `publisher()` = `0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a`. **This is testnet, not the mainnet
 production key** — see below.
 
 **Limitations, stated plainly rather than discovered by an auditor:**
 
 - `publisher` is immutable by design — there is no rotation function. Rotating the publisher key
-  means deploying a new `DatumAttestation` instance; the old contract's history remains as an
+  means deploying a new `TouchstoneAttestation` instance; the old contract's history remains as an
   honest record of what it anchored under the old key.
 - If the publisher key is compromised or lost, recovery requires deploying a new
-  `DatumAttestation` and publishing a migration notice — itself signed by the old key, while it
+  `TouchstoneAttestation` and publishing a migration notice — itself signed by the old key, while it
   is still controlled — pointing every future verifier at the new contract address. A migration
   notice published _after_ the old key is already lost cannot be signed by it and would need a
   different, explicitly weaker trust path, stated at the time if that ever happens.
 - The publisher key must be online to anchor each print — it is a **hot key** by necessity, not
   an oversight. Its blast radius on compromise is **forged prints**, not loss of funds: the key
-  never touches `DatumEscrow` or any USDC. This is a materially different risk profile from a
+  never touches `TouchstoneEscrow` or any USDC. This is a materially different risk profile from a
   wallet key, and is why anchoring frequency and monitoring matter more here than cold storage.
 - The testnet key currently lives in a plaintext `.env` in this development environment — adequate
   for Base Sepolia, where nothing of value is at stake. **Mainnet deployment requires a distinct
@@ -372,7 +372,7 @@ production key** — see below.
 
 ## Governance intention
 
-Datum currently controls its own methodology and harness. That is appropriate while the index
+Touchstone Assay currently controls its own methodology and harness. That is appropriate while the index
 carries no real weight — a project of one has no constituency to capture. **Once the index has
 real weight — cited, relied upon, priced against — the methodology and harness should move to
 neutral governance**, structured so no single commercial party can move the number that party also

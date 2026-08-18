@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Print } from "@datum/sdk";
+import type { Print } from "@touchstone/sdk";
 import { getIndexTool } from "./get-index.js";
 
 function fixturePrint(overrides: Partial<Print> = {}): Print {
@@ -40,7 +40,7 @@ describe("getIndexTool", () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), "datum-get-index-"));
+    dir = await mkdtemp(join(tmpdir(), "touchstone-get-index-"));
   });
 
   afterEach(async () => {

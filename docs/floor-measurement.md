@@ -23,7 +23,7 @@ GPU-seconds per basket, the utilisation assumption, and the computed
 ## Prerequisites
 
 - A reference GPU rate snapshot. If the existing one in `data/registry/gpu-rate-snapshot-*.json`
-  is stale, refresh it first: `pnpm --filter @datum/prices run fetch:gpu-rates` (pulls real
+  is stale, refresh it first: `pnpm --filter @touchstone/prices run fetch:gpu-rates` (pulls real
   Akash and Vast.ai listings for the reference GPU, `NVIDIA H100 SXM 80GB`).
 - Real API keys for whichever provider serves the reference model, if the harness needs them for
   anything besides the vLLM endpoint itself (it doesn't, here — vLLM needs no API key).
@@ -37,7 +37,7 @@ it's what `--source` and the snapshot's matching entry will refer to.
 ## Step 2 — serve an open-weight model with vLLM
 
 Start vLLM on the rented instance, serving an open-weight model that you expect to pass all three
-of `@datum/basket`'s quality gates (T1/T2/T3 — see `docs/siu-worked-example.md`'s "Quality gates"
+of `@touchstone/basket`'s quality gates (T1/T2/T3 — see `docs/siu-worked-example.md`'s "Quality gates"
 section for what passing looks like). Record vLLM's exact version:
 
 ```bash
@@ -49,7 +49,7 @@ continuing — `curl http://<host>:8000/v1/models` should list the served model.
 
 ## Step 3 — point the harness at it and run the basket
 
-`@datum/harness`'s existing OpenAI-compatible adapter (`createOpenAiCompatibleAdapter`,
+`@touchstone/harness`'s existing OpenAI-compatible adapter (`createOpenAiCompatibleAdapter`,
 `packages/harness/src/adapters/openai-compatible.ts`) works against any OpenAI-chat-completions
 endpoint, including a local vLLM server — it only needs a `chatCompletionsUrl`. Add a temporary
 entry to `data/registry/models.json` (or a scratch copy pointed at by a temporary registry file)
@@ -62,7 +62,7 @@ now** — e.g. `floor-measurement-2026-08-17` — you'll need it for both timing
 
 ```bash
 date -u +%s   # start
-pnpm --filter @datum/harness run run   # however your registry/run_id wiring invokes it
+pnpm --filter @touchstone/harness run run   # however your registry/run_id wiring invokes it
 date -u +%s   # end
 ```
 
@@ -101,7 +101,7 @@ floor from this session.
 ## Step 5 — feed it into a print
 
 ```bash
-pnpm --filter @datum/print run compute <print-id> [snapshot-file] floor-record=data/registry/floor-record-<timestamp>.json
+pnpm --filter @touchstone/print run compute <print-id> [snapshot-file] floor-record=data/registry/floor-record-<timestamp>.json
 ```
 
 `computePrint` (`packages/print/src/compute/index.ts`) sets `body.floor` and computes

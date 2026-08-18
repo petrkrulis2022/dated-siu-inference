@@ -1,5 +1,5 @@
-import type { Print } from "@datum/sdk";
-import { validatePrint } from "@datum/sdk";
+import type { Print } from "@touchstone/sdk";
+import { validatePrint } from "@touchstone/sdk";
 import { computePrint, type PrintInput } from "./compute/index.js";
 import { canonicalise, printBodyOf } from "./sign/canonicalise.js";
 import { verifyPrintSignature } from "./sign/sign.js";

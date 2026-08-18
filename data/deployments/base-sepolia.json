@@ -6,9 +6,10 @@
     "note": "Testnet only. Mainnet deployment is out of scope; see mainnetRequirements below."
   },
   "source": {
-    "gitCommit": "5ba46453e19d4c1f725ba75cc62ca295a8d2f63f",
-    "gitCommitShort": "5ba4645",
-    "treeCleanAtDeploy": true,
+    "gitCommit": "7b1d6ed1009a49e36845b43b7421ab9d80a397d2",
+    "gitCommitShort": "7b1d6ed",
+    "treeCleanAtDeploy": false,
+    "treeCleanAtDeployNote": "Deployed mid-rename: the working tree carried the uncommitted Datum → Touchstone Assay rename (including this contract's rename and the MIN_SETTLEMENT fee-floor fix) at deploy time. gitCommit above is the last commit that landed before this deploy; the commit that actually contains TouchstoneEscrow.sol/TouchstoneAttestation.sol as deployed is a later commit made after this file was written. Recorded honestly rather than claiming a clean-tree deploy that didn't happen.",
     "path": "packages/contracts"
   },
   "compiler": {
@@ -22,10 +23,16 @@
     "evmVersionRationale": "PUSH0 is universally available but Cancun opcodes are not; shanghai is the portable floor that keeps Arc a future deployment target rather than a rewrite."
   },
   "deployedAt": {
-    "unix": 1786862195,
-    "iso": "2026-08-16T06:36:35Z"
+    "unix": 1787034730,
+    "iso": "2026-08-18T06:32:10Z"
   },
   "deployer": "0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e",
+  "supersedes": {
+    "note": "Replaces the pre-rename Datum-named deployment (same deployer, same publisher key, same treasury/feeBps). Nothing had ever been publicly published against the old addresses — no real print was ever anchored, only synthetic smoke-test hashes — so this is a clean cutover with no migration path needed.",
+    "priorDatumAttestation": "0xBd8C6F2A9B71DaB2E4b7B3a0e9efA0a0F25301fF",
+    "priorDatumEscrow": "0xb9708BC05B15efC9dB494b2013125A44dc614757",
+    "priorDeployedAt": "2026-08-16T06:36:35Z"
+  },
   "usdc": {
     "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
     "symbol": "USDC",
@@ -39,10 +46,10 @@
     "verifiedOnChain": "symbol() == 'USDC' and decimals() == 6 queried live before deployment"
   },
   "contracts": {
-    "DatumAttestation": {
-      "address": "0xBd8C6F2A9B71DaB2E4b7B3a0e9efA0a0F25301fF",
-      "deploymentTx": "0x3bb0a3ef895b7a3545766fd3ac831ba8e3efd0b7b1d6e12ad24ae08d0b8c78a4",
-      "blockNumber": 45546954,
+    "TouchstoneAttestation": {
+      "address": "0xF60701793eD168ffd6e818e1DCcb600393297190",
+      "deploymentTx": "0x5e5f3751f7140e10a665a260a6163286a67c730098ec7cf80cbd469eae0786d5",
+      "blockNumber": 45633221,
       "gasUsed": 231496,
       "constructorArgs": {
         "publisher_": "0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a"
@@ -50,143 +57,133 @@
       "constructorArgsEncoded": "0x000000000000000000000000284ff2f8605ff8afeda6959b856bb7e6d48f845a",
       "verified": {
         "explorer": "Blockscout",
-        "status": "Pass - Verified"
+        "status": "Pass - Verified",
+        "note": "Auto-matched by Blockscout at submission time (identical bytecode to a contract it had already indexed); forge verify-contract reported 'already verified'."
       },
-      "explorerUrl": "https://base-sepolia.blockscout.com/address/0xBd8C6F2A9B71DaB2E4b7B3a0e9efA0a0F25301fF",
-      "notes": "publisher is the EOA of DATUM_PUBLISHER_KEY, the same key packages/print signs prints with (compressed pubkey 0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299), so the key that signs a print is the key that anchors it. Immutable: rotating the publisher means deploying a new instance."
+      "explorerUrl": "https://base-sepolia.blockscout.com/address/0xF60701793eD168ffd6e818e1DCcb600393297190",
+      "notes": "publisher is the EOA of TOUCHSTONE_PUBLISHER_KEY, the same key packages/print signs prints with (compressed pubkey 0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299), so the key that signs a print is the key that anchors it. Immutable: rotating the publisher means deploying a new instance. Same publisher key as the superseded Datum-named deployment — reused, not regenerated."
     },
-    "DatumEscrow": {
-      "address": "0xb9708BC05B15efC9dB494b2013125A44dc614757",
-      "deploymentTx": "0x74067f562e8e27ebd79ea08113dd5932f677dd4f5d5bd65cf5ed48051752afda",
-      "blockNumber": 45546954,
-      "gasUsed": 863865,
+    "TouchstoneEscrow": {
+      "address": "0x3eC06FFe8d5250d5Edf8Fff26b163aaaD65c8a00",
+      "deploymentTx": "0xdfd10967404bc2d41893aae935bd757b9d0885d7606c09927b9aaa737a2f15d5",
+      "blockNumber": 45633221,
+      "gasUsed": 899074,
       "constructorArgs": {
         "token_": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
         "treasury_": "0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e",
         "feeBps_": 50
       },
       "constructorArgOrder": ["token_", "treasury_", "feeBps_"],
+      "constructorArgsEncoded": "0x000000000000000000000000036cbd53842c5426634e7929541ec2318f3dcf7e000000000000000000000000d7ca8219c8afa07b455ab7e004fc5381b3727b1e0000000000000000000000000000000000000000000000000000000000000032",
       "verified": {
         "explorer": "Blockscout",
-        "status": "Pass - Verified"
+        "status": "Pass - Verified",
+        "guid": "3ec06ffe8d5250d5edf8fff26b163aaad65c8a006a83fcd3"
       },
-      "explorerUrl": "https://base-sepolia.blockscout.com/address/0xb9708BC05B15efC9dB494b2013125A44dc614757",
+      "explorerUrl": "https://base-sepolia.blockscout.com/address/0x3ec06ffe8d5250d5edf8fff26b163aaad65c8a00",
       "feeBpsMeaning": "50 basis points = 0.50%, charged on actualAmount only and deducted from seller proceeds. Contract cap MAX_FEE_BPS = 100 (1%).",
+      "minSettlement": 100,
+      "minSettlementMeaning": "New in this deployment. Below 100 minor units, settle() reverts (SettlementTooSmall) rather than silently charging a fee integer division would truncate to zero — the console's first live run against the prior deployment found real sub-200-unit settlements paying no fee at all. At or above 100, a configured nonzero feeBps always takes at least 1 unit, capping the floor's effective rate at 1% (1 unit on a 100-unit settlement), the same rate MAX_FEE_BPS already permits. actualAmount == 0 (a full refund via settle()) is exempt from the floor — unchanged behaviour. A feeBps == 0 deployment never has the floor manufacture a fee, since it explicitly configured no fee.",
       "notes": "treasury and feeBps are immutable with no setter. Treasury here is the deployer EOA, acceptable on testnet only."
     }
   },
   "mainnetRequirements": [
     "treasury MUST be a Safe/multisig, not an EOA. It is immutable with no setter, so a lost key makes fee revenue permanently unrecoverable and the only remedy is redeploying the escrow and migrating every integrator.",
-    "Generate DATUM_PUBLISHER_KEY on an air-gapped machine. The testnet key used here has passed through repository-adjacent files.",
+    "Generate TOUCHSTONE_PUBLISHER_KEY on an air-gapped machine. The testnet key used here has passed through repository-adjacent files.",
     "Deploy.s.sol is chain-guarded to 84532; a mainnet deployment needs its own script and its own review."
   ],
   "smokeTests": {
-    "ranAgainst": "live Base Sepolia with real testnet USDC",
+    "ranAgainst": "live Base Sepolia with real testnet USDC, against the new TouchstoneEscrow/TouchstoneAttestation deployment above",
     "seller": {
-      "address": "0xBF55C0d8764762d8aCd2F8c2D9680Da34BFd68dd",
+      "address": "0x83cCDe89b4b5F61A0c91ed79bB361D7D1B08a325",
       "note": "Throwaway testnet-only EOA generated for these tests; its key was never written to the repository."
     },
-    "fundingTxs": {
-      "publisherGas": "0xd813358939444e6b33fc15eec8343d34a3b8947ba4d58b56613c0852b688a2c0",
-      "sellerGas": "0x5845cd94cf2c21f6b1ded4c6f97023dd01698c3c2e0b04af7cd6dcef3e23f1fa"
-    },
     "1_anchorRealPrint": {
-      "description": "Signed a real print locally (worked example, reproduces Dated SIU $0.0383), anchored it, confirmed the event and stored timestamp, then confirmed re-anchoring reverts.",
-      "printId": "2026-08-16-smoke",
-      "bodyHash": "0xe5fb1ef345df5652346d72a958e55adc43b1722876bde8127c0cab16870408a4",
-      "postPrintTx": "0x037582a3530d5a9576737e0d91ee2d42aa146ed64934118d7d77be2b03c4ec85",
-      "blockNumber": 45547062,
-      "storedTimestamp": 1786862412,
-      "storedTimestampIso": "2026-08-16T06:40:12Z",
-      "eventTopic0": "0xecf1a9acd77fd19e418f714b9dfeb703873f7f27677eb00ebf17fdbcab06b999",
-      "eventDecoded": {
-        "version": "SIU-2026a",
-        "timestamp": 1786862412
+      "description": "Signed the worked example from docs/siu-worked-example.md locally (reproduces Dated SIU $0.0383), anchored its real body hash, confirmed the recovered signer matches publisher() on-chain, then confirmed re-anchoring a hash reverts. This is a worked example, not a production print — none has been published yet.",
+      "printId": "worked-example",
+      "datedSiu": "0.0383",
+      "bodyHash": "0xfa9c2b6cace2fe1d2459e4849f366044fe45b642eb412fe89497b32e1ccda1c4",
+      "postPrintTx": "0x0343d0e68aec482d840b847cc898a665f2b207ed07e09859e0b9f915d1795740",
+      "storedTimestamp": 1787035752,
+      "storedTimestampIso": "2026-08-18T06:49:12Z",
+      "recoveredSignerVerification": {
+        "onChainPublisher": "0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a",
+        "recoveredCandidates": [
+          "0x7ab67ceaaf33b21336b0481b3e8a867b70503e35",
+          "0x284ff2f8605ff8afeda6959b856bb7e6d48f845a"
+        ],
+        "matchedRecoveryId": 1,
+        "verified": true
       },
-      "reAnchorReverted": "AlreadyPosted() 0xe9f155db",
-      "nonPublisherReverted": "NotPublisher() 0x6cc8883a"
+      "reAnchorTest": {
+        "description": "A separate synthetic body hash, anchored and then re-anchored to confirm the revert independently of the worked-example print.",
+        "bodyHash": "0x3b891f24de0ac6a5c1c5becee546616bc47354d670da73d5b083a664334dd766",
+        "postPrintTx": "0xe736eddffa768c548a05664a22f57b4b685d65ae4bc022a9c334a5b216cf24a2",
+        "blockNumber": 45633507,
+        "storedTimestamp": 1787035302,
+        "storedTimestampIso": "2026-08-18T06:41:42Z",
+        "reAnchorReverted": "AlreadyPosted() 0xe9f155db"
+      }
     },
     "2_escrowSettleBelowMax": {
-      "description": "Full cycle with real USDC, settler = address(0). Fee charged on actualAmount only; buyer refund excludes fee.",
-      "quoteHash": "0x970f95d7dd7e9ad052dd0f68d80d95f671ca8db58bcb40d331369bc7f0efe026",
-      "quoteHashSource": "packages/sdk quoteHashHex over a real signed datum-quote",
-      "approveTx": "0xf24a9e13cf39944b43ab4ff89fe68b768a309159501735d47d5dd5e7937560bb",
-      "openAndFundTx": "0x432cd1d48645c85b0c85790a1215498e108d688629ea636da0cbd4054d7ad30e",
-      "openAndFundBlock": 45547109,
-      "settleTx": "0x070d6d181e7c09c2044ca8450de11e76ec8a613fbaf2c4846021b16d5e36c379",
-      "settleBlock": 45547127,
-      "maxAmount": 1000000,
-      "actualAmount": 400000,
+      "description": "Full cycle with real USDC, settler = address(0). Fee charged on actualAmount only; buyer refund excludes fee. Well above the new MIN_SETTLEMENT floor, so the raw feeBps formula alone governs — unaffected by the fix.",
+      "quoteHash": "0xefb153444e123267d0ab4fa0e124b7a1edf4ce5cb3b8e4b66304e70b5e48f678",
+      "openAndFundTx": "0x5c2bd0c1bb7514cb2c4cc716b7d533428d9c0d7547cc9c708007063594bf5f2d",
+      "settleTx": "0x3156ada31bb431cd44b5d767d0a0fe3ce43570a634cb4946d1292d8a58734e32",
+      "settleBlock": 45633511,
+      "maxAmount": 10000,
+      "actualAmount": 6000,
       "assertedOnChain": {
-        "feeToTreasury": 2000,
-        "toSeller": 398000,
-        "refundToBuyer": 600000,
-        "escrowBalanceAfter": 0,
-        "conservation": "toSeller + feeToTreasury + refundToBuyer == maxAmount (1000000)",
-        "provenBy": "three distinct USDC Transfer events emitted from the escrow in the settle tx, one per destination"
+        "feeToTreasury": 30,
+        "toSeller": 5970,
+        "refundToBuyer": 4000,
+        "conservation": "toSeller + feeToTreasury + refundToBuyer == maxAmount (10000)",
+        "provenBy": "seller's cumulative USDC balance across all of this run's settlements (7262) matched the sum independently predicted from every individual settle amount and the feeBps/MIN_SETTLEMENT formula exactly, cross-validating every step below"
       }
     },
     "3_escrowExpiryReclaim": {
-      "description": "Second quote taken to expiry, then expire() reclaimed by the buyer. No fee is taken on an expiry refund.",
-      "quoteHash": "0x716d3bad9eba3c06adac79e81c362aa00d84905fd16f53664312358a70efcd23",
-      "openAndFundTx": "0x2462acd647a991db4a3039e290df4786c9dc52915850e8062768e7c89c355c5e",
-      "openAndFundBlock": 45547107,
-      "expireTx": "0x4d29e145e8fe772fb83dfca48966f51c0b74f7f286f14609f28a6bf9899c58bf",
-      "expireBlock": 45547198,
-      "maxAmount": 500000,
+      "description": "Second quote taken to a real (30-second) expiry, then expire() reclaimed by the buyer after waiting for it on the wall clock. No fee is taken on an expiry refund.",
+      "quoteHash": "0x33d54f40ba1bc24634e753eb4aa7cdbb2f5738e2b35fe76ea53a85ff5ac97e54",
+      "openAndFundTx": "0xa53b92d64ee387256129d9a58e0a06b8903abd23e6c34299a44acdfab09101f4",
+      "expireTx": "0x217ed7b9795ac3015ba4ca96124f023a4f7c6e3c11cb38ff1752c88d9cb0b6d8",
+      "expireBlock": 45633534,
+      "maxAmount": 500,
       "assertedOnChain": {
-        "refundToBuyer": 500000,
+        "refundToBuyer": 500,
         "toSeller": 0,
-        "toTreasury": 0,
-        "escrowBalanceAfter": 0
+        "toTreasury": 0
       }
     },
     "4_quoteHashNotReusable": {
       "description": "A quoteHash is single-use forever, whether it was settled or expired.",
       "settledHashReuseReverted": "EscrowExists() 0x1e76f791",
-      "expiredHashReuseReverted": "EscrowExists() 0x1e76f791",
-      "doubleExpireReverted": "EscrowNotOpen() 0x80818813"
+      "expiredHashReuseReverted": "EscrowExists() 0x1e76f791"
     },
-    "5_idempotentAnchoring": {
-      "description": "Verified live that re-running anchoring is safe: the first run anchors, subsequent runs report already-anchored and send no transaction. This is the 'dropped client after a landed transaction' case.",
-      "implementedBy": "packages/print/src/anchor/attestation.ts (anchorIdempotently) and anchor/on-chain.ts (OnChainAttestationClient)",
-      "verifiedWith": {
-        "bodyHash": "0x1b352de926198640aa43e472aa2f44b209c3ec44d4f7945737ce8404586aca3a",
-        "printId": "2026-08-16-idem2",
-        "run1": {
-          "status": "anchored",
-          "tx": "0xc0de7a370534495408bce34dc5b2dd583917975f3718a4ebd553706731816454",
-          "postedAt": "2026-08-16T06:52:26.000Z"
-        },
-        "run2": {
-          "status": "already-anchored",
-          "tx": null,
-          "postedAt": "2026-08-16T06:52:26.000Z"
-        },
-        "run3": {
-          "status": "already-anchored",
-          "tx": null
-        }
+    "5_feeFloorBoundaries": {
+      "description": "New in this deployment. Live confirmation of MIN_SETTLEMENT and the fee-floor formula at the exact boundaries: 99 reverts, 100/199/1000 pay the formula's predicted fee. Each amount used its own fresh escrow (maxAmount 2000) on the same seller.",
+      "amount99": {
+        "expected": "reverts — below MIN_SETTLEMENT",
+        "settleReverted": "SettlementTooSmall(99, 100) 0x305ce088"
       },
-      "bugsFoundOnLiveChainAndFixed": [
-        {
-          "bug": "A reverted transaction was reported as a successful anchor.",
-          "cause": "viem's waitForTransactionReceipt resolves for reverted transactions too \u2014 a receipt means mined, not succeeded \u2014 and the receipt status was never checked.",
-          "evidence": "First idempotency attempt sent a duplicate postPrint (tx 0xab519e1ff6135e837574de77917ede8a62c94a1a19eb1aa22102224bd5f7bfc4) which mined with status 0, yet was reported as anchored.",
-          "fix": "on-chain.ts throws unless receipt.status === 'success'; anchorIdempotently then decides from contract state rather than from the transaction outcome.",
-          "regressionTest": "packages/print/src/anchor/idempotent.test.ts \u2014 'does not report a reverted transaction as anchored'"
-        },
-        {
-          "bug": "Reading postedAt immediately after a mined transaction returned 0, so the next run re-sent.",
-          "cause": "Public RPC endpoints are load-balanced across nodes at different heights; a read can be served by one that has not caught up.",
-          "evidence": "Run 1 recorded a wall-clock posted_at with milliseconds (2026-08-16T06:49:54.026Z) instead of the on-chain second-precision timestamp, showing the read had answered 0.",
-          "fix": "readPostedAtWithRetry polls until the read is conclusive; only a non-zero answer is trusted.",
-          "regressionTest": "packages/print/src/anchor/idempotent.test.ts \u2014 'tolerates RPC read lag right after a send instead of re-sending next run'"
-        }
-      ],
-      "supersededAttempt": {
-        "note": "An earlier print (2026-08-16-idem, hash 0x7b270f36d9be823db8027ab4d55623f6442c411d99aa2be48ca18af3379ffed5) was anchored by tx 0xc7ae882ce92451598c5d465267cf268adc47fed3751772305c0186f617265201 while exposing the bugs above. Its duplicate send reverted on-chain and moved no state.",
-        "anchoredAt": 1786862996
+      "amount100": {
+        "expected": "fee 1, seller receives 99 — 100 * 50 / 10000 == 0 raw, floored to 1",
+        "settleTx": "0x063e531ada571101c5482a075a2f127d25fabb0bf0425b3702ede56fea19a3cc",
+        "block": 45633545
+      },
+      "amount199": {
+        "expected": "fee 1, seller receives 198 — 199 * 50 / 10000 == 0 raw, floored to 1",
+        "settleTx": "0x1f1eee4b19a2a3ee5957e418c8d011dea5cd9d666cce561de9cd94baf9ec682f",
+        "block": 45633550
+      },
+      "amount1000": {
+        "expected": "fee 5, seller receives 995 — 1000 * 50 / 10000 == 5 raw, floor inactive (raw already nonzero)",
+        "settleTx": "0x12e115a6232638ab005e24d0318bbabf09cc3598b96d04dc205f2493dc339823",
+        "block": 45633556
+      },
+      "assertedOnChain": {
+        "sellerCumulativeBalanceAfterAllSmokeTests": 7262,
+        "predictedFromFormula": "5970 (test 2) + 99 (amount100) + 198 (amount199) + 995 (amount1000) = 7262",
+        "match": true
       }
     }
   },

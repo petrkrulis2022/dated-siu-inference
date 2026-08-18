@@ -2,7 +2,7 @@
 pragma solidity 0.8.24;
 
 /**
- * @title DatumAttestation
+ * @title TouchstoneAttestation
  * @notice Hash-anchors published Dated SIU prints — build1-spec.md §10.
  *
  * A print is a signed JSON document published in a public git repo; this contract records the
@@ -15,7 +15,7 @@ pragma solidity 0.8.24;
  * methodology. That is deliberate — a mutable publisher would let whoever controls the mutation
  * retroactively change who is trusted to have anchored past prints.
  */
-contract DatumAttestation {
+contract TouchstoneAttestation {
     /// @notice The only address permitted to post prints. Immutable by design.
     address public immutable publisher;
 

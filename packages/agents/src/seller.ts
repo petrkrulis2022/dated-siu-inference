@@ -1,14 +1,14 @@
 import express, { type Express, type Response } from "express";
-import { createAdapterFor, type Adapter } from "@datum/harness";
+import { createAdapterFor, type Adapter } from "@touchstone/harness";
 import {
   buildQuoteBody,
   signQuote,
   quoteHashHex,
   usdToMinorUnits,
   validateQuote,
-  type DatumQuote,
+  type TouchstoneQuote,
   type ModelRegistryEntry,
-} from "@datum/sdk";
+} from "@touchstone/sdk";
 import { readEscrowUntilMatch, escrowMatchesQuote, settle } from "./escrow-client.js";
 import { estimatedCeiling, realizedCost, type PriceSnapshotEntryPrices } from "./pricing.js";
 import { logIssuedQuote } from "./quote-log.js";
@@ -66,7 +66,7 @@ function defaultDeps(options: SellerOptions): SellerDeps {
 
 /**
  * `POST /infer` — build1-spec.md §11's seller side. No `quote` in the body: unpaid, issues a
- * fresh signed `datum-quote` and responds `402` (the quote rides in `extensions.datum_quote`,
+ * fresh signed `touchstone-quote` and responds `402` (the quote rides in `extensions.touchstone_quote`,
  * alongside a minimal x402-v2-shaped `accepts` array — confirmed against `@x402/core`'s real
  * `PaymentRequired` shape). A `quote` in the body: the buyer claims it funded escrow for that
  * exact quote — stateless by the same design as `verify_receipt` (P14 step 2): the seller
@@ -139,12 +139,12 @@ export function createSellerApp(
             extra: {},
           },
         ],
-        extensions: { datum_quote: quote },
+        extensions: { touchstone_quote: quote },
       });
       return;
     }
 
-    const quote = body.quote as DatumQuote;
+    const quote = body.quote as TouchstoneQuote;
     const validation = validateQuote(quote);
     if (!validation.valid) {
       res.status(400).json({ error: `quote fails validation: ${validation.errors.join("; ")}` });

@@ -11,7 +11,7 @@ import { healthRouter } from "./routes/health.js";
 
 /**
  * Read-only, localhost-only — see docs/console.md. This process never imports a write-capable
- * function from any `@datum/*` package (no `signPrintBody`, `signQuote`, `writePrint`,
+ * function from any `@touchstone/*` package (no `signPrintBody`, `signQuote`, `writePrint`,
  * `publishPrint`, no `openAndFund`/`settle`/`expire`, no private-key loader) and only ever
  * constructs a viem *public* client, never a wallet client. Binds `127.0.0.1` explicitly, never
  * `0.0.0.0` — not reachable from outside this machine.

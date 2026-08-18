@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { loadDeployment } from "@datum/sdk";
+import { loadDeployment } from "@touchstone/sdk";
 import { indexNewEvents } from "./index.js";
 import { emptyCache, type EventCache } from "./cache.js";
 
 /**
- * Against real Base Sepolia, the real deployed `DatumEscrow`/`DatumAttestation`, and the real
+ * Against real Base Sepolia, the real deployed `TouchstoneEscrow`/`TouchstoneAttestation`, and the real
  * settlements this session's own demo agents and live tests have already produced — not a mock,
  * per the P13 lesson applied throughout this project. Read-only: only `getLogs`/`getBlock`/
  * `readContract` calls, matching the console's own hard constraint.
@@ -16,13 +16,14 @@ describeLive("indexNewEvents (live Base Sepolia)", () => {
   const deployment = loadDeployment("base-sepolia");
   const config = {
     rpcUrl: RPC_URL ?? "",
-    escrowAddress: deployment.contracts.DatumEscrow.address,
+    escrowAddress: deployment.contracts.TouchstoneEscrow.address,
     escrowDeployBlock: BigInt(
-      (deployment.contracts.DatumEscrow as unknown as { blockNumber: number }).blockNumber,
+      (deployment.contracts.TouchstoneEscrow as unknown as { blockNumber: number }).blockNumber,
     ),
-    attestationAddress: deployment.contracts.DatumAttestation.address,
+    attestationAddress: deployment.contracts.TouchstoneAttestation.address,
     attestationDeployBlock: BigInt(
-      (deployment.contracts.DatumAttestation as unknown as { blockNumber: number }).blockNumber,
+      (deployment.contracts.TouchstoneAttestation as unknown as { blockNumber: number })
+        .blockNumber,
     ),
   };
 
@@ -50,7 +51,7 @@ describeLive("indexNewEvents (live Base Sepolia)", () => {
     expect(settled.quoteHash).toMatch(/^0x[0-9a-fA-F]{64}$/);
     expect(BigInt(settled.actualAmount)).toBeGreaterThanOrEqual(0n);
 
-    // Real deployment fact — DATUM_FEE_BPS=50 in this session's .env, confirmed against the live
+    // Real deployment fact — TOUCHSTONE_FEE_BPS=50 in this session's .env, confirmed against the live
     // contract's own immutable getter, not assumed.
     expect(fullScan.escrow.feeBps).toBe("50");
     expect(fullScan.escrow.treasury).toMatch(/^0x[0-9a-fA-F]{40}$/);

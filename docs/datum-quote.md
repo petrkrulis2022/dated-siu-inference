@@ -1,4 +1,4 @@
-# `datum-quote` specification
+# `touchstone-quote` specification
 
 _The pricing extension carried inside an x402 (or MPP) payment-required response — build1-spec.md
 §8. Draft standard, versioned via `schema_version`. Implemented by `packages/sdk`'s `quote/`
@@ -9,7 +9,7 @@ resolver seam in `quote/identity.ts`._
 
 ## What this is, and isn't
 
-A `datum-quote` is a seller's priced offer for a unit of inference work, denominated in SIU for
+A `touchstone-quote` is a seller's priced offer for a unit of inference work, denominated in SIU for
 comparison and settled in dollars. It is not a payment itself, not an escrow deposit, and not a
 promise the seller will honour it forever — `expiry` bounds how long it stands. **Payment
 amounts are dollar-fixed; SIU is the comparison unit.** A buyer comparing two sellers' quotes
@@ -21,7 +21,7 @@ incommensurable against; the dollars that actually move are `amount_usd_max`, co
 
 | Field              | Type                                   | Meaning                                                                                                                             |
 | ------------------ | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `schema_version`   | string, `"1.1"` in build 1             | See "Forward compatibility" below.                                                                                                  |
+| `schema_version`   | string, `"2.0"` in build 1             | See "Forward compatibility" below.                                                                                                  |
 | `siu`              | decimal string                         | The point-estimate SIU quantity this quote is for.                                                                                  |
 | `pattern`          | `"estimate"` \| `"cap"` \| `"fixed"`   | See "Patterns" below.                                                                                                               |
 | `siu_max`          | decimal string, conditionally required | The upper bound on SIU this quote can consume. Required for `estimate` and `cap`; absent for `fixed`.                               |
@@ -72,7 +72,7 @@ has nowhere to round to but `"0.0000"`.
 
 This was discovered live, not designed in advance: a real sub-cent inference call in P14's demo
 agents priced to a true cost small enough that `amount_usd_max` rounded to `"0.0000"`, and
-`DatumEscrow.openAndFund` reverted on a zero `maxAmount` — an unpayable quote that had already
+`TouchstoneEscrow.openAndFund` reverted on a zero `maxAmount` — an unpayable quote that had already
 been signed and accepted before the transaction was attempted.
 
 **Below the floor, a quote is rejected — never rounded up.** Rounding up would charge the buyer
@@ -93,7 +93,7 @@ worst-case cost, not just the point estimate, clears `$0.0001`.
 `settlement` is an array — deliberately, even though build 1 permits exactly one entry — mirroring
 x402's accepted-payment-methods structure rather than a bespoke shape. Each entry is
 `{ asset, chain, address, amount_max }`, with `amount_max` as **integer minor units**, not a
-decimal string, so it drops directly into `DatumEscrow.openAndFund`'s `uint256 maxAmount` with no
+decimal string, so it drops directly into `TouchstoneEscrow.openAndFund`'s `uint256 maxAmount` with no
 conversion at the contract boundary. This closes a unit-mismatch risk identified during planning:
 a decimal-string dollar figure and a `uint256` on-chain figure converted ad hoc in more than one
 place can silently drift.
@@ -138,7 +138,7 @@ later, never a rewrite."
 6. **`amount_usd_max` MUST be at least `MINIMUM_QUOTABLE_USD` (`$0.0001`).** See "Minimum
    quotable amount" above. Enforced by `validateQuote`, not by the schema — a below-floor quote is
    internally consistent (its arithmetic can still be honest) but unpayable, since
-   `DatumEscrow.openAndFund` reverts on a zero `maxAmount`.
+   `TouchstoneEscrow.openAndFund` reverts on a zero `maxAmount`.
 
 7. **The escrow `expiry` passed to `openAndFund` MUST be ≥ the quote's `expiry` plus a settlement
    window.** The work the quote pays for happens _after_ payment; an escrow that expires at or
@@ -151,14 +151,14 @@ later, never a rewrite."
 
 9. **`quoteHash`** is keccak256 of the JCS-canonicalised quote body with `sig` excluded — the
    same construction a print uses, excluding its own `signature`/`public_key`. This is the
-   `quoteHash` `DatumEscrow.openAndFund` and `receipt.quote_hash` both refer to, and it is
+   `quoteHash` `TouchstoneEscrow.openAndFund` and `receipt.quote_hash` both refer to, and it is
    computable before a seller signs anything, since it's a property of the offer, not of the
-   signer. `DatumEscrow` never recomputes it — the contract takes `quoteHash` as an opaque
+   signer. `TouchstoneEscrow` never recomputes it — the contract takes `quoteHash` as an opaque
    `bytes32` key — so there is no risk of the two implementations disagreeing about how it is
    derived; the SDK is its single source.
 
 10. **The seller MUST verify the on-chain settler before performing any work.** `settler` on the
-    quote is what the seller agreed to; `DatumEscrow.settlerOf(quoteHash)` is what the buyer
+    quote is what the seller agreed to; `TouchstoneEscrow.settlerOf(quoteHash)` is what the buyer
     actually funded. Before starting work the seller MUST read the on-chain value and confirm it
     matches the settler in their own signed quote. **On mismatch the seller MUST NOT perform the
     work, and MUST let the escrow expire** so the buyer's funds return untouched.
@@ -166,7 +166,7 @@ later, never a rewrite."
     This matters because a settler is an address the buyer chose. A buyer who funds escrow naming
     a settler the quote never agreed to could take delivery of completed work and then have that
     settler settle at zero, paying nothing. The contract cannot detect this — `settler` is fixed
-    at funding time and `DatumEscrow` has no way to know what a signed quote said — so the check
+    at funding time and `TouchstoneEscrow` has no way to know what a signed quote said — so the check
     has to happen off-chain, before the work is done, and it is the seller's responsibility. The
     contract makes the check cheap by exposing `settlerOf(quoteHash)` directly.
 
@@ -181,15 +181,23 @@ later, never a rewrite."
 
 ## Forward compatibility
 
-`schema_version` (`"1.1"` in build 1) lets a consumer detect additive changes without a schema
-rewrite: a same-major bump (`1.1`, `1.2`, …) is additive and safe for an existing consumer to
-accept and ignore unknown fields on; a major bump (`2.0`) is not, and an unrecognised major
-version MUST be rejected rather than guessed at.
+`schema_version` (`"2.0"` in build 1) lets a consumer detect additive changes without a schema
+rewrite: a same-major bump (`2.0`, `2.1`, …) is additive and safe for an existing consumer to
+accept and ignore unknown fields on; a major bump is not, and an unrecognised major version MUST
+be rejected rather than guessed at.
 
-The move from `1.0` to `1.1` added the optional `settler` field alongside `DatumEscrow`. Note
-that because the schema is `additionalProperties: false`, a consumer still holding the `1.0`
-schema file will _reject_ a quote carrying `settler` rather than ignore it — which is exactly why
-the version had to move: the rejection is then explicable rather than mysterious.
+Version history:
+
+- `1.0` → `1.1` added the optional `settler` field alongside `TouchstoneEscrow`. Because the
+  schema is `additionalProperties: false`, a consumer still holding the `1.0` schema file would
+  have rejected a quote carrying `settler` rather than ignoring it — which is exactly why the
+  version had to move: the rejection is then explicable rather than mysterious.
+- `1.1` → `2.0` is the Datum → Touchstone Assay rename: the extension itself is renamed from
+  `datum-quote` to `touchstone-quote`. That is a change to the format's identity, not an additive
+  field, so it is a major bump rather than a minor one — a consumer built against `datum-quote`
+  should not silently treat a `touchstone-quote` as the same thing. Nothing was published under
+  the pre-rename name, so there is no live `1.x` consumer this bump needs to stay compatible
+  with.
 
 ## Signature semantics
 
@@ -206,7 +214,7 @@ plainly that it isn't built yet.
 
 ## Known limitation: the contract cannot verify the work
 
-`DatumEscrow` enforces `actualAmount <= maxAmount` and nothing more. It has no way to observe how
+`TouchstoneEscrow` enforces `actualAmount <= maxAmount` and nothing more. It has no way to observe how
 many tokens a model actually consumed, so **a seller can settle for anything up to `maxAmount`
 regardless of the work performed.** This is a property of any on-chain escrow over off-chain
 work, not an oversight in this design, and it is stated here rather than left for someone to

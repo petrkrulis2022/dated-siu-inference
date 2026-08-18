@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RunRecord } from "@datum/sdk";
+import type { RunRecord } from "@touchstone/sdk";
 import { computeClassCost, type ModelPrice } from "./class-cost.js";
 
 const PRICE: ModelPrice = { price_in_usd_per_1m: "1.00", price_out_usd_per_1m: "2.00" };

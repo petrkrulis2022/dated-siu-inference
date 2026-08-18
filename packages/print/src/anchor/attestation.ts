@@ -1,10 +1,10 @@
-import { retryUntilConclusive, type RetryUntilConclusiveOptions } from "@datum/sdk";
+import { retryUntilConclusive, type RetryUntilConclusiveOptions } from "@touchstone/sdk";
 
 /**
- * build1-spec.md §6 Signing: "call DatumAttestation.postPrint(bodyHash, version) on Base so
+ * build1-spec.md §6 Signing: "call TouchstoneAttestation.postPrint(bodyHash, version) on Base so
  * the hash is timestamped by a third party."
  *
- * `DatumAttestation` is now deployed (see data/deployments/base-sepolia.json), so
+ * `TouchstoneAttestation` is now deployed (see data/deployments/base-sepolia.json), so
  * `OnChainAttestationClient` in ./on-chain.ts is the real implementation. `StubAttestationClient`
  * remains for tests and for running the pipeline with no chain configured.
  */
@@ -57,11 +57,11 @@ function isoFromUnixSeconds(seconds: bigint): string {
 }
 
 /** Alias kept for every existing caller/import of this name — the retry logic itself now lives
- * in `@datum/sdk`'s `retryUntilConclusive`, shared with `@datum/agents`' escrow reads. */
+ * in `@touchstone/sdk`'s `retryUntilConclusive`, shared with `@touchstone/agents`' escrow reads. */
 export type ReadRetryOptions = RetryUntilConclusiveOptions;
 
 /**
- * Reads `postedAt`, retrying while it reads zero — see `@datum/sdk`'s `retryUntilConclusive` for
+ * Reads `postedAt`, retrying while it reads zero — see `@touchstone/sdk`'s `retryUntilConclusive` for
  * why: trusting a single read immediately after a transaction was mined is what made an earlier
  * version of this code send a second, duplicate transaction on the very next run.
  */
@@ -175,7 +175,7 @@ export class StubAttestationClient implements AttestationClient {
       status: "stub",
       posted_at: new Date().toISOString(),
       notes:
-        "No DatumAttestation address was configured for this run, so no on-chain call was made.",
+        "No TouchstoneAttestation address was configured for this run, so no on-chain call was made.",
     };
   }
 }

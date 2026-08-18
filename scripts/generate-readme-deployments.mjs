@@ -50,8 +50,8 @@ function renderDeployment({ network, record }) {
   }
   lines.push("| Contract | Address | Verification |");
   lines.push("| --- | --- | --- |");
-  lines.push(renderContractRow("DatumAttestation", record.contracts.DatumAttestation));
-  lines.push(renderContractRow("DatumEscrow", record.contracts.DatumEscrow));
+  lines.push(renderContractRow("TouchstoneAttestation", record.contracts.TouchstoneAttestation));
+  lines.push(renderContractRow("TouchstoneEscrow", record.contracts.TouchstoneEscrow));
   lines.push("");
   lines.push(
     `Full record — transaction hashes, block numbers, constructor arguments, compiler settings, ` +
@@ -83,13 +83,15 @@ function renderVerifySection(deployments) {
   const first = deployments[0];
   if (!first) return "";
   const { network, record } = first;
+  const verification = record.smokeTests?.["1_anchorRealPrint"]?.recoveredSignerVerification;
+  if (!verification) return "";
   const rpcEnvVar = `${network.toUpperCase().replaceAll("-", "_")}_RPC_URL`;
   return `### Verify a print independently
 
 A print's own \`signature\` and \`public_key\` fields only prove internal consistency — that some
-key signed this exact body. They cannot prove that key is Datum's, because a tampered file could
-carry a self-consistent signature over a different key entirely. Closing that gap is the entire
-reason the publisher key is coupled to \`DatumAttestation\`: the contract's \`publisher\` address is
+key signed this exact body. They cannot prove that key is Touchstone Assay's, because a tampered
+file could carry a self-consistent signature over a different key entirely. Closing that gap is
+the entire reason the publisher key is coupled to \`TouchstoneAttestation\`: the contract's \`publisher\` address is
 immutable and lives outside the file, so it is a truth a tampered print cannot rewrite.
 
 The loop:
@@ -99,20 +101,20 @@ The loop:
 2. Recover the signer's address from the raw \`{signature, hash}\` pair — not read from the
    print's own \`public_key\` field. (Recovery yields two address candidates, since the stored
    signature carries no recovery bit; exactly one matches a real signer.)
-3. Compare the recovered address against \`DatumAttestation.publisher()\`, read live from chain.
+3. Compare the recovered address against \`TouchstoneAttestation.publisher()\`, read live from chain.
 4. Confirm the same body hash is anchored (\`postedAt(bodyHash) > 0\`).
 
 \`\`\`bash
-${rpcEnvVar}=... pnpm --filter @datum/print run verify-onchain <print-id> ${network}
+${rpcEnvVar}=... pnpm --filter @touchstone/print run verify-onchain <print-id> ${network}
 \`\`\`
 
-No \`DATUM_PUBLISHER_KEY\` is needed — this command only reads. Real output against a print
-anchored on ${record.network.name}:
+No \`TOUCHSTONE_PUBLISHER_KEY\` is needed — this command only reads. Real output against the
+worked-example print (docs/siu-worked-example.md, Dated SIU $0.0383) anchored on ${record.network.name}:
 
 \`\`\`
-On-chain publisher():        ${record.contracts.DatumAttestation.constructorArgs.publisher_}
-Recovered signer candidates: ${record.contracts.DatumAttestation.constructorArgs.publisher_.toLowerCase()}, 0x77e5e69a6e32acd31864bacc256765926cd39498
-  -> MATCH (recovery id 0): this print was signed by the on-chain publisher.
+On-chain publisher():        ${verification.onChainPublisher}
+Recovered signer candidates: ${verification.recoveredCandidates.join(", ")}
+  -> MATCH (recovery id ${verification.matchedRecoveryId}): this print was signed by the on-chain publisher.
 
 postedAt(bodyHash): ${record.smokeTests?.["1_anchorRealPrint"]?.storedTimestamp ?? "…"}
   -> ANCHORED at ${anchorIso(record)}

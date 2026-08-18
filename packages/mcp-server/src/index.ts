@@ -1,6 +1,6 @@
 export {
   buildApp,
-  createDatumMcpServer,
+  createTouchstoneMcpServer,
   type BuildAppOptions,
   type McpServerOptions,
 } from "./server.js";

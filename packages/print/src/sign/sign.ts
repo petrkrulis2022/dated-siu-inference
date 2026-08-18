@@ -1,9 +1,9 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js";
-import type { Print } from "@datum/sdk";
-import { validatePrint } from "@datum/sdk";
+import type { Print } from "@touchstone/sdk";
+import { validatePrint } from "@touchstone/sdk";
 import { fromHex, printBodyHash, printBodyHashHex, toHex, type PrintBody } from "./canonicalise.js";
 
-export const PUBLISHER_KEY_ENV = "DATUM_PUBLISHER_KEY";
+export const PUBLISHER_KEY_ENV = "TOUCHSTONE_PUBLISHER_KEY";
 
 export function loadPublisherKeyFromEnv(env: NodeJS.ProcessEnv = process.env): string {
   const key = env[PUBLISHER_KEY_ENV];

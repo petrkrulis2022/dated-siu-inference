@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DatumQuote } from "../types/generated/datum-quote.schema.js";
+import type { TouchstoneQuote } from "../types/generated/datum-quote.schema.js";
 import { buildQuoteBody } from "./build.js";
 import { signQuote } from "./sign.js";
 import { checkSpendingMandate, type SpendingMandate } from "./mandate.js";
@@ -13,7 +13,9 @@ const mandate: SpendingMandate = {
   accepted_chains: ["base"],
 };
 
-function buildAndSign(overrides: Partial<Parameters<typeof buildQuoteBody>[0]> = {}): DatumQuote {
+function buildAndSign(
+  overrides: Partial<Parameters<typeof buildQuoteBody>[0]> = {},
+): TouchstoneQuote {
   return signQuote(
     buildQuoteBody({
       siu: "1.000",
@@ -39,14 +41,14 @@ describe("checkSpendingMandate — the normative rule (build1-spec.md §8)", () 
     // Simulates a quote that never went through buildQuoteBody or ajv at all — an object
     // missing every field except the two the rule cares about. This is the scenario the rule
     // exists for: a payer must not trust that validation ran before it gets a quote.
-    const bareUnvalidated = { pattern: "estimate" } as DatumQuote;
+    const bareUnvalidated = { pattern: "estimate" } as TouchstoneQuote;
     const decision = checkSpendingMandate(bareUnvalidated, mandate, NOW);
     expect(decision.accepted).toBe(false);
     expect(decision.accepted === false && decision.reason).toBe("unbounded_estimate");
   });
 
   it("REJECTS a cap-pattern quote with no siu_max, same rule", () => {
-    const bareUnvalidated = { pattern: "cap" } as DatumQuote;
+    const bareUnvalidated = { pattern: "cap" } as TouchstoneQuote;
     const decision = checkSpendingMandate(bareUnvalidated, mandate, NOW);
     expect(decision.accepted).toBe(false);
     expect(decision.accepted === false && decision.reason).toBe("unbounded_estimate");
@@ -105,7 +107,7 @@ describe("checkSpendingMandate — the other payer-safety rules", () => {
   });
 
   it("treats a malformed amount_usd_max as a rejection, not a thrown exception", () => {
-    const quote = { ...buildAndSign(), amount_usd_max: "not-a-number" } as DatumQuote;
+    const quote = { ...buildAndSign(), amount_usd_max: "not-a-number" } as TouchstoneQuote;
     const decision = checkSpendingMandate(quote, mandate, NOW);
     expect(decision.accepted).toBe(false);
     expect(decision.accepted === false && decision.reason).toBe("malformed_quote");

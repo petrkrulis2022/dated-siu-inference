@@ -1,10 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { quoteHashHex, type DatumQuote } from "@datum/sdk";
+import { quoteHashHex, type TouchstoneQuote } from "@touchstone/sdk";
 
 /**
- * No file anywhere in this repo persists a `datum-quote` after it's built and signed — on chain,
- * only its hash ever appears (`DatumEscrow`'s `Opened` event). That makes "what was actually
+ * No file anywhere in this repo persists a `touchstone-quote` after it's built and signed — on chain,
+ * only its hash ever appears (`TouchstoneEscrow`'s `Opened` event). That makes "what was actually
  * quoted" unrecoverable after the fact for anyone reading chain state alone, which is exactly
  * what `packages/console`'s quoted-vs-paid panel needs to join against a settlement. This is a
  * console-convenience side effect, not part of the payment protocol itself — `mcp-server`'s
@@ -18,7 +18,7 @@ export function quotesCacheDir(): string {
 }
 
 export async function logIssuedQuote(
-  quote: DatumQuote,
+  quote: TouchstoneQuote,
   dir: string = quotesCacheDir(),
 ): Promise<string> {
   await mkdir(dir, { recursive: true });

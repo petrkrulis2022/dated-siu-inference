@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { loadRunRecords } from "@datum/print";
+import { loadRunRecords } from "@touchstone/print";
 import type { ConsoleConfig } from "../config.js";
 import { loadAllPrints } from "../lib/prints.js";
 

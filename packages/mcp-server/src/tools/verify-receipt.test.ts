@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { verifyReceiptSignature, buildQuoteBody, signQuote } from "@datum/sdk";
-import { publicKeyFor } from "@datum/print";
+import { verifyReceiptSignature, buildQuoteBody, signQuote } from "@touchstone/sdk";
+import { publicKeyFor } from "@touchstone/print";
 import type { OnChainSettlement, SettlementReader } from "../settlement/reader.js";
 import { verifyReceiptTool } from "./verify-receipt.js";
 
@@ -94,7 +94,7 @@ describe("verifyReceiptTool", () => {
         reader,
         TEST_KEY,
       ),
-    ).rejects.toThrow(/quote fails the published datum-quote schema/);
+    ).rejects.toThrow(/quote fails the published touchstone-quote schema/);
     expect(spy.called).toBe(false);
   });
 

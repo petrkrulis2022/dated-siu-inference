@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ModelRegistryEntry, PriceSnapshot } from "@datum/sdk";
+import type { ModelRegistryEntry, PriceSnapshot } from "@touchstone/sdk";
 import { flagSubsidised, buildPriceSnapshotFromOpenRouter } from "./build-snapshot.js";
 
 afterEach(() => {

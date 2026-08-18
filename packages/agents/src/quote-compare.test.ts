@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { DatumQuote } from "@datum/sdk";
+import type { TouchstoneQuote } from "@touchstone/sdk";
 import { pickCheaperQuote } from "./quote-compare.js";
 
-function quoteWithSiu(siu: string): DatumQuote {
+function quoteWithSiu(siu: string): TouchstoneQuote {
   return {
     schema_version: "1.1",
     siu,

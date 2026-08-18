@@ -1,5 +1,5 @@
 {
-  "name": "@datum/basket",
+  "name": "@touchstone/basket",
   "version": "0.0.0",
   "private": true,
   "type": "module",

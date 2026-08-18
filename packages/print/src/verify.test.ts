@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Print } from "@datum/sdk";
+import type { Print } from "@touchstone/sdk";
 import { computePrint } from "./compute/index.js";
 import { signPrintBody } from "./sign/sign.js";
 import { verifyPrint } from "./verify.js";

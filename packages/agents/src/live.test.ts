@@ -4,8 +4,8 @@ import {
   signQuote,
   quoteHashHex,
   loadDeployment,
-  type DatumQuote,
-} from "@datum/sdk";
+  type TouchstoneQuote,
+} from "@touchstone/sdk";
 import { clientsFor, generateAndFundSeller, type ChainClients } from "./wallets.js";
 import { openAndFund, settle, readEscrow, readEscrowUntilMatch } from "./escrow-client.js";
 import { LocalSettlementReader, QuoteHashMismatchError } from "./settlement-reader.js";
@@ -16,14 +16,14 @@ import { LocalSettlementReader, QuoteHashMismatchError } from "./settlement-read
  * where the first real run of `seller.ts` hit a genuine RPC-lag false rejection that no mock
  * would ever have surfaced (see `readEscrowUntilMatch`'s header comment in escrow-client.ts).
  *
- * Needs a funded `DEPLOYER_PRIVATE_KEY`, unlike `@datum/mcp-server`'s `on-chain.test.ts` (which
+ * Needs a funded `DEPLOYER_PRIVATE_KEY`, unlike `@touchstone/mcp-server`'s `on-chain.test.ts` (which
  * only reads pre-mined historical transactions and needs no key) — this suite funds and settles
  * a fresh real escrow itself, so it stays local-only rather than running in CI, matching
- * `@datum/mcp-server`'s `testnet.live.test.ts` precedent for write-requiring live suites.
+ * `@touchstone/mcp-server`'s `testnet.live.test.ts` precedent for write-requiring live suites.
  */
 const RPC_URL = process.env.BASE_SEPOLIA_RPC_URL;
 const DEPLOYER_KEY = process.env.DEPLOYER_PRIVATE_KEY;
-const CHAIN_NAME = process.env.DATUM_CHAIN_NAME ?? "base-sepolia";
+const CHAIN_NAME = process.env.TOUCHSTONE_CHAIN_NAME ?? "base-sepolia";
 
 const canRun = Boolean(RPC_URL && DEPLOYER_KEY);
 const describeLive = canRun ? describe : describe.skip;
@@ -31,7 +31,7 @@ const describeLive = canRun ? describe : describe.skip;
 describeLive("live Base Sepolia: escrow-client + LocalSettlementReader", () => {
   let buyer: ChainClients;
   let seller: ChainClients;
-  let quote: DatumQuote;
+  let quote: TouchstoneQuote;
   let quoteHash: string;
   let settleTxHash: string;
   let escrowAddress: string;
@@ -40,7 +40,7 @@ describeLive("live Base Sepolia: escrow-client + LocalSettlementReader", () => {
 
   beforeAll(async () => {
     const deployment = loadDeployment(CHAIN_NAME);
-    escrowAddress = deployment.contracts.DatumEscrow.address;
+    escrowAddress = deployment.contracts.TouchstoneEscrow.address;
     usdcAddress = deployment.usdc.address;
 
     buyer = clientsFor(DEPLOYER_KEY!, RPC_URL!);
@@ -144,7 +144,7 @@ describeLive("live Base Sepolia: escrow-client + LocalSettlementReader", () => {
       rpcUrl: RPC_URL!,
       escrowAddress,
     });
-    const wrongQuote: DatumQuote = { ...quote, siu: "9.999" };
+    const wrongQuote: TouchstoneQuote = { ...quote, siu: "9.999" };
     await expect(reader.read(CHAIN_NAME, settleTxHash, wrongQuote)).rejects.toThrow(
       QuoteHashMismatchError,
     );

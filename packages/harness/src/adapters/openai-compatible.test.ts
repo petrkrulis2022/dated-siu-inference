@@ -73,10 +73,10 @@ describe("createOpenAiCompatibleAdapter", () => {
     const adapter = createOpenAiCompatibleAdapter({
       chatCompletionsUrl: "https://example.com/v1/chat/completions",
       apiKey: "test-key",
-      extraHeaders: { "HTTP-Referer": "https://datum.example" },
+      extraHeaders: { "HTTP-Referer": "https://touchstone-assay.example" },
     });
     await adapter("some/model", "prompt", PARAMS);
 
-    expect(capturedHeaders?.["HTTP-Referer"]).toBe("https://datum.example");
+    expect(capturedHeaders?.["HTTP-Referer"]).toBe("https://touchstone-assay.example");
   });
 });

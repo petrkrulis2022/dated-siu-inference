@@ -1,4 +1,4 @@
-import { D, type DatumQuote } from "@datum/sdk";
+import { D, type TouchstoneQuote } from "@touchstone/sdk";
 import type { EventCache } from "../indexer/cache.js";
 
 export interface QuotedInfo {
@@ -37,13 +37,13 @@ const BPS_DENOMINATOR = 10_000;
  * Reconstructs every escrow's full lifecycle from the indexer's decoded events — pure, no I/O,
  * so it's directly unit-testable. `status` is derived from which terminal event (if any) exists
  * for a `quoteHash`: `Settled` and `Expired` are mutually exclusive by contract construction
- * (`DatumEscrow.sol`'s `settle`/`expire` require `Status.Open`, and each sets a terminal status),
+ * (`TouchstoneEscrow.sol`'s `settle`/`expire` require `Status.Open`, and each sets a terminal status),
  * so at most one of them is ever present for a given quoteHash; neither present means still open.
  */
 export function reconstructEscrowLifecycles(
   events: EventCache["events"],
   feeBps: string,
-  localQuotes: Map<string, DatumQuote>,
+  localQuotes: Map<string, TouchstoneQuote>,
 ): EscrowLifecycle[] {
   const settledByHash = new Map(events.settled.map((e) => [e.quoteHash.toLowerCase(), e]));
   const expiredByHash = new Map(events.expired.map((e) => [e.quoteHash.toLowerCase(), e]));

@@ -2,12 +2,12 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildQuoteBody, signQuote, quoteHashHex, type DatumQuote } from "@datum/sdk";
+import { buildQuoteBody, signQuote, quoteHashHex, type TouchstoneQuote } from "@touchstone/sdk";
 import { logIssuedQuote } from "./quote-log.js";
 
 const TEST_KEY = `0x${"55".repeat(32)}`;
 
-function quote(): DatumQuote {
+function quote(): TouchstoneQuote {
   return signQuote(
     buildQuoteBody({
       siu: "0.001",
@@ -29,7 +29,7 @@ describe("logIssuedQuote", () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), "datum-quote-log-"));
+    dir = await mkdtemp(join(tmpdir(), "touchstone-quote-log-"));
   });
 
   afterEach(async () => {
@@ -40,7 +40,7 @@ describe("logIssuedQuote", () => {
     const q = quote();
     const path = await logIssuedQuote(q, dir);
     expect(path).toBe(join(dir, `${quoteHashHex(q)}.json`));
-    const reread = JSON.parse(await readFile(path, "utf-8")) as DatumQuote;
+    const reread = JSON.parse(await readFile(path, "utf-8")) as TouchstoneQuote;
     expect(reread).toEqual(q);
   });
 
@@ -48,7 +48,7 @@ describe("logIssuedQuote", () => {
     const nested = join(dir, "nested", "quotes");
     const q = quote();
     const path = await logIssuedQuote(q, nested);
-    const reread = JSON.parse(await readFile(path, "utf-8")) as DatumQuote;
+    const reread = JSON.parse(await readFile(path, "utf-8")) as TouchstoneQuote;
     expect(reread.sig).toBe(q.sig);
   });
 });

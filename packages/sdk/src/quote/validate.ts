@@ -1,11 +1,11 @@
-import type { DatumQuote } from "../types/generated/datum-quote.schema.js";
+import type { TouchstoneQuote } from "../types/generated/datum-quote.schema.js";
 import type { ValidationResult } from "../validation/types.js";
-import { validateDatumQuote } from "../validation/datum-quote.js";
+import { validateTouchstoneQuote } from "../validation/datum-quote.js";
 import { D, roundHalfUp, usdToMinorUnits, usdcAddressFor } from "../money/index.js";
 import { QUOTE_AMOUNT_DP, MINIMUM_QUOTABLE_USD } from "./build.js";
 
 /**
- * Everything ajv's schema check (`validateDatumQuote`) cannot express: `if/then` covers
+ * Everything ajv's schema check (`validateTouchstoneQuote`) cannot express: `if/then` covers
  * `siu_max`'s presence, but not whether the numbers it's present alongside are internally
  * consistent, or whether `settlement` actually points at USDC. Runs the schema check first —
  * these checks assume a schema-conformant shape to index into.
@@ -14,8 +14,8 @@ import { QUOTE_AMOUNT_DP, MINIMUM_QUOTABLE_USD } from "./build.js";
  * become invalid at a clock tick, only stale. Expiration and spending limits are payer
  * decisions, made by `quote/mandate.ts`'s `checkSpendingMandate`, not shape validity.
  */
-export function validateQuote(data: unknown): ValidationResult<DatumQuote> {
-  const schemaCheck = validateDatumQuote(data);
+export function validateQuote(data: unknown): ValidationResult<TouchstoneQuote> {
+  const schemaCheck = validateTouchstoneQuote(data);
   if (!schemaCheck.valid) {
     return schemaCheck;
   }
@@ -23,9 +23,10 @@ export function validateQuote(data: unknown): ValidationResult<DatumQuote> {
   const errors: string[] = [];
 
   const [major] = quote.schema_version.split(".");
-  if (major !== "1") {
+  if (major !== "2") {
     errors.push(
-      `unsupported schema_version "${quote.schema_version}" (build 1 only understands major version 1)`,
+      `unsupported schema_version "${quote.schema_version}" (build 1 only understands major version 2, ` +
+        `the touchstone-quote format — a 1.x schema_version is the pre-rename datum-quote format)`,
     );
   }
 
@@ -64,7 +65,7 @@ export function validateQuote(data: unknown): ValidationResult<DatumQuote> {
   }
 
   // docs/datum-quote.md's "Minimum quotable amount": below MINIMUM_QUOTABLE_USD, amount_usd_max
-  // rounds to "0.0000" at this format's own precision and DatumEscrow.openAndFund reverts on a
+  // rounds to "0.0000" at this format's own precision and TouchstoneEscrow.openAndFund reverts on a
   // zero maxAmount — hit live in P14. Rejected rather than rounded up: rounding up would charge
   // the buyer more than the seller's real cost, an invented number. A seller whose true cost
   // rounds to zero must batch calls into one quote or widen a cap/estimate ceiling instead.

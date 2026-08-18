@@ -21,13 +21,13 @@
 
 import { readdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { RunRecord } from "@datum/sdk";
+import type { RunRecord } from "@touchstone/sdk";
 import {
   checkQualityGatesPassed,
   buildFloorRecord,
   writeFloorRecord,
   readGpuRateSnapshot,
-} from "@datum/prices";
+} from "@touchstone/prices";
 
 interface Flags {
   runId: string;
@@ -86,7 +86,7 @@ function parseFlags(argv: string[]): Flags {
 }
 
 /** Reads every run record for `runId` from `data/runs/<runId>/`. A local equivalent of
- * `@datum/print`'s `loadRunRecords`, not a reuse of it — that function resolves paths relative
+ * `@touchstone/print`'s `loadRunRecords`, not a reuse of it — that function resolves paths relative
  * to a package script's own directory two levels under the repo root, which doesn't hold for a
  * root-level script invoked with the repo root itself as `cwd`. */
 async function loadRunRecordsFrom(runsDir: string): Promise<RunRecord[]> {
@@ -150,7 +150,7 @@ async function main(): Promise<void> {
       `(${flags.gpuSeconds}s / 3600 × $${record.rate_usd_per_hour}/hr ÷ ${flags.utilisation} utilisation)`,
   );
   console.log(
-    `\nTo use it: pnpm --filter @datum/print run compute <print-id> ... floor-record=${path}`,
+    `\nTo use it: pnpm --filter @touchstone/print run compute <print-id> ... floor-record=${path}`,
   );
 }
 

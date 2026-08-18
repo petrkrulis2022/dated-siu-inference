@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateDatumQuote } from "./datum-quote.js";
+import { validateTouchstoneQuote } from "./datum-quote.js";
 
 const validQuote = {
   schema_version: "1.0",
@@ -24,29 +24,29 @@ const validQuote = {
   sig: "0xdeadbeef",
 };
 
-describe("validateDatumQuote", () => {
+describe("validateTouchstoneQuote", () => {
   it("accepts a valid fixed-pattern quote", () => {
-    const result = validateDatumQuote(validQuote);
+    const result = validateTouchstoneQuote(validQuote);
     expect(result.valid).toBe(true);
   });
 
   it("rejects an estimate-pattern quote missing siu_max (normative per build1-spec.md §8)", () => {
-    const result = validateDatumQuote({ ...validQuote, pattern: "estimate" });
+    const result = validateTouchstoneQuote({ ...validQuote, pattern: "estimate" });
     expect(result.valid).toBe(false);
   });
 
   it("rejects amount_usd_max encoded as a JSON number instead of a decimal string", () => {
-    const result = validateDatumQuote({ ...validQuote, amount_usd_max: 0.0676 });
+    const result = validateTouchstoneQuote({ ...validQuote, amount_usd_max: 0.0676 });
     expect(result.valid).toBe(false);
   });
 
   it("accepts an optional settler address (schema_version 1.1)", () => {
-    const result = validateDatumQuote({ ...validQuote, settler: `0x${"ab".repeat(20)}` });
+    const result = validateTouchstoneQuote({ ...validQuote, settler: `0x${"ab".repeat(20)}` });
     expect(result.valid).toBe(true);
   });
 
   it("rejects a settler that is not a 20-byte hex address", () => {
-    const result = validateDatumQuote({ ...validQuote, settler: "0xnope" });
+    const result = validateTouchstoneQuote({ ...validQuote, settler: "0xnope" });
     expect(result.valid).toBe(false);
   });
 });

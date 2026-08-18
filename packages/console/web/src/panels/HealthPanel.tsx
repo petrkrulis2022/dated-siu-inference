@@ -106,7 +106,7 @@ export function HealthPanel({ config }: { config: ConfigResponse | null }): Reac
             config={config}
             kind="address"
             value={config.attestationAddress}
-            label="DatumAttestation"
+            label="TouchstoneAttestation"
           />
         </p>
       )}

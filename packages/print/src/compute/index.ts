@@ -1,4 +1,4 @@
-import type { Print, RunRecord } from "@datum/sdk";
+import type { Print, RunRecord } from "@touchstone/sdk";
 import { D, type DecimalValue } from "../decimal.js";
 import { DEFAULT_ROUNDING, roundDown, roundHalfUp, type RoundingRules } from "../rounding.js";
 import { computeClassCost, type ModelPrice } from "./class-cost.js";

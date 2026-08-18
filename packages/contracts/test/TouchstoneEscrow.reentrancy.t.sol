@@ -3,7 +3,7 @@ pragma solidity 0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {DatumEscrow} from "../src/DatumEscrow.sol";
+import {TouchstoneEscrow} from "../src/TouchstoneEscrow.sol";
 import {ReentrantToken} from "./mocks/ReentrantToken.sol";
 
 /**
@@ -27,8 +27,8 @@ import {ReentrantToken} from "./mocks/ReentrantToken.sol";
  * authorisation and allowance checks instead. Each test below has since been re-verified by
  * removing the guard and confirming it fails.
  */
-contract DatumEscrowReentrancyTest is Test {
-    DatumEscrow internal escrow;
+contract TouchstoneEscrowReentrancyTest is Test {
+    TouchstoneEscrow internal escrow;
     ReentrantToken internal token;
 
     address internal buyer = makeAddr("buyer");
@@ -46,7 +46,7 @@ contract DatumEscrowReentrancyTest is Test {
 
     function setUp() public {
         token = new ReentrantToken();
-        escrow = new DatumEscrow(IERC20(address(token)), treasury, FEE_BPS);
+        escrow = new TouchstoneEscrow(IERC20(address(token)), treasury, FEE_BPS);
         expiry = uint64(block.timestamp + 1 days);
 
         token.mint(buyer, 100 * AMOUNT_A);
@@ -75,8 +75,8 @@ contract DatumEscrowReentrancyTest is Test {
         assertFalse(token.reentrySucceeded(), "reentrancy guard must refuse the nested settle");
 
         // B is untouched: still Open, still fully funded.
-        (,, DatumEscrow.Status statusB,,, uint256 maxB) = escrow.escrows(QUOTE_B);
-        assertEq(uint8(statusB), uint8(DatumEscrow.Status.Open));
+        (,, TouchstoneEscrow.Status statusB,,, uint256 maxB) = escrow.escrows(QUOTE_B);
+        assertEq(uint8(statusB), uint8(TouchstoneEscrow.Status.Open));
         assertEq(maxB, AMOUNT_B);
         assertEq(token.balanceOf(address(escrow)), AMOUNT_B, "only escrow A was paid out");
 
@@ -96,8 +96,8 @@ contract DatumEscrowReentrancyTest is Test {
         assertTrue(token.reentryAttempted());
         assertFalse(token.reentrySucceeded(), "reentrancy guard must refuse the nested expire");
 
-        (,, DatumEscrow.Status statusB,,,) = escrow.escrows(QUOTE_B);
-        assertEq(uint8(statusB), uint8(DatumEscrow.Status.Open), "escrow B was not drained");
+        (,, TouchstoneEscrow.Status statusB,,,) = escrow.escrows(QUOTE_B);
+        assertEq(uint8(statusB), uint8(TouchstoneEscrow.Status.Open), "escrow B was not drained");
         assertEq(token.balanceOf(address(escrow)), AMOUNT_B);
     }
 
@@ -110,8 +110,8 @@ contract DatumEscrowReentrancyTest is Test {
         assertTrue(token.reentryAttempted());
         assertFalse(token.reentrySucceeded(), "reentrancy guard must refuse a nested open");
 
-        (,, DatumEscrow.Status statusNew,,,) = escrow.escrows(keccak256("reentrant-second-escrow"));
-        assertEq(uint8(statusNew), uint8(DatumEscrow.Status.None), "no escrow was created");
+        (,, TouchstoneEscrow.Status statusNew,,,) = escrow.escrows(keccak256("reentrant-second-escrow"));
+        assertEq(uint8(statusNew), uint8(TouchstoneEscrow.Status.None), "no escrow was created");
     }
 
     function test_openAndFund_cannotReenterOpenAndFund() public {
@@ -123,8 +123,8 @@ contract DatumEscrowReentrancyTest is Test {
         assertTrue(token.reentryAttempted());
         assertFalse(token.reentrySucceeded(), "reentrancy guard must refuse a nested open");
 
-        (,, DatumEscrow.Status statusNew,,,) = escrow.escrows(keccak256("reentrant-second-escrow"));
-        assertEq(uint8(statusNew), uint8(DatumEscrow.Status.None), "no escrow was created");
+        (,, TouchstoneEscrow.Status statusNew,,,) = escrow.escrows(keccak256("reentrant-second-escrow"));
+        assertEq(uint8(statusNew), uint8(TouchstoneEscrow.Status.None), "no escrow was created");
     }
 
     /// Same-escrow re-entry is stopped twice over: CEI has already made it terminal, and the

@@ -1,5 +1,5 @@
 {
-  "name": "@datum/print",
+  "name": "@touchstone/print",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -15,9 +15,9 @@
     "verify-onchain": "pnpm run build && node dist/cli/verify-onchain.js"
   },
   "dependencies": {
-    "@datum/basket": "workspace:*",
-    "@datum/harness": "workspace:*",
-    "@datum/sdk": "workspace:*",
+    "@touchstone/basket": "workspace:*",
+    "@touchstone/harness": "workspace:*",
+    "@touchstone/sdk": "workspace:*",
     "@noble/curves": "^2.3.0",
     "@noble/hashes": "^2.3.0",
     "canonicalize": "^4.0.0",

@@ -1,6 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { Print } from "@datum/sdk";
+import type { Print } from "@touchstone/sdk";
 
 const NON_PRINT_FILES = new Set(["latest.json", "index.json"]);
 

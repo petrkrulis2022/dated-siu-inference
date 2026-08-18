@@ -1,4 +1,4 @@
-import type { Print } from "@datum/sdk";
+import type { Print } from "@touchstone/sdk";
 import type { PrintIndexEntry } from "../data.js";
 import { esc, formatDate, percent, truncateHex, usd } from "../format.js";
 

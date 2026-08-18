@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RunRecord } from "@datum/sdk";
+import type { RunRecord } from "@touchstone/sdk";
 import { computeCostOfProduction } from "./cost-of-production.js";
 import type { ModelInput } from "./index.js";
 

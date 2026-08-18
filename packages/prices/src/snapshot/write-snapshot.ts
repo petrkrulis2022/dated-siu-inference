@@ -1,7 +1,7 @@
 import { access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { PriceSnapshot } from "@datum/sdk";
-import { validatePriceSnapshot } from "@datum/sdk";
+import type { PriceSnapshot } from "@touchstone/sdk";
+import { validatePriceSnapshot } from "@touchstone/sdk";
 
 export function snapshotFileName(snapshot: PriceSnapshot): string {
   const safeTimestamp = snapshot.timestamp.replace(/:/g, "-");

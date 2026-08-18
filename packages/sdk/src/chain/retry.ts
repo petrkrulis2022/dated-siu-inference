@@ -8,9 +8,9 @@ export interface RetryUntilConclusiveOptions {
  * issued immediately after a transaction is confirmed mined can be served by a node that has
  * not caught up yet and will report a stale/default value. This exact failure mode produced two
  * independent bugs in two different places before being unified here — print anchoring's
- * `postedAt` reading 0 right after a real anchor (`@datum/print`'s `readPostedAtWithRetry`), and
+ * `postedAt` reading 0 right after a real anchor (`@touchstone/print`'s `readPostedAtWithRetry`), and
  * escrow-funding reads reporting `status: None` right after a real fund
- * (`@datum/agents`' `readEscrowUntilMatch`). Only a conclusive read is a fact; anything else is
+ * (`@touchstone/agents`' `readEscrowUntilMatch`). Only a conclusive read is a fact; anything else is
  * retried. The next caller reading chain state right after writing it should use this, not a
  * bare read — that is precisely the mistake this function exists to make impossible to repeat.
  */

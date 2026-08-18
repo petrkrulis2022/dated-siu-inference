@@ -4,8 +4,8 @@ pragma solidity 0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {DatumEscrow} from "../src/DatumEscrow.sol";
-import {DatumAttestation} from "../src/DatumAttestation.sol";
+import {TouchstoneEscrow} from "../src/TouchstoneEscrow.sol";
+import {TouchstoneAttestation} from "../src/TouchstoneAttestation.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
 
 /**
@@ -29,8 +29,8 @@ import {MockUSDC} from "./mocks/MockUSDC.sol";
 contract NoAdminPathTest is Test {
     using stdJson for string;
 
-    DatumEscrow internal escrow;
-    DatumAttestation internal attestation;
+    TouchstoneEscrow internal escrow;
+    TouchstoneAttestation internal attestation;
     MockUSDC internal usdc;
 
     address internal treasury = makeAddr("treasury");
@@ -38,8 +38,8 @@ contract NoAdminPathTest is Test {
 
     function setUp() public {
         usdc = new MockUSDC();
-        escrow = new DatumEscrow(IERC20(address(usdc)), treasury, 50);
-        attestation = new DatumAttestation(publisher);
+        escrow = new TouchstoneEscrow(IERC20(address(usdc)), treasury, 50);
+        attestation = new TouchstoneAttestation(publisher);
     }
 
     // ------------------------------------------------------------------ helpers
@@ -125,15 +125,15 @@ contract NoAdminPathTest is Test {
         return false;
     }
 
-    // ------------------------------------------------------------------ DatumEscrow
+    // ------------------------------------------------------------------ TouchstoneEscrow
 
     function test_escrow_hasExactlyThreeStateMutatingFunctions() public view {
-        string[] memory names = _mutatingFunctions("out/DatumEscrow.sol/DatumEscrow.json");
+        string[] memory names = _mutatingFunctions("out/TouchstoneEscrow.sol/TouchstoneEscrow.json");
 
         assertEq(
             names.length,
             3,
-            "DatumEscrow gained or lost a state-mutating function. If this is intentional, it "
+            "TouchstoneEscrow gained or lost a state-mutating function. If this is intentional, it "
             "must be reviewed against CLAUDE.md's no-admin-path invariant before the allowlist "
             "below is changed."
         );
@@ -146,7 +146,7 @@ contract NoAdminPathTest is Test {
     /// backdoor usually takes are named and asserted absent, so a reviewer reading only this
     /// test still sees what is being ruled out.
     function test_escrow_hasNoAdminShapedFunction() public view {
-        string[] memory names = _mutatingFunctions("out/DatumEscrow.sol/DatumEscrow.json");
+        string[] memory names = _mutatingFunctions("out/TouchstoneEscrow.sol/TouchstoneEscrow.json");
 
         string[18] memory forbidden = [
             "setFeeBps",
@@ -172,18 +172,18 @@ contract NoAdminPathTest is Test {
         for (uint256 i = 0; i < forbidden.length; i++) {
             assertFalse(
                 _contains(names, forbidden[i]),
-                string.concat("DatumEscrow must not expose ", forbidden[i])
+                string.concat("TouchstoneEscrow must not expose ", forbidden[i])
             );
         }
     }
 
     function test_escrow_hasNoReceiveOrFallback() public view {
         assertFalse(
-            _hasAbiEntryOfType("out/DatumEscrow.sol/DatumEscrow.json", "receive"),
+            _hasAbiEntryOfType("out/TouchstoneEscrow.sol/TouchstoneEscrow.json", "receive"),
             "no receive: ETH must not be able to enter and become stranded"
         );
         assertFalse(
-            _hasAbiEntryOfType("out/DatumEscrow.sol/DatumEscrow.json", "fallback"), "no fallback"
+            _hasAbiEntryOfType("out/TouchstoneEscrow.sol/TouchstoneEscrow.json", "fallback"), "no fallback"
         );
     }
 
@@ -203,20 +203,20 @@ contract NoAdminPathTest is Test {
 
         // Proven structurally above by the exact-three-mutating-functions assertion: there is no
         // function that could write any of these, so re-reading them can only ever agree.
-        string[] memory names = _mutatingFunctions("out/DatumEscrow.sol/DatumEscrow.json");
+        string[] memory names = _mutatingFunctions("out/TouchstoneEscrow.sol/TouchstoneEscrow.json");
         assertEq(names.length, 3);
     }
 
-    // ------------------------------------------------------------------ DatumAttestation
+    // ------------------------------------------------------------------ TouchstoneAttestation
 
     function test_attestation_hasExactlyOneStateMutatingFunction() public view {
-        string[] memory names = _mutatingFunctions("out/DatumAttestation.sol/DatumAttestation.json");
-        assertEq(names.length, 1, "DatumAttestation must expose only postPrint");
+        string[] memory names = _mutatingFunctions("out/TouchstoneAttestation.sol/TouchstoneAttestation.json");
+        assertEq(names.length, 1, "TouchstoneAttestation must expose only postPrint");
         assertTrue(_contains(names, "postPrint"));
     }
 
     function test_attestation_hasNoPublisherRotationOrAdmin() public view {
-        string[] memory names = _mutatingFunctions("out/DatumAttestation.sol/DatumAttestation.json");
+        string[] memory names = _mutatingFunctions("out/TouchstoneAttestation.sol/TouchstoneAttestation.json");
         string[6] memory forbidden = [
             "setPublisher",
             "transferOwnership",

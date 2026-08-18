@@ -1,4 +1,4 @@
-import { validateRunRecord, validatePrint, type Print } from "@datum/sdk";
+import { validateRunRecord, validatePrint, type Print } from "@touchstone/sdk";
 import { computePrint, type PrintInput } from "./compute/index.js";
 import { signPrintBody } from "./sign/sign.js";
 import { printBodyHashHex } from "./sign/canonicalise.js";

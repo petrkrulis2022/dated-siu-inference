@@ -1,9 +1,9 @@
 import { join } from "node:path";
-import type { Print } from "@datum/sdk";
-import { listPrintFiles, loadPrint, printsDir } from "@datum/print";
+import type { Print } from "@touchstone/sdk";
+import { listPrintFiles, loadPrint, printsDir } from "@touchstone/print";
 
 /**
- * Every published print, oldest first. Thin wrapper over `@datum/print`'s own
+ * Every published print, oldest first. Thin wrapper over `@touchstone/print`'s own
  * `listPrintFiles`/`loadPrint` — no parsing logic of its own, per the console's
  * reuse-not-reimplementation constraint.
  */

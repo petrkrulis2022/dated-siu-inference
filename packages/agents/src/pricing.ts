@@ -1,5 +1,5 @@
-import { callCost } from "@datum/print";
-import { D, roundHalfUp } from "@datum/sdk";
+import { callCost } from "@touchstone/print";
+import { D, roundHalfUp } from "@touchstone/sdk";
 
 /**
  * No real print has been published in this environment yet (`data/prints/` is empty — the
@@ -10,7 +10,7 @@ import { D, roundHalfUp } from "@datum/sdk";
  * real published rate. Each seller in `cli/demo.ts` sets its own `rate_usd_per_siu` (this default
  * or a markup over it), so two sellers can genuinely differ in SIU terms for the same real
  * underlying USD cost — see `estimatedCeiling` below. Everything else priced with it (the real
- * OpenRouter call, its real token usage, its real dollar cost from `@datum/print`'s `callCost`
+ * OpenRouter call, its real token usage, its real dollar cost from `@touchstone/print`'s `callCost`
  * against the real price snapshot) is genuine. See docs/demo.md.
  */
 export const DEMO_ILLUSTRATIVE_USD_PER_SIU = "0.0500";

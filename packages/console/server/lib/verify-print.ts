@@ -1,11 +1,11 @@
-import type { Print } from "@datum/sdk";
+import type { Print } from "@touchstone/sdk";
 import {
   verifyPrint,
   printBodyHashHex,
   recoverSignerCandidates,
   readAttestationPublisher,
   readAttestationPostedAt,
-} from "@datum/print";
+} from "@touchstone/print";
 
 /**
  * The exact closed loop `packages/print/src/cli/verify-onchain.ts` already runs, composed here

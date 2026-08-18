@@ -8,7 +8,7 @@ import {
 } from "./attestation.js";
 
 /**
- * The real DatumAttestation client.
+ * The real TouchstoneAttestation client.
  *
  * `viem` is a new runtime dependency for this package, and the reason is that there previously
  * was no chain to talk to: P9 shipped a stub precisely because the contract did not exist. Now
@@ -17,7 +17,7 @@ import {
  * dependency), so this pins a version already vetted in this repo rather than introducing a new
  * resolution.
  */
-export const DATUM_ATTESTATION_ABI = [
+export const TOUCHSTONE_ATTESTATION_ABI = [
   {
     type: "function",
     name: "postPrint",
@@ -57,7 +57,7 @@ export async function readAttestationPublisher(
   const publicClient = createPublicClient({ transport: http(rpcUrl) });
   return publicClient.readContract({
     address: contractAddress as Hex,
-    abi: DATUM_ATTESTATION_ABI,
+    abi: TOUCHSTONE_ATTESTATION_ABI,
     functionName: "publisher",
   });
 }
@@ -72,7 +72,7 @@ export async function readAttestationPostedAt(
   const publicClient = createPublicClient({ transport: http(rpcUrl) });
   const result = await publicClient.readContract({
     address: contractAddress as Hex,
-    abi: DATUM_ATTESTATION_ABI,
+    abi: TOUCHSTONE_ATTESTATION_ABI,
     functionName: "postedAt",
     args: [bodyHash as Hex],
   });
@@ -81,7 +81,7 @@ export async function readAttestationPostedAt(
 
 export interface OnChainAttestationOptions {
   rpcUrl: string;
-  /** Deployed DatumAttestation address — see data/deployments/<network>.json. */
+  /** Deployed TouchstoneAttestation address — see data/deployments/<network>.json. */
   contractAddress: string;
   /** The publisher key. Must be the key the contract's immutable `publisher` was set to. */
   privateKeyHex: string;
@@ -109,7 +109,7 @@ export class OnChainAttestationClient implements AttestationClient {
       async readPostedAt(bodyHash: string): Promise<bigint> {
         const result = await publicClient.readContract({
           address,
-          abi: DATUM_ATTESTATION_ABI,
+          abi: TOUCHSTONE_ATTESTATION_ABI,
           functionName: "postedAt",
           args: [bodyHash as Hex],
         });
@@ -119,7 +119,7 @@ export class OnChainAttestationClient implements AttestationClient {
         const chainId = await publicClient.getChainId();
         const txHash = await walletClient.writeContract({
           address,
-          abi: DATUM_ATTESTATION_ABI,
+          abi: TOUCHSTONE_ATTESTATION_ABI,
           functionName: "postPrint",
           args: [bodyHash as Hex, version],
           account,

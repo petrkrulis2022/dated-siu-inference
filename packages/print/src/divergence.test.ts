@@ -3,8 +3,8 @@ import {
   canonicalise as sdkCanonicalise,
   toHex as sdkToHex,
   fromHex as sdkFromHex,
-} from "@datum/sdk";
-import { D as SdkD } from "@datum/sdk";
+} from "@touchstone/sdk";
+import { D as SdkD } from "@touchstone/sdk";
 import {
   canonicalise as printCanonicalise,
   toHex as printToHex,
@@ -13,18 +13,18 @@ import {
 import { D as PrintD } from "./decimal.js";
 
 /**
- * `@datum/sdk`'s crypto/money primitives are a deliberate second copy of these exact
- * primitives, not an import — `@datum/print` depends on `@datum/sdk`, never the reverse, so
+ * `@touchstone/sdk`'s crypto/money primitives are a deliberate second copy of these exact
+ * primitives, not an import — `@touchstone/print` depends on `@touchstone/sdk`, never the reverse, so
  * importing print's copy into sdk would be a cycle (see packages/sdk/src/crypto/canonicalise.ts
  * and packages/sdk/src/money/decimal.ts for the full rationale).
  *
  * A duplicated implementation can silently drift with no test failing anywhere else — this
- * file is that test. If a print body and a datum-quote/receipt body were ever canonicalised or
+ * file is that test. If a print body and a touchstone-quote/receipt body were ever canonicalised or
  * hashed differently by the two packages, a signature produced with one copy could fail to
  * verify against the other, which would be a build1-spec.md §6 correctness bug invisible to
  * either package's own test suite in isolation.
  */
-describe("@datum/sdk's canonicalisation primitives stay byte-identical to @datum/print's own", () => {
+describe("@touchstone/sdk's canonicalisation primitives stay byte-identical to @touchstone/print's own", () => {
   it("canonicalise produces the same output for the same input", () => {
     const samples: unknown[] = [
       { b: 2, a: 1, c: { z: 26, y: 25 } },

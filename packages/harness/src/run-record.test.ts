@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TaskInstance } from "@datum/basket";
+import type { TaskInstance } from "@touchstone/basket";
 import { buildRunRecord } from "./run-record.js";
 import type { AdapterResult } from "./adapters/types.js";
 

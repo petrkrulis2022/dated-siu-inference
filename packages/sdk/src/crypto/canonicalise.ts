@@ -2,9 +2,9 @@ import canonicalizeDefault from "canonicalize";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 
 /**
- * A second, deliberately-duplicated copy of `@datum/print`'s canonicalisation primitives
- * (`packages/print/src/sign/canonicalise.ts`) — not an import, because `@datum/print` depends
- * on `@datum/sdk`, never the reverse. `packages/print/src/divergence.test.ts` asserts the two
+ * A second, deliberately-duplicated copy of `@touchstone/print`'s canonicalisation primitives
+ * (`packages/print/src/sign/canonicalise.ts`) — not an import, because `@touchstone/print` depends
+ * on `@touchstone/sdk`, never the reverse. `packages/print/src/divergence.test.ts` asserts the two
  * stay byte-identical.
  *
  * RFC 8785 (JSON Canonicalisation Scheme). Two independent implementations must serialise the

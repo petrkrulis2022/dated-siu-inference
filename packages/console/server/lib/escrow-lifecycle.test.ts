@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DatumQuote } from "@datum/sdk";
+import type { TouchstoneQuote } from "@touchstone/sdk";
 import type { EventCache } from "../indexer/cache.js";
 import { computeActivityAggregates, reconstructEscrowLifecycles } from "./escrow-lifecycle.js";
 
@@ -14,7 +14,7 @@ function emptyEvents(): EventCache["events"] {
   return { opened: [], settled: [], expired: [], printPosted: [] };
 }
 
-function fakeQuote(overrides: Partial<DatumQuote> = {}): DatumQuote {
+function fakeQuote(overrides: Partial<TouchstoneQuote> = {}): TouchstoneQuote {
   return {
     schema_version: "1.1",
     siu: "0.001",

@@ -163,7 +163,7 @@ export interface Print {
    */
   cost_of_production_usd: string;
   /**
-   * build1-spec.md §6 Signing: DatumAttestation.postPrint(bodyHash, version) on Base, timestamping the hash via a third party. 'stub' until the real contract (P13) exists — never presented as a real transaction.
+   * build1-spec.md §6 Signing: TouchstoneAttestation.postPrint(bodyHash, version) on Base, timestamping the hash via a third party. 'stub' until the real contract (P13) exists — never presented as a real transaction.
    */
   anchor?: {
     chain: string;

@@ -25,7 +25,7 @@
     "quote_hash": {
       "type": "string",
       "pattern": "^0x[0-9a-fA-F]{64}$",
-      "description": "bytes32 — matches DatumEscrow.openAndFund's quoteHash param, build1-spec.md §10."
+      "description": "bytes32 — matches TouchstoneEscrow.openAndFund's quoteHash param, build1-spec.md §10."
     },
     "chain": {
       "type": "string",
@@ -38,7 +38,7 @@
     "amount_quoted_usd": { "$ref": "#/definitions/decimalString" },
     "amount_paid_usd": {
       "$ref": "#/definitions/decimalString",
-      "description": "Gross: the actualAmount passed to DatumEscrow.settle, before the feeBps treasury split — build1-spec.md §10."
+      "description": "Gross: the actualAmount passed to TouchstoneEscrow.settle, before the feeBps treasury split — build1-spec.md §10."
     },
     "matched": {
       "type": "boolean"

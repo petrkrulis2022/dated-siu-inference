@@ -1,15 +1,15 @@
 import { createPublicClient, decodeEventLog, http, type Hex } from "viem";
-import { quoteHashHex, retryUntilConclusive, type DatumQuote } from "@datum/sdk";
-import type { OnChainSettlement, SettlementReader } from "@datum/mcp-server";
+import { quoteHashHex, retryUntilConclusive, type TouchstoneQuote } from "@touchstone/sdk";
+import type { OnChainSettlement, SettlementReader } from "@touchstone/mcp-server";
 
 /**
- * A local `SettlementReader`, mirroring `@datum/mcp-server`'s `OnChainSettlementReader`
+ * A local `SettlementReader`, mirroring `@touchstone/mcp-server`'s `OnChainSettlementReader`
  * (`settlement/on-chain.ts`, live-tested against Base Sepolia in P14 step 2) — not imported
  * directly, since it isn't part of that package's public `index.ts` export surface and this step
  * doesn't touch `packages/mcp-server`. Only the read logic this demo's own local `buildApp`
  * instance needs to power a real `verify_receipt` call.
  */
-const DATUM_ESCROW_READ_ABI = [
+const TOUCHSTONE_ESCROW_READ_ABI = [
   {
     type: "event",
     name: "Settled",
@@ -62,7 +62,11 @@ export class LocalSettlementReader implements SettlementReader {
     this.escrowAddress = options.escrowAddress as Hex;
   }
 
-  async read(chain: string, txHash: string, quote: DatumQuote): Promise<OnChainSettlement | null> {
+  async read(
+    chain: string,
+    txHash: string,
+    quote: TouchstoneQuote,
+  ): Promise<OnChainSettlement | null> {
     if (chain !== this.chainName) {
       throw new Error(`This reader serves "${this.chainName}" only; got chain "${chain}".`);
     }
@@ -80,7 +84,7 @@ export class LocalSettlementReader implements SettlementReader {
       if (log.address.toLowerCase() !== this.escrowAddress.toLowerCase()) continue;
       try {
         const event = decodeEventLog({
-          abi: DATUM_ESCROW_READ_ABI,
+          abi: TOUCHSTONE_ESCROW_READ_ABI,
           data: log.data,
           topics: log.topics,
           eventName: "Settled",
@@ -97,13 +101,13 @@ export class LocalSettlementReader implements SettlementReader {
       throw new QuoteHashMismatchError(decoded.quoteHash, expectedHash);
     }
 
-    // Retried via @datum/sdk's retryUntilConclusive — see escrow-client.ts's readEscrowUntilMatch
+    // Retried via @touchstone/sdk's retryUntilConclusive — see escrow-client.ts's readEscrowUntilMatch
     // for the same RPC-lag failure mode confirmed live against this exact escrow contract.
     const maxAmount = await retryUntilConclusive(
       async () => {
         const escrow = await publicClient.readContract({
           address: this.escrowAddress,
-          abi: DATUM_ESCROW_READ_ABI,
+          abi: TOUCHSTONE_ESCROW_READ_ABI,
           functionName: "escrows",
           args: [decoded.quoteHash],
         });

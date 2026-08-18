@@ -1,4 +1,4 @@
-import type { DatumQuote } from "../types/generated/datum-quote.schema.js";
+import type { TouchstoneQuote } from "../types/generated/datum-quote.schema.js";
 import type { SignatureCheck } from "../crypto/sign.js";
 import { quoteHashHex, verifyQuoteSignature } from "./sign.js";
 
@@ -60,7 +60,7 @@ export interface QuoteIdentityCheck extends SignatureCheck {
 /** Composes identity resolution with signature verification, so this seam is real code rather
  * than a TODO left for the mcp-server/agents milestones. */
 export async function verifyQuoteFromIdentity(
-  quote: DatumQuote,
+  quote: TouchstoneQuote,
   resolver: IdentityResolver,
 ): Promise<QuoteIdentityCheck> {
   const resolved = await resolver.resolve(quote.seller_id);

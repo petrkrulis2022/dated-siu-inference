@@ -1,4 +1,4 @@
-import type { PriceSnapshot, Print } from "@datum/sdk";
+import type { PriceSnapshot, Print } from "@touchstone/sdk";
 
 type ExchangeRateRow = Print["exchange_rate_table"][number];
 type PriceEntry = PriceSnapshot["entries"][number];

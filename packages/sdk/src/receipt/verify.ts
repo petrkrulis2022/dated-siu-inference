@@ -1,5 +1,5 @@
 import type { Receipt } from "../types/generated/receipt.schema.js";
-import type { DatumQuote } from "../types/generated/datum-quote.schema.js";
+import type { TouchstoneQuote } from "../types/generated/datum-quote.schema.js";
 import { D } from "../money/index.js";
 import { quoteHashHex } from "../quote/sign.js";
 import { verifyReceiptSignature } from "./sign.js";
@@ -8,7 +8,7 @@ export interface VerifyReceiptOptions {
   publicKeyHex: string;
   /** If supplied, checks receipt.quote_hash against this quote's own hash — binding the
    * receipt to the specific offer it claims to settle. */
-  quote?: DatumQuote;
+  quote?: TouchstoneQuote;
 }
 
 export interface ReceiptVerification {
@@ -20,7 +20,7 @@ export interface ReceiptVerification {
  * `get_index`'s sibling on the receipt side (build1-spec.md §9): quoted vs paid vs matched,
  * checked rather than trusted. Three independent checks, all of which must pass:
  *
- * 1. The signature verifies (proves the receipt wasn't tampered with after Datum signed it).
+ * 1. The signature verifies (proves the receipt wasn't tampered with after Touchstone Assay signed it).
  * 2. `matched` is honest: it must equal `amount_paid_usd ≤ amount_quoted_usd`
  *    (build1-spec.md §10's escrow invariant `actualAmount ≤ maxAmount`, restated in dollar
  *    terms). A receipt claiming `matched: true` while its own figures show an overspend is

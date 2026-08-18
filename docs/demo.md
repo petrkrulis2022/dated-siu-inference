@@ -1,8 +1,8 @@
 # Demo agents
 
 _`packages/agents` — build1-spec.md §11's "demo agents": a seller agent quoting a trivial paid
-inference service in SIU via `datum-quote`, and a buyer agent that compares two sellers, funds
-`DatumEscrow`, and calls `verify_receipt`. Run it with `pnpm --filter @datum/agents run demo`._
+inference service in SIU via `touchstone-quote`, and a buyer agent that compares two sellers, funds
+`TouchstoneEscrow`, and calls `verify_receipt`. Run it with `pnpm --filter @touchstone/agents run demo`._
 
 ---
 
@@ -29,17 +29,17 @@ the alternative was fabricating numbers CLAUDE.md's first hard invariant forbids
    (`SIU-2026a-illustrative-demo` / `demo-no-real-print-published-yet` / a zero hash) — never
    presented as, or confused with, a real published print. Everything priced _with_ that rate is
    real: a genuine OpenRouter call to `deepseek-v3.2` (already in `data/registry/models.json`),
-   its real token usage, and its real dollar cost from `@datum/print`'s own `callCost` against the
+   its real token usage, and its real dollar cost from `@touchstone/print`'s own `callCost` against the
    real, already-fetched price snapshot in `data/registry/`.
 2. **No Circle Agent Wallet or Gateway credentials exist in this environment.** Two consequences,
    both already anticipated in this project's planning:
    - The buyer runs on a plain testnet wallet (`DEPLOYER_PRIVATE_KEY`) rather than a Circle Agent
      Wallet, with the spending policy enforced in agent code instead of at the wallet level —
-     `buyer.ts` calls `@datum/sdk`'s `checkSpendingMandate` against every quote before accepting
+     `buyer.ts` calls `@touchstone/sdk`'s `checkSpendingMandate` against every quote before accepting
      it. **The wallet-level policy is the intended production path**; this is a stopgap.
    - `verify_receipt` is normally a paid x402 call through Circle's Gateway (like `get_quote` and
      `convert` already are in the real, deployed MCP server). This demo runs its own instance of
-     the real, unmodified `buildApp(...)` from `@datum/mcp-server` with its existing
+     the real, unmodified `buildApp(...)` from `@touchstone/mcp-server` with its existing
      `skipPaywall: true` test escape hatch, so the tool call itself — signature, on-chain
      verification, receipt — is real; only the payment gate in front of it is bypassed, for the
      same reason the buyer's wallet is a stopgap: no Circle credentials in this environment.
@@ -50,38 +50,38 @@ the alternative was fabricating numbers CLAUDE.md's first hard invariant forbids
    on-chain work) generates and funds two fresh seller wallets with a little ETH for gas. Two
    seller HTTP servers start, each running `createSellerApp` with the same real registry model and
    real price data but a different `rate_usd_per_siu` — so "compare two sellers" is a genuine
-   comparison, not a coincidence. A local instance of the real `@datum/mcp-server` also starts.
+   comparison, not a coincidence. A local instance of the real `@touchstone/mcp-server` also starts.
 2. **Two real quotes.** The buyer `POST`s an empty request to each seller's `/infer`. Each seller
-   issues a fresh signed `datum-quote` (pattern `"cap"`: a point estimate `siu` plus a `siu_max`
+   issues a fresh signed `touchstone-quote` (pattern `"cap"`: a point estimate `siu` plus a `siu_max`
    ceiling sized from a real per-token price times a bounded `max_tokens` budget the seller commits
-   to enforcing) and responds `402 Payment Required`, the quote riding in `extensions.datum_quote`
+   to enforcing) and responds `402 Payment Required`, the quote riding in `extensions.touchstone_quote`
    alongside a minimal x402-v2-shaped `accepts` array.
 3. **Spending-mandate check, then compare.** Each quote passes through `checkSpendingMandate`
    (the in-code stand-in for a Circle Agent Wallet policy). The buyer then picks the cheaper quote
    **in SIU** — "payment amounts are dollar-fixed; SIU is the comparison unit"
    (`docs/datum-quote.md`) — which is exactly what differs between the two sellers here.
-4. **Fund escrow.** The buyer calls `DatumEscrow.openAndFund` for the chosen quote's `quoteHash`,
+4. **Fund escrow.** The buyer calls `TouchstoneEscrow.openAndFund` for the chosen quote's `quoteHash`,
    naming the chosen seller and `settler = address(0)` (the seller-only path this demo exercises,
    per P13's design — the delegated-settler path is unit-tested but not run here).
 5. **Fulfillment.** The buyer re-`POST`s to the chosen seller with the funded quote attached.
    The seller independently reads `escrows(quoteHash)` on-chain to confirm it's genuinely `Open`
    and funded on the exact terms it quoted — never trusting the buyer's say-so — then performs the
    real OpenRouter call, computes the real `actualAmount` from real usage (capped at the quoted
-   ceiling), and calls `DatumEscrow.settle` with its own key.
+   ceiling), and calls `TouchstoneEscrow.settle` with its own key.
 6. **Verify.** The buyer calls the real `verify_receipt` tool, as a genuine MCP tool call over
    `StreamableHTTPClientTransport` against the local server — not an in-process function call,
-   since that would require the buyer to hold `DATUM_PUBLISHER_KEY`, which would break the entire
-   point of the tool (Datum attests; the buyer doesn't self-attest). The reader recomputes the
+   since that would require the buyer to hold `TOUCHSTONE_PUBLISHER_KEY`, which would break the entire
+   point of the tool (Touchstone Assay attests; the buyer doesn't self-attest). The reader recomputes the
    quote's hash and checks it against the on-chain `Settled` event before trusting anything else,
    exactly as it does for a real caller.
 
 ## A real transcript
 
-Captured from a real run (`pnpm --filter @datum/agents run demo`) against Base Sepolia:
+Captured from a real run (`pnpm --filter @touchstone/agents run demo`) against Base Sepolia:
 
 ```
 ==============================================================================
-Datum demo agents — TESTBED, not traction. These are our own agents on our
+Touchstone Assay demo agents — TESTBED, not traction. These are our own agents on our
 own testnet wallets; this run demonstrates the protocol, not market demand.
 ==============================================================================
 2026-08-16T14:42:21.837Z [setup] buyer wallet: 0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e
@@ -109,7 +109,7 @@ own testnet wallets; this run demonstrates the protocol, not market demand.
 
 Every hash above is a real Base Sepolia transaction, independently checkable on
 [Blockscout](https://base-sepolia.blockscout.com) against
-`data/deployments/base-sepolia.json`'s `DatumEscrow` address.
+`data/deployments/base-sepolia.json`'s `TouchstoneEscrow` address.
 
 ## A lesson this demo surfaced
 
@@ -125,9 +125,9 @@ settle + read cycle against Base Sepolia rather than a mock.
 ## Running it yourself
 
 ```bash
-pnpm --filter @datum/agents run demo
+pnpm --filter @touchstone/agents run demo
 ```
 
 Needs `BASE_SEPOLIA_RPC_URL`, `DEPLOYER_PRIVATE_KEY` (a funded Base Sepolia wallet — this account
-also funds the two fresh seller wallets each run), `DATUM_PUBLISHER_KEY`, and `OPENROUTER_API_KEY`
+also funds the two fresh seller wallets each run), `TOUCHSTONE_PUBLISHER_KEY`, and `OPENROUTER_API_KEY`
 in `.env`. Nothing is written back to `.env`; the two seller keys are generated fresh per run.

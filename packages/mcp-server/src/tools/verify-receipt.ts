@@ -2,14 +2,14 @@ import {
   minorUnitsToUsd,
   D,
   signReceipt,
-  validateDatumQuote,
-  type DatumQuote,
+  validateTouchstoneQuote,
+  type TouchstoneQuote,
   type ReceiptBody,
   type Receipt,
-} from "@datum/sdk";
+} from "@touchstone/sdk";
 import type { SettlementReader } from "../settlement/reader.js";
 
-/** Same v1 scoping docs/plan.md risk 6 states for the DatumEscrow contract itself: multi-chain
+/** Same v1 scoping docs/plan.md risk 6 states for the TouchstoneEscrow contract itself: multi-chain
  * plumbing isn't built, so an unsupported chain errors with a documented limitation rather than
  * silently attempting an unsupported read. */
 export const SUPPORTED_VERIFY_RECEIPT_CHAINS = ["base", "base-sepolia"] as const;
@@ -26,7 +26,7 @@ export interface VerifyReceiptInput {
 /**
  * verify_receipt(chain, tx_hash, quote) — build1-spec.md §9: "reads an on-chain settlement,
  * matches it against the referenced quote hash, and returns a signed attestation." Reading the
- * chain is `reader`'s job (settlement/on-chain.ts, against the deployed DatumEscrow); everything
+ * chain is `reader`'s job (settlement/on-chain.ts, against the deployed TouchstoneEscrow); everything
  * here — validating the caller's quote, then turning what was read into a checked, signed
  * Receipt — is real.
  */
@@ -45,13 +45,13 @@ export async function verifyReceiptTool(
     );
   }
 
-  const validation = validateDatumQuote(input.quote);
+  const validation = validateTouchstoneQuote(input.quote);
   if (!validation.valid) {
     throw new Error(
-      `quote fails the published datum-quote schema: ${validation.errors.join("; ")}`,
+      `quote fails the published touchstone-quote schema: ${validation.errors.join("; ")}`,
     );
   }
-  const quote: DatumQuote = validation.data;
+  const quote: TouchstoneQuote = validation.data;
 
   const settlement = await reader.read(input.chain, input.tx_hash, quote);
   if (!settlement) {

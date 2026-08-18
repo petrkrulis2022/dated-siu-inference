@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { ModelRegistryEntry, PriceSnapshot, Print, RunRecord } from "@datum/sdk";
+import type { ModelRegistryEntry, PriceSnapshot, Print, RunRecord } from "@touchstone/sdk";
 import type { ModelInput } from "../compute/index.js";
 
 /** pnpm always runs package scripts with cwd = the package directory. */
@@ -38,7 +38,7 @@ export async function latestPriceSnapshotFile(
   const latest = files.at(-1);
   if (!latest) {
     throw new Error(
-      `No ${source} price snapshot in ${registryDir()}. Run "pnpm --filter @datum/prices run fetch:prices" first.`,
+      `No ${source} price snapshot in ${registryDir()}. Run "pnpm --filter @touchstone/prices run fetch:prices" first.`,
     );
   }
   return latest;

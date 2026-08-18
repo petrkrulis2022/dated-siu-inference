@@ -1,5 +1,5 @@
 {
-  "name": "@datum/mcp-server",
+  "name": "@touchstone/mcp-server",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,8 +14,8 @@
   "dependencies": {
     "@circle-fin/x402-batching": "^3.3.0",
     "@x402/evm": "^2.22.0",
-    "@datum/print": "workspace:*",
-    "@datum/sdk": "workspace:*",
+    "@touchstone/print": "workspace:*",
+    "@touchstone/sdk": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "express": "^5.2.1",
     "viem": "^2.55.16",

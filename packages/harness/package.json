@@ -1,5 +1,5 @@
 {
-  "name": "@datum/harness",
+  "name": "@touchstone/harness",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,8 +14,8 @@
     "reconcile": "pnpm run build && node dist/cli/reconcile.js"
   },
   "dependencies": {
-    "@datum/basket": "workspace:*",
-    "@datum/sdk": "workspace:*",
+    "@touchstone/basket": "workspace:*",
+    "@touchstone/sdk": "workspace:*",
     "decimal.js": "^10.6.0"
   },
   "devDependencies": {

@@ -3,12 +3,12 @@ pragma solidity 0.8.24;
 
 import {CommonBase} from "forge-std/Base.sol";
 import {StdUtils} from "forge-std/StdUtils.sol";
-import {DatumEscrow} from "../../src/DatumEscrow.sol";
+import {TouchstoneEscrow} from "../../src/TouchstoneEscrow.sol";
 import {MockUSDC} from "../mocks/MockUSDC.sol";
 
 /**
- * Drives DatumEscrow through arbitrary sequences of open / settle / expire / time-passage, from
- * a small fixed set of actors, so the invariants in DatumEscrow.invariant.t.sol are checked
+ * Drives TouchstoneEscrow through arbitrary sequences of open / settle / expire / time-passage, from
+ * a small fixed set of actors, so the invariants in TouchstoneEscrow.invariant.t.sol are checked
  * against real state rather than a scripted happy path.
  *
  * Inputs are bounded so a useful fraction of calls succeed — an unbounded fuzzer would spend
@@ -17,7 +17,7 @@ import {MockUSDC} from "../mocks/MockUSDC.sol";
  * revert harmlessly, which is why the suite runs with `fail_on_revert = false`.
  */
 contract EscrowHandler is CommonBase, StdUtils {
-    DatumEscrow public immutable escrow;
+    TouchstoneEscrow public immutable escrow;
     MockUSDC public immutable usdc;
 
     address[3] public buyers;
@@ -33,7 +33,7 @@ contract EscrowHandler is CommonBase, StdUtils {
     uint256 public ghostTotalDeposited;
 
     constructor(
-        DatumEscrow escrow_,
+        TouchstoneEscrow escrow_,
         MockUSDC usdc_,
         address[3] memory buyers_,
         address[2] memory sellers_
@@ -82,9 +82,9 @@ contract EscrowHandler is CommonBase, StdUtils {
         if (quoteHashes.length == 0) return;
         bytes32 quoteHash = quoteHashes[bound(indexSeed, 0, quoteHashes.length - 1)];
 
-        (,, DatumEscrow.Status status, address seller, address settler, uint256 maxAmount) =
+        (,, TouchstoneEscrow.Status status, address seller, address settler, uint256 maxAmount) =
             escrow.escrows(quoteHash);
-        if (status != DatumEscrow.Status.Open) return;
+        if (status != TouchstoneEscrow.Status.Open) return;
 
         uint256 actual = bound(amountSeed, 0, maxAmount);
         address caller = (settler != address(0) && callerSeed % 2 == 0) ? settler : seller;
@@ -127,8 +127,8 @@ contract EscrowHandler is CommonBase, StdUtils {
     /// Sum of maxAmount across every escrow still Open — what the contract must be holding.
     function sumOpenEscrows() external view returns (uint256 total) {
         for (uint256 i = 0; i < quoteHashes.length; i++) {
-            (,, DatumEscrow.Status status,,, uint256 maxAmount) = escrow.escrows(quoteHashes[i]);
-            if (status == DatumEscrow.Status.Open) total += maxAmount;
+            (,, TouchstoneEscrow.Status status,,, uint256 maxAmount) = escrow.escrows(quoteHashes[i]);
+            if (status == TouchstoneEscrow.Status.Open) total += maxAmount;
         }
     }
 }

@@ -2,9 +2,9 @@ import {
   checkSpendingMandate,
   quoteHashHex,
   validateQuote,
-  type DatumQuote,
+  type TouchstoneQuote,
   type SpendingMandate,
-} from "@datum/sdk";
+} from "@touchstone/sdk";
 import { openAndFund } from "./escrow-client.js";
 import { pickCheaperQuote } from "./quote-compare.js";
 import { callVerifyReceipt } from "./mcp-client.js";
@@ -31,7 +31,7 @@ export interface BuyerRunOptions {
   log: (line: string) => void;
 }
 
-async function requestQuote(seller: SellerEndpoint): Promise<DatumQuote> {
+async function requestQuote(seller: SellerEndpoint): Promise<TouchstoneQuote> {
   const res = await fetch(`${seller.url}/infer`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -40,8 +40,8 @@ async function requestQuote(seller: SellerEndpoint): Promise<DatumQuote> {
   if (res.status !== 402) {
     throw new Error(`${seller.label}: expected 402 Payment Required, got ${res.status}.`);
   }
-  const body = (await res.json()) as { extensions?: { datum_quote?: unknown } };
-  const quote = body.extensions?.datum_quote;
+  const body = (await res.json()) as { extensions?: { touchstone_quote?: unknown } };
+  const quote = body.extensions?.touchstone_quote;
   const validation = validateQuote(quote);
   if (!validation.valid) {
     throw new Error(`${seller.label}: quote failed validation: ${validation.errors.join("; ")}`);
@@ -52,7 +52,7 @@ async function requestQuote(seller: SellerEndpoint): Promise<DatumQuote> {
 /**
  * The full quote → compare → escrow → settle → verify loop — build1-spec.md §11/§14. Every step
  * is real: real HTTP 402 responses, real on-chain funding and settlement on Base Sepolia, and a
- * real `verify_receipt` call against a live `@datum/mcp-server` instance. Labeled a testbed, not
+ * real `verify_receipt` call against a live `@touchstone/mcp-server` instance. Labeled a testbed, not
  * traction, throughout docs/demo.md — these are our own agents.
  */
 export async function runBuyerDemo(options: BuyerRunOptions): Promise<void> {

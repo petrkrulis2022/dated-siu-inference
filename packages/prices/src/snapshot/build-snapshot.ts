@@ -1,4 +1,4 @@
-import type { ModelRegistryEntry, PriceSnapshot } from "@datum/sdk";
+import type { ModelRegistryEntry, PriceSnapshot } from "@touchstone/sdk";
 import { perTokenToPer1M, decimalLessThan } from "../decimal.js";
 import { fetchOpenRouterEndpoints, fetchOpenRouterModels } from "../sources/openrouter.js";
 import { fetchLiteLLMPrices, type LiteLLMPriceMap } from "../sources/litellm.js";

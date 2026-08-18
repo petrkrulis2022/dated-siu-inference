@@ -1,4 +1,4 @@
-import type { ModelRegistryEntry } from "@datum/sdk";
+import type { ModelRegistryEntry } from "@touchstone/sdk";
 import { createAnthropicAdapter } from "./anthropic.js";
 import { createOpenAiAdapter } from "./openai.js";
 import { createGoogleAdapter } from "./google.js";

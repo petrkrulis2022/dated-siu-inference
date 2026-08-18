@@ -17,7 +17,7 @@ import { validateReceipt } from "../validation/receipt.js";
  */
 export type CallToolFn = (toolName: string, args: object) => Promise<unknown>;
 
-export interface DatumClientOptions {
+export interface TouchstoneClientOptions {
   callTool: CallToolFn;
 }
 
@@ -32,7 +32,7 @@ export interface GetQuoteParams {
 }
 
 /** "SIU price, exchange rate, index refs" per §9's tool table — index_version/print_id/
- * print_hash reuse the same "index refs" field names §8's datum-quote already carries, rather
+ * print_hash reuse the same "index refs" field names §8's touchstone-quote already carries, rather
  * than inventing new ones for the same concept. */
 export interface GetQuoteResult {
   siu_per_call: string;
@@ -80,7 +80,7 @@ function assertShape(
  * inventing a new schema unasked, keeps the client honest about malformed server output without
  * expanding schema scope beyond what P11 was asked to build.
  */
-export function createDatumClient(options: DatumClientOptions) {
+export function createTouchstoneClient(options: TouchstoneClientOptions) {
   return {
     async getIndex(params: GetIndexParams = {}): Promise<Print> {
       const raw = await options.callTool("get_index", params);
@@ -124,4 +124,4 @@ export function createDatumClient(options: DatumClientOptions) {
   };
 }
 
-export type DatumClient = ReturnType<typeof createDatumClient>;
+export type TouchstoneClient = ReturnType<typeof createTouchstoneClient>;

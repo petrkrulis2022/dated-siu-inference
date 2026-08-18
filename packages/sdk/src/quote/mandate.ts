@@ -1,4 +1,4 @@
-import type { DatumQuote } from "../types/generated/datum-quote.schema.js";
+import type { TouchstoneQuote } from "../types/generated/datum-quote.schema.js";
 import { D } from "../money/index.js";
 
 export interface SpendingMandate {
@@ -26,14 +26,14 @@ export type MandateDecision =
  * precisely what makes the extension safe to auto-accept.
  *
  * Deliberately does NOT assume `quote` has already passed `validateQuote` or even
- * `validateDatumQuote` — a payer may be handed a quote that skipped schema validation entirely
+ * `validateTouchstoneQuote` — a payer may be handed a quote that skipped schema validation entirely
  * (a bug, a hostile seller, a malformed relay), and this rule is normatively about what the
  * *payer* does with whatever it's handed, not about what a well-formed quote looks like. The
  * unbounded check runs first and touches only `pattern`/`siu_max`, so it holds even when every
  * other field on `quote` is missing or malformed.
  */
 export function checkSpendingMandate(
-  quote: DatumQuote,
+  quote: TouchstoneQuote,
   mandate: SpendingMandate,
   now: Date = new Date(),
 ): MandateDecision {
