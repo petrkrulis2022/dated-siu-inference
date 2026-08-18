@@ -39,11 +39,32 @@ export function clientsFor(privateKeyHex: string, rpcUrl: string): ChainClients 
  * distinct *sellers*, and the buyer's own identity has real transaction history from this
  * session's earlier live verification work.
  */
-const SELLER_GAS_FUNDING_WEI = 2_000_000_000_000_000n; // 0.002 ETH
+// 0.002 ETH was the original buffer here; at this session's observed real Base Sepolia gas
+// prices (~0.01 gwei) a single settle() costs on the order of 0.000002 ETH, so 0.002 ETH was
+// ~1000x more than a seller ever actually spends. Lowered after the deployer's cumulative real
+// testnet ETH spend across this session's many live runs left too little to fund two sellers at
+// the old amount — 0.0001 ETH still leaves ~45x margin over a real settle() at these prices.
+const SELLER_GAS_FUNDING_WEI = 100_000_000_000_000n; // 0.0001 ETH
 
 export interface FundedSeller {
   account: Account;
   privateKey: Hex;
+}
+
+/**
+ * The same RPC-lag family documented on `retryUntilConclusive` (`@touchstone/sdk`), one more
+ * shape of it: `sendTransaction` with no explicit nonce fetches the buyer's pending nonce fresh
+ * from whichever node answers, and even *after* this function's own `waitForTransactionReceipt`
+ * confirms a prior send mined, a second back-to-back send can still hit a node that hasn't
+ * caught up — reusing the same nonce and reverting with "replacement transaction underpriced".
+ * Confirmed live: two sequential `generateAndFundSeller` calls from `cli/demo.ts` hit exactly
+ * this. Not routed through `retryUntilConclusive` itself — that helper retries a *read* until a
+ * value is conclusive, whereas this retries the *send* itself — but it's the same lesson: a
+ * write immediately following another write against this account cannot trust the first
+ * lagging RPC node it happens to reach.
+ */
+function isNonceRaceError(err: unknown): boolean {
+  return err instanceof Error && /replacement transaction underpriced|nonce/i.test(err.message);
 }
 
 export async function generateAndFundSeller(
@@ -53,13 +74,26 @@ export async function generateAndFundSeller(
   const privateKey = generatePrivateKey();
   const account = privateKeyToAccount(privateKey);
 
-  const txHash = await buyer.walletClient.sendTransaction({
-    account: buyer.account,
-    chain: undefined,
-    to: account.address,
-    value: SELLER_GAS_FUNDING_WEI,
-  });
-  const receipt = await buyer.publicClient.waitForTransactionReceipt({ hash: txHash });
+  const attempts = 4;
+  let txHash: Hex | undefined;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      txHash = await buyer.walletClient.sendTransaction({
+        account: buyer.account,
+        chain: undefined,
+        to: account.address,
+        value: SELLER_GAS_FUNDING_WEI,
+      });
+      break;
+    } catch (err) {
+      if (i === attempts - 1 || !isNonceRaceError(err)) {
+        throw err;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+  }
+
+  const receipt = await buyer.publicClient.waitForTransactionReceipt({ hash: txHash! });
   if (receipt.status !== "success") {
     throw new Error(`Funding transaction for ${label} (${account.address}) reverted on-chain.`);
   }

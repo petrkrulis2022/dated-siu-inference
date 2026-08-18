@@ -1,5 +1,5 @@
 import express, { type Express, type Response } from "express";
-import { createAdapterFor, type Adapter } from "@touchstone/harness";
+import { createAdapterFor, withBackoff, type Adapter } from "@touchstone/harness";
 import {
   buildQuoteBody,
   signQuote,
@@ -37,6 +37,12 @@ export interface SellerOptions {
   prompt: string;
   maxOutputTokens: number;
   quoteTtlSeconds: number;
+  /** Passed straight to `createAdapterFor`'s routing option — see its own doc comment.
+   * Undefined/false (the default) keeps this seller pinned to `registryEntry.host`, matching
+   * the real measurement path. Only set this if a specific host's congestion is blocking a
+   * demo run and `withBackoff`'s retries aren't enough — never for anything that produces a
+   * real print. */
+  allowUnpinnedRouting?: boolean;
   log: (line: string) => void;
 }
 
@@ -60,7 +66,11 @@ function defaultDeps(options: SellerOptions): SellerDeps {
     readEscrowUntilMatch,
     settle,
     logIssuedQuote,
-    adapter: createAdapterFor(options.registryEntry, { openrouter: options.openrouterApiKey }),
+    adapter: createAdapterFor(
+      options.registryEntry,
+      { openrouter: options.openrouterApiKey },
+      { allowUnpinnedRouting: options.allowUnpinnedRouting },
+    ),
   };
 }
 
@@ -169,10 +179,17 @@ export function createSellerApp(
     options.log(
       `[${options.label}] escrow confirmed funded — performing the real inference call...`,
     );
-    const result = await adapter(options.registryEntry.model_string, options.prompt, {
-      temperature: 0,
-      max_tokens: options.maxOutputTokens,
-    });
+    // The harness's batch orchestrator (runOrchestrator) already retries transient upstream
+    // errors this way; this live HTTP-triggered call had no equivalent, and hit it directly —
+    // OpenRouter's shared free-tier provider pools return 429 intermittently under load,
+    // confirmed live: the identical request succeeded seconds later with no other change.
+    // withBackoff (@touchstone/harness) already exists for exactly this, just unused here.
+    const result = await withBackoff(() =>
+      adapter(options.registryEntry.model_string, options.prompt, {
+        temperature: 0,
+        max_tokens: options.maxOutputTokens,
+      }),
+    );
 
     const actualUsd = realizedCost(result.usage.input, result.usage.output, options.prices);
     const actualAmountRaw = BigInt(usdToMinorUnits(actualUsd));

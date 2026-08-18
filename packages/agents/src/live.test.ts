@@ -4,6 +4,7 @@ import {
   signQuote,
   quoteHashHex,
   loadDeployment,
+  retryUntilConclusive,
   type TouchstoneQuote,
 } from "@touchstone/sdk";
 import { clientsFor, generateAndFundSeller, type ChainClients } from "./wallets.js";
@@ -49,7 +50,10 @@ describeLive("live Base Sepolia: escrow-client + LocalSettlementReader", () => {
 
     quote = signQuote(
       buildQuoteBody({
-        siu: "0.001",
+        // siu: "0.001" (the original value here) produced maxAmount = 100 minor units, and this
+        // suite settles at maxAmount / 2 — 50, below TouchstoneEscrow's MIN_SETTLEMENT = 100.
+        // "0.01" gives maxAmount = 500, so actualAmount = 250 clears the floor with margin.
+        siu: "0.01",
         pattern: "fixed",
         model: "demo-live-test",
         rateUsdPerSiu: "0.05",
@@ -92,17 +96,16 @@ describeLive("live Base Sepolia: escrow-client + LocalSettlementReader", () => {
       receiptRef: quoteHash,
     });
 
-    // The same RPC-lag lesson yet again (see readEscrowUntilMatch's header comment) — even with
-    // waitForTransactionReceipt confirming the settle mined, a read against a different
-    // load-balanced RPC node moments later can still observe pre-settle state. Confirmed live
-    // while writing this file: the very first run of these assertions saw status Open (1), not
-    // Settled (2), immediately after this beforeAll returned. Poll until it converges before any
-    // `it` block runs, rather than baking a retry into every individual assertion below.
-    for (let i = 0; i < 5; i++) {
-      const escrow = await readEscrow(buyer, escrowAddress, quoteHash);
-      if (escrow.status === 2) break;
-      await new Promise((resolvePromise) => setTimeout(resolvePromise, 1500));
-    }
+    // The same RPC-lag lesson yet again (see retryUntilConclusive's header comment in
+    // @touchstone/sdk) — even with waitForTransactionReceipt confirming the settle mined, a read
+    // against a different load-balanced RPC node moments later can still observe pre-settle
+    // state. Confirmed live while writing this file: the very first run of these assertions saw
+    // status Open (1), not Settled (2), immediately after this beforeAll returned. Poll until it
+    // converges before any `it` block runs, via the shared helper rather than a hand-rolled loop.
+    await retryUntilConclusive(
+      () => readEscrow(buyer, escrowAddress, quoteHash),
+      (escrow) => escrow.status === 2,
+    );
   }, 60_000);
 
   it("readEscrow reflects the real Settled state, with maxAmount surviving settlement", async () => {

@@ -7,6 +7,7 @@ import { clientsFor, generateAndFundSeller } from "../wallets.js";
 import { createSellerApp } from "../seller.js";
 import { runBuyerDemo } from "../buyer.js";
 import { LocalSettlementReader } from "../settlement-reader.js";
+import { DEMO_ILLUSTRATIVE_USD_PER_SIU } from "../pricing.js";
 
 /**
  * The scripted end-to-end run — build1-spec.md §11/§14. TESTBED ONLY: these are our own agents,
@@ -65,18 +66,51 @@ async function main(): Promise<void> {
   const escrowAddress = deployment.contracts.TouchstoneEscrow.address;
   const usdcAddress = deployment.usdc.address;
 
+  // Two sellers on the *same* underlying model, priced very differently by host — not two
+  // different model families (an earlier version of this demo used one model for both sellers
+  // and only varied rate_usd_per_siu, which made "compare two sellers" a coincidence of a
+  // hand-picked number, not a real comparison; a later draft tried two different families
+  // instead). This is deliberately the stronger demonstration: two different model families
+  // costing different amounts is unsurprising, but identical weights (llama-3.3-70b) costing
+  // ~5.6x more per output token from one host (cloudflare, $2.253/1M) than another (novita,
+  // $0.40/1M) is the counterintuitive fact that makes the case for a common unit — and it is
+  // exactly the provider-spread column docs/methodology.md already publishes, not a story
+  // invented for this demo. Both sellers quote the same DEMO_ILLUSTRATIVE_USD_PER_SIU rate
+  // (pricing.ts), so the SIU spread the buyer sees below comes only from this real per-host
+  // cost difference.
+  //
+  // OpenRouter's free-tier shared provider pools intermittently 429 under load — confirmed
+  // live, repeatedly, across several registry models: the identical request to the identical
+  // pinned host succeeded seconds after failing, with no other change, and it recurred on more
+  // than one host in the same session, so it isn't one bad host to avoid. seller.ts's real
+  // inference call now retries through withBackoff for exactly this (matching the harness's
+  // batch orchestrator's existing retry behaviour). Host pinning itself stays on here — it's
+  // what makes the provider-spread comparison this demo makes actually true — so this is not
+  // routed through createAdapterFor's allowUnpinnedRouting escape hatch (see its doc comment);
+  // that exists for a demo variant that would rather auto-route than fail, which this one isn't.
   const registry = await loadRegistry();
-  const modelEntry = registry.find((m) => m.id === "deepseek-v3.2");
-  if (!modelEntry) {
-    throw new Error('Model "deepseek-v3.2" not found in data/registry/models.json.');
+  function requireModel(id: string) {
+    const entry = registry.find((m) => m.id === id);
+    if (!entry) {
+      throw new Error(`Model "${id}" not found in data/registry/models.json.`);
+    }
+    return entry;
   }
+  const modelA = requireModel("llama-3.3-70b-novita");
+  const modelB = requireModel("llama-3.3-70b-cloudflare");
+
   const snapshotFile = await latestPriceSnapshotFile("openrouter");
   const snapshot = await loadPriceSnapshot(snapshotFile);
   type PriceEntry = (typeof snapshot.entries)[number];
-  const priceEntry = snapshot.entries.find((e: PriceEntry) => e.model_id === modelEntry.id);
-  if (!priceEntry) {
-    throw new Error(`No price for "${modelEntry.id}" in ${snapshotFile}.`);
+  function requirePrice(modelId: string): PriceEntry {
+    const entry = snapshot.entries.find((e: PriceEntry) => e.model_id === modelId);
+    if (!entry) {
+      throw new Error(`No price for "${modelId}" in ${snapshotFile}.`);
+    }
+    return entry;
   }
+  const priceA = requirePrice(modelA.id);
+  const priceB = requirePrice(modelB.id);
 
   const buyerClients = clientsFor(deployerKey, rpcUrl);
   log(`[setup] buyer wallet: ${buyerClients.account.address}`);
@@ -86,40 +120,57 @@ async function main(): Promise<void> {
   const sellerBFunded = await generateAndFundSeller(buyerClients, "seller-b");
   log(`[setup] seller-b wallet funded: ${sellerBFunded.account.address}`);
 
-  const prompt = "In one short sentence, what is a benchmark price index?";
-  // Large enough that the real USD ceiling doesn't round to $0.0000 at touchstone-quote's 4dp
-  // precision (TouchstoneEscrow.openAndFund rejects a zero maxAmount) — confirmed by first running
-  // this demo with 64 and hitting exactly that revert.
-  const maxOutputTokens = 2000;
+  // A genuinely sized task, not a one-liner. The original one-sentence prompt settled around 14
+  // USDC minor units real cost — under TouchstoneEscrow's MIN_SETTLEMENT = 100, which now
+  // correctly reverts it. A real paid inference call looks more like this: a detailed,
+  // structured answer, sized so even the cheaper of the two sellers (llama-3.3-70b-novita,
+  // $0.40/1M output tokens) clears the floor with real margin and lands inside a realistic
+  // $0.001-$0.10 range, not just barely above it. maxOutputTokens is a ceiling the model is free
+  // to undershoot — real output length varies by model and run, so these numbers were tuned
+  // against real live runs, not assumed correct from the arithmetic alone: an earlier "at least
+  // 800 words" / 6000-token version settled at $0.000727 (727 minor units) — comfortably above
+  // the floor, but under the intended $0.001 low end — so the length ask and ceiling were both
+  // raised.
+  const prompt =
+    "Write a detailed, comprehensive explanation of how commodity benchmark price indices " +
+    "work, using Dated Brent as a concrete example. Cover: what makes a reference price " +
+    "trustworthy, how such indices are typically assembled and published on a rolling basis, " +
+    "the difference between a spot assessment and a futures curve, how market participants " +
+    "actually use the published number in real contracts, and at least two historical episodes " +
+    "where the benchmark's mechanics mattered in practice. Use specific, concrete examples " +
+    "throughout, and address counterarguments or edge cases where relevant. Aim for a thorough, " +
+    "in-depth answer of at least 1400 words, organized into clearly labeled sections.";
+  const maxOutputTokens = 8000;
   const quoteTtlSeconds = 3600;
 
-  const sellerACommon = {
-    registryEntry: modelEntry,
-    prices: priceEntry,
+  const sellerCommon = {
     openrouterApiKey: openrouterKey,
     escrowAddress,
     chainName,
     prompt,
     maxOutputTokens,
     quoteTtlSeconds,
+    // Same rate for both sellers — the SIU spread the buyer sees comes only from the real cost
+    // difference between the two models below, not from a hand-picked per-seller markup.
+    rateUsdPerSiu: DEMO_ILLUSTRATIVE_USD_PER_SIU,
     log,
   };
 
   const sellerAApp = createSellerApp({
-    ...sellerACommon,
+    ...sellerCommon,
+    registryEntry: modelA,
+    prices: priceA,
     label: "seller-a",
     clients: clientsFor(sellerAFunded.privateKey, rpcUrl),
     privateKeyHex: sellerAFunded.privateKey,
-    rateUsdPerSiu: "0.0500",
   });
   const sellerBApp = createSellerApp({
-    ...sellerACommon,
+    ...sellerCommon,
+    registryEntry: modelB,
+    prices: priceB,
     label: "seller-b",
     clients: clientsFor(sellerBFunded.privateKey, rpcUrl),
     privateKeyHex: sellerBFunded.privateKey,
-    // A higher per-SIU asking price for the identical underlying task — makes "compares the
-    // quotes in SIU" a genuine comparison rather than a coincidence.
-    rateUsdPerSiu: "0.0650",
   });
 
   const sellerAServer = await listen(sellerAApp);

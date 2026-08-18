@@ -41,6 +41,27 @@ function requireKey(keys: ApiKeys, provider: keyof ApiKeys, envVar: string): str
   return key;
 }
 
+export interface AdapterRoutingOptions {
+  /**
+   * NEVER set this for anything in the real measurement path (`runOrchestrator`, print
+   * computation, `data/runs/`) — the registry's multi-host entries (e.g. the three
+   * `llama-3.3-70b-*` entries) exist specifically so a print can publish real provider spread,
+   * and `docs/methodology.md`'s provider-spread column reports exactly the host a run actually
+   * used. Letting OpenRouter silently auto-route instead of honouring `entry.host` would corrupt
+   * that measurement — a run recorded against "cloudflare" could silently execute on a different
+   * host entirely, with no record of the substitution. `orchestrator.ts` never passes this.
+   *
+   * Exists only so a live, HTTP-triggered demo call (`@touchstone/agents`' seller.ts) isn't
+   * blocked outright by one specific host's shared free-tier pool being congested — confirmed
+   * live: a request pinned to a congested host 429'd while the identical request against a
+   * different host for the same model succeeded immediately. `withBackoff` (retry.ts) is the
+   * first line of defence for that and should usually be enough on its own; this is a second,
+   * more disruptive lever for a demo that would rather auto-route than fail. Defaults to `false`
+   * (pinning happens) everywhere this isn't explicitly set.
+   */
+  allowUnpinnedRouting?: boolean;
+}
+
 /**
  * Resolves the adapter for a registry entry (§4's four adapter families). Takes the full
  * entry, not just `provider` — an OpenRouter-routed entry needs its `host` field to pin the
@@ -56,6 +77,7 @@ function requireKey(keys: ApiKeys, provider: keyof ApiKeys, envVar: string): str
 export function createAdapterFor(
   entry: Pick<ModelRegistryEntry, "provider" | "host">,
   keys: ApiKeys,
+  routing: AdapterRoutingOptions = {},
 ): Adapter {
   switch (entry.provider) {
     case "anthropic":
@@ -68,7 +90,9 @@ export function createAdapterFor(
       return createOpenAiCompatibleAdapter({
         chatCompletionsUrl: OPENAI_COMPATIBLE_HOSTS.openrouter,
         apiKey: requireKey(keys, "openrouter", "OPENROUTER_API_KEY"),
-        extraBody: { provider: { only: [entry.host] } },
+        ...(routing.allowUnpinnedRouting
+          ? {}
+          : { extraBody: { provider: { only: [entry.host] } } }),
       });
     case "together":
       return createOpenAiCompatibleAdapter({

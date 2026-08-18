@@ -88,6 +88,34 @@ committed amount clears the floor, or — for `cap`/`estimate` patterns — wide
 ceiling (for example, raise the output-token budget a seller commits to enforcing) so the
 worst-case cost, not just the point estimate, clears `$0.0001`.
 
+### The settlement floor, and where sub-floor flows belong instead
+
+The quote-side floor above governs what can be _quoted_. A second, independent floor governs what
+`TouchstoneEscrow` will actually _settle_: `MIN_SETTLEMENT = 100` USDC minor units. Below it,
+`settle()` reverts (`SettlementTooSmall`) rather than accepting a real, nonzero settlement whose
+fee integer division would otherwise truncate to zero — found live, the same way the quote-side
+floor was: real settlements as small as 13–50 minor units were paying no fee at all, discovered
+against real demo-agent activity in the console's first live run.
+
+**The two floors are numerically identical, and that's not a coincidence worth leaving unstated.**
+`MINIMUM_QUOTABLE_USD` ($0.0001) is exactly 100 USDC minor units at 6dp (`0.0001 × 10^6 = 100`) —
+the same number as `MIN_SETTLEMENT`. A quote that clears the quoting floor therefore always
+clears the settlement floor too, for the same underlying dollar amount; the two mechanisms agree
+on where the escrow's usable range begins.
+
+**This is a deliberate division of responsibility between two payment paths, not a limitation of
+either.** `TouchstoneEscrow` is built for quote-and-settle transactions: a buyer and seller agree
+a ceiling, real work happens, the seller settles for what was actually consumed. That shape — an
+on-chain hold, a signed quote to check settlement against, an explicit settle call — has a real
+per-transaction floor below which its own accounting (a fee that must round to at least one unit,
+a settlement worth the gas of its own transaction) stops making sense. True nanopayment flows —
+many sub-$0.0001 charges that only make sense aggregated — belong on Circle's Gateway batching
+path instead, which the MCP server's paywall already uses for `get_quote`, `convert`, and
+`verify_receipt` (`packages/mcp-server/src/paywall.ts`). Escrow and Gateway are not competing
+solutions to the same problem; they're the two payment paths this protocol has, matched to the
+two shapes of flow it actually needs to support — one quote-and-settle transaction at a time
+above the floor, many aggregated micro-charges below it.
+
 ### Settlement
 
 `settlement` is an array — deliberately, even though build 1 permits exactly one entry — mirroring

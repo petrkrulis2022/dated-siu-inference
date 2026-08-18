@@ -7,11 +7,12 @@ import { D, roundHalfUp } from "@touchstone/sdk";
  * `usd_per_siu` exchange rate is therefore unavailable, and CLAUDE.md's first hard invariant
  * ("the print is computed from executed runs only") rules out fabricating one. This is a
  * clearly-labeled default rate for this demo's quotes — never presented as, or confused with, a
- * real published rate. Each seller in `cli/demo.ts` sets its own `rate_usd_per_siu` (this default
- * or a markup over it), so two sellers can genuinely differ in SIU terms for the same real
- * underlying USD cost — see `estimatedCeiling` below. Everything else priced with it (the real
- * OpenRouter call, its real token usage, its real dollar cost from `@touchstone/print`'s `callCost`
- * against the real price snapshot) is genuine. See docs/demo.md.
+ * real published rate. Both sellers in `cli/demo.ts` quote this same rate — the SIU spread a
+ * buyer sees between them comes only from the real cost difference between the two distinct
+ * models they each run (see `estimatedCeiling` below), not from an artificial per-seller markup.
+ * Everything else priced with it (the real OpenRouter call, its real token usage, its real
+ * dollar cost from `@touchstone/print`'s `callCost` against the real price snapshot) is genuine.
+ * See docs/demo.md.
  */
 export const DEMO_ILLUSTRATIVE_USD_PER_SIU = "0.0500";
 
@@ -32,8 +33,10 @@ export interface PriceSnapshotEntryPrices {
 /** The SIU-denominated ceiling a seller quotes *before* doing any work: real per-token USD
  * prices from the price snapshot, applied to an estimated prompt size and a hard `maxTokens`
  * output budget the seller commits to enforcing. `rateUsdPerSiu` is the seller's own asking
- * price per SIU — distinct sellers pricing the identical underlying USD cost at different rates
- * is exactly what "compare two sellers' quotes in SIU" (build1-spec.md §11) demonstrates. */
+ * price per SIU — two sellers quoting the *same* rate over their own real, different per-token
+ * prices is exactly what "compare two sellers' quotes in SIU" (build1-spec.md §11) demonstrates:
+ * the resulting SIU figures differ because the underlying real cost differs, not because of a
+ * chosen rate. */
 export function estimatedCeiling(
   promptText: string,
   maxTokens: number,
