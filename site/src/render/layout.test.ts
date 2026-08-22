@@ -19,6 +19,8 @@ describe("renderLayout", () => {
     const html = renderLayout({ title: "t", bodyHtml: "", basePath: "../" });
     expect(html).toContain('href="../styles.css"');
     expect(html).toContain('href="../index.html"');
+    expect(html).toContain('href="../prints/index.html"');
+    expect(html).toContain('href="../models/index.html"');
   });
 
   it("contains no <script> tag — no backend, no analytics, no tracking", () => {

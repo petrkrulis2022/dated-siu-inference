@@ -34,6 +34,11 @@ function basePrint(overrides: Partial<Print> = {}): Print {
 }
 
 const RUNS_BASE = "https://github.com/example/repo/tree/main/data/runs";
+const CHAIN = {
+  attestationAddress: "0xF60701793eD168ffd6e818e1DCcb600393297190",
+  publisherAddress: "0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a",
+  explorerBaseUrl: "https://base-sepolia.blockscout.com",
+};
 
 describe("renderPrintPage", () => {
   it("shows a non-alarming, factual note when the price fell", () => {
@@ -45,6 +50,7 @@ describe("renderPrintPage", () => {
       ],
       basePath: "",
       runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
     });
     expect(html).toContain("▼");
     expect(html).toContain("Cheaper than the previous print");
@@ -62,6 +68,7 @@ describe("renderPrintPage", () => {
       ],
       basePath: "",
       runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
     });
     expect(html).toContain("▲");
     expect(html).toContain("More expensive than the previous print");
@@ -75,6 +82,7 @@ describe("renderPrintPage", () => {
       ],
       basePath: "",
       runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
     });
     expect(html).not.toContain("change-note");
   });
@@ -90,6 +98,7 @@ describe("renderPrintPage", () => {
       allPrints: [],
       basePath: "",
       runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
     });
     expect(html).toContain("D");
     expect(html).toContain("undefined class: T3");
@@ -102,6 +111,7 @@ describe("renderPrintPage", () => {
       allPrints: [],
       basePath: "",
       runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
     });
     expect(html).toContain("Not yet published");
   });
@@ -115,6 +125,7 @@ describe("renderPrintPage", () => {
       allPrints: [],
       basePath: "",
       runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
     });
     expect(html).toContain("$0.0005");
     expect(html).toContain("reference config");
@@ -129,6 +140,7 @@ describe("renderPrintPage", () => {
       allPrints: [],
       basePath: "",
       runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
     });
     expect(html).toContain("not yet anchored");
     expect(html).not.toMatch(/0x0{10,}/); // never a fabricated-looking all-zero hash
@@ -140,6 +152,7 @@ describe("renderPrintPage", () => {
       allPrints: [],
       basePath: "",
       runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
     });
     expect(html).toContain(`${RUNS_BASE}/2026-08-15`);
   });
@@ -154,6 +167,7 @@ describe("renderPrintPage", () => {
       ],
       basePath: "",
       runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
     });
     expect(html).toContain("All prints");
     expect(html).toContain("2026-08-13.html");
@@ -178,6 +192,7 @@ describe("renderPrintPage", () => {
       allPrints: [],
       basePath: "",
       runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
     });
     expect(html).not.toContain("<img src=x onerror=");
     expect(html).toContain("&lt;img");
@@ -189,7 +204,35 @@ describe("renderPrintPage", () => {
       allPrints: [],
       basePath: "",
       runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
     });
     expect(html).toContain("…"); // truncation marker present for the long hex fields
+  });
+
+  it("links an anchored tx to the chain's block explorer, not a plain unlinked string", () => {
+    const html = renderPrintPage({
+      print: basePrint({
+        anchor: { chain: "base-sepolia", status: "anchored", tx_hash: `0x${"11".repeat(32)}` },
+      }),
+      allPrints: [],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).toContain(`<a href="${CHAIN.explorerBaseUrl}/tx/0x${"11".repeat(32)}"`);
+  });
+
+  it("renders a verify-yourself block naming the contract and giving independent-check steps", () => {
+    const html = renderPrintPage({
+      print: basePrint(),
+      allPrints: [],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).toContain("Verify this yourself");
+    expect(html).toContain(`${CHAIN.explorerBaseUrl}/address/${CHAIN.attestationAddress}`);
+    expect(html).toContain("publisher()");
+    expect(html).toContain("postedAt(bytes32)");
   });
 });

@@ -247,6 +247,9 @@ importers:
 
   site:
     dependencies:
+      '@touchstone/print':
+        specifier: workspace:*
+        version: link:../packages/print
       '@touchstone/sdk':
         specifier: workspace:*
         version: link:../packages/sdk

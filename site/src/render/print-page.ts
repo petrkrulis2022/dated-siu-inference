@@ -1,6 +1,7 @@
 import type { Print } from "@touchstone/sdk";
-import type { PrintIndexEntry } from "../data.js";
+import type { ChainInfo, PrintIndexEntry } from "../data.js";
 import { esc, formatDate, percent, truncateHex, usd } from "../format.js";
+import { buildVerifyInfo } from "../verify.js";
 
 export interface PrintPageOptions {
   print: Print;
@@ -10,6 +11,8 @@ export interface PrintPageOptions {
   basePath: string;
   /** Base URL for a print's raw run records, e.g. a GitHub tree URL. print_id is appended. */
   runsBaseUrl: string;
+  /** TouchstoneAttestation address/publisher/explorer — for the anchor link and verify block. */
+  chain: ChainInfo;
 }
 
 function findPreviousPrint(
@@ -126,7 +129,7 @@ function renderSensitivityBlock(print: Print): string {
   </section>`;
 }
 
-function renderMethodologyAndSigning(print: Print, runsUrl: string): string {
+function renderMethodologyAndSigning(print: Print, runsUrl: string, chain: ChainInfo): string {
   const methodologyLine = print.methodology_url
     ? `<a href="${esc(print.methodology_url)}">${esc(print.methodology_version)}</a>`
     : esc(print.methodology_version);
@@ -134,7 +137,7 @@ function renderMethodologyAndSigning(print: Print, runsUrl: string): string {
   const anchorLine = !print.anchor
     ? "not yet submitted"
     : print.anchor.status === "anchored" && print.anchor.tx_hash
-      ? `<span title="${esc(print.anchor.tx_hash)}">${esc(truncateHex(print.anchor.tx_hash))}</span> (${esc(print.anchor.chain)})`
+      ? `<a href="${esc(chain.explorerBaseUrl)}/tx/${esc(print.anchor.tx_hash)}" title="${esc(print.anchor.tx_hash)}">${esc(truncateHex(print.anchor.tx_hash))}</a> (${esc(print.anchor.chain)})`
       : `not yet anchored — ${esc(print.anchor.notes ?? print.anchor.status)}`;
 
   return `<section class="block">
@@ -147,6 +150,35 @@ function renderMethodologyAndSigning(print: Print, runsUrl: string): string {
       <dt>Anchor tx</dt><dd>${anchorLine}</dd>
       <dt>Raw runs</dt><dd><a href="${esc(runsUrl)}">${esc(runsUrl)}</a></dd>
     </dl>
+  </section>`;
+}
+
+/**
+ * A reader shouldn't have to trust this page's own "verified" claim — the point of anchoring is
+ * that anyone can check it independently. bodyHash/recoveredSigner are computed offline at
+ * build time (buildVerifyInfo); the three numbered steps let a reader re-derive the same check
+ * live against the contract itself, the same thing verify-onchain.ts / the console check.
+ */
+function renderVerifyBlock(print: Print, chain: ChainInfo): string {
+  const info = buildVerifyInfo(print, chain.publisherAddress);
+  const contractUrl = `${chain.explorerBaseUrl}/address/${chain.attestationAddress}`;
+  const matchLine = info.matchesPublisher
+    ? "matches the TouchstoneAttestation publisher below"
+    : "does NOT match the TouchstoneAttestation publisher below — treat this print as unverified";
+
+  return `<section class="block">
+    <h2>Verify this yourself</h2>
+    <p class="note">Don't take this page's word for it — every value below is checkable independently.</p>
+    <dl class="kv">
+      <dt>Body hash</dt><dd title="${esc(info.bodyHash)}">${esc(truncateHex(info.bodyHash))}</dd>
+      <dt>Recovered signer</dt><dd title="${esc(info.recoveredSigner)}">${esc(truncateHex(info.recoveredSigner))} — ${esc(matchLine)}</dd>
+      <dt>TouchstoneAttestation</dt><dd><a href="${esc(contractUrl)}" title="${esc(chain.attestationAddress)}">${esc(truncateHex(chain.attestationAddress))}</a> (${esc(print.anchor?.chain ?? "base-sepolia")})</dd>
+    </dl>
+    <ol class="verify-steps">
+      <li>Recompute this print's body hash from the published JSON (JCS-canonicalised, signature fields excluded) and confirm it matches the body hash shown above.</li>
+      <li>Open the contract link above on Blockscout, go to "Read Contract", call <code>publisher()</code>, and confirm it matches the recovered signer shown above.</li>
+      <li>On the same "Read Contract" tab, call <code>postedAt(bytes32)</code> with the body hash shown above and confirm it returns a non-zero timestamp.</li>
+    </ol>
   </section>`;
 }
 
@@ -191,6 +223,7 @@ export function renderPrintPage({
   allPrints,
   basePath,
   runsBaseUrl,
+  chain,
 }: PrintPageOptions): string {
   const previous = findPreviousPrint(allPrints, print);
   const runsUrl = `${runsBaseUrl}/${print.print_id}`;
@@ -208,6 +241,7 @@ export function renderPrintPage({
 ${renderExchangeRateTable(print)}
 ${renderFloorSection(print)}
 ${renderSensitivityBlock(print)}
-${renderMethodologyAndSigning(print, runsUrl)}
+${renderMethodologyAndSigning(print, runsUrl, chain)}
+${renderVerifyBlock(print, chain)}
 ${renderPrintArchive(allPrints, print.print_id, basePath)}`;
 }

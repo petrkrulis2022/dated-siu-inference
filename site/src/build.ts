@@ -1,12 +1,17 @@
 import { cp, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { loadAllPrints, type PrintIndexEntry } from "./data.js";
+import { loadAllPrints, loadChainInfo, loadRunRecordsFor, type PrintIndexEntry } from "./data.js";
 import { renderLayout } from "./render/layout.js";
 import { renderPrintPage } from "./render/print-page.js";
+import { renderSeriesPage } from "./render/series-page.js";
+import { renderPrintsList } from "./render/prints-list.js";
+import { renderModelsPage, type ModelGatePoint } from "./render/models-page.js";
 
 // pnpm --filter site run build => cwd = site/, which sits directly at the repo root.
 const REPO_ROOT = resolve(process.cwd(), "..");
 const PRINTS_DIR = join(REPO_ROOT, "data/prints");
+const RUNS_DIR = join(REPO_ROOT, "data/runs");
+const DEPLOYMENT_FILE = join(REPO_ROOT, "data/deployments/base-sepolia.json");
 // Deliberately not "dist" — tsc already compiles this package's own TypeScript to dist/, and
 // writing the deployable HTML/CSS site into the same directory would mix generator tooling
 // output with the thing meant to be deployed. "public/" is the conventional, unambiguous name
@@ -23,10 +28,17 @@ async function writeHtml(path: string, html: string): Promise<void> {
   await writeFile(path, html, "utf-8");
 }
 
-function renderEmptyState(): string {
-  return `<div class="empty-state">
-    <p>No print has been published yet. Once <code>publish-print</code> runs, this page renders the latest one directly from <code>data/prints/</code>.</p>
-  </div>`;
+async function buildGateHistory(printIds: string[]): Promise<Record<string, ModelGatePoint[]>> {
+  const gateHistory: Record<string, ModelGatePoint[]> = {};
+  for (const printId of printIds) {
+    const records = await loadRunRecordsFor(RUNS_DIR, printId);
+    for (const record of records) {
+      const points = gateHistory[record.model_id] ?? [];
+      points.push({ print_id: printId, task_class: record.task_class, passed: record.gate_passed });
+      gateHistory[record.model_id] = points;
+    }
+  }
+  return gateHistory;
 }
 
 async function main(): Promise<void> {
@@ -34,46 +46,61 @@ async function main(): Promise<void> {
   await cp(join(STATIC_DIR, "styles.css"), join(OUT_DIR, "styles.css"));
 
   const prints = await loadAllPrints(PRINTS_DIR);
-
-  if (prints.length === 0) {
-    await writeHtml(
-      join(OUT_DIR, "index.html"),
-      renderLayout({ title: "Dated SIU", bodyHtml: renderEmptyState(), basePath: "" }),
-    );
-    console.log(`No prints found in ${PRINTS_DIR} — wrote an empty-state index.html only.`);
-    return;
-  }
-
+  const chain = await loadChainInfo(DEPLOYMENT_FILE);
   const allPrints: PrintIndexEntry[] = prints.map((p) => ({
     print_id: p.print_id,
     date: p.date,
     status: p.status,
     dated_siu: p.dated_siu,
   }));
-  const latest = prints[prints.length - 1];
 
+  // SERIES — the public landing page.
+  await writeHtml(
+    join(OUT_DIR, "index.html"),
+    renderLayout({
+      title: "Touchstone Assay — Dated SIU",
+      bodyHtml: renderSeriesPage({ allPrints, basePath: "" }),
+      basePath: "",
+    }),
+  );
+
+  // PRINTS — the list, plus one detail page per print (unchanged structure, just parameterised
+  // over every print instead of the latest one).
+  await writeHtml(
+    join(OUT_DIR, "prints", "index.html"),
+    renderLayout({
+      title: "Touchstone Assay — Prints",
+      bodyHtml: renderPrintsList({ allPrints: prints, basePath: "../", chain }),
+      basePath: "../",
+    }),
+  );
   for (const print of prints) {
-    // The dated, permanent URL always lives one level deep: prints/YYYY-MM-DD.html.
     const datedHtml = renderLayout({
       title: `Dated SIU — ${print.date} (${print.status})`,
-      bodyHtml: renderPrintPage({ print, allPrints, basePath: "../", runsBaseUrl: RUNS_BASE_URL }),
+      bodyHtml: renderPrintPage({
+        print,
+        allPrints,
+        basePath: "../",
+        runsBaseUrl: RUNS_BASE_URL,
+        chain,
+      }),
       basePath: "../",
     });
     await writeHtml(join(OUT_DIR, "prints", `${print.date}.html`), datedHtml);
-
-    // The latest print is ALSO the site root — rendered separately, not reused, since its
-    // links are one directory shallower than the dated page's.
-    if (print.print_id === latest.print_id) {
-      const indexHtml = renderLayout({
-        title: `Dated SIU — ${print.date} (${print.status})`,
-        bodyHtml: renderPrintPage({ print, allPrints, basePath: "", runsBaseUrl: RUNS_BASE_URL }),
-        basePath: "",
-      });
-      await writeHtml(join(OUT_DIR, "index.html"), indexHtml);
-    }
   }
 
-  console.log(`Built ${prints.length} print page(s) -> ${OUT_DIR}`);
+  // MODELS — per-model rate/spread history plus gate pass/fail history.
+  const gateHistory = await buildGateHistory(prints.map((p) => p.print_id));
+  await writeHtml(
+    join(OUT_DIR, "models", "index.html"),
+    renderLayout({
+      title: "Touchstone Assay — Models",
+      bodyHtml: renderModelsPage({ allPrints: prints, gateHistory, basePath: "../" }),
+      basePath: "../",
+    }),
+  );
+
+  console.log(`Built Series, Prints (${prints.length}) and Models -> ${OUT_DIR}`);
 }
 
 main().catch((err) => {

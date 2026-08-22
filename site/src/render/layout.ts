@@ -22,9 +22,11 @@ export function renderLayout({ title, bodyHtml, basePath }: LayoutOptions): stri
 <body>
 <div class="container">
 <header class="site-header">
-  <a class="wordmark" href="${basePath}index.html">Dated SIU</a>
+  <a class="wordmark" href="${basePath}index.html">Touchstone Assay</a>
   <nav class="site-nav">
-    <a href="${basePath}index.html">Latest print</a>
+    <a href="${basePath}index.html">Series</a>
+    <a href="${basePath}prints/index.html">Prints</a>
+    <a href="${basePath}models/index.html">Models</a>
   </nav>
 </header>
 ${bodyHtml}

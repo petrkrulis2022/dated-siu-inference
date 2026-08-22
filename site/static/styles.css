@@ -17,6 +17,7 @@
   --mono:
     ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", "JetBrains Mono", Consolas, monospace;
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
   --content-width: 46rem;
 }
 
@@ -301,6 +302,342 @@ footer.site-footer p {
   font-size: 0.95rem;
 }
 
+.muted {
+  color: var(--ink-muted);
+}
+
+/* ---- series / models: inline SVG charts (no client JS, no chart library) ---- */
+
+.series-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.series-axis {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+
+.series-line,
+.model-line {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+.series-point {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  fill: var(--bg);
+}
+
+.series-point-final {
+  fill: var(--ink);
+}
+
+.series-axis-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  fill: var(--ink-muted);
+}
+
+.legend-marker {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+  vertical-align: middle;
+  margin: 0 0.3rem 0 0.9rem;
+}
+
+.legend-marker:first-child {
+  margin-left: 0;
+}
+
+.legend-marker.series-point-final {
+  background: var(--ink);
+}
+
+.legend-marker.model-line-legend {
+  border-radius: 0;
+  width: 1.1rem;
+  height: 0;
+  border: none;
+  border-top: 2px solid var(--ink);
+  vertical-align: middle;
+}
+
+/* Model identity, not a value judgment — dash pattern distinguishes lines, not color, to stay
+   consistent with the site's monochrome register. */
+.model-line-1,
+.model-line-legend.model-line-1 {
+  stroke-dasharray: 6 3;
+  border-top-style: dashed;
+}
+.model-line-2,
+.model-line-legend.model-line-2 {
+  stroke-dasharray: 2 2;
+  border-top-style: dotted;
+}
+.model-line-3,
+.model-line-legend.model-line-3 {
+  stroke-dasharray: 8 2 2 2;
+}
+.model-line-4,
+.model-line-legend.model-line-4 {
+  stroke-dasharray: 4 4 1 4;
+}
+.model-line-5,
+.model-line-legend.model-line-5 {
+  stroke-dasharray: 1 3;
+}
+
+/* ---- verify-yourself block ---- */
+
+ol.verify-steps {
+  margin: 0.75rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 0.9rem;
+  color: var(--ink);
+  line-height: 1.6;
+}
+
+ol.verify-steps li {
+  margin-bottom: 0.4rem;
+}
+
+ol.verify-steps code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  background: var(--surface);
+  padding: 0.05rem 0.3rem;
+}
+
+/* ---- homepage: hero ---- */
+
+.hero {
+  padding: 1.5rem 0 2rem;
+}
+
+.hero .logo {
+  display: block;
+  height: 2.25rem;
+  width: auto;
+  margin-bottom: 1.75rem;
+}
+
+.hero h1 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+  line-height: 1.25;
+  margin: 0 0 0.5rem;
+}
+
+.hero .subhead {
+  font-size: 1.05rem;
+  color: var(--ink-muted);
+  margin: 0 0 1.75rem;
+}
+
+.hero .quote-strip {
+  border: 1px solid var(--rule-strong);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.hero .quote-strip .label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+  margin-bottom: 0.4rem;
+}
+
+.hero .quote-strip .figure {
+  font-family: var(--mono);
+  font-size: clamp(1.9rem, 6vw, 2.6rem);
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.hero .quote-strip .meta {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+}
+
+.hero .footnote {
+  font-size: 0.88rem;
+  color: var(--ink-muted);
+  font-style: italic;
+}
+
+/* ---- homepage: section heading (serif, larger than the print-page label style) ---- */
+
+.section-heading {
+  font-family: var(--serif);
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin: 0 0 1rem;
+}
+
+/* ---- homepage: three-column layout (The Problem) ---- */
+
+.col-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.col-grid .col h3 {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 0.5rem;
+}
+
+.col-grid .col p {
+  font-size: 0.92rem;
+  color: var(--ink-muted);
+  margin: 0;
+}
+
+/* ---- homepage: cards (How It Works) ---- */
+
+.card-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+
+.card {
+  border: 1px solid var(--rule);
+  padding: 1.1rem 1.25rem;
+}
+
+.card h3 {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 0.5rem;
+}
+
+.card p {
+  font-size: 0.92rem;
+  color: var(--ink-muted);
+  margin: 0;
+}
+
+/* ---- homepage: annotated code block (402 response example) ---- */
+
+.code-block {
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  padding: 1rem 1.15rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+.code-block pre {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.code-block .annotation {
+  margin-top: 0.75rem;
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
+/* ---- homepage: diagram placeholder ---- */
+
+.diagram {
+  border: 1px dashed var(--rule);
+  padding: 1.25rem;
+  text-align: center;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  margin: 1rem 0;
+}
+
+.diagram img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.diagram .caption {
+  margin-top: 0.6rem;
+  font-style: italic;
+}
+
+/* ---- homepage: roadmap ---- */
+
+ol.roadmap {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: roadmap;
+}
+
+ol.roadmap li {
+  counter-increment: roadmap;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  gap: 1rem;
+}
+
+ol.roadmap li:last-child {
+  border-bottom: none;
+}
+
+ol.roadmap li::before {
+  content: counter(roadmap);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+  flex: none;
+  width: 1.25rem;
+}
+
+ol.roadmap .roadmap-body h3 {
+  font-family: var(--mono);
+  font-size: 0.88rem;
+  margin: 0 0 0.3rem;
+}
+
+ol.roadmap .roadmap-body p {
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+  margin: 0;
+}
+
+/* ---- homepage: placeholder notice (dev-only labeling for unreplaced assets) ---- */
+
+.placeholder-notice {
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+  border: 1px dashed var(--rule);
+  padding: 0.3rem 0.6rem;
+  display: inline-block;
+  margin-top: 0.5rem;
+}
+
 /* ---- mobile-first: base styles above are the small-screen layout;
        widen spacing slightly on larger viewports. ---- */
 @media (min-width: 40rem) {
@@ -310,5 +647,13 @@ footer.site-footer p {
 
   .site-header {
     padding-top: 2.5rem;
+  }
+
+  .col-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .card-grid {
+    grid-template-columns: repeat(3, 1fr);
   }
 }

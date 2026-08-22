@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@touchstone/print": "workspace:*",
     "@touchstone/sdk": "workspace:*"
   },
   "devDependencies": {
