@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Print } from "@touchstone/sdk";
 
@@ -8,24 +8,34 @@ export interface WritePrintResult {
 }
 
 /**
- * Writes a print to data/prints/YYYY-MM-DD.json and refreshes latest.json as a copy of it —
- * build1-spec.md §7.
+ * Writes a print to data/prints/<print_id>.json and refreshes latest.json as a copy of it —
+ * build1-spec.md §7. Keyed by `print_id`, not `date`: every other path that touches a print by
+ * identity (runsDirFor, verify.ts, verify-onchain.ts, compute.ts) already keys off `print_id`,
+ * and `print_id` is what's guaranteed unique — `date` is descriptive, not the identifier, and
+ * two distinct print_ids can legitimately share a date (e.g. a same-day re-run).
  *
- * Refuses to overwrite an existing FINAL print for that date: a final print has been
- * reconciled against a real invoice and is the number the public referenced. A provisional
- * print for the same date may be overwritten (e.g. re-running publish before reconciliation),
- * since nothing has been reconciled against it yet.
+ * Print writes are append-only, unconditionally. This used to refuse only an existing FINAL
+ * print, on the theory that "provisional" meant "not yet reconciled, safe to redo." It doesn't:
+ * provisional means "not yet reconciled," not "safe to destroy." A print that has been signed,
+ * written, and (usually) anchored is a real artifact from the moment it exists — a live incident
+ * showed exactly why this matters: a print's file was silently overwritten by a second run that
+ * happened to collide on the same filename, while its on-chain anchor stayed put, briefly leaving
+ * an anchored hash with no corresponding published content anywhere. Corrections to an existing
+ * print belong in a numbered revision alongside the original (the methodology's revision policy),
+ * never as a second write to the same path.
  */
 export async function writePrint(printsDir: string, print: Print): Promise<WritePrintResult> {
   await mkdir(printsDir, { recursive: true });
-  const path = join(printsDir, `${print.date}.json`);
+  const path = join(printsDir, `${print.print_id}.json`);
 
-  const existing = await readFile(path, "utf-8")
-    .then((raw) => JSON.parse(raw) as Print)
-    .catch(() => undefined);
-  if (existing?.status === "final") {
+  const alreadyExists = await access(path)
+    .then(() => true)
+    .catch(() => false);
+  if (alreadyExists) {
     throw new Error(
-      `Refusing to overwrite ${path}: it is already final. A reconciled, published print is not republished.`,
+      `Refusing to overwrite ${path}: a print already exists at this path. Print writes are ` +
+        `append-only — a correction is published as a numbered revision alongside the ` +
+        `original, never a second write to the same print_id.`,
     );
   }
 

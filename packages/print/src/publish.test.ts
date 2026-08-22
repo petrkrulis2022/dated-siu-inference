@@ -3,7 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AttestationClient, AnchorResult } from "./anchor/attestation.js";
-import { findInvalidRecords, publishPrint, type PublishInput } from "./publish.js";
+import type { ModelInput } from "./compute/index.js";
+import {
+  findInvalidRecords,
+  publishPrint,
+  MINIMUM_QUALIFYING_MODELS,
+  type PublishInput,
+} from "./publish.js";
 import { workedExampleInput, publishableWorkedExampleInput } from "./worked-example.fixture.js";
 
 const TEST_KEY = `0x${"55".repeat(32)}`;
@@ -18,11 +24,27 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
+/**
+ * The shared worked-example fixture (A/B/C/D) deliberately has only 3 qualifying models — D's
+ * T3 fails outright, by design (see worked-example.fixture.ts) — one short of
+ * MINIMUM_QUALIFYING_MODELS. Rather than change that canonical, doc-referenced fixture, tests
+ * here that don't care about the qualifying-set gate add one more clean-passing model locally.
+ */
+function extraQualifyingModel(id: string): ModelInput {
+  const base = workedExampleInput().models[0]; // "A" — fully clean-passing on every class.
+  return { ...base, model_id: id, records: base.records.map((r) => ({ ...r, model_id: id })) };
+}
+
 function publishInput(overrides: Partial<PublishInput> = {}): PublishInput {
   const rest = Object.fromEntries(
     Object.entries(publishableWorkedExampleInput()).filter(([key]) => key !== "status"),
   ) as PublishInput;
-  return { ...rest, privateKeyHex: TEST_KEY, ...overrides };
+  return {
+    ...rest,
+    models: [...rest.models, extraQualifyingModel("E")],
+    privateKeyHex: TEST_KEY,
+    ...overrides,
+  };
 }
 
 describe("findInvalidRecords", () => {
@@ -108,7 +130,33 @@ describe("publishPrint", () => {
   });
 
   it("refuses to publish a print with no sensitivity variants (fails schema before anchoring)", async () => {
-    const input = { ...workedExampleInput(), privateKeyHex: TEST_KEY } as PublishInput;
+    const base = workedExampleInput();
+    const input = {
+      ...base,
+      models: [...base.models, extraQualifyingModel("E")],
+      privateKeyHex: TEST_KEY,
+    } as PublishInput;
     await expect(publishPrint(dir, input)).rejects.toThrow(/Refusing to sign/);
+  });
+
+  it("refuses to publish below the minimum qualifying-set size, before signing or anchoring", async () => {
+    // The live incident this guards against: a run that only qualified 2 of 6 registered
+    // models still published. Simulate the equivalent here — fewer than the minimum qualify.
+    const base = publishableWorkedExampleInput();
+    const input = {
+      ...base,
+      models: base.models.filter((m) => m.model_id !== "D"), // A, B, C only qualify — 3 total.
+      privateKeyHex: TEST_KEY,
+    } as PublishInput;
+
+    await expect(publishPrint(dir, input)).rejects.toThrow(
+      new RegExp(
+        `only 3 of 3 registered models qualified \\(minimum ${MINIMUM_QUALIFYING_MODELS}\\)`,
+      ),
+    );
+
+    // A refusal is total — nothing was written, no signature, no anchor attempt.
+    const { readdir } = await import("node:fs/promises");
+    expect(await readdir(dir).catch(() => [])).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@ import canonicalizeDefault from "canonicalize";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import type { Print } from "@touchstone/sdk";
 
-export type PrintBody = Omit<Print, "signature" | "public_key" | "anchor">;
+export type PrintBody = Omit<Print, "signature" | "public_key" | "anchor" | "superseded_by">;
 
 /**
  * RFC 8785 (JSON Canonicalisation Scheme). Two independent implementations must serialise the
@@ -34,7 +34,7 @@ export function fromHex(hex: string): Uint8Array {
 }
 
 /**
- * Strips the signature fields, and `anchor`, before canonicalising.
+ * Strips the signature fields, `anchor`, and `superseded_by`, before canonicalising.
  *
  * A signature cannot cover itself (`signature`, `public_key`). `anchor` is excluded for a
  * different reason: build1-spec.md §6 anchors AFTER signing, calling
@@ -42,12 +42,19 @@ export function fromHex(hex: string): Uint8Array {
  * anchor transaction reference cannot possibly be part of what was signed; it is written into
  * the print file afterward, alongside but outside the signature's coverage. Including it here
  * would make every anchored print fail its own signature check.
+ *
+ * `superseded_by` is excluded for the same reason as `anchor`: a print can only be marked
+ * superseded *after* the print that supersedes it exists, which is necessarily after this print
+ * was already signed and anchored. Requiring a re-sign to disclose a supersession would change
+ * the body hash, which would no longer match what's already anchored on-chain — exactly the
+ * defect the append-only write guard (publication.ts) exists to prevent one level up.
  */
 export function printBodyOf(print: Print | PrintBody): PrintBody {
   const copy = { ...(print as Print) } as Partial<Print>;
   delete copy.signature;
   delete copy.public_key;
   delete copy.anchor;
+  delete copy.superseded_by;
   return copy as PrintBody;
 }
 

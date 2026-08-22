@@ -47,7 +47,7 @@ function print(overrides: Partial<Print> = {}): Print {
 }
 
 describe("writePrint", () => {
-  it("writes to data/prints/<date>.json and refreshes latest.json", async () => {
+  it("writes to data/prints/<print_id>.json and refreshes latest.json", async () => {
     const p = print();
     const { path, latestPath } = await writePrint(dir, p);
     expect(path).toBe(join(dir, "2026-08-14.json"));
@@ -55,19 +55,37 @@ describe("writePrint", () => {
     expect(JSON.parse(await readFile(latestPath, "utf-8"))).toEqual(p);
   });
 
-  it("allows overwriting a provisional print for the same date", async () => {
-    await writePrint(dir, print({ dated_siu: "0.01" }));
-    await writePrint(dir, print({ dated_siu: "0.02" }));
-    const onDisk = JSON.parse(await readFile(join(dir, "2026-08-14.json"), "utf-8")) as Print;
-    expect(onDisk.dated_siu).toBe("0.02");
-  });
-
-  it("refuses to overwrite a FINAL print for the same date", async () => {
-    await writePrint(dir, print({ status: "final" }));
-    await expect(writePrint(dir, print({ dated_siu: "0.99" }))).rejects.toThrow(/already final/);
-    // And the original is untouched.
+  it("refuses to overwrite an existing print at that path, even a provisional one", async () => {
+    await writePrint(dir, print({ status: "provisional", dated_siu: "0.01" }));
+    await expect(writePrint(dir, print({ dated_siu: "0.02" }))).rejects.toThrow(
+      /already exists.*append-only/s,
+    );
+    // And the original is untouched — provisional is "not yet reconciled," not "safe to destroy."
     const onDisk = JSON.parse(await readFile(join(dir, "2026-08-14.json"), "utf-8")) as Print;
     expect(onDisk.dated_siu).toBe("0.01");
+  });
+
+  it("refuses to overwrite an existing FINAL print at that path", async () => {
+    await writePrint(dir, print({ status: "final" }));
+    await expect(writePrint(dir, print({ dated_siu: "0.99" }))).rejects.toThrow(/already exists/);
+    const onDisk = JSON.parse(await readFile(join(dir, "2026-08-14.json"), "utf-8")) as Print;
+    expect(onDisk.dated_siu).toBe("0.01");
+  });
+
+  it("keys the filename by print_id, not date — two different print_ids sharing a date never collide", async () => {
+    await writePrint(dir, print({ print_id: "2026-08-14", date: "2026-08-14", dated_siu: "0.01" }));
+    // A same-day re-run under a different print_id — exactly the real incident this guards
+    // against: writePrint used to key off `date`, so this second write silently clobbered the
+    // first print's file even though the two are different prints with different identities.
+    await writePrint(
+      dir,
+      print({ print_id: "2026-08-14b", date: "2026-08-14", dated_siu: "0.02" }),
+    );
+
+    const first = JSON.parse(await readFile(join(dir, "2026-08-14.json"), "utf-8")) as Print;
+    const second = JSON.parse(await readFile(join(dir, "2026-08-14b.json"), "utf-8")) as Print;
+    expect(first.dated_siu).toBe("0.01");
+    expect(second.dated_siu).toBe("0.02");
   });
 
   it("latest.json always mirrors the most recently written print, even across different dates", async () => {

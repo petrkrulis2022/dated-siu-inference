@@ -163,6 +163,19 @@ export interface Print {
    */
   cost_of_production_usd: string;
   /**
+   * Present when this print has been superseded by a same-day redo under a different print_id (the revision policy's supersession rule — methodology.md). The original print is never edited or deleted; this field discloses the relationship on the original's own face. Excluded from the signed body (printBodyOf) alongside signature/public_key/anchor, so adding it never invalidates an existing signature or on-chain anchor — it is written after the fact, like anchor.
+   */
+  superseded_by?: {
+    /**
+     * The print_id of record that supersedes this one.
+     */
+    print_id: string;
+    /**
+     * Why this print was superseded, stated as a defined, disclosed cause — never merely that the other value was preferred.
+     */
+    reason: string;
+  };
+  /**
    * build1-spec.md §6 Signing: TouchstoneAttestation.postPrint(bodyHash, version) on Base, timestamping the hash via a third party. 'stub' until the real contract (P13) exists — never presented as a real transaction.
    */
   anchor?: {

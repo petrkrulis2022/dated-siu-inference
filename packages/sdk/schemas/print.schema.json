@@ -175,6 +175,24 @@
       "$ref": "#/definitions/decimalString",
       "description": "build1-spec.md §7's round-2 decision: what producing this print actually cost, summed across every recorded attempt for every measured model — not just the qualifying, weighted subset. Published beside the print, not folded into it."
     },
+    "superseded_by": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Present when this print has been superseded by a same-day redo under a different print_id (the revision policy's supersession rule — methodology.md). The original print is never edited or deleted; this field discloses the relationship on the original's own face. Excluded from the signed body (printBodyOf) alongside signature/public_key/anchor, so adding it never invalidates an existing signature or on-chain anchor — it is written after the fact, like anchor.",
+      "properties": {
+        "print_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The print_id of record that supersedes this one."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why this print was superseded, stated as a defined, disclosed cause — never merely that the other value was preferred."
+        }
+      },
+      "required": ["print_id", "reason"]
+    },
     "anchor": {
       "type": "object",
       "additionalProperties": false,

@@ -15,6 +15,16 @@ export interface InvalidRecordReport {
   errors: string[];
 }
 
+/**
+ * The floor below which a print refuses to publish at all — methodology.md's registry
+ * inclusion policy. Below this, a single constituent moves the print more than the market
+ * does, which is a materially different (and materially thinner) reference set than the one
+ * the registry is meant to represent, not just a worse measurement of the same thing. Found
+ * live: a run against a congested/unfunded provider key qualified only 2 of 6 registered
+ * models and still published — this constant exists so that can't happen silently again.
+ */
+export const MINIMUM_QUALIFYING_MODELS = 4;
+
 export interface PublishInput extends Omit<PrintInput, "status"> {
   privateKeyHex: string;
   attestationClient?: AttestationClient;
@@ -71,6 +81,19 @@ export async function publishPrint(printsDir: string, input: PublishInput): Prom
   }
 
   const { body } = computePrint({ ...input, status: "provisional" });
+
+  // Refuse before signing or anchoring — a print below the floor should never spend anchor gas
+  // or produce a signed artifact in the first place, not just fail some later review.
+  const qualifying = [...body.basket_costs].filter((m) => m.cost_usd !== undefined).length;
+  if (qualifying < MINIMUM_QUALIFYING_MODELS) {
+    throw new Error(
+      `Refusing to publish: only ${qualifying} of ${body.basket_costs.length} registered ` +
+        `models qualified (minimum ${MINIMUM_QUALIFYING_MODELS}) — this reference set is too ` +
+        `thin to constitute a print, not merely a worse measurement of the usual one. See ` +
+        `methodology.md's registry inclusion policy.`,
+    );
+  }
+
   const signed = signPrintBody(body, input.privateKeyHex);
 
   const client = input.attestationClient ?? new StubAttestationClient();
