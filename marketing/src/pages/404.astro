@@ -1,0 +1,17 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { NotFoundPage } from "@/components/pages/not-found/page";
+
+// Exception to prerender-by-default (AGENTS.md): must stay SSR so middleware
+// runs on unmatched routes. A prerendered 404 makes the Cloudflare adapter
+// short-circuit to static 404.html before middleware, breaking `/` redirects.
+export const prerender = false;
+---
+
+<Layout
+  title="404 - Page Not Found"
+  description="The page you requested could not be found."
+  noindex={true}
+>
+  <NotFoundPage client:load />
+</Layout>

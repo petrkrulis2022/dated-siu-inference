@@ -28,6 +28,8 @@ data/.cache/
 # Windows/WSL "mark of the web" sidecar files from downloaded docs
 *:Zone.Identifier
 
-# A separately-sourced landing-page exploration (an externally generated Astro/Cloudflare
-# project, its own repo/deploy pipeline) — not part of this repo's product, never committed here.
-landing-page-source/
+# marketing/ (Astro) build caches and local Wrangler state — node_modules/ and dist/ above
+# already cover the rest.
+.astro/
+.wrangler/
+marketing/logs/

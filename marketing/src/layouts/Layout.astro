@@ -1,0 +1,74 @@
+---
+import "@fontsource-variable/source-serif-4";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
+import "../styles/globals.css";
+import { STARTER_VERSION } from "../starter-version";
+import { SEO } from "@/components/seo";
+import { SITE_CONFIG } from "@/site-config";
+import type { SeoJsonSchema } from "@/components/seo-json";
+
+interface Props {
+  title?: string;
+  description?: string;
+  canonical?: string | URL;
+  image?: string | URL;
+  imageAlt?: string;
+  noindex?: boolean;
+  type?: "website" | "article";
+  siteName?: string;
+  jsonLd?: SeoJsonSchema | SeoJsonSchema[];
+}
+
+const {
+  title = SITE_CONFIG.name,
+  description = SITE_CONFIG.description,
+  canonical,
+  image,
+  imageAlt,
+  noindex = false,
+  type = "website",
+  siteName = SITE_CONFIG.name,
+  jsonLd,
+} = Astro.props;
+
+const site = Astro.site;
+
+const resolveUrl = (value?: string | URL) => {
+  if (!value) return undefined;
+  if (value instanceof URL) return value.toString();
+  if (site) return new URL(value, site).toString();
+  return value;
+};
+
+const canonicalUrl =
+  resolveUrl(canonical) ??
+  (site ? new URL(Astro.url.pathname, site).toString() : undefined);
+const imageUrl = resolveUrl(image);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="ploy-astro-starter-version" content={STARTER_VERSION} />
+    <SEO
+      title={title}
+      description={description}
+      canonicalUrl={canonicalUrl}
+      imageUrl={imageUrl}
+      imageAlt={imageAlt}
+      noindex={noindex}
+      type={type}
+      siteName={siteName}
+      jsonLd={jsonLd}
+    />
+    <slot name="head" />
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

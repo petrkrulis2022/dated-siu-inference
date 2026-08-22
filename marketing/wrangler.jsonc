@@ -1,0 +1,24 @@
+{
+  // Local-development fallback config. Ploy generates its own `wrangler.toml`
+  // at deploy time, and `astro.config.mjs` prefers that file over this one
+  // (see the `wranglerConfig` lookup order), so this never affects a Ploy
+  // deploy — it only gives `astro dev` / `check` / `build` a wrangler config
+  // to read when you're working from a plain `git clone`.
+  //
+  // Why it has to exist: without any wrangler config, `@astrojs/cloudflare`
+  // lets the compatibility date default to *today's date*. The pinned
+  // miniflare/workerd in the lockfile only supports dates up to its own
+  // release, so every local command fails with "This Worker requires
+  // compatibility date <today>, but the newest date supported by this server
+  // binary is <older>". Pinning the date here keeps a fresh clone working.
+  //
+  // Keep `compatibility_date` >= 2026-02-19: at that date Cloudflare enables
+  // `fetch_iterable_type_support`, which fixes Astro 6 + adapter 13 returning
+  // SSR response bodies as an async iterable workerd can't process (renders
+  // as "[object Object]" with a bogus `content-encoding: gzip` header).
+  // Refs: withastro/astro#14511, #14983, #15434.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ploy-web",
+  "compatibility_date": "2026-04-28",
+  "compatibility_flags": ["nodejs_compat"],
+}
