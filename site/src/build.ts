@@ -23,6 +23,11 @@ const STATIC_DIR = resolve(process.cwd(), "static");
 // true of data/runs/, so "link to the raw runs" points at that path in the published repo.
 const RUNS_BASE_URL = "https://github.com/petrkrulis2022/dated-siu-inference/tree/main/data/runs";
 
+// GitHub Pages custom domain: a CNAME file in the published artifact's root, re-asserted on
+// every build so it can never be silently dropped from an output dir that's wiped and rebuilt.
+// The marketing site stays at the apex (touchstoneassay.com) — this is the data publication.
+const CUSTOM_DOMAIN = "prints.touchstoneassay.com";
+
 async function writeHtml(path: string, html: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, html, "utf-8");
@@ -44,6 +49,7 @@ async function buildGateHistory(printIds: string[]): Promise<Record<string, Mode
 async function main(): Promise<void> {
   await mkdir(OUT_DIR, { recursive: true });
   await cp(join(STATIC_DIR, "styles.css"), join(OUT_DIR, "styles.css"));
+  await writeFile(join(OUT_DIR, "CNAME"), `${CUSTOM_DOMAIN}\n`, "utf-8");
 
   const prints = await loadAllPrints(PRINTS_DIR);
   const chain = await loadChainInfo(DEPLOYMENT_FILE);
