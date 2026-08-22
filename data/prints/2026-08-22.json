@@ -1,20 +1,16 @@
 {
   "version": "SIU-2026a",
-  "print_id": "2026-08-22b",
+  "print_id": "2026-08-22",
   "date": "2026-08-22",
   "status": "provisional",
   "basket_costs": [
-    {
-      "model_id": "deepseek-v3.2",
-      "cost_usd": "0.001823"
-    },
     {
       "model_id": "llama-3.3-70b-cloudflare",
       "excluded_reason": "undefined class: T2 (no run records for this class)"
     },
     {
       "model_id": "llama-3.3-70b-deepinfra",
-      "cost_usd": "0.000707"
+      "cost_usd": "0.000710"
     },
     {
       "model_id": "llama-3.3-70b-novita",
@@ -22,42 +18,28 @@
     },
     {
       "model_id": "mistral-small-3.2-24b-instruct",
-      "cost_usd": "0.000654"
+      "cost_usd": "0.000652"
     },
     {
       "model_id": "qwen-2.5-72b-instruct",
-      "cost_usd": "0.002506"
+      "excluded_reason": "undefined class: T2 (no run records for this class)"
     }
   ],
   "weights": {
     "source": "equal",
     "values": [
       {
-        "model_id": "deepseek-v3.2",
-        "weight": "0.250000"
-      },
-      {
         "model_id": "llama-3.3-70b-deepinfra",
-        "weight": "0.250000"
+        "weight": "0.500000"
       },
       {
         "model_id": "mistral-small-3.2-24b-instruct",
-        "weight": "0.250000"
-      },
-      {
-        "model_id": "qwen-2.5-72b-instruct",
-        "weight": "0.250000"
+        "weight": "0.500000"
       }
     ]
   },
-  "dated_siu": "0.0014",
+  "dated_siu": "0.0007",
   "exchange_rate_table": [
-    {
-      "model_id": "deepseek-v3.2",
-      "usd_per_siu": "0.0018",
-      "spread_to_index": "0.2817",
-      "siu_per_usd": "548.3"
-    },
     {
       "model_id": "llama-3.3-70b-cloudflare",
       "excluded_reason": "undefined class: T2 (no run records for this class)"
@@ -65,8 +47,8 @@
     {
       "model_id": "llama-3.3-70b-deepinfra",
       "usd_per_siu": "0.0007",
-      "spread_to_index": "-0.5031",
-      "siu_per_usd": "1414.4"
+      "spread_to_index": "0.0425",
+      "siu_per_usd": "1408.3"
     },
     {
       "model_id": "llama-3.3-70b-novita",
@@ -75,23 +57,20 @@
     {
       "model_id": "mistral-small-3.2-24b-instruct",
       "usd_per_siu": "0.0007",
-      "spread_to_index": "-0.5403",
-      "siu_per_usd": "1529.0"
+      "spread_to_index": "-0.0425",
+      "siu_per_usd": "1533.4"
     },
     {
       "model_id": "qwen-2.5-72b-instruct",
-      "usd_per_siu": "0.0025",
-      "spread_to_index": "0.7616",
-      "siu_per_usd": "399.0"
+      "excluded_reason": "undefined class: T2 (no run records for this class)"
     }
   ],
   "sensitivity_block": [
     {
       "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
-      "dated_siu": "0.0010",
-      "delta": "-0.3315",
+      "dated_siu": "0.0005",
+      "delta": "-0.3274",
       "applies_to": [
-        "deepseek-v3.2",
         "llama-3.3-70b-cloudflare",
         "llama-3.3-70b-deepinfra",
         "llama-3.3-70b-novita",
@@ -101,10 +80,9 @@
     },
     {
       "policy_variant": "batch-discount: 50% off input and output",
-      "dated_siu": "0.0007",
+      "dated_siu": "0.0003",
       "delta": "-0.5000",
       "applies_to": [
-        "deepseek-v3.2",
         "llama-3.3-70b-cloudflare",
         "llama-3.3-70b-deepinfra",
         "llama-3.3-70b-novita",
@@ -123,15 +101,19 @@
     "siu_per_usd_mode": "ROUND_DOWN",
     "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. basket_cost carries more decimal places than dated_siu so the published print is reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
   },
-  "cost_of_production_usd": "0.0932",
+  "cost_of_production_usd": "0.0222",
+  "superseded_by": {
+    "print_id": "2026-08-22b",
+    "reason": "Insufficient qualifying set: only 2 of 6 registered models qualified for this print (below the minimum of 4 — see methodology.md's registry inclusion policy), because the harness ran against an unfunded, free-tier provider key subject to heavy shared rate-limiting. A same-day re-run under a properly funded key qualified 4 of 6. This print is superseded for that reason alone, not because 2026-08-22b produced a different value."
+  },
   "price_snapshot_ref": "price-snapshot-openrouter-2026-08-22T18-04-27.229Z.json",
   "methodology_version": "v0-draft",
-  "signature": "0x6bbb66213634101f3f4396f0410acbbd227383f281333c898d6ccd79d9106ec92faa1593ed3d4265ba984768504c02ed8a56f5460c3d253f8526f8bcc1a5af27",
+  "signature": "0x58bfd832a9a8d351d2d92f6e4fc231933066820e4d1089b6337a60cad3ca7caa3172c9d34667d0a6c4ef1f655c7f0686d55838c9e1dd19b7515d3ec4c60bcc58",
   "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
   "anchor": {
     "chain": "base-sepolia",
     "status": "anchored",
-    "tx_hash": "0xe3cc6e52cacfb4aed0296539300a610cb23d11fe3f92b0a949cdbcda1497052a",
-    "posted_at": "2026-08-22T18:38:26.000Z"
+    "tx_hash": "0x4c1a3a122f4df41b4d0a6c349c4a23aef5d69525cc2bfe52867df4ceacbaae7c",
+    "posted_at": "2026-08-22T18:07:38.000Z"
   }
 }

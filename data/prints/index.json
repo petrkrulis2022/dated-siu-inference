@@ -4,5 +4,17 @@
     "date": "2026-08-18",
     "status": "provisional",
     "dated_siu": "0.0015"
+  },
+  {
+    "print_id": "2026-08-22",
+    "date": "2026-08-22",
+    "status": "provisional",
+    "dated_siu": "0.0007"
+  },
+  {
+    "print_id": "2026-08-22b",
+    "date": "2026-08-22",
+    "status": "provisional",
+    "dated_siu": "0.0014"
   }
 ]

@@ -98,10 +98,16 @@ default, one weight is allocated per qualifying model family, not per registry r
 
 ### Promotional and free tiers
 
-A promotional or free-tier price is not a real cost signal — it is definitionally below whatever
-it would cost to actually produce that inference, which is exactly what the subsidised-supply
-policy below exists to catch. Promotional pricing is not a separate carve-out; it is treated as
-subsidised supply.
+A promotional or free-tier _price_ — a $0 or near-$0 per-token rate a provider advertises — is
+not a real cost signal — it is definitionally below whatever it would cost to actually produce
+that inference, which is exactly what the subsidised-supply policy below exists to catch.
+Promotional pricing is not a separate carve-out; it is treated as subsidised supply.
+
+This is a claim about _price_, not about _account tier_ — a free or rate-limited API key that
+still charges the provider's normal, non-promotional per-token rate is a different thing
+entirely, and is explicitly not covered by this section. See "Rate-limit tier is not the same
+axis as subsidised pricing," directly below, for that distinction and the worked example that
+motivated stating it explicitly.
 
 ### Subsidised supply
 
@@ -111,6 +117,19 @@ subsidised — must be flagged, not silently averaged into the reference set.
 marks any price-snapshot entry priced below the published floor (§6) as `subsidised: true`. A
 flagged entry still appears in the published exchange-rate table — the price is real and
 informative — but is excluded from the headline reference set used to compute Dated SIU itself.
+
+**Rate-limit tier is not the same axis as subsidised pricing.** The subsidy flag targets
+below-cost _pricing_ — a per-token rate that doesn't cover what producing the inference actually
+cost. A free or promotional _access tier_ that charges the identical per-token price as a paid
+tier, and differs only in reliability and rate limits, is not that: nothing about the number
+itself is subsidised, only the odds of a given call completing at all. **Worked example, found
+live rather than assumed:** the 2026-08-22 incident (below) re-ran the same models on a free-tier
+key and then a funded key. `llama-3.3-70b-deepinfra` priced at $0.000710 vs. $0.000707 across the
+two runs; `mistral-small-3.2-24b-instruct` at $0.000652 vs. $0.000654 — both under 0.5%, both
+sides of ordinary run-to-run output-length variance, and both rounding to the identical published
+`usd_per_siu`. The tier changed which calls succeeded at all, not what a successful call cost.
+Treating that reliability difference as a subsidy would conflate two genuinely different
+questions this policy needs to keep separate.
 
 ### Rounding
 
@@ -249,20 +268,70 @@ basket.
 4. Its registry entry states `provider`, `tier`, `open_weights`, and `host` truthfully
    (`packages/sdk/schemas/model-registry-entry.schema.json`) — tier and open-weight status are
    not judgment calls made per print, they're fixed at admission.
+5. It is **structurally capable of every task class in the basket** — able to accept a class's
+   required input size and complete the request at all, independent of whether it then passes
+   that class's quality gate. This is distinct from criterion 3 (has completed one full run):
+   a host can complete a _small_ class successfully and still be hard-incapable of a _larger_
+   one, which is exactly the gap this criterion closes.
 
 Passing a print's quality gates (§5) is **not** an admission criterion — that is evaluated fresh,
 per print, and a model already in the registry that fails a class for one print is excluded from
 _that print's_ reference set (with a disclosed reason) without being removed from the registry
 itself. Registry admission and per-print qualification are deliberately separate questions.
 
+**Structural incapacity is not the same as a failed gate.** A quality-gate failure (§5) means the
+model attempted the task and produced output that didn't pass grading — evidence about the
+model's _output quality_. Structural incapacity means the request could never be attempted at
+all — the host rejects it outright (an explicit context-window/size limit, not a timeout or a
+harness bug) regardless of what the model would have produced. `packages/print/src/compute/class-cost.ts`
+already distinguishes these in the `undefinedReason` it records ("no run records for this class"
+— never attempted — versus "all N instance(s) failed the quality gate" — attempted and graded),
+and criterion 5 above is the registry-level consequence of the first case recurring: a per-print
+exclusion for "no run records" is a signal to _check_, not by itself proof of incapacity — it only
+becomes a removal case once confirmed structural (below), since a single print's infra hiccup
+looks identical in that field.
+
+**Confirmed structural incapacity (2026-08-18 print):** `llama-3.3-70b-cloudflare` and
+`llama-3.3-70b-novita` were excluded from the first print with `undefined class: T2 (no run
+records for this class)`. Diagnosed by replaying the exact real T2 prompt from that print
+(same seed, same instance, `T2-01`) directly against each host: `llama-3.3-70b-cloudflare`'s
+OpenRouter endpoint enforces a **24,000-token** context ceiling and `llama-3.3-70b-novita`'s
+enforces **12,288 tokens**; the T2 request needs roughly **31,000 tokens**, and both hosts reject
+it outright with an explicit context-length error — confirmed against the real deployed T2
+generator, not estimated. `llama-3.3-70b-deepinfra`, the same weights on a different host, served
+the identical prompt successfully (21,678 real prompt tokens). This is a per-host serving
+configuration limit, not a harness defect: no timeout, truncation, or routing misconfiguration was
+involved.
+
+Per criterion 5, both fail admission as of this finding and are **removed from the registry at
+the next scheduled review** (quarterly, per the review cadence below) — announced here, in this
+revision, ahead of that review taking effect, per the review cadence's own rule. Until then they
+remain registry members, continuing to be excluded from each print's reference set on a per-print
+basis exactly as they are today; this announcement does not retroactively remove them from any
+print already published or in progress.
+
 **Removal:** a registry entry is removed when its price source stops publishing a price for it,
 its provider adapter stops functioning and no replacement adapter is available within one review
-cycle, or the underlying model is discontinued by its provider. Removal for any other reason is
-out of policy.
+cycle, the underlying model is discontinued by its provider, or it fails criterion 5 above
+(confirmed structural incapacity in a task class, not merely a per-print gate failure). Removal
+for any other reason is out of policy.
 
 **Review cadence:** the candidate set is reviewed quarterly. A constituent change is announced in
 the print immediately preceding the one in which it takes effect, and never applied
 retroactively — see Index governance's constituent-change rule below, which this section shares.
+
+**Minimum qualifying-set size: 4.** A print with fewer than 4 qualifying models is not published
+at all — `packages/print/src/publish.ts`'s `MINIMUM_QUALIFYING_MODELS` refuses before signing or
+anchoring, not merely before writing. Reasoning: under equal weighting (the current default),
+each qualifying model carries `1 ÷ n` of the print's weight. At `n = 3`, one model already
+carries a third; at `n = 2`, a coin flip between two models _is_ the index. Below 4, a single
+constituent's idiosyncrasies — a bad day, a provider hiccup, one model's own pricing swing — move
+the print more than the underlying market does, which defeats the entire point of a basket-wide
+measurement. **Found live, not hypothesised:** on 2026-08-22, a harness run against an unfunded,
+free-tier provider key qualified only 2 of 6 registered models and still published — see the
+supersession entry in Index governance below. This constant exists so that can't happen silently
+again; a run that thin is a measurement of a materially different, and materially thinner,
+reference set, not a worse measurement of the usual one.
 
 **Weighting, stated on the face of every print:** weighting is currently **equal** across the
 qualifying set (`weights.source: "equal"` — `packages/sdk/schemas/print.schema.json`), because no
@@ -290,11 +359,31 @@ remaining qualifying set for that print only. This is disclosed on the face of t
 silently absorbed into the other models' weights.
 
 **Revision policy.** Every print starts `"provisional"` and becomes `"final"` only after
-reconciliation clears the 2% tolerance (§7). A correction to a final print is never made by
-editing or deleting the original — `writePrint` enforces this mechanically by refusing to
-overwrite a final print — corrections are published as **numbered revisions**, alongside the
-original, which remains in the public history exactly as it was first published. Anyone auditing
-the record sees both the original and the correction, with the correction's reasoning stated.
+reconciliation clears the 2% tolerance (§7). A correction to a print is never made by editing or
+deleting the original — `writePrint` enforces this mechanically by refusing to overwrite _any_
+existing print file, provisional or final, unconditionally — corrections are published as
+**numbered revisions**, alongside the original, which remains in the public history exactly as it
+was first published. Anyone auditing the record sees both the original and the correction, with
+the correction's reasoning stated. (Earlier drafts of this policy read "refusing to overwrite a
+_final_ print," on the theory that provisional meant "not yet reconciled, safe to redo." A live
+incident — see the supersession rule immediately below — showed that reasoning was wrong:
+provisional means "not yet reconciled," not "safe to destroy." The guard is unconditional now.)
+
+**Supersession rule.** A print may be superseded by a same-day redo only for a defined, disclosed
+cause — never because the redo produced a more welcome value. Both prints remain published and
+anchored; neither is edited or deleted. The superseded print carries a `superseded_by` field
+(excluded from its signed body, so adding it after the fact never invalidates the original
+signature or its on-chain anchor) naming the print of record and the cause, stated in the same
+terms as the cause itself — e.g. "insufficient qualifying set," not "we preferred the other
+number." Defined causes, so far: **insufficient qualifying set** (below the minimum in this
+section, above). **Found live, not hypothesised:** on 2026-08-22, a harness run against an
+unfunded free-tier provider key qualified only 2 of 6 registered models and published anyway (the
+minimum-qualifying-set guard above didn't exist yet). A same-day re-run under a funded key
+qualified 4 of 6. The first print (`2026-08-22`) is superseded by the second (`2026-08-22b`) for
+that reason alone — both remain visible on the public site, the superseded one marked distinctly
+on every view that lists prints (the Series chart, the Prints list, and its own page), never
+quietly dropped. A benchmark that hid this would be less credible than one that shows it: this is
+the revision policy working in public, not a defect to conceal.
 
 **Constituent changes.** Governed by the registry inclusion policy above: objective admission and
 removal criteria, no per-print discretion, changes announced in the print preceding the one they

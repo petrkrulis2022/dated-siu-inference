@@ -1,0 +1,17 @@
+{
+  "snapshot_id": "2026-08-22T18:04:27.229Z",
+  "timestamp": "2026-08-22T18:04:27.229Z",
+  "source": "litellm",
+  "entries": [
+    {
+      "model_id": "deepseek-v3.2",
+      "price_in_usd_per_1m": "0.28",
+      "price_out_usd_per_1m": "0.4"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-instruct",
+      "price_in_usd_per_1m": "0.1",
+      "price_out_usd_per_1m": "0.3"
+    }
+  ]
+}

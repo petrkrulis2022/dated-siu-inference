@@ -1,0 +1,18 @@
+{
+  "run_id": "ad091e16-8d3d-45be-9d0c-f2e0c6ed1485",
+  "model_id": "llama-3.3-70b-novita",
+  "task_class": "T1",
+  "instance_id": "T1-04",
+  "seed": 1184610078,
+  "attempt": 1,
+  "usage": {
+    "input": 918,
+    "output": 59,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 868,
+  "gate_passed": true,
+  "raw_response_ref": "ad091e16-8d3d-45be-9d0c-f2e0c6ed1485.raw.json",
+  "deviations": []
+}
