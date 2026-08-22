@@ -63,10 +63,14 @@ export const OTHER_OPEN_WEIGHT_INTENT: OpenRouterHostIntent[] = [
   {
     registry_id: "qwen-2.5-72b-instruct",
     openrouter_model_id: "qwen/qwen-2.5-72b-instruct",
-    host_provider_name: "Novita",
-    host: "novita",
+    host_provider_name: "DeepInfra",
+    host: "deepinfra",
     tier: "open-weight-hosted",
-    notes: "Catalog breadth: distinct model family from the Llama provider-spread trio.",
+    notes:
+      "Catalog breadth: distinct model family from the Llama provider-spread trio. Was pinned " +
+      "to novita, which structurally rejects this model on the completions endpoint (HTTP 400, " +
+      "not congestion) — OpenRouter serves it from exactly two providers, deepinfra and novita, " +
+      "and only deepinfra actually works. Corrected before the first real print run.",
   },
   {
     registry_id: "mistral-small-3.2-24b-instruct",

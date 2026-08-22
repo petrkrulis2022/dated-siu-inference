@@ -1,0 +1,137 @@
+{
+  "version": "SIU-2026a",
+  "print_id": "2026-08-18",
+  "date": "2026-08-18",
+  "status": "provisional",
+  "basket_costs": [
+    {
+      "model_id": "deepseek-v3.2",
+      "cost_usd": "0.001814"
+    },
+    {
+      "model_id": "llama-3.3-70b-cloudflare",
+      "excluded_reason": "undefined class: T2 (no run records for this class)"
+    },
+    {
+      "model_id": "llama-3.3-70b-deepinfra",
+      "cost_usd": "0.000707"
+    },
+    {
+      "model_id": "llama-3.3-70b-novita",
+      "excluded_reason": "undefined class: T2 (no run records for this class)"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-instruct",
+      "cost_usd": "0.000651"
+    },
+    {
+      "model_id": "qwen-2.5-72b-instruct",
+      "cost_usd": "0.002644"
+    }
+  ],
+  "weights": {
+    "source": "equal",
+    "values": [
+      {
+        "model_id": "deepseek-v3.2",
+        "weight": "0.250000"
+      },
+      {
+        "model_id": "llama-3.3-70b-deepinfra",
+        "weight": "0.250000"
+      },
+      {
+        "model_id": "mistral-small-3.2-24b-instruct",
+        "weight": "0.250000"
+      },
+      {
+        "model_id": "qwen-2.5-72b-instruct",
+        "weight": "0.250000"
+      }
+    ]
+  },
+  "dated_siu": "0.0015",
+  "exchange_rate_table": [
+    {
+      "model_id": "deepseek-v3.2",
+      "usd_per_siu": "0.0018",
+      "spread_to_index": "0.2476",
+      "siu_per_usd": "551.1"
+    },
+    {
+      "model_id": "llama-3.3-70b-cloudflare",
+      "excluded_reason": "undefined class: T2 (no run records for this class)"
+    },
+    {
+      "model_id": "llama-3.3-70b-deepinfra",
+      "usd_per_siu": "0.0007",
+      "spread_to_index": "-0.5137",
+      "siu_per_usd": "1414.1"
+    },
+    {
+      "model_id": "llama-3.3-70b-novita",
+      "excluded_reason": "undefined class: T2 (no run records for this class)"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-instruct",
+      "usd_per_siu": "0.0007",
+      "spread_to_index": "-0.5523",
+      "siu_per_usd": "1536.0"
+    },
+    {
+      "model_id": "qwen-2.5-72b-instruct",
+      "usd_per_siu": "0.0026",
+      "spread_to_index": "0.8184",
+      "siu_per_usd": "378.1"
+    }
+  ],
+  "sensitivity_block": [
+    {
+      "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
+      "dated_siu": "0.0010",
+      "delta": "-0.3318",
+      "applies_to": [
+        "deepseek-v3.2",
+        "llama-3.3-70b-cloudflare",
+        "llama-3.3-70b-deepinfra",
+        "llama-3.3-70b-novita",
+        "mistral-small-3.2-24b-instruct",
+        "qwen-2.5-72b-instruct"
+      ]
+    },
+    {
+      "policy_variant": "batch-discount: 50% off input and output",
+      "dated_siu": "0.0007",
+      "delta": "-0.5000",
+      "applies_to": [
+        "deepseek-v3.2",
+        "llama-3.3-70b-cloudflare",
+        "llama-3.3-70b-deepinfra",
+        "llama-3.3-70b-novita",
+        "mistral-small-3.2-24b-instruct",
+        "qwen-2.5-72b-instruct"
+      ]
+    }
+  ],
+  "rounding": {
+    "dated_siu_dp": 4,
+    "basket_cost_dp": 6,
+    "usd_per_siu_dp": 4,
+    "spread_dp": 4,
+    "siu_per_usd_dp": 1,
+    "mode": "ROUND_HALF_UP",
+    "siu_per_usd_mode": "ROUND_DOWN",
+    "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. basket_cost carries more decimal places than dated_siu so the published print is reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
+  },
+  "cost_of_production_usd": "0.1081",
+  "price_snapshot_ref": "price-snapshot-openrouter-2026-08-18T16-22-34.786Z.json",
+  "methodology_version": "v0-draft",
+  "signature": "0x643418557e9567faaff6d77b2e8b6c33401e11deca505059da4d55e1bf0d9a8f57635db2b67456c80b11318dd65428cefa8fc1c58cd091a0555d2442459cbd82",
+  "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
+  "anchor": {
+    "chain": "base-sepolia",
+    "status": "anchored",
+    "tx_hash": "0xc8ccc015ab8fc62846863d247e58753dfeccbaef383fa3d602fe87c47aebe656",
+    "posted_at": "2026-08-18T16:35:34.000Z"
+  }
+}

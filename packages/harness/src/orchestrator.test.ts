@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ModelRegistryEntry, RunRecord } from "@touchstone/sdk";
 import type { Grader, TaskInstance } from "@touchstone/basket";
 import { runOrchestrator, type OrchestratorTask } from "./orchestrator.js";
-import type { Adapter, AdapterResult } from "./adapters/types.js";
+import { AdapterHttpError, type Adapter, type AdapterResult } from "./adapters/types.js";
 
 vi.mock("./adapters/index.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./adapters/index.js")>();
@@ -145,6 +145,34 @@ describe("runOrchestrator", () => {
 
     const records = await readRecords();
     expect(records).toHaveLength(0);
+  });
+
+  it("records a retry-then-success in deviations, rather than looking like a clean first-attempt response", async () => {
+    let call = 0;
+    const adapter: Adapter = vi.fn(async () => {
+      call++;
+      if (call === 1) {
+        throw new AdapterHttpError("rate limited", 429, undefined);
+      }
+      return fakeAdapterResult("ok");
+    });
+    vi.mocked(createAdapterFor).mockReturnValue(adapter);
+    const grader: Grader = vi.fn(async () => ({ passed: true }));
+
+    const tasks: OrchestratorTask[] = [{ registryEntry, instance: makeInstance("T1"), grader }];
+    const outcomes = await runOrchestrator(tasks, {
+      runsDir,
+      backoff: { maxRetries: 3, baseDelayMs: 1, maxDelayMs: 2 },
+    });
+
+    expect(adapter).toHaveBeenCalledTimes(2);
+    expect(outcomes[0].passed).toBe(true);
+    expect(outcomes[0].records).toHaveLength(1);
+    expect(outcomes[0].records[0].deviations).toHaveLength(1);
+    expect(outcomes[0].records[0].deviations[0]).toMatch(/retry 1:.*rate limited/);
+
+    const [record] = await readRecords();
+    expect(record.deviations[0]).toMatch(/retry 1:.*rate limited/);
   });
 
   it("runs multiple tasks and produces one outcome per task", async () => {

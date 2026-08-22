@@ -1,0 +1,18 @@
+{
+  "run_id": "8e85e6c2-2321-4a6d-9ac0-8a03bb4ebd47",
+  "model_id": "llama-3.3-70b-cloudflare",
+  "task_class": "T3",
+  "instance_id": "T3-00",
+  "seed": 185114146,
+  "attempt": 1,
+  "usage": {
+    "input": 141,
+    "output": 26,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 219,
+  "gate_passed": true,
+  "raw_response_ref": "8e85e6c2-2321-4a6d-9ac0-8a03bb4ebd47.raw.json",
+  "deviations": []
+}

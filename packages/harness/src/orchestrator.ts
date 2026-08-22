@@ -67,10 +67,18 @@ async function runOneInstance(
     attempt++;
 
     let adapterResult;
+    const retryErrors: string[] = [];
     try {
       adapterResult = await withBackoff(
         () => adapter(task.registryEntry.model_string, task.instance.prompt, task.instance.params),
-        backoff,
+        {
+          ...backoff,
+          onRetry: (attemptNumber, err) => {
+            retryErrors.push(
+              `retry ${attemptNumber}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          },
+        },
       );
     } catch (err) {
       // Every retry within backoff was exhausted: an infrastructure failure, not a graded
@@ -84,6 +92,12 @@ async function runOneInstance(
         passed: false,
         infraFailure: err instanceof Error ? err.message : String(err),
       };
+    }
+
+    // A retried-then-successful response must not look identical to a clean first-attempt one
+    // in the record a print is computed from — see BackoffOptions.onRetry's doc comment.
+    if (retryErrors.length > 0) {
+      adapterResult = { ...adapterResult, deviations: [...adapterResult.deviations, ...retryErrors] };
     }
 
     const grade = await task.grader(task.instance, adapterResult.text);

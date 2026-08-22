@@ -17,6 +17,16 @@ export interface BackoffOptions {
   maxRetries: number;
   baseDelayMs: number;
   maxDelayMs: number;
+  /**
+   * Called once per retry, after a retryable error and before the backoff sleep. Most callers
+   * (the demo's live seller calls) don't need this — a retried-then-successful demo call is
+   * fine to look identical to a clean one. The measurement path is different: a print's run
+   * record must not present a retried response as if it were obtained cleanly on the first
+   * try, since that silently discards a real data-quality signal (build1-spec.md §3's
+   * `deviations` field exists precisely to carry this kind of forced deviation). Optional and
+   * a no-op by default, so this is additive, not a behaviour change for existing callers.
+   */
+  onRetry?: (attemptNumber: number, err: unknown) => void;
 }
 
 export const DEFAULT_BACKOFF: BackoffOptions = {
@@ -46,6 +56,7 @@ export async function withBackoff<T>(
       if (!isRetryableError(err) || attempt >= opts.maxRetries) {
         throw err;
       }
+      opts.onRetry?.(attempt + 1, err);
       const exponential = opts.baseDelayMs * 2 ** attempt;
       const jitter = Math.random() * opts.baseDelayMs;
       const delay = Math.min(exponential + jitter, opts.maxDelayMs);

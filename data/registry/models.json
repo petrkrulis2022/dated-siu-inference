@@ -56,7 +56,7 @@
     "model_string": "qwen/qwen-2.5-72b-instruct",
     "tier": "open-weight-hosted",
     "open_weights": true,
-    "host": "novita",
-    "notes": "Catalog breadth: distinct model family from the Llama provider-spread trio."
+    "host": "deepinfra",
+    "notes": "Catalog breadth: distinct model family from the Llama provider-spread trio. Host corrected from novita to deepinfra before the first real print run: OpenRouter serves this model from exactly two providers (deepinfra, novita), and novita rejected every real request with a structural 400 (\"does not support endpoint: completions\") — not congestion, confirmed by testing all four providers OpenRouter lists plus the two it actually serves from. deepinfra returns 200 on the identical request."
   }
 ]
