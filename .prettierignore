@@ -12,3 +12,8 @@ packages/contracts/broadcast/
 # Solidity is formatted by `forge fmt` (configured in packages/contracts/foundry.toml),
 # not by prettier, which has no Solidity parser without an extra plugin.
 *.sol
+
+# marketing/ is its own toolchain (Bun/Astro), with its own prettier + prettier-plugin-astro
+# installed in its own node_modules and its own `npm run format`/`verify` — not a pnpm workspace
+# member, so the root prettier can't resolve that plugin for its .astro files.
+marketing/

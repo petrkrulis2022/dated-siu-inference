@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
     "test": "vitest run",
     "dev": "node dev.mjs",
-    "index": "pnpm run build && node dist/server/indexer/rebuild-cli.js"
+    "index": "pnpm run build && node dist/server/indexer/rebuild-cli.js",
+    "build:static-api": "tsx scripts/build-static-api.ts"
   },
   "dependencies": {
     "@touchstone/print": "workspace:*",

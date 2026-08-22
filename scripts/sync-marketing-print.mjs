@@ -5,7 +5,7 @@
 // publishes automatically regenerates and redeploys the marketing site too.
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { URL, fileURLToPath } from "node:url";
 
 const REPO_ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 const LATEST_PRINT_FILE = resolve(REPO_ROOT, "data/prints/latest.json");
@@ -30,7 +30,9 @@ export const CURRENT_PRINT = {
 `;
 
   await writeFile(CONTENT_FILE, content, "utf-8");
-  console.log(`Synced marketing hero to print ${print.print_id} (${print.dated_siu}, ${print.status}).`);
+  console.log(
+    `Synced marketing hero to print ${print.print_id} (${print.dated_siu}, ${print.status}).`,
+  );
 }
 
 main().catch((err) => {

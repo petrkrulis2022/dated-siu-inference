@@ -133,8 +133,11 @@ async function getJson<T>(path: string): Promise<T> {
 export const api = {
   config: () => getJson<ConfigResponse>("/config"),
   prints: () => getJson<PrintRow[]>("/prints"),
+  // Not /prints/<id> — the static build writes the prints *list* at exactly that path
+  // (build-static-api.ts), and a plain static filesystem can't have a file and a directory
+  // with the same name.
   print: (printId: string) =>
-    getJson<PrintDetailResponse>(`/prints/${encodeURIComponent(printId)}`),
+    getJson<PrintDetailResponse>(`/prints-detail/${encodeURIComponent(printId)}`),
   models: () => getJson<ModelsResponse>("/models"),
   activity: () => getJson<ActivityResponse>("/activity"),
   quotedVsPaid: () => getJson<QuotedVsPaidResponse>("/quoted-vs-paid"),

@@ -5,6 +5,6 @@
     "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["server"],
+  "include": ["server", "scripts"],
   "exclude": ["**/*.test.ts", "**/*.spec.ts", "web"]
 }

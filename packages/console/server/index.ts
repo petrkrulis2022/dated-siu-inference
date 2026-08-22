@@ -41,6 +41,13 @@ async function main(): Promise<void> {
   app.use(express.json());
   app.use("/api/config", configRouter(config));
   app.use("/api/prints", printsRouter(config));
+  // Also mounted at /api/prints-detail: the static build (scripts/build-static-api.ts) writes
+  // the prints list at the literal path "prints" and per-print detail under "prints-detail/",
+  // since a plain static filesystem can't have a file and a directory share one name. The live
+  // Express server has no such constraint, but web/src/lib/api.ts fetches the same path either
+  // way, so both mounts stay in sync here rather than the frontend needing to know which
+  // backend it's talking to.
+  app.use("/api/prints-detail", printsRouter(config));
   app.use("/api/models", modelsRouter(config));
   app.use("/api/activity", activityRouter(config));
   app.use("/api/quoted-vs-paid", quotedVsPaidRouter(config));

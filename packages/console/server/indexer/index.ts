@@ -17,7 +17,18 @@ import { emptyCache } from "./cache.js";
  */
 function isRetryableRpcError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
-  return /rate limit|429|ECONNRESET|ETIMEDOUT|ENOTFOUND|ENETUNREACH|timeout/i.test(message);
+  // "block range extends beyond current head" (-32602) happens on sepolia.base.org's shared,
+  // load-balanced backend: eth_blockNumber and the eth_getLogs it feeds land on different nodes
+  // with slightly different sync state, so the toBlock this indexer just computed can briefly
+  // be ahead of what the node serving the log query has seen yet. Confirmed live: a manual
+  // `cast logs` against the exact failing range reproduced this, and the chain head had already
+  // caught up moments later — a real, recurring public-RPC quirk, not a malformed request.
+  // "no backend is currently healthy to serve traffic" (-32011) is the same shared endpoint's
+  // full-outage message — already seen and confirmed self-resolving on retry earlier in this
+  // project's history (verify-onchain.ts, the print measurement run), not unique to this path.
+  return /rate limit|429|ECONNRESET|ETIMEDOUT|ENOTFOUND|ENETUNREACH|timeout|block range extends beyond current head|no backend is currently healthy/i.test(
+    message,
+  );
 }
 
 async function withRpcBackoff<T>(fn: () => Promise<T>, maxRetries = 6): Promise<T> {
