@@ -194,7 +194,9 @@ function renderPrintArchive(
 ): string {
   const others = [...allPrints]
     .filter((p) => p.print_id !== currentPrintId)
-    .sort((a, b) => b.date.localeCompare(a.date));
+    // Secondary key on print_id: date alone isn't unique (a same-day re-run shares it with the
+    // print it supersedes).
+    .sort((a, b) => b.date.localeCompare(a.date) || b.print_id.localeCompare(a.print_id));
 
   if (others.length === 0) {
     return `<section class="block">
@@ -206,8 +208,8 @@ function renderPrintArchive(
   const items = others
     .map(
       (p) => `<li>
-        <a href="${basePath}prints/${esc(p.date)}.html">${esc(formatDate(p.date))}</a>
-        <span class="siu">${esc(usd(p.dated_siu))} · ${esc(p.status)}</span>
+        <a href="${basePath}prints/${esc(p.print_id)}.html">${esc(formatDate(p.date))}</a>
+        <span class="siu">${esc(usd(p.dated_siu))} · ${esc(p.status)}${p.superseded_by ? " · superseded" : ""}</span>
       </li>`,
     )
     .join("\n");
@@ -216,6 +218,19 @@ function renderPrintArchive(
     <h2>All prints</h2>
     <ul class="link-list">${items}</ul>
   </section>`;
+}
+
+/**
+ * A reader who lands directly on a superseded print's own page (a bookmark, a shared link, a
+ * search result) must see this before anything else — cross-references from the Prints list or
+ * Series chart aren't enough on their own. The original is never edited or deleted; this is
+ * disclosure on the print's own face, per the revision policy.
+ */
+function renderSupersessionNotice(print: Print, basePath: string): string {
+  if (!print.superseded_by) return "";
+  return `<div class="change-note">
+    <strong>Superseded</strong> by <a href="${basePath}prints/${esc(print.superseded_by.print_id)}.html">${esc(print.superseded_by.print_id)}</a> — ${esc(print.superseded_by.reason)}
+  </div>`;
 }
 
 export function renderPrintPage({
@@ -235,6 +250,7 @@ export function renderPrintPage({
     <span>${esc(formatDate(print.date))}</span>
     <span class="badge status-${esc(print.status)}">${esc(print.status)}</span>
   </div>
+  ${renderSupersessionNotice(print, basePath)}
   ${renderChangeNote(print, previous)}
 </div>
 

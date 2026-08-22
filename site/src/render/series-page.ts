@@ -37,11 +37,22 @@ function renderMultiPointChart(prints: PrintIndexEntry[]): string {
 
   const line = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
 
+  // Superseded is rendered as a distinct marker style, layered over the status-based one — the
+  // chart shows every print that was ever published, including a same-day redo's predecessor.
+  // Dropping it here would make the chart disagree with the Prints list, which does show it.
   const markers = points
-    .map(
-      (p) =>
-        `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" class="series-point series-point-${esc(p.status)}"><title>${esc(formatDate(p.date))} — ${esc(usd(p.dated_siu))} (${esc(p.status)})</title></circle>`,
-    )
+    .map((p) => {
+      const markerClass = p.superseded_by
+        ? "series-point-superseded"
+        : `series-point-${esc(p.status)}`;
+      const title = p.superseded_by
+        ? `${esc(formatDate(p.date))} — ${esc(usd(p.dated_siu))} (superseded by ${esc(p.superseded_by.print_id)}: ${esc(p.superseded_by.reason)})`
+        : `${esc(formatDate(p.date))} — ${esc(usd(p.dated_siu))} (${esc(p.status)})`;
+      const annotation = p.superseded_by
+        ? `<text x="${p.x.toFixed(1)}" y="${(p.y + 16).toFixed(1)}" text-anchor="middle" class="series-annotation">superseded</text>`
+        : "";
+      return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" class="series-point ${markerClass}"><title>${title}</title></circle>${annotation}`;
+    })
     .join("\n");
 
   const firstLabel = `<text x="${PAD_X}" y="${CHART_HEIGHT - 8}" class="series-axis-label">${esc(formatDate(points[0]!.date))}</text>`;
@@ -75,7 +86,11 @@ export function renderSeriesPage({ allPrints, basePath }: SeriesPageOptions): st
     </div>`;
   }
 
-  const latest = allPrints[allPrints.length - 1]!;
+  // "Latest" means the current print of record, not merely the last-loaded entry: a superseded
+  // print can share the newest date with the print that replaced it, so it must be explicitly
+  // excluded here rather than relied on to sort last by accident.
+  const standing = allPrints.filter((p) => !p.superseded_by);
+  const latest = (standing.length > 0 ? standing : allPrints).at(-1)!;
   const chart =
     allPrints.length === 1 ? renderSinglePointChart(latest) : renderMultiPointChart(allPrints);
   const seriesNote =
@@ -99,6 +114,7 @@ export function renderSeriesPage({ allPrints, basePath }: SeriesPageOptions): st
   <p class="note">
     <span class="legend-marker series-point series-point-final"></span> final
     <span class="legend-marker series-point series-point-provisional"></span> provisional
+    <span class="legend-marker series-point series-point-superseded"></span> superseded
   </p>
   <p class="note"><a href="${basePath}prints/index.html">All prints &rarr;</a></p>
 </section>`;

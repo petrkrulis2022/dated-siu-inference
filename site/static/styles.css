@@ -147,6 +147,21 @@ nav.site-nav a:first-child {
   background: transparent;
 }
 
+.badge.status-superseded {
+  background: transparent;
+  border-style: dashed;
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+
+.badge.status-superseded:hover {
+  color: var(--ink);
+}
+
+tr.superseded td {
+  color: var(--ink-muted);
+}
+
 .change-note {
   margin-top: 0.9rem;
   font-size: 0.9rem;
@@ -335,6 +350,22 @@ footer.site-footer p {
   fill: var(--ink);
 }
 
+/* A superseded print stays on the chart — dropping it would make the chart disagree with the
+   Prints list — but rendered distinctly: hollow and muted, never the same weight as a real,
+   standing point. */
+.series-point-superseded {
+  stroke: var(--ink-muted);
+  stroke-dasharray: 2 1;
+  fill: var(--bg);
+}
+
+.series-annotation {
+  font-family: var(--mono);
+  font-size: 10px;
+  fill: var(--ink-muted);
+  font-style: italic;
+}
+
 .series-axis-label {
   font-family: var(--mono);
   font-size: 10px;
@@ -357,6 +388,11 @@ footer.site-footer p {
 
 .legend-marker.series-point-final {
   background: var(--ink);
+}
+
+.legend-marker.series-point-superseded {
+  border-color: var(--ink-muted);
+  border-style: dashed;
 }
 
 .legend-marker.model-line-legend {

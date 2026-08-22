@@ -53,6 +53,45 @@ describe("renderSeriesPage", () => {
     expect(html).not.toContain("The series begins here");
   });
 
+  it("keeps a superseded point on the chart, rendered distinctly, rather than dropping it", () => {
+    const html = renderSeriesPage({
+      allPrints: [
+        entry({ print_id: "2026-08-18", date: "2026-08-18", dated_siu: "0.0015" }),
+        entry({
+          print_id: "2026-08-22",
+          date: "2026-08-22",
+          dated_siu: "0.0007",
+          superseded_by: {
+            print_id: "2026-08-22b",
+            reason: "Insufficient qualifying set: only 2 of 6 models qualified.",
+          },
+        }),
+        entry({ print_id: "2026-08-22b", date: "2026-08-22", dated_siu: "0.0014" }),
+      ],
+      basePath: "",
+    });
+    expect(html).toContain("series-point-superseded");
+    expect(html).toContain(">superseded<"); // the visible annotation, not just a hover title
+    expect(html).toContain("superseded by 2026-08-22b");
+  });
+
+  it("picks the standing (non-superseded) print as latest, even when it shares a date with the superseded one", () => {
+    const html = renderSeriesPage({
+      allPrints: [
+        entry({
+          print_id: "2026-08-22",
+          date: "2026-08-22",
+          dated_siu: "0.0007",
+          superseded_by: { print_id: "2026-08-22b", reason: "thin qualifying set" },
+        }),
+        entry({ print_id: "2026-08-22b", date: "2026-08-22", dated_siu: "0.0014" }),
+      ],
+      basePath: "",
+    });
+    expect(html).toContain("Dated SIU — 2026-08-22b");
+    expect(html).toContain("$0.0014"); // the standing print's figure, not the superseded one's
+  });
+
   it("links to the prints list with the given basePath", () => {
     const html = renderSeriesPage({ allPrints: [entry({})], basePath: "../" });
     expect(html).toContain('href="../prints/index.html"');

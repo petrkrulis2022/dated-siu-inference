@@ -146,6 +146,22 @@ describe("renderPrintPage", () => {
     expect(html).not.toMatch(/0x0{10,}/); // never a fabricated-looking all-zero hash
   });
 
+  it("links archive entries by print_id, not date — two prints sharing a date never collide", () => {
+    // Exactly the real incident: a same-day re-run under a different print_id.
+    const html = renderPrintPage({
+      print: basePrint({ print_id: "2026-08-22b", date: "2026-08-22" }),
+      allPrints: [
+        { print_id: "2026-08-22", date: "2026-08-22", status: "provisional", dated_siu: "0.0007" },
+        { print_id: "2026-08-22b", date: "2026-08-22", status: "provisional", dated_siu: "0.0014" },
+      ],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).toContain('href="prints/2026-08-22.html"');
+    expect(html).not.toContain('href="prints/2026-08-22b.html"'); // current print excluded
+  });
+
   it("links to the raw runs for this print's id", () => {
     const html = renderPrintPage({
       print: basePrint({ print_id: "2026-08-15" }),
@@ -207,6 +223,36 @@ describe("renderPrintPage", () => {
       chain: CHAIN,
     });
     expect(html).toContain("…"); // truncation marker present for the long hex fields
+  });
+
+  it("shows a supersession notice on the superseded print's own page, with reason and successor link", () => {
+    const html = renderPrintPage({
+      print: basePrint({
+        print_id: "2026-08-22",
+        superseded_by: {
+          print_id: "2026-08-22b",
+          reason: "Insufficient qualifying set: only 2 of 6 models qualified.",
+        },
+      }),
+      allPrints: [],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).toContain("Superseded");
+    expect(html).toContain("Insufficient qualifying set");
+    expect(html).toContain('href="prints/2026-08-22b.html"');
+  });
+
+  it("shows no supersession notice for a standing (non-superseded) print", () => {
+    const html = renderPrintPage({
+      print: basePrint(),
+      allPrints: [],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).not.toContain("Superseded");
   });
 
   it("links an anchored tx to the chain's block explorer, not a plain unlinked string", () => {

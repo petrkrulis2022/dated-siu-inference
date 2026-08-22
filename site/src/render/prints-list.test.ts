@@ -69,6 +69,43 @@ describe("renderPrintsList", () => {
     expect(html).toContain(`${CHAIN.explorerBaseUrl}/tx/0x${"11".repeat(32)}`);
   });
 
+  it("links each row by print_id, not date — two prints sharing a date never collide", () => {
+    // Exactly the real incident: a same-day re-run under a different print_id. Linking by date
+    // alone would send both rows to the same detail page.
+    const html = renderPrintsList({
+      allPrints: [
+        print({ print_id: "2026-08-22", date: "2026-08-22", dated_siu: "0.0007" }),
+        print({ print_id: "2026-08-22b", date: "2026-08-22", dated_siu: "0.0014" }),
+      ],
+      basePath: "../",
+      chain: CHAIN,
+    });
+    expect(html).toContain('href="../prints/2026-08-22.html"');
+    expect(html).toContain('href="../prints/2026-08-22b.html"');
+  });
+
+  it("marks a superseded print distinctly, with the reason and a link to its successor", () => {
+    const html = renderPrintsList({
+      allPrints: [
+        print({
+          print_id: "2026-08-22",
+          date: "2026-08-22",
+          superseded_by: {
+            print_id: "2026-08-22b",
+            reason: "Insufficient qualifying set: only 2 of 6 models qualified.",
+          },
+        }),
+        print({ print_id: "2026-08-22b", date: "2026-08-22" }),
+      ],
+      basePath: "../",
+      chain: CHAIN,
+    });
+    expect(html).toContain('class="superseded"');
+    expect(html).toContain(">superseded<");
+    expect(html).toContain('href="../prints/2026-08-22b.html"');
+    expect(html).toContain("Insufficient qualifying set");
+  });
+
   it("shows an unanchored print's status rather than fabricating a tx link", () => {
     const html = renderPrintsList({
       allPrints: [print({ anchor: { chain: "base-sepolia", status: "stub" } })],

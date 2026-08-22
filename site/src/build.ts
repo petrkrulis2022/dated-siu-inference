@@ -58,6 +58,7 @@ async function main(): Promise<void> {
     date: p.date,
     status: p.status,
     dated_siu: p.dated_siu,
+    superseded_by: p.superseded_by,
   }));
 
   // SERIES — the public landing page.
@@ -92,7 +93,7 @@ async function main(): Promise<void> {
       }),
       basePath: "../",
     });
-    await writeHtml(join(OUT_DIR, "prints", `${print.date}.html`), datedHtml);
+    await writeHtml(join(OUT_DIR, "prints", `${print.print_id}.html`), datedHtml);
   }
 
   // MODELS — per-model rate/spread history plus gate pass/fail history.

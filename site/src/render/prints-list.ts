@@ -10,6 +10,11 @@ export interface PrintsListOptions {
   chain: ChainInfo;
 }
 
+function renderStatusCell(print: Print, basePath: string): string {
+  if (!print.superseded_by) return esc(print.status);
+  return `${esc(print.status)} <a class="badge status-superseded" href="${basePath}prints/${esc(print.superseded_by.print_id)}.html" title="${esc(print.superseded_by.reason)}">superseded</a>`;
+}
+
 function renderAnchorCell(print: Print, chain: ChainInfo): string {
   if (!print.anchor) return `<span class="muted">not yet submitted</span>`;
   if (print.anchor.status === "anchored" && print.anchor.tx_hash) {
@@ -27,11 +32,14 @@ export function renderPrintsList({ allPrints, basePath, chain }: PrintsListOptio
   }
 
   const rows = [...allPrints]
-    .sort((a, b) => b.date.localeCompare(a.date))
+    // Secondary key on print_id: date alone isn't unique (a same-day re-run shares it with the
+    // print it supersedes), so relying on date-only comparison leaves same-date entries in
+    // whatever order they happened to load in.
+    .sort((a, b) => b.date.localeCompare(a.date) || b.print_id.localeCompare(a.print_id))
     .map(
-      (p) => `<tr>
-        <td><a href="${basePath}prints/${esc(p.date)}.html">${esc(formatDate(p.date))}</a></td>
-        <td>${esc(p.status)}</td>
+      (p) => `<tr class="${p.superseded_by ? "superseded" : ""}">
+        <td><a href="${basePath}prints/${esc(p.print_id)}.html">${esc(formatDate(p.date))}</a></td>
+        <td>${renderStatusCell(p, basePath)}</td>
         <td>${esc(usd(p.dated_siu))}</td>
         <td>${esc(p.weights.source)}</td>
         <td>${esc(p.methodology_version)}</td>
