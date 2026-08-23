@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { DocumentHeader } from "../components/document-header";
 
 /**
@@ -42,9 +43,34 @@ export function Analogy() {
           <p id="analogy-title" className="font-heading text-2xl leading-snug">Inference is the commodity, SIU is the grade, and the dollar settles.</p>
           <p className="max-w-xl leading-7 text-ploy-text-secondary">A touchstone is the dark stone used to test the purity of metal by the mark it leaves; an assay is the formal test.</p>
         </div>
+
+        <div className="mt-10 border-t border-ploy-border-primary pt-8" aria-label="Touchstone Assay sits outside the AI-buying stack, connected to it only by measurement">
+          <div className="flex flex-wrap items-center justify-center gap-2 font-mono text-[0.56rem] uppercase tracking-[0.16em] text-ploy-text-secondary">
+            <StackNode>Routing</StackNode>
+            <StackArrow />
+            <StackNode>Metering</StackNode>
+            <StackArrow />
+            <StackNode>Billing</StackNode>
+            <StackArrow />
+            <StackNode>Settlement</StackNode>
+          </div>
+          <div className="ml-auto flex w-fit flex-col items-center gap-1 pr-2 md:pr-16">
+            <span className="h-5 border-l border-dashed border-ploy-border-primary" aria-hidden="true" />
+            <span className="border border-dashed border-ploy-accent-primary px-2 py-1 font-mono text-[0.56rem] uppercase tracking-[0.16em] text-ploy-accent-primary">Touchstone Assay</span>
+          </div>
+          <p className="mt-2 text-center font-mono text-[0.58rem] uppercase tracking-[0.16em] text-ploy-text-secondary">Measurement sits outside the flow.</p>
+        </div>
       </div>
     </section>
   );
+}
+
+function StackNode({ children }: { children: ReactNode }) {
+  return <span className="border border-ploy-border-primary px-2 py-1">{children}</span>;
+}
+
+function StackArrow() {
+  return <span aria-hidden="true">&rarr;</span>;
 }
 
 function DiagramNode({ number, title, subtitle, copy, featured = false }: { number: string; title: string; subtitle: string; copy: string; featured?: boolean }) {

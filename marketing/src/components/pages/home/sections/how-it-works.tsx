@@ -1,4 +1,11 @@
+import { FileCheck2, ShoppingCart, Slash } from "lucide-react";
 import { DocumentHeader } from "../components/document-header";
+
+const independence = [
+  [ShoppingCart, "We buy the inference we measure, at market prices, like any customer."],
+  [Slash, "We take no fee on the work we price and route no requests."],
+  [FileCheck2, "Every print is signed and anchored; the method is published and reproducible."],
+] as const;
 
 const mechanisms = [
   ["The basket", "A fixed, versioned set of inference tasks with objective quality gates. Output that fails the gate prices at zero."],
@@ -76,6 +83,13 @@ export function HowItWorks() {
           <p className="mt-5 font-mono text-4xl tabular-nums md:col-span-7 md:mt-0 md:text-right">ISSUED</p>
         </div>
       </figure>
+
+      <div className="mt-16 border border-ploy-border-primary p-6 md:p-8" aria-labelledby="independence-title">
+        <h3 id="independence-title" className="font-heading text-2xl font-normal">Why this number is independent.</h3>
+        <ul className="mt-8 grid gap-6 md:grid-cols-3">
+          {independence.map(([Icon, copy]) => <li key={copy} className="flex gap-3"><Icon className="mt-0.5 h-4 w-4 shrink-0 text-ploy-accent-primary" aria-hidden="true" /><p className="text-sm leading-6 text-ploy-text-secondary">{copy}</p></li>)}
+        </ul>
+      </div>
 
       <div className="mt-16 grid gap-8 md:grid-cols-12">
         <div className="md:col-span-4"><p id="how-title" className="font-heading text-2xl leading-snug">The quote travels with the payment request.</p><p className="mt-5 text-sm leading-6 text-ploy-text-secondary">The example is illustrative. Fields and version identifiers explain the transport pattern, not a production schema commitment.</p></div>
