@@ -14,6 +14,12 @@ export default tseslint.config(
       "packages/contracts/lib/**",
       "packages/contracts/out/**",
       "packages/contracts/cache/**",
+      // marketing/ is a separately toolchained Astro project (npm, not a pnpm workspace member)
+      // with its own eslint.config.js and its own `npm run lint` gate. ESLint's flat config
+      // discovers nested config files, so without this the root `eslint .` finds and tries to
+      // load marketing/eslint.config.js's plugins (e.g. eslint-plugin-astro), which are only
+      // installed in marketing/node_modules, never here.
+      "marketing/**",
     ],
   },
   js.configs.recommended,
