@@ -83,7 +83,12 @@ jobs:
           PRINT_ID: ${{ steps.resolve.outputs.print_id }}
         run: |
           set -o pipefail
-          node packages/print/dist/cli/publish-unattended.js "$PRINT_ID" 2>&1 | tee publish.log
+          # cwd must be packages/print, not the repo root: @touchstone/sdk's loadDeployment (and
+          # this package's own repoRoot() in cli/load-inputs.ts) resolve data/ as ../../data
+          # relative to process.cwd(), matching pnpm's "scripts run with cwd = the package
+          # directory" convention every other CLI here relies on. `pnpm --filter ... exec` sets
+          # that cwd for the spawned node process without re-running the build step.
+          pnpm --filter @touchstone/print exec node dist/cli/publish-unattended.js "$PRINT_ID" 2>&1 | tee publish.log
           if grep -q "Already published" publish.log; then
             echo "status=noop" >> "$GITHUB_OUTPUT"
           else
