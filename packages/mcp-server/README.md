@@ -12,16 +12,21 @@ settled in USDC.
 | `verify_receipt(chain, tx_hash)`              | signed attestation: quoted vs paid vs matched | $0.01  |
 
 Transport is Streamable HTTP (`POST /mcp`), not stdio — x402 is an HTTP-status-code protocol, so
-a paywalled tool needs an HTTP layer to hang a `402` off. `verify_receipt`'s on-chain read is
-currently stubbed (`src/settlement/reader.ts`) — `TouchstoneEscrow` doesn't exist until the contracts
-milestone, and this stub says so rather than fabricating a settlement.
+a paywalled tool needs an HTTP layer to hang a `402` off. `verify_receipt`'s on-chain read is live
+(`src/settlement/on-chain.ts`), reading the real deployed `TouchstoneEscrow`
+(`data/deployments/base-sepolia.json`) — `StubSettlementReader` (`src/settlement/reader.ts`)
+remains for tests and for running the server with no chain configured, the same pattern
+`@touchstone/print`'s `StubAttestationClient` uses.
 
 ## Running it
 
 ```bash
-export TOUCHSTONE_PUBLISHER_KEY=0x...   # signs receipts — same key print publication uses
-export TOUCHSTONE_SELLER_ADDRESS=0x...  # receives USDC payments through Gateway
-pnpm run start                      # builds, then listens on $PORT (default 3000)
+export TOUCHSTONE_ATTESTATION_KEY=0x...  # signs receipts — a dedicated key, never
+                                          # TOUCHSTONE_PUBLISHER_KEY, which signs prints and
+                                          # anchors on-chain and has no business on this
+                                          # public-facing service
+export TOUCHSTONE_SELLER_ADDRESS=0x...   # receives USDC payments through Gateway
+pnpm run start                       # builds, then listens on $PORT (default 3000)
 ```
 
 Both env vars are required and there is no default — the server refuses to start rather than

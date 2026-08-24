@@ -59,7 +59,9 @@ async function main(): Promise<void> {
   const rpcEnvVar = `${chainName.toUpperCase().replaceAll("-", "_")}_RPC_URL`;
   const rpcUrl = requireEnv(rpcEnvVar);
   const deployerKey = requireEnv("DEPLOYER_PRIVATE_KEY");
-  const publisherKey = requireEnv("TOUCHSTONE_PUBLISHER_KEY");
+  // Dedicated to verify_receipt's signature — never TOUCHSTONE_PUBLISHER_KEY, which signs prints
+  // and anchors on-chain. This demo models the same key separation the deployed service uses.
+  const attestationKey = requireEnv("TOUCHSTONE_ATTESTATION_KEY");
   const openrouterKey = requireEnv("OPENROUTER_API_KEY");
 
   const deployment = loadDeployment(chainName);
@@ -181,7 +183,7 @@ async function main(): Promise<void> {
 
   const settlementReader = new LocalSettlementReader({ chainName, rpcUrl, escrowAddress });
   const mcpApp = buildApp({
-    publisherPrivateKeyHex: publisherKey,
+    attestationPrivateKeyHex: attestationKey,
     settlementReader,
     // No Circle Gateway credentials exist in this environment — see docs/demo.md. In production
     // verify_receipt is a paid x402 call through Circle's Gateway, same as get_quote/convert.

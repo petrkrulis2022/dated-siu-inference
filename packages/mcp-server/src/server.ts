@@ -35,7 +35,7 @@ async function loadLatestPrintOrThrow(printsDirPath: string): Promise<Print> {
 
 export interface McpServerOptions {
   settlementReader: SettlementReader;
-  publisherPrivateKeyHex: string;
+  attestationPrivateKeyHex: string;
   printsDirPath?: string;
 }
 
@@ -119,7 +119,7 @@ export function createTouchstoneMcpServer(options: McpServerOptions): McpServer 
         const receipt = await verifyReceiptTool(
           args as VerifyReceiptInput,
           options.settlementReader,
-          options.publisherPrivateKeyHex,
+          options.attestationPrivateKeyHex,
         );
         return toolResult(receipt);
       } catch (err) {
@@ -132,7 +132,7 @@ export function createTouchstoneMcpServer(options: McpServerOptions): McpServer 
 }
 
 export interface BuildAppOptions {
-  publisherPrivateKeyHex: string;
+  attestationPrivateKeyHex: string;
   settlementReader?: SettlementReader;
   paywall?: PaywallOptions;
   printsDirPath?: string;
@@ -165,7 +165,7 @@ export function buildApp(options: BuildAppOptions): Express {
   const paywall = options.skipPaywall ? NO_PAYWALL : createToolPaywall(options.paywall);
   const mcpServer = createTouchstoneMcpServer({
     settlementReader: options.settlementReader ?? new StubSettlementReader(),
-    publisherPrivateKeyHex: options.publisherPrivateKeyHex,
+    attestationPrivateKeyHex: options.attestationPrivateKeyHex,
     printsDirPath: options.printsDirPath,
   });
 

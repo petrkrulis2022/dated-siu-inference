@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { loadPublisherKeyFromEnv, loadSellerAddressFromEnv } from "./env.js";
+import { loadAttestationKeyFromEnv, loadSellerAddressFromEnv } from "./env.js";
 
-describe("loadPublisherKeyFromEnv", () => {
+describe("loadAttestationKeyFromEnv", () => {
   it("returns the key when set", () => {
-    expect(loadPublisherKeyFromEnv({ TOUCHSTONE_PUBLISHER_KEY: "0xabc" })).toBe("0xabc");
+    expect(loadAttestationKeyFromEnv({ TOUCHSTONE_ATTESTATION_KEY: "0xabc" })).toBe("0xabc");
   });
 
   it("throws rather than defaulting when unset", () => {
-    expect(() => loadPublisherKeyFromEnv({})).toThrow(/TOUCHSTONE_PUBLISHER_KEY/);
+    expect(() => loadAttestationKeyFromEnv({})).toThrow(/TOUCHSTONE_ATTESTATION_KEY/);
   });
 });
 

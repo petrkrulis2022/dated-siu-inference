@@ -3,21 +3,24 @@ import { OnChainSettlementReader } from "./settlement/on-chain.js";
 import type { SettlementReader } from "./settlement/reader.js";
 
 /**
- * A minimal, local copy of packages/print/src/sign/sign.ts's env-key convention — reading
- * `TOUCHSTONE_PUBLISHER_KEY` directly rather than importing @touchstone/print for one helper function,
- * which would pull @touchstone/basket and @touchstone/harness in as transitive workspace deps for no
- * other reason.
+ * Deliberately NOT the same key `packages/print` signs prints and anchors with. This is a
+ * public-facing service — putting a key that can anchor on-chain records on it would mean a
+ * compromised Worker could forge anchored history, not just forge unanchored receipts. A
+ * dedicated attestation key has no relationship to TOUCHSTONE_PUBLISHER_KEY (different value,
+ * generated independently) and can only ever sign the small ReceiptBody JSON verify_receipt
+ * builds — it never anchors anything, never holds funds, never signs a transaction.
  */
-export const PUBLISHER_KEY_ENV = "TOUCHSTONE_PUBLISHER_KEY";
+export const ATTESTATION_KEY_ENV = "TOUCHSTONE_ATTESTATION_KEY";
 export const SELLER_ADDRESS_ENV = "TOUCHSTONE_SELLER_ADDRESS";
 export const CHAIN_NAME_ENV = "TOUCHSTONE_CHAIN_NAME";
 
-export function loadPublisherKeyFromEnv(env: NodeJS.ProcessEnv = process.env): string {
-  const key = env[PUBLISHER_KEY_ENV];
+export function loadAttestationKeyFromEnv(env: NodeJS.ProcessEnv = process.env): string {
+  const key = env[ATTESTATION_KEY_ENV];
   if (!key) {
     throw new Error(
-      `${PUBLISHER_KEY_ENV} is not set. verify_receipt signs with the same publisher key ` +
-        `prints are signed with; it is never committed and never defaulted.`,
+      `${ATTESTATION_KEY_ENV} is not set. verify_receipt signs with a dedicated attestation ` +
+        `key — separate from TOUCHSTONE_PUBLISHER_KEY, which this service never touches — and ` +
+        `there is no default to fall back to.`,
     );
   }
   return key;

@@ -26,8 +26,8 @@ export {
   type VerifyReceiptInput,
 } from "./tools/verify-receipt.js";
 export {
-  loadPublisherKeyFromEnv,
+  loadAttestationKeyFromEnv,
   loadSellerAddressFromEnv,
-  PUBLISHER_KEY_ENV,
+  ATTESTATION_KEY_ENV,
   SELLER_ADDRESS_ENV,
 } from "./env.js";

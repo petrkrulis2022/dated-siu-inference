@@ -36,7 +36,8 @@ about listing the real, already-implemented `@touchstone/mcp-server` itself._
 ## Steps to list as a seller
 
 1. **Deploy `@touchstone/mcp-server` publicly.** `pnpm --filter @touchstone/mcp-server run start` (reads
-   `TOUCHSTONE_PUBLISHER_KEY`, `TOUCHSTONE_SELLER_ADDRESS`, and — once P14 step 2's wiring is in place —
+   `TOUCHSTONE_ATTESTATION_KEY` — dedicated to this service, never `TOUCHSTONE_PUBLISHER_KEY`, which
+   signs prints and anchors on-chain — `TOUCHSTONE_SELLER_ADDRESS`, and — once P14 step 2's wiring is in place —
    resolves `TouchstoneEscrow`'s address from `data/deployments/<chain>.json` via
    `loadSettlementReaderFromEnv`) behind a public host with TLS. `server.json` under
    `packages/mcp-server/src/manifest/` already describes the four tools for discovery — confirm
@@ -50,7 +51,7 @@ about listing the real, already-implemented `@touchstone/mcp-server` itself._
    each paid tool unpaid (expect `402`), then with a valid signed payment (expect `200` and a
    `PAYMENT-RESPONSE` header). `packages/mcp-server/src/integration/testnet.live.test.ts` already
    contains this exact check, gated on real `CIRCLE_TESTNET_PRIVATE_KEY` /
-   `TOUCHSTONE_SELLER_ADDRESS` / `TOUCHSTONE_PUBLISHER_KEY` credentials — run it for real once they exist,
+   `TOUCHSTONE_SELLER_ADDRESS` / `TOUCHSTONE_ATTESTATION_KEY` credentials — run it for real once they exist,
    rather than trusting the local `skipPaywall` path as a stand-in for this step.
 4. **List on the MCP registries build1-spec.md §9 names** — the official MCP registry, Smithery,
    Glama, PulseMCP, mcp.so — each with its own submission flow (typically: a public manifest URL

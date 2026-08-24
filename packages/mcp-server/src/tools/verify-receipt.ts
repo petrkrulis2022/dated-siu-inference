@@ -33,7 +33,7 @@ export interface VerifyReceiptInput {
 export async function verifyReceiptTool(
   input: VerifyReceiptInput,
   reader: SettlementReader,
-  publisherPrivateKeyHex: string,
+  attestationPrivateKeyHex: string,
 ): Promise<Receipt> {
   if (
     !SUPPORTED_VERIFY_RECEIPT_CHAINS.includes(
@@ -73,5 +73,5 @@ export async function verifyReceiptTool(
     print_ref: settlement.printRef,
   };
 
-  return signReceipt(body, publisherPrivateKeyHex);
+  return signReceipt(body, attestationPrivateKeyHex);
 }

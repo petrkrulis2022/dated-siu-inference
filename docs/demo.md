@@ -76,7 +76,7 @@ the alternative was fabricating numbers CLAUDE.md's first hard invariant forbids
    ceiling), and calls `TouchstoneEscrow.settle` with its own key.
 6. **Verify.** The buyer calls the real `verify_receipt` tool, as a genuine MCP tool call over
    `StreamableHTTPClientTransport` against the local server — not an in-process function call,
-   since that would require the buyer to hold `TOUCHSTONE_PUBLISHER_KEY`, which would break the entire
+   since that would require the buyer to hold `TOUCHSTONE_ATTESTATION_KEY`, which would break the entire
    point of the tool (Touchstone Assay attests; the buyer doesn't self-attest). The reader recomputes the
    quote's hash and checks it against the on-chain `Settled` event before trusting anything else,
    exactly as it does for a real caller.
@@ -162,5 +162,7 @@ pnpm --filter @touchstone/agents run demo
 ```
 
 Needs `BASE_SEPOLIA_RPC_URL`, `DEPLOYER_PRIVATE_KEY` (a funded Base Sepolia wallet — this account
-also funds the two fresh seller wallets each run), `TOUCHSTONE_PUBLISHER_KEY`, and `OPENROUTER_API_KEY`
-in `.env`. Nothing is written back to `.env`; the two seller keys are generated fresh per run.
+also funds the two fresh seller wallets each run), `TOUCHSTONE_ATTESTATION_KEY` (dedicated to
+`verify_receipt` — never `TOUCHSTONE_PUBLISHER_KEY`, which signs prints and anchors on-chain), and
+`OPENROUTER_API_KEY` in `.env`. Nothing is written back to `.env`; the two seller keys are
+generated fresh per run.

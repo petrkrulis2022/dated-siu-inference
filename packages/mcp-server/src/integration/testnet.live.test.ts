@@ -8,7 +8,9 @@ import { buildApp } from "../server.js";
  * funded testnet wallet: `CIRCLE_TESTNET_PRIVATE_KEY` (a Base Sepolia private key holding
  * Gateway-deposited testnet USDC — see docs/build1-spec.md §9 and
  * https://developers.circle.com/gateway/nanopayments/quickstarts/buyer) and
- * `TOUCHSTONE_SELLER_ADDRESS`/`TOUCHSTONE_PUBLISHER_KEY` for the server side.
+ * `TOUCHSTONE_SELLER_ADDRESS`/`TOUCHSTONE_ATTESTATION_KEY` for the server side. The attestation
+ * key is dedicated to this service — never `TOUCHSTONE_PUBLISHER_KEY`, which signs prints and
+ * anchors on-chain and has no business running on a public-facing server.
  *
  * This sandbox's `.env` holds neither — the same already-flagged gap as the harness never
  * having run against a real paid provider API (P7/P9). This suite is real, runnable code that
@@ -17,7 +19,7 @@ import { buildApp } from "../server.js";
 const canRun = Boolean(
   process.env.CIRCLE_TESTNET_PRIVATE_KEY &&
   process.env.TOUCHSTONE_SELLER_ADDRESS &&
-  process.env.TOUCHSTONE_PUBLISHER_KEY,
+  process.env.TOUCHSTONE_ATTESTATION_KEY,
 );
 
 describe.skipIf(!canRun)("mcp-server paywall against Circle's Base Sepolia testnet", () => {
@@ -26,7 +28,7 @@ describe.skipIf(!canRun)("mcp-server paywall against Circle's Base Sepolia testn
 
   beforeAll(async () => {
     const app = buildApp({
-      publisherPrivateKeyHex: process.env.TOUCHSTONE_PUBLISHER_KEY!,
+      attestationPrivateKeyHex: process.env.TOUCHSTONE_ATTESTATION_KEY!,
       paywall: {
         sellerAddress: process.env.TOUCHSTONE_SELLER_ADDRESS!,
         networks: ["eip155:84532"], // Base Sepolia
