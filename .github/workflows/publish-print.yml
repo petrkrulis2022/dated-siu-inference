@@ -1,16 +1,17 @@
 name: Publish print
 
-# Separate from ci.yml/pages.yml deliberately: this workflow spends real money and writes a
-# permanent signed, anchored record. It should never be gated on, or gate, the JS/Solidity test
-# suite or the site deploy — a broken lint rule in an unrelated PR must never block today's print,
-# and a bad print must never be masked as a green CI run.
+# Separate from ci.yml deliberately: this workflow spends real money and writes a permanent
+# signed, anchored record. It should never be gated on, or gate, the JS/Solidity test suite — a
+# broken lint rule in an unrelated PR must never block today's print, and a bad print must never
+# be masked as a green CI run. (Site publication no longer has its own workflow here — it moved
+# to Cloudflare Pages' own git integration, which redeploys on push independently of GitHub
+# Actions; the old pages.yml / GitHub Pages configuration was retired once that was confirmed.)
 #
-# The schedule trigger is commented out on purpose until a clean workflow_dispatch run has been
-# reviewed end to end (harness, compute, sign, anchor, print:verify, commit, push) — see the plan
-# this workflow was built from. Uncomment the schedule block once that dry run is confirmed good.
+# Schedule enabled 2026-08-24, after a clean workflow_dispatch dry run (print 2026-08-24: Dated
+# SIU 0.0014, $0.0949 cost, anchored, independently verified, committed by github-actions[bot]).
 on:
-  # schedule:
-  #   - cron: "17 0 * * *" # 00:17 UTC daily — print date and run date always agree.
+  schedule:
+    - cron: "17 0 * * *" # 00:17 UTC daily — print date and run date always agree.
   workflow_dispatch:
     inputs:
       print_id:
@@ -120,6 +121,16 @@ jobs:
           }
           EOF
 
+      # This push uses the default GITHUB_TOKEN actions/checkout@v4 wires up — and GitHub
+      # deliberately does not let a GITHUB_TOKEN-authored push trigger other push-triggered
+      # workflows (infinite-loop prevention), so ci.yml does NOT run against this commit. Known
+      # and accepted, not an oversight: this workflow already runs build, compute, sign, anchor
+      # and print:verify inline before this step, and an automated commit only ever touches
+      # data/ — nothing ci.yml's broader typecheck/lint/contract suite would catch that isn't
+      # already covered here. The alternative (a PAT with repo-write scope, stored as a secret,
+      # so pushes look user-authored) was declined for the same reason the console's ceiling
+      # button was declined: it's credential expansion for a case this workflow already guards.
+      # Revisit this if an automated commit ever starts touching code, not just data/.
       - name: Commit and push
         if: steps.publish.outputs.status == 'published'
         env:
