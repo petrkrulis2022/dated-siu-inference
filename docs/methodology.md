@@ -234,16 +234,26 @@ than distributed out of band.
 
 ## 9. Cost of producing the index
 
-At roughly five instances per task class per model, per-print cost per model is dominated by T2's
-long context: about 143,000 input and 26,500 output tokens per model per print. Illustrative,
-tier-labelled per-print-per-model costs: frontier tier ≈ **$0.80**, mid tier ≈ **$0.15**,
-open-weight-hosted tier ≈ **$0.04**. A basket of twelve models weighted toward the cheaper tiers
-lands near **$3 per print**. Weekly prints therefore cost roughly **$13/month**; daily cadence
-(gated behind infrastructure funding, not a technical blocker) would run roughly **$93/month**.
-Rented reference hardware for the floor-measurement session (§6) costs a few dollars per session,
-run monthly. These figures are illustrative estimates from `docs/build1-spec.md`'s cost model, not
-figures reconciled against a real invoice — labelled as such, per this project's own rule against
-presenting an estimate as a measured fact.
+**Measured, not estimated, for the registry as it stands today:** the three real prints published
+so far (all six registry models, all open-weight-hosted via OpenRouter) cost $0.1081, $0.0222, and
+$0.0932 respectively — `cost_of_production_usd` on the face of every print, per §7. At daily
+cadence that is roughly **$3/month** at today's registry, not the $93/month once projected here
+for a larger, hypothetical basket — that earlier figure assumed a bigger, costlier basket than
+what is actually running and is superseded by this measured number.
+
+Direct frontier-provider adapters (OpenAI, Anthropic, Google, xAI) are planned but not yet live.
+Once added, cost rises materially: T2's long context dominates per-model cost (about 21,600 input
+and 30 output tokens per model per print, measured from real run records, not the ~143,000/26,500
+figure this section previously stated before real runs existed), and one flagship model per
+provider at current list pricing costs roughly $0.15–$0.35 per print each — **≈$1/print for four
+frontier models alone**, on top of the ~$0.10 the current six models cost, i.e. **roughly
+$32/month at daily cadence** once that change ships, up from ~$3/month today. This is why
+`PUBLISH_SPEND_CEILING_USD` (§ Index governance) will need raising deliberately alongside that
+change, not left at its pre-frontier value. Rented reference hardware for the floor-measurement
+session (§6) costs a few dollars per session, run monthly. The frontier figure is illustrative —
+real current list prices and real observed token counts, but no run against those models exists
+yet, so retries aren't modelled — labelled as such per this project's own rule against presenting
+an estimate as a measured fact.
 
 ---
 
@@ -345,12 +355,23 @@ updated to name that source before the first print that uses it ships.
 
 ## Index governance
 
-**Publication cadence and cut-off.** Prints are published weekly (daily cadence is the stated
-build-2 goal, gated on infrastructure funding — see §9 — not on methodology readiness) against a
-fixed weekly cut-off time, stated alongside the print schedule once cadence goes live. A print
-that cannot be produced by its cut-off is **published as soon as it genuinely is available, with
-the delay disclosed on the print itself** — never backdated to its scheduled date. A late print
-tells the truth about when it was actually computed.
+**Publication cadence and cut-off.** Prints are published **daily, at a fixed 00:17 UTC cut-off**
+(`.github/workflows/publish-print.yml`), so the print's `date` and the run's actual date always
+agree. **Cadence changed from weekly to daily, announced here, effective from the first scheduled
+run** — infrastructure funding, previously the stated gate (see §9), is no longer the constraint;
+the daily cost below reflects the registry as currently constituted. A print that cannot be
+produced by its cut-off is **published as soon as it genuinely is available, with the delay
+disclosed on the print itself** — never backdated to its scheduled date. A late print tells the
+truth about when it was actually computed.
+
+The automated run enforces the same invariants a manual publish does — the minimum
+qualifying-set size (below), the append-only guard (Revision policy, below), idempotent
+anchoring — plus guards that only matter with no human watching: it refuses to spend on
+inference if the publisher's on-chain gas balance is too low to anchor the result, refuses to
+sign or anchor if the run's actual cost exceeds a configured spend ceiling
+(`PUBLISH_SPEND_CEILING_USD`, a GitHub Actions repository variable — currently $1.10, revisited
+as the registry grows), and refuses to write a print whose anchor transaction failed rather than
+recording it as anchored-in-name-only.
 
 **A model unreachable on print day.** The print proceeds. The unreachable model is marked
 unavailable for that print (distinct from failing a quality gate, and distinct from registry

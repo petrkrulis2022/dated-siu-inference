@@ -159,4 +159,32 @@ describe("publishPrint", () => {
     const { readdir } = await import("node:fs/promises");
     expect(await readdir(dir).catch(() => [])).toEqual([]);
   });
+
+  it("refuses to publish when the anchor transaction fails, writing nothing", async () => {
+    // The gap this guards against: anchorIdempotently can return status "failed" (a mined
+    // but reverted tx, or postedAt still reading 0 after retries) without throwing. A human
+    // publishing manually would notice and not commit it; automation has no human, so this
+    // must be a hard refusal, not a written-but-unverifiable print.
+    const failing: AttestationClient = {
+      async postPrint(): Promise<AnchorResult> {
+        return { chain: "base-sepolia", status: "failed", notes: "simulated revert" };
+      },
+    };
+    await expect(
+      publishPrint(dir, publishInput({ attestationClient: failing })),
+    ).rejects.toThrow(/anchoring failed/);
+
+    const { readdir } = await import("node:fs/promises");
+    expect(await readdir(dir).catch(() => [])).toEqual([]);
+  });
+
+  it("refuses to publish above the configured spend ceiling, before signing or anchoring", async () => {
+    await expect(
+      publishPrint(dir, publishInput({ spendCeilingUsd: "0.0000001" })),
+    ).rejects.toThrow(/exceeds the configured ceiling/);
+
+    // A refusal is total — nothing was written, no signature, no anchor attempt.
+    const { readdir } = await import("node:fs/promises");
+    expect(await readdir(dir).catch(() => [])).toEqual([]);
+  });
 });

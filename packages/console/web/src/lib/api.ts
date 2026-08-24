@@ -4,6 +4,10 @@ export interface ConfigResponse {
   explorerBaseUrl: string;
   escrowAddress: string;
   attestationAddress: string;
+  /** From .github/workflows/publish-print.yml's PUBLISH_SPEND_CEILING_USD Variable, mirrored
+   * into data/registry/pipeline-config.json on every successful automated publish. Null before
+   * the first automated run has ever succeeded. */
+  spendCeilingUsd: string | null;
 }
 
 export interface PrintVerification {
@@ -25,6 +29,7 @@ export interface PrintRow {
   dated_siu: string;
   weights_source: "equal" | "routed-market-share";
   methodology_version: string;
+  cost_of_production_usd: string;
   anchor_tx_hash: string | null;
   anchor_status: string;
   verification: PrintVerification;

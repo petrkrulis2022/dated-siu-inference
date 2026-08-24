@@ -1,5 +1,5 @@
 import { validateRunRecord, validatePrint, type Print } from "@touchstone/sdk";
-import { computePrint, type PrintInput } from "./compute/index.js";
+import { computePrint, computeCostOfProduction, type PrintInput } from "./compute/index.js";
 import { signPrintBody } from "./sign/sign.js";
 import { printBodyHashHex } from "./sign/canonicalise.js";
 import { writePrint, writePrintsIndex, type WritePrintResult } from "./publication.js";
@@ -28,6 +28,11 @@ export const MINIMUM_QUALIFYING_MODELS = 4;
 export interface PublishInput extends Omit<PrintInput, "status"> {
   privateKeyHex: string;
   attestationClient?: AttestationClient;
+  /** Refuse before signing or anchoring if the real spend for this print (every recorded
+   * attempt across every registered model, per computeCostOfProduction) exceeds this — a
+   * runaway-spend guard for unattended runs. Omit for manual publishing, where a human
+   * already sees the cost before choosing to run at all. */
+  spendCeilingUsd?: string;
 }
 
 export interface PublishResult {
@@ -94,10 +99,35 @@ export async function publishPrint(printsDir: string, input: PublishInput): Prom
     );
   }
 
+  // Same "refuse before signing or anchoring" shape as the qualifying-set gate above — a
+  // runaway-cost print should never spend anchor gas or produce a signed artifact either.
+  if (input.spendCeilingUsd !== undefined) {
+    const spent = computeCostOfProduction(input.models);
+    if (spent.greaterThan(input.spendCeilingUsd)) {
+      throw new Error(
+        `Refusing to publish: cost of production $${spent.toString()} exceeds the configured ` +
+          `ceiling of $${input.spendCeilingUsd}.`,
+      );
+    }
+  }
+
   const signed = signPrintBody(body, input.privateKeyHex);
 
   const client = input.attestationClient ?? new StubAttestationClient();
   const anchor = await client.postPrint(printBodyHashHex(signed), signed.version);
+
+  // A failed anchor is not a lesser publish, it's an unverifiable one — and once written,
+  // the append-only guard on writePrint makes that permanent for this print_id. A human
+  // running this manually would notice `anchor.status: "failed"` and choose not to commit
+  // it; automation has no such human, so this refuses outright rather than writing a print
+  // that claims verifiability it doesn't have.
+  if (anchor.status === "failed") {
+    throw new Error(
+      `Refusing to publish: anchoring failed (${anchor.notes ?? "no further detail"}). ` +
+        `Nothing was signed to disk or committed.`,
+    );
+  }
+
   const print: Print = { ...signed, anchor };
 
   // signPrintBody already validated `signed`; anchor is new since, so validate the final

@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { createPublicClient, http, type Hex } from "viem";
 import { latestPriceSnapshotFile, loadPriceSnapshot } from "@touchstone/print";
@@ -56,12 +56,24 @@ async function main(): Promise<void> {
   );
   await writeCache(config.eventCachePath, cache);
 
+  // Mirrors .github/workflows/publish-print.yml's spend-ceiling Variable — the console has no
+  // access to GitHub Actions Variables, so the workflow writes this file on every successful
+  // publish and this is the console's only source for it. Absent (e.g. before the first
+  // automated run, or read failure) is reported as null, never a fabricated default.
+  const spendCeilingUsd = await readFile(
+    join(config.registryDir, "pipeline-config.json"),
+    "utf-8",
+  )
+    .then((raw) => (JSON.parse(raw) as { spend_ceiling_usd?: string }).spend_ceiling_usd ?? null)
+    .catch(() => null);
+
   await writeJson("config", {
     chainName: config.chainName,
     chainId: config.chainId,
     explorerBaseUrl: config.explorerBaseUrl,
     escrowAddress: config.escrowAddress,
     attestationAddress: config.attestationAddress,
+    spendCeilingUsd,
   });
 
   const prints = await loadAllPrints(config.printsDir);
@@ -74,6 +86,7 @@ async function main(): Promise<void> {
       dated_siu: print.dated_siu,
       weights_source: print.weights.source,
       methodology_version: print.methodology_version,
+      cost_of_production_usd: print.cost_of_production_usd,
       anchor_tx_hash: print.anchor.tx_hash ?? null,
       anchor_status: print.anchor.status,
       verification: await verifyPrintOnChain(print, {

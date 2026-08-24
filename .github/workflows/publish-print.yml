@@ -1,0 +1,152 @@
+name: Publish print
+
+# Separate from ci.yml/pages.yml deliberately: this workflow spends real money and writes a
+# permanent signed, anchored record. It should never be gated on, or gate, the JS/Solidity test
+# suite or the site deploy — a broken lint rule in an unrelated PR must never block today's print,
+# and a bad print must never be masked as a green CI run.
+#
+# The schedule trigger is commented out on purpose until a clean workflow_dispatch run has been
+# reviewed end to end (harness, compute, sign, anchor, print:verify, commit, push) — see the plan
+# this workflow was built from. Uncomment the schedule block once that dry run is confirmed good.
+on:
+  # schedule:
+  #   - cron: "17 0 * * *" # 00:17 UTC daily — print date and run date always agree.
+  workflow_dispatch:
+    inputs:
+      print_id:
+        description: "Print ID (defaults to today's UTC date, YYYY-MM-DD)"
+        required: false
+
+concurrency:
+  group: publish-print
+  # Never cancel an in-flight run — it may have already spent real money on inference or sent an
+  # anchor transaction. A second trigger queues behind it instead.
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Topological build — packages/print, packages/harness etc. must be built before the CLI
+      # below can resolve its workspace dependencies' compiled dist/. Same reasoning as ci.yml.
+      - name: Build
+        run: pnpm run build
+
+      # See ci.yml's identical step: packages/basket's T3 grader refuses to run candidate code
+      # without unshare --net sandboxing, which needs unprivileged user namespaces enabled on this
+      # runner image. This workflow runs the real harness (including T3), so it needs this too.
+      - name: Allow unprivileged user namespaces (needed for T3's unshare --net sandbox)
+        run: |
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+
+      - name: Resolve print id
+        id: resolve
+        env:
+          PRINT_ID_INPUT: ${{ inputs.print_id }}
+        run: |
+          PRINT_ID="$PRINT_ID_INPUT"
+          if [ -z "$PRINT_ID" ]; then PRINT_ID=$(date -u +%Y-%m-%d); fi
+          echo "print_id=$PRINT_ID" >> "$GITHUB_OUTPUT"
+
+      # No fallback to a committed snapshot on failure, and no continue-on-error — a print dated
+      # today built on stale prices is exactly the quiet inaccuracy the evidence hierarchy in
+      # docs/methodology.md exists to prevent. If this fails, the job stops here, before the
+      # harness spends anything.
+      - name: Fetch fresh prices
+        run: pnpm --filter @touchstone/prices run fetch:prices
+
+      - name: Publish print (unattended)
+        id: publish
+        env:
+          TOUCHSTONE_PUBLISHER_KEY: ${{ secrets.TOUCHSTONE_PUBLISHER_KEY }}
+          TOUCHSTONE_PUBLISHER_ADDRESS: ${{ secrets.TOUCHSTONE_PUBLISHER_ADDRESS }}
+          BASE_SEPOLIA_RPC_URL: ${{ secrets.BASE_SEPOLIA_RPC_URL }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          PUBLISH_SPEND_CEILING_USD: ${{ vars.PUBLISH_SPEND_CEILING_USD }}
+          PRINT_ID: ${{ steps.resolve.outputs.print_id }}
+        run: |
+          set -o pipefail
+          node packages/print/dist/cli/publish-unattended.js "$PRINT_ID" 2>&1 | tee publish.log
+          if grep -q "Already published" publish.log; then
+            echo "status=noop" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=published" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Independent, from-scratch recomputation check — deliberately separate from publishPrint's
+      # own internal validation, run before anything is committed. Skipped on a no-op (nothing new
+      # to verify).
+      - name: print:verify
+        if: steps.publish.outputs.status == 'published'
+        env:
+          PRINT_ID: ${{ steps.resolve.outputs.print_id }}
+        run: pnpm --filter @touchstone/print run verify "$PRINT_ID"
+
+      # Mirrors the spend-ceiling GitHub Actions Variable into a committed file so the read-only
+      # operator console (which has no access to Actions Variables) can display the same number
+      # without the two disagreeing. Only commits when the value actually changed, so changing the
+      # Variable doesn't require a print to have published today for the console to catch up.
+      - name: Sync spend ceiling into the repo
+        if: steps.publish.outputs.status == 'published'
+        env:
+          PUBLISH_SPEND_CEILING_USD: ${{ vars.PUBLISH_SPEND_CEILING_USD }}
+        run: |
+          cat > data/registry/pipeline-config.json <<EOF
+          {
+            "spend_ceiling_usd": "${PUBLISH_SPEND_CEILING_USD}",
+            "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+      - name: Commit and push
+        if: steps.publish.outputs.status == 'published'
+        env:
+          PRINT_ID: ${{ steps.resolve.outputs.print_id }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/prints/ "data/runs/$PRINT_ID/" data/registry/
+          git commit -m "Publish print $PRINT_ID
+
+          Automated daily run. Cadence and cut-off: docs/methodology.md, Index governance."
+          git push origin main
+
+      - name: Job summary
+        if: always()
+        env:
+          PRINT_ID: ${{ steps.resolve.outputs.print_id }}
+          JOB_STATUS: ${{ job.status }}
+          PUBLISH_STATUS: ${{ steps.publish.outputs.status }}
+        run: |
+          {
+            echo "## Print: $PRINT_ID"
+            echo ""
+            if [ "$JOB_STATUS" = "success" ] && [ "$PUBLISH_STATUS" = "noop" ]; then
+              echo "Already published for this print id — no action taken."
+            elif [ "$JOB_STATUS" = "success" ]; then
+              echo "Published, verified, and pushed. See publish.log below for the run's own summary."
+            else
+              echo "**Aborted — nothing was committed.** Check the failed step above for which guard fired (already-published no-op excepted, every other early exit is a real failure: insufficient publisher balance, no RPC configured, price fetch failure, below the minimum qualifying-set size, over the spend ceiling, or a failed anchor)."
+            fi
+            echo ""
+            echo '```'
+            cat publish.log 2>/dev/null || echo "(no publish.log — failed before the publish step ran)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

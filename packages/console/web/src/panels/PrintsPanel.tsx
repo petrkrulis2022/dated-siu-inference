@@ -49,6 +49,14 @@ export function PrintsPanel({ config }: { config: ConfigResponse | null }): Reac
   return (
     <div className="panel">
       <h2>Prints</h2>
+      {config && (
+        <p className="muted">
+          Spend ceiling:{" "}
+          {config.spendCeilingUsd ? `$${config.spendCeilingUsd}` : "not yet set by an automated run"}{" "}
+          · configured via the <code>PUBLISH_SPEND_CEILING_USD</code> GitHub Actions repository
+          variable, not editable here.
+        </p>
+      )}
       {error && <p className="bad">{error}</p>}
       {prints && prints.length === 0 && <p className="empty">No prints published yet.</p>}
       {prints && prints.length > 0 && (
@@ -60,6 +68,7 @@ export function PrintsPanel({ config }: { config: ConfigResponse | null }): Reac
               <th>Dated SIU</th>
               <th>Weights</th>
               <th>Methodology</th>
+              <th>Cost</th>
               <th>Anchor</th>
               <th>Signature</th>
             </tr>
@@ -76,6 +85,7 @@ export function PrintsPanel({ config }: { config: ConfigResponse | null }): Reac
                 <td>{p.dated_siu}</td>
                 <td>{p.weights_source}</td>
                 <td>{p.methodology_version}</td>
+                <td>${p.cost_of_production_usd}</td>
                 <td>
                   {p.anchor_tx_hash ? (
                     <ExplorerLink config={config} kind="tx" value={p.anchor_tx_hash} />
