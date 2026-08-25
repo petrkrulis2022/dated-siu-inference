@@ -37,7 +37,16 @@ app.post("/mcp", async (c) => {
   }
   const toolName = extractToolCallName(body);
 
-  paywall ??= createToolPaywall({ sellerAddress: c.env.TOUCHSTONE_SELLER_ADDRESS });
+  // Every other binding in this deployment (BASE_SEPOLIA_RPC_URL, TOUCHSTONE_ESCROW_ADDRESS) is
+  // already Base-Sepolia-only, per wrangler.jsonc — createGatewayMiddleware's own default
+  // facilitatorUrl is Circle's MAINNET Gateway, which would silently reject every testnet
+  // payment rather than accept one, so this must be passed explicitly. Revisit alongside every
+  // other testnet-only binding here when a mainnet deployment is ever built.
+  paywall ??= createToolPaywall({
+    sellerAddress: c.env.TOUCHSTONE_SELLER_ADDRESS,
+    networks: ["eip155:84532"],
+    facilitatorUrl: "https://gateway-api-testnet.circle.com",
+  });
   const { req, res, next, getResult, nextCalled, responseHeaders } = createNodeShim(
     c.req.raw,
     body,
