@@ -1,0 +1,46 @@
+{
+  "id": "gen-1787640716-sfBMQsaKVln1rzQiwYTA",
+  "object": "chat.completion",
+  "created": 1787640716,
+  "model": "mistralai/mistral-small-3.2-24b-instruct",
+  "provider": "Parasail",
+  "system_fingerprint": "vllm-0.23.0-46229f12",
+  "service_tier": null,
+  "choices": [
+    {
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": "stop",
+      "native_finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "Here are the archival access codes listed in the order they appear in the document:\n\nE6087D\nDC7B49\n336B1A\n3CC0CB",
+        "refusal": null,
+        "reasoning": null
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21960,
+    "completion_tokens": 42,
+    "total_tokens": 22002,
+    "cost": 0.00198708,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 48,
+      "cache_write_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": 0.00198708,
+      "upstream_inference_prompt_cost": 0.00197448,
+      "upstream_inference_completions_cost": 0.0000126
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "image_tokens": 0,
+      "audio_tokens": 0
+    }
+  }
+}

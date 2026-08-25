@@ -1,0 +1,46 @@
+{
+  "id": "gen-1787640665-6ht0g6s7CCJ4mE1aOQoO",
+  "object": "chat.completion",
+  "created": 1787640665,
+  "model": "meta-llama/llama-3.3-70b-instruct",
+  "provider": "Cloudflare",
+  "system_fingerprint": null,
+  "service_tier": null,
+  "choices": [
+    {
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": "stop",
+      "native_finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "```\n{\n  \"tracking_id\": \"SH-085FC9\",\n  \"origin_city\": \"Denver\",\n  \"destination_city\": \"Lisbon\",\n  \"weight_kg\": 86,\n  \"status\": \"in_transit\",\n  \"priority\": \"standard\"\n}\n```",
+        "refusal": null,
+        "reasoning": null
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 932,
+    "completion_tokens": 61,
+    "total_tokens": 993,
+    "cost": 0.000410509,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": 0.000410509,
+      "upstream_inference_prompt_cost": 0.000273076,
+      "upstream_inference_completions_cost": 0.000137433
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "image_tokens": 0,
+      "audio_tokens": 0
+    }
+  }
+}
