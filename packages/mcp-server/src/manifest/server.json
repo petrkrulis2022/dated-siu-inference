@@ -1,7 +1,7 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.petrkrulis2022/touchstone-mcp",
-  "description": "Four tools for Dated SIU, the benchmark price of AI inference work: a free signed-print lookup, and three paid tools (SIU pricing, token conversion, receipt verification) settled in USDC through Circle's Gateway nanopayments.",
+  "description": "Dated SIU, the benchmark price of AI inference work: one free tool, three paid via x402.",
   "version": "0.1.0",
   "repository": {
     "url": "https://github.com/petrkrulis2022/dated-siu-inference",
@@ -12,7 +12,7 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://mcp.touchstone-assay.example/mcp"
+      "url": "https://mcp.touchstoneassay.com/mcp"
     }
   ]
 }
