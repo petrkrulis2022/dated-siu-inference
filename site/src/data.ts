@@ -40,6 +40,32 @@ export async function loadRunRecordsFor(runsDir: string, printId: string): Promi
   );
 }
 
+export interface Incident {
+  date: string;
+  run_url: string;
+  reason: string;
+  occurred_at: string;
+}
+
+/**
+ * A day the scheduled publish-print.yml run failed to produce a print — written by that
+ * workflow itself on any abort (`.github/workflows/publish-print.yml`'s "Record a failed run"
+ * step), never fabricated here. Absence from data/prints/ for a given date is not itself
+ * evidence of a failure (build1-spec.md's cadence allows a late print, published "as soon as it
+ * genuinely is available" — see docs/methodology.md's Index governance) — only an explicit
+ * incident record is.
+ */
+export async function loadIncidents(incidentsDir: string): Promise<Incident[]> {
+  const files = (await readdir(incidentsDir).catch(() => [] as string[])).filter((f) =>
+    f.endsWith(".json"),
+  );
+  const incidents: Incident[] = await Promise.all(
+    files.map(async (f) => JSON.parse(await readFile(join(incidentsDir, f), "utf-8")) as Incident),
+  );
+  incidents.sort((a, b) => a.date.localeCompare(b.date));
+  return incidents;
+}
+
 export interface ChainInfo {
   attestationAddress: string;
   publisherAddress: string;

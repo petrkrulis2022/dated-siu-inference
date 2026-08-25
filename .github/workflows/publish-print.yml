@@ -138,10 +138,52 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # A print for this print_id now exists, so any earlier "no print — run failed" incident
+          # for the same id (e.g. the scheduled run failed and this is a same-day manual retry)
+          # is no longer accurate — sitting next to a real print for that date would mislead, not
+          # disclose. Removed in the same commit as the print it's superseded by, not left behind.
+          rm -f "data/prints/incidents/$PRINT_ID.json"
           git add data/prints/ "data/runs/$PRINT_ID/" data/registry/
           git commit -m "Publish print $PRINT_ID
 
           Automated daily run. Cadence and cut-off: docs/methodology.md, Index governance."
+          git push origin main
+
+      # A missed day is disclosed on the public site (site/src/data.ts's loadIncidents), not
+      # silently absent — the same "the record must tell the truth" principle the supersession
+      # and superseded-print disclosures already follow. Deliberately narrow: this only ever
+      # writes data/prints/incidents/<print_id>.json, never data/prints/<print_id>.json or
+      # data/runs/ — the append-only guard on the print itself is completely untouched by this.
+      - name: Record a failed run
+        if: always() && job.status == 'failure'
+        env:
+          PRINT_ID: ${{ steps.resolve.outputs.print_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p data/prints/incidents
+          REASON=$(grep -m1 "^Error:" publish.log 2>/dev/null | sed 's/^Error: //')
+          if [ -z "$REASON" ]; then
+            REASON="Run failed before publish.log had a diagnostic message — see the linked run's full log."
+          fi
+          REASON="$REASON" python3 -c '
+          import json, os, datetime
+          print_id = os.environ["PRINT_ID"]
+          record = {
+              "date": print_id,
+              "run_url": os.environ["RUN_URL"],
+              "reason": os.environ["REASON"],
+              "occurred_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+          }
+          with open("data/prints/incidents/" + print_id + ".json", "w") as f:
+              json.dump(record, f, indent=2)
+              f.write("\n")
+          '
+          git add "data/prints/incidents/${PRINT_ID}.json"
+          git commit -m "Record failed print run for ${PRINT_ID}
+
+          Automated. See ${RUN_URL} for the full log."
           git push origin main
 
       - name: Job summary

@@ -1,9 +1,11 @@
-import type { PrintIndexEntry } from "../data.js";
+import type { Incident, PrintIndexEntry } from "../data.js";
 import { esc, formatDate, usd } from "../format.js";
 
 export interface SeriesPageOptions {
   /** Every published print, oldest first. */
   allPrints: PrintIndexEntry[];
+  /** Days the scheduled run failed to produce a print — see data.ts's loadIncidents. */
+  incidents?: Incident[];
   /** "" at the site root. */
   basePath: string;
 }
@@ -78,7 +80,27 @@ function renderSinglePointChart(print: PrintIndexEntry): string {
   </svg>`;
 }
 
-export function renderSeriesPage({ allPrints, basePath }: SeriesPageOptions): string {
+/**
+ * Missed days aren't points on the value chart — there is no dated_siu to plot for a run that
+ * never produced a print. Listed instead, each linking straight to the failed run so "what
+ * happened" is one click away, not buried in a separate incidents page — dropping this list
+ * would make the chart look like a clean, unbroken series when it wasn't.
+ */
+function renderIncidentsNote(incidents: Incident[]): string {
+  if (incidents.length === 0) return "";
+  const items = incidents
+    .map(
+      (incident) =>
+        `<li><a href="${esc(incident.run_url)}" target="_blank" rel="noopener">${esc(formatDate(incident.date))} — no print published, run failed &rarr;</a></li>`,
+    )
+    .join("\n");
+  return `<div class="note incidents">
+    <p>Days a scheduled run failed to produce a print:</p>
+    <ul>${items}</ul>
+  </div>`;
+}
+
+export function renderSeriesPage({ allPrints, incidents = [], basePath }: SeriesPageOptions): string {
   if (allPrints.length === 0) {
     return `<div class="headline">
       <div class="label">Dated SIU</div>
@@ -95,7 +117,7 @@ export function renderSeriesPage({ allPrints, basePath }: SeriesPageOptions): st
     allPrints.length === 1 ? renderSinglePointChart(latest) : renderMultiPointChart(allPrints);
   const seriesNote =
     allPrints.length === 1
-      ? "The series begins here. Prints publish weekly."
+      ? "The series begins here. Prints publish daily."
       : "A falling line is normal and expected: one SIU always buys the same work, so a falling line means inference got cheaper, not that the measurement is drifting.";
 
   return `<div class="headline">
@@ -116,6 +138,7 @@ export function renderSeriesPage({ allPrints, basePath }: SeriesPageOptions): st
     <span class="legend-marker series-point series-point-provisional"></span> provisional
     <span class="legend-marker series-point series-point-superseded"></span> superseded
   </p>
+  ${renderIncidentsNote(incidents)}
   <p class="note"><a href="${basePath}prints/index.html">All prints &rarr;</a></p>
 </section>`;
 }

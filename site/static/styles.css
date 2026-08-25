@@ -162,6 +162,32 @@ tr.superseded td {
   color: var(--ink-muted);
 }
 
+.badge.status-failed {
+  background: transparent;
+  border-style: dotted;
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+
+.badge.status-failed:hover {
+  color: var(--ink);
+}
+
+tr.incident td {
+  color: var(--ink-muted);
+  font-style: italic;
+}
+
+.note.incidents ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+  list-style: "\2014\a0";
+}
+
+.note.incidents li {
+  margin: 0.2rem 0;
+}
+
 .change-note {
   margin-top: 0.9rem;
   font-size: 0.9rem;

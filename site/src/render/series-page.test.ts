@@ -23,7 +23,7 @@ describe("renderSeriesPage", () => {
     const html = renderSeriesPage({ allPrints: [entry({})], basePath: "" });
     expect(html).toContain("<svg");
     expect(html).toContain("The series begins here");
-    expect(html).toContain("publish weekly");
+    expect(html).toContain("publish daily");
     expect(html).not.toContain("<polyline");
   });
 
@@ -103,5 +103,29 @@ describe("renderSeriesPage", () => {
       basePath: "",
     });
     expect(html).not.toContain("<script>alert(1)</script>");
+  });
+
+  it("lists a day the scheduled run failed, linking to the failed run — not plotted as a value", () => {
+    const html = renderSeriesPage({
+      allPrints: [entry({})],
+      incidents: [
+        {
+          date: "2026-08-25",
+          run_url: "https://github.com/petrkrulis2022/dated-siu-inference/actions/runs/32793706266",
+          reason: "only 3 of 5 registered models qualified (minimum 4)",
+          occurred_at: "2026-08-25T00:33:35Z",
+        },
+      ],
+      basePath: "",
+    });
+    expect(html).toContain(
+      'href="https://github.com/petrkrulis2022/dated-siu-inference/actions/runs/32793706266"',
+    );
+    expect(html).toContain("no print published, run failed");
+  });
+
+  it("omits the incidents note entirely when there are none", () => {
+    const html = renderSeriesPage({ allPrints: [entry({})], incidents: [], basePath: "" });
+    expect(html).not.toContain("incidents");
   });
 });

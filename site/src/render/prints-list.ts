@@ -1,10 +1,12 @@
 import type { Print } from "@touchstone/sdk";
-import type { ChainInfo } from "../data.js";
+import type { ChainInfo, Incident } from "../data.js";
 import { esc, formatDate, truncateHex, usd } from "../format.js";
 
 export interface PrintsListOptions {
   /** Every published print, oldest first. */
   allPrints: Print[];
+  /** Days the scheduled run failed to produce a print — see data.ts's loadIncidents. */
+  incidents?: Incident[];
   /** "../" — this page always lives one level deep, at prints/index.html. */
   basePath: string;
   chain: ChainInfo;
@@ -23,21 +25,35 @@ function renderAnchorCell(print: Print, chain: ChainInfo): string {
   return `<span class="muted">${esc(print.anchor.status)}</span>`;
 }
 
-export function renderPrintsList({ allPrints, basePath, chain }: PrintsListOptions): string {
-  if (allPrints.length === 0) {
+function renderIncidentRow(incident: Incident): string {
+  return `<tr class="incident">
+    <td>${esc(formatDate(incident.date))}</td>
+    <td><a class="badge status-failed" href="${esc(incident.run_url)}" title="${esc(incident.reason)}" target="_blank" rel="noopener">no print — run failed</a></td>
+    <td colspan="5" class="muted" title="${esc(incident.reason)}">${esc(incident.reason)}</td>
+  </tr>`;
+}
+
+export function renderPrintsList({
+  allPrints,
+  incidents = [],
+  basePath,
+  chain,
+}: PrintsListOptions): string {
+  if (allPrints.length === 0 && incidents.length === 0) {
     return `<div class="headline">
       <div class="label">Prints</div>
       <p class="note">No print has been published yet.</p>
     </div>`;
   }
 
-  const rows = [...allPrints]
+  type Row = { date: string; sortKey: string; html: string };
+  const printRows: Row[] = allPrints.map((p) => ({
+    date: p.date,
     // Secondary key on print_id: date alone isn't unique (a same-day re-run shares it with the
     // print it supersedes), so relying on date-only comparison leaves same-date entries in
     // whatever order they happened to load in.
-    .sort((a, b) => b.date.localeCompare(a.date) || b.print_id.localeCompare(a.print_id))
-    .map(
-      (p) => `<tr class="${p.superseded_by ? "superseded" : ""}">
+    sortKey: p.print_id,
+    html: `<tr class="${p.superseded_by ? "superseded" : ""}">
         <td><a href="${basePath}prints/${esc(p.print_id)}.html">${esc(formatDate(p.date))}</a></td>
         <td>${renderStatusCell(p, basePath)}</td>
         <td>${esc(usd(p.dated_siu))}</td>
@@ -46,12 +62,21 @@ export function renderPrintsList({ allPrints, basePath, chain }: PrintsListOptio
         <td>${renderAnchorCell(p, chain)}</td>
         <td title="${esc(p.signature)}">${esc(truncateHex(p.signature))}</td>
       </tr>`,
-    )
+  }));
+  const incidentRows: Row[] = incidents.map((incident) => ({
+    date: incident.date,
+    sortKey: incident.date,
+    html: renderIncidentRow(incident),
+  }));
+
+  const rows = [...printRows, ...incidentRows]
+    .sort((a, b) => b.date.localeCompare(a.date) || b.sortKey.localeCompare(a.sortKey))
+    .map((r) => r.html)
     .join("\n");
 
   return `<div class="headline">
   <div class="label">Prints</div>
-  <p class="note">Every published Dated SIU print, newest first.</p>
+  <p class="note">Every published Dated SIU print, newest first${incidents.length > 0 ? " — including days a scheduled run failed and no print was produced" : ""}.</p>
 </div>
 
 <section class="block">

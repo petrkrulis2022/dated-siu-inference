@@ -115,4 +115,52 @@ describe("renderPrintsList", () => {
     expect(html).toContain("stub");
     expect(html).not.toContain(`${CHAIN.explorerBaseUrl}/tx/`);
   });
+
+  it("lists a day the scheduled run failed, linking to the actual failed run", () => {
+    const html = renderPrintsList({
+      allPrints: [],
+      incidents: [
+        {
+          date: "2026-08-25",
+          run_url: "https://github.com/petrkrulis2022/dated-siu-inference/actions/runs/32793706266",
+          reason: "Refusing to publish: only 3 of 5 registered models qualified (minimum 4).",
+          occurred_at: "2026-08-25T00:33:35Z",
+        },
+      ],
+      basePath: "../",
+      chain: CHAIN,
+    });
+    expect(html).toContain('class="incident"');
+    expect(html).toContain(
+      'href="https://github.com/petrkrulis2022/dated-siu-inference/actions/runs/32793706266"',
+    );
+    expect(html).toContain("no print — run failed");
+    expect(html).toContain("only 3 of 5 registered models qualified");
+    expect(html).not.toContain("No print has been published yet");
+  });
+
+  it("interleaves a missed day with real prints in date order, not appended at the end", () => {
+    const html = renderPrintsList({
+      allPrints: [
+        print({ print_id: "2026-08-24", date: "2026-08-24" }),
+        print({ print_id: "2026-08-18", date: "2026-08-18" }),
+      ],
+      incidents: [
+        {
+          date: "2026-08-25",
+          run_url: "https://github.com/petrkrulis2022/dated-siu-inference/actions/runs/1",
+          reason: "insufficient balance",
+          occurred_at: "2026-08-25T00:00:00Z",
+        },
+      ],
+      basePath: "../",
+      chain: CHAIN,
+    });
+    const incidentIndex = html.indexOf("25 Aug 2026");
+    const latestPrintIndex = html.indexOf("24 Aug 2026");
+    const oldestPrintIndex = html.indexOf("18 Aug 2026");
+    expect(incidentIndex).toBeGreaterThan(-1);
+    expect(latestPrintIndex).toBeGreaterThan(incidentIndex); // newest first: the miss sorts above it
+    expect(oldestPrintIndex).toBeGreaterThan(latestPrintIndex);
+  });
 });

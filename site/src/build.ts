@@ -1,6 +1,12 @@
 import { cp, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { loadAllPrints, loadChainInfo, loadRunRecordsFor, type PrintIndexEntry } from "./data.js";
+import {
+  loadAllPrints,
+  loadChainInfo,
+  loadIncidents,
+  loadRunRecordsFor,
+  type PrintIndexEntry,
+} from "./data.js";
 import { renderLayout } from "./render/layout.js";
 import { renderPrintPage } from "./render/print-page.js";
 import { renderSeriesPage } from "./render/series-page.js";
@@ -11,6 +17,7 @@ import { renderModelsPage, type ModelGatePoint } from "./render/models-page.js";
 const REPO_ROOT = resolve(process.cwd(), "..");
 const PRINTS_DIR = join(REPO_ROOT, "data/prints");
 const RUNS_DIR = join(REPO_ROOT, "data/runs");
+const INCIDENTS_DIR = join(REPO_ROOT, "data/prints/incidents");
 const DEPLOYMENT_FILE = join(REPO_ROOT, "data/deployments/base-sepolia.json");
 // Deliberately not "dist" — tsc already compiles this package's own TypeScript to dist/, and
 // writing the deployable HTML/CSS site into the same directory would mix generator tooling
@@ -46,6 +53,7 @@ async function main(): Promise<void> {
   await cp(join(STATIC_DIR, "styles.css"), join(OUT_DIR, "styles.css"));
 
   const prints = await loadAllPrints(PRINTS_DIR);
+  const incidents = await loadIncidents(INCIDENTS_DIR);
   const chain = await loadChainInfo(DEPLOYMENT_FILE);
   const allPrints: PrintIndexEntry[] = prints.map((p) => ({
     print_id: p.print_id,
@@ -60,7 +68,7 @@ async function main(): Promise<void> {
     join(OUT_DIR, "index.html"),
     renderLayout({
       title: "Touchstone Assay — Dated SIU",
-      bodyHtml: renderSeriesPage({ allPrints, basePath: "" }),
+      bodyHtml: renderSeriesPage({ allPrints, incidents, basePath: "" }),
       basePath: "",
     }),
   );
@@ -71,7 +79,7 @@ async function main(): Promise<void> {
     join(OUT_DIR, "prints", "index.html"),
     renderLayout({
       title: "Touchstone Assay — Prints",
-      bodyHtml: renderPrintsList({ allPrints: prints, basePath: "../", chain }),
+      bodyHtml: renderPrintsList({ allPrints: prints, incidents, basePath: "../", chain }),
       basePath: "../",
     }),
   );
@@ -101,7 +109,9 @@ async function main(): Promise<void> {
     }),
   );
 
-  console.log(`Built Series, Prints (${prints.length}) and Models -> ${OUT_DIR}`);
+  console.log(
+    `Built Series, Prints (${prints.length}, ${incidents.length} missed) and Models -> ${OUT_DIR}`,
+  );
 }
 
 main().catch((err) => {
