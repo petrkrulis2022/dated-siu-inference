@@ -1,10 +1,9 @@
 import type { PriceSnapshot } from "../types/generated/price-snapshot.schema.js";
 import { ajv, formatAjvErrors } from "./ajv-instance.js";
-import { loadSchema } from "./load-schema.js";
+import schema from "../../schemas/price-snapshot.schema.json" with { type: "json" };
 import type { ValidationResult } from "./types.js";
 
-const schema = loadSchema("../../schemas/price-snapshot.schema.json", import.meta.url);
-const validateFn = ajv.compile(schema);
+const validateFn = ajv.compile<PriceSnapshot>(schema);
 
 export function validatePriceSnapshot(data: unknown): ValidationResult<PriceSnapshot> {
   if (validateFn(data)) {

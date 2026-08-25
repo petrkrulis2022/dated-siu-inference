@@ -1,10 +1,9 @@
 import type { Print } from "../types/generated/print.schema.js";
 import { ajv, formatAjvErrors } from "./ajv-instance.js";
-import { loadSchema } from "./load-schema.js";
+import schema from "../../schemas/print.schema.json" with { type: "json" };
 import type { ValidationResult } from "./types.js";
 
-const schema = loadSchema("../../schemas/print.schema.json", import.meta.url);
-const validateFn = ajv.compile(schema);
+const validateFn = ajv.compile<Print>(schema);
 
 export function validatePrint(data: unknown): ValidationResult<Print> {
   if (validateFn(data)) {

@@ -1,10 +1,9 @@
 import type { TouchstoneQuote } from "../types/generated/datum-quote.schema.js";
 import { ajv, formatAjvErrors } from "./ajv-instance.js";
-import { loadSchema } from "./load-schema.js";
+import schema from "../../schemas/datum-quote.schema.json" with { type: "json" };
 import type { ValidationResult } from "./types.js";
 
-const schema = loadSchema("../../schemas/datum-quote.schema.json", import.meta.url);
-const validateFn = ajv.compile(schema);
+const validateFn = ajv.compile<TouchstoneQuote>(schema);
 
 export function validateTouchstoneQuote(data: unknown): ValidationResult<TouchstoneQuote> {
   if (validateFn(data)) {

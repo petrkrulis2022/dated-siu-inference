@@ -1,10 +1,9 @@
 import type { ModelRegistryEntry } from "../types/generated/model-registry-entry.schema.js";
 import { ajv, formatAjvErrors } from "./ajv-instance.js";
-import { loadSchema } from "./load-schema.js";
+import schema from "../../schemas/model-registry-entry.schema.json" with { type: "json" };
 import type { ValidationResult } from "./types.js";
 
-const schema = loadSchema("../../schemas/model-registry-entry.schema.json", import.meta.url);
-const validateFn = ajv.compile(schema);
+const validateFn = ajv.compile<ModelRegistryEntry>(schema);
 
 export function validateModelRegistryEntry(data: unknown): ValidationResult<ModelRegistryEntry> {
   if (validateFn(data)) {
