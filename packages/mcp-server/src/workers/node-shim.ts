@@ -25,6 +25,16 @@ export function createNodeShim(
   req: ExpressRequest;
   res: ExpressResponse;
   next: NextFunction;
+  /** Resolves once the middleware reaches a terminal state — either `res.end()` (a 402 or other
+   * terminal response) or `next()` (payment cleared, or the tool is free). `../paywall.ts`'s
+   * `dispatchPaywall` calls the real Circle Gateway middleware as `void middleware(req, res,
+   * next)` — fire-and-forget, since Express itself doesn't need the promise, it just waits for
+   * `res` to actually complete. Awaiting `paywall(req, res, next)`'s own return value resolves
+   * immediately, before the async verify/settle call against Circle's Gateway has done anything
+   * — found live, not guessed: the first real deploy returned an empty 402 with no
+   * PAYMENT-REQUIRED header because of exactly this. This promise is what the caller must await
+   * instead. */
+  settled: Promise<void>;
   /** Non-null once the middleware called `res.end()` (a 402 or other terminal response) rather
    * than `next()` — the caller should return this directly and never reach the MCP layer. */
   getResult: () => ShimResult | null;
@@ -52,6 +62,10 @@ export function createNodeShim(
   let ended = false;
   let endBody = "";
   let nextWasCalled = false;
+  let resolveSettled!: () => void;
+  const settled = new Promise<void>((resolve) => {
+    resolveSettled = resolve;
+  });
 
   const res = {
     get statusCode() {
@@ -72,17 +86,20 @@ export function createNodeShim(
         endBody = chunk;
       }
       ended = true;
+      resolveSettled();
     },
   } as unknown as ExpressResponse;
 
   const next: NextFunction = () => {
     nextWasCalled = true;
+    resolveSettled();
   };
 
   return {
     req,
     res,
     next,
+    settled,
     getResult: () => (ended ? { status: statusCode, headers: headersOut, body: endBody } : null),
     nextCalled: () => nextWasCalled,
     responseHeaders: () => headersOut,

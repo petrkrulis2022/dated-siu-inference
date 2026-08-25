@@ -47,11 +47,20 @@ app.post("/mcp", async (c) => {
     networks: ["eip155:84532"],
     facilitatorUrl: "https://gateway-api-testnet.circle.com",
   });
-  const { req, res, next, getResult, nextCalled, responseHeaders } = createNodeShim(
+  const { req, res, next, settled, getResult, nextCalled, responseHeaders } = createNodeShim(
     c.req.raw,
     body,
   );
-  await paywall(req, res, next);
+  // paywall(req, res, next) itself returns void synchronously (../paywall.ts's dispatchPaywall
+  // calls the real middleware as `void middleware(...)`) — awaiting that resolves before Circle's
+  // Gateway verify/settle call has done anything. `settled` is what actually waits for it.
+  paywall(req, res, next);
+  await Promise.race([
+    settled,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("paywall timed out")), 25_000),
+    ),
+  ]);
 
   if (!nextCalled()) {
     const result = getResult();
