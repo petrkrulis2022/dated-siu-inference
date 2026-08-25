@@ -18,7 +18,7 @@ a paywalled tool needs an HTTP layer to hang a `402` off. `verify_receipt`'s on-
 remains for tests and for running the server with no chain configured, the same pattern
 `@touchstone/print`'s `StubAttestationClient` uses.
 
-## Running it
+## Running it locally (Node/Express)
 
 ```bash
 export TOUCHSTONE_ATTESTATION_KEY=0x...  # signs receipts — a dedicated key, never
@@ -32,6 +32,46 @@ pnpm run start                       # builds, then listens on $PORT (default 30
 Both env vars are required and there is no default — the server refuses to start rather than
 run unconfigured. `data/prints/` needs at least one published print (`pnpm --filter @touchstone/print
 run publish-print`) before `get_index`/`get_quote`/`convert` have anything real to serve.
+
+## Deployed: Cloudflare Workers (`mcp.touchstoneassay.com`)
+
+The live, public deployment is `src/workers/` — a different transport (Hono + Cloudflare's
+`McpAgent`, Durable-Object-backed) and a different data-loading layer (KV-cached fetches against
+this repo's own public GitHub content, since Workers has no filesystem), but the exact same four
+tools and the exact same paywall logic (`../paywall.ts`, run through a minimal req/res shim —
+`src/workers/node-shim.ts` — rather than reimplemented). See that directory's files for the
+per-piece reasoning; `wrangler.jsonc` is the binding/route source of truth.
+
+**Security boundary:** `TOUCHSTONE_PUBLISHER_KEY` is never present on this Worker — not as a
+secret, not as a var, not transitively. The only key is `TOUCHSTONE_ATTESTATION_KEY`, which signs
+receipts and nothing else (no anchoring, no transactions, no funds). Every other binding is
+non-sensitive: a chain name, a public contract address, a public RPC URL, and
+`TOUCHSTONE_SELLER_ADDRESS` (the existing escrow treasury address, reused as a payment-receiving
+address — no private key for it exists on this Worker at all).
+
+**Setup, once:**
+
+```bash
+npx wrangler login
+npx wrangler kv namespace create PRINTS_CACHE   # then paste the id into wrangler.jsonc
+npx wrangler secret put TOUCHSTONE_ATTESTATION_KEY
+```
+
+Enable Analytics Engine once for the account (dashboard-only, no API/CLI path):
+`https://dash.cloudflare.com/<account-id>/workers/analytics-engine` — usage logging
+(`src/workers/analytics.ts`) degrades to a caught, logged no-op if this isn't done, so it never
+blocks the rest of the service, but the point of it (adoption evidence — call counts, distinct
+payer addresses) needs it enabled.
+
+**Deploy:**
+
+```bash
+pnpm run deploy   # wrangler deploy
+```
+
+Re-run `npx wrangler types` after changing any binding in `wrangler.jsonc` — `worker-configuration.d.ts`
+(committed) is generated from it and is what makes `Env` resolve for `agents`' `McpAgent<Env, ...>`
+generic constraint; a stale copy silently breaks `this.env` inside `TouchstoneMcpAgent`.
 
 ## Listing this server
 

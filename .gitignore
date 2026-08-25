@@ -10,6 +10,10 @@ site/public/
 .env
 .env.*
 
+# Cloudflare Workers local-dev secret simulation — never commit
+.dev.vars
+.dev.vars.*
+
 # private key material — never commit signing/wallet keys
 *.pem
 *.key

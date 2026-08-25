@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Print } from "@touchstone/sdk";
+import { defaultDataSource } from "../print-data-source.js";
 import { getIndexTool } from "./get-index.js";
 
 function fixturePrint(overrides: Partial<Print> = {}): Print {
@@ -48,25 +49,25 @@ describe("getIndexTool", () => {
   });
 
   it("throws an honest error when no print has been published yet", async () => {
-    await expect(getIndexTool({}, dir)).rejects.toThrow(/No print has been published/);
+    await expect(getIndexTool({}, defaultDataSource(dir))).rejects.toThrow(/No print has been published/);
   });
 
   it("serves latest.json when no params are given", async () => {
     const print = fixturePrint({ print_id: "2026-08-15", date: "2026-08-15" });
     await writeFile(join(dir, "latest.json"), JSON.stringify(print));
-    const result = await getIndexTool({}, dir);
+    const result = await getIndexTool({}, defaultDataSource(dir));
     expect(result.print_id).toBe("2026-08-15");
   });
 
   it("serves a print by exact date", async () => {
     const print = fixturePrint({ print_id: "2026-08-13", date: "2026-08-13" });
     await writeFile(join(dir, "2026-08-13.json"), JSON.stringify(print));
-    const result = await getIndexTool({ date: "2026-08-13" }, dir);
+    const result = await getIndexTool({ date: "2026-08-13" }, defaultDataSource(dir));
     expect(result.print_id).toBe("2026-08-13");
   });
 
   it("throws an honest error for a date with no print", async () => {
-    await expect(getIndexTool({ date: "1999-01-01" }, dir)).rejects.toThrow(/No print for date/);
+    await expect(getIndexTool({ date: "1999-01-01" }, defaultDataSource(dir))).rejects.toThrow(/No print for date/);
   });
 
   it("serves the newest print matching a requested version", async () => {
@@ -82,13 +83,13 @@ describe("getIndexTool", () => {
         fixturePrint({ version: "SIU-2026a", print_id: "2026-08-14", date: "2026-08-14" }),
       ),
     );
-    const result = await getIndexTool({ version: "SIU-2026a" }, dir);
+    const result = await getIndexTool({ version: "SIU-2026a" }, defaultDataSource(dir));
     expect(result.print_id).toBe("2026-08-14");
   });
 
   it("throws an honest error for a version with no print", async () => {
     await writeFile(join(dir, "2026-08-13.json"), JSON.stringify(fixturePrint()));
-    await expect(getIndexTool({ version: "SIU-2099z" }, dir)).rejects.toThrow(
+    await expect(getIndexTool({ version: "SIU-2099z" }, defaultDataSource(dir))).rejects.toThrow(
       /No print for version/,
     );
   });

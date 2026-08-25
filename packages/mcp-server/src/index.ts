@@ -4,6 +4,7 @@ export {
   type BuildAppOptions,
   type McpServerOptions,
 } from "./server.js";
+export { defaultDataSource, type PrintDataSource } from "./print-data-source.js";
 export {
   createToolPaywall,
   createDispatcher,

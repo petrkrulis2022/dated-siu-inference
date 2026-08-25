@@ -1,0 +1,42 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "touchstone-mcp",
+  "main": "src/workers/index.ts",
+  "compatibility_date": "2026-08-24",
+  // Needed by viem/@touchstone/sdk's crypto (secp256k1 signing, keccak256) — not by Express,
+  // which the Workers build never imports (src/workers/ replaces it with Hono + a minimal
+  // req/res shim; see src/workers/node-shim.ts).
+  "compatibility_flags": ["nodejs_compat"],
+
+  // The MCP transport (McpAgent, from the `agents` package — Cloudflare's documented pattern for
+  // Streamable HTTP MCP servers on Workers) is Durable-Object-backed even though this service is
+  // logically stateless: no state is set or read across calls, but Streamable HTTP's currently
+  // recommended `serve()` helper requires the binding regardless. Requires a paid Workers plan.
+  "durable_objects": {
+    "bindings": [{ "name": "TOUCHSTONE_MCP", "class_name": "TouchstoneMcpAgent" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TouchstoneMcpAgent"] }],
+
+  "kv_namespaces": [{ "binding": "PRINTS_CACHE", "id": "e057dc9329f342828d4a61c9912b8944" }],
+
+  // Usage evidence only — call counts per tool, distinct payer addresses for the three paid
+  // tools. No request bodies, no PII. See src/workers/analytics.ts.
+  "analytics_engine_datasets": [{ "binding": "USAGE", "dataset": "touchstone_mcp_usage" }],
+
+  // Custom Domains route every path on the hostname to this Worker automatically — no wildcard
+  // or path segment is allowed in the pattern (unlike a plain Route).
+  "routes": [{ "pattern": "mcp.touchstoneassay.com", "custom_domain": true }],
+
+  // Every value below is non-sensitive: a chain name, a contract address (already public in
+  // data/deployments/base-sepolia.json), a public RPC endpoint (same classification ci.yml
+  // already gives it), and TOUCHSTONE_TREASURY — the existing escrow fee address, reused here as
+  // where Circle Gateway pays out (a receiving address needs no private key on this Worker at
+  // all). The one real secret, TOUCHSTONE_ATTESTATION_KEY, is set via `wrangler secret put`, not
+  // here — see README.md's deploy section.
+  "vars": {
+    "TOUCHSTONE_SELLER_ADDRESS": "0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e",
+    "TOUCHSTONE_CHAIN_NAME": "base-sepolia",
+    "TOUCHSTONE_ESCROW_ADDRESS": "0x3eC06FFe8d5250d5Edf8Fff26b163aaaD65c8a00",
+    "BASE_SEPOLIA_RPC_URL": "https://sepolia.base.org"
+  }
+}

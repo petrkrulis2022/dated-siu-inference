@@ -9,7 +9,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "start": "pnpm run build && node dist/cli/serve.js"
+    "start": "pnpm run build && node dist/cli/serve.js",
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
     "@circle-fin/x402-batching": "^3.3.0",
@@ -17,12 +18,16 @@
     "@touchstone/print": "workspace:*",
     "@touchstone/sdk": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "agents": "^0.21.0",
     "express": "^5.2.1",
+    "hono": "^4.13.4",
     "viem": "^2.55.16",
-    "zod": "^3.25.0"
+    "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260823.1",
     "@types/express": "^5.0.0",
-    "@types/node": "^26.2.0"
+    "@types/node": "^26.2.0",
+    "wrangler": "^4.125.0"
   }
 }

@@ -1,0 +1,120 @@
+import type { KVNamespace } from "@cloudflare/workers-types";
+import type { PriceSnapshot, Print, RunRecord } from "@touchstone/sdk";
+import type { PrintDataSource } from "../print-data-source.js";
+import { GITHUB_API_BASE, GITHUB_RAW_BASE } from "./env.js";
+import { cached, type CacheOutcome } from "./kv-cache.js";
+
+const NOT_PUBLISHED_MESSAGE =
+  "No print has been published yet — data/prints/ has no latest.json. Publish one with " +
+  "`pnpm --filter @touchstone/print run publish-print` first.";
+
+// Prints publish once a day — freshness beyond a few minutes buys nothing, and a short TTL is
+// what keeps get_index (and every other tool) from ever failing a call over GitHub being briefly
+// slow or rate-limited. Run records and price snapshots are immutable once a print references
+// them (the append-only guard — see docs/methodology.md's Revision policy), so they get a much
+// longer TTL: there is no staleness to protect against, only repeat-fetch cost.
+const PRINT_TTL_SECONDS = 300;
+const IMMUTABLE_TTL_SECONDS = 3600;
+
+interface GitHubContentsEntry {
+  name: string;
+  type: "file" | "dir";
+  download_url: string | null;
+}
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, { headers: { accept: "application/vnd.github+json" } });
+  if (!res.ok) {
+    throw new Error(`GitHub fetch failed for ${url}: ${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as T;
+}
+
+/** Every real run record (excludes `.raw.json` provider-response dumps and
+ * `reconciliation.json`) for one print, fetched in parallel — matches
+ * `@touchstone/print`'s `loadRunRecords` filter exactly. One directory listing (GitHub's Contents
+ * API, unauthenticated, no rate-limit concern since the *result* is what's cached, not this call
+ * — see IMMUTABLE_TTL_SECONDS above) plus one fetch per file, comfortably inside a paid Workers
+ * plan's per-invocation subrequest limit for a basket this size. */
+async function fetchRunRecords(printId: string): Promise<RunRecord[]> {
+  const entries = await fetchJson<GitHubContentsEntry[]>(
+    `${GITHUB_API_BASE}/contents/data/runs/${encodeURIComponent(printId)}`,
+  ).catch(() => [] as GitHubContentsEntry[]);
+
+  const files = entries.filter(
+    (e) =>
+      e.type === "file" &&
+      e.name.endsWith(".json") &&
+      !e.name.endsWith(".raw.json") &&
+      e.name !== "reconciliation.json" &&
+      e.download_url,
+  );
+
+  return Promise.all(files.map((f) => fetchJson<RunRecord>(f.download_url!)));
+}
+
+/**
+ * The Cloudflare Workers implementation of `PrintDataSource` (`../print-data-source.js`) — reads
+ * `data/` from this repo's own public GitHub content instead of the local filesystem, fronted by
+ * a KV cache (`../workers/kv-cache.js`). Every tool in `../tools/` is unchanged: this is the only
+ * new code the Workers deployment needed for data access.
+ */
+export function githubDataSource(kv: KVNamespace): PrintDataSource {
+  const print = (key: string, path: string, ttl: number) =>
+    cached<Print>(kv, key, ttl, () => fetchJson<Print>(`${GITHUB_RAW_BASE}/${path}`));
+
+  return {
+    async loadLatestPrint() {
+      const { value, cached: hit, fetchedAt } = await print(
+        "print:latest",
+        "data/prints/latest.json",
+        PRINT_TTL_SECONDS,
+      ).catch(() => {
+        throw new Error(NOT_PUBLISHED_MESSAGE);
+      });
+      return { print: value, cached: hit, fetchedAt };
+    },
+
+    async loadPrintByDate(date) {
+      const { value } = await print(
+        `print:${date}`,
+        `data/prints/${encodeURIComponent(date)}.json`,
+        // A specific print_id/date's file never changes once it exists (append-only guard), so
+        // this can be cached as long as the immutable data below — only "latest" needs the short
+        // TTL, since which print *is* latest changes daily.
+        IMMUTABLE_TTL_SECONDS,
+      );
+      return value;
+    },
+
+    async listPrintIds() {
+      const { value } = await cached<{ print_id: string }[]>(
+        kv,
+        "print:index",
+        PRINT_TTL_SECONDS,
+        () => fetchJson(`${GITHUB_RAW_BASE}/data/prints/index.json`),
+      );
+      return value.map((entry) => entry.print_id);
+    },
+
+    async loadPriceSnapshot(ref) {
+      const { value } = await cached<PriceSnapshot>(
+        kv,
+        `price-snapshot:${ref}`,
+        IMMUTABLE_TTL_SECONDS,
+        () => fetchJson(`${GITHUB_RAW_BASE}/data/registry/${encodeURIComponent(ref)}`),
+      );
+      return value;
+    },
+
+    async loadRunRecords(printId) {
+      const outcome: CacheOutcome<RunRecord[]> = await cached(
+        kv,
+        `run-records:${printId}`,
+        IMMUTABLE_TTL_SECONDS,
+        () => fetchRunRecords(printId),
+      ).catch(() => ({ value: [], cached: false, fetchedAt: new Date().toISOString() }));
+      return outcome.value;
+    },
+  };
+}

@@ -1,16 +1,18 @@
-import { join } from "node:path";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-import type { Print, RunRecord } from "@touchstone/sdk";
-import { loadPrint, loadPriceSnapshot, loadRunRecords, printsDir } from "@touchstone/print";
+import type { RunRecord } from "@touchstone/sdk";
+import { printsDir } from "@touchstone/print";
 import { getIndexTool, type GetIndexInput } from "./tools/get-index.js";
 import { getQuoteTool, type GetQuoteInput } from "./tools/get-quote.js";
 import { convertTool, type ConvertInput } from "./tools/convert.js";
 import { verifyReceiptTool, type VerifyReceiptInput } from "./tools/verify-receipt.js";
 import { createToolPaywall, type PaywallOptions } from "./paywall.js";
 import { StubSettlementReader, type SettlementReader } from "./settlement/reader.js";
+import { defaultDataSource, type PrintDataSource } from "./print-data-source.js";
+
+export type { PrintDataSource } from "./print-data-source.js";
 
 function toolResult(data: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(data) }] };
@@ -23,20 +25,11 @@ function toolError(err: unknown) {
   };
 }
 
-const NOT_PUBLISHED_MESSAGE =
-  "No print has been published yet — data/prints/ has no latest.json. Publish one with " +
-  "`pnpm --filter @touchstone/print run publish-print` first.";
-
-async function loadLatestPrintOrThrow(printsDirPath: string): Promise<Print> {
-  return loadPrint(join(printsDirPath, "latest.json")).catch(() => {
-    throw new Error(NOT_PUBLISHED_MESSAGE);
-  });
-}
-
 export interface McpServerOptions {
   settlementReader: SettlementReader;
   attestationPrivateKeyHex: string;
   printsDirPath?: string;
+  dataSource?: PrintDataSource;
 }
 
 /** The four tools — build1-spec.md §9. Pricing is enforced entirely outside this function, by
@@ -46,6 +39,7 @@ export interface McpServerOptions {
 export function createTouchstoneMcpServer(options: McpServerOptions): McpServer {
   const server = new McpServer({ name: "touchstone-assay", version: "1.0.0" });
   const printsDirPath = options.printsDirPath ?? printsDir();
+  const dataSource = options.dataSource ?? defaultDataSource(printsDirPath);
 
   server.registerTool(
     "get_index",
@@ -55,7 +49,7 @@ export function createTouchstoneMcpServer(options: McpServerOptions): McpServer 
     },
     async (args) => {
       try {
-        return toolResult(await getIndexTool(args as GetIndexInput, printsDirPath));
+        return toolResult(await getIndexTool(args as GetIndexInput, dataSource));
       } catch (err) {
         return toolError(err);
       }
@@ -71,9 +65,9 @@ export function createTouchstoneMcpServer(options: McpServerOptions): McpServer 
     async (args) => {
       try {
         const input = args as GetQuoteInput;
-        const print = await loadLatestPrintOrThrow(printsDirPath);
-        const snapshot = await loadPriceSnapshot(print.price_snapshot_ref);
-        const allRecords: RunRecord[] = await loadRunRecords(print.print_id).catch(() => []);
+        const { print } = await dataSource.loadLatestPrint();
+        const snapshot = await dataSource.loadPriceSnapshot(print.price_snapshot_ref);
+        const allRecords: RunRecord[] = await dataSource.loadRunRecords(print.print_id);
         const modelRecords = allRecords.filter((r) => r.model_id === input.model);
         return toolResult(getQuoteTool(input, print, snapshot, modelRecords));
       } catch (err) {
@@ -95,8 +89,8 @@ export function createTouchstoneMcpServer(options: McpServerOptions): McpServer 
     async (args) => {
       try {
         const input = args as ConvertInput;
-        const print = await loadLatestPrintOrThrow(printsDirPath);
-        const snapshot = await loadPriceSnapshot(print.price_snapshot_ref);
+        const { print } = await dataSource.loadLatestPrint();
+        const snapshot = await dataSource.loadPriceSnapshot(print.price_snapshot_ref);
         return toolResult(convertTool(input, print, snapshot));
       } catch (err) {
         return toolError(err);

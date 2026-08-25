@@ -1,7 +1,5 @@
-import { readdir } from "node:fs/promises";
-import { join } from "node:path";
 import type { Print } from "@touchstone/sdk";
-import { loadPrint } from "@touchstone/print";
+import type { PrintDataSource } from "../print-data-source.js";
 
 export interface GetIndexInput {
   version?: string;
@@ -18,24 +16,31 @@ export interface GetIndexInput {
  * resolve a specific file without reading candidates and filtering. With no params, serves
  * `latest.json` (a byte-identical copy of the newest print — @touchstone/print's `writePrint`).
  *
- * Takes `printsDirPath` explicitly (mirroring @touchstone/print's `writePrint(printsDir, print)`)
- * rather than resolving it internally, so this is testable against a temp directory.
+ * A pure function over `dataSource` (../print-data-source.js) rather than a filesystem path —
+ * the Node CLI and the Cloudflare Workers deployment both call this unchanged, supplying
+ * different `PrintDataSource` implementations.
  */
-export async function getIndexTool(input: GetIndexInput, printsDirPath: string): Promise<Print> {
+export type GetIndexOutput = Print & {
+  /** Present only on the no-params (latest) path — the one case with a cache in front of it.
+   * Honest hit/miss reporting, never silently one or the other. */
+  _meta?: { cached: boolean; fetched_at: string };
+};
+
+export async function getIndexTool(
+  input: GetIndexInput,
+  dataSource: PrintDataSource,
+): Promise<GetIndexOutput> {
   if (input.date) {
-    return loadPrint(join(printsDirPath, `${input.date}.json`)).catch(() => {
+    return dataSource.loadPrintByDate(input.date).catch(() => {
       throw new Error(`No print for date "${input.date}".`);
     });
   }
 
   if (input.version) {
-    const files = await readdir(printsDirPath).catch(() => [] as string[]);
-    const candidates = files.filter(
-      (f) => f !== "latest.json" && f !== "index.json" && f.endsWith(".json"),
-    );
+    const ids = await dataSource.listPrintIds();
     const matches: Print[] = [];
-    for (const file of candidates) {
-      const print = await loadPrint(join(printsDirPath, file)).catch(() => undefined);
+    for (const id of ids) {
+      const print = await dataSource.loadPrintByDate(id).catch(() => undefined);
       if (print && print.version === input.version) {
         matches.push(print);
       }
@@ -47,10 +52,6 @@ export async function getIndexTool(input: GetIndexInput, printsDirPath: string):
     return matches[0];
   }
 
-  return loadPrint(join(printsDirPath, "latest.json")).catch(() => {
-    throw new Error(
-      "No print has been published yet — data/prints/ has no latest.json. Publish one with " +
-        "`pnpm --filter @touchstone/print run publish-print` first.",
-    );
-  });
+  const { print, cached, fetchedAt } = await dataSource.loadLatestPrint();
+  return { ...print, _meta: { cached, fetched_at: fetchedAt } };
 }
