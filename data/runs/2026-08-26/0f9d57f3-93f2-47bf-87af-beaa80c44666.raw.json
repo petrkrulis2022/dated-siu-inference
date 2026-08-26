@@ -1,0 +1,46 @@
+{
+  "id": "gen-1787704171-5HyT8AQ4nqfRovuiT7ic",
+  "object": "chat.completion",
+  "created": 1787704171,
+  "model": "meta-llama/llama-3.3-70b-instruct",
+  "provider": "Novita",
+  "system_fingerprint": null,
+  "service_tier": null,
+  "choices": [
+    {
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": "stop",
+      "native_finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! \n{\"tracking_id\": \"SH-6385AC\", \"origin_city\": \"Tallinn\", \"destination_city\": \"Cebu\", \"weight_kg\": 450, \"status\": \"delivered\", \"priority\": \"standard\"}",
+        "refusal": null,
+        "reasoning": null
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 919,
+    "completion_tokens": 285,
+    "total_tokens": 1204,
+    "cost": 0.000238065,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": 0.000238065,
+      "upstream_inference_prompt_cost": 0.000124065,
+      "upstream_inference_completions_cost": 0.000114
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "image_tokens": 0,
+      "audio_tokens": 0
+    }
+  }
+}
