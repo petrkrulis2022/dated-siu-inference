@@ -4,5 +4,6 @@ export * from "./concurrency.js";
 export * from "./decimal.js";
 export * from "./run-record.js";
 export * from "./orchestrator.js";
+export * from "./failure-summary.js";
 export * from "./dry-run.js";
 export * from "./reconcile.js";

@@ -9,7 +9,7 @@ import {
   type Adapter,
   type ApiKeys,
 } from "./adapters/index.js";
-import { DEFAULT_BACKOFF, withBackoff, type BackoffOptions } from "./retry.js";
+import { DEFAULT_BACKOFF, withBackoff, classifyFailure, type BackoffOptions, type FailureCategory } from "./retry.js";
 import { createLimiter } from "./concurrency.js";
 import { buildRunRecord } from "./run-record.js";
 
@@ -33,6 +33,12 @@ export interface InstanceOutcome {
   passed: boolean;
   /** Set only when every retry within backoff was exhausted — no response was ever obtained. */
   infraFailure?: string;
+  /** One-word bucket for infraFailure — see retry.ts's classifyFailure. Set exactly when
+   * infraFailure is. */
+  infraFailureCategory?: FailureCategory;
+  /** How many retries were attempted before infraFailure was recorded — 0 means the error was
+   * non-retryable (failed immediately, retrying would not have helped) rather than exhausted. */
+  infraFailureRetries?: number;
 }
 
 /** T3 gets up to 3 graded attempts per build1-spec.md §3; T1/T2 are single-shot. */
@@ -91,6 +97,8 @@ async function runOneInstance(
         records,
         passed: false,
         infraFailure: err instanceof Error ? err.message : String(err),
+        infraFailureCategory: classifyFailure(err),
+        infraFailureRetries: retryErrors.length,
       };
     }
 

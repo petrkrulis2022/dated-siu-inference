@@ -13,6 +13,36 @@ export function isRetryableError(err: unknown): boolean {
   return false;
 }
 
+/**
+ * One-word bucket for the *final* error an instance failed with — what an operator actually
+ * needs to act on a batch of "infrastructure failure" outcomes: is this one host rate-limiting,
+ * a genuine outage, a network blip, or something the response shape itself couldn't handle. Not
+ * exhaustive diagnosis (the full message is kept alongside this, see InstanceOutcome.infraFailure)
+ * — just enough structure to group and count without re-reading every message by eye.
+ */
+export type FailureCategory =
+  | "rate_limit"
+  | "server_error"
+  | "timeout"
+  | "network"
+  | "auth_or_bad_request"
+  | "malformed_response"
+  | "unknown";
+
+export function classifyFailure(err: unknown): FailureCategory {
+  if (err instanceof AdapterHttpError) {
+    if (err.status === 429) return "rate_limit";
+    if (err.status >= 500) return "server_error";
+    return "auth_or_bad_request"; // 4xx other than 429: bad key, bad request, not found, etc.
+  }
+  if (err instanceof SyntaxError) return "malformed_response"; // JSON.parse on a non-JSON body.
+  if (err instanceof Error) {
+    if (/ETIMEDOUT|timed? ?out/i.test(err.message)) return "timeout";
+    if (/fetch failed|network|ECONNRESET|ENOTFOUND|ENETUNREACH/i.test(err.message)) return "network";
+  }
+  return "unknown";
+}
+
 export interface BackoffOptions {
   maxRetries: number;
   baseDelayMs: number;
