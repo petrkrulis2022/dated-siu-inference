@@ -9,6 +9,12 @@ export interface SnapshotBuildResult {
   unmatched: string[];
 }
 
+// PriceSnapshot["entries"] is a non-empty tuple (the schema requires at least one priced
+// entry) — the right type for a final snapshot, but not for an accumulator built up one
+// .push() at a time starting from []. Same cast-at-construction pattern flagSubsidised below
+// already uses.
+type PriceEntry = PriceSnapshot["entries"][number];
+
 function litellmLookup(map: LiteLLMPriceMap, modelString: string) {
   // LiteLLM's key naming is inconsistent with OpenRouter's slugs — some match exactly,
   // some are prefixed with "openrouter/", most aren't matchable by pattern at all. Try
@@ -22,7 +28,7 @@ export async function buildPriceSnapshotFromOpenRouter(
   snapshotId: string,
   timestamp: string,
 ): Promise<SnapshotBuildResult> {
-  const entries: PriceSnapshot["entries"] = [];
+  const entries: PriceEntry[] = [];
   const unmatched: string[] = [];
 
   // Entries routed through OpenRouter need per-host pricing (fetchOpenRouterEndpoints), not
@@ -72,7 +78,12 @@ export async function buildPriceSnapshotFromOpenRouter(
   }
 
   return {
-    snapshot: { snapshot_id: snapshotId, timestamp, source: "openrouter", entries },
+    snapshot: {
+      snapshot_id: snapshotId,
+      timestamp,
+      source: "openrouter",
+      entries: entries as PriceSnapshot["entries"],
+    },
     unmatched,
   };
 }
@@ -84,7 +95,7 @@ export async function buildPriceSnapshotFromLiteLLM(
 ): Promise<SnapshotBuildResult> {
   const prices = await fetchLiteLLMPrices();
 
-  const entries: PriceSnapshot["entries"] = [];
+  const entries: PriceEntry[] = [];
   const unmatched: string[] = [];
 
   for (const reg of registry) {
@@ -101,7 +112,12 @@ export async function buildPriceSnapshotFromLiteLLM(
   }
 
   return {
-    snapshot: { snapshot_id: snapshotId, timestamp, source: "litellm", entries },
+    snapshot: {
+      snapshot_id: snapshotId,
+      timestamp,
+      source: "litellm",
+      entries: entries as PriceSnapshot["entries"],
+    },
     unmatched,
   };
 }

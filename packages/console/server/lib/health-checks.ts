@@ -83,8 +83,8 @@ export function computeHealthReport(input: ComputeHealthInput): HealthReport {
   );
 
   const unanchoredPrints: UnanchoredPrint[] = input.prints
-    .filter((p) => !ANCHORED_STATUSES.has(p.anchor.status))
-    .map((p) => ({ print_id: p.print_id, date: p.date, anchorStatus: p.anchor.status }));
+    .filter((p) => !p.anchor || !ANCHORED_STATUSES.has(p.anchor.status))
+    .map((p) => ({ print_id: p.print_id, date: p.date, anchorStatus: p.anchor?.status ?? "none" }));
 
   const staleProvisionalPrints: StaleProvisionalPrint[] = input.prints
     .filter((p) => p.status === "provisional")

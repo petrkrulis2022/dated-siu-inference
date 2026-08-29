@@ -87,8 +87,8 @@ async function main(): Promise<void> {
       weights_source: print.weights.source,
       methodology_version: print.methodology_version,
       cost_of_production_usd: print.cost_of_production_usd,
-      anchor_tx_hash: print.anchor.tx_hash ?? null,
-      anchor_status: print.anchor.status,
+      anchor_tx_hash: print.anchor?.tx_hash ?? null,
+      anchor_status: print.anchor?.status ?? "none",
       verification: await verifyPrintOnChain(print, {
         rpcUrl: config.rpcUrl,
         attestationAddress: config.attestationAddress,
