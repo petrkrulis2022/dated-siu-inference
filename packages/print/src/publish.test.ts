@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -10,6 +10,7 @@ import {
   MINIMUM_QUALIFYING_MODELS,
   type PublishInput,
 } from "./publish.js";
+import { writeRunManifest } from "./publication.js";
 import { workedExampleInput, publishableWorkedExampleInput } from "./worked-example.fixture.js";
 
 const TEST_KEY = `0x${"55".repeat(32)}`;
@@ -186,5 +187,37 @@ describe("publishPrint", () => {
     // A refusal is total — nothing was written, no signature, no anchor attempt.
     const { readdir } = await import("node:fs/promises");
     expect(await readdir(dir).catch(() => [])).toEqual([]);
+  });
+
+  it("writes a declared run manifest when runsDirPath is supplied", async () => {
+    const runsDir = join(dir, "runs");
+    const input = publishInput({ runsDirPath: runsDir });
+    const result = await publishPrint(dir, input);
+
+    const manifest = JSON.parse(await readFile(join(runsDir, "index.json"), "utf-8"));
+    expect(manifest.print_id).toBe(result.print.print_id);
+    expect(manifest.basket_version).toBe(result.print.version);
+    expect(manifest.methodology_version).toBe(result.print.methodology_version);
+
+    const expectedFiles = input.models.flatMap((m) => m.records.map((r) => `${r.run_id}.json`)).sort();
+    expect(manifest.run_records).toEqual(expectedFiles);
+  });
+
+  it("does not write a manifest when runsDirPath is omitted", async () => {
+    await publishPrint(dir, publishInput());
+    const runsDir = join(dir, "runs");
+    const exists = await access(runsDir)
+      .then(() => true)
+      .catch(() => false);
+    expect(exists).toBe(false);
+  });
+
+  it("refuses to overwrite an existing run manifest for the same print_id", async () => {
+    const runsDir = join(dir, "runs");
+    const result = await publishPrint(dir, publishInput({ runsDirPath: runsDir }));
+
+    // Matches writePrint's own append-only test shape: check the guard directly rather than
+    // simulate a full second publish under the same print_id.
+    await expect(writeRunManifest(runsDir, result.print, [])).rejects.toThrow(/already exists/);
   });
 });

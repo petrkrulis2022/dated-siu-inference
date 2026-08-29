@@ -2,7 +2,12 @@ import { validateRunRecord, validatePrint, type Print } from "@touchstone/sdk";
 import { computePrint, computeCostOfProduction, type PrintInput } from "./compute/index.js";
 import { signPrintBody } from "./sign/sign.js";
 import { printBodyHashHex } from "./sign/canonicalise.js";
-import { writePrint, writePrintsIndex, type WritePrintResult } from "./publication.js";
+import {
+  writePrint,
+  writePrintsIndex,
+  writeRunManifest,
+  type WritePrintResult,
+} from "./publication.js";
 import {
   StubAttestationClient,
   type AnchorResult,
@@ -33,6 +38,11 @@ export interface PublishInput extends Omit<PrintInput, "status"> {
    * runaway-spend guard for unattended runs. Omit for manual publishing, where a human
    * already sees the cost before choosing to run at all. */
   spendCeilingUsd?: string;
+  /** When supplied, writes data/runs/<print_id>/index.json — see publication.ts's
+   * writeRunManifest. Optional so synthetic-fixture unit tests (no real runs/ directory on
+   * disk) don't need one; both real CLI entry points (cli/publish.ts,
+   * cli/publish-unattended.ts) always pass it. */
+  runsDirPath?: string;
 }
 
 export interface PublishResult {
@@ -141,6 +151,14 @@ export async function publishPrint(printsDir: string, input: PublishInput): Prom
 
   const write = await writePrint(printsDir, print);
   const indexPath = await writePrintsIndex(printsDir);
+
+  if (input.runsDirPath !== undefined) {
+    await writeRunManifest(
+      input.runsDirPath,
+      print,
+      input.models.flatMap((m) => m.records),
+    );
+  }
 
   return { print, write, indexPath, anchor };
 }

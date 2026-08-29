@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { ModelRegistryEntry, PriceSnapshot, Print, RunRecord } from "@touchstone/sdk";
+import type { ModelRegistryEntry, PriceSnapshot, Print, RunManifest, RunRecord } from "@touchstone/sdk";
 import type { ModelInput } from "../compute/index.js";
 
 /** pnpm always runs package scripts with cwd = the package directory. */
@@ -44,6 +44,13 @@ export async function latestPriceSnapshotFile(
   return latest;
 }
 
+/**
+ * Scans the directory for candidate run records. The one legitimate use of this: gathering
+ * inputs for a print that doesn't exist yet (cli/publish.ts, cli/publish-unattended.ts), before
+ * there's a manifest to declare what belongs to it. Every post-publish reader (verify, the MCP
+ * server's data sources) must use loadDeclaredRunRecords below instead — see its own doc comment
+ * for why a directory listing is not a safe stand-in for the declared list.
+ */
 export async function loadRunRecords(printId: string): Promise<RunRecord[]> {
   const dir = runsDirFor(printId);
   const files = (
@@ -54,6 +61,41 @@ export async function loadRunRecords(printId: string): Promise<RunRecord[]> {
 
   return Promise.all(
     files.map(async (f) => JSON.parse(await readFile(join(dir, f), "utf-8")) as RunRecord),
+  );
+}
+
+export async function loadRunManifest(printId: string): Promise<RunManifest> {
+  const dir = runsDirFor(printId);
+  const path = join(dir, "index.json");
+  return JSON.parse(
+    await readFile(path, "utf-8").catch(() => {
+      throw new Error(
+        `No run manifest at ${path}. Every print published after the manifest system shipped ` +
+          `has one; older prints need backfill-run-manifest run once — see cli/backfill-run-manifest.ts.`,
+      );
+    }),
+  ) as RunManifest;
+}
+
+/**
+ * Loads run records by the print's own declared manifest (data/runs/<print_id>/index.json), not
+ * by listing the directory — see writeRunManifest's doc comment (publication.ts) for why a
+ * directory listing is not a safe stand-in: a same-print_id retry writes into the same
+ * directory as an earlier failed attempt's leftovers, and only the manifest states which files
+ * actually went into the print. A declared file that's missing on disk is a real integrity
+ * problem and throws, rather than silently treating the record as absent.
+ */
+export async function loadDeclaredRunRecords(printId: string): Promise<RunRecord[]> {
+  const dir = runsDirFor(printId);
+  const manifest = await loadRunManifest(printId);
+  return Promise.all(
+    manifest.run_records.map(async (f) => {
+      const path = join(dir, f);
+      const text = await readFile(path, "utf-8").catch(() => {
+        throw new Error(`Manifest for ${printId} declares "${f}", but ${path} does not exist.`);
+      });
+      return JSON.parse(text) as RunRecord;
+    }),
   );
 }
 

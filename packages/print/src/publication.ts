@@ -1,6 +1,6 @@
 import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Print } from "@touchstone/sdk";
+import type { Print, RunRecord } from "@touchstone/sdk";
 
 export interface WritePrintResult {
   path: string;
@@ -46,6 +46,46 @@ export async function writePrint(printsDir: string, print: Print): Promise<Write
   await writeFile(latestPath, json, "utf-8");
 
   return { path, latestPath };
+}
+
+/**
+ * Writes data/runs/<print_id>/index.json — the declared, authoritative list of the run-record
+ * files that were actually used to compute `print` (docs/methodology.md's reproducibility
+ * section). Not derived by re-scanning `runsDir`: a same-print_id retry (a scheduled run that
+ * fails the qualifying-set gate, then a same-day manual retry) writes fresh run records into the
+ * same directory as an earlier failed attempt's leftovers, so a directory listing is not
+ * guaranteed to match what actually went into the print. `records` must be exactly what the
+ * caller already used to compute `print` — publishPrint passes `input.models`' own records,
+ * never a fresh read.
+ *
+ * Append-only, same as writePrint: a manifest, once declared, is as permanent as the print it
+ * describes.
+ */
+export async function writeRunManifest(
+  runsDir: string,
+  print: Print,
+  records: RunRecord[],
+): Promise<string> {
+  await mkdir(runsDir, { recursive: true });
+  const path = join(runsDir, "index.json");
+
+  const alreadyExists = await access(path)
+    .then(() => true)
+    .catch(() => false);
+  if (alreadyExists) {
+    throw new Error(
+      `Refusing to overwrite ${path}: a run manifest already exists for this print_id.`,
+    );
+  }
+
+  const manifest = {
+    print_id: print.print_id,
+    basket_version: print.version,
+    methodology_version: print.methodology_version,
+    run_records: records.map((r) => `${r.run_id}.json`).sort(),
+  };
+  await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`, "utf-8");
+  return path;
 }
 
 export interface PrintIndexEntry {
