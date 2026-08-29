@@ -139,6 +139,43 @@ describe("renderPrintsList", () => {
     expect(html).not.toContain("No print has been published yet");
   });
 
+  it("shows the per-model infrastructure-failure breakdown when the incident carries one", () => {
+    const html = renderPrintsList({
+      allPrints: [],
+      incidents: [
+        {
+          date: "2026-08-27",
+          run_url: "https://github.com/petrkrulis2022/dated-siu-inference/actions/runs/33031864314",
+          reason: "Refusing to publish: only 3 of 6 registered models qualified (minimum 4).",
+          infra_failures:
+            "25 instance(s) had an infrastructure failure and produced no run record:\n  deepseek-v3.2 / T2: 10x rate_limit",
+          occurred_at: "2026-08-27T02:03:11Z",
+        },
+      ],
+      basePath: "../",
+      chain: CHAIN,
+    });
+    expect(html).toContain('class="infra-breakdown"');
+    expect(html).toContain("deepseek-v3.2 / T2: 10x rate_limit");
+  });
+
+  it("omits the breakdown block when the incident has none", () => {
+    const html = renderPrintsList({
+      allPrints: [],
+      incidents: [
+        {
+          date: "2026-08-22",
+          run_url: "https://github.com/petrkrulis2022/dated-siu-inference/actions/runs/1",
+          reason: "insufficient balance",
+          occurred_at: "2026-08-22T00:00:00Z",
+        },
+      ],
+      basePath: "../",
+      chain: CHAIN,
+    });
+    expect(html).not.toContain('class="infra-breakdown"');
+  });
+
   it("interleaves a missed day with real prints in date order, not appended at the end", () => {
     const html = renderPrintsList({
       allPrints: [

@@ -44,6 +44,11 @@ export interface Incident {
   date: string;
   run_url: string;
   reason: string;
+  /** Per-model/task-class infrastructure-failure breakdown (harness's
+   * formatInfraFailureSummary), when the failure was the qualifying-set gate rather than
+   * something earlier in the pipeline — absent (or older incidents predating this field) means
+   * either no infrastructure failures occurred, or the failure happened before the harness ran. */
+  infra_failures?: string | null;
   occurred_at: string;
 }
 

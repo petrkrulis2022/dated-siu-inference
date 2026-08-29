@@ -178,6 +178,13 @@ tr.incident td {
   font-style: italic;
 }
 
+.infra-breakdown {
+  font-style: normal;
+  font-size: 0.85em;
+  white-space: pre-wrap;
+  margin: 0.3rem 0 0;
+}
+
 .note.incidents ul {
   margin: 0.4rem 0 0;
   padding-left: 1.2rem;

@@ -26,10 +26,13 @@ function renderAnchorCell(print: Print, chain: ChainInfo): string {
 }
 
 function renderIncidentRow(incident: Incident): string {
+  const breakdown = incident.infra_failures
+    ? `<br /><pre class="infra-breakdown">${esc(incident.infra_failures)}</pre>`
+    : "";
   return `<tr class="incident">
     <td>${esc(formatDate(incident.date))}</td>
     <td><a class="badge status-failed" href="${esc(incident.run_url)}" title="${esc(incident.reason)}" target="_blank" rel="noopener">no print — run failed</a></td>
-    <td colspan="5" class="muted" title="${esc(incident.reason)}">${esc(incident.reason)}</td>
+    <td colspan="5" class="muted" title="${esc(incident.reason)}">${esc(incident.reason)}${breakdown}</td>
   </tr>`;
 }
 
