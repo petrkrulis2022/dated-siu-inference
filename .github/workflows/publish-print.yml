@@ -167,13 +167,25 @@ jobs:
           if [ -z "$REASON" ]; then
             REASON="Run failed before publish.log had a diagnostic message — see the linked run's full log."
           fi
-          REASON="$REASON" python3 -c '
+          # Per-model/task-class infrastructure-failure breakdown (harness's
+          # formatInfraFailureSummary), when the failure was the qualifying-set gate rather than
+          # something earlier — makes the disclosure itself self-diagnosing, not just a link to
+          # dig through. Captures the summary line plus every indented bucket line that follows
+          # it, stopping at the first non-indented line.
+          INFRA_BREAKDOWN=$(awk '
+            /instance\(s\) had an infrastructure failure and produced no run record:/ { capture=1; print; next }
+            capture && /^  / { print; next }
+            { capture=0 }
+          ' publish.log 2>/dev/null)
+          REASON="$REASON" INFRA_BREAKDOWN="$INFRA_BREAKDOWN" python3 -c '
           import json, os, datetime
           print_id = os.environ["PRINT_ID"]
+          infra_breakdown = os.environ["INFRA_BREAKDOWN"]
           record = {
               "date": print_id,
               "run_url": os.environ["RUN_URL"],
               "reason": os.environ["REASON"],
+              "infra_failures": infra_breakdown if infra_breakdown else None,
               "occurred_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
           }
           with open("data/prints/incidents/" + print_id + ".json", "w") as f:
