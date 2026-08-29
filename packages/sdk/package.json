@@ -6,7 +6,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && mkdir -p dist/types/generated && cp src/types/generated/*.d.ts dist/types/generated/",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "gen:types": "json2ts -i schemas -o src/types/generated"

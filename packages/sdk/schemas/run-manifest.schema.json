@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "run-manifest.schema.json",
+  "title": "RunManifest",
+  "description": "The declared, authoritative list of run-record files that constitute one print — written once at publish time to data/runs/<print_id>/index.json. A reader must load run records by this list, never by listing the directory: the directory can hold leftover files from an earlier failed attempt under the same print_id (a same-day retry runs into the same directory), and only this manifest states which files were actually used to compute the print.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "print_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "basket_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Basket version, e.g. SIU-2026a — matches Print.version for the same print."
+    },
+    "methodology_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "run_records": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Filenames only (e.g. \"<run_id>.json\"), resolved relative to this manifest's own directory. Sorted, so the file is stable and diffable."
+    }
+  },
+  "required": ["print_id", "basket_version", "methodology_version", "run_records"]
+}
