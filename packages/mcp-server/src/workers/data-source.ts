@@ -37,9 +37,22 @@ async function fetchJson<T>(url: string): Promise<T> {
  * — see IMMUTABLE_TTL_SECONDS above) plus one fetch per file, comfortably inside a paid Workers
  * plan's per-invocation subrequest limit for a basket this size. */
 async function fetchRunRecords(printId: string): Promise<RunRecord[]> {
-  const entries = await fetchJson<GitHubContentsEntry[]>(
+  const listingRes = await fetch(
     `${GITHUB_API_BASE}/contents/data/runs/${encodeURIComponent(printId)}`,
-  ).catch(() => [] as GitHubContentsEntry[]);
+    { headers: { accept: "application/vnd.github+json" } },
+  );
+  // A 404 means the print genuinely has no run directory — legitimately empty, worth caching.
+  // Any other failure (rate limit, GitHub 5xx, network error) is NOT the same thing and must not
+  // be swallowed into an empty result: that would let a transient fetch failure get cached for a
+  // full IMMUTABLE_TTL_SECONDS as if it were real, permanent "no run records" data — masking the
+  // real error behind a wrong business-logic answer for an hour, on a paid tool call.
+  if (listingRes.status === 404) return [];
+  if (!listingRes.ok) {
+    throw new Error(
+      `GitHub fetch failed for run records listing (${printId}): ${listingRes.status} ${listingRes.statusText}`,
+    );
+  }
+  const entries = (await listingRes.json()) as GitHubContentsEntry[];
 
   const files = entries.filter(
     (e) =>
@@ -108,12 +121,16 @@ export function githubDataSource(kv: KVNamespace): PrintDataSource {
     },
 
     async loadRunRecords(printId) {
+      // No blanket catch-to-empty here, deliberately: `cached()` only reaches KV.put on a
+      // successful fetch, so letting a real failure propagate (rather than reporting a false
+      // "no run records for this class") never poisons the cache — it just fails this one call
+      // honestly, and a retry tries again.
       const outcome: CacheOutcome<RunRecord[]> = await cached(
         kv,
         `run-records:${printId}`,
         IMMUTABLE_TTL_SECONDS,
         () => fetchRunRecords(printId),
-      ).catch(() => ({ value: [], cached: false, fetchedAt: new Date().toISOString() }));
+      );
       return outcome.value;
     },
   };
