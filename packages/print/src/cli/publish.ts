@@ -17,6 +17,7 @@ import {
 import {
   estimateCost,
   formatDryRunReport,
+  formatInfraFailureSummary,
   loadApiKeysFromEnv,
   runOrchestrator,
   type OrchestratorTask,
@@ -107,11 +108,9 @@ const outcomes = await runOrchestrator(tasks, {
   runsDir: runsDirFor(printId),
   keys: loadApiKeysFromEnv(),
 });
-const infraFailures = outcomes.filter((o) => o.infraFailure);
-if (infraFailures.length > 0) {
-  console.warn(
-    `${infraFailures.length} instance(s) had an infrastructure failure and produced no run record.`,
-  );
+const infraFailureSummary = formatInfraFailureSummary(outcomes);
+if (infraFailureSummary) {
+  console.warn(infraFailureSummary);
 }
 
 // 4. Compute -> sign -> write -> anchor. publishPrint refuses if any loaded record fails
@@ -143,6 +142,7 @@ const result = await publishPrint(printsDir(), {
   methodology_version: "v0-draft",
   privateKeyHex,
   attestationClient,
+  runsDirPath: runsDirFor(printId),
   sensitivityVariants: [
     cachePolicyVariant({
       cachedFraction: "0.40",

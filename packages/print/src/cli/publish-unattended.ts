@@ -15,7 +15,12 @@ import {
   type Grader,
   type TaskClass,
 } from "@touchstone/basket";
-import { loadApiKeysFromEnv, runOrchestrator, type OrchestratorTask } from "@touchstone/harness";
+import {
+  formatInfraFailureSummary,
+  loadApiKeysFromEnv,
+  runOrchestrator,
+  type OrchestratorTask,
+} from "@touchstone/harness";
 import { batchDiscountVariant, cachePolicyVariant } from "../compute/sensitivity.js";
 import { loadPublisherKeyFromEnv } from "../sign/sign.js";
 import { OnChainAttestationClient } from "../anchor/on-chain.js";
@@ -126,11 +131,9 @@ const outcomes = await runOrchestrator(tasks, {
   runsDir: runsDirFor(printId),
   keys: loadApiKeysFromEnv(),
 });
-const infraFailures = outcomes.filter((o) => o.infraFailure);
-if (infraFailures.length > 0) {
-  console.warn(
-    `${infraFailures.length} instance(s) had an infrastructure failure and produced no run record.`,
-  );
+const infraFailureSummary = formatInfraFailureSummary(outcomes);
+if (infraFailureSummary) {
+  console.warn(infraFailureSummary);
 }
 
 // 5. Compute -> sign -> anchor -> write. publishPrint enforces the qualifying-set gate, the
@@ -161,6 +164,7 @@ const result = await publishPrint(printsDir(), {
   privateKeyHex,
   attestationClient,
   spendCeilingUsd,
+  runsDirPath: runsDirFor(printId),
   sensitivityVariants: [
     cachePolicyVariant({
       cachedFraction: "0.40",
