@@ -1,0 +1,22 @@
+{
+  "run_id": "daffbe5a-1edc-47ae-a6b2-56e0599ca8d2",
+  "model_id": "llama-3.3-70b-novita",
+  "task_class": "T1",
+  "instance_id": "T1-03",
+  "seed": 2528755511,
+  "attempt": 1,
+  "usage": {
+    "input": 858,
+    "output": 58,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 436,
+  "gate_passed": true,
+  "raw_response_ref": "daffbe5a-1edc-47ae-a6b2-56e0599ca8d2.raw.json",
+  "deviations": [
+    "retry 1: OpenAI-compatible request failed: 429",
+    "retry 2: OpenAI-compatible request failed: 429",
+    "retry 3: OpenAI-compatible request failed: 429"
+  ]
+}

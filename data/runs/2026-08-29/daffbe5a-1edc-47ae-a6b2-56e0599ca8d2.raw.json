@@ -1,0 +1,46 @@
+{
+  "id": "gen-1787964786-SXG1HyzEHE8LuO3JPQ8O",
+  "object": "chat.completion",
+  "created": 1787964786,
+  "model": "meta-llama/llama-3.3-70b-instruct",
+  "provider": "Novita",
+  "system_fingerprint": null,
+  "service_tier": null,
+  "choices": [
+    {
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": "stop",
+      "native_finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "```\n{\n  \"tracking_id\": \"SH-204475\",\n  \"origin_city\": \"Auckland\",\n  \"destination_city\": \"Osaka\",\n  \"weight_kg\": 59,\n  \"status\": \"pending\",\n  \"priority\": \"express\"\n}\n```",
+        "refusal": null,
+        "reasoning": null
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 858,
+    "completion_tokens": 58,
+    "total_tokens": 916,
+    "cost": 0.00013903,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": 0.00013903,
+      "upstream_inference_prompt_cost": 0.00011583,
+      "upstream_inference_completions_cost": 0.0000232
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "image_tokens": 0,
+      "audio_tokens": 0
+    }
+  }
+}

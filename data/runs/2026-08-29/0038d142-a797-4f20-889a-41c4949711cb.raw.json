@@ -1,0 +1,46 @@
+{
+  "id": "gen-1787964763-59No9drCeWMwQzg4x3jg",
+  "object": "chat.completion",
+  "created": 1787964763,
+  "model": "meta-llama/llama-3.3-70b-instruct",
+  "provider": "Cloudflare",
+  "system_fingerprint": null,
+  "service_tier": null,
+  "choices": [
+    {
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": "stop",
+      "native_finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "```javascript\nexport function filterAboveThreshold(nums, threshold) {\n    return nums.filter(num => num > threshold);\n}\n```",
+        "refusal": null,
+        "reasoning": null
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 141,
+    "completion_tokens": 26,
+    "total_tokens": 167,
+    "cost": 0.000099891,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": 0.000099891,
+      "upstream_inference_prompt_cost": 0.000041313,
+      "upstream_inference_completions_cost": 0.000058578
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "image_tokens": 0,
+      "audio_tokens": 0
+    }
+  }
+}
