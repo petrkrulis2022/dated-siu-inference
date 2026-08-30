@@ -33,7 +33,16 @@ export async function loadAllPrints(printsDir: string): Promise<Print[]> {
 export async function loadRunRecordsFor(runsDir: string, printId: string): Promise<RunRecord[]> {
   const dir = join(runsDir, printId);
   const files = (await readdir(dir).catch(() => [] as string[])).filter(
-    (f) => f.endsWith(".json") && !f.endsWith(".raw.json") && f !== "reconciliation.json",
+    (f) =>
+      f.endsWith(".json") &&
+      !f.endsWith(".raw.json") &&
+      f !== "reconciliation.json" &&
+      // The declared run-record manifest (@touchstone/print's writeRunManifest) — present
+      // alongside real run records from the first real publish after that feature shipped
+      // onward. Found live: loaded as if it were a RunRecord (it passes every other filter
+      // here), its undefined model_id/task_class/gate_passed then crashed the Models page
+      // renderer on the first print that actually had one.
+      f !== "index.json",
   );
   return Promise.all(
     files.map(async (f) => JSON.parse(await readFile(join(dir, f), "utf-8")) as RunRecord),
