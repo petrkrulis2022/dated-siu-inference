@@ -1,0 +1,7 @@
+{
+  "date": "2026-08-30",
+  "run_url": "https://github.com/petrkrulis2022/dated-siu-inference/actions/runs/33284757881",
+  "reason": "Refusing to publish: only 3 of 6 registered models qualified (minimum 4) \u2014 this reference set is too thin to constitute a print, not merely a worse measurement of the usual one. See methodology.md's registry inclusion policy.",
+  "infra_failures": "20 instance(s) had an infrastructure failure and produced no run record:\n  llama-3.3-70b-cloudflare / T2: 5x auth_or_bad_request \u2014 \"OpenAI-compatible request failed: 400\"\n  llama-3.3-70b-novita / T2: 5x auth_or_bad_request \u2014 \"OpenAI-compatible request failed: 400\"\n  mistral-small-3.2-24b-instruct / T3: 5x rate_limit \u2014 \"OpenAI-compatible request failed: 429\"\n  mistral-small-3.2-24b-instruct / T1: 3x rate_limit \u2014 \"OpenAI-compatible request failed: 429\"\n  mistral-small-3.2-24b-instruct / T2: 2x rate_limit \u2014 \"OpenAI-compatible request failed: 429\"",
+  "occurred_at": "2026-08-30T01:06:04Z"
+}
