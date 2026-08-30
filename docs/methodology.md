@@ -82,11 +82,15 @@ a reader can see how much of any spread a batch-pricing tier could close.
 ### Host weighting for identical open weights
 
 The same open-weight model is frequently served by more than one host at different prices — the
-registry today already has three separate entries for `meta-llama/llama-3.3-70b-instruct` alone
+registry had three separate entries for `meta-llama/llama-3.3-70b-instruct` at one point
 (`llama-3.3-70b-cloudflare`, `llama-3.3-70b-deepinfra`, `llama-3.3-70b-novita` —
-`data/registry/models.json`), each a real, independently-priced registry entry. Left unaddressed,
-this would let identical weights inflate their influence on Dated SIU simply by being listed
-under more hosts than a comparably-priced closed model.
+`data/registry/models.json`; the cloudflare and novita entries were since removed for confirmed
+structural incapacity, Registry inclusion policy below — `llama-3.3-70b-deepinfra` remains), each
+a real, independently-priced registry entry while it was a member. Left unaddressed, multiple
+entries for identical weights would let them inflate their influence on Dated SIU simply by being
+listed under more hosts than a comparably-priced closed model — the same principle applies to a
+frontier model reachable through more than one access path (e.g. a direct provider API and an
+OpenRouter route to the same model), should that arise.
 
 **Rule:** each host-variant of the same open weights is retained as its own row in the published
 exchange-rate table — the price _does_ differ by host, and hiding that would itself be a loss of
@@ -313,12 +317,16 @@ the identical prompt successfully (21,678 real prompt tokens). This is a per-hos
 configuration limit, not a harness defect: no timeout, truncation, or routing misconfiguration was
 involved.
 
-Per criterion 5, both fail admission as of this finding and are **removed from the registry at
-the next scheduled review** (quarterly, per the review cadence below) — announced here, in this
-revision, ahead of that review taking effect, per the review cadence's own rule. Until then they
-remain registry members, continuing to be excluded from each print's reference set on a per-print
-basis exactly as they are today; this announcement does not retroactively remove them from any
-print already published or in progress.
+**Removed 2026-08-30**, per criterion 5 and the constituent-change rule (announced here, in
+this revision, ahead of the print it takes effect in — every print already published, including
+every one where these two were excluded per-print rather than absent from the registry, is
+untouched). `llama-3.3-70b-cloudflare` and `llama-3.3-70b-novita` were removed from
+`data/registry/models.json`, not merely excluded again: the 2026-08-30 scheduled run's own
+infrastructure-failure breakdown independently confirmed the same finding with the real HTTP
+status this time (`OpenAI-compatible request failed: 400` on every T2 instance, both hosts) —
+the same conclusion as the manual replay above, now corroborated by production evidence rather
+than resting on that replay alone. `llama-3.3-70b-deepinfra` — the same weights, unaffected —
+stays in the registry.
 
 **Removal:** a registry entry is removed when its price source stops publishing a price for it,
 its provider adapter stops functioning and no replacement adapter is available within one review
