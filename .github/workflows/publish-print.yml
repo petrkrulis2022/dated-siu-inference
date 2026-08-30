@@ -183,7 +183,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           mkdir -p data/prints/incidents
-          REASON=$(grep -m1 "^Error:" publish.log 2>/dev/null | sed 's/^Error: //')
+          # Matches "Error: ..." and any custom Error subclass Node prints by its own
+          # constructor name on an uncaught throw (e.g. "QualifyingSetError: ...", from
+          # packages/print/src/publish.ts) — a literal "^Error:" match alone missed every
+          # QualifyingSetError, the most common real failure, and silently fell back to the
+          # generic placeholder instead of the actual reason. Found live, same day the class
+          # was introduced.
+          REASON=$(grep -m1 -E "^[A-Za-z]*Error: " publish.log 2>/dev/null | sed -E 's/^[A-Za-z]*Error: //')
           if [ -z "$REASON" ]; then
             REASON="Run failed before publish.log had a diagnostic message — see the linked run's full log."
           fi
