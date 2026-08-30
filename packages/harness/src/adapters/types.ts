@@ -26,6 +26,16 @@ export type Adapter = (
   params: AdapterParams,
 ) => Promise<AdapterResult>;
 
+/**
+ * Bounds the reasoning-accommodation retry every adapter implements the same way — see each
+ * adapter's own `callX` doc comment. docs/methodology.md's Quality gates section states this
+ * multiple as a published, versioned methodology fact, not an implementation detail: the rule
+ * is architectural (any provider reporting reasoning tokens separately, whose thinking cannot
+ * be disabled, gets this same accommodation), never a per-model allowance, and this constant is
+ * the single place that bound is defined so every adapter reads the same number.
+ */
+export const REASONING_BUDGET_MULTIPLE = 3;
+
 export class AdapterHttpError extends Error {
   constructor(
     message: string,

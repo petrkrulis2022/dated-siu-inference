@@ -78,4 +78,65 @@ describe("createOpenAiAdapter", () => {
     expect(callCount).toBe(2);
     expect(result.deviations).toHaveLength(1);
   });
+
+  it("retries with reasoning accommodated above the task budget when mandatory reasoning truncates the completion", async () => {
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      if (fetchMock.mock.calls.length === 1) {
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: "" }, finish_reason: "length" }],
+            usage: {
+              prompt_tokens: 50,
+              completion_tokens: 2,
+              completion_tokens_details: { reasoning_tokens: 95 },
+            },
+          }),
+        };
+      }
+      const body = JSON.parse(init.body as string);
+      expect(body.max_completion_tokens).toBe(100 * (1 + 3)); // REASONING_BUDGET_MULTIPLE
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: "56" }, finish_reason: "stop" }],
+          usage: {
+            prompt_tokens: 50,
+            completion_tokens: 8,
+            completion_tokens_details: { reasoning_tokens: 90 },
+          },
+        }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = createOpenAiAdapter("test-key");
+    const result = await adapter("gpt-5.1", "prompt", PARAMS);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.text).toBe("56");
+    expect(result.deviations).toHaveLength(1);
+    expect(result.deviations[0]).toContain("truncated by mandatory reasoning");
+  });
+
+  it("does not retry when the completion wasn't truncated by reasoning", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "clean answer" }, finish_reason: "stop" }],
+        usage: {
+          prompt_tokens: 50,
+          completion_tokens: 10,
+          completion_tokens_details: { reasoning_tokens: 20 },
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = createOpenAiAdapter("test-key");
+    const result = await adapter("gpt-test", "prompt", PARAMS);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.deviations).toEqual([]);
+  });
 });

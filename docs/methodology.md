@@ -190,6 +190,44 @@ explicitly out of scope for v1 and named here as a v2 question**, not solved by 
 future subjective dimension would need its own stated methodology, its own disclosed cost and
 variance characteristics, and would not retroactively change how v1 prints were computed.
 
+**Reasoning-token budget accommodation (added 2026-08-30, ahead of frontier-model admission).**
+Every task class defines a fixed token budget (T1/T3: 512, T2: 256 —
+`packages/basket/src/{t1,t2,t3}/generate.ts`), the same ceiling for every model, deliberately: a
+shared budget is how the basket keeps the comparison fair. But for a model whose provider reports
+reasoning/thinking tokens separately and cannot be told to skip them — confirmed live for
+`gemini-3.1-pro-preview`: requesting a zero thinking budget returns `"This model only works in
+thinking mode"` — a shared budget stops being a fair constraint and becomes a different, tighter
+one for that architecture alone. The mandatory reasoning consumes most or all of the budget before
+the model can write an answer, and what gets measured is "how well does this model perform under a
+budget that conflicts with how it works," not the model's real capability at the price it actually
+charges. That's a benchmark artifact, not a market fact: a real buyer sets a budget that
+accommodates the model's reasoning, pays for those tokens, and gets a correct answer — the index
+should reflect that. The economics are already captured correctly regardless: reasoning tokens are
+billed as output on every provider that reports them, so a model that reasons expensively shows
+that cost in its exchange rate, which is the right place for it — not as an artificial failure
+rate.
+
+**Rule, architectural not per-model:** where a provider reports reasoning tokens separately for a
+call **and** that call's completion was cut off by the task's token budget while reasoning tokens
+were nonzero (the provider's own truncation signal — `finishReason: "MAX_TOKENS"` /
+`finish_reason: "length"` / `stop_reason: "max_tokens"` — not inferred from output length), the
+adapter retries once with the task's own budget preserved for the completion and a reasoning
+allowance added above it, bounded at **`REASONING_BUDGET_MULTIPLE` = 3×** the task's token budget
+(`packages/harness/src/adapters/types.ts` — one constant every adapter reads, so the bound is
+uniform, not tunable per model). This applies identically to every adapter
+(`anthropic.ts`/`google.ts`/`openai.ts`) and fires only on the observed symptom — a model that
+doesn't exhibit it (every current registry model; `claude-sonnet-5` and `gpt-5.1` did not need this
+in their admission evidence runs) is completely unaffected. Every retry is recorded in that run
+record's `deviations` field, naming the truncation signal, the reasoning tokens observed, and the
+accommodated total used — auditable per instance, not asserted in the aggregate.
+
+**Not a version bump.** `methodology_version` changes when a rule change would move an
+*already-published* number (Methodology versioning, below) — nothing published under the current
+registry has ever exercised this path, since no admitted model has mandatory, separately-reported
+reasoning. This rule applies from this revision onward, including to admission evidence runs
+(Registry inclusion policy, criterion 3) for any future candidate — stated here, dated, before the
+first run that uses it, per this document's own revision discipline elsewhere.
+
 ## 6. The floor column
 
 Published beside the print, never inside it: a hardware-cost floor,

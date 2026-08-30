@@ -1,15 +1,27 @@
-import { AdapterHttpError, type Adapter, type AdapterParams, type AdapterResult } from "./types.js";
+import {
+  AdapterHttpError,
+  REASONING_BUDGET_MULTIPLE,
+  type Adapter,
+  type AdapterParams,
+  type AdapterResult,
+} from "./types.js";
 
 const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 
 interface AnthropicResponse {
   content: { type: string; text?: string }[];
+  stop_reason?: string;
   usage: {
     input_tokens: number;
     output_tokens: number;
     cache_creation_input_tokens?: number;
     cache_read_input_tokens?: number;
+    // Present (0 unless extended thinking is explicitly enabled) as of the current API — the
+    // "always folded into output_tokens, never reported separately" this field used to be
+    // documented as no longer holds; read it rather than hardcode 0, so this stays correct if
+    // extended thinking is ever turned on for a candidate here.
+    output_tokens_details?: { thinking_tokens?: number };
   };
 }
 
@@ -19,10 +31,11 @@ async function callAnthropic(
   prompt: string,
   params: AdapterParams,
   includeTemperature: boolean,
+  maxTokens: number,
 ): Promise<{ response: AnthropicResponse; latencyMs: number }> {
   const body: Record<string, unknown> = {
     model: modelString,
-    max_tokens: params.max_tokens,
+    max_tokens: maxTokens,
     messages: [{ role: "user", content: prompt }],
   };
   if (includeTemperature) {
@@ -62,7 +75,7 @@ export function createAnthropicAdapter(apiKey: string): Adapter {
     const deviations: string[] = [];
     let result: { response: AnthropicResponse; latencyMs: number };
     try {
-      result = await callAnthropic(apiKey, modelString, prompt, params, true);
+      result = await callAnthropic(apiKey, modelString, prompt, params, true, params.max_tokens);
     } catch (err) {
       if (!mentionsTemperature(err)) {
         throw err;
@@ -70,7 +83,24 @@ export function createAnthropicAdapter(apiKey: string): Adapter {
       deviations.push(
         "temperature forced to provider default (request without temperature=0 was rejected)",
       );
-      result = await callAnthropic(apiKey, modelString, prompt, params, false);
+      result = await callAnthropic(apiKey, modelString, prompt, params, false, params.max_tokens);
+    }
+
+    // Same architectural rule as google.ts's createGoogleAdapter — see its doc comment. A no-op
+    // today: standard (non-extended-thinking) calls report 0 thinking tokens, so this never
+    // triggers unless extended thinking is explicitly enabled for a candidate later.
+    const truncatedByReasoning =
+      result.response.stop_reason === "max_tokens" &&
+      (result.response.usage.output_tokens_details?.thinking_tokens ?? 0) > 0;
+    if (truncatedByReasoning) {
+      const accommodatedBudget = params.max_tokens * (1 + REASONING_BUDGET_MULTIPLE);
+      deviations.push(
+        `completion truncated by mandatory reasoning (stop_reason max_tokens, ` +
+          `${result.response.usage.output_tokens_details?.thinking_tokens} reasoning tokens ` +
+          `against a ${params.max_tokens}-token task budget) — retried with reasoning accommodated ` +
+          `above the task budget, capped at ${REASONING_BUDGET_MULTIPLE}x (${accommodatedBudget} tokens total)`,
+      );
+      result = await callAnthropic(apiKey, modelString, prompt, params, true, accommodatedBudget);
     }
 
     const { response, latencyMs } = result;
@@ -85,9 +115,7 @@ export function createAnthropicAdapter(apiKey: string): Adapter {
         input: response.usage.input_tokens,
         output: response.usage.output_tokens,
         cached_input: response.usage.cache_read_input_tokens ?? 0,
-        // Anthropic doesn't report extended-thinking tokens as a separate usage field —
-        // they're already folded into output_tokens.
-        reasoning: 0,
+        reasoning: response.usage.output_tokens_details?.thinking_tokens ?? 0,
       },
       latency_ms: latencyMs,
       raw: response,
