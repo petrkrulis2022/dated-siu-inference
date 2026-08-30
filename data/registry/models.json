@@ -38,5 +38,35 @@
     "open_weights": true,
     "host": "deepinfra",
     "notes": "Catalog breadth: distinct model family from the Llama provider-spread trio. Host corrected from novita to deepinfra before the first real print run: OpenRouter serves this model from exactly two providers (deepinfra, novita), and novita rejected every real request with a structural 400 (\"does not support endpoint: completions\") — not congestion, confirmed by testing all four providers OpenRouter lists plus the two it actually serves from. deepinfra returns 200 on the identical request."
+  },
+  {
+    "id": "claude-sonnet-5",
+    "provider": "anthropic",
+    "endpoint": "https://api.anthropic.com/v1/messages",
+    "model_string": "claude-sonnet-5",
+    "tier": "frontier",
+    "open_weights": false,
+    "host": "anthropic",
+    "notes": "Admitted 2026-08-30 — direct provider adapter, not routed through OpenRouter (real redundancy against the single-upstream failure mode that took out two other constituents the same week; see docs/methodology.md's \"Why not through OpenRouter\" reasoning). Evidence run: data/runs/admission-2026-08-30/, 15/15, $0.3809."
+  },
+  {
+    "id": "gpt-5.1",
+    "provider": "openai",
+    "endpoint": "https://api.openai.com/v1/chat/completions",
+    "model_string": "gpt-5.1",
+    "tier": "frontier",
+    "open_weights": false,
+    "host": "openai",
+    "notes": "Admitted 2026-08-30 — direct provider adapter. Evidence run: data/runs/admission-2026-08-30/, 15/15, $0.1506 — cheapest of the three frontier constituents by a wide margin."
+  },
+  {
+    "id": "gemini-3.1-pro-preview",
+    "provider": "google",
+    "endpoint": "https://generativelanguage.googleapis.com",
+    "model_string": "gemini-3.1-pro-preview",
+    "tier": "frontier",
+    "open_weights": false,
+    "host": "google",
+    "notes": "Admitted 2026-08-30 — direct provider adapter. Mandatory reasoning (thinking cannot be disabled — confirmed live) required docs/methodology.md's reasoning-budget accommodation rule to admit correctly; without it, a real measurement artifact would have read as structural incapacity. Evidence run: data/runs/admission-2026-08-30/, 14/15 ($0.3871) — one T3 instance is a genuine bounded finding under the 3x reasoning cap, not an infrastructure failure."
   }
 ]

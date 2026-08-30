@@ -221,6 +221,15 @@ in their admission evidence runs) is completely unaffected. Every retry is recor
 record's `deviations` field, naming the truncation signal, the reasoning tokens observed, and the
 accommodated total used — auditable per instance, not asserted in the aggregate.
 
+**Result, measured (2026-08-30 admission evidence run):** `gemini-3.1-pro-preview` went from 3/15
+to 14/15 once accommodated — confirming this was a benchmark artifact, not a finding about the
+model. The one remaining failure (T3, instance `T3-04`) is not an infrastructure failure or a
+retry that should have happened again: all three of T3's quality-gate attempts (§5) hit close to
+the full 3x reasoning allowance and still failed to produce a passing answer within it. That's a
+genuine, bounded result about this model's real reasoning cost on this specific task class, arrived
+at under a stated rule — not expanded further to force a pass, which is exactly what
+`REASONING_BUDGET_MULTIPLE` exists to prevent.
+
 **Not a version bump.** `methodology_version` changes when a rule change would move an
 *already-published* number (Methodology versioning, below) — nothing published under the current
 registry has ever exercised this path, since no admitted model has mandatory, separately-reported
@@ -276,26 +285,40 @@ than distributed out of band.
 
 ## 9. Cost of producing the index
 
-**Measured, not estimated, for the registry as it stands today:** the three real prints published
-so far (all six registry models, all open-weight-hosted via OpenRouter) cost $0.1081, $0.0222, and
-$0.0932 respectively — `cost_of_production_usd` on the face of every print, per §7. At daily
-cadence that is roughly **$3/month** at today's registry, not the $93/month once projected here
-for a larger, hypothetical basket — that earlier figure assumed a bigger, costlier basket than
-what is actually running and is superseded by this measured number.
+**Measured, not estimated.** The registry's own history so far: six models at launch, down to
+four on 2026-08-30 (two removed for confirmed structural incapacity — Registry inclusion policy,
+below), up to seven the same day with three direct frontier-provider adapters admitted
+(`claude-sonnet-5`, `gpt-5.1`, `gemini-3.1-pro-preview` — Anthropic, OpenAI, Google). The last real
+print under the six-model registry (`2026-08-29`) cost **$0.0977** — `cost_of_production_usd` on
+the face of every print, per §7; the four-model registry's own real cost is close to that figure,
+slightly lower, with no print yet published to state it more precisely than that.
 
-Direct frontier-provider adapters (OpenAI, Anthropic, Google, xAI) are planned but not yet live.
-Once added, cost rises materially: T2's long context dominates per-model cost (about 21,600 input
-and 30 output tokens per model per print, measured from real run records, not the ~143,000/26,500
-figure this section previously stated before real runs existed), and one flagship model per
-provider at current list pricing costs roughly $0.15–$0.35 per print each — **≈$1/print for four
-frontier models alone**, on top of the ~$0.10 the current six models cost, i.e. **roughly
-$32/month at daily cadence** once that change ships, up from ~$3/month today. This is why
-`PUBLISH_SPEND_CEILING_USD` (§ Index governance) will need raising deliberately alongside that
-change, not left at its pre-frontier value. Rented reference hardware for the floor-measurement
-session (§6) costs a few dollars per session, run monthly. The frontier figure is illustrative —
-real current list prices and real observed token counts, but no run against those models exists
-yet, so retries aren't modelled — labelled as such per this project's own rule against presenting
-an estimate as a measured fact.
+**Frontier admission cost, measured from the real evidence run (2026-08-30), not projected:**
+
+| Model | Real cost, one basket run |
+|---|---|
+| `gpt-5.1` | $0.1506 |
+| `claude-sonnet-5` | $0.3809 |
+| `gemini-3.1-pro-preview` | $0.3871 |
+| **Three frontier models, combined** | **$0.9185** |
+
+Claude and Gemini cost roughly **2.5× GPT-5.1** for identical basket work — the first real
+frontier-tier exchange-rate observation this index has made, exactly the kind of comparison Dated
+SIU exists to publish. Combined with the existing four-model registry's own real cost, one print
+under the seven-model registry costs **≈$1.00**, i.e. **≈$30/month at daily cadence typical, up to
+≈$75/month at the full spend ceiling** — up from ≈$3/month at the six-model registry. This
+supersedes the illustrative frontier estimate this section previously carried (that number is now
+measured, not projected, and this is stated as a dated correction, not an edit that erases what
+was said before it was known).
+
+**`PUBLISH_SPEND_CEILING_USD` raised to $2.50/day, effective 2026-08-30** (from $1.10), set
+deliberately with real headroom rather than to just clear the measured number — the $1.10 ceiling
+was set the same way the registry itself was under-margined, cleared today's cost with nothing
+held back for variance, and a week of missed prints was the result. $2.50 is ≈2.5× the measured
+≈$1.00, sized to absorb T3 quality-gate retries, Gemini's reasoning-token variance (§5), and
+day-to-day provider price movement without tripping, while still catching a genuine runaway.
+Rented reference hardware for the floor-measurement session (§6) costs a few dollars per session,
+run monthly, outside this daily figure.
 
 ---
 
@@ -366,6 +389,22 @@ the same conclusion as the manual replay above, now corroborated by production e
 than resting on that replay alone. `llama-3.3-70b-deepinfra` — the same weights, unaffected —
 stays in the registry.
 
+**Admitted 2026-08-30:** `claude-sonnet-5` (Anthropic), `gpt-5.1` (OpenAI), and
+`gemini-3.1-pro-preview` (Google) — the first `tier: "frontier"` entries this registry has ever
+carried, each direct to its own provider (§ "Why not through OpenRouter" — no visible markup on
+these three today, but real redundancy against the exact single-upstream failure mode that
+produced the two removals above). Each satisfies every admission criterion: real price sources
+(direct list pricing, already the source `packages/prices` uses for the illustrative comparisons
+this document already published), real provider adapters
+(`packages/harness/src/adapters/{anthropic,openai,google}.ts`), a completed real evidence run for
+each (`data/runs/admission-2026-08-30/`, §9's cost table), truthful registry entries, and
+structural capability across every task class — `gemini-3.1-pro-preview` only after the
+reasoning-budget accommodation above; without it, the same evidence run would have wrongly read as
+structural incapacity when the real cause was measurement, not capability. **The reference set now
+spans both tiers this index was built to compare** — commodity, open-weight-hosted inference
+(§1's positioning statement) and frontier closed models — rather than the commodity tier alone, as
+it was from the first print through 2026-08-30.
+
 **Removal:** a registry entry is removed when its price source stops publishing a price for it,
 its provider adapter stops functioning and no replacement adapter is available within one review
 cycle, the underlying model is discontinued by its provider, or it fails criterion 5 above
@@ -388,6 +427,14 @@ free-tier provider key qualified only 2 of 6 registered models and still publish
 supersession entry in Index governance below. This constant exists so that can't happen silently
 again; a run that thin is a measurement of a materially different, and materially thinner,
 reference set, not a worse measurement of the usual one.
+
+**Margin, restored 2026-08-30.** The registry sat at exactly 4 — the minimum, with zero margin —
+between the two structural removals and the three frontier admissions the same day; the two
+scheduled runs in between both failed the qualifying-set guard on ordinary infrastructure trouble
+that a thicker registry would have absorbed without incident. At 7 constituents against a minimum
+of 4, a single model having a bad day no longer breaks the print outright — this is the direct,
+stated fix for a week of missed prints, not a side effect of admitting frontier models for other
+reasons.
 
 **Weighting, stated on the face of every print:** weighting is currently **equal** across the
 qualifying set (`weights.source: "equal"` — `packages/sdk/schemas/print.schema.json`), because no

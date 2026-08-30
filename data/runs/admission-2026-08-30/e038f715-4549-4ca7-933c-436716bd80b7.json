@@ -1,0 +1,20 @@
+{
+  "run_id": "e038f715-4549-4ca7-933c-436716bd80b7",
+  "model_id": "claude-sonnet-5",
+  "task_class": "T1",
+  "instance_id": "T1-02",
+  "seed": 3603442690,
+  "attempt": 1,
+  "usage": {
+    "input": 1529,
+    "output": 86,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 1602,
+  "gate_passed": true,
+  "raw_response_ref": "e038f715-4549-4ca7-933c-436716bd80b7.raw.json",
+  "deviations": [
+    "temperature forced to provider default (request without temperature=0 was rejected)"
+  ]
+}
