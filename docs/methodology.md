@@ -373,6 +373,47 @@ sign or anchor if the run's actual cost exceeds a configured spend ceiling
 as the registry grows), and refuses to write a print whose anchor transaction failed rather than
 recording it as anchored-in-name-only.
 
+**Missed days.** When neither the scheduled attempt nor its retry (below) produces a print, the
+day is disclosed, never left as a silent gap a reader has to notice on their own — the same
+principle the supersession disclosure follows. The failing workflow run itself writes
+`data/prints/incidents/<print_id>.json` (`.github/workflows/publish-print.yml`'s "Record a
+failed run" step): the reason, a link to the actual failed run, real qualifying/registered
+model counts, real spend incurred on that attempt, and — when the failure was widespread
+instance-level infrastructure trouble rather than the qualifying-set gate alone — a
+per-model/task-class breakdown of what actually failed (harness's `classifyFailure`:
+rate_limit/timeout/network/server_error/auth_or_bad_request/malformed_response). Rendered
+inline on the public Prints list, sorted by date alongside real prints, linking straight to the
+failed run for full detail — never backdated, never presented as though nothing happened that
+day.
+
+**Retry policy.** A scheduled run that fails gets **one automated retry the same day, at 04:17
+UTC** — before a day is declared missed (above), not instead of that disclosure.
+`publish-unattended.ts` determines this from disk, not from which cron fired it: if a disclosed
+incident for that print_id already exists (written by the first attempt's own failure, above),
+this run is that day's retry, not a fresh first attempt. **One retry only** — a second failure
+is a disclosed missed day, not a third attempt, and there is no third scheduled trigger to make
+one.
+
+The spend ceiling (above) applies **per day, not per attempt** — a deliberate choice, stated
+here so it is never a surprise: the retry's own ceiling is `PUBLISH_SPEND_CEILING_USD` minus
+whatever the first attempt already spent (its own disclosed, real `cost_usd`), so a day with a
+retry can never spend more than the configured daily ceiling in total, never up to 2x it.
+
+A print produced on the retry carries `prior_attempts` — every failed attempt that preceded it
+that day, each with its timestamp, reason, the qualifying/registered model counts it reached,
+and the real spend it incurred — **part of the signed body**, not added after the fact like
+`superseded_by`/`anchor`, since it is known before signing. Disclosed on the print's own page
+and flagged with a **late** badge everywhere the print is listed, on the same principle the
+superseded-print disclosure already follows: anything that could have gone differently is
+stated, not just correct in the underlying JSON. A print with no `prior_attempts` field
+succeeded cleanly on its first, on-schedule attempt.
+
+Retry eligibility is not yet conditioned on the failure's classification (harness's
+`classifyFailure` — rate_limit/timeout/network/server_error/auth_or_bad_request/
+malformed_response): every failure gets the one retry today. Once enough real incidents exist
+to show which categories a retry actually helps with, this may become conditional — noted here
+as a deliberate deferral, not an oversight.
+
 **A model unreachable on print day.** The print proceeds. The unreachable model is marked
 unavailable for that print (distinct from failing a quality gate, and distinct from registry
 removal — it may well be reachable again next print) and its weight is redistributed across the
