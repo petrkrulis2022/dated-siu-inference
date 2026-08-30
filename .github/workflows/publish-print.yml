@@ -9,9 +9,19 @@ name: Publish print
 #
 # Schedule enabled 2026-08-24, after a clean workflow_dispatch dry run (print 2026-08-24: Dated
 # SIU 0.0014, $0.0949 cost, anchored, independently verified, committed by github-actions[bot]).
+#
+# Two cron entries, one workflow: the second isn't a separate mechanism, it's the retry policy
+# (docs/methodology.md's Index governance) — one automated same-day retry before a missed day is
+# declared, never a second one. Nothing in this file's own logic distinguishes "first attempt"
+# from "retry": publish-unattended.ts's own pre-flight (already published → no-op) and its
+# same-day-retry detection (an incident already on disk for this print_id → this is that retry,
+# with the day's remaining spend ceiling and prior_attempts disclosure) do all of it. A retry
+# firing while the first attempt is still running queues behind it (concurrency, below) rather
+# than overlapping.
 on:
   schedule:
     - cron: "17 0 * * *" # 00:17 UTC daily — print date and run date always agree.
+    - cron: "17 4 * * *" # 04:17 UTC — the one same-day retry, if 00:17 didn't produce a print.
   workflow_dispatch:
     inputs:
       print_id:
@@ -177,15 +187,27 @@ jobs:
             capture && /^  / { print; next }
             { capture=0 }
           ' publish.log 2>/dev/null)
-          REASON="$REASON" INFRA_BREAKDOWN="$INFRA_BREAKDOWN" python3 -c '
+          # publish-unattended.ts's own structured line (cli/publish-unattended.ts's catch
+          # block) — real qualifying/registered counts and real spend for this attempt, plus
+          # this attempt's own prior_attempts if it was itself the same-day retry and also
+          # failed. Falls back to null fields if absent (a refusal type that doesn't emit this
+          # line yet, or a failure before the harness ran at all).
+          ATTEMPT_SUMMARY=$(grep -m1 "^ATTEMPT_SUMMARY " publish.log 2>/dev/null | sed 's/^ATTEMPT_SUMMARY //')
+          REASON="$REASON" INFRA_BREAKDOWN="$INFRA_BREAKDOWN" ATTEMPT_SUMMARY="$ATTEMPT_SUMMARY" python3 -c '
           import json, os, datetime
           print_id = os.environ["PRINT_ID"]
           infra_breakdown = os.environ["INFRA_BREAKDOWN"]
+          summary_line = os.environ["ATTEMPT_SUMMARY"]
+          summary = json.loads(summary_line) if summary_line else {}
           record = {
               "date": print_id,
               "run_url": os.environ["RUN_URL"],
               "reason": os.environ["REASON"],
               "infra_failures": infra_breakdown if infra_breakdown else None,
+              "qualifying_models": summary.get("qualifying_models"),
+              "registered_models": summary.get("registered_models"),
+              "cost_usd": summary.get("cost_usd"),
+              "prior_attempts": summary.get("prior_attempts") or None,
               "occurred_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
           }
           with open("data/prints/incidents/" + print_id + ".json", "w") as f:
