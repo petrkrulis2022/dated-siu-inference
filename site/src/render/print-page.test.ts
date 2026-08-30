@@ -255,6 +255,41 @@ describe("renderPrintPage", () => {
     expect(html).not.toContain("Superseded");
   });
 
+  it("discloses prior failed attempts on a print that was published late", () => {
+    const html = renderPrintPage({
+      print: basePrint({
+        prior_attempts: [
+          {
+            attempted_at: "2026-08-27T02:03:11Z",
+            reason: "only 3 of 6 registered models qualified (minimum 4)",
+            qualifying_models: 3,
+            registered_models: 6,
+            cost_usd: "0.0621",
+          },
+        ],
+      }),
+      allPrints: [],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).toContain("Published late");
+    expect(html).toContain("only 3 of 6 registered models qualified");
+    expect(html).toContain("3 of 6 qualified");
+    expect(html).toContain("$0.0621");
+  });
+
+  it("shows no prior-attempts notice for a print that succeeded on its first attempt", () => {
+    const html = renderPrintPage({
+      print: basePrint(),
+      allPrints: [],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).not.toContain("Published late");
+  });
+
   it("links an anchored tx to the chain's block explorer, not a plain unlinked string", () => {
     const html = renderPrintPage({
       print: basePrint({

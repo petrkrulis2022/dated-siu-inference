@@ -158,6 +158,17 @@ nav.site-nav a:first-child {
   color: var(--ink);
 }
 
+.badge.status-late {
+  background: transparent;
+  border-style: double;
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+
+.badge.status-late:hover {
+  color: var(--ink);
+}
+
 tr.superseded td {
   color: var(--ink-muted);
 }

@@ -106,6 +106,31 @@ describe("renderPrintsList", () => {
     expect(html).toContain("Insufficient qualifying set");
   });
 
+  it("marks a print published after a failed attempt with a late badge linking to its own page", () => {
+    const html = renderPrintsList({
+      allPrints: [
+        print({
+          print_id: "2026-08-27",
+          date: "2026-08-27",
+          prior_attempts: [
+            {
+              attempted_at: "2026-08-27T02:03:11Z",
+              reason: "only 3 of 6 registered models qualified (minimum 4)",
+              qualifying_models: 3,
+              registered_models: 6,
+              cost_usd: "0.0621",
+            },
+          ],
+        }),
+      ],
+      basePath: "../",
+      chain: CHAIN,
+    });
+    expect(html).toContain('class="badge status-late"');
+    expect(html).toContain(">late<");
+    expect(html).toContain('href="../prints/2026-08-27.html"');
+  });
+
   it("shows an unanchored print's status rather than fabricating a tx link", () => {
     const html = renderPrintsList({
       allPrints: [print({ anchor: { chain: "base-sepolia", status: "stub" } })],
@@ -137,6 +162,37 @@ describe("renderPrintsList", () => {
     expect(html).toContain("no print — run failed");
     expect(html).toContain("only 3 of 5 registered models qualified");
     expect(html).not.toContain("No print has been published yet");
+  });
+
+  it("shows the qualifying-set counts, spend, and a chained prior-attempt note on a second failure", () => {
+    const html = renderPrintsList({
+      allPrints: [],
+      incidents: [
+        {
+          date: "2026-08-30",
+          run_url: "https://github.com/petrkrulis2022/dated-siu-inference/actions/runs/2",
+          reason: "only 3 of 6 registered models qualified (minimum 4)",
+          qualifying_models: 3,
+          registered_models: 6,
+          cost_usd: "0.0589",
+          prior_attempts: [
+            {
+              attempted_at: "2026-08-30T02:03:11Z",
+              reason: "only 3 of 6 registered models qualified (minimum 4)",
+              qualifying_models: 3,
+              registered_models: 6,
+              cost_usd: "0.0621",
+            },
+          ],
+          occurred_at: "2026-08-30T06:20:00Z",
+        },
+      ],
+      basePath: "../",
+      chain: CHAIN,
+    });
+    expect(html).toContain("3 of 6 registered models qualified");
+    expect(html).toContain("$0.0589 spent on this attempt");
+    expect(html).toContain("An earlier attempt the same day also failed");
   });
 
   it("shows the per-model infrastructure-failure breakdown when the incident carries one", () => {

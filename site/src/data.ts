@@ -40,6 +40,17 @@ export async function loadRunRecordsFor(runsDir: string, printId: string): Promi
   );
 }
 
+/** Mirrors Print["prior_attempts"][number] (@touchstone/sdk) — the site's own Incident type
+ * isn't schema-validated, so this is a hand-kept sibling, not an import; both are written by
+ * the same workflow step and must stay in sync by convention. */
+export interface PriorAttemptDisclosure {
+  attempted_at: string;
+  reason: string;
+  qualifying_models: number;
+  registered_models: number;
+  cost_usd: string;
+}
+
 export interface Incident {
   date: string;
   run_url: string;
@@ -49,6 +60,14 @@ export interface Incident {
    * something earlier in the pipeline — absent (or older incidents predating this field) means
    * either no infrastructure failures occurred, or the failure happened before the harness ran. */
   infra_failures?: string | null;
+  /** Real counts/spend for this specific attempt — absent on incidents recorded before this
+   * field existed, or a refusal type that doesn't compute a qualifying-set count at all. */
+  qualifying_models?: number | null;
+  registered_models?: number | null;
+  cost_usd?: string | null;
+  /** Present when this incident is itself the same-day retry and it also failed — the earlier
+   * attempt's own record, chained rather than lost. Absent means this is the first attempt. */
+  prior_attempts?: PriorAttemptDisclosure[] | null;
   occurred_at: string;
 }
 

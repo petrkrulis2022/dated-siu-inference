@@ -13,8 +13,20 @@ export interface PrintsListOptions {
 }
 
 function renderStatusCell(print: Print, basePath: string): string {
-  if (!print.superseded_by) return esc(print.status);
-  return `${esc(print.status)} <a class="badge status-superseded" href="${basePath}prints/${esc(print.superseded_by.print_id)}.html" title="${esc(print.superseded_by.reason)}">superseded</a>`;
+  const badges: string[] = [];
+  if (print.prior_attempts && print.prior_attempts.length > 0) {
+    const count = print.prior_attempts.length;
+    const title = `${count} earlier attempt(s) failed before this print was produced — see the print's own page for the full disclosure.`;
+    badges.push(
+      `<a class="badge status-late" href="${basePath}prints/${esc(print.print_id)}.html" title="${esc(title)}">late</a>`,
+    );
+  }
+  if (print.superseded_by) {
+    badges.push(
+      `<a class="badge status-superseded" href="${basePath}prints/${esc(print.superseded_by.print_id)}.html" title="${esc(print.superseded_by.reason)}">superseded</a>`,
+    );
+  }
+  return badges.length === 0 ? esc(print.status) : `${esc(print.status)} ${badges.join(" ")}`;
 }
 
 function renderAnchorCell(print: Print, chain: ChainInfo): string {
@@ -29,10 +41,21 @@ function renderIncidentRow(incident: Incident): string {
   const breakdown = incident.infra_failures
     ? `<br /><pre class="infra-breakdown">${esc(incident.infra_failures)}</pre>`
     : "";
+  const counts =
+    incident.qualifying_models != null && incident.registered_models != null
+      ? `<br />${incident.qualifying_models} of ${incident.registered_models} registered models qualified` +
+        (incident.cost_usd != null ? ` · $${esc(incident.cost_usd)} spent on this attempt` : "")
+      : "";
+  // A second consecutive failure discloses the day's whole story, not just this attempt —
+  // one retry only (docs/methodology.md's retry policy), so at most one prior entry here.
+  const retryNote =
+    incident.prior_attempts && incident.prior_attempts.length > 0
+      ? `<br />An earlier attempt the same day also failed: ${esc(incident.prior_attempts[0]!.reason)}`
+      : "";
   return `<tr class="incident">
     <td>${esc(formatDate(incident.date))}</td>
     <td><a class="badge status-failed" href="${esc(incident.run_url)}" title="${esc(incident.reason)}" target="_blank" rel="noopener">no print — run failed</a></td>
-    <td colspan="5" class="muted" title="${esc(incident.reason)}">${esc(incident.reason)}${breakdown}</td>
+    <td colspan="5" class="muted" title="${esc(incident.reason)}">${esc(incident.reason)}${counts}${retryNote}${breakdown}</td>
   </tr>`;
 }
 

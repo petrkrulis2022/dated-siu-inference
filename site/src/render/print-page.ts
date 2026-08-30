@@ -233,6 +233,26 @@ function renderSupersessionNotice(print: Print, basePath: string): string {
   </div>`;
 }
 
+/**
+ * "A late print tells the truth about when it was actually computed" — docs/methodology.md's
+ * retry policy. Same visibility principle as renderSupersessionNotice: on the print's own page,
+ * before anything else, not buried in a separate log a reader has to already know to look for.
+ */
+function renderPriorAttemptsNotice(print: Print): string {
+  if (!print.prior_attempts || print.prior_attempts.length === 0) return "";
+  const items = print.prior_attempts
+    .map((a) => {
+      const time = a.attempted_at.length >= 16 ? a.attempted_at.slice(11, 16) : "";
+      return `<li>${esc(formatDate(a.attempted_at.slice(0, 10)))}${time ? ` at ${esc(time)} UTC` : ""} — ${esc(a.reason)} (${a.qualifying_models} of ${a.registered_models} qualified, ${esc(usd(a.cost_usd))} spent)</li>`;
+    })
+    .join("\n");
+  const plural = print.prior_attempts.length === 1 ? "attempt" : "attempts";
+  return `<div class="change-note">
+    <strong>Published late</strong> — ${print.prior_attempts.length} earlier ${plural} failed before this print was produced:
+    <ul class="link-list">${items}</ul>
+  </div>`;
+}
+
 export function renderPrintPage({
   print,
   allPrints,
@@ -251,6 +271,7 @@ export function renderPrintPage({
     <span class="badge status-${esc(print.status)}">${esc(print.status)}</span>
   </div>
   ${renderSupersessionNotice(print, basePath)}
+  ${renderPriorAttemptsNotice(print)}
   ${renderChangeNote(print, previous)}
 </div>
 
