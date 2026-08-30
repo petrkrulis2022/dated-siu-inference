@@ -1,4 +1,4 @@
-import { access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createPublicClient, http, parseEther, type Hex } from "viem";
 import { loadDeployment } from "@touchstone/sdk";
@@ -24,7 +24,8 @@ import {
 import { batchDiscountVariant, cachePolicyVariant } from "../compute/sensitivity.js";
 import { loadPublisherKeyFromEnv } from "../sign/sign.js";
 import { OnChainAttestationClient } from "../anchor/on-chain.js";
-import { publishPrint } from "../publish.js";
+import { D } from "../decimal.js";
+import { publishPrint, QualifyingSetError, type PriorAttempt } from "../publish.js";
 import {
   buildModelInputs,
   latestPriceSnapshotFile,
@@ -32,8 +33,20 @@ import {
   loadRegistry,
   loadRunRecords,
   printsDir,
+  repoRoot,
   runsDirFor,
 } from "./load-inputs.js";
+
+/** The shape .github/workflows/publish-print.yml's "Record a failed run" step writes to
+ * data/prints/incidents/<print_id>.json — see site/src/data.ts's Incident for the sibling
+ * type on the read side (the site's own consumer). */
+interface PriorIncidentRecord {
+  occurred_at: string;
+  reason: string;
+  qualifying_models?: number;
+  registered_models?: number;
+  cost_usd?: string;
+}
 
 /**
  * The scheduled-workflow entry point (.github/workflows/publish-print.yml) — distinct from
@@ -58,6 +71,21 @@ const alreadyPublished = await access(targetPath)
 if (alreadyPublished) {
   console.log(`Already published for "${printId}" (${targetPath} exists) — nothing to do.`);
   process.exit(0);
+}
+
+// 1b. Same-day retry detection — docs/methodology.md's retry policy. An earlier attempt for
+// this print_id already failing and being disclosed (data/prints/incidents/<print_id>.json,
+// written by the workflow's own "Record a failed run" step, present in this fresh checkout if
+// so) means this run is that day's one automated retry, not a fresh first attempt.
+const incidentPath = join(repoRoot(), "data/prints/incidents", `${printId}.json`);
+const priorIncident: PriorIncidentRecord | undefined = await readFile(incidentPath, "utf-8")
+  .then((text) => JSON.parse(text) as PriorIncidentRecord)
+  .catch(() => undefined);
+if (priorIncident) {
+  console.log(
+    `An earlier attempt for "${printId}" already failed at ${priorIncident.occurred_at} ` +
+      `(${priorIncident.reason}) — this is that day's one automated retry.`,
+  );
 }
 
 // 2. Publisher gas balance — before spending on inference for a print that couldn't be
@@ -96,6 +124,20 @@ const spendCeilingUsd = process.env.PUBLISH_SPEND_CEILING_USD;
 if (!spendCeilingUsd) {
   console.error("PUBLISH_SPEND_CEILING_USD is not set — refusing to run without a spend ceiling.");
   process.exit(1);
+}
+
+// The ceiling applies per day, not per attempt — docs/methodology.md's retry policy states this
+// explicitly, so a day with a retry can never exceed PUBLISH_SPEND_CEILING_USD in total, not up
+// to 2x it. On a retry, this run's own budget is what's left after the earlier attempt's real,
+// disclosed spend (priorIncident.cost_usd); never negative.
+const effectiveSpendCeilingUsd = priorIncident?.cost_usd
+  ? D.max(new D(spendCeilingUsd).minus(priorIncident.cost_usd), new D(0)).toString()
+  : spendCeilingUsd;
+if (priorIncident?.cost_usd) {
+  console.log(
+    `Effective spend ceiling for this attempt: $${effectiveSpendCeilingUsd} ` +
+      `($${spendCeilingUsd} daily ceiling − $${priorIncident.cost_usd} already spent today).`,
+  );
 }
 
 const privateKeyHex = loadPublisherKeyFromEnv();
@@ -148,35 +190,68 @@ if (models.length === 0) {
   process.exit(1);
 }
 
-const allModelIds = models.map((m) => m.model_id);
-const result = await publishPrint(printsDir(), {
-  version: BASKET_VERSION,
-  print_id: printId,
-  date: printDate,
-  classWeights: {
-    T1: TASK_CLASSES.T1.weight,
-    T2: TASK_CLASSES.T2.weight,
-    T3: TASK_CLASSES.T3.weight,
-  },
-  models,
-  price_snapshot_ref: snapshotFile,
-  methodology_version: "v0-draft",
-  privateKeyHex,
-  attestationClient,
-  spendCeilingUsd,
-  runsDirPath: runsDirFor(printId),
-  sensitivityVariants: [
-    cachePolicyVariant({
-      cachedFraction: "0.40",
-      cachedPriceRatio: "0.10",
-      appliesTo: allModelIds,
-      taskClasses: ["T2"],
-    }),
-    batchDiscountVariant({ discount: "0.50", appliesTo: allModelIds }),
-  ],
-});
+const priorAttempts: PriorAttempt[] = priorIncident
+  ? [
+      {
+        attempted_at: priorIncident.occurred_at,
+        reason: priorIncident.reason,
+        qualifying_models: priorIncident.qualifying_models ?? 0,
+        registered_models: priorIncident.registered_models ?? 0,
+        cost_usd: priorIncident.cost_usd ?? "0",
+      },
+    ]
+  : [];
 
-console.log(`\nPublished ${result.write.path}`);
-console.log(`Dated SIU ${result.print.dated_siu} (${result.print.status})`);
-console.log(`Cost of production: $${result.print.cost_of_production_usd}`);
-console.log(`Anchor: ${result.anchor.status} (${result.anchor.chain})`);
+const allModelIds = models.map((m) => m.model_id);
+try {
+  const result = await publishPrint(printsDir(), {
+    version: BASKET_VERSION,
+    print_id: printId,
+    date: printDate,
+    classWeights: {
+      T1: TASK_CLASSES.T1.weight,
+      T2: TASK_CLASSES.T2.weight,
+      T3: TASK_CLASSES.T3.weight,
+    },
+    models,
+    price_snapshot_ref: snapshotFile,
+    methodology_version: "v0-draft",
+    privateKeyHex,
+    attestationClient,
+    spendCeilingUsd: effectiveSpendCeilingUsd,
+    runsDirPath: runsDirFor(printId),
+    priorAttempts,
+    sensitivityVariants: [
+      cachePolicyVariant({
+        cachedFraction: "0.40",
+        cachedPriceRatio: "0.10",
+        appliesTo: allModelIds,
+        taskClasses: ["T2"],
+      }),
+      batchDiscountVariant({ discount: "0.50", appliesTo: allModelIds }),
+    ],
+  });
+
+  console.log(`\nPublished ${result.write.path}`);
+  console.log(`Dated SIU ${result.print.dated_siu} (${result.print.status})`);
+  console.log(`Cost of production: $${result.print.cost_of_production_usd}`);
+  console.log(`Anchor: ${result.anchor.status} (${result.anchor.chain})`);
+} catch (err) {
+  // Structured, greppable summary — the workflow's "Record a failed run" step reads this
+  // (ATTEMPT_SUMMARY line) to build the public incident record with real counts and spend,
+  // instead of parsing them back out of the prose error message. Only QualifyingSetError
+  // carries this data today (the failure mode both real incidents so far were); other refusal
+  // types (spend ceiling, anchor failure, schema validation) still fail loudly, just without
+  // this line — the workflow's existing "^Error:" fallback still captures their message.
+  if (err instanceof QualifyingSetError) {
+    console.log(
+      `ATTEMPT_SUMMARY ${JSON.stringify({
+        qualifying_models: err.qualifying,
+        registered_models: err.registered,
+        cost_usd: err.costUsd,
+        prior_attempts: priorAttempts,
+      })}`,
+    );
+  }
+  throw err;
+}
