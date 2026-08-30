@@ -163,6 +163,22 @@ export interface Print {
    */
   cost_of_production_usd: string;
   /**
+   * Every failed attempt to compute this print before this one succeeded — the lateness disclosure docs/methodology.md's Index governance commits to: 'a late print tells the truth about when it was actually computed.' Absent or empty means this print succeeded on its first (scheduled) attempt. Unlike superseded_by/anchor, this is known before signing and is part of the signed body — it describes this print's own production history, not a fact added after the fact.
+   */
+  prior_attempts?: {
+    /**
+     * When the failed attempt ran, per that attempt's own incident record.
+     */
+    attempted_at: string;
+    reason: string;
+    qualifying_models: number;
+    registered_models: number;
+    /**
+     * A decimal number encoded as a string. Never a JSON number — no floats in money maths.
+     */
+    cost_usd: string;
+  }[];
+  /**
    * Present when this print has been superseded by a same-day redo under a different print_id (the revision policy's supersession rule — methodology.md). The original print is never edited or deleted; this field discloses the relationship on the original's own face. Excluded from the signed body (printBodyOf) alongside signature/public_key/anchor, so adding it never invalidates an existing signature or on-chain anchor — it is written after the fact, like anchor.
    */
   superseded_by?: {

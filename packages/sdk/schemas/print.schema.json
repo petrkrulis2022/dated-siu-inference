@@ -175,6 +175,34 @@
       "$ref": "#/definitions/decimalString",
       "description": "build1-spec.md §7's round-2 decision: what producing this print actually cost, summed across every recorded attempt for every measured model — not just the qualifying, weighted subset. Published beside the print, not folded into it."
     },
+    "prior_attempts": {
+      "type": "array",
+      "description": "Every failed attempt to compute this print before this one succeeded — the lateness disclosure docs/methodology.md's Index governance commits to: 'a late print tells the truth about when it was actually computed.' Absent or empty means this print succeeded on its first (scheduled) attempt. Unlike superseded_by/anchor, this is known before signing and is part of the signed body — it describes this print's own production history, not a fact added after the fact.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "attempted_at": {
+            "type": "string",
+            "description": "When the failed attempt ran, per that attempt's own incident record."
+          },
+          "reason": { "type": "string", "minLength": 1 },
+          "qualifying_models": { "type": "integer", "minimum": 0 },
+          "registered_models": { "type": "integer", "minimum": 0 },
+          "cost_usd": {
+            "$ref": "#/definitions/decimalString",
+            "description": "Real spend incurred by this failed attempt — every recorded attempt across every registered model, same basis as cost_of_production_usd."
+          }
+        },
+        "required": [
+          "attempted_at",
+          "reason",
+          "qualifying_models",
+          "registered_models",
+          "cost_usd"
+        ]
+      }
+    },
     "superseded_by": {
       "type": "object",
       "additionalProperties": false,
