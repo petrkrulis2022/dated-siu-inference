@@ -30,6 +30,37 @@ export interface InvalidRecordReport {
  */
 export const MINIMUM_QUALIFYING_MODELS = 4;
 
+/**
+ * Thrown instead of a bare Error so a caller (cli/publish-unattended.ts, on a failed attempt)
+ * can report the qualifying-set shortfall as structured data — qualifying/registered counts and
+ * the real spend already incurred — rather than parsing it back out of the message string. The
+ * message itself is unchanged, so existing callers matching on text (the workflow's own
+ * grep "^Error:") keep working.
+ */
+export class QualifyingSetError extends Error {
+  constructor(
+    public readonly qualifying: number,
+    public readonly registered: number,
+    public readonly costUsd: string,
+  ) {
+    super(
+      `Refusing to publish: only ${qualifying} of ${registered} registered models qualified ` +
+        `(minimum ${MINIMUM_QUALIFYING_MODELS}) — this reference set is too thin to constitute a ` +
+        `print, not merely a worse measurement of the usual one. See methodology.md's registry ` +
+        `inclusion policy.`,
+    );
+    this.name = "QualifyingSetError";
+  }
+}
+
+export interface PriorAttempt {
+  attempted_at: string;
+  reason: string;
+  qualifying_models: number;
+  registered_models: number;
+  cost_usd: string;
+}
+
 export interface PublishInput extends Omit<PrintInput, "status"> {
   privateKeyHex: string;
   attestationClient?: AttestationClient;
@@ -43,6 +74,10 @@ export interface PublishInput extends Omit<PrintInput, "status"> {
    * disk) don't need one; both real CLI entry points (cli/publish.ts,
    * cli/publish-unattended.ts) always pass it. */
   runsDirPath?: string;
+  /** Every failed attempt for this print_id before this one — the automated same-day retry's
+   * disclosure (docs/methodology.md's Index governance, retry policy). Known before signing
+   * (unlike superseded_by/anchor), so it's part of the signed body — see print.schema.json. */
+  priorAttempts?: PriorAttempt[];
 }
 
 export interface PublishResult {
@@ -101,12 +136,7 @@ export async function publishPrint(printsDir: string, input: PublishInput): Prom
   // or produce a signed artifact in the first place, not just fail some later review.
   const qualifying = [...body.basket_costs].filter((m) => m.cost_usd !== undefined).length;
   if (qualifying < MINIMUM_QUALIFYING_MODELS) {
-    throw new Error(
-      `Refusing to publish: only ${qualifying} of ${body.basket_costs.length} registered ` +
-        `models qualified (minimum ${MINIMUM_QUALIFYING_MODELS}) — this reference set is too ` +
-        `thin to constitute a print, not merely a worse measurement of the usual one. See ` +
-        `methodology.md's registry inclusion policy.`,
-    );
+    throw new QualifyingSetError(qualifying, body.basket_costs.length, body.cost_of_production_usd);
   }
 
   // Same "refuse before signing or anchoring" shape as the qualifying-set gate above — a
@@ -121,7 +151,11 @@ export async function publishPrint(printsDir: string, input: PublishInput): Prom
     }
   }
 
-  const signed = signPrintBody(body, input.privateKeyHex);
+  const bodyWithAttempts =
+    input.priorAttempts && input.priorAttempts.length > 0
+      ? { ...body, prior_attempts: input.priorAttempts }
+      : body;
+  const signed = signPrintBody(bodyWithAttempts, input.privateKeyHex);
 
   const client = input.attestationClient ?? new StubAttestationClient();
   const anchor = await client.postPrint(printBodyHashHex(signed), signed.version);

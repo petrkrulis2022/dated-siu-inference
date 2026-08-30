@@ -8,7 +8,9 @@ import {
   findInvalidRecords,
   publishPrint,
   MINIMUM_QUALIFYING_MODELS,
+  QualifyingSetError,
   type PublishInput,
+  type PriorAttempt,
 } from "./publish.js";
 import { writeRunManifest } from "./publication.js";
 import { workedExampleInput, publishableWorkedExampleInput } from "./worked-example.fixture.js";
@@ -161,6 +163,22 @@ describe("publishPrint", () => {
     expect(await readdir(dir).catch(() => [])).toEqual([]);
   });
 
+  it("throws a QualifyingSetError carrying the counts and real spend as structured data", async () => {
+    const base = publishableWorkedExampleInput();
+    const input = {
+      ...base,
+      models: base.models.filter((m) => m.model_id !== "D"),
+      privateKeyHex: TEST_KEY,
+    } as PublishInput;
+
+    const err = await publishPrint(dir, input).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(QualifyingSetError);
+    const qsErr = err as QualifyingSetError;
+    expect(qsErr.qualifying).toBe(3);
+    expect(qsErr.registered).toBe(3);
+    expect(qsErr.costUsd).toMatch(/^\d+(\.\d+)?$/);
+  });
+
   it("refuses to publish when the anchor transaction fails, writing nothing", async () => {
     // The gap this guards against: anchorIdempotently can return status "failed" (a mined
     // but reverted tx, or postedAt still reading 0 after retries) without throwing. A human
@@ -210,6 +228,28 @@ describe("publishPrint", () => {
       .then(() => true)
       .catch(() => false);
     expect(exists).toBe(false);
+  });
+
+  it("discloses prior failed attempts on a print that succeeds after them, signed as part of the body", async () => {
+    const priorAttempts: PriorAttempt[] = [
+      {
+        attempted_at: "2026-08-27T00:33:11Z",
+        reason: "only 3 of 6 registered models qualified (minimum 4)",
+        qualifying_models: 3,
+        registered_models: 6,
+        cost_usd: "0.0621",
+      },
+    ];
+    const result = await publishPrint(dir, publishInput({ priorAttempts }));
+    expect(result.print.prior_attempts).toEqual(priorAttempts);
+
+    const { verifyPrintSignature } = await import("./sign/sign.js");
+    expect(verifyPrintSignature(result.print).valid).toBe(true);
+  });
+
+  it("omits prior_attempts entirely on a clean first-attempt print", async () => {
+    const result = await publishPrint(dir, publishInput());
+    expect(result.print.prior_attempts).toBeUndefined();
   });
 
   it("refuses to overwrite an existing run manifest for the same print_id", async () => {
