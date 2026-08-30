@@ -90,6 +90,16 @@ jobs:
           TOUCHSTONE_PUBLISHER_ADDRESS: ${{ secrets.TOUCHSTONE_PUBLISHER_ADDRESS }}
           BASE_SEPOLIA_RPC_URL: ${{ secrets.BASE_SEPOLIA_RPC_URL }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # Frontier adapters (packages/harness/src/adapters/{anthropic,openai,google}.ts) —
+          # wired through now so this workflow needs no further change once the registry
+          # actually admits a frontier model (docs/methodology.md's registry inclusion policy:
+          # admission needs a completed real evidence run first). Harmless to pass unconditionally
+          # today: loadApiKeysFromEnv() only reads these, and no adapter is constructed for a
+          # provider nothing in data/registry/models.json references yet. Empty/unset secrets
+          # resolve to empty strings, not errors.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           PUBLISH_SPEND_CEILING_USD: ${{ vars.PUBLISH_SPEND_CEILING_USD }}
           PRINT_ID: ${{ steps.resolve.outputs.print_id }}
         run: |
