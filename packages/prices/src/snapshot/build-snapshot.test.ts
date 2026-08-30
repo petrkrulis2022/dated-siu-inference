@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ModelRegistryEntry, PriceSnapshot } from "@touchstone/sdk";
-import { flagSubsidised, buildPriceSnapshotFromOpenRouter } from "./build-snapshot.js";
+import { flagSubsidised, buildPriceSnapshotFromOpenRouter, mergeSnapshots } from "./build-snapshot.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -84,5 +84,58 @@ describe("flagSubsidised", () => {
   it("does not mutate the input snapshot", () => {
     flagSubsidised(snapshot, "1.00");
     expect(snapshot.entries[1].subsidised).toBeUndefined();
+  });
+});
+
+describe("mergeSnapshots", () => {
+  const openrouter: PriceSnapshot = {
+    snapshot_id: "or-1",
+    timestamp: "2026-08-30T00:00:00Z",
+    source: "openrouter",
+    entries: [
+      { model_id: "open-weight-a", price_in_usd_per_1m: "0.10", price_out_usd_per_1m: "0.20" },
+    ],
+  };
+  const litellm: PriceSnapshot = {
+    snapshot_id: "ll-1",
+    timestamp: "2026-08-30T00:00:00Z",
+    source: "litellm",
+    entries: [
+      // Present in both — openrouter's price must win, not this one.
+      { model_id: "open-weight-a", price_in_usd_per_1m: "9.99", price_out_usd_per_1m: "9.99" },
+      // Direct-provider frontier model — no OpenRouter presence at all, litellm is the only price.
+      { model_id: "frontier-b", price_in_usd_per_1m: "2.00", price_out_usd_per_1m: "10.00" },
+    ],
+  };
+
+  it("keeps openrouter's price for a model present in both, never the litellm one", () => {
+    const { snapshot } = mergeSnapshots(openrouter, litellm, "merged-1", "2026-08-30T00:00:00Z");
+    const entry = snapshot.entries.find((e) => e.model_id === "open-weight-a");
+    expect(entry).toEqual({
+      model_id: "open-weight-a",
+      price_in_usd_per_1m: "0.10",
+      price_out_usd_per_1m: "0.20",
+    });
+  });
+
+  it("falls back to litellm for a model with no OpenRouter presence at all", () => {
+    const { snapshot, fromLiteLLM } = mergeSnapshots(
+      openrouter,
+      litellm,
+      "merged-1",
+      "2026-08-30T00:00:00Z",
+    );
+    const entry = snapshot.entries.find((e) => e.model_id === "frontier-b");
+    expect(entry).toEqual({
+      model_id: "frontier-b",
+      price_in_usd_per_1m: "2.00",
+      price_out_usd_per_1m: "10.00",
+    });
+    expect(fromLiteLLM).toEqual(["frontier-b"]);
+  });
+
+  it("labels the result source as merged", () => {
+    const { snapshot } = mergeSnapshots(openrouter, litellm, "merged-1", "2026-08-30T00:00:00Z");
+    expect(snapshot.source).toBe("merged");
   });
 });

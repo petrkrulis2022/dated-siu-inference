@@ -30,7 +30,7 @@ export async function loadPriceSnapshot(fileName: string): Promise<PriceSnapshot
 }
 
 export async function latestPriceSnapshotFile(
-  source: "openrouter" | "litellm" = "openrouter",
+  source: "openrouter" | "litellm" | "merged" = "merged",
 ): Promise<string> {
   const files = (await readdir(registryDir()))
     .filter((f) => f.startsWith(`price-snapshot-${source}-`) && f.endsWith(".json"))

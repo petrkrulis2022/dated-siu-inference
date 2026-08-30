@@ -68,7 +68,7 @@ if (!attestationClient) {
   );
 }
 
-const snapshotFile = await latestPriceSnapshotFile("openrouter");
+const snapshotFile = await latestPriceSnapshotFile("merged");
 const registry = await loadRegistry();
 const snapshot = await loadPriceSnapshot(snapshotFile);
 

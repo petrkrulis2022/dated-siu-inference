@@ -23,9 +23,9 @@ export interface PriceSnapshot {
    */
   timestamp: string;
   /**
-   * Per build1-spec.md §5: primary/secondary/verification sources.
+   * Per build1-spec.md §5: primary/secondary/verification sources. "merged" is per-entry: openrouter's own routed-market price where a registry entry is OpenRouter-routed, falling back to litellm's list price only for entries with no OpenRouter presence at all (a direct-provider frontier model) — never overriding an available openrouter price. Written once, alongside the two single-source snapshots, so an OpenRouter-only or LiteLLM-only reader still has a pure single-source file to work from; only the publish pipeline reads the merged one.
    */
-  source: "openrouter" | "litellm" | "provider-page";
+  source: "openrouter" | "litellm" | "provider-page" | "merged";
   /**
    * @minItems 1
    */

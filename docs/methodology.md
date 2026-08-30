@@ -334,7 +334,17 @@ basket.
 **Admission — objective criteria, no discretion:**
 
 1. The model has a real, queryable price source already integrated (`packages/prices/src/sources/`
-   — currently OpenRouter and LiteLLM) — never a manually-typed price.
+   — currently OpenRouter and LiteLLM) — never a manually-typed price. The publish pipeline reads
+   the **merged** snapshot (`mergeSnapshots`, `packages/prices/src/snapshot/build-snapshot.ts`):
+   OpenRouter's own routed-market price for an OpenRouter-routed entry, falling back to LiteLLM's
+   list price only for a direct-provider entry with no OpenRouter presence at all — never
+   overriding an available OpenRouter price. **Found live, not hypothesised (2026-08-30):** the
+   day the first direct-provider frontier models were admitted, the publish pipeline was still
+   reading the OpenRouter-only snapshot; all three silently dropped out of the print as
+   "unpriced, excluded" — indistinguishable from a genuinely unpriced model — even though the
+   harness had already spent real money calling them. Fixed the same day by wiring the merge in;
+   noted here because it's exactly the kind of gap criterion 1 exists to prevent, caught only
+   because the run failed loudly (below minimum qualifying) rather than silently.
 2. It is servable through an existing or trivially-adaptable provider adapter
    (`packages/harness/src/adapters/`).
 3. It has completed at least one full basket run recorded as real run records under

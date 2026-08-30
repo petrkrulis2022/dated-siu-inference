@@ -122,6 +122,57 @@ export async function buildPriceSnapshotFromLiteLLM(
   };
 }
 
+export interface MergeSnapshotsResult {
+  snapshot: PriceSnapshot;
+  /** Registry ids present in both — openrouter's routed-market price wins, never overridden. */
+  fromOpenRouter: string[];
+  /** Registry ids with no OpenRouter presence at all (a direct-provider model, never routed
+   * through OpenRouter) — litellm's list price is the only source available for these. */
+  fromLiteLLM: string[];
+}
+
+/**
+ * What the publish pipeline actually reads (`latestPriceSnapshotFile("merged")`). Every
+ * OpenRouter-routed registry entry (the open-weight-hosted tier) keeps its real routed-market
+ * price exactly as buildPriceSnapshotFromOpenRouter produced it — merging never overrides an
+ * available OpenRouter price. A direct-provider entry (frontier tier — no OpenRouter presence at
+ * all for models like `claude-sonnet-5`/`gpt-5.1`/`gemini-3.1-pro-preview`, which aren't routed
+ * through OpenRouter) falls back to litellm's list price, the only source that has one. Found
+ * live: the two frontier admissions on 2026-08-30 silently dropped out of every print
+ * (`buildModelInputs`'s own "unpriced, excluded" path — correct behaviour given only the
+ * openrouter snapshot was ever read) because nothing merged the litellm snapshot in at all; this
+ * closes that gap rather than working around it per call site.
+ */
+export function mergeSnapshots(
+  openrouter: PriceSnapshot,
+  litellm: PriceSnapshot,
+  snapshotId: string,
+  timestamp: string,
+): MergeSnapshotsResult {
+  const litellmById = new Map(litellm.entries.map((e) => [e.model_id, e]));
+  const entries: PriceEntry[] = [...openrouter.entries];
+  const fromOpenRouter = openrouter.entries.map((e) => e.model_id);
+  const coveredIds = new Set(fromOpenRouter);
+  const fromLiteLLM: string[] = [];
+
+  for (const [modelId, entry] of litellmById) {
+    if (coveredIds.has(modelId)) continue; // openrouter's price always wins when both exist.
+    entries.push(entry);
+    fromLiteLLM.push(modelId);
+  }
+
+  return {
+    snapshot: {
+      snapshot_id: snapshotId,
+      timestamp,
+      source: "merged",
+      entries: entries as PriceSnapshot["entries"],
+    },
+    fromOpenRouter,
+    fromLiteLLM,
+  };
+}
+
 /**
  * Flags any entry priced below `floorUsdPer1M` as subsidised, per build1-spec.md §5's
  * subsidised-supply policy. Mutates nothing — returns a new snapshot.

@@ -1,8 +1,9 @@
 import { readFile } from "node:fs/promises";
-import type { ModelRegistryEntry } from "@touchstone/sdk";
+import type { ModelRegistryEntry, PriceSnapshot } from "@touchstone/sdk";
 import {
   buildPriceSnapshotFromLiteLLM,
   buildPriceSnapshotFromOpenRouter,
+  mergeSnapshots,
 } from "../snapshot/build-snapshot.js";
 import { writeSnapshot } from "../snapshot/write-snapshot.js";
 import { registryDir, registryModelsPath } from "./paths.js";
@@ -24,6 +25,7 @@ if (registry.length === 0) {
 const dir = registryDir();
 const timestamp = new Date().toISOString();
 
+const snapshots: Record<"openrouter" | "litellm", PriceSnapshot> = {} as never;
 for (const [label, build] of [
   ["openrouter", buildPriceSnapshotFromOpenRouter] as const,
   ["litellm", buildPriceSnapshotFromLiteLLM] as const,
@@ -33,5 +35,19 @@ for (const [label, build] of [
   console.log(`[${label}] wrote ${snapshot.entries.length} entries -> ${path}`);
   if (unmatched.length > 0) {
     console.log(`[${label}] unmatched (no price found): ${unmatched.join(", ")}`);
+  }
+  snapshots[label] = snapshot;
+}
+
+// What the publish pipeline actually reads — see mergeSnapshots' own doc comment for why this
+// exists: an OpenRouter-only snapshot silently drops any direct-provider (frontier) registry
+// entry with no OpenRouter presence at all, and buildModelInputs treats that identically to a
+// genuinely unpriced model (excluded, no error) rather than the wiring gap it actually is.
+{
+  const merged = mergeSnapshots(snapshots.openrouter, snapshots.litellm, timestamp, timestamp);
+  const path = await writeSnapshot(dir, merged.snapshot);
+  console.log(`[merged] wrote ${merged.snapshot.entries.length} entries -> ${path}`);
+  if (merged.fromLiteLLM.length > 0) {
+    console.log(`[merged] priced via litellm fallback (no OpenRouter presence): ${merged.fromLiteLLM.join(", ")}`);
   }
 }
