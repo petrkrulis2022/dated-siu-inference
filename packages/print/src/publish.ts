@@ -61,6 +61,40 @@ export interface PriorAttempt {
   cost_usd: string;
 }
 
+export interface ConstituentChange {
+  model_id: string;
+  change: "admitted" | "removed";
+}
+
+/**
+ * Diffs the registry's current model ids against the immediately preceding print's own
+ * `basket_costs` model ids — every registered model as of that print, qualifying or not, so a
+ * model merely excluded from one print's reference set (a bad day, still in the registry) is
+ * never confused with an actual registry removal. Returns [] when there's no previous print
+ * (the very first one) or nothing changed — never fabricates a change that didn't happen.
+ *
+ * Deliberately a pure function over already-loaded data, not something publishPrint reaches
+ * out and loads itself — the CLI already loads both the registry and the previous print for
+ * other reasons, and passing them in keeps this testable without a filesystem.
+ */
+export function computeConstituentChanges(
+  registryModelIds: string[],
+  previousPrint: Pick<Print, "basket_costs"> | undefined,
+): ConstituentChange[] {
+  if (!previousPrint) return [];
+  const previousIds = new Set(previousPrint.basket_costs.map((bc) => bc.model_id));
+  const currentIds = new Set(registryModelIds);
+
+  const admitted = registryModelIds
+    .filter((id) => !previousIds.has(id))
+    .map((model_id): ConstituentChange => ({ model_id, change: "admitted" }));
+  const removed = [...previousIds]
+    .filter((id) => !currentIds.has(id))
+    .map((model_id): ConstituentChange => ({ model_id, change: "removed" }));
+
+  return [...admitted, ...removed];
+}
+
 export interface PublishInput extends Omit<PrintInput, "status"> {
   privateKeyHex: string;
   attestationClient?: AttestationClient;
@@ -78,6 +112,10 @@ export interface PublishInput extends Omit<PrintInput, "status"> {
    * disclosure (docs/methodology.md's Index governance, retry policy). Known before signing
    * (unlike superseded_by/anchor), so it's part of the signed body — see print.schema.json. */
   priorAttempts?: PriorAttempt[];
+  /** Registry membership changes taking effect as of this print — see
+   * computeConstituentChanges. Known before signing, so part of the signed body like
+   * priorAttempts, not added after the fact like superseded_by/anchor. */
+  constituentChanges?: ConstituentChange[];
 }
 
 export interface PublishResult {
@@ -151,11 +189,16 @@ export async function publishPrint(printsDir: string, input: PublishInput): Prom
     }
   }
 
-  const bodyWithAttempts =
-    input.priorAttempts && input.priorAttempts.length > 0
-      ? { ...body, prior_attempts: input.priorAttempts }
-      : body;
-  const signed = signPrintBody(bodyWithAttempts, input.privateKeyHex);
+  const bodyWithDisclosures = {
+    ...body,
+    ...(input.priorAttempts && input.priorAttempts.length > 0
+      ? { prior_attempts: input.priorAttempts }
+      : {}),
+    ...(input.constituentChanges && input.constituentChanges.length > 0
+      ? { constituent_changes: input.constituentChanges }
+      : {}),
+  };
+  const signed = signPrintBody(bodyWithDisclosures, input.privateKeyHex);
 
   const client = input.attestationClient ?? new StubAttestationClient();
   const anchor = await client.postPrint(printBodyHashHex(signed), signed.version);

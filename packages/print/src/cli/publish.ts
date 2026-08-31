@@ -1,5 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
+import { join } from "node:path";
 import { loadDeployment } from "@touchstone/sdk";
 import {
   BASKET_VERSION,
@@ -25,10 +26,11 @@ import {
 import { batchDiscountVariant, cachePolicyVariant } from "../compute/sensitivity.js";
 import { loadPublisherKeyFromEnv } from "../sign/sign.js";
 import { OnChainAttestationClient } from "../anchor/on-chain.js";
-import { publishPrint } from "../publish.js";
+import { computeConstituentChanges, publishPrint } from "../publish.js";
 import {
   buildModelInputs,
   latestPriceSnapshotFile,
+  loadPrint,
   loadPriceSnapshot,
   loadRegistry,
   loadRunRecords,
@@ -127,6 +129,22 @@ if (models.length === 0) {
   process.exit(1);
 }
 
+// Diffed against the print immediately before this one — see computeConstituentChanges's own
+// doc comment for why the previous print's basket_costs, not the previous registry file, is
+// the right comparison point.
+const previousPrint = await loadPrint(join(printsDir(), "latest.json")).catch(() => undefined);
+const constituentChanges = computeConstituentChanges(
+  registry.map((r) => r.id),
+  previousPrint,
+);
+if (constituentChanges.length > 0) {
+  console.log(
+    `Constituent changes since the previous print: ${constituentChanges
+      .map((c) => `${c.model_id} (${c.change})`)
+      .join(", ")}`,
+  );
+}
+
 const allModelIds = models.map((m) => m.model_id);
 const result = await publishPrint(printsDir(), {
   version: BASKET_VERSION,
@@ -143,6 +161,7 @@ const result = await publishPrint(printsDir(), {
   privateKeyHex,
   attestationClient,
   runsDirPath: runsDirFor(printId),
+  constituentChanges,
   sensitivityVariants: [
     cachePolicyVariant({
       cachedFraction: "0.40",

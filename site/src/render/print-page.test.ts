@@ -290,6 +290,36 @@ describe("renderPrintPage", () => {
     expect(html).not.toContain("Published late");
   });
 
+  it("discloses a registry change on the print that carries it", () => {
+    const html = renderPrintPage({
+      print: basePrint({
+        constituent_changes: [
+          { model_id: "gpt-5.1", change: "admitted" },
+          { model_id: "gemini-3.1-pro-preview", change: "admitted" },
+          { model_id: "old-model", change: "removed" },
+        ],
+      }),
+      allPrints: [],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).toContain("Registry changed");
+    expect(html).toContain("admitted: gpt-5.1, gemini-3.1-pro-preview");
+    expect(html).toContain("removed: old-model");
+  });
+
+  it("shows no registry-change notice when the registry was unchanged", () => {
+    const html = renderPrintPage({
+      print: basePrint(),
+      allPrints: [],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).not.toContain("Registry changed");
+  });
+
   it("links an anchored tx to the chain's block explorer, not a plain unlinked string", () => {
     const html = renderPrintPage({
       print: basePrint({

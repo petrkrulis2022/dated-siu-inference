@@ -253,6 +253,29 @@ function renderPriorAttemptsNotice(print: Print): string {
   </div>`;
 }
 
+/**
+ * The registry inclusion policy requires a constituent change to be announced ahead of the
+ * print it takes effect in — this is where a reader actually encounters that announcement,
+ * not just in docs/methodology.md's prose. Without this, a reader six months from now sees the
+ * headline figure jump between two consecutive prints with no explanation on the record itself.
+ */
+function renderConstituentChangesNotice(print: Print): string {
+  if (!print.constituent_changes || print.constituent_changes.length === 0) return "";
+  const admitted = print.constituent_changes.filter((c) => c.change === "admitted");
+  const removed = print.constituent_changes.filter((c) => c.change === "removed");
+  const parts: string[] = [];
+  if (admitted.length > 0) {
+    parts.push(`admitted: ${admitted.map((c) => esc(c.model_id)).join(", ")}`);
+  }
+  if (removed.length > 0) {
+    parts.push(`removed: ${removed.map((c) => esc(c.model_id)).join(", ")}`);
+  }
+  return `<div class="change-note">
+    <strong>Registry changed</strong> since the previous print — ${parts.join("; ")}. See the
+    registry inclusion policy in the methodology for why.
+  </div>`;
+}
+
 export function renderPrintPage({
   print,
   allPrints,
@@ -272,6 +295,7 @@ export function renderPrintPage({
   </div>
   ${renderSupersessionNotice(print, basePath)}
   ${renderPriorAttemptsNotice(print)}
+  ${renderConstituentChangesNotice(print)}
   ${renderChangeNote(print, previous)}
 </div>
 

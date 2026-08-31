@@ -556,6 +556,22 @@ take effect in, never retroactive. A model retired mid-cycle by its provider is 
 like a print-day-unavailable model (above) for the print in progress, and processed as a registry
 removal (per the inclusion policy) from the next review cycle onward.
 
+**Added 2026-08-31: the announcement lives on the print itself, not only in this document's
+prose.** `prior_attempts` covered *when* a print was actually computed; the same gap existed for
+*what changed* — a reader of the series months from now, seeing the level move materially between
+two consecutive prints, had nothing on the record to say why beyond finding and reading this file.
+`constituent_changes` (`packages/sdk/schemas/print.schema.json`) closes it: computed automatically
+at publish time (`computeConstituentChanges`, `packages/print/src/publish.ts`) by diffing the
+registry's current model ids against the *immediately preceding print's own* `basket_costs` model
+ids — every registered model as of that print, qualifying or not, so a model merely excluded from
+one print's reference set is never mistaken for an actual removal. Known before signing, so part
+of the signed body like `prior_attempts` — not added after the fact like `superseded_by`/`anchor`.
+Rendered on the affected print's own page, annotated directly on the series chart's point, and
+listed in a note beneath it — the same "surface it where people actually read, not only in a
+separate document" principle every other disclosure in this section already follows. Not a
+`methodology_version` bump: it doesn't change how any published number was computed, only what's
+disclosed alongside it.
+
 **Methodology versioning.** When this document's rules change in a way that would move a
 published number, the new methodology version is published alongside the old one, and **both
 series run in parallel for at least one full cadence cycle** before the old version is retired —

@@ -128,4 +128,35 @@ describe("renderSeriesPage", () => {
     const html = renderSeriesPage({ allPrints: [entry({})], incidents: [], basePath: "" });
     expect(html).not.toContain("incidents");
   });
+
+  it("annotates the chart point and lists a registry change below it", () => {
+    const html = renderSeriesPage({
+      allPrints: [
+        entry({ print_id: "2026-08-29", date: "2026-08-29", dated_siu: "0.0014" }),
+        entry({
+          print_id: "2026-08-30",
+          date: "2026-08-30",
+          dated_siu: "0.0075",
+          constituent_changes: [
+            { model_id: "gpt-5.1", change: "admitted" },
+            { model_id: "claude-sonnet-5", change: "admitted" },
+          ],
+        }),
+      ],
+      basePath: "",
+    });
+    expect(html).toContain(">registry changed<");
+    expect(html).toContain("Registry changes reflected in this series");
+    expect(html).toContain("admitted gpt-5.1, claude-sonnet-5");
+    expect(html).toContain('href="prints/2026-08-30.html"');
+  });
+
+  it("shows no registry-change annotation when nothing changed", () => {
+    const html = renderSeriesPage({
+      allPrints: [entry({}), entry({ print_id: "2026-08-19", date: "2026-08-19" })],
+      basePath: "",
+    });
+    expect(html).not.toContain("registry changed");
+    expect(html).not.toContain("Registry changes reflected");
+  });
 });

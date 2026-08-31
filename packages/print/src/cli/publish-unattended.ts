@@ -25,10 +25,16 @@ import { batchDiscountVariant, cachePolicyVariant } from "../compute/sensitivity
 import { loadPublisherKeyFromEnv } from "../sign/sign.js";
 import { OnChainAttestationClient } from "../anchor/on-chain.js";
 import { D } from "../decimal.js";
-import { publishPrint, QualifyingSetError, type PriorAttempt } from "../publish.js";
+import {
+  computeConstituentChanges,
+  publishPrint,
+  QualifyingSetError,
+  type PriorAttempt,
+} from "../publish.js";
 import {
   buildModelInputs,
   latestPriceSnapshotFile,
+  loadPrint,
   loadPriceSnapshot,
   loadRegistry,
   loadRunRecords,
@@ -202,6 +208,22 @@ const priorAttempts: PriorAttempt[] = priorIncident
     ]
   : [];
 
+// Diffed against the print immediately before this one — the registry inclusion policy's own
+// definition of when a constituent change "takes effect". Absent for the very first print, or
+// if the previous print doesn't exist for some other reason — never blocks a publish over this.
+const previousPrint = await loadPrint(join(printsDir(), "latest.json")).catch(() => undefined);
+const constituentChanges = computeConstituentChanges(
+  registry.map((r) => r.id),
+  previousPrint,
+);
+if (constituentChanges.length > 0) {
+  console.log(
+    `Constituent changes since the previous print: ${constituentChanges
+      .map((c) => `${c.model_id} (${c.change})`)
+      .join(", ")}`,
+  );
+}
+
 const allModelIds = models.map((m) => m.model_id);
 try {
   const result = await publishPrint(printsDir(), {
@@ -221,6 +243,7 @@ try {
     spendCeilingUsd: effectiveSpendCeilingUsd,
     runsDirPath: runsDirFor(printId),
     priorAttempts,
+    constituentChanges,
     sensitivityVariants: [
       cachePolicyVariant({
         cachedFraction: "0.40",

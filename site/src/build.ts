@@ -61,6 +61,7 @@ async function main(): Promise<void> {
     status: p.status,
     dated_siu: p.dated_siu,
     superseded_by: p.superseded_by,
+    constituent_changes: p.constituent_changes,
   }));
 
   // SERIES — the public landing page.

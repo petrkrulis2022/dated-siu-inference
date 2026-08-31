@@ -203,6 +203,19 @@
         ]
       }
     },
+    "constituent_changes": {
+      "type": "array",
+      "description": "Registry membership changes taking effect as of this print — computed automatically at publish time by diffing the registry's current model ids against the immediately preceding print's own basket_costs model ids (which lists every registered model as of that print, qualifying or not — so this never confuses a per-print exclusion with an actual registry change). Absent or empty means the registry was unchanged since the previous print. Known before signing (the registry is fixed before the harness runs), so — like prior_attempts — this is part of the signed body, not added after the fact. Exists so a reader of the series months later sees why the level moved, on the print itself, not only in docs/methodology.md's prose (Registry inclusion policy's constituent-change rule requires the announcement; this is where a reader of the print actually encounters it).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "model_id": { "type": "string", "minLength": 1 },
+          "change": { "type": "string", "enum": ["admitted", "removed"] }
+        },
+        "required": ["model_id", "change"]
+      }
+    },
     "superseded_by": {
       "type": "object",
       "additionalProperties": false,

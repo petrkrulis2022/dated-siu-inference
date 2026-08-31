@@ -50,10 +50,17 @@ function renderMultiPointChart(prints: PrintIndexEntry[]): string {
       const title = p.superseded_by
         ? `${esc(formatDate(p.date))} — ${esc(usd(p.dated_siu))} (superseded by ${esc(p.superseded_by.print_id)}: ${esc(p.superseded_by.reason)})`
         : `${esc(formatDate(p.date))} — ${esc(usd(p.dated_siu))} (${esc(p.status)})`;
-      const annotation = p.superseded_by
+      const supersededAnnotation = p.superseded_by
         ? `<text x="${p.x.toFixed(1)}" y="${(p.y + 16).toFixed(1)}" text-anchor="middle" class="series-annotation">superseded</text>`
         : "";
-      return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" class="series-point ${markerClass}"><title>${title}</title></circle>${annotation}`;
+      // A registry change is exactly the kind of thing that can make the line jump between two
+      // points for a reason that has nothing to do with the market — the annotation sits right
+      // on the point where it happened, not only in a note below the chart a reader might miss.
+      const constituentAnnotation =
+        p.constituent_changes && p.constituent_changes.length > 0
+          ? `<text x="${p.x.toFixed(1)}" y="${(p.y + (p.superseded_by ? 30 : 16)).toFixed(1)}" text-anchor="middle" class="series-annotation">registry changed</text>`
+          : "";
+      return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" class="series-point ${markerClass}"><title>${title}</title></circle>${supersededAnnotation}${constituentAnnotation}`;
     })
     .join("\n");
 
@@ -100,6 +107,33 @@ function renderIncidentsNote(incidents: Incident[]): string {
   </div>`;
 }
 
+/**
+ * A reader looking at the chart's own shape needs to see WHY the level jumped, right next to
+ * where the jump is visible — not only on the individual print's own page (print-page.ts's
+ * renderConstituentChangesNotice). Registry inclusion policy requires the announcement; this is
+ * where a reader of the series (not a single print) actually encounters it.
+ */
+function renderConstituentChangeNotes(allPrints: PrintIndexEntry[], basePath: string): string {
+  const withChanges = allPrints.filter(
+    (p) => p.constituent_changes && p.constituent_changes.length > 0,
+  );
+  if (withChanges.length === 0) return "";
+  const items = withChanges
+    .map((p) => {
+      const admitted = p.constituent_changes!.filter((c) => c.change === "admitted");
+      const removed = p.constituent_changes!.filter((c) => c.change === "removed");
+      const parts: string[] = [];
+      if (admitted.length > 0) parts.push(`admitted ${admitted.map((c) => esc(c.model_id)).join(", ")}`);
+      if (removed.length > 0) parts.push(`removed ${removed.map((c) => esc(c.model_id)).join(", ")}`);
+      return `<li><a href="${basePath}prints/${esc(p.print_id)}.html">${esc(formatDate(p.date))}</a> — ${parts.join("; ")}</li>`;
+    })
+    .join("\n");
+  return `<div class="note incidents">
+    <p>Registry changes reflected in this series:</p>
+    <ul>${items}</ul>
+  </div>`;
+}
+
 export function renderSeriesPage({ allPrints, incidents = [], basePath }: SeriesPageOptions): string {
   if (allPrints.length === 0) {
     return `<div class="headline">
@@ -139,6 +173,7 @@ export function renderSeriesPage({ allPrints, incidents = [], basePath }: Series
     <span class="legend-marker series-point series-point-superseded"></span> superseded
   </p>
   ${renderIncidentsNote(incidents)}
+  ${renderConstituentChangeNotes(allPrints, basePath)}
   <p class="note"><a href="${basePath}prints/index.html">All prints &rarr;</a></p>
 </section>`;
 }

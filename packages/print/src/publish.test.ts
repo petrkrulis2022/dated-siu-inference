@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AttestationClient, AnchorResult } from "./anchor/attestation.js";
 import type { ModelInput } from "./compute/index.js";
 import {
+  computeConstituentChanges,
   findInvalidRecords,
   publishPrint,
   MINIMUM_QUALIFYING_MODELS,
@@ -252,6 +253,23 @@ describe("publishPrint", () => {
     expect(result.print.prior_attempts).toBeUndefined();
   });
 
+  it("discloses constituent changes, signed as part of the body", async () => {
+    const constituentChanges = [
+      { model_id: "gpt-5.1", change: "admitted" as const },
+      { model_id: "old-model", change: "removed" as const },
+    ];
+    const result = await publishPrint(dir, publishInput({ constituentChanges }));
+    expect(result.print.constituent_changes).toEqual(constituentChanges);
+
+    const { verifyPrintSignature } = await import("./sign/sign.js");
+    expect(verifyPrintSignature(result.print).valid).toBe(true);
+  });
+
+  it("omits constituent_changes entirely when the registry is unchanged", async () => {
+    const result = await publishPrint(dir, publishInput());
+    expect(result.print.constituent_changes).toBeUndefined();
+  });
+
   it("refuses to overwrite an existing run manifest for the same print_id", async () => {
     const runsDir = join(dir, "runs");
     const result = await publishPrint(dir, publishInput({ runsDirPath: runsDir }));
@@ -259,5 +277,48 @@ describe("publishPrint", () => {
     // Matches writePrint's own append-only test shape: check the guard directly rather than
     // simulate a full second publish under the same print_id.
     await expect(writeRunManifest(runsDir, result.print, [])).rejects.toThrow(/already exists/);
+  });
+});
+
+describe("computeConstituentChanges", () => {
+  it("returns [] when there is no previous print (the very first print)", () => {
+    expect(computeConstituentChanges(["a", "b"], undefined)).toEqual([]);
+  });
+
+  it("returns [] when the registry is unchanged from the previous print", () => {
+    const previous = { basket_costs: [{ model_id: "a" }, { model_id: "b" }] };
+    expect(computeConstituentChanges(["a", "b"], previous)).toEqual([]);
+  });
+
+  it("reports a new registry id as admitted", () => {
+    const previous = { basket_costs: [{ model_id: "a" }] };
+    expect(computeConstituentChanges(["a", "b"], previous)).toEqual([
+      { model_id: "b", change: "admitted" },
+    ]);
+  });
+
+  it("reports an id present in the previous print but absent from the registry as removed", () => {
+    const previous = { basket_costs: [{ model_id: "a" }, { model_id: "b" }] };
+    expect(computeConstituentChanges(["a"], previous)).toEqual([
+      { model_id: "b", change: "removed" },
+    ]);
+  });
+
+  it("does not confuse a per-print exclusion with a registry removal", () => {
+    // "b" is excluded from the previous print's reference set (no cost_usd) but is still a
+    // basket_costs entry — still in the registry, just not qualifying that day. Must not be
+    // reported as removed just because it's excluded again.
+    const previous = {
+      basket_costs: [{ model_id: "a", cost_usd: "0.01" }, { model_id: "b", excluded_reason: "no run records" }],
+    };
+    expect(computeConstituentChanges(["a", "b"], previous)).toEqual([]);
+  });
+
+  it("reports both admissions and removals together", () => {
+    const previous = { basket_costs: [{ model_id: "old" }] };
+    expect(computeConstituentChanges(["new"], previous)).toEqual([
+      { model_id: "new", change: "admitted" },
+      { model_id: "old", change: "removed" },
+    ]);
   });
 });

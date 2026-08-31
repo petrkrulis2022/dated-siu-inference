@@ -179,6 +179,13 @@ export interface Print {
     cost_usd: string;
   }[];
   /**
+   * Registry membership changes taking effect as of this print — computed automatically at publish time by diffing the registry's current model ids against the immediately preceding print's own basket_costs model ids (which lists every registered model as of that print, qualifying or not — so this never confuses a per-print exclusion with an actual registry change). Absent or empty means the registry was unchanged since the previous print. Known before signing (the registry is fixed before the harness runs), so — like prior_attempts — this is part of the signed body, not added after the fact. Exists so a reader of the series months later sees why the level moved, on the print itself, not only in docs/methodology.md's prose (Registry inclusion policy's constituent-change rule requires the announcement; this is where a reader of the print actually encounters it).
+   */
+  constituent_changes?: {
+    model_id: string;
+    change: "admitted" | "removed";
+  }[];
+  /**
    * Present when this print has been superseded by a same-day redo under a different print_id (the revision policy's supersession rule — methodology.md). The original print is never edited or deleted; this field discloses the relationship on the original's own face. Excluded from the signed body (printBodyOf) alongside signature/public_key/anchor, so adding it never invalidates an existing signature or on-chain anchor — it is written after the fact, like anchor.
    */
   superseded_by?: {

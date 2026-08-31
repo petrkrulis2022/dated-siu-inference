@@ -10,6 +10,7 @@ export interface PrintIndexEntry {
   status: "provisional" | "final";
   dated_siu: string;
   superseded_by?: { print_id: string; reason: string };
+  constituent_changes?: { model_id: string; change: "admitted" | "removed" }[];
 }
 
 /** Every published print, oldest first. Renders directly from data/prints/ — build1-spec.md §7. */
