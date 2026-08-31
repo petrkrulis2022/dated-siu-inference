@@ -237,6 +237,48 @@ reasoning. This rule applies from this revision onward, including to admission e
 (Registry inclusion policy, criterion 3) for any future candidate — stated here, dated, before the
 first run that uses it, per this document's own revision discipline elsewhere.
 
+### Why quality gates define usefulness — the Pearl cuPOW case
+
+This is the argument for why §5's gates exist at all, not a restatement of them.
+
+Proof-of-useful-work schemes that define usefulness as _computation performed_ rather than
+_outcome delivered_ are vulnerable to synthetic workloads that satisfy the computation without
+producing the outcome. Pearl's cuPOW chain marketed itself as proof-of-useful-work for AI
+inference. **External finding, not this project's own** — Basu, "The Usefulness Gap in
+Proof-of-Useful-Work: An Empirical Study of Pearl's cuPOW Protocol"
+([arXiv:2606.04819](https://arxiv.org/abs/2606.04819), June 2026): cuPOW's consensus verifies
+that a submitted matrix multiplication (`NoisyGEMM`) was computed correctly, but never verifies
+that the matrices came from an actual model forward pass. Miners running arbitrary, uniformly
+random matrices through the identical verification pipeline passed every check while performing
+zero AI inference. The audit's own figures: a network reporting 24 EH/s — on the order of 320,000
+GPU-equivalents, an estimated 112 MW — producing no useful AI computation, while budget GPU rental
+prices rose 38% and utilisation surged from 57% to 94% once the exploit became public, displacing
+real research workloads with computation that satisfied the protocol's own proof while delivering
+nothing it was meant to measure.
+
+Touchstone's design is structurally immune to this specific failure, and it is worth stating
+plainly why, not just asserting it:
+
+- SIU is credited only for a defined task class (§3, T1/T2/T3) that passes a machine-checkable
+  quality gate against a real, buyer-specified task. A synthetic computation tied to no task and
+  no buyer yields zero SIU, regardless of how much compute it consumed — there is no "the
+  arithmetic was correct" path to credit, because correctness of arithmetic was never what earned
+  credit in the first place.
+- Receipts (`verify_receipt`, `docs/settlement-metadata.md`) bind a settlement to a buyer, a task,
+  and evidence hashes — a self-dealt synthetic job (the same party as both buyer and seller,
+  manufacturing volume with no independent demand behind it) is structurally distinguishable from
+  genuine traffic, not merely assumed absent.
+- Because the index measures **cost per verified outcome**, not compute performed, a network
+  emitting large rewards while producing little verified work is _measurable_, not merely
+  suspected — the gap between reward volume and verified-outcome volume is exactly the number
+  cuPOW's own design has no equivalent of publishing.
+
+**The honest limit, stated as plainly as the claim above:** SIU does not fix anyone else's
+incentives, and does not audit any other network's consensus. It only makes the distinction
+between synthetic and delivered work legible to a buyer or observer who chooses to measure it —
+the same way a benchmark grade never prevented anyone from selling adulterated oil, only made the
+adulteration checkable against a stated standard.
+
 ## 6. The floor column
 
 Published beside the print, never inside it: a hardware-cost floor,
