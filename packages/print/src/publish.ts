@@ -95,6 +95,49 @@ export function computeConstituentChanges(
   return [...admitted, ...removed];
 }
 
+/**
+ * Same diff as computeConstituentChanges, scoped to one tier series (design-doc §4a). The
+ * registry doesn't carry per-print tier history, so this recovers which of the previous print's
+ * basket_costs belonged to this tier by cross-referencing the CURRENT registry's open_weights —
+ * a fair approximation since open_weights is fixed at admission (registry inclusion policy
+ * criterion 4) and doesn't change over a model's life in the registry.
+ *
+ * `previousPrint` is always the previous Dated SIU print — published daily, covering the full
+ * registry across both tiers — never a per-series previous print. This is deliberate, not a
+ * shortcut: it means a tier series' very first print correctly discloses only its genuinely new
+ * admissions (the models that triggered that day's registry change), not its entire founding
+ * membership as if every constituent had just been admitted; and a model admitted or removed in
+ * the other tier never leaks into this tier's diff as a false entry, since the previous print's
+ * basket_costs is filtered down to this tier before diffing, not compared wholesale.
+ *
+ * Known limitation, disclosed rather than silently wrong: a model removed from the registry
+ * entirely can no longer be looked up in the current registry, so it cannot be attributed to
+ * either tier here and is omitted from every tier-scoped diff — it still appears correctly in
+ * Dated SIU's own (registry-wide, not tier-scoped) constituent_changes.
+ */
+export function computeConstituentChangesForSeries(
+  currentTierModelIds: string[],
+  previousPrint: Pick<Print, "basket_costs"> | undefined,
+  currentRegistryOpenWeightsById: Map<string, boolean>,
+  wantOpenWeights: boolean,
+): ConstituentChange[] {
+  if (!previousPrint) return [];
+  const previousTierIds = previousPrint.basket_costs
+    .map((bc) => bc.model_id)
+    .filter((id) => currentRegistryOpenWeightsById.get(id) === wantOpenWeights);
+  // Print["basket_costs"] is a non-empty tuple by schema — this internal diffing object is
+  // never itself serialised or schema-validated (only computeConstituentChanges reads
+  // .basket_costs off it, to pull model ids back out), so the empty-array case genuinely
+  // possible here (a tier with zero constituents as of the previous Dated SIU print — e.g. the
+  // day before this tier's very first admission) is a real, valid input, not a schema
+  // violation; the type is asserted past the tuple constraint rather than special-cased away,
+  // so that case still correctly reads every current id in this tier as newly admitted instead
+  // of silently reporting no change.
+  return computeConstituentChanges(currentTierModelIds, {
+    basket_costs: previousTierIds.map((model_id) => ({ model_id })),
+  } as Pick<Print, "basket_costs">);
+}
+
 export interface PublishInput extends Omit<PrintInput, "status"> {
   privateKeyHex: string;
   attestationClient?: AttestationClient;

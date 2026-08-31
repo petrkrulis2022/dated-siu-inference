@@ -6,6 +6,7 @@ import type { AttestationClient, AnchorResult } from "./anchor/attestation.js";
 import type { ModelInput } from "./compute/index.js";
 import {
   computeConstituentChanges,
+  computeConstituentChangesForSeries,
   findInvalidRecords,
   publishPrint,
   MINIMUM_QUALIFYING_MODELS,
@@ -338,5 +339,68 @@ describe("computeConstituentChanges", () => {
       { model_id: "new", change: "admitted" },
       { model_id: "old", change: "removed" },
     ]);
+  });
+});
+
+describe("computeConstituentChangesForSeries", () => {
+  // Mirrors the real 2026-08-31 scenario: 3 pre-existing frontier models, 4 commodity models,
+  // then 2 new frontier admissions (claude-haiku-4-5, gpt-5.4-mini) in the same registry update.
+  const openWeightsById = new Map([
+    ["claude-sonnet-5", false],
+    ["gpt-5.1", false],
+    ["gemini-3.1-pro-preview", false],
+    ["claude-haiku-4-5", false],
+    ["gpt-5.4-mini", false],
+    ["deepseek-v3.2", true],
+    ["llama-3.3-70b-deepinfra", true],
+  ]);
+  const previousDatedSiuPrint = {
+    basket_costs: [
+      { model_id: "claude-sonnet-5" },
+      { model_id: "gpt-5.1" },
+      { model_id: "gemini-3.1-pro-preview" },
+      { model_id: "deepseek-v3.2" },
+      { model_id: "llama-3.3-70b-deepinfra" },
+    ],
+  };
+
+  it("discloses a tier series' debut print as only its genuinely new admissions, not its whole founding membership", () => {
+    const frontierIds = [
+      "claude-sonnet-5",
+      "gpt-5.1",
+      "gemini-3.1-pro-preview",
+      "claude-haiku-4-5",
+      "gpt-5.4-mini",
+    ];
+    expect(
+      computeConstituentChangesForSeries(frontierIds, previousDatedSiuPrint, openWeightsById, false),
+    ).toEqual([
+      { model_id: "claude-haiku-4-5", change: "admitted" },
+      { model_id: "gpt-5.4-mini", change: "admitted" },
+    ]);
+  });
+
+  it("never leaks an admission from one tier into the other tier's diff", () => {
+    const commodityIds = ["deepseek-v3.2", "llama-3.3-70b-deepinfra"];
+    // Frontier's two new admissions must not appear here at all — commodity's own membership
+    // is unchanged.
+    expect(
+      computeConstituentChangesForSeries(commodityIds, previousDatedSiuPrint, openWeightsById, true),
+    ).toEqual([]);
+  });
+
+  it("returns [] when there is no previous Dated SIU print at all", () => {
+    expect(
+      computeConstituentChangesForSeries(["claude-sonnet-5"], undefined, openWeightsById, false),
+    ).toEqual([]);
+  });
+
+  it("treats a tier with zero constituents in the previous print as every current id being newly admitted", () => {
+    // No frontier model existed at all as of the previous print — a tier having its first-ever
+    // constituent is itself an admission event, not silence.
+    const noFrontierYet = { basket_costs: [{ model_id: "deepseek-v3.2" }] };
+    expect(
+      computeConstituentChangesForSeries(["claude-sonnet-5"], noFrontierYet, openWeightsById, false),
+    ).toEqual([{ model_id: "claude-sonnet-5", change: "admitted" }]);
   });
 });

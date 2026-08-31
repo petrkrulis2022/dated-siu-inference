@@ -28,6 +28,7 @@ import { loadPublisherKeyFromEnv } from "../sign/sign.js";
 import { OnChainAttestationClient } from "../anchor/on-chain.js";
 import {
   computeConstituentChanges,
+  computeConstituentChangesForSeries,
   MINIMUM_QUALIFYING_MODELS,
   publishPrint,
   QualifyingSetError,
@@ -190,13 +191,40 @@ console.log(`Anchor: ${result.anchor.status} (${result.anchor.chain})`);
 // doesn't (yet) have MINIMUM_QUALIFYING_MODELS of its own constituents logs a plain, expected
 // skip — never blocks the other tier, never fails this script.
 const openWeightsById = new Map(registry.map((r) => [r.id, r.open_weights]));
-const tierGroups: { series: "commodity" | "frontier"; seriesModels: typeof models }[] = [
-  { series: "commodity", seriesModels: models.filter((m) => openWeightsById.get(m.model_id)) },
-  { series: "frontier", seriesModels: models.filter((m) => !openWeightsById.get(m.model_id)) },
+const tierGroups: {
+  series: "commodity" | "frontier";
+  seriesModels: typeof models;
+  registryIds: string[];
+}[] = [
+  {
+    series: "commodity",
+    seriesModels: models.filter((m) => openWeightsById.get(m.model_id)),
+    registryIds: registry.filter((r) => r.open_weights).map((r) => r.id),
+  },
+  {
+    series: "frontier",
+    seriesModels: models.filter((m) => !openWeightsById.get(m.model_id)),
+    registryIds: registry.filter((r) => !r.open_weights).map((r) => r.id),
+  },
 ];
-for (const { series, seriesModels } of tierGroups) {
+for (const { series, seriesModels, registryIds } of tierGroups) {
   if (seriesModels.length === 0) continue; // nothing of this tier ran at all today
   const seriesModelIds = seriesModels.map((m) => m.model_id);
+  // See computeConstituentChangesForSeries's own doc comment for why this diffs against the
+  // previous Dated SIU print, not a per-series previous print.
+  const seriesConstituentChanges = computeConstituentChangesForSeries(
+    registryIds,
+    previousPrint,
+    openWeightsById,
+    series === "commodity",
+  );
+  if (seriesConstituentChanges.length > 0) {
+    console.log(
+      `${series} SIU constituent changes: ${seriesConstituentChanges
+        .map((c) => `${c.model_id} (${c.change})`)
+        .join(", ")}`,
+    );
+  }
   try {
     const seriesResult = await publishPrint(printsDir(), {
       version: BASKET_VERSION,
@@ -213,6 +241,7 @@ for (const { series, seriesModels } of tierGroups) {
       privateKeyHex,
       attestationClient,
       series,
+      constituentChanges: seriesConstituentChanges,
       sensitivityVariants: [
         cachePolicyVariant({
           cachedFraction: "0.40",
