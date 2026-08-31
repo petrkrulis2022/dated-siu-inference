@@ -1,7 +1,7 @@
 import type { KVNamespace } from "@cloudflare/workers-types";
-import type { PriceSnapshot, Print, RunRecord } from "@touchstone/sdk";
+import type { PriceSnapshot, Print, RunManifest, RunRecord } from "@touchstone/sdk";
 import type { PrintDataSource } from "../print-data-source.js";
-import { GITHUB_API_BASE, GITHUB_RAW_BASE } from "./env.js";
+import { GITHUB_RAW_BASE } from "./env.js";
 import { cached, type CacheOutcome } from "./kv-cache.js";
 
 const NOT_PUBLISHED_MESSAGE =
@@ -16,12 +16,6 @@ const NOT_PUBLISHED_MESSAGE =
 const PRINT_TTL_SECONDS = 300;
 const IMMUTABLE_TTL_SECONDS = 3600;
 
-interface GitHubContentsEntry {
-  name: string;
-  type: "file" | "dir";
-  download_url: string | null;
-}
-
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { accept: "application/vnd.github+json" } });
   if (!res.ok) {
@@ -30,47 +24,75 @@ async function fetchJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** Every real run record (excludes `.raw.json` provider-response dumps and
- * `reconciliation.json`) for one print, fetched in parallel — matches
- * `@touchstone/print`'s `loadRunRecords` filter exactly. One directory listing (GitHub's Contents
- * API, unauthenticated, no rate-limit concern since the *result* is what's cached, not this call
- * — see IMMUTABLE_TTL_SECONDS above) plus one fetch per file, comfortably inside a paid Workers
- * plan's per-invocation subrequest limit for a basket this size. */
+// Cloudflare Workers (and Durable Objects, which this runs inside — TouchstoneMcpAgent) cap
+// *simultaneous* outbound connections at 6 per invocation — not a total-count limit, a
+// concurrency one. Found live: a basket with 94 run records, fetched via a flat Promise.all,
+// failed every call with "Too many subrequests by single Worker invocation" — the manifest fix
+// (above) had already removed the GitHub Contents API dependency correctly, this is a second,
+// independent limit the same 94-file fetch ran into next. 5 stays comfortably under the
+// platform's 6-connection ceiling, leaving headroom for whatever else the isolate has in flight.
+const MAX_CONCURRENT_FETCHES = 5;
+
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]!);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+const MANIFEST_MISSING_MESSAGE = (printId: string) =>
+  `No run-record manifest (data/runs/${printId}/index.json) for this print. Every print ` +
+  `published after the manifest system shipped (2026-08-30 onward) has one; this print predates ` +
+  `it and has never been backfilled.`;
+
+/**
+ * Every real run record for one print, read via the declared manifest — the same
+ * `data/runs/<print_id>/index.json` `@touchstone/print`'s `loadDeclaredRunRecords` reads from
+ * the local filesystem, here read from `raw.githubusercontent.com` instead (a CDN with no
+ * meaningful per-caller rate limit, unlike GitHub's Contents API — see the git history for why
+ * this replaced an earlier version that listed the directory via that API: Cloudflare Workers'
+ * shared egress IP pool exhausted its unauthenticated 60/hour limit routinely, and the fix
+ * chosen deliberately was "stop calling that API", not "authenticate to it" — this service holds
+ * no credential it doesn't need). One fetch for the manifest, one per declared file, bounded to
+ * MAX_CONCURRENT_FETCHES at a time (the platform's own simultaneous-connection ceiling).
+ */
 async function fetchRunRecords(printId: string): Promise<RunRecord[]> {
-  const listingRes = await fetch(
-    `${GITHUB_API_BASE}/contents/data/runs/${encodeURIComponent(printId)}`,
-    { headers: { accept: "application/vnd.github+json" } },
-  );
-  // A 404 means the print genuinely has no run directory — legitimately empty, worth caching.
-  // Any other failure (rate limit, GitHub 5xx, network error) is NOT the same thing and must not
-  // be swallowed into an empty result: that would let a transient fetch failure get cached for a
-  // full IMMUTABLE_TTL_SECONDS as if it were real, permanent "no run records" data — masking the
-  // real error behind a wrong business-logic answer for an hour, on a paid tool call.
-  if (listingRes.status === 404) return [];
-  if (!listingRes.ok) {
+  const manifestUrl = `${GITHUB_RAW_BASE}/data/runs/${encodeURIComponent(printId)}/index.json`;
+  const manifestRes = await fetch(manifestUrl, { headers: { accept: "application/vnd.github+json" } });
+  // A 404 means this print genuinely has no manifest — either it predates the manifest system
+  // (see MANIFEST_MISSING_MESSAGE) or it's still mid-publish. Not the same thing as a transient
+  // fetch failure (rate limit, GitHub 5xx, network error), which must propagate honestly instead
+  // of being swallowed into an empty result and cached as if it were real "no run records" data.
+  if (manifestRes.status === 404) {
+    throw new Error(MANIFEST_MISSING_MESSAGE(printId));
+  }
+  if (!manifestRes.ok) {
     throw new Error(
-      `GitHub fetch failed for run records listing (${printId}): ${listingRes.status} ${listingRes.statusText}`,
+      `GitHub fetch failed for run manifest (${printId}): ${manifestRes.status} ${manifestRes.statusText}`,
     );
   }
-  const entries = (await listingRes.json()) as GitHubContentsEntry[];
+  const manifest = (await manifestRes.json()) as RunManifest;
 
-  const files = entries.filter(
-    (e) =>
-      e.type === "file" &&
-      e.name.endsWith(".json") &&
-      !e.name.endsWith(".raw.json") &&
-      e.name !== "reconciliation.json" &&
-      e.download_url,
+  return mapWithConcurrency(manifest.run_records, MAX_CONCURRENT_FETCHES, (fileName) =>
+    fetchJson<RunRecord>(
+      `${GITHUB_RAW_BASE}/data/runs/${encodeURIComponent(printId)}/${encodeURIComponent(fileName)}`,
+    ),
   );
-
-  return Promise.all(files.map((f) => fetchJson<RunRecord>(f.download_url!)));
 }
 
 /**
  * The Cloudflare Workers implementation of `PrintDataSource` (`../print-data-source.js`) — reads
  * `data/` from this repo's own public GitHub content instead of the local filesystem, fronted by
  * a KV cache (`../workers/kv-cache.js`). Every tool in `../tools/` is unchanged: this is the only
- * new code the Workers deployment needed for data access.
+ * new code the Workers deployment needed for data access. Every fetch here reads
+ * `raw.githubusercontent.com`, a CDN — no GitHub REST API call, no credential, anywhere in this
+ * file.
  */
 export function githubDataSource(kv: KVNamespace): PrintDataSource {
   const print = (key: string, path: string, ttl: number) =>

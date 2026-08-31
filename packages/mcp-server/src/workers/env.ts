@@ -8,6 +8,13 @@
 // — see docs/listing.md and README.md for why it's the only one) is set via `wrangler secret
 // put`, so it's part of the generated `Env` too even though it never appears in wrangler.jsonc.
 
+// Deliberately no GITHUB_API_BASE (api.github.com) — data-source.ts reads only
+// raw.githubusercontent.com, a CDN with no meaningful per-caller rate limit. An earlier version
+// of data-source.ts called the Contents API to list a print's run-record directory; Cloudflare
+// Workers' shared egress IP pool exhausted its unauthenticated 60/hour limit routinely (every
+// call, not a transient blip — confirmed live). The fix was the run-record manifest
+// (`data/runs/<print_id>/index.json`, `@touchstone/print`'s `writeRunManifest`), read from this
+// same CDN instead — removing the dependency, not authenticating to it. This service holds no
+// credential it doesn't need.
 export const GITHUB_REPO = "petrkrulis2022/dated-siu-inference";
 export const GITHUB_RAW_BASE = `https://raw.githubusercontent.com/${GITHUB_REPO}/main`;
-export const GITHUB_API_BASE = `https://api.github.com/repos/${GITHUB_REPO}`;

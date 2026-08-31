@@ -68,17 +68,16 @@ async function main(): Promise<void> {
   const escrowAddress = deployment.contracts.TouchstoneEscrow.address;
   const usdcAddress = deployment.usdc.address;
 
-  // Two sellers on the *same* underlying model, priced very differently by host — not two
-  // different model families (an earlier version of this demo used one model for both sellers
-  // and only varied rate_usd_per_siu, which made "compare two sellers" a coincidence of a
-  // hand-picked number, not a real comparison; a later draft tried two different families
-  // instead). This is deliberately the stronger demonstration: two different model families
-  // costing different amounts is unsurprising, but identical weights (llama-3.3-70b) costing
-  // ~5.6x more per output token from one host (cloudflare, $2.253/1M) than another (novita,
-  // $0.40/1M) is the counterintuitive fact that makes the case for a common unit — and it is
-  // exactly the provider-spread column docs/methodology.md already publishes, not a story
-  // invented for this demo. Both sellers quote the same DEMO_ILLUSTRATIVE_USD_PER_SIU rate
-  // (pricing.ts), so the SIU spread the buyer sees below comes only from this real per-host
+  // Two sellers on two different model families, priced very differently — an earlier version
+  // of this demo compared two *hosts* of the identical llama-3.3-70b weights (novita vs
+  // cloudflare), the stronger demonstration since identical weights costing ~5.6x more per
+  // output token purely by host is the counterintuitive fact that makes the case for a common
+  // unit. Both of those hosts were removed from the registry (docs/methodology.md's registry
+  // inclusion policy — confirmed structural incapacity: their context ceilings reject T2
+  // outright) with nothing left in the current registry sharing weights across hosts, so this
+  // reverted to two distinct families instead — still a real price comparison, just no longer
+  // the "identical weights" one. Both sellers quote the same DEMO_ILLUSTRATIVE_USD_PER_SIU rate
+  // (pricing.ts), so the SIU spread the buyer sees below comes only from this real per-model
   // cost difference.
   //
   // OpenRouter's free-tier shared provider pools intermittently 429 under load — confirmed
@@ -86,10 +85,9 @@ async function main(): Promise<void> {
   // pinned host succeeded seconds after failing, with no other change, and it recurred on more
   // than one host in the same session, so it isn't one bad host to avoid. seller.ts's real
   // inference call now retries through withBackoff for exactly this (matching the harness's
-  // batch orchestrator's existing retry behaviour). Host pinning itself stays on here — it's
-  // what makes the provider-spread comparison this demo makes actually true — so this is not
-  // routed through createAdapterFor's allowUnpinnedRouting escape hatch (see its doc comment);
-  // that exists for a demo variant that would rather auto-route than fail, which this one isn't.
+  // batch orchestrator's existing retry behaviour). Host pinning stays on regardless — it's just
+  // no longer load-bearing for the comparison itself now that the two sellers are different
+  // model families rather than the same weights on different hosts.
   const registry = await loadRegistry();
   function requireModel(id: string) {
     const entry = registry.find((m) => m.id === id);
@@ -98,8 +96,8 @@ async function main(): Promise<void> {
     }
     return entry;
   }
-  const modelA = requireModel("llama-3.3-70b-novita");
-  const modelB = requireModel("llama-3.3-70b-cloudflare");
+  const modelA = requireModel("mistral-small-3.2-24b-instruct");
+  const modelB = requireModel("qwen-2.5-72b-instruct");
 
   const snapshotFile = await latestPriceSnapshotFile("openrouter");
   const snapshot = await loadPriceSnapshot(snapshotFile);
@@ -125,8 +123,8 @@ async function main(): Promise<void> {
   // A genuinely sized task, not a one-liner. The original one-sentence prompt settled around 14
   // USDC minor units real cost — under TouchstoneEscrow's MIN_SETTLEMENT = 100, which now
   // correctly reverts it. A real paid inference call looks more like this: a detailed,
-  // structured answer, sized so even the cheaper of the two sellers (llama-3.3-70b-novita,
-  // $0.40/1M output tokens) clears the floor with real margin and lands inside a realistic
+  // structured answer, sized so even the cheaper of the two sellers (mistral-small-3.2-24b-instruct,
+  // $0.30/1M output tokens) clears the floor with real margin and lands inside a realistic
   // $0.001-$0.10 range, not just barely above it. maxOutputTokens is a ceiling the model is free
   // to undershoot — real output length varies by model and run, so these numbers were tuned
   // against real live runs, not assumed correct from the arithmetic alone: an earlier "at least

@@ -8,6 +8,17 @@
   // req/res shim; see src/workers/node-shim.ts).
   "compatibility_flags": ["nodejs_compat"],
 
+  // Found live: a print's run-record manifest can list 90+ files (7 constituents × ~13-14 task
+  // instances each, growing as the registry does — see docs/methodology.md), and get_quote/convert
+  // fetch every one of them each cold call (loadRunRecords is print-scoped, not model-scoped — the
+  // manifest lists filenames only, with no per-model index to filter by before fetching). That
+  // exceeded the platform's default subrequest budget and failed every real get_quote call with
+  // "Too many subrequests by single Worker invocation" — this account was on the Free plan
+  // (50/invocation) at the time; upgraded to Workers Paid specifically for this. Set explicitly
+  // here rather than left to the account's default, which this deployment should not depend on
+  // implicitly staying above whatever the real basket size needs as the registry grows.
+  "limits": { "subrequests": 1000 },
+
   // The MCP transport (McpAgent, from the `agents` package — Cloudflare's documented pattern for
   // Streamable HTTP MCP servers on Workers) is Durable-Object-backed even though this service is
   // logically stateless: no state is set or read across calls, but Streamable HTTP's currently

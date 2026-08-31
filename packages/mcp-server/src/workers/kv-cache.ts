@@ -8,12 +8,13 @@ export interface CacheOutcome<T> {
 
 /**
  * Get-or-populate against a KV namespace, wrapping `fresh()` — a network call against GitHub's
- * public repo (data/, no auth) — behind a short TTL. Prints publish once a day, so a few minutes
- * of staleness is imperceptible; what actually matters is that a slow or rate-limited
- * raw.githubusercontent.com/api.github.com response never becomes a failed tool call, paid or
- * free. `cached`/`fetchedAt` flow back to the caller so both the response header (X-Cache) and,
- * for get_index, the JSON body's `_meta` field can say honestly whether this was a hit or a miss
- * — never silently one or the other.
+ * public repo (data/, no auth — raw.githubusercontent.com only, see data-source.ts and its own
+ * env.ts's doc comment for why never api.github.com) — behind a short TTL. Prints publish once a
+ * day, so a few minutes of staleness is imperceptible; what actually matters is that a slow
+ * raw.githubusercontent.com response never becomes a failed tool call, paid or free.
+ * `cached`/`fetchedAt` flow back to the caller so both the response header (X-Cache) and, for
+ * get_index, the JSON body's `_meta` field can say honestly whether this was a hit or a miss —
+ * never silently one or the other.
  */
 export async function cached<T>(
   kv: KVNamespace,
