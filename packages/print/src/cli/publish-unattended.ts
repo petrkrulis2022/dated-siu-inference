@@ -27,6 +27,7 @@ import { OnChainAttestationClient } from "../anchor/on-chain.js";
 import { D } from "../decimal.js";
 import {
   computeConstituentChanges,
+  MINIMUM_QUALIFYING_MODELS,
   publishPrint,
   QualifyingSetError,
   type PriorAttempt,
@@ -189,7 +190,9 @@ if (infraFailureSummary) {
 const records = await loadRunRecords(printId);
 const { models, unpriced } = buildModelInputs(registry, snapshot, records);
 if (unpriced.length > 0) {
-  console.warn(`Models with runs but no price in ${snapshotFile}, excluded: ${unpriced.join(", ")}`);
+  console.warn(
+    `Models with runs but no price in ${snapshotFile}, excluded: ${unpriced.join(", ")}`,
+  );
 }
 if (models.length === 0) {
   console.error("No priced models with run records — nothing to publish.");
@@ -259,6 +262,65 @@ try {
   console.log(`Dated SIU ${result.print.dated_siu} (${result.print.status})`);
   console.log(`Cost of production: $${result.print.cost_of_production_usd}`);
   console.log(`Anchor: ${result.anchor.status} (${result.anchor.chain})`);
+
+  // Tier segmentation — design-doc §4a "grades, not refineries": Frontier SIU and Commodity
+  // SIU, computed from the exact same run records as Dated SIU above, at no additional
+  // measurement cost. Only ever attempted after Dated SIU itself succeeds — no sub-series
+  // without a same-day Dated SIU print. Each is fully independent of the other: a tier that
+  // doesn't (yet) have MINIMUM_QUALIFYING_MODELS of its own constituents logs a plain,
+  // expected skip — never an incident, never a retry trigger, never blocks the other tier —
+  // §4a's own "once the reference set is large enough" gate is exactly that guard, reused.
+  const openWeightsById = new Map(registry.map((r) => [r.id, r.open_weights]));
+  const tierGroups: { series: "commodity" | "frontier"; seriesModels: typeof models }[] = [
+    { series: "commodity", seriesModels: models.filter((m) => openWeightsById.get(m.model_id)) },
+    { series: "frontier", seriesModels: models.filter((m) => !openWeightsById.get(m.model_id)) },
+  ];
+  for (const { series, seriesModels } of tierGroups) {
+    if (seriesModels.length === 0) continue; // nothing of this tier ran at all today
+    const seriesModelIds = seriesModels.map((m) => m.model_id);
+    try {
+      const seriesResult = await publishPrint(printsDir(), {
+        version: BASKET_VERSION,
+        print_id: `${printId}-${series}`,
+        date: printDate,
+        classWeights: {
+          T1: TASK_CLASSES.T1.weight,
+          T2: TASK_CLASSES.T2.weight,
+          T3: TASK_CLASSES.T3.weight,
+        },
+        models: seriesModels,
+        price_snapshot_ref: snapshotFile,
+        methodology_version: "v0-draft",
+        privateKeyHex,
+        attestationClient,
+        series,
+        sensitivityVariants: [
+          cachePolicyVariant({
+            cachedFraction: "0.40",
+            cachedPriceRatio: "0.10",
+            appliesTo: seriesModelIds,
+            taskClasses: ["T2"],
+          }),
+          batchDiscountVariant({ discount: "0.50", appliesTo: seriesModelIds }),
+        ],
+      });
+      console.log(
+        `${series} SIU: published ${seriesResult.print.dated_siu} (${seriesResult.print.print_id})`,
+      );
+    } catch (seriesErr) {
+      if (seriesErr instanceof QualifyingSetError) {
+        console.log(
+          `${series} SIU: ${seriesErr.qualifying} of ${seriesErr.registered} qualifying ` +
+            `(minimum ${MINIMUM_QUALIFYING_MODELS}) — not publishing this series yet.`,
+        );
+      } else {
+        console.error(
+          `${series} SIU: unexpected failure — ` +
+            `${seriesErr instanceof Error ? seriesErr.message : String(seriesErr)}`,
+        );
+      }
+    }
+  }
 } catch (err) {
   // Structured, greppable summary — the workflow's "Record a failed run" step reads this
   // (ATTEMPT_SUMMARY line) to build the public incident record with real counts and spend,

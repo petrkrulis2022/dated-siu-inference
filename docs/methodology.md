@@ -231,7 +231,7 @@ at under a stated rule — not expanded further to force a pass, which is exactl
 `REASONING_BUDGET_MULTIPLE` exists to prevent.
 
 **Not a version bump.** `methodology_version` changes when a rule change would move an
-*already-published* number (Methodology versioning, below) — nothing published under the current
+_already-published_ number (Methodology versioning, below) — nothing published under the current
 registry has ever exercised this path, since no admitted model has mandatory, separately-reported
 reasoning. This rule applies from this revision onward, including to admission evidence runs
 (Registry inclusion policy, criterion 3) for any future candidate — stated here, dated, before the
@@ -295,12 +295,12 @@ slightly lower, with no print yet published to state it more precisely than that
 
 **Frontier admission cost, measured from the real evidence run (2026-08-30), not projected:**
 
-| Model | Real cost, one basket run |
-|---|---|
-| `gpt-5.1` | $0.1506 |
-| `claude-sonnet-5` | $0.3809 |
-| `gemini-3.1-pro-preview` | $0.3871 |
-| **Three frontier models, combined** | **$0.9185** |
+| Model                               | Real cost, one basket run |
+| ----------------------------------- | ------------------------- |
+| `gpt-5.1`                           | $0.1506                   |
+| `claude-sonnet-5`                   | $0.3809                   |
+| `gemini-3.1-pro-preview`            | $0.3871                   |
+| **Three frontier models, combined** | **$0.9185**               |
 
 Claude and Gemini cost roughly **2.5× GPT-5.1** for identical basket work — the first real
 frontier-tier exchange-rate observation this index has made, exactly the kind of comparison Dated
@@ -454,6 +454,56 @@ Every print states which weighting method it used. The moment a real, named, rou
 data source is wired, `weights.source` switches to `"routed-market-share"` and this document is
 updated to name that source before the first print that uses it ships.
 
+**Limitation, disclosed prominently: equal weighting tracks frontier pricing more than a
+demand-weighted index would.** The registry now spans commodity, open-weight-hosted inference and
+frontier closed models (the 2026-08-30 admissions above) — basket costs across the qualifying set
+span roughly 36x, cheapest to most expensive constituent. Equal weighting equalises constituent
+_count_, not dollar magnitude, so a basket with a wide cost spread lets the expensive end dominate
+the sum even though each constituent carries the same `1 ÷ n` share. **Illustrative, as of the
+2026-08-31 print** (this is a snapshot, not a standing figure — it moves every print): the three
+frontier constituents summed to $0.046977 of qualifying basket cost against $0.005737 for the four
+commodity constituents — 43% of constituents (3 of 7) producing roughly 89% of the summed basket
+cost that `dated_siu` is computed from. This is disclosed on the print page itself (computed live
+from that print's own `basket_costs`, not hand-written per print), not only here.
+
+**Routed-market-share weighting: investigated and rejected as unavailable, not merely deferred.**
+OpenRouter publishes a real, public Data API (`/api/v1/datasets/rankings-daily`, CC BY 4.0,
+live-updating per-model daily token totals) that looked, at first, like exactly the missing input.
+It isn't: the API only sees OpenRouter's own routed traffic, which is a rounding error against
+real frontier-model usage — ChatGPT, Claude.ai, and direct enterprise API access never pass
+through it at all. Publishing a weighting scheme built on it would answer "what share of
+OpenRouter's traffic" while presenting itself as "what share of real inference demand," which is a
+materially different, and misleading, number — worse than disclosing no demand weighting at all.
+**What would change this answer:** a credible cross-market volume source — aggregated usage
+spanning major first-party surfaces, not one router's own logs. Recorded here so this is revisited
+deliberately when one exists, rather than silently forgotten.
+
+**A geometric mean was considered and rejected — not because it is hard, but because it has no
+non-arbitrary justification.** Averaging the seven qualifying basket costs geometrically instead
+of arithmetically would move `dated_siu` toward the commodity end without solving the underlying
+problem, only obscuring it: the geometric mean of seven basket costs corresponds to no purchasable
+basket of work, whereas the arithmetic mean at least means "one unit of work from each tracked
+model." It would move the number in the direction intuition suggests is right only by
+construction, not because it answers what a buyer actually purchases — and there is no
+non-arbitrary answer to "why that estimator, and not some other one." A benchmark earns trust by
+being mechanical and dull, not by reaching for a sophisticated estimator whenever an inconvenient
+spread shows up.
+
+**The resolution is segmentation, not a different weighting formula** — the project's design
+document, §4a ("Segmentation: grades, not refineries"). Dated SIU stays the blended headline,
+equally weighted, unchanged. Alongside it, **Frontier SIU** and **Commodity SIU** publish as
+separate tier prints (`Print.series: "frontier" | "commodity"` —
+`packages/sdk/schemas/print.schema.json`) computed from the exact same executed runs, at no
+additional measurement cost. Tier assignment is objective and published, not an editorial call: a
+model's own registry `open_weights` field (already required, already truthful at admission —
+criterion 4 above) decides it — `open_weights: false` is Frontier SIU, `open_weights: true` is
+Commodity SIU. Each tier print is gated by the identical `MINIMUM_QUALIFYING_MODELS` rule as Dated
+SIU itself, applied to that tier's own constituent count: a tier with too few of its own qualifying
+constituents on a given day simply doesn't publish that day, exactly like Dated SIU would, rather
+than publishing a single-model proxy dressed up as a tier index. This lets a reader choose the
+grade that matches their own exposure, instead of the index choosing an estimator that hides the
+spread from every reader alike.
+
 ---
 
 ## Index governance
@@ -557,12 +607,12 @@ like a print-day-unavailable model (above) for the print in progress, and proces
 removal (per the inclusion policy) from the next review cycle onward.
 
 **Added 2026-08-31: the announcement lives on the print itself, not only in this document's
-prose.** `prior_attempts` covered *when* a print was actually computed; the same gap existed for
-*what changed* — a reader of the series months from now, seeing the level move materially between
+prose.** `prior_attempts` covered _when_ a print was actually computed; the same gap existed for
+_what changed_ — a reader of the series months from now, seeing the level move materially between
 two consecutive prints, had nothing on the record to say why beyond finding and reading this file.
 `constituent_changes` (`packages/sdk/schemas/print.schema.json`) closes it: computed automatically
 at publish time (`computeConstituentChanges`, `packages/print/src/publish.ts`) by diffing the
-registry's current model ids against the *immediately preceding print's own* `basket_costs` model
+registry's current model ids against the _immediately preceding print's own_ `basket_costs` model
 ids — every registered model as of that print, qualifying or not, so a model merely excluded from
 one print's reference set is never mistaken for an actual removal. Known before signing, so part
 of the signed body like `prior_attempts` — not added after the fact like `superseded_by`/`anchor`.

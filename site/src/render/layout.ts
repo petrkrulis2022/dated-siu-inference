@@ -27,6 +27,8 @@ export function renderLayout({ title, bodyHtml, basePath }: LayoutOptions): stri
     <a href="${basePath}index.html">Series</a>
     <a href="${basePath}prints/index.html">Prints</a>
     <a href="${basePath}models/index.html">Models</a>
+    <a href="${basePath}frontier/index.html">Frontier SIU</a>
+    <a href="${basePath}commodity/index.html">Commodity SIU</a>
   </nav>
 </header>
 ${bodyHtml}

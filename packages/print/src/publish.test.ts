@@ -190,18 +190,18 @@ describe("publishPrint", () => {
         return { chain: "base-sepolia", status: "failed", notes: "simulated revert" };
       },
     };
-    await expect(
-      publishPrint(dir, publishInput({ attestationClient: failing })),
-    ).rejects.toThrow(/anchoring failed/);
+    await expect(publishPrint(dir, publishInput({ attestationClient: failing }))).rejects.toThrow(
+      /anchoring failed/,
+    );
 
     const { readdir } = await import("node:fs/promises");
     expect(await readdir(dir).catch(() => [])).toEqual([]);
   });
 
   it("refuses to publish above the configured spend ceiling, before signing or anchoring", async () => {
-    await expect(
-      publishPrint(dir, publishInput({ spendCeilingUsd: "0.0000001" })),
-    ).rejects.toThrow(/exceeds the configured ceiling/);
+    await expect(publishPrint(dir, publishInput({ spendCeilingUsd: "0.0000001" }))).rejects.toThrow(
+      /exceeds the configured ceiling/,
+    );
 
     // A refusal is total — nothing was written, no signature, no anchor attempt.
     const { readdir } = await import("node:fs/promises");
@@ -218,7 +218,9 @@ describe("publishPrint", () => {
     expect(manifest.basket_version).toBe(result.print.version);
     expect(manifest.methodology_version).toBe(result.print.methodology_version);
 
-    const expectedFiles = input.models.flatMap((m) => m.records.map((r) => `${r.run_id}.json`)).sort();
+    const expectedFiles = input.models
+      .flatMap((m) => m.records.map((r) => `${r.run_id}.json`))
+      .sort();
     expect(manifest.run_records).toEqual(expectedFiles);
   });
 
@@ -270,6 +272,19 @@ describe("publishPrint", () => {
     expect(result.print.constituent_changes).toBeUndefined();
   });
 
+  it("discloses which tier series a print is, signed as part of the body", async () => {
+    const result = await publishPrint(dir, publishInput({ series: "commodity" }));
+    expect(result.print.series).toBe("commodity");
+
+    const { verifyPrintSignature } = await import("./sign/sign.js");
+    expect(verifyPrintSignature(result.print).valid).toBe(true);
+  });
+
+  it("omits series entirely on the blended Dated SIU print", async () => {
+    const result = await publishPrint(dir, publishInput());
+    expect(result.print.series).toBeUndefined();
+  });
+
   it("refuses to overwrite an existing run manifest for the same print_id", async () => {
     const runsDir = join(dir, "runs");
     const result = await publishPrint(dir, publishInput({ runsDirPath: runsDir }));
@@ -309,7 +324,10 @@ describe("computeConstituentChanges", () => {
     // basket_costs entry — still in the registry, just not qualifying that day. Must not be
     // reported as removed just because it's excluded again.
     const previous = {
-      basket_costs: [{ model_id: "a", cost_usd: "0.01" }, { model_id: "b", excluded_reason: "no run records" }],
+      basket_costs: [
+        { model_id: "a", cost_usd: "0.01" },
+        { model_id: "b", excluded_reason: "no run records" },
+      ],
     };
     expect(computeConstituentChanges(["a", "b"], previous)).toEqual([]);
   });

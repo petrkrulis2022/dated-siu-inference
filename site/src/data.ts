@@ -11,6 +11,8 @@ export interface PrintIndexEntry {
   dated_siu: string;
   superseded_by?: { print_id: string; reason: string };
   constituent_changes?: { model_id: string; change: "admitted" | "removed" }[];
+  /** Absent means the blended Dated SIU itself — see print.schema.json's series field. */
+  series?: "frontier" | "commodity";
 }
 
 /** Every published print, oldest first. Renders directly from data/prints/ — build1-spec.md §7. */

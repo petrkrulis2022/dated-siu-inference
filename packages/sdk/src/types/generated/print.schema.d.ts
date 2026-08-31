@@ -186,6 +186,10 @@ export interface Print {
     change: "admitted" | "removed";
   }[];
   /**
+   * Which tier grade this print is — design-doc §4a's 'grades, not refineries' segmentation: Frontier SIU (open_weights: false constituents only) and Commodity SIU (open_weights: true only), published alongside the blended Dated SIU from the same executed runs, at no additional measurement cost. Absent means the blended Dated SIU itself — the field is optional specifically so every print published before this field existed stays valid with no retroactive change. Known before signing (which series a print is, is decided before computation starts), so part of the signed body, unlike superseded_by/anchor. Governed by the same MINIMUM_QUALIFYING_MODELS gate as Dated SIU, applied to that tier's own constituent count — so a tier series simply doesn't publish on a day its own reference set is too thin, exactly like Dated SIU itself would.
+   */
+  series?: "frontier" | "commodity";
+  /**
    * Present when this print has been superseded by a same-day redo under a different print_id (the revision policy's supersession rule — methodology.md). The original print is never edited or deleted; this field discloses the relationship on the original's own face. Excluded from the signed body (printBodyOf) alongside signature/public_key/anchor, so adding it never invalidates an existing signature or on-chain anchor — it is written after the fact, like anchor.
    */
   superseded_by?: {

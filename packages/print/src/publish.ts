@@ -116,6 +116,11 @@ export interface PublishInput extends Omit<PrintInput, "status"> {
    * computeConstituentChanges. Known before signing, so part of the signed body like
    * priorAttempts, not added after the fact like superseded_by/anchor. */
   constituentChanges?: ConstituentChange[];
+  /** Which tier grade this print is — design-doc §4a's "grades, not refineries" segmentation.
+   * Absent means the blended Dated SIU itself. Known before signing (decided before
+   * computation starts, unlike superseded_by/anchor), so part of the signed body — see
+   * print.schema.json. */
+  series?: "frontier" | "commodity";
 }
 
 export interface PublishResult {
@@ -197,6 +202,7 @@ export async function publishPrint(printsDir: string, input: PublishInput): Prom
     ...(input.constituentChanges && input.constituentChanges.length > 0
       ? { constituent_changes: input.constituentChanges }
       : {}),
+    ...(input.series ? { series: input.series } : {}),
   };
   const signed = signPrintBody(bodyWithDisclosures, input.privateKeyHex);
 

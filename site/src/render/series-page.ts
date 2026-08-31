@@ -8,6 +8,17 @@ export interface SeriesPageOptions {
   incidents?: Incident[];
   /** "" at the site root. */
   basePath: string;
+  /** Distance-to-root for links into the shared /prints/<id>.html detail-page directory —
+   * distinct from basePath because a tier page (e.g. /frontier/index.html) lives at a
+   * different nesting depth than the "All prints" list it links to (its own /frontier/prints/
+   * directory) versus a print's own detail page (always the single shared /prints/ directory
+   * at the site root, since print_id is already globally unique across every series). Defaults
+   * to basePath, which is correct whenever both happen to coincide — the blended Dated SIU
+   * page today, where there's only one "prints/" directory in the first place. */
+  detailBasePath?: string;
+  /** "Dated SIU", "Frontier SIU" or "Commodity SIU" — which series this page is presenting.
+   * Defaults to "Dated SIU" for the blended headline series. */
+  seriesLabel?: string;
 }
 
 const CHART_WIDTH = 640;
@@ -113,7 +124,10 @@ function renderIncidentsNote(incidents: Incident[]): string {
  * renderConstituentChangesNotice). Registry inclusion policy requires the announcement; this is
  * where a reader of the series (not a single print) actually encounters it.
  */
-function renderConstituentChangeNotes(allPrints: PrintIndexEntry[], basePath: string): string {
+function renderConstituentChangeNotes(
+  allPrints: PrintIndexEntry[],
+  detailBasePath: string,
+): string {
   const withChanges = allPrints.filter(
     (p) => p.constituent_changes && p.constituent_changes.length > 0,
   );
@@ -123,9 +137,11 @@ function renderConstituentChangeNotes(allPrints: PrintIndexEntry[], basePath: st
       const admitted = p.constituent_changes!.filter((c) => c.change === "admitted");
       const removed = p.constituent_changes!.filter((c) => c.change === "removed");
       const parts: string[] = [];
-      if (admitted.length > 0) parts.push(`admitted ${admitted.map((c) => esc(c.model_id)).join(", ")}`);
-      if (removed.length > 0) parts.push(`removed ${removed.map((c) => esc(c.model_id)).join(", ")}`);
-      return `<li><a href="${basePath}prints/${esc(p.print_id)}.html">${esc(formatDate(p.date))}</a> — ${parts.join("; ")}</li>`;
+      if (admitted.length > 0)
+        parts.push(`admitted ${admitted.map((c) => esc(c.model_id)).join(", ")}`);
+      if (removed.length > 0)
+        parts.push(`removed ${removed.map((c) => esc(c.model_id)).join(", ")}`);
+      return `<li><a href="${detailBasePath}prints/${esc(p.print_id)}.html">${esc(formatDate(p.date))}</a> — ${parts.join("; ")}</li>`;
     })
     .join("\n");
   return `<div class="note incidents">
@@ -134,10 +150,16 @@ function renderConstituentChangeNotes(allPrints: PrintIndexEntry[], basePath: st
   </div>`;
 }
 
-export function renderSeriesPage({ allPrints, incidents = [], basePath }: SeriesPageOptions): string {
+export function renderSeriesPage({
+  allPrints,
+  incidents = [],
+  basePath,
+  detailBasePath = basePath,
+  seriesLabel = "Dated SIU",
+}: SeriesPageOptions): string {
   if (allPrints.length === 0) {
     return `<div class="headline">
-      <div class="label">Dated SIU</div>
+      <div class="label">${esc(seriesLabel)}</div>
       <p class="note">No print has been published yet.</p>
     </div>`;
   }
@@ -155,7 +177,7 @@ export function renderSeriesPage({ allPrints, incidents = [], basePath }: Series
       : "A falling line is normal and expected: one SIU always buys the same work, so a falling line means inference got cheaper, not that the measurement is drifting.";
 
   return `<div class="headline">
-  <div class="label">Dated SIU — ${esc(latest.print_id)}</div>
+  <div class="label">${esc(seriesLabel)} — ${esc(latest.print_id)}</div>
   <div class="figure">${esc(usd(latest.dated_siu))}</div>
   <div class="meta">
     <span>${esc(formatDate(latest.date))}</span>
@@ -164,7 +186,7 @@ export function renderSeriesPage({ allPrints, incidents = [], basePath }: Series
 </div>
 
 <section class="block">
-  <h2>Dated SIU over time</h2>
+  <h2>${esc(seriesLabel)} over time</h2>
   <div class="table-scroll">${chart}</div>
   <p class="note">${esc(seriesNote)}</p>
   <p class="note">
@@ -173,7 +195,7 @@ export function renderSeriesPage({ allPrints, incidents = [], basePath }: Series
     <span class="legend-marker series-point series-point-superseded"></span> superseded
   </p>
   ${renderIncidentsNote(incidents)}
-  ${renderConstituentChangeNotes(allPrints, basePath)}
+  ${renderConstituentChangeNotes(allPrints, detailBasePath)}
   <p class="note"><a href="${basePath}prints/index.html">All prints &rarr;</a></p>
 </section>`;
 }

@@ -276,6 +276,44 @@ function renderConstituentChangesNotice(print: Print): string {
   </div>`;
 }
 
+/**
+ * docs/methodology.md's Weighting section discloses the limitation in prose; this is where a
+ * reader of a single print actually encounters it, computed live from that print's own
+ * basket_costs rather than hand-written per print (a hand-written figure would go stale the
+ * next time the qualifying set or its prices changed). Equal weighting gives every qualifying
+ * constituent the same 1÷n nominal share — this states, plainly, how unevenly that translates
+ * into the summed basket cost dated_siu is actually computed from, splitting on the mean cost
+ * (a natural, non-cherry-picked line, not a threshold chosen to hit a particular number).
+ */
+function renderWeightingNotice(print: Print): string {
+  if (print.weights.source !== "equal") return "";
+  const costs = print.basket_costs
+    .filter((b): b is typeof b & { cost_usd: string } => b.cost_usd !== undefined)
+    .map((b) => Number(b.cost_usd));
+  const n = costs.length;
+  if (n < 2) return "";
+
+  const total = costs.reduce((sum, c) => sum + c, 0);
+  const mean = total / n;
+  const aboveMean = costs.filter((c) => c >= mean);
+  const spread = Math.max(...costs) / Math.min(...costs);
+  if (!Number.isFinite(spread) || spread <= 1) return "";
+
+  const aboveShare = aboveMean.reduce((sum, c) => sum + c, 0) / total;
+  const constituentSharePct = ((aboveMean.length / n) * 100).toFixed(0);
+  const costSharePct = (aboveShare * 100).toFixed(0);
+  return `<div class="change-note">
+    <strong>Equal weighting, disclosed:</strong> basket costs span ${spread.toFixed(1)}× across
+    the ${n} qualifying constituents. ${aboveMean.length} of ${n} constituents
+    (${constituentSharePct}%) sit at or above the mean basket cost and together account for
+    ${costSharePct}% of the summed basket cost Dated SIU is computed from — equal weighting still
+    gives each of them the same 1÷${n} nominal share. Dated SIU therefore tracks the more
+    expensive end of the basket more closely than a demand-weighted index would. See the
+    methodology's Weighting section, and Frontier SIU / Commodity SIU, the tier prints published
+    alongside this one for exactly this reason.
+  </div>`;
+}
+
 export function renderPrintPage({
   print,
   allPrints,
@@ -297,6 +335,7 @@ export function renderPrintPage({
   ${renderPriorAttemptsNotice(print)}
   ${renderConstituentChangesNotice(print)}
   ${renderChangeNote(print, previous)}
+  ${renderWeightingNotice(print)}
 </div>
 
 ${renderExchangeRateTable(print)}

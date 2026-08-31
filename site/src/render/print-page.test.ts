@@ -346,4 +346,66 @@ describe("renderPrintPage", () => {
     expect(html).toContain("publisher()");
     expect(html).toContain("postedAt(bytes32)");
   });
+
+  it("discloses the equal-weighting concentration live from this print's own basket_costs", () => {
+    const html = renderPrintPage({
+      print: basePrint({
+        basket_costs: [
+          { model_id: "cheap-a", cost_usd: "0.001" },
+          { model_id: "cheap-b", cost_usd: "0.001" },
+          { model_id: "expensive", cost_usd: "0.05" },
+        ],
+        weights: {
+          source: "equal",
+          values: [
+            { model_id: "cheap-a", weight: "0.3333" },
+            { model_id: "cheap-b", weight: "0.3333" },
+            { model_id: "expensive", weight: "0.3333" },
+          ],
+        },
+      }),
+      allPrints: [],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).toContain("Equal weighting, disclosed");
+    expect(html).toContain("1 of 3 constituents");
+    expect(html).toContain("1÷3 nominal share");
+    expect(html).toContain("Frontier SIU / Commodity SIU");
+  });
+
+  it("omits the equal-weighting notice when there's only one qualifying constituent", () => {
+    const html = renderPrintPage({
+      print: basePrint(), // default fixture: a single constituent, nothing to disclose
+      allPrints: [],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).not.toContain("Equal weighting, disclosed");
+  });
+
+  it("omits the equal-weighting notice once weighting isn't equal", () => {
+    const html = renderPrintPage({
+      print: basePrint({
+        basket_costs: [
+          { model_id: "cheap", cost_usd: "0.001" },
+          { model_id: "expensive", cost_usd: "0.05" },
+        ],
+        weights: {
+          source: "routed-market-share",
+          values: [
+            { model_id: "cheap", weight: "0.1" },
+            { model_id: "expensive", weight: "0.9" },
+          ],
+        },
+      }),
+      allPrints: [],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).not.toContain("Equal weighting, disclosed");
+  });
 });

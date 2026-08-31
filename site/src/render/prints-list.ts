@@ -7,9 +7,16 @@ export interface PrintsListOptions {
   allPrints: Print[];
   /** Days the scheduled run failed to produce a print — see data.ts's loadIncidents. */
   incidents?: Incident[];
-  /** "../" — this page always lives one level deep, at prints/index.html. */
+  /** "../" — this page always lives one level deep, at prints/index.html. A tier page
+   * (/frontier/prints/index.html) lives one level deeper still, so its basePath ("../../")
+   * points all the way back to the shared root /prints/ detail-page directory — every link
+   * this renderer emits already uses that same basePath for every purpose, so no split like
+   * series-page.ts's detailBasePath is needed here. */
   basePath: string;
   chain: ChainInfo;
+  /** "Prints", "Frontier SIU prints" or "Commodity SIU prints" — defaults to "Prints" for the
+   * blended Dated SIU list. */
+  seriesLabel?: string;
 }
 
 function renderStatusCell(print: Print, basePath: string): string {
@@ -64,10 +71,11 @@ export function renderPrintsList({
   incidents = [],
   basePath,
   chain,
+  seriesLabel = "Dated SIU",
 }: PrintsListOptions): string {
   if (allPrints.length === 0 && incidents.length === 0) {
     return `<div class="headline">
-      <div class="label">Prints</div>
+      <div class="label">${esc(seriesLabel)} Prints</div>
       <p class="note">No print has been published yet.</p>
     </div>`;
   }
@@ -101,8 +109,8 @@ export function renderPrintsList({
     .join("\n");
 
   return `<div class="headline">
-  <div class="label">Prints</div>
-  <p class="note">Every published Dated SIU print, newest first${incidents.length > 0 ? " — including days a scheduled run failed and no print was produced" : ""}.</p>
+  <div class="label">${esc(seriesLabel)} Prints</div>
+  <p class="note">Every published ${esc(seriesLabel)} print, newest first${incidents.length > 0 ? " — including days a scheduled run failed and no print was produced" : ""}.</p>
 </div>
 
 <section class="block">
