@@ -457,6 +457,45 @@ spans both tiers this index was built to compare** — commodity, open-weight-ho
 (§1's positioning statement) and frontier closed models — rather than the commodity tier alone, as
 it was from the first print through 2026-08-30.
 
+**Admitted 2026-08-31:** `claude-haiku-4-5` (Anthropic) and `gpt-5.4-mini` (OpenAI) — the
+registry's first `tier: "mid"` entries, both closed-weight (`open_weights: false`) and therefore
+Frontier SIU constituents under design-doc §4a's segmentation rule, even though their real cost
+lands in build1-spec.md §12's original "Mid" cost band rather than "Frontier." Admitted
+specifically to widen the frontier tier's own internal price range: the reference set measured
+only the expensive end of closed-weight inference through 2026-08-30, and frontier buying happens
+across a wide internal range, not only at the top. Both model strings were resolved live against
+each provider's own `/v1/models` endpoint, not assumed from memory — the catalogue moves,
+`gemini-3.1-pro-preview` no longer existing under an earlier name is the standing precedent for
+why. Each satisfies every admission criterion identically to the 2026-08-30 admissions: real price
+sources (`claude-haiku-4-5-20251001`/`gpt-5.4-mini`, both cross-verified against LiteLLM,
+OpenRouter's own listing, and each provider's official pricing page — four independent sources in
+agreement), real provider adapters (the same `anthropic.ts`/`openai.ts` already serving
+`claude-sonnet-5`/`gpt-5.1`), a completed real evidence run for each
+(`data/runs/admission-2026-08-31/`), truthful registry entries, and structural capability across
+every task class — **15/15 for both, zero infrastructure failures, zero forced deviations,
+zero retries needed even on T3.** This is a genuine, reported finding, not an assumption tuned
+toward: a cheaper frontier-family model was not expected to necessarily clear every gate as
+reliably as the frontier flagships, and this evidence run shows it did. `claude-haiku-4-5`'s real
+cost ($0.1236) is below `gpt-5.1`'s own admission cost ($0.1506) — "mini/haiku" does not mean
+dramatically cheaper than the existing frontier constituents here, it means a different, real
+price point the reference set was missing.
+
+**Frontier SIU publishes for the first time as of this admission.** The frontier tier went from 3
+constituents (below `MINIMUM_QUALIFYING_MODELS = 4`) to 5 — see Weighting's tier-segmentation
+paragraph below and design-doc §4a. The reasoning-token budget accommodation above does not apply
+to either new model: both recorded zero reasoning tokens across all 30 evidence-run records.
+
+**`PUBLISH_SPEND_CEILING_USD` raised to $3.00/day, effective 2026-08-31** (from $2.50), for the
+same reason the $1.10 → $2.50 raise was made on 2026-08-30: set with real headroom, not to just
+clear the measured number. Real cost of production the day before this admission (7 constituents):
+$0.8415. Adding both new models' real evidence-run cost ($0.1236 + $0.0866 = $0.2101) projects a
+9-constituent baseline of **≈$1.05/print** under similar conditions — already close to the old
+$2.50 ceiling's own ≈2.5× margin over the _previous_ ≈$1.00 baseline, meaning that margin would
+have been eaten by this admission alone if left unchanged. $3.00 restores the same ≈2.5-2.85×
+margin over the new ≈$1.05 baseline, sized the same way as before: to absorb T3 retries,
+reasoning-token variance, and day-to-day provider price movement without tripping, while still
+catching a genuine runaway.
+
 **Removal:** a registry entry is removed when its price source stops publishing a price for it,
 its provider adapter stops functioning and no replacement adapter is available within one review
 cycle, the underlying model is discontinued by its provider, or it fails criterion 5 above
@@ -480,13 +519,17 @@ supersession entry in Index governance below. This constant exists so that can't
 again; a run that thin is a measurement of a materially different, and materially thinner,
 reference set, not a worse measurement of the usual one.
 
-**Margin, restored 2026-08-30.** The registry sat at exactly 4 — the minimum, with zero margin —
-between the two structural removals and the three frontier admissions the same day; the two
-scheduled runs in between both failed the qualifying-set guard on ordinary infrastructure trouble
-that a thicker registry would have absorbed without incident. At 7 constituents against a minimum
-of 4, a single model having a bad day no longer breaks the print outright — this is the direct,
-stated fix for a week of missed prints, not a side effect of admitting frontier models for other
-reasons.
+**Margin, restored 2026-08-30, widened further 2026-08-31.** The registry sat at exactly 4 — the
+minimum, with zero margin — between the two structural removals and the three frontier admissions
+the same day; the two scheduled runs in between both failed the qualifying-set guard on ordinary
+infrastructure trouble that a thicker registry would have absorbed without incident. At 7
+constituents against a minimum of 4, a single model having a bad day no longer breaks the print
+outright — this is the direct, stated fix for a week of missed prints, not a side effect of
+admitting frontier models for other reasons. At 9 constituents after the 2026-08-31 admissions
+above, Dated SIU's own margin over the minimum widens again (2.25×); more directly, the frontier
+tier itself goes from 3 constituents (no margin at all, below the minimum — Frontier SIU could not
+publish) to 5 (1.25× the minimum) — the same zero-margin failure mode this note first documented,
+now avoided for a tier series before it ever had the chance to occur.
 
 **Weighting, stated on the face of every print:** weighting is currently **equal** across the
 qualifying set (`weights.source: "equal"` — `packages/sdk/schemas/print.schema.json`), because no

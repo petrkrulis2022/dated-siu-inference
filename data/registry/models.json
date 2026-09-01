@@ -68,5 +68,25 @@
     "open_weights": false,
     "host": "google",
     "notes": "Admitted 2026-08-30 — direct provider adapter. Mandatory reasoning (thinking cannot be disabled — confirmed live) required docs/methodology.md's reasoning-budget accommodation rule to admit correctly; without it, a real measurement artifact would have read as structural incapacity. Evidence run: data/runs/admission-2026-08-30/, 14/15 ($0.3871) — one T3 instance is a genuine bounded finding under the 3x reasoning cap, not an infrastructure failure."
+  },
+  {
+    "id": "claude-haiku-4-5",
+    "provider": "anthropic",
+    "endpoint": "https://api.anthropic.com/v1/messages",
+    "model_string": "claude-haiku-4-5-20251001",
+    "tier": "mid",
+    "open_weights": false,
+    "host": "anthropic",
+    "notes": "Admitted 2026-08-31 — direct provider adapter, resolved live against Anthropic's /v1/models (not hardcoded from memory; see docs/methodology.md's registry inclusion policy). Real cost lands in build1-spec.md §12's original 'Mid' cost band (~$0.15/print), distinct from Frontier (~$0.80) — objectively validating tier: \"mid\" independent of open_weights, which alone decides Frontier SIU membership (design-doc §4a). Evidence run: data/runs/admission-2026-08-31/, 15/15, $0.1236, zero deviations — cheaper than gpt-5.1's own admission cost."
+  },
+  {
+    "id": "gpt-5.4-mini",
+    "provider": "openai",
+    "endpoint": "https://api.openai.com/v1/chat/completions",
+    "model_string": "gpt-5.4-mini",
+    "tier": "mid",
+    "open_weights": false,
+    "host": "openai",
+    "notes": "Admitted 2026-08-31 — direct provider adapter. OpenAI's current mini-class model, resolved live against /v1/models: no gpt-5.1-mini exists (only gpt-5-mini, an older generation, and gpt-5.4-mini, the current one) — picked the current one, same principle as picking gpt-5.1 itself at its own admission over an older flagship. Evidence run: data/runs/admission-2026-08-31/, 15/15, $0.0866, zero deviations — the cheapest constituent in the frontier tier by a wide margin."
   }
 ]
