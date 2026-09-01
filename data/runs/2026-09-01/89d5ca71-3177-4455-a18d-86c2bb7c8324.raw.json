@@ -1,0 +1,30 @@
+{
+  "model": "claude-sonnet-5",
+  "id": "msg_011Cebq8NQvXomWDRmCinPXC",
+  "type": "message",
+  "role": "assistant",
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"tracking_id\": \"SH-C975B0\", \"origin_city\": \"Tallinn\", \"destination_city\": \"Marseille\", \"weight_kg\": 36, \"status\": \"in_transit\", \"priority\": \"express\"}"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "stop_details": null,
+  "usage": {
+    "input_tokens": 1431,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_5m_input_tokens": 0,
+      "ephemeral_1h_input_tokens": 0
+    },
+    "output_tokens": 71,
+    "output_tokens_details": {
+      "thinking_tokens": 0
+    },
+    "service_tier": "standard",
+    "inference_geo": "global"
+  }
+}
