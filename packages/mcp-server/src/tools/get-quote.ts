@@ -11,6 +11,12 @@ export interface GetQuoteInput {
 
 export interface GetQuoteOutput {
   siu_per_call: string;
+  /** The same call's cost in USD — what actually settles over x402, alongside the SIU figure,
+   * so an agent sees "0.0003 SIU = $0.001 USDC" rather than SIU alone. Not `wSIU`: that stays
+   * gated on wSIU existing at all (Build 2, CLAUDE.md), and quoting in a token that doesn't
+   * exist isn't possible — SIU is the work-denominated unit, wSIU would only ever be its
+   * transferable wrapper. */
+  usd_per_call: string;
   usd_per_siu: string;
   index_version: string;
   print_id: string;
@@ -79,6 +85,10 @@ export function getQuoteTool(
 
   return {
     siu_per_call: siuPerCall.toString(),
+    // classCost.cost is already the USD cost of this exact call — siuPerCall is only that same
+    // value re-expressed in SIU terms (divided by usd_per_siu), so this is the un-divided figure
+    // itself, not a second computation that could round differently from the SIU one above.
+    usd_per_call: classCost.cost.toString(),
     usd_per_siu: row.usd_per_siu,
     index_version: print.version,
     print_id: print.print_id,

@@ -65,10 +65,19 @@ describe("getQuoteTool", () => {
     // cost = 1000/1e6*1.00 + 500/1e6*2.00 = 0.001 + 0.001 = 0.002
     // siu_per_call = 0.002 / 0.10 = 0.02
     expect(result.siu_per_call).toBe("0.02");
+    expect(result.usd_per_call).toBe("0.002");
     expect(result.usd_per_siu).toBe("0.10");
     expect(result.index_version).toBe("SIU-2026a");
     expect(result.print_id).toBe("2026-08-14");
     expect(result.print_hash).toMatch(/^0x[0-9a-f]{64}$/);
+  });
+
+  it("keeps usd_per_call and siu_per_call × usd_per_siu in agreement — an agent should see the same call priced both ways", () => {
+    const result = getQuoteTool({ task_class: "T1", model: "A" }, fixturePrint(), snapshot, [
+      runRecord(),
+    ]);
+    const recomputed = Number(result.siu_per_call) * Number(result.usd_per_siu);
+    expect(recomputed).toBeCloseTo(Number(result.usd_per_call), 10);
   });
 
   it("rejects an unknown task_class", () => {
