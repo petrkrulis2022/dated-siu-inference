@@ -1,0 +1,46 @@
+{
+  "id": "gen-1788310793-Hw1Buzy6EFSBdwz8C4FZ",
+  "object": "chat.completion",
+  "created": 1788310793,
+  "model": "deepseek/deepseek-v3.2",
+  "provider": "DeepInfra",
+  "system_fingerprint": null,
+  "service_tier": null,
+  "choices": [
+    {
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": "stop",
+      "native_finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "```json\n{\n  \"tracking_id\": \"SH-2A9292\",\n  \"origin_city\": \"Recife\",\n  \"destination_city\": \"Nairobi\",\n  \"weight_kg\": 348,\n  \"status\": \"delayed\",\n  \"priority\": \"express\"\n}\n```",
+        "refusal": null,
+        "reasoning": null
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 923,
+    "completion_tokens": 65,
+    "total_tokens": 988,
+    "cost": 0.00023972,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 192,
+      "cache_write_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": 0.00023972,
+      "upstream_inference_prompt_cost": 0.00021502,
+      "upstream_inference_completions_cost": 0.0000247
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "image_tokens": 0,
+      "audio_tokens": 0
+    }
+  }
+}

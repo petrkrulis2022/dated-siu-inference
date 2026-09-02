@@ -1,0 +1,35 @@
+{
+  "id": "chatcmpl-EJTfUf8OMiitacnaYjl6buwpoTNKE",
+  "object": "chat.completion",
+  "created": 1788310984,
+  "model": "gpt-5.4-mini-2026-03-17",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```javascript\nexport function cappedRunningTotal(nums, cap) {\n  const result = [];\n  let total = 0;\n\n  for (const num of nums) {\n    if (total >= cap) {\n      result.push(cap);\n      continue;\n    }\n\n    total += num;\n    if (total > cap) total = cap;\n    result.push(total);\n  }\n\n  return result;\n}\n```",
+        "refusal": null,
+        "annotations": []
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 145,
+    "completion_tokens": 84,
+    "total_tokens": 229,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    }
+  },
+  "service_tier": "default",
+  "system_fingerprint": null
+}

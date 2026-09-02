@@ -1,0 +1,27 @@
+{
+  "model": "claude-haiku-4-5-20251001",
+  "id": "msg_011CediDbejNF32vKg4RteFC",
+  "type": "message",
+  "role": "assistant",
+  "content": [
+    {
+      "type": "text",
+      "text": "```json\n{\n  \"tracking_id\": \"SH-AD3AAC\",\n  \"origin_city\": \"Toronto\",\n  \"destination_city\": \"Osaka\",\n  \"weight_kg\": 252,\n  \"status\": \"pending\",\n  \"priority\": \"express\"\n}\n```"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "stop_details": null,
+  "usage": {
+    "input_tokens": 1061,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_5m_input_tokens": 0,
+      "ephemeral_1h_input_tokens": 0
+    },
+    "output_tokens": 74,
+    "service_tier": "standard",
+    "inference_geo": "not_available"
+  }
+}

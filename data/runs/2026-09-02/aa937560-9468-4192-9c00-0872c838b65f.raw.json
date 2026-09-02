@@ -1,0 +1,35 @@
+{
+  "id": "chatcmpl-EJTehsWQnmjJ6Rp4iU31pxPTEvNvO",
+  "object": "chat.completion",
+  "created": 1788310935,
+  "model": "gpt-5.1-2025-11-13",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```javascript\nexport function nthLargest(nums, n) {\n  const arr = nums.slice();\n  const targetIndex = arr.length - n;\n\n  function partition(left, right, pivotIndex) {\n    const pivotValue = arr[pivotIndex];\n    [arr[pivotIndex], arr[right]] = [arr[right], arr[pivotIndex]];\n    let storeIndex = left;\n\n    for (let i = left; i < right; i++) {\n      if (arr[i] < pivotValue) {\n        [arr[storeIndex], arr[i]] = [arr[i], arr[storeIndex]];\n        storeIndex++;\n      }\n    }\n\n    [arr[right], arr[storeIndex]] = [arr[storeIndex], arr[right]];\n    return storeIndex;\n  }\n\n  function quickSelect(left, right, index) {\n    while (left <= right) {\n      const pivotIndex = left + Math.floor(Math.random() * (right - left + 1));\n      const newPivotIndex = partition(left, right, pivotIndex);\n\n      if (newPivotIndex === index) {\n        return arr[newPivotIndex];\n      } else if (newPivotIndex < index) {\n        left = newPivotIndex + 1;\n      } else {\n        right = newPivotIndex - 1;\n      }\n    }\n  }\n\n  return quickSelect(0, arr.length - 1, targetIndex);\n}\n```",
+        "refusal": null,
+        "annotations": []
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 127,
+    "completion_tokens": 298,
+    "total_tokens": 425,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    }
+  },
+  "service_tier": "default",
+  "system_fingerprint": null
+}
