@@ -14,6 +14,7 @@ import { renderPrintPage } from "./render/print-page.js";
 import { renderSeriesPage } from "./render/series-page.js";
 import { renderPrintsList } from "./render/prints-list.js";
 import { renderModelsPage, type ModelGatePoint } from "./render/models-page.js";
+import { renderForAgentsPage } from "./render/for-agents-page.js";
 
 // pnpm --filter site run build => cwd = site/, which sits directly at the repo root.
 const REPO_ROOT = resolve(process.cwd(), "..");
@@ -71,7 +72,10 @@ async function buildGateHistory(printIds: string[]): Promise<Record<string, Mode
 
 async function main(): Promise<void> {
   await mkdir(OUT_DIR, { recursive: true });
-  await cp(join(STATIC_DIR, "styles.css"), join(OUT_DIR, "styles.css"));
+  // Recursive: static/ now also carries .well-known/llms.txt and mcp.json (agent discoverability
+  // — "For agents" page below) alongside styles.css, and both need to land at OUT_DIR's own root
+  // for their conventional paths (/.well-known/llms.txt, /mcp.json) to resolve correctly.
+  await cp(STATIC_DIR, OUT_DIR, { recursive: true });
 
   const allPublishedPrints = await loadAllPrints(PRINTS_DIR);
   const incidents = await loadIncidents(INCIDENTS_DIR);
@@ -204,9 +208,21 @@ async function main(): Promise<void> {
     }),
   );
 
+  // FOR AGENTS — the human-readable counterpart to /mcp.json and /.well-known/llms.txt (copied
+  // wholesale from static/ above), all three published this same build so they can never drift.
+  await writeHtml(
+    join(OUT_DIR, "for-agents.html"),
+    renderLayout({
+      title: "Touchstone Assay — For agents",
+      bodyHtml: renderForAgentsPage(),
+      basePath: "",
+    }),
+  );
+
   console.log(
     `Built Series, Prints (${prints.length}, ${incidents.length} missed), Models, ` +
-      `Frontier SIU (${frontierPrints.length}) and Commodity SIU (${commodityPrints.length}) -> ${OUT_DIR}`,
+      `Frontier SIU (${frontierPrints.length}), Commodity SIU (${commodityPrints.length}) ` +
+      `and For agents -> ${OUT_DIR}`,
   );
 }
 

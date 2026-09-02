@@ -1,0 +1,39 @@
+# Touchstone Assay — Dated SIU
+
+Dated SIU is the benchmark price of AI inference work: a versioned basket of
+inference tasks, executed against real provider APIs and priced against a
+signed, dated print — measured by actually buying inference, not by surveying
+list prices. One SIU (Standard Inference Unit) is a fixed quantity of that
+work; the print is the dollar price of one basket.
+
+TESTBED — Base Sepolia. Real signed prints, real settlements on a test
+network. Not mainnet, not traction.
+
+## For agents
+
+MCP server (Streamable HTTP): https://mcp.touchstoneassay.com/mcp
+Machine-readable config + pricing: https://touchstoneassay.com/mcp.json
+Human page: https://touchstoneassay.com/for-agents.html
+
+Four tools. `get_index` is free. The other three are paid per call via x402
+(Circle Gateway nanopayments), settled in USDC on Base Sepolia
+(`eip155:84532`):
+
+- `get_index(version?, date?)` — free — returns the current signed print.
+- `get_quote(task_class, model)` — $0.001 — SIU price and USD equivalent for
+  one call of a given task class against a given model.
+- `convert(model, input_tokens, output_tokens)` — $0.001 — SIU + USD
+  equivalent for a specific token count.
+- `verify_receipt(chain, tx_hash)` — $0.01 — reads an on-chain settlement and
+  returns a signed attestation of what was quoted versus what was actually
+  paid.
+
+## For humans and other crawlers
+
+Site: https://touchstoneassay.com
+Methodology: https://touchstoneassay.com (see "Methodology" — the full
+computation rules, quality gates, and registry policy)
+Source: https://github.com/petrkrulis2022/dated-siu-inference
+
+Never "backed by," never a peg, never an oracle, never for sale. Touchstone
+Assay publishes a measurement, not an instrument.
