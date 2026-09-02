@@ -8,11 +8,23 @@ export interface WritePrintResult {
 }
 
 /**
- * Writes a print to data/prints/<print_id>.json and refreshes latest.json as a copy of it —
- * build1-spec.md §7. Keyed by `print_id`, not `date`: every other path that touches a print by
- * identity (runsDirFor, verify.ts, verify-onchain.ts, compute.ts) already keys off `print_id`,
- * and `print_id` is what's guaranteed unique — `date` is descriptive, not the identifier, and
- * two distinct print_ids can legitimately share a date (e.g. a same-day re-run).
+ * Writes a print to data/prints/<print_id>.json and, for the blended Dated SIU print only,
+ * refreshes latest.json as a copy of it — build1-spec.md §7. Keyed by `print_id`, not `date`:
+ * every other path that touches a print by identity (runsDirFor, verify.ts, verify-onchain.ts,
+ * compute.ts) already keys off `print_id`, and `print_id` is what's guaranteed unique — `date`
+ * is descriptive, not the identifier, and two distinct print_ids can legitimately share a date
+ * (e.g. a same-day re-run).
+ *
+ * **`latest.json` is scoped to `series === undefined` (Dated SIU) deliberately.** Found live: it
+ * used to be refreshed unconditionally by every write, so on a day Commodity SIU and Frontier
+ * SIU both published (after Dated SIU, in the same script run — publish-unattended.ts's tier
+ * loop), `latest.json` ended up pointing at whichever tier print happened to be written last —
+ * Frontier SIU, not Dated SIU. Every reader that means "the current print" by `latest.json`
+ * (the Cloudflare Workers deployment's `loadLatestPrint`, which backs the free `get_index` tool
+ * and every paid tool's own pre-check) silently served the wrong series' data as a result — not
+ * an error, a wrong answer, on the one tool this project most needs to be trustworthy. A tier
+ * print is still written to its own `data/prints/<print_id>.json` exactly as before; it just
+ * never touches the one file every "current print" reader trusts.
  *
  * Print writes are append-only, unconditionally. This used to refuse only an existing FINAL
  * print, on the theory that "provisional" meant "not yet reconciled, safe to redo." It doesn't:
@@ -43,7 +55,9 @@ export async function writePrint(printsDir: string, print: Print): Promise<Write
   await writeFile(path, json, "utf-8");
 
   const latestPath = join(printsDir, "latest.json");
-  await writeFile(latestPath, json, "utf-8");
+  if (print.series === undefined) {
+    await writeFile(latestPath, json, "utf-8");
+  }
 
   return { path, latestPath };
 }

@@ -88,11 +88,40 @@ describe("writePrint", () => {
     expect(second.dated_siu).toBe("0.02");
   });
 
-  it("latest.json always mirrors the most recently written print, even across different dates", async () => {
+  it("latest.json mirrors the most recently written Dated SIU print, even across different dates", async () => {
     await writePrint(dir, print({ print_id: "2026-08-14", date: "2026-08-14" }));
     await writePrint(dir, print({ print_id: "2026-08-15", date: "2026-08-15" }));
     const latest = JSON.parse(await readFile(join(dir, "latest.json"), "utf-8")) as Print;
     expect(latest.date).toBe("2026-08-15");
+  });
+
+  it("never lets a tier series print touch latest.json, even when written after Dated SIU", async () => {
+    // Found live: publish-unattended.ts's tier loop writes Commodity SIU and Frontier SIU
+    // *after* Dated SIU in the same run, and latest.json used to be refreshed unconditionally by
+    // every write — so it ended up pointing at whichever tier print was written last, and every
+    // "current print" reader (get_index, every paid tool's pre-check) silently served the wrong
+    // series' data. This is the regression test for that fix.
+    await writePrint(dir, print({ print_id: "2026-09-02", date: "2026-09-02", dated_siu: "0.0073" }));
+    await writePrint(
+      dir,
+      print({ print_id: "2026-09-02-commodity", date: "2026-09-02", series: "commodity", dated_siu: "0.0014" }),
+    );
+    await writePrint(
+      dir,
+      print({ print_id: "2026-09-02-frontier", date: "2026-09-02", series: "frontier", dated_siu: "0.0120" }),
+    );
+
+    const latest = JSON.parse(await readFile(join(dir, "latest.json"), "utf-8")) as Print;
+    expect(latest.print_id).toBe("2026-09-02");
+    expect(latest.series).toBeUndefined();
+  });
+
+  it("still creates data/prints/<print_id>.json for a tier print — only latest.json is exempted", async () => {
+    const result = await writePrint(
+      dir,
+      print({ print_id: "2026-09-02-frontier", date: "2026-09-02", series: "frontier" }),
+    );
+    expect(JSON.parse(await readFile(result.path, "utf-8"))).toMatchObject({ series: "frontier" });
   });
 });
 
