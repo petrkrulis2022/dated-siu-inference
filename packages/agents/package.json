@@ -9,13 +9,15 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "demo": "pnpm run build && node dist/cli/demo.js"
+    "demo": "pnpm run build && node dist/cli/demo.js",
+    "agent-loop": "pnpm run build && node dist/cli/agent-loop.js"
   },
   "dependencies": {
     "@touchstone/harness": "workspace:*",
     "@touchstone/mcp-server": "workspace:*",
     "@touchstone/print": "workspace:*",
     "@touchstone/sdk": "workspace:*",
+    "@circle-fin/x402-batching": "^3.3.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "express": "^5.2.1",
     "viem": "^2.55.16"
