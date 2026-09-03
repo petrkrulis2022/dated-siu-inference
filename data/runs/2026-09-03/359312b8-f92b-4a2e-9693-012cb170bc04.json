@@ -1,0 +1,20 @@
+{
+  "run_id": "359312b8-f92b-4a2e-9693-012cb170bc04",
+  "model_id": "gemini-3.1-pro-preview",
+  "task_class": "T1",
+  "instance_id": "T1-04",
+  "seed": 3726708991,
+  "attempt": 1,
+  "usage": {
+    "input": 910,
+    "output": 70,
+    "cached_input": 0,
+    "reasoning": 635
+  },
+  "latency_ms": 7082,
+  "gate_passed": true,
+  "raw_response_ref": "359312b8-f92b-4a2e-9693-012cb170bc04.raw.json",
+  "deviations": [
+    "completion truncated by mandatory reasoning (finishReason MAX_TOKENS, 492 reasoning tokens against a 512-token task budget) — retried with reasoning accommodated above the task budget, capped at 3x (2048 tokens total)"
+  ]
+}
