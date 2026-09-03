@@ -36,6 +36,7 @@ function extractToolCallArguments(body: unknown): Record<string, unknown> | unde
  * service can give, so this trades one extra (cached) read for never charging for a failure.
  */
 async function getQuoteWouldSucceed(args: Record<string, unknown>, env: Env): Promise<boolean> {
+  const t0 = Date.now();
   try {
     const input = args as unknown as GetQuoteInput;
     const dataSource = githubDataSource(env.PRINTS_CACHE);
@@ -44,8 +45,12 @@ async function getQuoteWouldSucceed(args: Record<string, unknown>, env: Env): Pr
     const allRecords = await dataSource.loadRunRecords(print.print_id);
     const modelRecords = allRecords.filter((r) => r.model_id === input.model);
     getQuoteTool(input, print, snapshot, modelRecords);
+    console.log(`[latency] getQuoteWouldSucceed: ${Date.now() - t0}ms (ok)`);
     return true;
-  } catch {
+  } catch (err) {
+    console.log(
+      `[latency] getQuoteWouldSucceed: ${Date.now() - t0}ms (would fail: ${err instanceof Error ? err.message : String(err)})`,
+    );
     return false;
   }
 }
@@ -102,6 +107,7 @@ app.post("/mcp", async (c) => {
   // paywall(req, res, next) itself returns void synchronously (../paywall.ts's dispatchPaywall
   // calls the real middleware as `void middleware(...)`) — awaiting that resolves before Circle's
   // Gateway verify/settle call has done anything. `settled` is what actually waits for it.
+  const tPaywall0 = Date.now();
   paywall(req, res, next);
   await Promise.race([
     settled,
@@ -109,6 +115,9 @@ app.post("/mcp", async (c) => {
       setTimeout(() => reject(new Error("paywall timed out")), 25_000),
     ),
   ]);
+  console.log(
+    `[latency] paywall dispatch (Circle Gateway round-trip): ${Date.now() - tPaywall0}ms — ${nextCalled() ? "cleared/free" : "402 challenge"}`,
+  );
 
   if (!nextCalled()) {
     const result = getResult();
@@ -136,9 +145,11 @@ app.post("/mcp", async (c) => {
   // Hono's own ExecutionContext type is a narrower structural subset of
   // @cloudflare/workers-types' — both describe the same runtime object; McpAgent.serve()'s
   // .fetch() just wants the fuller shape.
+  const tMcp0 = Date.now();
   const mcpResponse = await TouchstoneMcpAgent.serve("/mcp", {
     binding: "TOUCHSTONE_MCP",
   }).fetch(mcpRequest, c.env, c.executionCtx as unknown as ExecutionContext);
+  console.log(`[latency] MCP agent (Durable Object) tool execution: ${Date.now() - tMcp0}ms`);
 
   // A cleared payment's PAYMENT-RESPONSE header (the settlement receipt) was set on the shim's
   // throwaway res, not on the real response — carry it across, per the x402 protocol's own

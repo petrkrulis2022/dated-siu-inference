@@ -11,10 +11,19 @@ const NOT_PUBLISHED_MESSAGE =
 // Prints publish once a day — freshness beyond a few minutes buys nothing, and a short TTL is
 // what keeps get_index (and every other tool) from ever failing a call over GitHub being briefly
 // slow or rate-limited. Run records and price snapshots are immutable once a print references
-// them (the append-only guard — see docs/methodology.md's Revision policy), so they get a much
-// longer TTL: there is no staleness to protect against, only repeat-fetch cost.
+// them (the append-only guard — see docs/methodology.md's Revision policy), so there is no
+// staleness risk to protect against at all, only repeat-fetch cost — the TTL exists purely to
+// bound KV storage, not to keep this data fresh.
 const PRINT_TTL_SECONDS = 300;
-const IMMUTABLE_TTL_SECONDS = 3600;
+// Found live: a get_quote call after this expired (routine — the previous value, 3600s, is
+// shorter than a single day) paid ~8s fetching a 9-constituent print's full run-record set
+// (fetchRunRecords, concurrency-bounded but still ~130 individual raw.githubusercontent.com
+// requests) — 86% of a real measured 10.4s call, dwarfing Circle Gateway's own real network cost
+// (~470ms: a 178ms 402 challenge plus a 295ms settlement, measured the same session). Since this
+// data can never go stale, 30 days trades a little extra KV storage (cheap) for making that cold
+// path something a real caller hits roughly once a month per print rather than routinely within
+// a single day of light traffic.
+const IMMUTABLE_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { accept: "application/vnd.github+json" } });

@@ -3,18 +3,23 @@ import type { KVNamespace } from "@cloudflare/workers-types";
 import type { RunManifest, RunRecord } from "@touchstone/sdk";
 import { githubDataSource } from "./data-source.js";
 
-/** Minimal in-memory fake — only the two methods `cached()` (kv-cache.ts) actually calls. */
-function fakeKv(): KVNamespace {
+/** Minimal in-memory fake — only the two methods `cached()` (kv-cache.ts) actually calls.
+ * `puts` records every `put()` call's TTL, so a test can assert on it directly rather than trust
+ * a passing test to mean the right value was used. */
+function fakeKv(): { kv: KVNamespace; puts: { key: string; expirationTtl?: number }[] } {
   const store = new Map<string, string>();
-  return {
+  const puts: { key: string; expirationTtl?: number }[] = [];
+  const kv = {
     async get(key: string) {
       const raw = store.get(key);
       return raw ? JSON.parse(raw) : null;
     },
-    async put(key: string, value: string) {
+    async put(key: string, value: string, options?: { expirationTtl?: number }) {
       store.set(key, value);
+      puts.push({ key, expirationTtl: options?.expirationTtl });
     },
   } as unknown as KVNamespace;
+  return { kv, puts };
 }
 
 function runRecord(id: string): RunRecord {
@@ -66,7 +71,7 @@ describe("githubDataSource.loadRunRecords", () => {
       throw new Error(`unexpected fetch: ${url}`);
     });
 
-    const records = await githubDataSource(fakeKv()).loadRunRecords("2026-08-31");
+    const records = await githubDataSource(fakeKv().kv).loadRunRecords("2026-08-31");
 
     expect(records).toEqual([recordA, recordB]);
     for (const [url] of fetchMock.mock.calls) {
@@ -101,7 +106,7 @@ describe("githubDataSource.loadRunRecords", () => {
       return new Response(JSON.stringify(runRecord(fileName)), { status: 200 });
     });
 
-    const records = await githubDataSource(fakeKv()).loadRunRecords("2026-08-31");
+    const records = await githubDataSource(fakeKv().kv).loadRunRecords("2026-08-31");
 
     expect(records).toHaveLength(20);
     expect(peak).toBeLessThanOrEqual(5);
@@ -110,7 +115,7 @@ describe("githubDataSource.loadRunRecords", () => {
   it("throws a clear, honest error when a print has no manifest at all, rather than silently returning empty", async () => {
     fetchMock.mockResolvedValue(new Response("Not Found", { status: 404 }));
 
-    await expect(githubDataSource(fakeKv()).loadRunRecords("2026-08-18")).rejects.toThrow(
+    await expect(githubDataSource(fakeKv().kv).loadRunRecords("2026-08-18")).rejects.toThrow(
       /no run-record manifest/i,
     );
   });
@@ -118,6 +123,32 @@ describe("githubDataSource.loadRunRecords", () => {
   it("propagates a transient fetch failure honestly rather than caching it as empty", async () => {
     fetchMock.mockResolvedValue(new Response("rate limited", { status: 429 }));
 
-    await expect(githubDataSource(fakeKv()).loadRunRecords("2026-08-31")).rejects.toThrow(/429/);
+    await expect(githubDataSource(fakeKv().kv).loadRunRecords("2026-08-31")).rejects.toThrow(/429/);
+  });
+
+  it("caches run records for at least a week — this data can never go stale, so a short TTL only buys back-to-back cold fetches", async () => {
+    // Found live: a real get_quote call paid ~8s re-fetching a 9-constituent print's full
+    // run-record set on a cache miss — 86% of a measured 10.4s call — because the previous TTL
+    // (3600s) was shorter than a single day of light traffic. Regression test for the fix: a
+    // caller some real distance in the future must still get a cache hit, not force the ~8s cold
+    // path again for data that hasn't changed and structurally cannot change (the append-only
+    // guard — docs/methodology.md's Revision policy).
+    const manifest: RunManifest = {
+      print_id: "2026-08-31",
+      basket_version: "SIU-2026a",
+      methodology_version: "v0-draft",
+      run_records: ["a.json"],
+    };
+    fetchMock.mockImplementation((url: string) =>
+      url.endsWith("/index.json")
+        ? Promise.resolve(new Response(JSON.stringify(manifest), { status: 200 }))
+        : Promise.resolve(new Response(JSON.stringify(runRecord("a")), { status: 200 })),
+    );
+
+    const { kv, puts } = fakeKv();
+    await githubDataSource(kv).loadRunRecords("2026-08-31");
+
+    const runRecordsPut = puts.find((p) => p.key === "run-records:2026-08-31");
+    expect(runRecordsPut?.expirationTtl).toBeGreaterThanOrEqual(60 * 60 * 24 * 7);
   });
 });

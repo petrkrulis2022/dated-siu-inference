@@ -22,12 +22,18 @@ export async function cached<T>(
   ttlSeconds: number,
   fresh: () => Promise<T>,
 ): Promise<CacheOutcome<T>> {
+  const t0 = Date.now();
   const hit = await kv.get<{ value: T; fetchedAt: string }>(key, "json");
   if (hit) {
+    console.log(`[latency] kv-cache "${key}": HIT, ${Date.now() - t0}ms`);
     return { value: hit.value, cached: true, fetchedAt: hit.fetchedAt };
   }
 
+  const tFresh0 = Date.now();
   const value = await fresh();
+  console.log(
+    `[latency] kv-cache "${key}": MISS, kv.get ${tFresh0 - t0}ms + fresh() ${Date.now() - tFresh0}ms`,
+  );
   const fetchedAt = new Date().toISOString();
   // Best-effort: a KV write failure must never fail the tool call that already has a good,
   // freshly-fetched value in hand.
