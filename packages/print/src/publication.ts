@@ -8,6 +8,18 @@ export interface WritePrintResult {
 }
 
 /**
+ * Whether `print` is the blended Dated SIU headline — the one series `latest.json` is allowed
+ * to mirror. Extracted to a named predicate, not left as an inline condition inside `writePrint`,
+ * specifically so the invariant is independently unit-testable (`publication.test.ts`) and so a
+ * future third or fourth series (this project already has three writers sharing `writePrint`
+ * today: Dated SIU, Commodity SIU, Frontier SIU) inherits the same guard automatically by going
+ * through `writePrint` at all, rather than depending on every call site remembering to check.
+ */
+export function isBlendedDatedSiuPrint(print: Pick<Print, "series">): boolean {
+  return print.series === undefined;
+}
+
+/**
  * Writes a print to data/prints/<print_id>.json and, for the blended Dated SIU print only,
  * refreshes latest.json as a copy of it — build1-spec.md §7. Keyed by `print_id`, not `date`:
  * every other path that touches a print by identity (runsDirFor, verify.ts, verify-onchain.ts,
@@ -55,7 +67,7 @@ export async function writePrint(printsDir: string, print: Print): Promise<Write
   await writeFile(path, json, "utf-8");
 
   const latestPath = join(printsDir, "latest.json");
-  if (print.series === undefined) {
+  if (isBlendedDatedSiuPrint(print)) {
     await writeFile(latestPath, json, "utf-8");
   }
 

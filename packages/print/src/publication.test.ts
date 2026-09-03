@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Print } from "@touchstone/sdk";
-import { buildPrintsIndex, writePrint, writePrintsIndex } from "./publication.js";
+import { buildPrintsIndex, isBlendedDatedSiuPrint, writePrint, writePrintsIndex } from "./publication.js";
 
 let dir: string;
 
@@ -122,6 +122,47 @@ describe("writePrint", () => {
       print({ print_id: "2026-09-02-frontier", date: "2026-09-02", series: "frontier" }),
     );
     expect(JSON.parse(await readFile(result.path, "utf-8"))).toMatchObject({ series: "frontier" });
+  });
+
+  it("never creates latest.json at all for a tier print written in complete isolation — no Dated SIU print, ever", async () => {
+    // The strongest form of the guarantee: not "ends up pointing at the right print after a
+    // specific sequence," but "a tier print, on its own, with nothing else in play, cannot make
+    // latest.json exist at all." Order-independent by construction, not by which test runs first.
+    await writePrint(
+      dir,
+      print({ print_id: "2026-09-02-commodity", date: "2026-09-02", series: "commodity" }),
+    );
+    await expect(readFile(join(dir, "latest.json"), "utf-8")).rejects.toThrow();
+  });
+
+  it.each([
+    ["frontier", "commodity", "dated"],
+    ["commodity", "frontier", "dated"],
+    ["dated", "frontier", "commodity"],
+  ] as const)(
+    "always resolves to the Dated SIU print regardless of write order: %s, %s, %s",
+    async (first, second, third) => {
+      const bySeries = {
+        dated: print({ print_id: "2026-09-02", date: "2026-09-02" }),
+        commodity: print({ print_id: "2026-09-02-commodity", date: "2026-09-02", series: "commodity" }),
+        frontier: print({ print_id: "2026-09-02-frontier", date: "2026-09-02", series: "frontier" }),
+      };
+      await writePrint(dir, bySeries[first]);
+      await writePrint(dir, bySeries[second]);
+      await writePrint(dir, bySeries[third]);
+
+      const latest = JSON.parse(await readFile(join(dir, "latest.json"), "utf-8")) as Print;
+      expect(latest.print_id).toBe("2026-09-02");
+      expect(latest.series).toBeUndefined();
+    },
+  );
+});
+
+describe("isBlendedDatedSiuPrint", () => {
+  it("is true only for a print with no series", () => {
+    expect(isBlendedDatedSiuPrint({ series: undefined })).toBe(true);
+    expect(isBlendedDatedSiuPrint({ series: "commodity" })).toBe(false);
+    expect(isBlendedDatedSiuPrint({ series: "frontier" })).toBe(false);
   });
 });
 
