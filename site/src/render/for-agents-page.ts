@@ -1,8 +1,8 @@
 import { esc } from "../format.js";
 
 const MCP_URL = "https://mcp.touchstoneassay.com/mcp";
-const MCP_JSON_URL = "https://touchstoneassay.com/mcp.json";
-const LLMS_TXT_URL = "https://touchstoneassay.com/.well-known/llms.txt";
+const MCP_JSON_URL = "https://prints.touchstoneassay.com/mcp.json";
+const LLMS_TXT_URL = "https://prints.touchstoneassay.com/.well-known/llms.txt";
 
 const MCP_CONFIG_JSON = `{
   "mcpServers": {

@@ -12,8 +12,8 @@ network. Not mainnet, not traction.
 ## For agents
 
 MCP server (Streamable HTTP): https://mcp.touchstoneassay.com/mcp
-Machine-readable config + pricing: https://touchstoneassay.com/mcp.json
-Human page: https://touchstoneassay.com/for-agents.html
+Machine-readable config + pricing: https://prints.touchstoneassay.com/mcp.json
+Human page: https://prints.touchstoneassay.com/for-agents.html
 
 Four tools. `get_index` is free. The other three are paid per call via x402
 (Circle Gateway nanopayments), settled in USDC on Base Sepolia
@@ -30,10 +30,15 @@ Four tools. `get_index` is free. The other three are paid per call via x402
 
 ## For humans and other crawlers
 
-Site: https://touchstoneassay.com
-Methodology: https://touchstoneassay.com (see "Methodology" — the full
-computation rules, quality gates, and registry policy)
+Marketing site: https://touchstoneassay.com
+Prints, series, methodology: https://prints.touchstoneassay.com
+Operator console: https://console.touchstoneassay.com
 Source: https://github.com/petrkrulis2022/dated-siu-inference
+
+This file is served from the prints subdomain, not the marketing apex domain —
+if you reached it starting from prints.touchstoneassay.com directly, every
+link above resolves correctly; if you checked the apex domain's own
+/.well-known/llms.txt expecting this file, it isn't published there yet.
 
 Never "backed by," never a peg, never an oracle, never for sale. Touchstone
 Assay publishes a measurement, not an instrument.
