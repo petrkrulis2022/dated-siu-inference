@@ -14,9 +14,17 @@ page in `site/`, which stays a separate, plainer artefact for outside readers._
   client, never a wallet client. There is no code path that could sign anything or send a
   transaction, because nothing capable of doing so is ever imported — this is enforced by absence,
   not a runtime check that could be bypassed.
-- **`127.0.0.1` only.** Both the API (`server/index.ts`) and the Vite dev server
-  (`web/vite.config.ts`) bind `127.0.0.1` explicitly, never `0.0.0.0`. Not reachable from another
-  machine. No auth, because nothing is exposed to authenticate against. No telemetry.
+- **`127.0.0.1` only — for the API this package ships.** Both the API (`server/index.ts`) and the
+  Vite dev server (`web/vite.config.ts`) bind `127.0.0.1` explicitly, never `0.0.0.0`. Not
+  reachable from another machine. No auth on the local process, because nothing is exposed to
+  authenticate against. No telemetry. A static build of the web bundle is separately deployed at
+  `console.touchstoneassay.com`, gated by Cloudflare Access — but that deployed frontend's own
+  `/api` calls have no backend to answer them there, since this package's API is a Node/Express
+  process with no remote deployment; every panel except Chat analytics is consequently only fully
+  functional against a local `pnpm console`. Chat analytics is the one exception to the `/api`
+  pattern (see `web/src/lib/chat-digest.ts`): it fetches cross-origin, directly from
+  `chat-server`'s own read-only `GET /digest` — a real Worker with its own deployment and its own
+  CORS allowlist — so that one panel works on the deployed console as well as locally.
 - **`.env` is read, never written, and no key material is ever read.** The console reads
   `BASE_SEPOLIA_RPC_URL`/`TOUCHSTONE_CHAIN_NAME`/`TOUCHSTONE_PUBLISHER_ADDRESS` and displays addresses as-is.
   `TOUCHSTONE_PUBLISHER_KEY` and `DEPLOYER_PRIVATE_KEY` are never touched by any file in this package.

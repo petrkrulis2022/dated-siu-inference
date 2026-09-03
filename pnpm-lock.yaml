@@ -89,6 +89,28 @@ importers:
         specifier: ^26.2.0
         version: 26.2.0
 
+  packages/chat-server:
+    dependencies:
+      '@touchstone/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      decimal.js:
+        specifier: ^10.6.0
+        version: 10.6.0
+      hono:
+        specifier: ^4.13.4
+        version: 4.13.4
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^5.20260823.1
+        version: 5.20260823.1
+      '@types/node':
+        specifier: ^26.2.0
+        version: 26.2.0
+      wrangler:
+        specifier: ^4.125.0
+        version: 4.125.0(@cloudflare/workers-types@5.20260823.1)
+
   packages/console:
     dependencies:
       '@touchstone/print':

@@ -1,0 +1,49 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "touchstone-chat",
+  "main": "src/workers/index.ts",
+  "compatibility_date": "2026-08-24",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // ChatBudgetTracker is the one hard limit — the global daily $ cap, atomic check-and-increment
+  // before every LLM call, same discipline as PUBLISH_SPEND_CEILING_USD. Per-session and per-IP
+  // limits are soft (CHAT_LIMITS KV below) — abuse deterrents, not budget precision, so KV's
+  // eventual consistency is an acceptable tradeoff there in exchange for not needing a second DO.
+  "durable_objects": {
+    "bindings": [{ "name": "CHAT_BUDGET", "class_name": "ChatBudgetTracker" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ChatBudgetTracker"] }],
+
+  // Session/IP soft caps (message counts, request timestamps) — see src/rate-limit.ts.
+  "kv_namespaces": [{ "binding": "CHAT_LIMITS", "id": "f6cf7cd3b38046559d77400afa65a9bb" }],
+
+  // The analysis layer itself — conversations, messages, weekly_digests (migrations/0001_init.sql).
+  "d1_databases": [
+    {
+      "binding": "CHAT_DB",
+      "database_name": "touchstone-chat",
+      "database_id": "b7cc2d49-5750-4ab2-a4b8-8d90b5b1fefe"
+    }
+  ],
+
+  // Weekly digest generation + 90-day transcript retention cleanup — see src/workers/index.ts's
+  // scheduled() handler. Sunday 02:00 UTC: well clear of the daily 00:17/04:17 UTC print-publish
+  // cron (.github/workflows/publish-print.yml), no resource contention with it. Cloudflare's own
+  // cron day-of-week numbering is 1=Sunday..7=Saturday (not the usual 0=Sunday) — real deploy
+  // error caught this ("invalid cron string" for "0 2 * * 0") — using the SUN abbreviation
+  // instead of a number sidesteps the ambiguity entirely, per Cloudflare's own docs advice.
+  "triggers": { "crons": ["0 2 * * SUN"] },
+
+  "routes": [{ "pattern": "chat.touchstoneassay.com", "custom_domain": true }],
+
+  // TOUCHSTONE_ATTESTATION_KEY-style separation: this Worker signs nothing, anchors nothing,
+  // moves no funds. Its only secret is ANTHROPIC_API_KEY (`wrangler secret put`), which can only
+  // ever spend against CHAT_DAILY_CEILING_USD below.
+  "vars": {
+    "CHAT_DAILY_CEILING_USD": "3.00",
+    "CHAT_MODEL": "claude-haiku-4-5-20251001",
+    "MCP_SERVER_URL": "https://mcp.touchstoneassay.com/mcp",
+    "SITE_URL": "https://prints.touchstoneassay.com",
+    "CONSOLE_URL": "https://console.touchstoneassay.com"
+  }
+}

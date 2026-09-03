@@ -1,0 +1,24 @@
+{
+  "name": "@touchstone/chat-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@touchstone/sdk": "workspace:*",
+    "decimal.js": "^10.6.0",
+    "hono": "^4.13.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260823.1",
+    "@types/node": "^26.2.0",
+    "wrangler": "^4.125.0"
+  }
+}

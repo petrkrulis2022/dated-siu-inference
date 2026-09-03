@@ -6,6 +6,7 @@ import { ModelsPanel } from "./panels/ModelsPanel.js";
 import { ActivityPanel } from "./panels/ActivityPanel.js";
 import { QuotedVsPaidPanel } from "./panels/QuotedVsPaidPanel.js";
 import { HealthPanel } from "./panels/HealthPanel.js";
+import { ChatAnalyticsPanel } from "./panels/ChatAnalyticsPanel.js";
 
 const TABS = [
   { id: "series", label: "Series" },
@@ -14,6 +15,7 @@ const TABS = [
   { id: "activity", label: "Agent activity" },
   { id: "quoted-vs-paid", label: "Quoted vs paid" },
   { id: "health", label: "Health" },
+  { id: "chat", label: "Chat analytics" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -55,6 +57,7 @@ export function App(): React.JSX.Element {
       {tab === "activity" && <ActivityPanel config={config} />}
       {tab === "quoted-vs-paid" && <QuotedVsPaidPanel config={config} />}
       {tab === "health" && <HealthPanel config={config} />}
+      {tab === "chat" && <ChatAnalyticsPanel />}
     </div>
   );
 }

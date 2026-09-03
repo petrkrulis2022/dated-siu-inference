@@ -23,9 +23,13 @@ describe("renderLayout", () => {
     expect(html).toContain('href="../models/index.html"');
   });
 
-  it("contains no <script> tag — no backend, no analytics, no tracking", () => {
+  it("carries exactly one <script> tag — the chat widget, deliberately, and nothing else", () => {
+    // Was "contains no <script> tag — no backend, no analytics, no tracking" until the chat
+    // widget was approved as an explicit, on-every-page exception (Phase D). This still guards
+    // the invariant that matters: no *second*, unreviewed script sneaks in alongside it.
     const html = renderLayout({ title: "t", bodyHtml: "<p>x</p>", basePath: "" });
-    expect(html.toLowerCase()).not.toContain("<script");
+    const scriptTags = html.match(/<script[^>]*>/gi) ?? [];
+    expect(scriptTags).toEqual(['<script src="https://chat.touchstoneassay.com/widget.js" defer>']);
   });
 
   it("is mobile-friendly: sets a real viewport meta tag", () => {

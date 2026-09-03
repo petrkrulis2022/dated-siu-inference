@@ -37,6 +37,7 @@ ${bodyHtml}
   <p>SIU is a measurement standard and data publication. Nothing on this site is an offer of any token, security or investment.</p>
 </footer>
 </div>
+<script src="https://chat.touchstoneassay.com/widget.js" defer></script>
 </body>
 </html>
 `;
