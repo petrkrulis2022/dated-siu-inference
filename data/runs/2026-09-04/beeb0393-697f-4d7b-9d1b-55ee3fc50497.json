@@ -1,0 +1,18 @@
+{
+  "run_id": "beeb0393-697f-4d7b-9d1b-55ee3fc50497",
+  "model_id": "gemini-3.1-pro-preview",
+  "task_class": "T3",
+  "instance_id": "T3-03",
+  "seed": 3891696959,
+  "attempt": 1,
+  "usage": {
+    "input": 99,
+    "output": 25,
+    "cached_input": 0,
+    "reasoning": 393
+  },
+  "latency_ms": 4626,
+  "gate_passed": true,
+  "raw_response_ref": "beeb0393-697f-4d7b-9d1b-55ee3fc50497.raw.json",
+  "deviations": []
+}

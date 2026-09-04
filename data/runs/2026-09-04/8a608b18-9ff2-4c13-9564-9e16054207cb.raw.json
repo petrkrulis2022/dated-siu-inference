@@ -1,0 +1,35 @@
+{
+  "id": "chatcmpl-EKCa7N99rSEz1tCfuzZvm97C60tRj",
+  "object": "chat.completion",
+  "created": 1788483631,
+  "model": "gpt-5.1-2025-11-13",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```javascript\nexport function filterAboveThreshold(nums, threshold) {\n  const result = [];\n  for (let i = 0; i < nums.length; i++) {\n    if (nums[i] > threshold) {\n      result.push(nums[i]);\n    }\n  }\n  return result;\n}\n```",
+        "refusal": null,
+        "annotations": []
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 114,
+    "completion_tokens": 70,
+    "total_tokens": 184,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    }
+  },
+  "service_tier": "default",
+  "system_fingerprint": null
+}

@@ -100,5 +100,17 @@
     "date": "2026-09-03",
     "status": "provisional",
     "dated_siu": "0.0073"
+  },
+  {
+    "print_id": "2026-09-04-frontier",
+    "date": "2026-09-04",
+    "status": "provisional",
+    "dated_siu": "0.0120"
+  },
+  {
+    "print_id": "2026-09-04",
+    "date": "2026-09-04",
+    "status": "provisional",
+    "dated_siu": "0.0081"
   }
 ]
