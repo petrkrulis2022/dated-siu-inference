@@ -6,27 +6,33 @@ signed, dated print — measured by actually buying inference, not by surveying
 list prices. One SIU (Standard Inference Unit) is a fixed quantity of that
 work; the print is the dollar price of one basket.
 
-TESTBED — Base Sepolia. Real signed prints, real settlements on a test
-network. Not mainnet, not traction.
+## If you're an agent, start here
 
-## For agents
+Call `get_index` before you read any further — it's free, it's live, and a
+real print teaches you more about SIU than this file's own prose does.
 
-MCP server (Streamable HTTP): https://mcp.touchstoneassay.com/mcp
-Machine-readable config + pricing: https://prints.touchstoneassay.com/mcp.json
-Human page: https://prints.touchstoneassay.com/for-agents.html
+1. Paste this into an MCP-compatible client (same config, machine-readable, at
+   https://prints.touchstoneassay.com/mcp.json):
+   `{ "mcpServers": { "touchstone-assay": { "url": "https://mcp.touchstoneassay.com/mcp" } } }`
+2. Call `get_index` with no arguments — free, no payment step, no x402
+   challenge.
+3. Read `dated_siu` for the current price and `exchange_rate_table` for how
+   individual models compare.
 
-Four tools. `get_index` is free. The other three are paid per call via x402
-(Circle Gateway nanopayments), settled in USDC on Base Sepolia
-(`eip155:84532`):
+The other three tools cost real money per call, over x402 (Circle Gateway
+nanopayments), settled in USDC on Base Sepolia (`eip155:84532`) —
+TESTBED, not mainnet, not traction:
 
-- `get_index(version?, date?)` — free — returns the current signed print.
-- `get_quote(task_class, model)` — $0.001 — SIU price and USD equivalent for
-  one call of a given task class against a given model.
+- `get_index(version?, date?)` — free — the current signed print.
+- `get_quote(task_class, model)` — $0.001 — SIU + USD price for one call of a
+  task class against a model.
 - `convert(model, input_tokens, output_tokens)` — $0.001 — SIU + USD
   equivalent for a specific token count.
 - `verify_receipt(chain, tx_hash)` — $0.01 — reads an on-chain settlement and
   returns a signed attestation of what was quoted versus what was actually
   paid.
+
+Full reference, human-readable: https://prints.touchstoneassay.com/for-agents.html
 
 ## For humans and other crawlers
 
