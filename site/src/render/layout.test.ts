@@ -23,13 +23,28 @@ describe("renderLayout", () => {
     expect(html).toContain('href="../models/index.html"');
   });
 
-  it("carries exactly one <script> tag — the chat widget, deliberately, and nothing else", () => {
-    // Was "contains no <script> tag — no backend, no analytics, no tracking" until the chat
-    // widget was approved as an explicit, on-every-page exception (Phase D). This still guards
-    // the invariant that matters: no *second*, unreviewed script sneaks in alongside it.
+  it("carries exactly the two expected <script> tags — the chat widget and the mode toggle — and nothing else", () => {
+    // Was "contains no <script> tag" until the chat widget (Phase D), then "exactly one" until
+    // the audience toggle needed its own sitewide script. Deliberately updated again, not
+    // silently broken — this still guards the invariant that matters: no *third*, unreviewed
+    // script sneaks in alongside these two.
     const html = renderLayout({ title: "t", bodyHtml: "<p>x</p>", basePath: "" });
     const scriptTags = html.match(/<script[^>]*>/gi) ?? [];
-    expect(scriptTags).toEqual(['<script src="https://chat.touchstoneassay.com/widget.js" defer>']);
+    expect(scriptTags).toEqual([
+      '<script src="https://chat.touchstoneassay.com/widget.js" defer>',
+      '<script type="module" src="client/mode-toggle.js" defer>',
+    ]);
+  });
+
+  it("renders the audience toggle with the correct link active for each mode", () => {
+    const human = renderLayout({ title: "t", bodyHtml: "", basePath: "" });
+    expect(human).toMatch(/<a href="index\.html" aria-current="page">Human<\/a>/);
+    expect(human).not.toMatch(/<a href="for-agents\.html" aria-current="page">/);
+
+    const forAgents = renderLayout({ title: "t", bodyHtml: "", basePath: "", mode: "for-agents" });
+    expect(forAgents).toMatch(/<a href="for-agents\.html" aria-current="page">For agents<\/a>/);
+    expect(forAgents).not.toMatch(/<a href="index\.html" aria-current="page">/);
+    expect(forAgents).toContain('href="for-agents.html#try-it-here"');
   });
 
   it("is mobile-friendly: sets a real viewport meta tag", () => {

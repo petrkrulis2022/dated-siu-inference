@@ -76,6 +76,16 @@ async function main(): Promise<void> {
   // — "For agents" page below) alongside styles.css, and both need to land at OUT_DIR's own root
   // for their conventional paths (/.well-known/llms.txt, /mcp.json) to resolve correctly.
   await cp(STATIC_DIR, OUT_DIR, { recursive: true });
+  // The compiled browser scripts (mode-toggle.js sitewide, try-it-here.js + mcp-browser-client.js
+  // on the for-agents page) — tsc already compiled src/client/*.ts to dist/client/*.js (same
+  // rootDir/outDir mapping as everything else this package compiles), so this is a copy, not a
+  // build step of its own. Filtered to .js only — the .d.ts siblings tsc also emits (this
+  // package's own tsconfig sets declaration: true, for workspace-package consumption elsewhere)
+  // serve no purpose in a deployed static site.
+  await cp(resolve(process.cwd(), "dist", "client"), join(OUT_DIR, "client"), {
+    recursive: true,
+    filter: (source) => !source.endsWith(".d.ts"),
+  });
 
   const allPublishedPrints = await loadAllPrints(PRINTS_DIR);
   const incidents = await loadIncidents(INCIDENTS_DIR);
@@ -216,6 +226,7 @@ async function main(): Promise<void> {
       title: "Touchstone Assay — For agents",
       bodyHtml: renderForAgentsPage(),
       basePath: "",
+      mode: "for-agents",
     }),
   );
 

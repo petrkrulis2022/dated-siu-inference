@@ -8,6 +8,10 @@ export default tseslint.config(
       "**/dist/**",
       "**/node_modules/**",
       "**/generated/**",
+      // site/'s build output — named "public/", not "dist/", specifically to avoid conflating
+      // this package's own tsc output with the deployable static site (see build.ts's own
+      // comment) — so it needs its own ignore entry rather than being covered by **/dist/**.
+      "site/public/**",
       // Vendored Foundry dependencies (git submodules). OpenZeppelin ships its own
       // eslint.config.mjs, which ESLint would otherwise try to load — and fail on, since its
       // plugins are not installed here. Solidity is linted by `forge build`/`forge fmt` instead.
@@ -32,6 +36,16 @@ export default tseslint.config(
     files: ["**/*.mjs"],
     languageOptions: {
       globals: { process: "readonly", console: "readonly" },
+    },
+  },
+  {
+    // site/'s only browser-executed TypeScript (everything else in this repo runs in Node or a
+    // Cloudflare Worker) — no @types/node ambient globals apply here, and this file's own
+    // tsconfig.json's "DOM" lib addition only affects type-checking, not eslint's separate
+    // no-undef scope analysis, so the browser globals it actually uses need stating explicitly.
+    files: ["site/src/client/**/*.ts"],
+    languageOptions: {
+      globals: { document: "readonly", window: "readonly" },
     },
   },
   prettier,

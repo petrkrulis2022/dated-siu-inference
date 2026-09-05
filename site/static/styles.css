@@ -727,6 +727,74 @@ ol.roadmap .roadmap-body p {
   margin-top: 0.5rem;
 }
 
+/* ---- audience toggle: Human / For agents / Try it here ---- */
+
+.mode-toggle {
+  display: flex;
+  gap: 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 1.5rem;
+}
+
+.mode-toggle a {
+  border: 1px solid var(--rule);
+  padding: 0.3rem 0.7rem;
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+
+.mode-toggle a[aria-current="page"] {
+  border-color: var(--ink);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ---- for-agents page: "Try it here" live tool buttons ---- */
+
+.tool-grid {
+  display: grid;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.tool {
+  border: 1px solid var(--rule);
+  padding: 1rem 1.15rem;
+}
+
+.tool-button {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  background: var(--bg);
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+
+.tool-button:hover {
+  background: var(--surface);
+}
+
+.tool-button:disabled {
+  color: var(--ink-muted);
+  border-color: var(--rule);
+  cursor: default;
+}
+
+.tool-result {
+  margin: 0.75rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: var(--ink-muted);
+  min-height: 1.2em;
+}
+
 /* ---- mobile-first: base styles above are the small-screen layout;
        widen spacing slightly on larger viewports. ---- */
 @media (min-width: 40rem) {
@@ -743,6 +811,10 @@ ol.roadmap .roadmap-body p {
   }
 
   .card-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .tool-grid {
     grid-template-columns: repeat(3, 1fr);
   }
 }

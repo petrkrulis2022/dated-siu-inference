@@ -25,11 +25,36 @@ const TOOLS: ToolRow[] = [
   { name: "verify_receipt", args: "chain, tx_hash", price: "$0.01" },
 ];
 
+interface TryItHereTool {
+  name: string;
+  label: string;
+  description: string;
+}
+
+const TRY_IT_HERE_TOOLS: TryItHereTool[] = [
+  {
+    name: "get_current_print",
+    label: "Get current print",
+    description: "Returns the current Dated SIU value, date, and status from the live, signed print.",
+  },
+  {
+    name: "explain_siu",
+    label: "Explain SIU",
+    description: "Explains what one SIU is: the basket, the quality gate, how the print is computed.",
+  },
+  {
+    name: "compare_model_cost",
+    label: "Compare model cost",
+    description: "Returns the current print's exchange-rate table — every constituent model's real cost, in SIU.",
+  },
+];
+
 /**
  * The human-readable counterpart to /mcp.json and /.well-known/llms.txt — the same facts, laid
- * out for someone deciding whether to point their agent at this server, not for a parser. No
- * client JS: the config block is plain text meant to be copied, not a live widget (see
- * layout.test.ts's no-client-JS invariant).
+ * out for someone deciding whether to point their agent at this server, not for a parser. Carries
+ * exactly one client script (client/try-it-here.js, page-scoped — see layout.test.ts's sitewide
+ * script-count invariant, which this page doesn't affect) powering the "Try it here" section
+ * below; every other section here is still plain text meant to be copied, not a live widget.
  */
 export function renderForAgentsPage(): string {
   const rows = TOOLS.map(
@@ -74,5 +99,26 @@ export function renderForAgentsPage(): string {
   never an oracle, nothing for sale. <code>verify_receipt</code>'s on-chain read is live, reading
   the real deployed <code>TouchstoneEscrow</code> — see the <a href="index.html">Series</a> page
   for the current print and the full methodology.</p>
-</section>`;
+</section>
+
+<section class="block" id="try-it-here">
+  <h2>Try it here</h2>
+  <p class="note" id="try-it-here-status">Checking this browser for WebMCP support…</p>
+  <div class="tool-grid">
+    ${TRY_IT_HERE_TOOLS.map(
+      (tool) => `<div class="tool">
+      <button type="button" class="tool-button" data-tool="${esc(tool.name)}"><code>${esc(tool.name)}</code></button>
+      <p class="note">${esc(tool.description)}</p>
+      <pre class="tool-result" data-tool-result="${esc(tool.name)}"></pre>
+    </div>`,
+    ).join("\n    ")}
+  </div>
+  <p class="note">Free, read-only, no exceptions — never <code>get_quote</code>,
+  <code>convert</code>, or <code>verify_receipt</code>, which stay paid, on the remote server
+  only. These three call the same live MCP server as the config above. If your browser or agent
+  supports <a href="https://webmachinelearning.github.io/webmcp/">WebMCP</a> — an experimental
+  W3C Community Group proposal, not yet a shipped standard — they're also registered directly
+  with <code>document.modelContext</code>, in addition to the buttons.</p>
+</section>
+<script type="module" src="client/try-it-here.js"></script>`;
 }
