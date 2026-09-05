@@ -120,6 +120,11 @@ export interface IndexerConfig {
    * cap the range per call; verified empirically against the configured RPC during real indexing
    * rather than assumed. */
   chunkSize?: bigint;
+  /** Overrides "scan up to the real current chain tip" with a fixed block instead — for tests
+   * that need a bounded, permanently-small range rather than one that grows every day the real
+   * chain keeps producing blocks. Real callers (the server's own startup catch-up, rebuild-cli)
+   * never set this. */
+  toBlockOverride?: bigint;
 }
 
 const DEFAULT_CHUNK_SIZE = 2000n;
@@ -204,7 +209,7 @@ export async function indexNewEvents(
 ): Promise<EventCache> {
   const client = createPublicClient({ transport: http(config.rpcUrl) }) as PublicClient;
   const chunkSize = config.chunkSize ?? DEFAULT_CHUNK_SIZE;
-  const latest = await withRpcBackoff(() => client.getBlockNumber());
+  const latest = config.toBlockOverride ?? (await withRpcBackoff(() => client.getBlockNumber()));
 
   const escrowAddress = config.escrowAddress as Hex;
   const attestationAddress = config.attestationAddress as Hex;

@@ -8,9 +8,31 @@ import { emptyCache, type EventCache } from "./cache.js";
  * settlements this session's own demo agents and live tests have already produced — not a mock,
  * per the P13 lesson applied throughout this project. Read-only: only `getLogs`/`getBlock`/
  * `readContract` calls, matching the console's own hard constraint.
+ *
+ * Bounded to a fixed historical window, not "deployment block to the real current chain tip":
+ * a full scan from the deployment block (base-sepolia.json's own smoke tests happened at
+ * 45633221-45633556) genuinely took 150s+ once measured for real — 793,351 real blocks had
+ * accumulated since deployment by 2026-09-05, needing ~800 sequential eth_getLogs calls at this
+ * indexer's own chunk size, confirmed live (real per-call latency ~200ms, RPC itself healthy, no
+ * rate-limit errors — this is pure accumulated range, not RPC degradation). That range only grows
+ * every day Base Sepolia keeps producing blocks, so raising the hook timeout would only buy time
+ * before the next failure, not fix anything. TOUCHSTONE_ESCROW_ADDRESS's real deploy-time smoke
+ * tests are known, by construction, to have produced real Opened/Settled events inside
+ * [45633221, 45633600] — confirmed live (7 Opened, 4 Settled) before writing this — so this
+ * suite scans exactly that fixed, permanent window (indexNewEvents's toBlockOverride) instead:
+ * genuinely bounded, one eth_getLogs chunk, and it will never grow no matter how much time passes.
+ * The real production indexer (server/index.ts) never does a from-deployment full scan in normal
+ * operation anyway — it always resumes incrementally from a persisted cache, exactly what the
+ * second test below already exercises; this suite's "full scan" now demonstrates the same
+ * historical-event-decoding correctness against a small, real, permanently-fixed slice of history
+ * instead of the entire chain since deployment.
  */
 const RPC_URL = process.env.BASE_SEPOLIA_RPC_URL;
 const describeLive = RPC_URL ? describe : describe.skip;
+
+// Confirmed live (2026-09-05) via `cast logs` against exactly this range: 7 real Opened events,
+// 4 real Settled events, from base-sepolia.json's own documented smoke tests.
+const BOUNDED_SCAN_TO_BLOCK = 45_633_600n;
 
 describeLive("indexNewEvents (live Base Sepolia)", () => {
   const deployment = loadDeployment("base-sepolia");
@@ -25,13 +47,14 @@ describeLive("indexNewEvents (live Base Sepolia)", () => {
       (deployment.contracts.TouchstoneAttestation as unknown as { blockNumber: number })
         .blockNumber,
     ),
+    toBlockOverride: BOUNDED_SCAN_TO_BLOCK,
   };
 
   let fullScan: EventCache;
 
   beforeAll(async () => {
     fullScan = await indexNewEvents(config, emptyCache());
-  }, 90_000);
+  }, 30_000);
 
   it("scans from the deployment block and finds real Opened/Settled events with real fee/treasury values", () => {
     // This session has produced substantial real activity (P13 smoke tests, P14 demo agent
