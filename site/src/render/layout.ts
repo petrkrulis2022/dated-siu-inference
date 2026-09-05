@@ -17,12 +17,13 @@ export function renderLayout({ title, bodyHtml, basePath }: LayoutOptions): stri
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
 <meta name="description" content="Dated SIU: the benchmark price of AI inference work, measured by executing a versioned task basket, not by surveying list prices.">
+<link rel="icon" type="image/png" href="${basePath}favicon.png">
 <link rel="stylesheet" href="${basePath}styles.css">
 </head>
 <body>
 <div class="container">
 <header class="site-header">
-  <a class="wordmark" href="${basePath}index.html">Touchstone Assay</a>
+  <a class="wordmark" href="${basePath}index.html"><img class="wordmark-icon" src="${basePath}logo.png" alt="" width="40" height="40">Touchstone Assay</a>
   <nav class="site-nav">
     <a href="${basePath}index.html">Series</a>
     <a href="${basePath}prints/index.html">Prints</a>

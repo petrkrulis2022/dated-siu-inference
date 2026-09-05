@@ -1,0 +1,13 @@
+# Exported by three-d-stage
+newmtl Stone
+Kd 0.0116 0.0123 0.0137
+Ks 0.2000 0.2000 0.2000
+Ns 30
+d 1.0000
+
+newmtl Strike
+Kd 0.9047 0.8879 0.8228
+Ks 0.2000 0.2000 0.2000
+Ns 140
+d 1.0000
+
