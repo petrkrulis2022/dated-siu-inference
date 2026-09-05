@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 
 import { getPublishedPages } from "@/lib/content";
 import { SITE_CONFIG } from "@/site-config";
+import { FOR_AGENTS_URL, MCP_CONFIG_JSON, MCP_JSON_URL, MCP_TOOLS } from "@/lib/mcp-info";
 
 export const prerender = true;
 
@@ -44,6 +45,24 @@ export const GET: APIRoute = async ({ site }) => {
     ...(SITE_CONFIG.name ? [`# ${SITE_CONFIG.name}`, ""] : []),
     ...(SITE_CONFIG.description ? [`> ${SITE_CONFIG.description}`, ""] : []),
     "This file is generated from the site's source content. It is a curated index for AI assistants, not a crawler permissions file. For crawler permissions, see `/robots.txt`.",
+    "",
+    "## If you're an agent, start here",
+    "",
+    "Call `get_index` before you read any further — it's free, it's live, and a real print teaches you more about SIU than this file's own prose does.",
+    "",
+    `1. Paste this into an MCP-compatible client (same config, machine-readable, at ${MCP_JSON_URL}):`,
+    `   \`${MCP_CONFIG_JSON.replace(/\n\s*/g, " ")}\``,
+    "2. Call `get_index` with no arguments — free, no payment step, no x402 challenge.",
+    "3. Read `dated_siu` for the current price and `exchange_rate_table` for how individual models compare.",
+    "",
+    "The other three tools cost real money per call, over x402 (Circle Gateway nanopayments), settled in USDC on Base Sepolia (`eip155:84532`) — testbed, not mainnet, not traction:",
+    "",
+    ...MCP_TOOLS.map(
+      (tool) =>
+        `- \`${tool.name}\` — ${tool.free ? "free" : `$${tool.priceUsd}`} — ${tool.description}`,
+    ),
+    "",
+    `Full reference, human-readable: ${FOR_AGENTS_URL}`,
     "",
     "## Core Pages",
     "",
