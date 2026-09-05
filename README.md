@@ -24,6 +24,25 @@ _Placeholder — wired up once `packages/print` exists._
 
 <!-- BEGIN GENERATED: deployments -->
 
+### Arc Testnet
+
+Chain ID `5042002`. Deployed 2026-09-05 from commit `95eea03`.
+
+| Contract                | Address                                                                                                                        | Verification    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------- |
+| `TouchstoneAttestation` | [`0x12b886b043feABc3d90bBae3ae206d22b208160d`](https://testnet.arcscan.app/address/0x12b886b043feabc3d90bbae3ae206d22b208160d) | Pass - Verified |
+| `TouchstoneEscrow`      | [`0x3Cc274d68972DFA1B9B13b90eE40664E0dE2c91F`](https://testnet.arcscan.app/address/0x3cc274d68972dfa1b9b13b90ee40664e0de2c91f) | Pass - Verified |
+
+Full record — transaction hashes, block numbers, constructor arguments, compiler settings, and live smoke-test results — is canonical in [`data/deployments/arc-testnet.json`](./data/deployments/arc-testnet.json). **This README section is a convenience view generated from that file** (`node scripts/generate-readme-deployments.mjs`) and must never be hand-edited to disagree with it.
+
+**Not deployed to mainnet.** Requirements before it can be:
+
+- treasury MUST be a Safe/multisig, not an EOA. It is immutable with no setter, so a lost key makes fee revenue permanently unrecoverable and the only remedy is redeploying the escrow and migrating every integrator.
+- Generate TOUCHSTONE_PUBLISHER_KEY on an air-gapped machine. The testnet key reused here has passed through repository-adjacent files.
+- DeployArcTestnet.s.sol is chain-guarded to 5042002; a mainnet deployment needs its own script and its own review.
+- Arc mainnet's own chain ID and USDC contract address must be independently re-verified against Circle's/Arc's own documentation at deploy time — never copied from this testnet record, even though Arc's testnet USDC happens to sit at a distinctive, memorable address (0x3600...0000).
+- Arc's public mainnet launches 2026-09-16 — see packages/contracts/script/DeployArcMainnet.s.sol, prepared but not run, with its chain-id guard deliberately left as an env-var placeholder rather than a guessed constant.
+
 ### Base Sepolia
 
 Chain ID `84532`. Deployed 2026-08-18 from commit `7b1d6ed`.

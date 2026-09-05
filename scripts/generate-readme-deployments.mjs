@@ -80,11 +80,17 @@ function anchorIso(record) {
 }
 
 function renderVerifySection(deployments) {
-  const first = deployments[0];
-  if (!first) return "";
-  const { network, record } = first;
-  const verification = record.smokeTests?.["1_anchorRealPrint"]?.recoveredSignerVerification;
-  if (!verification) return "";
+  // Not deployments[0]: that's whichever network sorts first alphabetically, which says nothing
+  // about which deployment's smoke tests actually used the recovered-signer verification method
+  // this section documents (arc-testnet.json's own anchor test used a simpler direct
+  // isPosted()/publisher() check instead — see its own smokeTests entry). Pick the first
+  // deployment that actually has this specific data, rather than assuming index 0 always does.
+  const withVerification = deployments.find(
+    (d) => d.record.smokeTests?.["1_anchorRealPrint"]?.recoveredSignerVerification,
+  );
+  if (!withVerification) return "";
+  const { network, record } = withVerification;
+  const verification = record.smokeTests["1_anchorRealPrint"].recoveredSignerVerification;
   const rpcEnvVar = `${network.toUpperCase().replaceAll("-", "_")}_RPC_URL`;
   return `### Verify a print independently
 
