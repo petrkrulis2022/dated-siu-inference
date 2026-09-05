@@ -1,4 +1,4 @@
-import express, { type Express, type Response } from "express";
+import express, { type Express } from "express";
 import { createAdapterFor, withBackoff, type Adapter } from "@touchstone/harness";
 import {
   buildQuoteBody,
@@ -74,67 +74,65 @@ function defaultDeps(options: SellerOptions): SellerDeps {
   };
 }
 
+export interface InferResult {
+  status: number;
+  body: unknown;
+}
+
 /**
- * `POST /infer` — build1-spec.md §11's seller side. No `quote` in the body: unpaid, issues a
- * fresh signed `touchstone-quote` and responds `402` (the quote rides in `extensions.touchstone_quote`,
- * alongside a minimal x402-v2-shaped `accepts` array — confirmed against `@x402/core`'s real
- * `PaymentRequired` shape). A `quote` in the body: the buyer claims it funded escrow for that
- * exact quote — stateless by the same design as `verify_receipt` (P14 step 2): the seller
- * recomputes `quoteHash` from the resupplied quote and reads the real escrow state itself,
- * rather than trusting anything the buyer says or keeping its own quote index.
+ * `POST /infer`'s actual logic, build1-spec.md §11's seller side — framework-agnostic (returns
+ * a status/body pair rather than writing to an Express `Response`) so it can be called from
+ * either `createSellerApp`'s Express wrapper below or a Cloudflare Workers fetch handler
+ * (`workers/seller.ts`) with no duplicated business logic. No `quote` in the body: unpaid,
+ * issues a fresh signed `touchstone-quote` and responds `402` (the quote rides in
+ * `extensions.touchstone_quote`, alongside a minimal x402-v2-shaped `accepts` array — confirmed
+ * against `@x402/core`'s real `PaymentRequired` shape). A `quote` in the body: the buyer claims
+ * it funded escrow for that exact quote — stateless by the same design as `verify_receipt` (P14
+ * step 2): the seller recomputes `quoteHash` from the resupplied quote and reads the real escrow
+ * state itself, rather than trusting anything the buyer says or keeping its own quote index.
+ *
+ * Throws on unexpected failures (a real adapter/chain error) — the caller decides how to turn
+ * that into a 500, matching each runtime's own error-reporting convention.
  */
-export function createSellerApp(
+export async function handleInferCore(
   options: SellerOptions,
-  deps: SellerDeps = defaultDeps(options),
-): Express {
-  const app = express();
-  app.use(express.json());
-  const { adapter } = deps;
-
-  app.post("/infer", (req, res) => {
-    handleInfer(req.body as { quote?: unknown } | undefined, res).catch((err: unknown) => {
-      options.log(
-        `[${options.label}] /infer failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      if (!res.headersSent) {
-        res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-      }
+  deps: SellerDeps,
+  body: { quote?: unknown } | undefined,
+): Promise<InferResult> {
+  if (!body?.quote) {
+    const { siu, siuMax } = estimatedCeiling(
+      options.prompt,
+      options.maxOutputTokens,
+      options.prices,
+      options.rateUsdPerSiu,
+    );
+    const quoteBody = buildQuoteBody({
+      siu,
+      pattern: "cap",
+      siuMax,
+      model: options.registryEntry.id,
+      rateUsdPerSiu: options.rateUsdPerSiu,
+      indexVersion: ILLUSTRATIVE_INDEX_VERSION,
+      printId: ILLUSTRATIVE_PRINT_ID,
+      printHash: ILLUSTRATIVE_PRINT_HASH,
+      sellerId: sellerIdFor(options.clients),
+      chain: options.chainName,
+      expiresInSeconds: options.quoteTtlSeconds,
     });
-  });
-
-  async function handleInfer(body: { quote?: unknown } | undefined, res: Response): Promise<void> {
-    if (!body?.quote) {
-      const { siu, siuMax } = estimatedCeiling(
-        options.prompt,
-        options.maxOutputTokens,
-        options.prices,
-        options.rateUsdPerSiu,
-      );
-      const quoteBody = buildQuoteBody({
-        siu,
-        pattern: "cap",
-        siuMax,
-        model: options.registryEntry.id,
-        rateUsdPerSiu: options.rateUsdPerSiu,
-        indexVersion: ILLUSTRATIVE_INDEX_VERSION,
-        printId: ILLUSTRATIVE_PRINT_ID,
-        printHash: ILLUSTRATIVE_PRINT_HASH,
-        sellerId: sellerIdFor(options.clients),
-        chain: options.chainName,
-        expiresInSeconds: options.quoteTtlSeconds,
-      });
-      const quote = signQuote(quoteBody, options.privateKeyHex);
+    const quote = signQuote(quoteBody, options.privateKeyHex);
+    options.log(
+      `[${options.label}] issuing quote: siu=${quote.siu} (cap ${quote.siu_max}), ` +
+        `amount_usd_max=$${quote.amount_usd_max}`,
+    );
+    // Best-effort: a console-convenience side effect must never break a real quote response.
+    await deps.logIssuedQuote(quote).catch((err: unknown) => {
       options.log(
-        `[${options.label}] issuing quote: siu=${quote.siu} (cap ${quote.siu_max}), ` +
-          `amount_usd_max=$${quote.amount_usd_max}`,
+        `[${options.label}] (non-fatal) failed to log quote for the console: ${err instanceof Error ? err.message : String(err)}`,
       );
-      // Best-effort: a console-convenience side effect must never break a real quote response.
-      await deps.logIssuedQuote(quote).catch((err: unknown) => {
-        options.log(
-          `[${options.label}] (non-fatal) failed to log quote for the console: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      });
-      res.status(402).json({
+    });
+    return {
+      status: 402,
+      body: {
         x402Version: 2,
         error: "Payment Required",
         resource: "/infer",
@@ -150,69 +148,88 @@ export function createSellerApp(
           },
         ],
         extensions: { touchstone_quote: quote },
-      });
-      return;
-    }
+      },
+    };
+  }
 
-    const quote = body.quote as TouchstoneQuote;
-    const validation = validateQuote(quote);
-    if (!validation.valid) {
-      res.status(400).json({ error: `quote fails validation: ${validation.errors.join("; ")}` });
-      return;
-    }
+  const quote = body.quote as TouchstoneQuote;
+  const validation = validateQuote(quote);
+  if (!validation.valid) {
+    return { status: 400, body: { error: `quote fails validation: ${validation.errors.join("; ")}` } };
+  }
 
-    const quoteHash = quoteHashHex(quote);
-    const expiryUnix = BigInt(Math.floor(new Date(quote.expiry).getTime() / 1000));
-    const maxAmount = BigInt(quote.settlement[0].amount_max);
-    const expected = { seller: options.clients.account.address, maxAmount, expiryUnix };
-    const escrow = await deps.readEscrowUntilMatch(
-      options.clients,
-      options.escrowAddress,
-      quoteHash,
-      expected,
-    );
-    if (!escrowMatchesQuote(escrow, expected)) {
-      res.status(402).json({ error: `escrow for ${quoteHash} is not open and funded as quoted.` });
-      return;
-    }
+  const quoteHash = quoteHashHex(quote);
+  const expiryUnix = BigInt(Math.floor(new Date(quote.expiry).getTime() / 1000));
+  const maxAmount = BigInt(quote.settlement[0].amount_max);
+  const expected = { seller: options.clients.account.address, maxAmount, expiryUnix };
+  const escrow = await deps.readEscrowUntilMatch(
+    options.clients,
+    options.escrowAddress,
+    quoteHash,
+    expected,
+  );
+  if (!escrowMatchesQuote(escrow, expected)) {
+    return { status: 402, body: { error: `escrow for ${quoteHash} is not open and funded as quoted.` } };
+  }
 
-    options.log(
-      `[${options.label}] escrow confirmed funded — performing the real inference call...`,
-    );
-    // The harness's batch orchestrator (runOrchestrator) already retries transient upstream
-    // errors this way; this live HTTP-triggered call had no equivalent, and hit it directly —
-    // OpenRouter's shared free-tier provider pools return 429 intermittently under load,
-    // confirmed live: the identical request succeeded seconds later with no other change.
-    // withBackoff (@touchstone/harness) already exists for exactly this, just unused here.
-    const result = await withBackoff(() =>
-      adapter(options.registryEntry.model_string, options.prompt, {
-        temperature: 0,
-        max_tokens: options.maxOutputTokens,
-      }),
-    );
+  options.log(`[${options.label}] escrow confirmed funded — performing the real inference call...`);
+  // The harness's batch orchestrator (runOrchestrator) already retries transient upstream
+  // errors this way; this live HTTP-triggered call had no equivalent, and hit it directly —
+  // OpenRouter's shared free-tier provider pools return 429 intermittently under load,
+  // confirmed live: the identical request succeeded seconds later with no other change.
+  // withBackoff (@touchstone/harness) already exists for exactly this, just unused here.
+  const result = await withBackoff(() =>
+    deps.adapter(options.registryEntry.model_string, options.prompt, {
+      temperature: 0,
+      max_tokens: options.maxOutputTokens,
+    }),
+  );
 
-    const actualUsd = realizedCost(result.usage.input, result.usage.output, options.prices);
-    const actualAmountRaw = BigInt(usdToMinorUnits(actualUsd));
-    const actualAmount = actualAmountRaw > maxAmount ? maxAmount : actualAmountRaw;
-    const receiptRef = quoteHash; // 32-byte stand-in ref, same convention this session's earlier live smoke tests used
+  const actualUsd = realizedCost(result.usage.input, result.usage.output, options.prices);
+  const actualAmountRaw = BigInt(usdToMinorUnits(actualUsd));
+  const actualAmount = actualAmountRaw > maxAmount ? maxAmount : actualAmountRaw;
+  const receiptRef = quoteHash; // 32-byte stand-in ref, same convention this session's earlier live smoke tests used
 
-    const settleTxHash = await deps.settle(options.clients, options.escrowAddress, {
-      quoteHash,
-      actualAmount,
-      receiptRef,
-    });
-    options.log(
-      `[${options.label}] settled: actual=$${actualUsd} (of $${quote.amount_usd_max} max) — tx ${settleTxHash}`,
-    );
+  const settleTxHash = await deps.settle(options.clients, options.escrowAddress, {
+    quoteHash,
+    actualAmount,
+    receiptRef,
+  });
+  options.log(
+    `[${options.label}] settled: actual=$${actualUsd} (of $${quote.amount_usd_max} max) — tx ${settleTxHash}`,
+  );
 
-    res.json({
+  return {
+    status: 200,
+    body: {
       text: result.text,
       usage: result.usage,
       actual_usd: actualUsd,
       settle_tx_hash: settleTxHash,
       chain: options.chainName,
-    });
-  }
+    },
+  };
+}
+
+export function createSellerApp(
+  options: SellerOptions,
+  deps: SellerDeps = defaultDeps(options),
+): Express {
+  const app = express();
+  app.use(express.json());
+
+  app.post("/infer", (req, res) => {
+    handleInferCore(options, deps, req.body as { quote?: unknown } | undefined)
+      .then((result) => res.status(result.status).json(result.body))
+      .catch((err: unknown) => {
+        options.log(
+          `[${options.label}] /infer failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        if (!res.headersSent) {
+          res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+        }
+      });
+  });
 
   return app;
 }

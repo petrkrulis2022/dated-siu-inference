@@ -11,8 +11,15 @@ import type { SettlementReader } from "../settlement/reader.js";
 
 /** Same v1 scoping docs/plan.md risk 6 states for the TouchstoneEscrow contract itself: multi-chain
  * plumbing isn't built, so an unsupported chain errors with a documented limitation rather than
- * silently attempting an unsupported read. */
-export const SUPPORTED_VERIFY_RECEIPT_CHAINS = ["base", "base-sepolia"] as const;
+ * silently attempting an unsupported read. "arc-testnet" was added once Arc Testnet had its own
+ * real TouchstoneEscrow deployment (data/deployments/arc-testnet.json) — this only widens the
+ * syntactic allow-list checked here; the actual chain read is still governed entirely by
+ * whichever single `chainName` the calling deployment's own SettlementReader was constructed
+ * with (../settlement/on-chain.ts's `read()` rejects a chain argument that doesn't match its own
+ * configured chainName regardless of this list), so this change doesn't let the real, single-chain
+ * production mcp.touchstoneassay.com deployment verify anything on Arc — only a deployment whose
+ * reader is itself configured for arc-testnet (the isolated arc-testbed MCP Worker) can. */
+export const SUPPORTED_VERIFY_RECEIPT_CHAINS = ["base", "base-sepolia", "arc-testnet"] as const;
 
 export interface VerifyReceiptInput {
   chain: string;

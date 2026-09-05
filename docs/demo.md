@@ -2,7 +2,9 @@
 
 _`packages/agents` — build1-spec.md §11's "demo agents": a seller agent quoting a trivial paid
 inference service in SIU via `touchstone-quote`, and a buyer agent that compares two sellers, funds
-`TouchstoneEscrow`, and calls `verify_receipt`. Run it with `pnpm --filter @touchstone/agents run demo`._
+`TouchstoneEscrow`, and calls `verify_receipt`. Run it with `pnpm --filter @touchstone/agents run demo`.
+The same loop also runs on Arc Testnet, deployed as real Cloudflare Workers rather than local
+processes — see `docs/demo-arc.md`._
 
 ---
 

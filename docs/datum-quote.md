@@ -134,6 +134,12 @@ anticipates a token; it only leaves the door unlocked, per `CLAUDE.md`'s stated 
 consequence that "the receipt and quote formats must be written so a token wrapper is additive
 later, never a rewrite."
 
+`chain` was already a free-form string, not a closed list — naming a new settlement network is a
+data change, never a schema change. `"arc-testnet"` is a real example of this today: Arc Testnet
+(chain id 5042002) has its own live `TouchstoneEscrow`/`TouchstoneAttestation` deployment (see
+`data/deployments/arc-testnet.json`), settling the same USDC-only rule above at a different
+contract address (`packages/sdk/src/money/assets.ts`).
+
 ## Normative rules
 
 1. **Payment amounts are dollar-fixed; SIU is the comparison unit.** Escrow holds and settles in

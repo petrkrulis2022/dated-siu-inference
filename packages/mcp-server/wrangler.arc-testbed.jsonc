@@ -1,0 +1,43 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "touchstone-arc-testbed-mcp",
+  "main": "src/workers/arc-testbed-index.ts",
+  "compatibility_date": "2026-08-24",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Isolated from production (wrangler.jsonc, touchstone-mcp): a separate Worker script means a
+  // separate Durable Object storage namespace even though the class name is reused — no state or
+  // traffic is shared with the real, paid mcp.touchstoneassay.com deployment.
+  "durable_objects": {
+    "bindings": [{ "name": "TOUCHSTONE_MCP", "class_name": "TouchstoneMcpAgent" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TouchstoneMcpAgent"] }],
+
+  // Same KV namespace production uses — safe to share: it only ever caches public, read-only
+  // print JSON fetched from GitHub, nothing chain- or deployment-specific.
+  "kv_namespaces": [{ "binding": "PRINTS_CACHE", "id": "e057dc9329f342828d4a61c9912b8944" }],
+
+  // A workers.dev URL alone doesn't work here: Cloudflare blocks a Worker's own fetch() from
+  // reaching another Worker's bare *.workers.dev URL (anti-loop/abuse protection on that shared
+  // zone) — confirmed live when the Arc buyer Worker tried to call the seller Workers the same
+  // way. A custom domain isn't subject to that restriction. "arc-testbed-" keeps this legible as
+  // testbed infrastructure, distinct from the real mcp.touchstoneassay.com.
+  "routes": [{ "pattern": "arc-testbed-mcp.touchstoneassay.com", "custom_domain": true }],
+
+  // TOUCHSTONE_CHAIN_NAME/TOUCHSTONE_ESCROW_ADDRESS/BASE_SEPOLIA_RPC_URL are read by
+  // TouchstoneMcpAgent (src/workers/mcp-agent.ts) by these exact literal binding names,
+  // unmodified from production — BASE_SEPOLIA_RPC_URL is a real misnomer here (it holds Arc
+  // Testnet's RPC URL, not Base Sepolia's), kept only because the shared agent code reads that
+  // specific key name; harmless, since nothing about the value itself is Base-specific.
+  "vars": {
+    "TOUCHSTONE_CHAIN_NAME": "arc-testnet",
+    "TOUCHSTONE_ESCROW_ADDRESS": "0x3Cc274d68972DFA1B9B13b90eE40664E0dE2c91F",
+    // The primary rpc.testnet.arc.io endpoint rate-limited under this session's own repeated
+    // traffic — using dRPC's documented alternate mirror instead (docs.arc.io/arc/references/connect-to-arc).
+    "BASE_SEPOLIA_RPC_URL": "https://rpc.drpc.testnet.arc.io"
+  }
+
+  // Secret (wrangler secret put -c wrangler.arc-testbed.jsonc):
+  //   TOUCHSTONE_ATTESTATION_KEY   a fresh key, dedicated to this testbed deployment — distinct
+  //                                from production's, even though neither holds funds.
+}

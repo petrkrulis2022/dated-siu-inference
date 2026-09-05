@@ -61,4 +61,16 @@ describe("loadDeployment", () => {
     );
     expect(record.usdc.address).toBe("0x036CbD53842c5426634e7929541eC2318f3dCF7e");
   });
+
+  it("loads the real committed arc-testnet.json", () => {
+    const record = loadDeployment("arc-testnet", "../../data/deployments");
+    expect(record.network.chainId).toBe(5042002);
+    expect(record.contracts.TouchstoneAttestation.address).toBe(
+      "0x12b886b043feABc3d90bBae3ae206d22b208160d",
+    );
+    expect(record.contracts.TouchstoneEscrow.address).toBe(
+      "0x3Cc274d68972DFA1B9B13b90eE40664E0dE2c91F",
+    );
+    expect(record.usdc.address).toBe("0x3600000000000000000000000000000000000000");
+  });
 });

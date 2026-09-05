@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "touchstone-arc-seller-a",
+  "main": "src/workers/seller.ts",
+  "compatibility_date": "2026-08-24",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Stateless — no KV/D1/DO. Each request builds its own chain clients from
+  // SELLER_PRIVATE_KEY and does one real on-chain read/write per /infer call.
+  // Cloudflare blocks a Worker's own fetch() from reaching another Worker's bare *.workers.dev
+  // URL (anti-loop/abuse protection on that shared zone) — confirmed live: the buyer Worker's
+  // real call here got a synthetic 404 in ~3ms, far too fast to have reached this Worker's code
+  // at all. A custom domain isn't subject to that restriction, so this uses one — prefixed
+  // "arc-" to keep it legible as testbed infrastructure, distinct from mcp.touchstoneassay.com.
+  "routes": [{ "pattern": "arc-seller-a.touchstoneassay.com", "custom_domain": true }],
+
+  "vars": {
+    "CHAIN_NAME": "arc-testnet",
+    // The primary rpc.testnet.arc.io endpoint hit a real per-caller rate limit under this
+    // session's own repeated deploy/read/write traffic ("Request exceeds defined limit ...
+    // rate limit exceeded") — switched to dRPC's mirror, one of Arc's own documented alternate
+    // endpoints (docs.arc.io/arc/references/connect-to-arc), same chain, no API key needed.
+    "RPC_URL": "https://rpc.drpc.testnet.arc.io",
+    "ESCROW_ADDRESS": "0x3Cc274d68972DFA1B9B13b90eE40664E0dE2c91F",
+    "MODEL_ID": "mistral-small-3.2-24b-instruct",
+    "SELLER_LABEL": "seller-a"
+  }
+
+  // Secrets (wrangler secret put -c wrangler.seller-a.jsonc):
+  //   SELLER_PRIVATE_KEY   this seller's own dedicated Arc Testnet wallet key
+  //   OPENROUTER_API_KEY   same OpenRouter key used elsewhere in this repo
+}

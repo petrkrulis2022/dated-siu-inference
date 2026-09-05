@@ -130,4 +130,35 @@ forge script script/Deploy.s.sol --rpc-url "$BASE_SEPOLIA_RPC_URL" --broadcast  
 Base Sepolia USDC defaults to `0x036CbD53842c5426634e7929541eC2318f3dCF7e`, from Circle's own
 documentation and the same value `packages/sdk/src/money/assets.ts` carries.
 
-Nothing has been deployed yet — no address here is live.
+## Deploying (Arc Testnet)
+
+`script/DeployArcTestnet.s.sol` is the same script, guarded to Arc Testnet's chain id (5042002)
+instead — a new file per the note above, not a parameterized version of `Deploy.s.sol`.
+
+```bash
+export TOUCHSTONE_PUBLISHER_ADDRESS=0x...   # address of the print-signing publisher key
+export TOUCHSTONE_TREASURY=0x...            # fee destination — immutable, use a Safe
+export TOUCHSTONE_FEE_BPS=50                # 0.5%, must be <= 100
+# optional: TOUCHSTONE_USDC to override Arc Testnet's USDC address
+
+forge script script/DeployArcTestnet.s.sol --rpc-url https://rpc.testnet.arc.io                 # simulate
+forge script script/DeployArcTestnet.s.sol --rpc-url https://rpc.testnet.arc.io --broadcast     # deploy
+```
+
+Arc Testnet USDC defaults to `0x3600000000000000000000000000000000000000`, verified against two
+independent Circle documentation pages and the same value `packages/sdk/src/money/assets.ts`
+carries. Arc Testnet's native gas currency is USDC itself (shown with 18 decimals at the protocol
+level — the ERC-20 contract above still reports 6, like every other chain's USDC): the deployer
+wallet needs Arc Testnet USDC from https://faucet.circle.com before broadcasting, since the same
+balance pays both gas and any settlement.
+
+Real addresses for both networks are recorded in `data/deployments/base-sepolia.json` and
+`data/deployments/arc-testnet.json`.
+
+## Arc mainnet — prepared, not run
+
+`script/DeployArcMainnet.s.sol` deploys `TouchstoneAttestation` only (no `TouchstoneEscrow` — see
+`data/deployments/arc-testnet.json`'s `mainnetRequirements` for why) ahead of Arc's 2026-09-16
+public mainnet launch. Its chain-id guard is driven by an `ARC_MAINNET_CHAIN_ID` env var rather
+than a hardcoded constant, since Arc's real mainnet chain id wasn't publicly documented at the
+time this was written — confirm the real value against Arc's own docs before ever running this.

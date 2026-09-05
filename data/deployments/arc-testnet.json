@@ -1,0 +1,143 @@
+{
+  "network": {
+    "name": "Arc Testnet",
+    "chainId": 5042002,
+    "rpcUrl": "https://rpc.testnet.arc.io",
+    "explorer": "https://testnet.arcscan.app",
+    "note": "Testnet only. Arc's public mainnet launches 2026-09-16, three days after this project's 2026-09-13 ETHOnline submission deadline — see mainnetRequirements below. Native gas currency is USDC itself (shown with 18 decimals at the protocol level; the ERC-20 USDC contract below still reports 6 decimals, like every other chain's USDC)."
+  },
+  "source": {
+    "gitCommit": "95eea037793bdda50bcedb53bb152a379319a6ac",
+    "gitCommitShort": "95eea03",
+    "treeCleanAtDeploy": false,
+    "treeCleanAtDeployNote": "Deployed with script/DeployArcTestnet.s.sol, test/DeployArcTestnet.t.sol and this README update uncommitted at deploy time (all net-new, additive files — no uncommitted change to TouchstoneAttestation.sol/TouchstoneEscrow.sol themselves, which are unmodified from gitCommit above). Recorded honestly rather than claiming a clean-tree deploy that didn't happen — same practice as base-sepolia.json.",
+    "path": "packages/contracts"
+  },
+  "compiler": {
+    "solc": "0.8.24+commit.e11b9ed9",
+    "evmVersion": "shanghai",
+    "optimizer": {
+      "enabled": true,
+      "runs": 200
+    },
+    "bytecodeHash": "none",
+    "evmVersionRationale": "PUSH0 is universally available but Cancun opcodes are not; shanghai is the portable floor that already kept Arc a deployment target rather than a rewrite — see CLAUDE.md and foundry.toml's own comment on this."
+  },
+  "deployedAt": {
+    "unix": 1788592834,
+    "iso": "2026-09-05T07:20:34Z"
+  },
+  "deployer": "0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e",
+  "reuses": {
+    "note": "Same deployer EOA and same TOUCHSTONE_PUBLISHER_KEY as the Base Sepolia deployment (data/deployments/base-sepolia.json) — testnet-only, no security consequence, and it means the same key that signs a print anchors it on both chains.",
+    "baseSepoliaAttestation": "0xF60701793eD168ffd6e818e1DCcb600393297190",
+    "baseSepoliaEscrow": "0x3eC06FFe8d5250d5Edf8Fff26b163aaaD65c8a00"
+  },
+  "usdc": {
+    "address": "0x3600000000000000000000000000000000000000",
+    "symbol": "USDC",
+    "decimals": 6,
+    "source": "Circle official documentation, resolved via Circle's MCP server on 2026-09-05",
+    "sourceUrl": "https://developers.circle.com/stablecoins/usdc-contract-addresses",
+    "corroboration": [
+      "https://developers.circle.com/stablecoins/quickstarts/transfer-usdc-evm (Arc Testnet row, independently matches)",
+      "packages/sdk/src/money/assets.ts's arc-testnet entry — added speculatively before this deployment, now independently verified correct rather than merely trusted"
+    ],
+    "verifiedOnChain": "balanceOf(deployer) queried live via cast before deployment returned a nonzero real balance (40999579 minor units), confirming the address is a live, funded ERC-20 contract on this chain, not just a documented one"
+  },
+  "contracts": {
+    "TouchstoneAttestation": {
+      "address": "0x12b886b043feABc3d90bBae3ae206d22b208160d",
+      "deploymentTx": "0xbbea693d41e7fa664e3a1946f99b3f2d8caa4ef5359463f416872521228ec9ad",
+      "blockNumber": 60542344,
+      "gasUsed": 231496,
+      "constructorArgs": {
+        "publisher_": "0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a"
+      },
+      "constructorArgsEncoded": "0x000000000000000000000000284ff2f8605ff8afeda6959b856bb7e6d48f845a",
+      "verified": {
+        "explorer": "Blockscout",
+        "status": "Pass - Verified",
+        "guid": "12b886b043feabc3d90bbae3ae206d22b208160d6a9bc2ce",
+        "note": "Confirmed via Blockscout's own API (GET /api/v2/smart-contracts/<address> → is_verified: true), not just the submission response — forge verify-check returned a stale/racy result immediately after submission for the sibling Escrow contract below, so the API was checked directly as ground truth for both."
+      },
+      "explorerUrl": "https://testnet.arcscan.app/address/0x12b886b043feabc3d90bbae3ae206d22b208160d",
+      "notes": "Same publisher key as Base Sepolia's TouchstoneAttestation (compressed pubkey 0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299) — the key that signs a print anchors it on both chains. Immutable: rotating the publisher means deploying a new instance."
+    },
+    "TouchstoneEscrow": {
+      "address": "0x3Cc274d68972DFA1B9B13b90eE40664E0dE2c91F",
+      "deploymentTx": "0x8af8831a4c490f6bd9546c7732b22b92498b576bf33bca8486cf5a0f13f4e03b",
+      "blockNumber": 60542344,
+      "gasUsed": 898846,
+      "constructorArgs": {
+        "token_": "0x3600000000000000000000000000000000000000",
+        "treasury_": "0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e",
+        "feeBps_": 50
+      },
+      "constructorArgOrder": ["token_", "treasury_", "feeBps_"],
+      "constructorArgsEncoded": "0x0000000000000000000000003600000000000000000000000000000000000000000000000000000000000000d7ca8219c8afa07b455ab7e004fc5381b3727b1e0000000000000000000000000000000000000000000000000000000000000032",
+      "verified": {
+        "explorer": "Blockscout",
+        "status": "Pass - Verified",
+        "guid": "3cc274d68972dfa1b9b13b90ee40664e0de2c91f6a9bc2d6",
+        "note": "See TouchstoneAttestation.verified.note above — the same forge verify-check timing caveat applied here, resolved the same way."
+      },
+      "explorerUrl": "https://testnet.arcscan.app/address/0x3cc274d68972dfa1b9b13b90ee40664e0de2c91f",
+      "feeBpsMeaning": "50 basis points = 0.50%, charged on actualAmount only and deducted from seller proceeds. Contract cap MAX_FEE_BPS = 100 (1%). Same as Base Sepolia's own configuration.",
+      "minSettlement": 100,
+      "notes": "treasury and feeBps are immutable with no setter. Treasury here is the deployer EOA, acceptable on testnet only — same choice as Base Sepolia."
+    }
+  },
+  "mainnetRequirements": [
+    "treasury MUST be a Safe/multisig, not an EOA. It is immutable with no setter, so a lost key makes fee revenue permanently unrecoverable and the only remedy is redeploying the escrow and migrating every integrator.",
+    "Generate TOUCHSTONE_PUBLISHER_KEY on an air-gapped machine. The testnet key reused here has passed through repository-adjacent files.",
+    "DeployArcTestnet.s.sol is chain-guarded to 5042002; a mainnet deployment needs its own script and its own review.",
+    "Arc mainnet's own chain ID and USDC contract address must be independently re-verified against Circle's/Arc's own documentation at deploy time — never copied from this testnet record, even though Arc's testnet USDC happens to sit at a distinctive, memorable address (0x3600...0000).",
+    "Arc's public mainnet launches 2026-09-16 — see packages/contracts/script/DeployArcMainnet.s.sol, prepared but not run, with its chain-id guard deliberately left as an env-var placeholder rather than a guessed constant."
+  ],
+  "smokeTests": {
+    "1_anchorRealPrint": {
+      "description": "Reused Base Sepolia's own worked-example body hash (docs/siu-worked-example.md), anchored on this separate contract instance via a direct postPrint call from TOUCHSTONE_PUBLISHER_KEY. Confirmed isPosted(bodyHash) == true, publisher() matches the expected address, and a second postPrint of the same hash reverts.",
+      "bodyHash": "0xfa9c2b6cace2fe1d2459e4849f366044fe45b642eb412fe89497b32e1ccda1c4",
+      "postPrintTx": "0x402694778b2ea2e0acb5e9ac58ee9bd4e90001a6e0b3ef8854587b58d43415ef",
+      "blockNumber": 60564405,
+      "isPostedConfirmed": true,
+      "publisherConfirmed": "0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a",
+      "reAnchorReverted": "AlreadyPosted() 0xe9f155db"
+    },
+    "2_buyerSellerWorkerLoop": {
+      "description": "The full Phase-E deliverable: two real Cloudflare Worker sellers (packages/agents/src/workers/seller.ts, deployed as touchstone-arc-seller-a/b) and a real Worker buyer (workers/buyer.ts, touchstone-arc-buyer) run the complete discover→quote→compare→fund→settle→verify loop end to end, real HTTP, real chain, real inference, real Circle-Gateway-free verify_receipt against the isolated arc-testbed MCP Worker. Ran successfully via POST https://touchstone-arc-buyer.perklur.workers.dev/run.",
+      "sellerAQuoteSiu": "0.024311",
+      "sellerBQuoteSiu": "0.033246",
+      "chosenSeller": "seller-a (cheaper in SIU)",
+      "openAndFundTx": "0x33d319af7505a55092c7e4dd3891c2d4cfdc0077deee0b6df245dbe0606c3ae5",
+      "settleTx": "0x7fa80a20e935f59a79aec2b9a3937c9b1cd78cf9e3972d0d002e72a04c199994",
+      "actualUsd": "0.00052392",
+      "quotedMaxUsd": "0.0024",
+      "verifyReceipt": {
+        "matched": true,
+        "amountPaidUsd": "0.000524",
+        "amountQuotedUsd": "0.002400",
+        "printRef": "demo-no-real-print-published-yet"
+      }
+    },
+    "3_escrowLifecycleLiveTest": {
+      "description": "packages/agents/src/arc.live.test.ts — the same suite live.test.ts already runs against Base Sepolia, ported to Arc: real openAndFund, real readEscrowUntilMatch, real settle, real LocalSettlementReader read bound by quote hash, and a real rejection of a quote that doesn't hash to what was actually settled. Ran with ARC_TESTNET_RPC_URL=https://rpc.drpc.testnet.arc.io — all 4 tests passed for real, no mocks.",
+      "allTestsPassed": true
+    },
+    "notSeparatelyReRunOnArc": {
+      "note": "escrowExpiryReclaim, quoteHashNotReusable (the funding-side, non-verify_receipt version), and the feeFloorBoundaries sweep (99/100/199/1000) are not independently re-verified live on this deployment. TouchstoneEscrow's bytecode here is identical to Base Sepolia's (same source, same compiler/optimizer settings — see compiler above and noAdminPathCheckedOnLiveBytecode below), that exact behaviour is already exhaustively covered by 92 passing Foundry unit/fuzz/invariant tests (chain-independent by construction — they exercise the contract's own logic, not network conditions) and was already live-smoke-tested once, on the same bytecode, on Base Sepolia (base-sepolia.json's own smokeTests 3/4/5). Re-running the identical boundary arithmetic against identical bytecode on a second chain would mostly re-prove the Solidity compiler behaves the same way twice, not surface anything Arc-specific — the two chain-specific things worth checking for real (gas economics, RPC quirks, verify_receipt's chain-name gating) are exactly what smokeTests 2 and 3 above exercised, and both surfaced real, previously-unknown platform differences (Arc's real gas price required raising this session's seller funding amounts; the primary RPC endpoint rate-limited under sustained traffic, worked around with dRPC's documented mirror; Worker-to-Worker fetch() to a bare *.workers.dev URL is blocked by Cloudflare, worked around with custom domains)."
+    }
+  },
+  "noAdminPathCheckedOnLiveBytecode": {
+    "absent": [
+      "owner()",
+      "transferOwnership(address)",
+      "setFeeBps(uint16)",
+      "setTreasury(address)",
+      "emergencyWithdraw(address,uint256)",
+      "pause()"
+    ],
+    "note": "Structural property of the compiled bytecode, chain-independent — test/NoAdminPath.t.sol already asserts this from the ABI/bytecode itself and applies identically here since the contracts are byte-for-byte the same as Base Sepolia's deployment."
+  }
+}

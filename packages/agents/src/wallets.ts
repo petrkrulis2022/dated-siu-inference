@@ -70,6 +70,13 @@ function isNonceRaceError(err: unknown): boolean {
 export async function generateAndFundSeller(
   buyer: ChainClients,
   label: string,
+  /** Defaults to SELLER_GAS_FUNDING_WEI, tuned for Base Sepolia's own real (~0.01 gwei) gas
+   * price. Arc Testnet's real gas price is orders of magnitude higher (confirmed live: the same
+   * default amount reverted with "gas required exceeds allowance" there) — its native gas token
+   * is also USDC itself, a different denomination entirely from ETH, so one shared constant
+   * can't sensibly size both. Callers on a different chain should pass their own real, observed
+   * funding amount rather than assume this default travels. */
+  fundingWei: bigint = SELLER_GAS_FUNDING_WEI,
 ): Promise<FundedSeller> {
   const privateKey = generatePrivateKey();
   const account = privateKeyToAccount(privateKey);
@@ -82,7 +89,7 @@ export async function generateAndFundSeller(
         account: buyer.account,
         chain: undefined,
         to: account.address,
-        value: SELLER_GAS_FUNDING_WEI,
+        value: fundingWei,
       });
       break;
     } catch (err) {

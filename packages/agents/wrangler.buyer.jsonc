@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "touchstone-arc-buyer",
+  "main": "src/workers/buyer.ts",
+  "compatibility_date": "2026-08-24",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "vars": {
+    "CHAIN_NAME": "arc-testnet",
+    // See wrangler.seller-a.jsonc's comment: the primary endpoint rate-limited under this
+    // session's own repeated traffic — using dRPC's documented alternate mirror instead.
+    "RPC_URL": "https://rpc.drpc.testnet.arc.io",
+    "ESCROW_ADDRESS": "0x3Cc274d68972DFA1B9B13b90eE40664E0dE2c91F",
+    "USDC_ADDRESS": "0x3600000000000000000000000000000000000000",
+    "MAX_USD_PER_QUOTE": "1.00",
+    "SELLER_A_URL": "https://arc-seller-a.touchstoneassay.com",
+    "SELLER_B_URL": "https://arc-seller-b.touchstoneassay.com",
+    "ARC_TESTBED_MCP_URL": "https://arc-testbed-mcp.touchstoneassay.com/mcp"
+  }
+
+  // Secrets (wrangler secret put -c wrangler.buyer.jsonc):
+  //   BUYER_PRIVATE_KEY   reuses the same deployer/buyer key already used for Base Sepolia (testnet only)
+}

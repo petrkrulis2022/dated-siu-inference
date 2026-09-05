@@ -10,7 +10,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "demo": "pnpm run build && node dist/cli/demo.js",
-    "agent-loop": "pnpm run build && node dist/cli/agent-loop.js"
+    "agent-loop": "pnpm run build && node dist/cli/agent-loop.js",
+    "arc-worker-loop": "pnpm run build && node dist/cli/arc-worker-loop.js",
+    "deploy:seller-a": "wrangler deploy -c wrangler.seller-a.jsonc",
+    "deploy:seller-b": "wrangler deploy -c wrangler.seller-b.jsonc",
+    "deploy:buyer": "wrangler deploy -c wrangler.buyer.jsonc"
   },
   "dependencies": {
     "@touchstone/harness": "workspace:*",
@@ -20,10 +24,13 @@
     "@circle-fin/x402-batching": "^3.3.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "express": "^5.2.1",
+    "hono": "^4.13.4",
     "viem": "^2.55.16"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260823.1",
     "@types/express": "^5.0.0",
-    "@types/node": "^26.2.0"
+    "@types/node": "^26.2.0",
+    "wrangler": "^4.125.0"
   }
 }

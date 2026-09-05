@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "touchstone-arc-seller-b",
+  "main": "src/workers/seller.ts",
+  "compatibility_date": "2026-08-24",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // See wrangler.seller-a.jsonc's comment: Cloudflare blocks Worker-to-Worker fetch() calls to
+  // bare *.workers.dev URLs, confirmed live — a custom domain is required instead.
+  "routes": [{ "pattern": "arc-seller-b.touchstoneassay.com", "custom_domain": true }],
+
+  "vars": {
+    "CHAIN_NAME": "arc-testnet",
+    // See wrangler.seller-a.jsonc's comment: the primary endpoint rate-limited under this
+    // session's own repeated traffic — using dRPC's documented alternate mirror instead.
+    "RPC_URL": "https://rpc.drpc.testnet.arc.io",
+    "ESCROW_ADDRESS": "0x3Cc274d68972DFA1B9B13b90eE40664E0dE2c91F",
+    "MODEL_ID": "qwen-2.5-72b-instruct",
+    "SELLER_LABEL": "seller-b"
+  }
+
+  // Secrets (wrangler secret put -c wrangler.seller-b.jsonc):
+  //   SELLER_PRIVATE_KEY   this seller's own dedicated Arc Testnet wallet key (distinct from seller-a's)
+  //   OPENROUTER_API_KEY   same OpenRouter key used elsewhere in this repo
+}

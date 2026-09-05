@@ -28,7 +28,7 @@
         "chain": {
           "type": "string",
           "minLength": 1,
-          "description": "Illustrative example: \"base\"."
+          "description": "Illustrative examples: \"base\", \"arc-testnet\"."
         },
         "address": {
           "type": "string",

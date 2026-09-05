@@ -73,6 +73,8 @@ Storage is flat files under `data/`, git-tracked — no database. `data/prints/`
 
 Deployment chain for contracts: **Base**. Write contracts with no chain-specific assumptions so Arc (Circle's L1) is a deployment target rather than a rewrite. The MCP paywall settles through Circle's Gateway and is chain-abstracted.
 
+Arc is no longer an undated future target: Arc Testnet (chain id 5042002) has a real, deployed `TouchstoneAttestation`/`TouchstoneEscrow` (`data/deployments/arc-testnet.json`), a real buyer/seller demo loop running as Cloudflare Workers (`packages/agents/src/workers/`, `docs/demo-arc.md`), and a genuinely fixed mainnet date: **2026-09-16**. That date falls *after* ETHOnline 2026's submission deadline (2026-09-13, 12:00pm EDT) — so any ETHOnline submission is honestly testnet-complete with a mainnet-ready deploy script prepared (`packages/contracts/script/DeployArcMainnet.s.sol`, `TouchstoneAttestation` only), never a claim of a live Arc mainnet deployment. `TouchstoneEscrow` stays on Arc Testnet regardless of the date — the same mainnet preconditions (Safe treasury, settled `feeBps`, an air-gapped publisher key, external review) apply there as on Base.
+
 Circle Agent Stack components in use: Nanopayments/Gateway for the paywall, Agent Wallets for the demo agents, Circle CLI for provisioning, Agent Marketplace for distribution. Circle's own MCP server should be installed so SDK documentation is current.
 
 ---

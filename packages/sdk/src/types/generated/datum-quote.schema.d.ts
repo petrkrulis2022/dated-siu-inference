@@ -54,7 +54,7 @@ export interface SettlementEntry {
    */
   asset: string;
   /**
-   * Illustrative example: "base".
+   * Illustrative examples: "base", "arc-testnet".
    */
   chain: string;
   /**
