@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { createToolPaywall, extractToolCallName } from "../paywall.js";
 import { getQuoteTool, type GetQuoteInput } from "../tools/get-quote.js";
 import { createNodeShim } from "./node-shim.js";
@@ -18,6 +19,24 @@ export { TouchstoneMcpAgent };
 let paywall: ReturnType<typeof createToolPaywall> | undefined;
 
 const app = new Hono<{ Bindings: Env }>();
+
+// Enables the free get_index tool to be called live from a browser (both public sites' own
+// "Try it here" pages) — before this, every response here carried no CORS headers at all, so a
+// cross-origin fetch() from either site's own JS was silently blocked by the browser, even
+// though a non-browser caller (curl, this repo's own agents) was never subject to CORS in the
+// first place. Purely additive: no payment/business logic changes. Scoped to exactly the two
+// real site origins, never a wildcard. exposeHeaders is not optional — the browser-side session
+// handshake reads the Mcp-Session-Id response header, and per the Fetch spec a cross-origin
+// response only exposes "simple" headers to JS unless Access-Control-Expose-Headers names it.
+const ALLOWED_ORIGINS = new Set(["https://prints.touchstoneassay.com", "https://touchstoneassay.com"]);
+app.use(
+  "*",
+  cors({
+    origin: (origin) => (origin && ALLOWED_ORIGINS.has(origin) ? origin : ""),
+    allowMethods: ["POST"],
+    exposeHeaders: ["Mcp-Session-Id"],
+  }),
+);
 
 function extractToolCallArguments(body: unknown): Record<string, unknown> | undefined {
   if (typeof body !== "object" || body === null) return undefined;
