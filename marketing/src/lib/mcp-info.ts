@@ -8,6 +8,7 @@
 
 export const MCP_SERVER_URL = "https://mcp.touchstoneassay.com/mcp";
 export const MCP_JSON_URL = "https://touchstoneassay.com/mcp.json";
+export const LLMS_TXT_URL = "https://touchstoneassay.com/llms.txt";
 export const FOR_AGENTS_URL = "https://touchstoneassay.com/for-agents";
 
 export const MCP_CONFIG_JSON = `{

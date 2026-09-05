@@ -1,4 +1,5 @@
 import { CURRENT_PRINT, PUBLICATION_URL } from "../content";
+import { Navbar } from "@/components/sections/navbar";
 
 /**
  * @ployComponent
@@ -19,22 +20,8 @@ export function Hero() {
           <span className="whitespace-nowrap text-ploy-text-inverse-secondary">Method / Versioned</span>
         </div>
       </div>
-      <div className="mx-auto max-w-7xl px-5 pb-16 pt-7 md:px-8 md:pb-24 md:pt-10">
-        <nav className="hero__nav flex items-center justify-between gap-6 border-b border-ploy-border-primary pb-7" aria-label="Primary navigation">
-          <a href="#top" className="group flex min-w-0 items-center gap-3" aria-label="Touchstone Assay home">
-            <img src="/logo.png" alt="" width={32} height={32} className="size-8 shrink-0 rounded-md" />
-            <span className="min-w-0">
-              <span className="block truncate font-heading text-xl tracking-[0.04em] md:text-2xl">TOUCHSTONE ASSAY</span>
-              <span className="block truncate font-mono text-[0.5rem] uppercase tracking-[0.26em] text-ploy-text-secondary">AI inference index &amp; pricing</span>
-            </span>
-          </a>
-          <div className="hidden items-center gap-7 font-mono text-[0.65rem] uppercase tracking-[0.13em] md:flex">
-            <a href="#method" className="hover:text-ploy-accent-primary">Method</a>
-            <a href="#builders" className="hover:text-ploy-accent-primary">For builders</a>
-            <a href={PUBLICATION_URL} className="border-b border-current pb-1 hover:text-ploy-accent-primary">Full series</a>
-          </div>
-        </nav>
-
+      <Navbar activeMode="human" />
+      <div className="mx-auto max-w-7xl px-5 pb-16 md:px-8 md:pb-24">
         <div className="hero__copy grid gap-10 pt-14 md:grid-cols-12 md:gap-8 md:pt-20">
           <div className="md:col-span-8">
             <h1 id="hero-title" className="hero__title max-w-4xl text-balance font-heading text-5xl font-normal leading-[0.98] tracking-[-0.025em] md:text-7xl">Touchstone Assay publishes Dated SIU.</h1>

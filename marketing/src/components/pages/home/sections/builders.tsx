@@ -1,12 +1,10 @@
-import { DocumentHeader } from "../components/document-header";
+import { DocumentHeader } from "@/components/ui/document-header";
 import { PUBLICATION_URL } from "../content";
+import { FOR_AGENTS_URL, MCP_TOOLS } from "@/lib/mcp-info";
 
-const tools = [
-  ["get_quote", "Retrieve a comparable SIU quote for an inference offer."],
-  ["convert", "Convert model-native units and prices into SIU."],
-  ["verify_receipt", "Check a receipt against the signed print and methodology version."],
-  ["get_index", "Read the current index and publication metadata.", "FREE"],
-] as const;
+const tools = MCP_TOOLS.map(
+  (tool) => [tool.name, tool.description, tool.free ? "FREE" : undefined] as const,
+);
 
 /**
  * @ployComponent
@@ -27,7 +25,7 @@ export function Builders() {
         <p id="builders-title" className="max-w-2xl leading-7 text-ploy-text-secondary md:col-span-7">The methodology is published, versioned and tied to every print.</p>
         <div id="published-prints" className="flex flex-col items-start gap-4 font-mono text-sm md:col-span-5 md:items-end">
           <a href={PUBLICATION_URL} className="border-b border-current pb-1 hover:text-ploy-accent-primary">Published prints and methodology</a>
-          <a href="#" className="text-ploy-text-secondary hover:text-ploy-accent-primary">Methodology document →</a>
+          <a href={FOR_AGENTS_URL} className="text-ploy-text-secondary hover:text-ploy-accent-primary">Read the full agent documentation →</a>
         </div>
       </div>
     </section>

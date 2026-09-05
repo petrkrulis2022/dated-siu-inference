@@ -1,4 +1,4 @@
-import { DocumentHeader } from "../components/document-header";
+import { DocumentHeader } from "@/components/ui/document-header";
 
 const priceUnits = [
   ["Per token", "Input, output and reasoning tokens vary by tokenizer and model behavior."],

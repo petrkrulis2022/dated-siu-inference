@@ -1,5 +1,5 @@
 import { FileCheck2, ShoppingCart, Slash } from "lucide-react";
-import { DocumentHeader } from "../components/document-header";
+import { DocumentHeader } from "@/components/ui/document-header";
 
 const independence = [
   [ShoppingCart, "We buy the inference we measure, at market prices, like any customer."],

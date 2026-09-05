@@ -1,0 +1,14 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { ForAgentsPage } from "@/components/pages/for-agents/page";
+
+export const prerender = true;
+---
+
+<Layout
+  title="Touchstone Assay — For agents"
+  description="MCP config, tools, and prices for Touchstone Assay's Dated SIU index, plus a live in-browser demo — readable with no JavaScript required."
+  siteName="Touchstone Assay"
+>
+  <ForAgentsPage client:load />
+</Layout>

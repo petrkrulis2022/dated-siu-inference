@@ -1,4 +1,4 @@
-import { DocumentHeader } from "../components/document-header";
+import { DocumentHeader } from "@/components/ui/document-header";
 
 const sequence = [
   ["First", "The index and settlement rail", "Establish the measurement standard, publication record and payment-path quote extension."],

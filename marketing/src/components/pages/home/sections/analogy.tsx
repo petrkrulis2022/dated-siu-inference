@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { DocumentHeader } from "../components/document-header";
+import { DocumentHeader } from "@/components/ui/document-header";
 
 /**
  * @ployComponent

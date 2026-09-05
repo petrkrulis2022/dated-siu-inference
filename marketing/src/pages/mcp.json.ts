@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { MCP_SERVER_URL, MCP_TOOLS, SETTLEMENT_ASSET_ADDRESS } from "@/lib/mcp-info";
+import { FOR_AGENTS_URL, MCP_SERVER_URL, MCP_TOOLS, SETTLEMENT_ASSET_ADDRESS } from "@/lib/mcp-info";
 
 export const prerender = true;
 
@@ -34,10 +34,7 @@ export const GET: APIRoute = () => {
       free: tool.free,
     })),
     repository: "https://github.com/petrkrulis2022/dated-siu-inference",
-    // TODO(Phase 3): once marketing's own /for-agents page ships, point this at
-    // https://touchstoneassay.com/for-agents instead — kept on the real, already-live page for
-    // now so this link is never dead in the meantime.
-    docs: "https://prints.touchstoneassay.com/for-agents.html",
+    docs: FOR_AGENTS_URL,
   };
 
   return new Response(JSON.stringify(body, null, 2), {
