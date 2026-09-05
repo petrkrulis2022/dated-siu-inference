@@ -22,7 +22,7 @@ export function Hero() {
       <div className="mx-auto max-w-7xl px-5 pb-16 pt-7 md:px-8 md:pb-24 md:pt-10">
         <nav className="hero__nav flex items-center justify-between gap-6 border-b border-ploy-border-primary pb-7" aria-label="Primary navigation">
           <a href="#top" className="group flex min-w-0 items-center gap-3" aria-label="Touchstone Assay home">
-            <span className="relative block size-8 shrink-0 bg-ploy-background-inverse after:absolute after:bottom-2 after:left-2 after:h-px after:w-4 after:-rotate-[34deg] after:bg-ploy-background-primary" aria-hidden="true" />
+            <img src="/logo.png" alt="" width={32} height={32} className="size-8 shrink-0 rounded-md" />
             <span className="min-w-0">
               <span className="block truncate font-heading text-xl tracking-[0.04em] md:text-2xl">TOUCHSTONE ASSAY</span>
               <span className="block truncate font-mono text-[0.5rem] uppercase tracking-[0.26em] text-ploy-text-secondary">AI inference index &amp; pricing</span>
