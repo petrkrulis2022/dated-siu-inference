@@ -19,6 +19,9 @@ _Placeholder — wired up once `packages/print` exists._
 - [`CLAUDE.md`](./CLAUDE.md) — vocabulary, invariants, build boundaries.
 - [`docs/build1-spec.md`](./docs/build1-spec.md) — the Build 1 engineering specification.
 - [`docs/plan.md`](./docs/plan.md) — orientation, dependency order, and open risks.
+- [`docs/architecture.md`](./docs/architecture.md) — one diagram of the whole system.
+- [`docs/demo.md`](./docs/demo.md) / [`docs/demo-arc.md`](./docs/demo-arc.md) — the buyer/seller
+  agent loop, real transcripts, on Base Sepolia and Arc Testnet.
 
 ## Deployments
 
