@@ -81,3 +81,10 @@ export function realizedCost(
     prices.price_out_usd_per_1m,
   ).toString();
 }
+
+/** Inverse of `estimatedCeiling`'s own usd→SIU conversion — restates a real settled dollar
+ * amount in SIU terms, against the same quote's own rate, for agent-run telemetry
+ * (agent-run-log.ts). Decimal-string division throughout; never a float. */
+export function usdToSiu(usd: string, rateUsdPerSiu: string): string {
+  return roundHalfUp(new D(usd).dividedBy(rateUsdPerSiu), SIU_DP);
+}

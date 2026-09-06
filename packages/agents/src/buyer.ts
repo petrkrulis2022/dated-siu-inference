@@ -4,10 +4,13 @@ import {
   validateQuote,
   type TouchstoneQuote,
   type SpendingMandate,
+  type AgentRunRecord,
 } from "@touchstone/sdk";
 import { openAndFund } from "./escrow-client.js";
 import { pickCheaperQuote } from "./quote-compare.js";
 import { callVerifyReceipt } from "./mcp-client.js";
+import { usdToSiu } from "./pricing.js";
+import { logAgentRun } from "./agent-run-log.js";
 import type { ChainClients } from "./wallets.js";
 
 export interface SellerEndpoint {
@@ -29,6 +32,12 @@ export interface BuyerRunOptions {
   chainName: string;
   mcpServerUrl: string;
   log: (line: string) => void;
+  /** Real implementation writes to node:fs (data/agent-runs/), unavailable from a Cloudflare
+   * Worker with no repo checkout — workers/buyer.ts overrides this with a console-only stub,
+   * the same accommodation workers/seller.ts already makes for logIssuedQuote. Defaults to the
+   * real implementation for the Node/CLI path (cli/demo.ts, cli/agent-loop.ts), where it's
+   * exactly what's wanted. */
+  logAgentRun?: typeof logAgentRun;
 }
 
 async function requestQuote(seller: SellerEndpoint): Promise<TouchstoneQuote> {
@@ -114,6 +123,8 @@ export async function runBuyerDemo(options: BuyerRunOptions): Promise<void> {
   }
   const fulfillment = (await fulfillRes.json()) as {
     text: string;
+    usage?: { input: number; output: number; cached_input: number; reasoning: number };
+    latency_ms?: number;
     actual_usd: string;
     settle_tx_hash: string;
   };
@@ -132,4 +143,40 @@ export async function runBuyerDemo(options: BuyerRunOptions): Promise<void> {
     `[buyer] receipt: matched=${receipt.matched} amount_paid_usd=$${receipt.amount_paid_usd} ` +
       `amount_quoted_usd=$${receipt.amount_quoted_usd} print_ref=${receipt.print_ref}`,
   );
+
+  // Best-effort, same non-blocking convention as the seller's own agent-run logging: this is
+  // unpublished telemetry (AgentRunRecord — the buyer's own vantage point, distinct from the
+  // seller's), not settlement, so a write failure here must never look like the demo failed.
+  const buyerRunRecord: Omit<AgentRunRecord, "receipt_hash"> = {
+    schema_version: "1.0",
+    run_id: crypto.randomUUID(),
+    captured_at: new Date().toISOString(),
+    role: "buyer",
+    chain: options.chainName,
+    quote_hash: quoteHash,
+    methodology_version: chosenQuote.index_version,
+    model: chosenQuote.model,
+    provider: null,
+    routing_decision: null,
+    usage: fulfillment.usage ?? null,
+    latency_ms: fulfillment.latency_ms ?? null,
+    retry_count: null,
+    fallback_count: null,
+    tool_calls: null,
+    tool_failures: null,
+    quality_gate_result: null,
+    human_review_required: null,
+    quoted_siu: chosenQuote.siu,
+    actual_siu: usdToSiu(fulfillment.actual_usd, chosenQuote.rate_usd_per_siu),
+    usdc_paid: fulfillment.actual_usd,
+    task_spec_hash: null,
+    verify_receipt_matched: receipt.matched,
+    chosen_seller_label: chosenSeller.label,
+  };
+  const doLogAgentRun = options.logAgentRun ?? logAgentRun;
+  await doLogAgentRun(buyerRunRecord).catch((err: unknown) => {
+    options.log(
+      `[buyer] (non-fatal) failed to log agent-run telemetry: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  });
 }

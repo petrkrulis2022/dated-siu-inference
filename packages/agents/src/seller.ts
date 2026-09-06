@@ -8,10 +8,12 @@ import {
   validateQuote,
   type TouchstoneQuote,
   type ModelRegistryEntry,
+  type AgentRunRecord,
 } from "@touchstone/sdk";
 import { readEscrowUntilMatch, escrowMatchesQuote, settle } from "./escrow-client.js";
-import { estimatedCeiling, realizedCost, type PriceSnapshotEntryPrices } from "./pricing.js";
+import { estimatedCeiling, realizedCost, usdToSiu, type PriceSnapshotEntryPrices } from "./pricing.js";
 import { logIssuedQuote } from "./quote-log.js";
+import { logAgentRun, taskSpecHash } from "./agent-run-log.js";
 import type { ChainClients } from "./wallets.js";
 
 /** Neither a real print (`data/prints/` is empty in this environment) nor a real ERC-8004
@@ -58,6 +60,7 @@ export interface SellerDeps {
   readEscrowUntilMatch: typeof readEscrowUntilMatch;
   settle: typeof settle;
   logIssuedQuote: typeof logIssuedQuote;
+  logAgentRun: typeof logAgentRun;
   adapter: Adapter;
 }
 
@@ -66,6 +69,7 @@ function defaultDeps(options: SellerOptions): SellerDeps {
     readEscrowUntilMatch,
     settle,
     logIssuedQuote,
+    logAgentRun,
     adapter: createAdapterFor(
       options.registryEntry,
       { openrouter: options.openrouterApiKey },
@@ -178,11 +182,17 @@ export async function handleInferCore(
   // OpenRouter's shared free-tier provider pools return 429 intermittently under load,
   // confirmed live: the identical request succeeded seconds later with no other change.
   // withBackoff (@touchstone/harness) already exists for exactly this, just unused here.
-  const result = await withBackoff(() =>
-    deps.adapter(options.registryEntry.model_string, options.prompt, {
-      temperature: 0,
-      max_tokens: options.maxOutputTokens,
-    }),
+  // onRetry counts real retried attempts for agent-run telemetry below — a genuine, not invented,
+  // retry_count (see AgentRunRecord's own field description for why this is the seller's own
+  // vantage point, never the buyer's).
+  let retryCount = 0;
+  const result = await withBackoff(
+    () =>
+      deps.adapter(options.registryEntry.model_string, options.prompt, {
+        temperature: 0,
+        max_tokens: options.maxOutputTokens,
+      }),
+    { maxRetries: 5, baseDelayMs: 500, maxDelayMs: 15000, onRetry: () => { retryCount += 1; } },
   );
 
   const actualUsd = realizedCost(result.usage.input, result.usage.output, options.prices);
@@ -199,11 +209,47 @@ export async function handleInferCore(
     `[${options.label}] settled: actual=$${actualUsd} (of $${quote.amount_usd_max} max) — tx ${settleTxHash}`,
   );
 
+  // Best-effort, same convention as logIssuedQuote above: this is unpublished telemetry, not
+  // settlement — a logging failure must never be able to break a real payment that already
+  // succeeded, so it's non-blocking and surfaced via the existing log callback, never thrown.
+  const sellerRunRecord: Omit<AgentRunRecord, "receipt_hash"> = {
+    schema_version: "1.0",
+    run_id: crypto.randomUUID(),
+    captured_at: new Date().toISOString(),
+    role: "seller",
+    chain: options.chainName,
+    quote_hash: quoteHash,
+    methodology_version: quote.index_version,
+    model: options.registryEntry.id,
+    provider: options.registryEntry.provider,
+    routing_decision: options.allowUnpinnedRouting ? "unpinned" : "pinned",
+    usage: result.usage,
+    latency_ms: result.latency_ms,
+    retry_count: retryCount,
+    fallback_count: null,
+    tool_calls: null,
+    tool_failures: null,
+    quality_gate_result: null,
+    human_review_required: null,
+    quoted_siu: quote.siu,
+    actual_siu: usdToSiu(actualUsd, quote.rate_usd_per_siu),
+    usdc_paid: actualUsd,
+    task_spec_hash: taskSpecHash(options.prompt, options.maxOutputTokens),
+    verify_receipt_matched: null,
+    chosen_seller_label: null,
+  };
+  await deps.logAgentRun(sellerRunRecord).catch((err: unknown) => {
+    options.log(
+      `[${options.label}] (non-fatal) failed to log agent-run telemetry: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  });
+
   return {
     status: 200,
     body: {
       text: result.text,
       usage: result.usage,
+      latency_ms: result.latency_ms,
       actual_usd: actualUsd,
       settle_tx_hash: settleTxHash,
       chain: options.chainName,

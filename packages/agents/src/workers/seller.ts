@@ -109,6 +109,18 @@ function depsFor(options: SellerOptions): SellerDeps {
       console.log(`[${options.label}] issued quote ${quote.siu} SIU (cap ${quote.siu_max})`);
       return "console-only, not written anywhere — see this file's header comment on quote-log.ts";
     },
+    // Same reasoning as logIssuedQuote above: agent-run-log.ts's real implementation writes to
+    // node:fs, unavailable from a Worker with no repo checkout to write into. This Worker's real
+    // transactions are exactly the ones the telemetry gap matters most for (they're live, real
+    // Arc/Base-Sepolia settlements) — console.log is a stopgap visibility measure, not a
+    // substitute for the git-tracked data/agent-runs/ record a Node-run seller produces.
+    logAgentRun: async (record) => {
+      console.log(
+        `[${options.label}] agent-run: role=${record.role} model=${record.model} ` +
+          `retry_count=${record.retry_count} usdc_paid=$${record.usdc_paid} quote_hash=${record.quote_hash}`,
+      );
+      return "console-only, not written anywhere — see this file's header comment.";
+    },
     adapter: createAdapterFor(options.registryEntry, { openrouter: options.openrouterApiKey }),
   };
 }

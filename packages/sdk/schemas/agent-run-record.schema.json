@@ -1,0 +1,171 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "agent-run-record.schema.json",
+  "title": "AgentRunRecord",
+  "description": "Rich per-transaction telemetry captured by the demo buyer/seller agents (packages/agents) — a different object from Receipt (receipt.schema.json), which is verify_receipt's minimal signed on-chain attestation. This is unpublished research data about Touchstone's own testbed agents: it feeds nobody's print, is never cited as market evidence (docs/methodology.md §2's hierarchy of evidence excludes it explicitly), and exists only so workflow-level questions (retries, latency, routing) can be answered about runs that already happened, since this data cannot be collected retroactively. Every field below is either populated with a real, honestly-derived value or explicitly null — a null always carries a 'why' in its own description, distinguishing 'considered and unavailable' from 'forgotten.'",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "decimalString": {
+      "type": "string",
+      "pattern": "^-?[0-9]+(\\.[0-9]+)?$",
+      "description": "A decimal number encoded as a string. Never a JSON number — no floats in money maths."
+    },
+    "hexString": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]+$"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "Build 1 emits \"1.0\". Same forward-compatibility convention as Receipt/touchstone-quote: a same-major bump is additive and safe for an existing reader to accept."
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Generated at capture time. Not the same value as any RunRecord.run_id (packages/basket measurement runs) — this is a demo-agent transaction, never a basket-measurement execution."
+    },
+    "captured_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+      "description": "ISO-8601 UTC timestamp, e.g. \"2026-09-06T00:00:00.000Z\"."
+    },
+    "role": {
+      "type": "string",
+      "enum": ["buyer", "seller"],
+      "description": "One real settled transaction produces two records, one per vantage point — a buyer and a seller see genuinely different things (the buyer knows which of two quotes it chose and whether verify_receipt matched; the seller knows the model, provider and execution telemetry). Neither role's record is a subset of the other's."
+    },
+    "chain": { "type": "string", "minLength": 1 },
+    "quote_hash": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{64}$",
+      "description": "Links this record to the same on-chain settlement Receipt.quote_hash refers to (docs/settlement-metadata.md) — the join key between rich (unpublished) telemetry and the minimal (published-shape) signed attestation."
+    },
+    "methodology_version": {
+      "type": "string",
+      "description": "Illustrative in this environment (see packages/agents/src/seller.ts's ILLUSTRATIVE_INDEX_VERSION) until a real print exists to quote against — never presented as a real published methodology version."
+    },
+    "model": {
+      "type": ["string", "null"],
+      "description": "Registry model id. Null only for a buyer record predating this field's population from the chosen quote's own `model` field — should not be null in practice, since the quote always carries it."
+    },
+    "provider": {
+      "type": ["string", "null"],
+      "description": "Null-by-design on a buyer record: a buyer sees the seller's quote and result, never the seller's own registry entry, so it has no provider field to report. Populated directly on a seller record from its own ModelRegistryEntry."
+    },
+    "routing_decision": {
+      "type": ["string", "null"],
+      "enum": ["pinned", "unpinned", null],
+      "description": "Seller-only: whether this call was pinned to registryEntry.host or allowed to route unpinned (SellerOptions.allowUnpinnedRouting). Null-by-design on a buyer record — routing is an internal seller decision a buyer never observes."
+    },
+    "usage": {
+      "description": "Null-by-design only if the transaction failed before a result existed. Real token counts on both roles once the seller's 200 response is reached (buyer reads them off the same response body the seller computed).",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "input": { "type": "integer", "minimum": 0 },
+            "output": { "type": "integer", "minimum": 0 },
+            "cached_input": { "type": "integer", "minimum": 0 },
+            "reasoning": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["input", "output", "cached_input", "reasoning"]
+        },
+        { "type": "null" }
+      ]
+    },
+    "latency_ms": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Real adapter call latency, reported by the seller and echoed back to the buyer in the fulfillment response so both roles can record the same true figure."
+    },
+    "retry_count": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Seller-only, via withBackoff's existing onRetry hook (packages/harness/src/retry.ts) — a real, not invented, count of retried attempts before success. Null-by-design on a buyer record: a buyer never sees a seller's internal retry behaviour, only the eventual result."
+    },
+    "fallback_count": {
+      "type": ["integer", "null"],
+      "enum": [0, null],
+      "description": "Null-by-design on both roles today: no fallback mechanism exists anywhere in this demo path (a buyer picks between exactly two known sellers by cheapest quote; neither agent retries against a different seller on failure). Recorded as an explicit null, not omitted, so a future reader knows this was considered and found not-yet-applicable, rather than forgotten."
+    },
+    "tool_calls": {
+      "type": ["integer", "null"],
+      "enum": [0, null],
+      "description": "Null-by-design on both roles: the demo task is a single-turn completion with no tool-calling in the harness/adapter model at all (build1-spec.md §3's execution settings state 'no tools' explicitly). Recorded as null, not omitted, because the field was considered."
+    },
+    "tool_failures": {
+      "type": ["integer", "null"],
+      "enum": [0, null],
+      "description": "Null-by-design on both roles, for the same reason as tool_calls — no tool-calling mechanism exists in the demo path to fail."
+    },
+    "quality_gate_result": {
+      "type": ["string", "null"],
+      "enum": [null],
+      "description": "Null-by-design on both roles: a live demo transaction never runs a basket grader (packages/basket) — only a scheduled print's own harness run does that (RunRecord.gate_passed). This field exists so a future workflow-measurement product can populate it once a grading step is added to the demo path, not because one exists today."
+    },
+    "human_review_required": {
+      "type": ["boolean", "null"],
+      "enum": [null],
+      "description": "Null-by-design on both roles: no human-review step exists anywhere in the demo path today. Recorded as null, not omitted, for the same reason as quality_gate_result."
+    },
+    "quoted_siu": {
+      "$ref": "#/definitions/decimalString",
+      "description": "The chosen quote's own `siu` field — available to both roles directly."
+    },
+    "actual_siu": {
+      "description": "usdc_paid converted back to SIU via the same quote's rate_usd_per_siu (decimal-string division, never a float) — computable by both roles from data each already has.",
+      "oneOf": [{ "$ref": "#/definitions/decimalString" }, { "type": "null" }]
+    },
+    "usdc_paid": {
+      "$ref": "#/definitions/decimalString",
+      "description": "The real settled USD amount (TouchstoneEscrow.settle's actualAmount, restated in dollars) — available to both roles."
+    },
+    "task_spec_hash": {
+      "oneOf": [{ "$ref": "#/definitions/hexString" }, { "type": "null" }],
+      "description": "keccak256 of the fixed canned task the seller ran (its prompt and output-token ceiling). Null-by-design on a buyer record — a buyer never sees the seller's literal prompt text, only the result, so it has nothing to hash. Populated on every seller record."
+    },
+    "receipt_hash": {
+      "$ref": "#/definitions/hexString",
+      "description": "keccak256 of this record's own other fields (JCS-canonicalised, this field itself excluded — a hash cannot cover itself, same convention as quote_hash). Not a substitute for Receipt's own signature; this record is unsigned, unpublished telemetry."
+    },
+    "verify_receipt_matched": {
+      "type": ["boolean", "null"],
+      "description": "Buyer-only: the `matched` value verify_receipt returned for this transaction. Null-by-design on a seller record — a seller never calls verify_receipt itself in this demo."
+    },
+    "chosen_seller_label": {
+      "type": ["string", "null"],
+      "description": "Buyer-only: which of the two known sellers this transaction settled with. Null-by-design on a seller record — a seller has no notion of having been 'chosen' over an alternative it never saw."
+    }
+  },
+  "required": [
+    "schema_version",
+    "run_id",
+    "captured_at",
+    "role",
+    "chain",
+    "quote_hash",
+    "methodology_version",
+    "model",
+    "provider",
+    "routing_decision",
+    "usage",
+    "latency_ms",
+    "retry_count",
+    "fallback_count",
+    "tool_calls",
+    "tool_failures",
+    "quality_gate_result",
+    "human_review_required",
+    "quoted_siu",
+    "actual_siu",
+    "usdc_paid",
+    "task_spec_hash",
+    "receipt_hash",
+    "verify_receipt_matched",
+    "chosen_seller_label"
+  ]
+}

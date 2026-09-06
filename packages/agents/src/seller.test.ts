@@ -28,6 +28,7 @@ function fakeDeps(overrides: Partial<SellerDeps> = {}): SellerDeps {
     readEscrowUntilMatch: async () => OPEN_ESCROW,
     settle: async () => "0xsettletxhash" as `0x${string}`,
     logIssuedQuote: async () => "/dev/null",
+    logAgentRun: async () => "/dev/null",
     adapter: async () => ({
       text: "a trivial reply",
       usage: { input: 20, output: 10, cached_input: 0, reasoning: 0 },

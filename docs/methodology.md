@@ -83,6 +83,14 @@ computed figure is exactly the kind of thing an outside auditor would be right t
 `packages/harness`'s run records (`RunRecord.usage`, captured from the real provider response,
 never from a list price) are the only thing `packages/print`'s cost computation reads.
 
+**A fourth category exists and belongs to none of these tiers: telemetry from Touchstone's own
+demo agents** (`data/agent-runs/`, `packages/agents`). It is never an input to the print, at any
+tier — not because it's low-quality evidence, but because it isn't market evidence at all. Every
+record there comes from an agent Touchstone Assay itself controls, running one fixed canned task
+against a small, hand-picked set of models. That makes it genuinely useful for understanding
+workflow behaviour (retries, latency, routing) and equally genuinely useless as evidence about
+what independent buyers and sellers actually do — see `data/agent-runs/README.md`.
+
 ## 3. Policies
 
 ### Cache policy

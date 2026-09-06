@@ -22,8 +22,9 @@ site/public/
 # contains a live GITHUB_TOKEN in plaintext — never commit
 docs/keys_needed_datum.md
 
-# data/prints/ and data/runs/ are intentionally NOT excluded here —
-# they are git-tracked on purpose. Publication is the product.
+# data/prints/, data/runs/ and data/agent-runs/ are intentionally NOT excluded here —
+# they are git-tracked on purpose. Publication is the product. (data/agent-runs/ is unpublished
+# testbed telemetry, not evidence for anything published — see its own README.)
 
 # Derived, regenerable local caches (packages/console's event index and agents' local quote
 # log) — never a source of truth, never committed.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { estimateTokens, estimatedCeiling, realizedCost } from "./pricing.js";
+import { estimateTokens, estimatedCeiling, realizedCost, usdToSiu } from "./pricing.js";
 
 const PRICES = { price_in_usd_per_1m: "1.00", price_out_usd_per_1m: "2.00" };
 
@@ -39,5 +39,21 @@ describe("realizedCost", () => {
 
   it("is zero for zero usage", () => {
     expect(realizedCost(0, 0, PRICES)).toBe("0");
+  });
+});
+
+describe("usdToSiu", () => {
+  it("is the exact inverse of estimatedCeiling's own usd→SIU direction", () => {
+    // $0.05 at a rate of $0.05/SIU is exactly 1 SIU.
+    expect(usdToSiu("0.05", "0.05")).toBe("1.000000");
+  });
+
+  it("a higher rate_usd_per_siu yields a lower SIU figure for the identical dollar amount", () => {
+    expect(Number(usdToSiu("1.00", "0.10"))).toBeGreaterThan(Number(usdToSiu("1.00", "0.20")));
+  });
+
+  it("returns a decimal string, never a float, even for a non-terminating division", () => {
+    const result = usdToSiu("1", "3");
+    expect(result).toMatch(/^-?[0-9]+(\.[0-9]+)?$/);
   });
 });

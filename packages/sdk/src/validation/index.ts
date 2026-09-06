@@ -6,3 +6,4 @@ export { validateRunManifest } from "./run-manifest.js";
 export { validatePrint } from "./print.js";
 export { validateTouchstoneQuote } from "./datum-quote.js";
 export { validateReceipt } from "./receipt.js";
+export { validateAgentRunRecord } from "./agent-run-record.js";

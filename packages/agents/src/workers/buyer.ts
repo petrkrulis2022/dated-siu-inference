@@ -64,6 +64,17 @@ app.post("/run", async (c) => {
       chainName: env.CHAIN_NAME,
       mcpServerUrl: env.ARC_TESTBED_MCP_URL,
       log,
+      // Same accommodation workers/seller.ts makes for logIssuedQuote: agent-run-log.ts's real
+      // implementation writes to node:fs, unavailable here. console.log is a stopgap visibility
+      // measure — the git-tracked data/agent-runs/ record still comes from the Node/CLI path.
+      logAgentRun: async (record) => {
+        console.log(
+          `[buyer] agent-run: role=${record.role} chosen_seller=${record.chosen_seller_label} ` +
+            `verify_receipt_matched=${record.verify_receipt_matched} usdc_paid=$${record.usdc_paid} ` +
+            `quote_hash=${record.quote_hash}`,
+        );
+        return "console-only, not written anywhere — see this file's header comment.";
+      },
     });
     return c.json({
       ok: true,
