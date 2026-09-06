@@ -1,0 +1,32 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "{\n  \"tracking_id\": \"SH-1E8738\",\n  \"origin_city\": \"Cebu\",\n  \"destination_city\": \"Perth\",\n  \"weight_kg\": 378,\n  \"status\": \"pending\",\n  \"priority\": \"standard\"\n}",
+            "thoughtSignature": "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"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 924,
+    "candidatesTokenCount": 70,
+    "totalTokenCount": 1580,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 924
+      }
+    ],
+    "thoughtsTokenCount": 586,
+    "serviceTier": "standard"
+  },
+  "modelVersion": "gemini-3.1-pro-preview",
+  "responseId": "obycapv2GOuMjrEPm8Do6Qo"
+}

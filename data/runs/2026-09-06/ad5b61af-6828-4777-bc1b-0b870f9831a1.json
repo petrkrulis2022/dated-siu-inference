@@ -1,0 +1,22 @@
+{
+  "run_id": "ad5b61af-6828-4777-bc1b-0b870f9831a1",
+  "model_id": "mistral-small-3.2-24b-instruct",
+  "task_class": "T3",
+  "instance_id": "T3-01",
+  "seed": 1772838716,
+  "attempt": 1,
+  "usage": {
+    "input": 142,
+    "output": 68,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 286,
+  "gate_passed": true,
+  "raw_response_ref": "ad5b61af-6828-4777-bc1b-0b870f9831a1.raw.json",
+  "deviations": [
+    "retry 1: OpenAI-compatible request failed: 429",
+    "retry 2: OpenAI-compatible request failed: 429",
+    "retry 3: OpenAI-compatible request failed: 429"
+  ]
+}
