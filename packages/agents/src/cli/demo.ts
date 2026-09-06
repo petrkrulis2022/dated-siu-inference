@@ -144,7 +144,7 @@ async function main(): Promise<void> {
   const quoteTtlSeconds = 3600;
 
   const sellerCommon = {
-    openrouterApiKey: openrouterKey,
+    apiKeys: { openrouter: openrouterKey },
     escrowAddress,
     chainName,
     prompt,

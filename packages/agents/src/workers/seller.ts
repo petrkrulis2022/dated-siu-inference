@@ -20,9 +20,19 @@ import { DEMO_ILLUSTRATIVE_USD_PER_SIU, type PriceSnapshotEntryPrices } from "..
  * Model registry entries and price snapshot entries are inlined below rather than read from
  * data/registry/*.json at runtime (that's a Node fs read; a Worker has no repo checkout to read
  * from) — sourced from the real, current files as of 2026-09-05
- * (data/registry/models.json, data/registry/price-snapshot-merged-2026-09-03T01-01-04.946Z.json).
+ * (data/registry/models.json, data/registry/price-snapshot-merged-2026-09-03T01-01-04.946Z.json),
+ * except gpt-5.4-mini's price, sourced from the most recent snapshot as of 2026-09-06
+ * (data/registry/price-snapshot-litellm-2026-09-06T01-05-07.104Z.json) when it was added.
  * A registry change later needs a redeploy of this Worker to pick up, same tradeoff any
  * build-time-inlined config has.
+ *
+ * seller-b deliberately quotes a frontier-tier model (gpt-5.4-mini) against seller-a's
+ * open-weight one, not a second open-weight model at a different host: a same-tier spread (the
+ * mistral-small/qwen-2.5-72b pairing this replaced) sits within the range a buyer could plausibly
+ * guess from headline token prices alone ($0.30 vs $0.40 output — no unit of account needed to
+ * arrive at roughly the same answer). The comparison only earns its keep when the naive
+ * token-price answer and the measured cost-per-unit-of-work answer can diverge — which is what a
+ * frontier-versus-commodity spread is for.
  */
 
 const MODELS: Record<string, { registryEntry: ModelRegistryEntry; prices: PriceSnapshotEntryPrices }> = {
@@ -48,25 +58,56 @@ const MODELS: Record<string, { registryEntry: ModelRegistryEntry; prices: PriceS
       tier: "open-weight-hosted",
       open_weights: true,
       host: "deepinfra",
-      notes: "Catalog breadth: distinct model family from the seller-a cheap-tier pick.",
+      notes: "Catalog breadth: distinct model family from the seller-a cheap-tier pick. No longer deployed as seller-b (see gpt-5.4-mini below) — kept here as a catalog entry, available to reconfigure MODEL_ID back to if ever needed.",
     },
     prices: { price_in_usd_per_1m: "0.36", price_out_usd_per_1m: "0.4" },
   },
+  "gpt-5.4-mini": {
+    registryEntry: {
+      id: "gpt-5.4-mini",
+      provider: "openai",
+      endpoint: "https://api.openai.com/v1/chat/completions",
+      model_string: "gpt-5.4-mini",
+      tier: "frontier",
+      open_weights: false,
+      host: "openai",
+      notes: "Frontier-tier contrast point for seller-b, replacing qwen-2.5-72b-instruct — see this file's header comment for why a same-tier open-weight pairing doesn't demonstrate the argument.",
+    },
+    prices: { price_in_usd_per_1m: "0.75", price_out_usd_per_1m: "4.5" },
+  },
 };
 
-// Same prompt/ceiling cli/demo.ts uses — sized so even the cheaper model clears
-// TouchstoneEscrow's MIN_SETTLEMENT with real margin. See pricing.ts's own header comment for
-// why both sellers quote the same illustrative rate.
+// Resized three times now, every time against real (not point-estimate) settlement, not
+// arithmetic — this design's own stated $0.001-$0.10 target range is a real constraint that
+// shaped the demo: v1 ("≥1400 words", soft aggregate count) settled mistral-small at $0.000544 —
+// clears TouchstoneEscrow's MIN_SETTLEMENT (100 minor units, $0.0001) with real margin, but under
+// $0.001. v2 ("≥2800 words", still a soft aggregate count) only grew real output ~23%
+// (1761→~2160 tokens) to $0.000648 — still under $0.001: a single soft word-count target doesn't
+// reliably move a smaller open-weight model's real output the way it moves a point estimate. v3
+// (an explicit 8-section, ≥400-words-each structure — a model tracking "have I written section 6
+// of 8 yet" complies more reliably than one tracking a running word count) got real output to
+// ~3050 tokens, settling at $0.000917 — much closer, still just under $0.001. v4 (this version)
+// raises the per-section minimum to 550 words for more headroom. Confirm live after any future
+// change here too — this whole history is the point: the floor is a real constraint that shaped
+// the demo, not a number in a spec.
 const PROMPT =
-  "Write a detailed, comprehensive explanation of how commodity benchmark price indices " +
-  "work, using Dated Brent as a concrete example. Cover: what makes a reference price " +
-  "trustworthy, how such indices are typically assembled and published on a rolling basis, " +
-  "the difference between a spot assessment and a futures curve, how market participants " +
-  "actually use the published number in real contracts, and at least two historical episodes " +
-  "where the benchmark's mechanics mattered in practice. Use specific, concrete examples " +
-  "throughout, and address counterarguments or edge cases where relevant. Aim for a thorough, " +
-  "in-depth answer of at least 1400 words, organized into clearly labeled sections.";
-const MAX_OUTPUT_TOKENS = 8000;
+  "Write an exhaustive explanation of how commodity benchmark price indices work, using Dated " +
+  "Brent as a concrete example. Structure your answer as exactly eight clearly labeled sections, " +
+  "each at least 550 words: (1) what makes a reference price trustworthy, (2) how such indices " +
+  "are typically assembled, (3) how they are published on a rolling basis, (4) the difference " +
+  "between a spot assessment and a futures curve, (5) how market participants use the published " +
+  "number in real contracts, (6) a first historical episode where the benchmark's mechanics " +
+  "mattered in practice, explained in full narrative detail, (7) a second, different historical " +
+  "episode explained the same way, and (8) counterarguments or edge cases against the benchmark's " +
+  "reliability, with a concrete rebuttal to each. Use specific, concrete examples throughout. Do " +
+  "not summarize sections briefly — each of the eight must independently satisfy its own " +
+  "550-word minimum.";
+// Raised from 8000 after a live run measured gpt-5.4-mini's real output at 7574 tokens — within
+// ~5% of that ceiling, a real risk of silent truncation on a future run that happens to run
+// slightly longer. This does move both sellers' point-estimate/cap quote (estimatedCeiling's
+// point estimate is half of this value) — confirmed live after this change, same as every other
+// resize here.
+const MAX_OUTPUT_TOKENS = 11000;
 const QUOTE_TTL_SECONDS = 3600;
 
 interface Env {
@@ -76,7 +117,11 @@ interface Env {
   MODEL_ID: string;
   SELLER_LABEL: string;
   SELLER_PRIVATE_KEY: string;
-  OPENROUTER_API_KEY: string;
+  /** Only the key this deployment's own MODEL_ID actually needs has to be a real secret — the
+   * other is simply unset. Both declared optional here since this one source file is deployed
+   * against different providers per seller (see this file's header comment). */
+  OPENROUTER_API_KEY?: string;
+  OPENAI_API_KEY?: string;
 }
 
 function optionsFor(env: Env): SellerOptions {
@@ -91,7 +136,7 @@ function optionsFor(env: Env): SellerOptions {
     registryEntry: model.registryEntry,
     prices: model.prices,
     rateUsdPerSiu: DEMO_ILLUSTRATIVE_USD_PER_SIU,
-    openrouterApiKey: env.OPENROUTER_API_KEY,
+    apiKeys: { openrouter: env.OPENROUTER_API_KEY, openai: env.OPENAI_API_KEY },
     escrowAddress: env.ESCROW_ADDRESS,
     chainName: env.CHAIN_NAME,
     prompt: PROMPT,
@@ -121,7 +166,7 @@ function depsFor(options: SellerOptions): SellerDeps {
       );
       return "console-only, not written anywhere — see this file's header comment.";
     },
-    adapter: createAdapterFor(options.registryEntry, { openrouter: options.openrouterApiKey }),
+    adapter: createAdapterFor(options.registryEntry, options.apiKeys),
   };
 }
 

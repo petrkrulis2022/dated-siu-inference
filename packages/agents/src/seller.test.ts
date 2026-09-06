@@ -56,7 +56,7 @@ function options() {
     },
     prices: { price_in_usd_per_1m: "1.00", price_out_usd_per_1m: "2.00" },
     rateUsdPerSiu: "0.05",
-    openrouterApiKey: "unused-in-tests",
+    apiKeys: {},
     escrowAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
     chainName: "base-sepolia",
     prompt: "a trivial fixed demo prompt",

@@ -15,11 +15,15 @@
     // session's own repeated traffic — using dRPC's documented alternate mirror instead.
     "RPC_URL": "https://rpc.drpc.testnet.arc.io",
     "ESCROW_ADDRESS": "0x3Cc274d68972DFA1B9B13b90eE40664E0dE2c91F",
-    "MODEL_ID": "qwen-2.5-72b-instruct",
+    // Switched from qwen-2.5-72b-instruct (same open-weight-hosted tier as seller-a) to a
+    // frontier-tier model — see workers/seller.ts's own header comment for why a same-tier
+    // spread doesn't demonstrate the argument this demo exists to make.
+    "MODEL_ID": "gpt-5.4-mini",
     "SELLER_LABEL": "seller-b"
   }
 
   // Secrets (wrangler secret put -c wrangler.seller-b.jsonc):
   //   SELLER_PRIVATE_KEY   this seller's own dedicated Arc Testnet wallet key (distinct from seller-a's)
-  //   OPENROUTER_API_KEY   same OpenRouter key used elsewhere in this repo
+  //   OPENAI_API_KEY       gpt-5.4-mini is a direct OpenAI adapter, not OpenRouter-routed —
+  //                        this seller no longer needs OPENROUTER_API_KEY at all
 }

@@ -1,5 +1,5 @@
 import express, { type Express } from "express";
-import { createAdapterFor, withBackoff, type Adapter } from "@touchstone/harness";
+import { createAdapterFor, withBackoff, type Adapter, type ApiKeys } from "@touchstone/harness";
 import {
   buildQuoteBody,
   signQuote,
@@ -31,7 +31,11 @@ export interface SellerOptions {
   prices: PriceSnapshotEntryPrices;
   /** This seller's own asking price per SIU — see pricing.ts's header comment. */
   rateUsdPerSiu: string;
-  openrouterApiKey: string;
+  /** Whichever provider key(s) this seller's own registryEntry.provider actually needs — a
+   * seller only ever uses one provider, but the type stays the general ApiKeys shape (not a
+   * single openrouter-specific string) so a seller can be configured against any of
+   * createAdapterFor's provider families, not only OpenRouter-routed open-weight models. */
+  apiKeys: ApiKeys;
   escrowAddress: string;
   chainName: string;
   /** Fixed, seller-known task — "trivial paid inference service" (build1-spec.md §11): not a
@@ -72,7 +76,7 @@ function defaultDeps(options: SellerOptions): SellerDeps {
     logAgentRun,
     adapter: createAdapterFor(
       options.registryEntry,
-      { openrouter: options.openrouterApiKey },
+      options.apiKeys,
       { allowUnpinnedRouting: options.allowUnpinnedRouting },
     ),
   };
