@@ -27,6 +27,8 @@ The analogy that governs design decisions: oil never got its own currency, it go
 | **Touchstone**         | Conversational short form of the project name.                                       |
 | **SIU**                | The unit. Standard Inference Unit.                                                   |
 | **Dated SIU**          | The published spot assessment — "the print".                                         |
+| **Model SIU**          | The published index — Dated SIU itself. Workload is fixed and reproducible.          |
+| **Workflow SIU / Outcome SIU** | Never an index — no canonical workflow exists to standardize against. An analytics product computed per customer about their own agents, never a print. |
 | **the basket**         | The versioned set of benchmark tasks defining one SIU. Current version: `SIU-2026a`. |
 | **the print**          | One published assessment, dated, signed.                                             |
 | **exchange rate**      | A model's cost expressed in SIU terms.                                               |

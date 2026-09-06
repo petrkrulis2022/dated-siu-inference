@@ -347,6 +347,19 @@ describe("renderPrintPage", () => {
     expect(html).toContain("postedAt(bytes32)");
   });
 
+  it("states the controlled-inference-vs-production-agent-cost caveat unconditionally, unlike the data-derived notices above it", () => {
+    const html = renderPrintPage({
+      print: basePrint(),
+      allPrints: [],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).toContain(
+      "not a prediction of production agent costs, which vary with workflow design",
+    );
+  });
+
   it("discloses the equal-weighting concentration live from this print's own basket_costs", () => {
     const html = renderPrintPage({
       print: basePrint({

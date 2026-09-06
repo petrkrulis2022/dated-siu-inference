@@ -28,6 +28,40 @@ The analogy that governs every design decision below: oil never got its own curr
 benchmark grade — Dated Brent — priced in dollars. Inference is the commodity, SIU is the grade,
 the dollar settles.
 
+### What this measures, and what it doesn't
+
+Dated SIU is an assessment of qualifying inference work under a versioned basket, a stated
+model/provider configuration, and an objective quality gate (§5). **It is not a prediction of
+production agent costs**, which vary with workflow design, tool reliability, retry policy, and
+context handling — a fixed basket run under controlled settings cannot capture those, and reading
+Dated SIU as "the cost of AI work" in general overextends the claim.
+
+A documented production incident illustrates why configuration, not just the model, decides cost
+and latency: [Local First AI, "The Model Wasn't Broken," 2026-08-30](https://localfirstai.eu/posts/2026-08-30-the-model-wasnt-broken/)
+— external finding, not Touchstone's own — describes `gemma4:31b` running at roughly 1/400th of
+its normal speed (94 seconds versus under one second) because of a single unexamined context/
+KV-cache reservation default, on otherwise identical hardware. The diagnostic tell was a pegged,
+not idle, CPU — the process was working, not stuck — and sweeping the setting produced a cliff,
+not a slope: fine, fine, fine, then catastrophic past a threshold. The model wasn't broken; the
+configuration was. The methodology point this supports: a throughput or cost claim without its
+full execution configuration can be wrong by orders of magnitude, which is exactly why
+`RunRecord.deviations` (§3, already implemented) exists — to record every forced configuration
+change rather than silently discarding a real data-quality signal.
+
+### Model SIU is an index. Workflow SIU and Outcome SIU are not, and never will be.
+
+Model SIU — Dated SIU itself — is reproducible because the workload is fixed and published:
+anyone can regenerate the exact instances from the published template, seed, and basket version,
+and independently re-run the measurement (§4). A workflow has no equivalent canonical form to
+standardize against — a research agent's cost depends on its own prompts, tools, and retry/
+fallback rules, none of which are standard across agents. Publishing "our reference workflow
+costs $X" would measure Touchstone's own implementation choices rather than the market, which is
+how a benchmark stops being neutral.
+
+Workflow and outcome measurement are therefore **analytics products**, computed for a specific
+customer about their own agents, sold as a service — never published as a print, and never
+described as an index. Full framing and business rationale: `docs/positioning.md`.
+
 ## 2. Inputs and the hierarchy of evidence
 
 **The print is computed from executed runs only.** Three kinds of evidence exist, in strict

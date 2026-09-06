@@ -150,6 +150,7 @@ function renderMethodologyAndSigning(print: Print, runsUrl: string, chain: Chain
       <dt>Anchor tx</dt><dd>${anchorLine}</dd>
       <dt>Raw runs</dt><dd><a href="${esc(runsUrl)}">${esc(runsUrl)}</a></dd>
     </dl>
+    <p class="note">Dated SIU is an assessment of qualifying inference work under this basket version, model/provider configuration and quality gate — not a prediction of production agent costs, which vary with workflow design, tool reliability, retry policy and context handling.</p>
   </section>`;
 }
 
