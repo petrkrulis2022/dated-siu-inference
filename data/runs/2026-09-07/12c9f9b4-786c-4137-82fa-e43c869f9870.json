@@ -1,0 +1,21 @@
+{
+  "run_id": "12c9f9b4-786c-4137-82fa-e43c869f9870",
+  "model_id": "deepseek-v3.2",
+  "task_class": "T1",
+  "instance_id": "T1-01",
+  "seed": 3080433412,
+  "attempt": 1,
+  "usage": {
+    "input": 937,
+    "output": 64,
+    "cached_input": 256,
+    "reasoning": 0
+  },
+  "latency_ms": 481,
+  "gate_passed": true,
+  "raw_response_ref": "12c9f9b4-786c-4137-82fa-e43c869f9870.raw.json",
+  "deviations": [
+    "retry 1: OpenAI-compatible request failed: 429",
+    "retry 2: OpenAI-compatible request failed: 429"
+  ]
+}
