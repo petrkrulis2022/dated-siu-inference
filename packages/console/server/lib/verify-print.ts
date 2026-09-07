@@ -31,6 +31,14 @@ export interface VerifyPrintOptions {
 }
 
 /**
+ * `resolveOptions` is a thunk, not a plain value, specifically so a caller resolves it against
+ * *this print's own* `anchor.chain` (`../config.js`'s `resolveVerifyOptions`) rather than always
+ * the console's single configured default chain — a print anchored elsewhere would otherwise
+ * read as "unverified" simply because the wrong chain's TouchstoneAttestation was asked about a
+ * bodyHash it never received, indistinguishable from a genuine anchoring failure.
+ */
+
+/**
  * The two on-chain reads below hit a shared public RPC endpoint (sepolia.base.org — see
  * data/deployments/base-sepolia.json), and the static console build fires a burst of them in a
  * short window (two reads per print, across every print, plus the indexer's own calls). A single
@@ -54,12 +62,16 @@ async function withRetry<T>(read: () => Promise<T>, attempts = 3, delayMs = 800)
 
 export async function verifyPrintOnChain(
   print: Print,
-  options: VerifyPrintOptions,
+  resolveOptions: () => VerifyPrintOptions,
 ): Promise<PrintVerification> {
   const selfCheck = verifyPrint(print);
   const bodyHash = printBodyHashHex(print);
 
   try {
+    // Resolving inside the try, not before it: a print anchored on a chain this console has no
+    // RPC URL/deployment file for should report the same honest "verification failed, here's
+    // why" shape as a chain-read failure would, not throw past the caller's own error handling.
+    const options = resolveOptions();
     const [publisher, postedAt] = await Promise.all([
       withRetry(() => readAttestationPublisher(options.rpcUrl, options.attestationAddress)),
       withRetry(() => readAttestationPostedAt(options.rpcUrl, options.attestationAddress, bodyHash)),

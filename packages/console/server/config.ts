@@ -1,5 +1,7 @@
 import { resolve } from "node:path";
 import { loadDeployment } from "@touchstone/sdk";
+import type { Print } from "@touchstone/sdk";
+import type { VerifyPrintOptions } from "./lib/verify-print.js";
 
 /** pnpm always runs package scripts (and this repo's `dev.mjs`/`tsx` invocations) with cwd =
  * the package directory. */
@@ -32,7 +34,7 @@ export interface ConsoleConfig {
   localQuotesDir: string;
 }
 
-function requireEnv(name: string): string {
+export function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
     throw new Error(`${name} is not set — source .env before starting the console.`);
@@ -75,4 +77,28 @@ export function loadConfig(): ConsoleConfig {
     eventCachePath: resolve(repoRoot(), "data/.cache/console/events.json"),
     localQuotesDir: resolve(repoRoot(), "data/.cache/quotes"),
   };
+}
+
+/**
+ * Which chain to verify a print's anchor against — print.anchor.chain when the print has one,
+ * never silently the console's own configured default. Before this, a print anchored on a
+ * different chain than the running console's TOUCHSTONE_CHAIN_NAME would always read as
+ * "unverified" (checking the right bodyHash against the wrong chain's TouchstoneAttestation
+ * finds nothing, indistinguishable from a genuine anchoring failure) — latent today (every
+ * existing print anchors to base-sepolia, matching every console deployment's own default so
+ * far), live the moment a print anchors anywhere else, e.g. Arc mainnet from 2026-09-16.
+ *
+ * Falls back to the console's own default chain only when the print was never anchored at all —
+ * there's no chain field to read, and verifyPrintOnChain's existing behaviour (report
+ * anchored: false against whatever chain is asked) is already correct for that case.
+ */
+export function resolveVerifyOptions(print: Print, config: ConsoleConfig): VerifyPrintOptions {
+  const chainName = print.anchor?.chain ?? config.chainName;
+  if (chainName === config.chainName) {
+    return { rpcUrl: config.rpcUrl, attestationAddress: config.attestationAddress };
+  }
+  const rpcEnvVar = `${chainName.toUpperCase().replaceAll("-", "_")}_RPC_URL`;
+  const rpcUrl = requireEnv(rpcEnvVar);
+  const deployment = loadDeployment(chainName);
+  return { rpcUrl, attestationAddress: deployment.contracts.TouchstoneAttestation.address };
 }

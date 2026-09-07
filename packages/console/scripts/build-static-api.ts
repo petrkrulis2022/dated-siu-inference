@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { createPublicClient, http, type Hex } from "viem";
 import { latestPriceSnapshotFile, loadPriceSnapshot } from "@touchstone/print";
-import { loadConfig } from "../server/config.js";
+import { loadConfig, resolveVerifyOptions } from "../server/config.js";
 import { loadCache, writeCache } from "../server/indexer/cache.js";
 import { indexNewEvents } from "../server/indexer/index.js";
 import { loadAllPrints } from "../server/lib/prints.js";
@@ -89,19 +89,13 @@ async function main(): Promise<void> {
       cost_of_production_usd: print.cost_of_production_usd,
       anchor_tx_hash: print.anchor?.tx_hash ?? null,
       anchor_status: print.anchor?.status ?? "none",
-      verification: await verifyPrintOnChain(print, {
-        rpcUrl: config.rpcUrl,
-        attestationAddress: config.attestationAddress,
-      }),
+      verification: await verifyPrintOnChain(print, () => resolveVerifyOptions(print, config)),
     })),
   );
   await writeJson("prints", printRows);
 
   for (const print of prints) {
-    const verification = await verifyPrintOnChain(print, {
-      rpcUrl: config.rpcUrl,
-      attestationAddress: config.attestationAddress,
-    });
+    const verification = await verifyPrintOnChain(print, () => resolveVerifyOptions(print, config));
     // Not nested under "prints/" — that path is already a *file* (the list, above), and a
     // plain static filesystem can't have both a file and a directory at the same path.
     await writeJson(`prints-detail/${print.print_id}`, { print, verification });

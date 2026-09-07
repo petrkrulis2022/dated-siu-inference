@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { ConsoleConfig } from "../config.js";
+import { resolveVerifyOptions } from "../config.js";
 import { loadAllPrints } from "../lib/prints.js";
 import { verifyPrintOnChain } from "../lib/verify-print.js";
 
@@ -19,10 +20,7 @@ export function printsRouter(config: ConsoleConfig): Router {
           methodology_version: print.methodology_version,
           anchor_tx_hash: print.anchor?.tx_hash ?? null,
           anchor_status: print.anchor?.status ?? "none",
-          verification: await verifyPrintOnChain(print, {
-            rpcUrl: config.rpcUrl,
-            attestationAddress: config.attestationAddress,
-          }),
+          verification: await verifyPrintOnChain(print, () => resolveVerifyOptions(print, config)),
         })),
       );
       res.json(rows);
@@ -39,10 +37,7 @@ export function printsRouter(config: ConsoleConfig): Router {
         res.status(404).json({ error: `No print "${req.params.printId}".` });
         return;
       }
-      const verification = await verifyPrintOnChain(print, {
-        rpcUrl: config.rpcUrl,
-        attestationAddress: config.attestationAddress,
-      });
+      const verification = await verifyPrintOnChain(print, () => resolveVerifyOptions(print, config));
       res.json({ print, verification });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
