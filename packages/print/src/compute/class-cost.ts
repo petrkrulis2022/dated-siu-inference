@@ -44,9 +44,17 @@ export function computeClassCost(records: RunRecord[], price: ModelPrice): Class
     let passed = false;
     for (const record of ordered) {
       running = running.plus(
+        // usage.output + usage.reasoning, not usage.output alone: reasoning/thinking tokens are
+        // billed by the provider at the output rate — confirmed live and empirically, 2026-09-08
+        // (Google's own pricing page states this plainly: "Output price (including thinking
+        // tokens)"; xAI's real per-call cost_in_usd_ticks matched output+reasoning at the output
+        // rate exactly, not output alone, an 8x difference in that one call). Excluding reasoning
+        // here isn't a methodology choice, it's a gap against this project's own definition — the
+        // index measures realised cost from executed runs, and the run record already carries
+        // this field (RunRecord.usage.reasoning), captured but previously never priced.
         callCost(
           record.usage.input,
-          record.usage.output,
+          record.usage.output + record.usage.reasoning,
           price.price_in_usd_per_1m,
           price.price_out_usd_per_1m,
         ),

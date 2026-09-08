@@ -161,5 +161,11 @@
     "status": "anchored",
     "tx_hash": "0x24c79668b4d721042263fbdfec8a5f8addd759a7b94f924d9e383a7a2fe5b0e4",
     "posted_at": "2026-09-01T01:26:50.000Z"
-  }
+  },
+  "correction_notes": [
+    {
+      "published_at": "2026-09-08",
+      "note": "A reasoning-token cost gap affected this print: gemini-3.1-pro-preview's reasoning tokens (RunRecord.usage.reasoning — real, captured in every run record for this print) were not priced. packages/print/src/compute/class-cost.ts computed cost from usage.output alone. Reasoning tokens are billed by the provider at the output rate — confirmed live, 2026-09-08: Google's own published pricing states \"Output price (including thinking tokens)\", and a separate live check (xAI's real per-call billed cost) independently confirmed the same billing convention for reasoning models generally. This is not a methodology refinement — the index measures realised cost from executed runs, and the run records already carried this field. Corrected figures, computed from this print's own real run records and price snapshot with the fix applied, not from new data: this print's dated_siu was originally reported as $0.0074; the corrected figure is $0.0084. gemini-3.1-pro-preview's own basket cost was originally reported as $0.013884; the corrected figure is $0.020744. This print itself is not recomputed or replaced — the original stands, per the revision policy's unconditional never-edit guarantee. The fix (packages/print/src/compute/class-cost.ts, cost-of-production.ts) applies forward from the next published print onward, which will show a real, one-time jump in gemini-3.1-pro-preview's cost for this methodological reason, not a market move — see docs/methodology.md's Index governance."
+    }
+  ]
 }

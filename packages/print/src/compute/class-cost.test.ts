@@ -10,6 +10,7 @@ function rec(
   gatePassed: boolean,
   input = 1000,
   output = 1000,
+  reasoning = 0,
 ): RunRecord {
   return {
     run_id: `${instanceId}-${attempt}`,
@@ -18,7 +19,7 @@ function rec(
     instance_id: instanceId,
     seed: 1,
     attempt,
-    usage: { input, output, cached_input: 0, reasoning: 0 },
+    usage: { input, output, cached_input: 0, reasoning },
     latency_ms: 1,
     gate_passed: gatePassed,
     raw_response_ref: "r.json",
@@ -34,6 +35,21 @@ describe("computeClassCost", () => {
     const result = computeClassCost([rec("i0", 1, true)], PRICE);
     expect(result.cost?.toString()).toBe(PER_ATTEMPT);
     expect(result.passingInstances).toBe(1);
+  });
+
+  it("prices reasoning tokens at the output rate, added to output — not silently dropped", () => {
+    // Found live, 2026-09-08: reasoning tokens are billed by the provider at the output rate
+    // (confirmed against both xAI's real per-call cost and Google's own published pricing —
+    // "Output price (including thinking tokens)") but were previously excluded from this
+    // computation entirely. 1000 input @ $1/1M + (1000 output + 500 reasoning) @ $2/1M =
+    // 0.001 + 0.003 = 0.004, not 0.003 (which is what output alone would give).
+    const result = computeClassCost([rec("i0", 1, true, 1000, 1000, 500)], PRICE);
+    expect(result.cost?.toString()).toBe("0.004");
+  });
+
+  it("is a no-op when reasoning is zero — every existing non-reasoning model's cost is unchanged", () => {
+    const result = computeClassCost([rec("i0", 1, true, 1000, 1000, 0)], PRICE);
+    expect(result.cost?.toString()).toBe(PER_ATTEMPT);
   });
 
   it("sums every attempt up to and including the first pass", () => {

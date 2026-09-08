@@ -19,6 +19,7 @@ export interface ApiKeys {
   together?: string;
   fireworks?: string;
   groq?: string;
+  xai?: string;
 }
 
 export function loadApiKeysFromEnv(): ApiKeys {
@@ -30,6 +31,7 @@ export function loadApiKeysFromEnv(): ApiKeys {
     together: process.env.TOGETHER_API_KEY,
     fireworks: process.env.FIREWORKS_API_KEY,
     groq: process.env.GROQ_API_KEY,
+    xai: process.env.XAI_API_KEY,
   };
 }
 
@@ -108,6 +110,11 @@ export function createAdapterFor(
       return createOpenAiCompatibleAdapter({
         chatCompletionsUrl: OPENAI_COMPATIBLE_HOSTS.groq,
         apiKey: requireKey(keys, "groq", "GROQ_API_KEY"),
+      });
+    case "xai":
+      return createOpenAiCompatibleAdapter({
+        chatCompletionsUrl: OPENAI_COMPATIBLE_HOSTS.xai,
+        apiKey: requireKey(keys, "xai", "XAI_API_KEY"),
       });
     default:
       throw new Error(`No adapter for provider "${entry.provider}".`);

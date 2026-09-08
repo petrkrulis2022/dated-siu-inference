@@ -3,7 +3,7 @@ import type { RunRecord } from "@touchstone/sdk";
 import { computeCostOfProduction } from "./cost-of-production.js";
 import type { ModelInput } from "./index.js";
 
-function rec(input: number, output: number, gatePassed: boolean): RunRecord {
+function rec(input: number, output: number, gatePassed: boolean, reasoning = 0): RunRecord {
   return {
     run_id: Math.random().toString(),
     model_id: "m",
@@ -11,7 +11,7 @@ function rec(input: number, output: number, gatePassed: boolean): RunRecord {
     instance_id: "T1-00",
     seed: 1,
     attempt: 1,
-    usage: { input, output, cached_input: 0, reasoning: 0 },
+    usage: { input, output, cached_input: 0, reasoning },
     latency_ms: 1,
     gate_passed: gatePassed,
     raw_response_ref: "r.json",
@@ -63,5 +63,17 @@ describe("computeCostOfProduction", () => {
 
   it("is zero for an empty model list", () => {
     expect(computeCostOfProduction([]).toString()).toBe("0");
+  });
+
+  it("prices reasoning tokens at the output rate, same fix as computeClassCost", () => {
+    const models: ModelInput[] = [
+      {
+        model_id: "A",
+        price: { price_in_usd_per_1m: "1.00", price_out_usd_per_1m: "2.00" },
+        // 0 input + (0 output + 1,000,000 reasoning) @ $2/1M = $2.00, not $0.
+        records: [rec(0, 0, true, 1_000_000)],
+      },
+    ];
+    expect(computeCostOfProduction(models).toString()).toBe("2");
   });
 });

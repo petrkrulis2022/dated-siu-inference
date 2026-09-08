@@ -199,7 +199,17 @@ export async function handleInferCore(
     { maxRetries: 5, baseDelayMs: 500, maxDelayMs: 15000, onRetry: () => { retryCount += 1; } },
   );
 
-  const actualUsd = realizedCost(result.usage.input, result.usage.output, options.prices);
+  // result.usage.output + result.usage.reasoning, not output alone — same fix and same reason
+  // as packages/print/src/compute/class-cost.ts (2026-09-08): reasoning/thinking tokens are
+  // billed by the provider at the output rate, confirmed live. gpt-5.4-mini (a real seller model
+  // here) is a reasoning model — openai.ts's own adapter already has the budget-accommodation
+  // retry for it, but this real settlement math was still under-billing every real Arc/Base-
+  // Sepolia transaction that produced nonzero reasoning tokens until this line changed.
+  const actualUsd = realizedCost(
+    result.usage.input,
+    result.usage.output + result.usage.reasoning,
+    options.prices,
+  );
   const actualAmountRaw = BigInt(usdToMinorUnits(actualUsd));
   const actualAmount = actualAmountRaw > maxAmount ? maxAmount : actualAmountRaw;
   const receiptRef = quoteHash; // 32-byte stand-in ref, same convention this session's earlier live smoke tests used

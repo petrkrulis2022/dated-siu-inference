@@ -15,9 +15,11 @@ export function computeCostOfProduction(models: ModelInput[]): DecimalValue {
   const perModelCosts = models.map((model) =>
     sum(
       model.records.map((record) =>
+        // usage.output + usage.reasoning — same fix and same reasoning as class-cost.ts's own
+        // computeClassCost: reasoning tokens are billed at the output rate, confirmed live.
         callCost(
           record.usage.input,
-          record.usage.output,
+          record.usage.output + record.usage.reasoning,
           model.price.price_in_usd_per_1m,
           model.price.price_out_usd_per_1m,
         ),

@@ -121,6 +121,35 @@ disclosed sensitivity block, never in the headline number. The headline basket c
 reflects standard (non-batch) API pricing; a batch-discount variant is published alongside it so
 a reader can see how much of any spread a batch-pricing tier could close.
 
+### Reasoning-token pricing
+
+Reasoning/thinking tokens (`RunRecord.usage.reasoning`) are priced at the same rate as regular
+output tokens (`callCost(input, output + reasoning, ...)`, `packages/print/src/decimal.ts` via
+`packages/print/src/compute/class-cost.ts` and `cost-of-production.ts`) — never excluded, never a
+separate rate. This is not a policy choice among alternatives the way cache and batch-discount
+modelling are (those are genuinely optional pricing scenarios, disclosed only in the sensitivity
+block); it states plainly what the headline cost formula must include to measure what a buyer
+actually pays, which is this project's own definition of the index.
+
+**Found live, 2026-09-08, and fixed the same day.** `usage.reasoning` was captured in every run
+record from the start (`RunRecord.usage.reasoning`, part of the schema) but never priced —
+`computeClassCost`/`computeCostOfProduction` summed `usage.output` alone. Confirmed empirically
+before fixing it, not assumed: Google's own published pricing states plainly, for Gemini's
+thinking-capable models, "Output price (including thinking tokens)"; a live test call to a second
+reasoning-capable provider (xAI's Grok, evaluated the same day for registry admission — see
+Registry inclusion policy) matched its own real per-call billed cost exactly against
+output-plus-reasoning at the output rate, and did not match output alone (a real, one-call, 8×
+difference). Every daily print from `2026-09-08` back through `gemini-3.1-pro-preview`'s own
+admission on `2026-08-30` understated that model's real cost and, through it, understated
+`dated_siu` itself by roughly 10–14% each day. None of those prints are recomputed or replaced —
+the revision policy's unconditional never-edit guarantee stands — each carries a
+`correction_notes` entry stating both the originally published figure and the corrected one,
+computed from that print's own real run records and price snapshot, so a reader sees the size of
+the understatement rather than only being told one exists. The print immediately following this
+fix will show a real, one-time jump in `gemini-3.1-pro-preview`'s cost, and therefore in
+`dated_siu` itself, for this methodological reason — not a market move, the same disclosure
+standard the constituent-change mechanism already applies to a registry admission.
+
 ### Host weighting for identical open weights
 
 The same open-weight model is frequently served by more than one host at different prices — the

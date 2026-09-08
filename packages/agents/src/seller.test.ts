@@ -130,6 +130,43 @@ describe("createSellerApp", () => {
     });
   });
 
+  describe("funded request, a reasoning model reports nonzero reasoning tokens", () => {
+    beforeAll(() =>
+      startServer(
+        fakeDeps({
+          adapter: async () => ({
+            text: "a trivial reply",
+            usage: { input: 20, output: 10, cached_input: 0, reasoning: 100 },
+            latency_ms: 5,
+            raw: {},
+            deviations: ["mandatory reasoning (thinking cannot be disabled) — 100 reasoning tokens used"],
+          }),
+        }),
+      ),
+    );
+
+    it("prices output + reasoning, not output alone — the same fix as packages/print's own cost formula", async () => {
+      const quoteRes = await fetch(`${baseUrl}/infer`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      const { extensions } = (await quoteRes.json()) as {
+        extensions: { touchstone_quote: unknown };
+      };
+
+      const fulfillRes = await fetch(`${baseUrl}/infer`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ quote: extensions.touchstone_quote }),
+      });
+      const body = (await fulfillRes.json()) as { actual_usd: string };
+      // 20 input @ $1/1M + (10 output + 100 reasoning) @ $2/1M = 0.00002 + 0.00022 = 0.00024,
+      // not 0.00004 (which is what output alone would give).
+      expect(body.actual_usd).toBe("0.00024");
+    });
+  });
+
   describe("funded request, escrow not actually open", () => {
     beforeAll(() =>
       startServer(fakeDeps({ readEscrowUntilMatch: async () => ({ ...OPEN_ESCROW, status: 0 }) })),
