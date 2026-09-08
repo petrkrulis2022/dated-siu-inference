@@ -762,6 +762,35 @@ log entry naming what was wrong, why, and what changed. This procedure exists no
 that the first real error is handled by a process decided in advance rather than improvised under
 pressure.
 
+**First real exercise, and a distinction step (2) above didn't yet draw: not every disclosed fact
+has a corrected number to redo it with.** `superseded_by` covers the case where a same-day re-run
+produces a different, more complete value — a real redo. **Found live, 2026-09-08**: both
+Anthropic constituents (`claude-sonnet-5`, `claude-haiku-4-5`) produced zero run records for that
+day's print — every attempt failed with the same provider-side billing failure, not a quality-gate
+failure — and were silently absent from `basket_costs`/`exchange_rate_table` (no `excluded_reason`
+gap row), because `buildModelInputs` (`packages/print/src/cli/load-inputs.ts`) dropped a
+zero-run-record model before the already-correct `excluded_reason` logic ever saw it — fixed for
+every print from this one onward. Seven of nine registered models still qualified, above
+`MINIMUM_QUALIFYING_MODELS`, so the print correctly published; **the resulting figure is the
+correct equal-weighted average of the seven constituents that did produce real data — there is no
+"more correct" number to redo it with**, only a missing disclosure of why the reference set
+changed. `correction_notes` (`packages/sdk/schemas/print.schema.json`) is the mechanism for
+exactly this: a fact discovered after publication that doesn't change `dated_siu`, excluded from
+the signed body alongside `anchor`/`superseded_by` for the same reason (written after the fact,
+never requiring a re-sign), rendered prominently on the print's own page. Applied to
+`data/prints/2026-09-08.json` disclosing this incident. This is also why the apparent ~33% drop
+from 2026-09-07's print is not a market move: it is the mechanical consequence of an
+equal-weighted average losing its two most expensive constituents to a provider outage.
+
+This incident also exposed a real gap in gate design, not only disclosure, worth recording even
+though not yet resolved: `MINIMUM_QUALIFYING_MODELS` gates the blended print's *overall* qualifying
+count only. Frontier SIU correctly declined to publish that day (3 of its own 5 constituents
+qualified, below its own minimum of 4 — the tier-specific gate already applied to standalone tier
+prints) — but the blend has no equivalent check on its own tier *composition*, so it published
+while its reference set quietly shifted from a genuine frontier/commodity blend toward an
+overwhelmingly commodity-weighted one. Whether the blend's own gate should also require each tier
+to independently clear its minimum is an open question, tracked for resolution before it recurs.
+
 ---
 
 ## Publisher identity and verification

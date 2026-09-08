@@ -192,7 +192,7 @@ const records = await loadRunRecords(printId);
 const { models, unpriced } = buildModelInputs(registry, snapshot, records);
 if (unpriced.length > 0) {
   console.warn(
-    `Models with runs but no price in ${snapshotFile}, excluded: ${unpriced.join(", ")}`,
+    `Registered models with no price in ${snapshotFile}, excluded: ${unpriced.join(", ")}`,
   );
 }
 if (models.length === 0) {

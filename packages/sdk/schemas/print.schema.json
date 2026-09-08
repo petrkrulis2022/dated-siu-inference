@@ -246,6 +246,27 @@
       },
       "required": ["chain", "status"]
     },
+    "correction_notes": {
+      "type": "array",
+      "description": "The revision policy's error procedure (methodology.md's Index governance, 'Error procedure, written before the first mistake'): discloses a fact material to reading this print correctly, discovered after publication, that does not change dated_siu or any other computed value — unlike superseded_by, this is not a redo, because there is no corrected number to redo it with (e.g. a provider-side outage that silently dropped a constituent, disclosed here rather than by editing basket_costs after signing). Excluded from the signed body (printBodyOf) alongside signature/public_key/anchor/superseded_by, so adding a note never invalidates the existing signature or on-chain anchor — written after the fact, like anchor. Absent or empty means no correction has been published against this print.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "published_at": {
+            "type": "string",
+            "minLength": 1,
+            "description": "When this note was added — necessarily after the print's own date, since it discloses something discovered after publication."
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The fact being disclosed, in the same plain, specific terms the supersession rule requires of its own reason field — never vague, never softened."
+          }
+        },
+        "required": ["published_at", "note"]
+      }
+    },
     "signature": {
       "type": "string",
       "pattern": "^0x[0-9a-fA-F]+$"

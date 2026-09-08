@@ -2,7 +2,10 @@ import canonicalizeDefault from "canonicalize";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import type { Print } from "@touchstone/sdk";
 
-export type PrintBody = Omit<Print, "signature" | "public_key" | "anchor" | "superseded_by">;
+export type PrintBody = Omit<
+  Print,
+  "signature" | "public_key" | "anchor" | "superseded_by" | "correction_notes"
+>;
 
 /**
  * RFC 8785 (JSON Canonicalisation Scheme). Two independent implementations must serialise the
@@ -48,6 +51,11 @@ export function fromHex(hex: string): Uint8Array {
  * was already signed and anchored. Requiring a re-sign to disclose a supersession would change
  * the body hash, which would no longer match what's already anchored on-chain — exactly the
  * defect the append-only write guard (publication.ts) exists to prevent one level up.
+ *
+ * `correction_notes` is excluded for the same reason: a fact discovered after publication, by
+ * definition, cannot have been part of what was signed — see print.schema.json's own description
+ * for why this is a disclosure, not a redo (unlike superseded_by, no corrected number exists to
+ * re-sign against).
  */
 export function printBodyOf(print: Print | PrintBody): PrintBody {
   const copy = { ...(print as Print) } as Partial<Print>;
@@ -55,6 +63,7 @@ export function printBodyOf(print: Print | PrintBody): PrintBody {
   delete copy.public_key;
   delete copy.anchor;
   delete copy.superseded_by;
+  delete copy.correction_notes;
   return copy as PrintBody;
 }
 

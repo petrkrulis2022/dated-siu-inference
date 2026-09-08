@@ -212,6 +212,19 @@ export interface Print {
     posted_at?: string;
     notes?: string;
   };
+  /**
+   * The revision policy's error procedure (methodology.md's Index governance, 'Error procedure, written before the first mistake'): discloses a fact material to reading this print correctly, discovered after publication, that does not change dated_siu or any other computed value — unlike superseded_by, this is not a redo, because there is no corrected number to redo it with (e.g. a provider-side outage that silently dropped a constituent, disclosed here rather than by editing basket_costs after signing). Excluded from the signed body (printBodyOf) alongside signature/public_key/anchor/superseded_by, so adding a note never invalidates the existing signature or on-chain anchor — written after the fact, like anchor. Absent or empty means no correction has been published against this print.
+   */
+  correction_notes?: {
+    /**
+     * When this note was added — necessarily after the print's own date, since it discloses something discovered after publication.
+     */
+    published_at: string;
+    /**
+     * The fact being disclosed, in the same plain, specific terms the supersession rule requires of its own reason field — never vague, never softened.
+     */
+    note: string;
+  }[];
   signature: string;
   public_key: string;
 }

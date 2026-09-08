@@ -161,5 +161,11 @@
     "status": "anchored",
     "tx_hash": "0x24d4877747f124463eb1b8660ffb88184f34777e7badf44c110845cd3ceb0b5a",
     "posted_at": "2026-09-08T01:03:40.000Z"
-  }
+  },
+  "correction_notes": [
+    {
+      "published_at": "2026-09-08",
+      "note": "claude-sonnet-5 and claude-haiku-4-5 (both frontier-tier) produced zero run records for this print — every attempt across all three task classes failed with the same Anthropic API error, \"Your credit balance is too low to access the Anthropic API,\" a provider-side billing failure, not a quality-gate failure. Both models were reachable and qualified normally in the immediately preceding print (2026-09-07). This print's basket_costs and exchange_rate_table did not disclose this exclusion with a gap row when first published, because the print pipeline (packages/print/src/cli/load-inputs.ts) silently dropped zero-run-record models before the existing excluded_reason mechanism could apply to them — fixed for every print from this one onward. The published $0.0049 figure is the correct equal-weighted average of the seven constituents that did produce real data; it is not a market move. The apparent 33% drop from 2026-09-07's $0.0073 is a mechanical consequence of losing the two most expensive constituents to a provider outage, not a change in inference cost."
+    }
+  ]
 }

@@ -235,6 +235,25 @@ function renderSupersessionNotice(print: Print, basePath: string): string {
 }
 
 /**
+ * The revision policy's error procedure (methodology.md's Index governance): a fact discovered
+ * after publication that doesn't change dated_siu — unlike renderSupersessionNotice, there's no
+ * redo to link to, so this renders in place, at the top, before anything else on the page. Most
+ * prominent of the disclosure notices deliberately: it exists specifically for the failure mode
+ * where a reader would otherwise mistake a computed-correctly-from-incomplete-data number for a
+ * real market move.
+ */
+function renderCorrectionNotesNotice(print: Print): string {
+  if (!print.correction_notes || print.correction_notes.length === 0) return "";
+  const items = print.correction_notes
+    .map((n) => `<li>${esc(formatDate(n.published_at.slice(0, 10)))} — ${esc(n.note)}</li>`)
+    .join("\n");
+  return `<div class="change-note">
+    <strong>Correction notice</strong> — published after this print, disclosing a fact that does not change dated_siu:
+    <ul class="link-list">${items}</ul>
+  </div>`;
+}
+
+/**
  * "A late print tells the truth about when it was actually computed" — docs/methodology.md's
  * retry policy. Same visibility principle as renderSupersessionNotice: on the print's own page,
  * before anything else, not buried in a separate log a reader has to already know to look for.
@@ -332,6 +351,7 @@ export function renderPrintPage({
     <span>${esc(formatDate(print.date))}</span>
     <span class="badge status-${esc(print.status)}">${esc(print.status)}</span>
   </div>
+  ${renderCorrectionNotesNotice(print)}
   ${renderSupersessionNotice(print, basePath)}
   ${renderPriorAttemptsNotice(print)}
   ${renderConstituentChangesNotice(print)}

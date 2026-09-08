@@ -244,6 +244,38 @@ describe("renderPrintPage", () => {
     expect(html).toContain('href="prints/2026-08-22b.html"');
   });
 
+  it("shows a correction notice — a disclosure that doesn't change dated_siu, unlike a supersession", () => {
+    const html = renderPrintPage({
+      print: basePrint({
+        print_id: "2026-09-08",
+        correction_notes: [
+          {
+            published_at: "2026-09-08",
+            note:
+              "claude-sonnet-5 and claude-haiku-4-5 produced zero run records due to a provider billing failure.",
+          },
+        ],
+      }),
+      allPrints: [],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).toContain("Correction notice");
+    expect(html).toContain("provider billing failure");
+  });
+
+  it("shows no correction notice for a print with none", () => {
+    const html = renderPrintPage({
+      print: basePrint(),
+      allPrints: [],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).not.toContain("Correction notice");
+  });
+
   it("shows no supersession notice for a standing (non-superseded) print", () => {
     const html = renderPrintPage({
       print: basePrint(),

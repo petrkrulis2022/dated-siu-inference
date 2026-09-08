@@ -72,7 +72,7 @@ if (models.length === 0) {
 }
 if (unpriced.length > 0) {
   console.warn(
-    `Models with runs but no price in ${snapshotFile}, excluded: ${unpriced.join(", ")}`,
+    `Registered models with no price in ${snapshotFile}, excluded: ${unpriced.join(", ")}`,
   );
 }
 

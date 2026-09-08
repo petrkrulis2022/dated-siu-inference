@@ -107,6 +107,21 @@ export async function loadPrint(path: string): Promise<Print> {
  * Joins run records to their registry entry and the price snapshot's price for that model.
  * A model with runs but no price in the snapshot is reported rather than silently priced at
  * zero — a missing price must never look like free inference.
+ *
+ * Every registered model is included in the returned `models` array, even one with zero run
+ * records — this used to `continue` past those, which meant `computeIndex` never saw them at
+ * all and they simply never appeared in a print's `basket_costs`/`exchange_rate_table`, not even
+ * as a gap row. That silently violated methodology.md §5's own stated invariant ("a model with
+ * any undefined class is excluded from that print's headline reference set, appearing in the
+ * exchange-rate table with an explicit excluded_reason rather than a silent gap") for exactly the
+ * failure mode most likely to produce zero run records in the first place: a total provider-side
+ * outage (an expired key, a billing failure, an API change) rather than a model that ran and
+ * failed its quality gate. Confirmed live on the 2026-09-08 print: both Anthropic constituents
+ * hit a billing failure on every attempt, produced no run records, and vanished from the print
+ * with no disclosure — a 33% Dated SIU drop that read as a market move. `computeClassCost`
+ * already has a distinct reason for this case ("no run records for this class", as opposed to
+ * "all N instance(s) failed the quality gate") — passing `records: []` through here for a
+ * zero-record model is all that's needed for that already-correct downstream logic to run.
  */
 export function buildModelInputs(
   registry: ModelRegistryEntry[],
@@ -125,10 +140,7 @@ export function buildModelInputs(
   const unpriced: string[] = [];
 
   for (const entry of registry) {
-    const modelRecords = recordsByModelId.get(entry.id);
-    if (!modelRecords || modelRecords.length === 0) {
-      continue; // no runs for this model in this print
-    }
+    const modelRecords = recordsByModelId.get(entry.id) ?? [];
     const price = priceByModelId.get(entry.id);
     if (!price) {
       unpriced.push(entry.id);
