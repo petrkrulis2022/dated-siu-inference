@@ -70,6 +70,16 @@
     "notes": "Admitted 2026-08-30 — direct provider adapter. Mandatory reasoning (thinking cannot be disabled — confirmed live) required docs/methodology.md's reasoning-budget accommodation rule to admit correctly; without it, a real measurement artifact would have read as structural incapacity. Evidence run: data/runs/admission-2026-08-30/, 14/15 ($0.3871) — one T3 instance is a genuine bounded finding under the 3x reasoning cap, not an infrastructure failure."
   },
   {
+    "id": "grok-4.6",
+    "provider": "xai",
+    "endpoint": "https://api.x.ai/v1/chat/completions",
+    "model_string": "grok-4.6",
+    "tier": "frontier",
+    "open_weights": false,
+    "host": "xai",
+    "notes": "Admitted 2026-09-08 — direct provider adapter (xAI's OpenAI-compatible Chat Completions endpoint). The fourth major frontier lab represented (alongside Anthropic, OpenAI, Google) and, more to the point, a fourth independent provider: the 2026-09-08 incident that excluded claude-sonnet-5 and claude-haiku-4-5 from the same print was provider-level correlation (both Anthropic, a billing failure), not model-level — a fifth OpenAI or Google constituent would not have added the same resilience. Model resolved live against /v1/models, not assumed: grok-4.20's version number reads as newer but is actually the oldest of the five real text models by creation date (2026-03-09 vs grok-4.6's 2026-08-06) — grok-4.6 is the genuinely current flagship. Mandatory reasoning (thinking cannot be disabled — reasoning_effort:\"none\" explicitly rejected, confirmed live) is billed at the output rate but counted separately from max_tokens, unlike Anthropic/Google's reasoning models, where it trades off against the same completion budget — confirmed live, no accommodation retry needed (packages/harness/src/adapters/openai-compatible.ts). Evidence run: data/runs/admission-2026-09-08/, 15/15, $0.2750."
+  },
+  {
     "id": "claude-haiku-4-5",
     "provider": "anthropic",
     "endpoint": "https://api.anthropic.com/v1/messages",

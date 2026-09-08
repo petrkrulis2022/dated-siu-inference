@@ -1,0 +1,39 @@
+{
+  "id": "47250407-5101-9994-aeeb-bbfbd7b7f146",
+  "object": "chat.completion",
+  "created": 1788881827,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```javascript\nexport function filterAboveThreshold(nums, threshold) {\n  return nums.filter((n) => n > threshold);\n}\n```",
+        "reasoning_content": "The user wants a JavaScript function `filterAboveThreshold(nums, threshold)` that returns a new array containing every number in `nums` that is strictly greater than `threshold`, preserving original o...",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 746,
+    "completion_tokens": 28,
+    "total_tokens": 994,
+    "prompt_tokens_details": {
+      "text_tokens": 746,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 220,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 22120000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

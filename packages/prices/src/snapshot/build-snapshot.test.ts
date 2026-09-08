@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ModelRegistryEntry, PriceSnapshot } from "@touchstone/sdk";
-import { flagSubsidised, buildPriceSnapshotFromOpenRouter, mergeSnapshots } from "./build-snapshot.js";
+import {
+  flagSubsidised,
+  buildPriceSnapshotFromOpenRouter,
+  buildPriceSnapshotFromLiteLLM,
+  mergeSnapshots,
+} from "./build-snapshot.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -57,6 +62,58 @@ describe("buildPriceSnapshotFromOpenRouter", () => {
     expect(byId["llama-host-a"].price_in_usd_per_1m).not.toBe(
       byId["llama-host-b"].price_in_usd_per_1m,
     );
+  });
+});
+
+describe("buildPriceSnapshotFromLiteLLM", () => {
+  it("matches an xAI entry via the xai/ prefix, without needing model_string itself prefixed", async () => {
+    // Found live, 2026-09-08, admitting grok-4.6: LiteLLM keys every xAI entry "xai/<model>"
+    // (unlike Anthropic/OpenAI/Google, which match bare) — registryEntry.model_string must stay
+    // the bare form regardless, since it's also the real API call's own "model" field, which
+    // xAI's endpoint doesn't understand the "xai/" prefix for.
+    const registry: ModelRegistryEntry[] = [
+      {
+        id: "grok-4.6",
+        provider: "xai",
+        endpoint: "https://api.x.ai/v1/chat/completions",
+        model_string: "grok-4.6",
+        tier: "frontier",
+        open_weights: false,
+        host: "xai",
+      },
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          "xai/grok-4.6": { input_cost_per_token: 0.000002, output_cost_per_token: 0.000006 },
+        }),
+      })),
+    );
+
+    const { snapshot: result, unmatched } = await buildPriceSnapshotFromLiteLLM(registry, "t", "t");
+    expect(unmatched).toEqual([]);
+    expect(result.entries[0].price_in_usd_per_1m).toBe("2");
+    expect(result.entries[0].price_out_usd_per_1m).toBe("6");
+  });
+
+  it("still reports a genuinely absent model as unmatched, never fabricating a price", async () => {
+    const registry: ModelRegistryEntry[] = [
+      {
+        id: "nowhere",
+        provider: "xai",
+        endpoint: "https://api.x.ai/v1/chat/completions",
+        model_string: "grok-nonexistent",
+        tier: "frontier",
+        open_weights: false,
+        host: "xai",
+      },
+    ];
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({}) })));
+    const { unmatched } = await buildPriceSnapshotFromLiteLLM(registry, "t", "t");
+    expect(unmatched).toEqual(["nowhere"]);
   });
 });
 

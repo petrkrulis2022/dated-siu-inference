@@ -1,0 +1,39 @@
+{
+  "id": "b90e6094-7f84-9b8d-9b19-be429fc80c3a",
+  "object": "chat.completion",
+  "created": 1788881813,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"tracking_id\": \"SH-BE0F7A\",\n  \"origin_city\": \"Lisbon\",\n  \"destination_city\": \"Gdansk\",\n  \"weight_kg\": 75,\n  \"status\": \"pending\",\n  \"priority\": \"standard\"\n}",
+        "reasoning_content": "The user wants me to extract a shipment record from the operations report into a JSON object matching the given schema.\n",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1538,
+    "completion_tokens": 64,
+    "total_tokens": 1865,
+    "prompt_tokens_details": {
+      "text_tokens": 1538,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 263,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 50380000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

@@ -18,9 +18,16 @@ type PriceEntry = PriceSnapshot["entries"][number];
 function litellmLookup(map: LiteLLMPriceMap, modelString: string) {
   // LiteLLM's key naming is inconsistent with OpenRouter's slugs — some match exactly,
   // some are prefixed with "openrouter/", most aren't matchable by pattern at all. Try
-  // the two patterns that are actually reliable; report anything else as unmatched
-  // rather than guessing with fuzzy string similarity.
-  return map[modelString] ?? map[`openrouter/${modelString}`];
+  // the patterns that are actually reliable; report anything else as unmatched rather
+  // than guessing with fuzzy string similarity.
+  //
+  // "xai/" added 2026-09-08, confirmed live: every xAI entry in LiteLLM's real price map
+  // (grok-4.6 included) is keyed "xai/<model>", unlike Anthropic/OpenAI/Google's entries,
+  // which match bare. registryEntry.model_string must stay the bare form regardless — it's
+  // also what's sent as the real API call's own "model" field (packages/harness/src/
+  // adapters/openai-compatible.ts), and xAI's endpoint doesn't understand LiteLLM's
+  // "xai/" prefix — so the prefix is tried only here, in the lookup, never in the registry.
+  return map[modelString] ?? map[`openrouter/${modelString}`] ?? map[`xai/${modelString}`];
 }
 
 export async function buildPriceSnapshotFromOpenRouter(
