@@ -1,6 +1,6 @@
 {
   "version": "SIU-2026a",
-  "print_id": "2026-09-08",
+  "print_id": "2026-09-08-commodity",
   "date": "2026-09-08",
   "status": "provisional",
   "basket_costs": [
@@ -19,18 +19,6 @@
     {
       "model_id": "qwen-2.5-72b-instruct",
       "cost_usd": "0.002507"
-    },
-    {
-      "model_id": "gpt-5.1",
-      "cost_usd": "0.009168"
-    },
-    {
-      "model_id": "gemini-3.1-pro-preview",
-      "cost_usd": "0.013990"
-    },
-    {
-      "model_id": "gpt-5.4-mini",
-      "cost_usd": "0.005314"
     }
   ],
   "weights": {
@@ -38,106 +26,70 @@
     "values": [
       {
         "model_id": "deepseek-v3.2",
-        "weight": "0.142857"
+        "weight": "0.250000"
       },
       {
         "model_id": "llama-3.3-70b-deepinfra",
-        "weight": "0.142857"
+        "weight": "0.250000"
       },
       {
         "model_id": "mistral-small-3.2-24b-instruct",
-        "weight": "0.142857"
+        "weight": "0.250000"
       },
       {
         "model_id": "qwen-2.5-72b-instruct",
-        "weight": "0.142857"
-      },
-      {
-        "model_id": "gpt-5.1",
-        "weight": "0.142857"
-      },
-      {
-        "model_id": "gemini-3.1-pro-preview",
-        "weight": "0.142857"
-      },
-      {
-        "model_id": "gpt-5.4-mini",
-        "weight": "0.142857"
+        "weight": "0.250000"
       }
     ]
   },
-  "dated_siu": "0.0049",
+  "dated_siu": "0.0014",
   "exchange_rate_table": [
     {
       "model_id": "deepseek-v3.2",
       "usd_per_siu": "0.0018",
-      "spread_to_index": "-0.6281",
+      "spread_to_index": "0.2773",
       "siu_per_usd": "551.1"
     },
     {
       "model_id": "llama-3.3-70b-deepinfra",
       "usd_per_siu": "0.0007",
-      "spread_to_index": "-0.8550",
+      "spread_to_index": "-0.5019",
       "siu_per_usd": "1413.1"
     },
     {
       "model_id": "mistral-small-3.2-24b-instruct",
       "usd_per_siu": "0.0007",
-      "spread_to_index": "-0.8661",
+      "spread_to_index": "-0.5402",
       "siu_per_usd": "1531.1"
     },
     {
       "model_id": "qwen-2.5-72b-instruct",
       "usd_per_siu": "0.0025",
-      "spread_to_index": "-0.4862",
+      "spread_to_index": "0.7648",
       "siu_per_usd": "398.8"
-    },
-    {
-      "model_id": "gpt-5.1",
-      "usd_per_siu": "0.0092",
-      "spread_to_index": "0.8790",
-      "siu_per_usd": "109.0"
-    },
-    {
-      "model_id": "gemini-3.1-pro-preview",
-      "usd_per_siu": "0.0140",
-      "spread_to_index": "1.8674",
-      "siu_per_usd": "71.4"
-    },
-    {
-      "model_id": "gpt-5.4-mini",
-      "usd_per_siu": "0.0053",
-      "spread_to_index": "0.0890",
-      "siu_per_usd": "188.1"
     }
   ],
   "sensitivity_block": [
     {
       "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
-      "dated_siu": "0.0033",
-      "delta": "-0.3197",
+      "dated_siu": "0.0009",
+      "delta": "-0.3318",
       "applies_to": [
         "deepseek-v3.2",
         "llama-3.3-70b-deepinfra",
         "mistral-small-3.2-24b-instruct",
-        "qwen-2.5-72b-instruct",
-        "gpt-5.1",
-        "gemini-3.1-pro-preview",
-        "gpt-5.4-mini"
+        "qwen-2.5-72b-instruct"
       ]
     },
     {
       "policy_variant": "batch-discount: 50% off input and output",
-      "dated_siu": "0.0024",
+      "dated_siu": "0.0007",
       "delta": "-0.5000",
       "applies_to": [
         "deepseek-v3.2",
         "llama-3.3-70b-deepinfra",
         "mistral-small-3.2-24b-instruct",
-        "qwen-2.5-72b-instruct",
-        "gpt-5.1",
-        "gemini-3.1-pro-preview",
-        "gpt-5.4-mini"
+        "qwen-2.5-72b-instruct"
       ]
     }
   ],
@@ -151,15 +103,16 @@
     "siu_per_usd_mode": "ROUND_DOWN",
     "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. basket_cost carries more decimal places than dated_siu so the published print is reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
   },
-  "cost_of_production_usd": "0.5539",
+  "cost_of_production_usd": "0.0920",
   "price_snapshot_ref": "price-snapshot-merged-2026-09-08T01-00-10.620Z.json",
   "methodology_version": "v0-draft",
-  "signature": "0x50048f882ea349ce25fa42de0304bcaa7d223aaf39d0486e3b284fc946e4dd1e51b1df559606a2fb8076310ec8b26828c779d7dc782a742b1936cccc9620f0aa",
+  "series": "commodity",
+  "signature": "0x502c90f519f2962faada27fbaeb3541eab91fee3a6dc6a53b8171d4411d6d40a28ab5e71a43fb9df3681192578684149df3193f3dd0c9df5c94508cebcba137e",
   "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
   "anchor": {
     "chain": "base-sepolia",
     "status": "anchored",
-    "tx_hash": "0x24d4877747f124463eb1b8660ffb88184f34777e7badf44c110845cd3ceb0b5a",
-    "posted_at": "2026-09-08T01:03:40.000Z"
+    "tx_hash": "0x3aac4e09c78bd069e79e3c249b9edae6c6a588bd18e345bb32c06e5fd53c8652",
+    "posted_at": "2026-09-08T01:03:44.000Z"
   }
 }
