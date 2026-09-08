@@ -152,6 +152,10 @@ if (constituentChanges.length > 0) {
 }
 
 const allModelIds = models.map((m) => m.model_id);
+// Computed here, before the blend's own publishPrint call, so TierCollapseError (publish.ts) can
+// gate the blend on each tier's own qualifying count, not just the overall one — found live,
+// 2026-09-08. Reused below for the tier-series loop.
+const openWeightsById = new Map(registry.map((r) => [r.id, r.open_weights]));
 const result = await publishPrint(printsDir(), {
   version: BASKET_VERSION,
   print_id: printId,
@@ -168,6 +172,7 @@ const result = await publishPrint(printsDir(), {
   attestationClient,
   runsDirPath: runsDirFor(printId),
   constituentChanges,
+  openWeightsById,
   sensitivityVariants: [
     cachePolicyVariant({
       cachedFraction: "0.40",
@@ -190,7 +195,7 @@ console.log(`Anchor: ${result.anchor.status} (${result.anchor.chain})`);
 // script before reaching here). Each tier is fully independent of the other: a tier that
 // doesn't (yet) have MINIMUM_QUALIFYING_MODELS of its own constituents logs a plain, expected
 // skip — never blocks the other tier, never fails this script.
-const openWeightsById = new Map(registry.map((r) => [r.id, r.open_weights]));
+// (openWeightsById itself is computed above, before the blend's own publishPrint call.)
 const tierGroups: {
   series: "commodity" | "frontier";
   seriesModels: typeof models;

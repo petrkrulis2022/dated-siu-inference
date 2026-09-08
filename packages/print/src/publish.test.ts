@@ -11,6 +11,7 @@ import {
   publishPrint,
   MINIMUM_QUALIFYING_MODELS,
   QualifyingSetError,
+  TierCollapseError,
   type PublishInput,
   type PriorAttempt,
 } from "./publish.js";
@@ -179,6 +180,92 @@ describe("publishPrint", () => {
     expect(qsErr.qualifying).toBe(3);
     expect(qsErr.registered).toBe(3);
     expect(qsErr.costUsd).toMatch(/^\d+(\.\d+)?$/);
+  });
+
+  describe("the per-tier gate (TierCollapseError)", () => {
+    // A, B, C, E all qualify cleanly (E is a clone of A — see extraQualifyingModel); D fails its
+    // T3 class by the fixture's own design. Assigning A/B/C/E to commodity and D alone to
+    // frontier reproduces the exact shape of the live 2026-09-08 incident in miniature: the
+    // overall qualifying count (4) clears MINIMUM_QUALIFYING_MODELS on its own, so the existing
+    // overall gate would pass this — only the per-tier check catches that frontier collapsed to
+    // zero qualifying constituents.
+    function collapsedFrontierInput(overrides: Partial<PublishInput> = {}): PublishInput {
+      return publishInput({
+        openWeightsById: new Map([
+          ["A", true],
+          ["B", true],
+          ["C", true],
+          ["D", false],
+          ["E", true],
+        ]),
+        ...overrides,
+      });
+    }
+
+    it("refuses to publish the blend when one tier's own qualifying count collapses below the minimum, even though the overall count clears it", async () => {
+      const err = await publishPrint(dir, collapsedFrontierInput()).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(TierCollapseError);
+      const tcErr = err as TierCollapseError;
+      expect(tcErr.tier).toBe("frontier");
+      expect(tcErr.qualifying).toBe(0);
+      expect(tcErr.registered).toBe(1);
+      expect(tcErr.message).toContain("a measurement of a different market");
+
+      // A refusal is total — nothing was written, no signature, no anchor attempt, same as
+      // every other publishPrint refusal.
+      const { readdir } = await import("node:fs/promises");
+      expect(await readdir(dir).catch(() => [])).toEqual([]);
+    });
+
+    it("publishes normally when every tier with any registered constituents independently clears the minimum", async () => {
+      // D fails (frontier), so frontier needs 4 more clean-passing members of its own —
+      // F/G/H/I — on top of it to clear MINIMUM_QUALIFYING_MODELS.
+      const base = publishInput();
+      const frontierFillers = ["F", "G", "H", "I"].map(extraQualifyingModel);
+      const input = collapsedFrontierInput({
+        models: [...base.models, ...frontierFillers],
+        openWeightsById: new Map([
+          ["A", true],
+          ["B", true],
+          ["C", true],
+          ["D", false],
+          ["E", true],
+          ["F", false],
+          ["G", false],
+          ["H", false],
+          ["I", false],
+        ]),
+      });
+      const result = await publishPrint(dir, input);
+      expect(result.print.dated_siu).toBeTruthy();
+    });
+
+    it("does not gate a tier with zero registered constituents — a registry era where that tier never existed is not a collapse", async () => {
+      const input = publishInput({
+        openWeightsById: new Map([
+          ["A", true],
+          ["B", true],
+          ["C", true],
+          ["D", true],
+          ["E", true],
+        ]),
+      });
+      const result = await publishPrint(dir, input);
+      expect(result.print.dated_siu).toBeTruthy();
+    });
+
+    it("does not apply the per-tier check to a standalone tier print (series set) — already single-tier by construction", async () => {
+      const input = collapsedFrontierInput({ series: "commodity" });
+      // The overall gate still applies (only A, B, C, E qualify — 4, clearing the minimum), but
+      // TierCollapseError must never fire for a series-scoped publish.
+      const result = await publishPrint(dir, input);
+      expect(result.print.series).toBe("commodity");
+    });
+
+    it("does not apply the per-tier check when openWeightsById is omitted — backward compatible with fixtures that don't care about tiers", async () => {
+      const result = await publishPrint(dir, publishInput());
+      expect(result.print.dated_siu).toBeTruthy();
+    });
   });
 
   it("refuses to publish when the anchor transaction fails, writing nothing", async () => {

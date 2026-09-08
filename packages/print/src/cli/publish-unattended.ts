@@ -229,6 +229,11 @@ if (constituentChanges.length > 0) {
 }
 
 const allModelIds = models.map((m) => m.model_id);
+// Computed here, before the blend's own publishPrint call, so TierCollapseError (publish.ts) can
+// gate the blend on each tier's own qualifying count, not just the overall one — found live,
+// 2026-09-08: Frontier SIU's standalone gate correctly declined that day while the blend
+// published anyway on the same underlying tier collapse. Reused below for the tier-series loop.
+const openWeightsById = new Map(registry.map((r) => [r.id, r.open_weights]));
 try {
   const result = await publishPrint(printsDir(), {
     version: BASKET_VERSION,
@@ -248,6 +253,7 @@ try {
     runsDirPath: runsDirFor(printId),
     priorAttempts,
     constituentChanges,
+    openWeightsById,
     sensitivityVariants: [
       cachePolicyVariant({
         cachedFraction: "0.40",
@@ -271,7 +277,8 @@ try {
   // doesn't (yet) have MINIMUM_QUALIFYING_MODELS of its own constituents logs a plain,
   // expected skip — never an incident, never a retry trigger, never blocks the other tier —
   // §4a's own "once the reference set is large enough" gate is exactly that guard, reused.
-  const openWeightsById = new Map(registry.map((r) => [r.id, r.open_weights]));
+  // (openWeightsById itself is computed above, before the blend's own publishPrint call, so
+  // TierCollapseError can use it too.)
   const tierGroups: {
     series: "commodity" | "frontier";
     seriesModels: typeof models;

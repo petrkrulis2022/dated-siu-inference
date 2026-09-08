@@ -53,6 +53,33 @@ export class QualifyingSetError extends Error {
   }
 }
 
+/**
+ * Found live, 2026-09-08: seven of nine registered models qualified — comfortably above
+ * MINIMUM_QUALIFYING_MODELS overall — but both lost constituents were the entire frontier tier's
+ * priciest members, and Frontier SIU's own standalone gate correctly declined to publish that
+ * day (3 of 5 qualifying, below its own minimum) while the blend published anyway, on the exact
+ * same underlying tier collapse. A blend that has lost an entire tier is not a thinner
+ * measurement of the same market, it is a measurement of a different one — the ~33% Dated SIU
+ * drop that incident produced read as a market move, when it was two constituents vanishing to a
+ * provider outage. Declining to publish is the honest failure; that misleading drop is the
+ * alternative. See docs/methodology.md's Index governance for the full incident record.
+ */
+export class TierCollapseError extends Error {
+  constructor(
+    public readonly tier: "frontier" | "commodity",
+    public readonly qualifying: number,
+    public readonly registered: number,
+  ) {
+    super(
+      `Refusing to publish: only ${qualifying} of ${registered} ${tier}-tier models qualified ` +
+        `(minimum ${MINIMUM_QUALIFYING_MODELS}) — the overall qualifying count is high enough, but ` +
+        `a blend that has lost an entire tier is a measurement of a different market, not a ` +
+        `thinner measurement of the same one. See methodology.md's registry inclusion policy.`,
+    );
+    this.name = "TierCollapseError";
+  }
+}
+
 export interface PriorAttempt {
   attempted_at: string;
   reason: string;
@@ -164,6 +191,13 @@ export interface PublishInput extends Omit<PrintInput, "status"> {
    * computation starts, unlike superseded_by/anchor), so part of the signed body — see
    * print.schema.json. */
   series?: "frontier" | "commodity";
+  /** Every registry model's own tier, keyed by model id — used only when `series` is absent
+   * (the blend), to additionally require each tier to independently clear
+   * MINIMUM_QUALIFYING_MODELS, not just the overall count (see TierCollapseError). Omit for a
+   * standalone tier print (already single-tier by construction — this would be redundant with
+   * its own overall check) or a synthetic-fixture unit test that doesn't care about tiers. Real
+   * CLI callers always pass it, built from the same registry they already load. */
+  openWeightsById?: Map<string, boolean>;
 }
 
 export interface PublishResult {
@@ -220,9 +254,38 @@ export async function publishPrint(printsDir: string, input: PublishInput): Prom
 
   // Refuse before signing or anchoring — a print below the floor should never spend anchor gas
   // or produce a signed artifact in the first place, not just fail some later review.
-  const qualifying = [...body.basket_costs].filter((m) => m.cost_usd !== undefined).length;
-  if (qualifying < MINIMUM_QUALIFYING_MODELS) {
-    throw new QualifyingSetError(qualifying, body.basket_costs.length, body.cost_of_production_usd);
+  const qualifyingIds = [...body.basket_costs]
+    .filter((m) => m.cost_usd !== undefined)
+    .map((m) => m.model_id);
+  if (qualifyingIds.length < MINIMUM_QUALIFYING_MODELS) {
+    throw new QualifyingSetError(
+      qualifyingIds.length,
+      body.basket_costs.length,
+      body.cost_of_production_usd,
+    );
+  }
+
+  // The overall count above can pass while one tier has quietly collapsed underneath it — found
+  // live, 2026-09-08 (TierCollapseError's own doc comment has the incident). Only meaningful for
+  // the blend (a standalone tier print is already single-tier, checked by the gate above); only
+  // gates a tier that has at least one registered constituent, so a registry era with no
+  // frontier constituents at all (this project's own real history before 2026-08-30) is never
+  // retroactively invalid — a tier that was never part of the registry isn't one the blend can
+  // be said to have "lost."
+  if (!input.series && input.openWeightsById) {
+    for (const wantOpenWeights of [true, false] as const) {
+      const tier = wantOpenWeights ? "commodity" : "frontier";
+      const registeredInTier = [...input.openWeightsById.values()].filter(
+        (ow) => ow === wantOpenWeights,
+      ).length;
+      if (registeredInTier === 0) continue;
+      const qualifyingInTier = qualifyingIds.filter(
+        (id) => input.openWeightsById!.get(id) === wantOpenWeights,
+      ).length;
+      if (qualifyingInTier < MINIMUM_QUALIFYING_MODELS) {
+        throw new TierCollapseError(tier, qualifyingInTier, registeredInTier);
+      }
+    }
   }
 
   // Same "refuse before signing or anchoring" shape as the qualifying-set gate above — a

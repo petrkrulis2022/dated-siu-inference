@@ -782,14 +782,36 @@ never requiring a re-sign), rendered prominently on the print's own page. Applie
 from 2026-09-07's print is not a market move: it is the mechanical consequence of an
 equal-weighted average losing its two most expensive constituents to a provider outage.
 
-This incident also exposed a real gap in gate design, not only disclosure, worth recording even
-though not yet resolved: `MINIMUM_QUALIFYING_MODELS` gates the blended print's *overall* qualifying
-count only. Frontier SIU correctly declined to publish that day (3 of its own 5 constituents
-qualified, below its own minimum of 4 — the tier-specific gate already applied to standalone tier
-prints) — but the blend has no equivalent check on its own tier *composition*, so it published
-while its reference set quietly shifted from a genuine frontier/commodity blend toward an
-overwhelmingly commodity-weighted one. Whether the blend's own gate should also require each tier
-to independently clear its minimum is an open question, tracked for resolution before it recurs.
+**This incident also exposed a real gap in gate design, not only disclosure — since fixed.**
+`MINIMUM_QUALIFYING_MODELS` gated the blended print's *overall* qualifying count only. Frontier
+SIU correctly declined to publish that day (3 of its own 5 constituents qualified, below its own
+minimum of 4 — the tier-specific gate already applied to standalone tier prints) — but the blend
+had no equivalent check on its own tier *composition*, so it published while its reference set
+quietly shifted from a genuine frontier/commodity blend toward an overwhelmingly
+commodity-weighted one, on the exact same underlying tier collapse Frontier SIU's own gate had
+already caught. Verified directly against the real 2026-09-08 data: applied retroactively for
+confirmation only, this rule would have refused that print outright (frontier: 3 of 5, below the
+minimum) — the clearest possible demonstration that the gate was missing, not merely imperfect.
+
+**The rule, stated plainly, because it changes behaviour materially:** a blend that has lost an
+entire tier is not a thinner measurement of the same market, it is a measurement of a different
+one. Publishing it as though the series continued is exactly what produced the misleading ~33%
+drop this incident describes. Declining to publish is the honest failure; that drop was the
+alternative. `publishPrint` (`packages/print/src/publish.ts`) now requires each tier — commodity
+(`open_weights: true`) and frontier (`open_weights: false`) — to independently clear
+`MINIMUM_QUALIFYING_MODELS` before the blend publishes at all, reusing the exact same threshold
+and mechanism the standalone tier prints already use (`TierCollapseError`), not a new number. A
+tier with zero *registered* constituents is never gated by this — a registry era where a tier
+never existed (this project's own real history before 2026-08-30, commodity-only) is not a tier
+that was "lost."
+
+**The consequence, accepted deliberately, not a side effect to discover later:** the series will
+have more gaps. Any provider outage affecting one tier now stops the headline print, not just
+that tier's own standalone print. With five frontier constituents today, losing any two of them
+for any reason — an outage, a removal, a quality-gate failure — blocks the blend entirely, even
+though the overall registry would otherwise comfortably clear the minimum. That is the correct
+trade, not a defect to work around: the alternative is publishing a number that misleads. The
+answer to a thin tier is expanding the registry, never loosening the gate.
 
 ---
 
