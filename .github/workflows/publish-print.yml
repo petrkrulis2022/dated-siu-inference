@@ -100,6 +100,13 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          # xAI adapter (packages/harness/src/adapters/openai-compatible.ts) — grok-4.6 admitted
+          # to the registry 2026-09-08 (data/registry/models.json). Missed on that same commit:
+          # this workflow's env block wasn't updated, so the 2026-09-09 automated run failed with
+          # "No adapter for provider \"xai\": XAI_API_KEY not set" on the first Grok instance.
+          # Requires XAI_API_KEY to actually be added as a repo secret (Settings → Secrets and
+          # variables → Actions) — this line alone doesn't create it.
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           PUBLISH_SPEND_CEILING_USD: ${{ vars.PUBLISH_SPEND_CEILING_USD }}
           PRINT_ID: ${{ steps.resolve.outputs.print_id }}
         run: |
