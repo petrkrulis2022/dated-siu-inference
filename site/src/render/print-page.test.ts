@@ -352,6 +352,91 @@ describe("renderPrintPage", () => {
     expect(html).not.toContain("Registry changed");
   });
 
+  it("quantifies the compositional vs. continuous split when the previous print's basket_costs are available", () => {
+    // A and B are continuous (previous 0.001/0.003 -> current 0.002/0.004, real drift +$0.0010
+    // on their own equal-weighted mean); C is newly admitted at 0.012. dated_siu moves
+    // 0.0020 -> 0.0060 (+$0.0040 total), so the compositional remainder is +$0.0030.
+    const html = renderPrintPage({
+      print: basePrint({
+        print_id: "2026-08-15",
+        date: "2026-08-15",
+        dated_siu: "0.0060",
+        constituent_changes: [{ model_id: "C", change: "admitted" }],
+        basket_costs: [
+          { model_id: "A", cost_usd: "0.002" },
+          { model_id: "B", cost_usd: "0.004" },
+          { model_id: "C", cost_usd: "0.012" },
+        ],
+      }),
+      allPrints: [
+        {
+          print_id: "2026-08-14",
+          date: "2026-08-14",
+          status: "provisional",
+          dated_siu: "0.0020",
+          basket_costs: [
+            { model_id: "A", cost_usd: "0.001" },
+            { model_id: "B", cost_usd: "0.003" },
+          ],
+        },
+        { print_id: "2026-08-15", date: "2026-08-15", status: "provisional", dated_siu: "0.0060" },
+      ],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).toContain("admitted: C");
+    expect(html).toContain("Of the $0.0040 move since the previous print,");
+    expect(html).toContain("+$0.0030 is attributable to this composition change and");
+    expect(html).toContain("+$0.0010 to movement among the 2");
+    expect(html).toContain("a mechanical split, not a judgement of cause");
+  });
+
+  it("falls back to the names-only registry-change notice when no previous print is supplied", () => {
+    const html = renderPrintPage({
+      print: basePrint({
+        constituent_changes: [{ model_id: "C", change: "admitted" }],
+      }),
+      allPrints: [],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).toContain("admitted: C");
+    expect(html).not.toContain("is attributable to this composition change");
+  });
+
+  it("degrades gracefully to the names-only notice when nothing is continuous between the two prints", () => {
+    // The previous print's only constituent (Z) doesn't appear in the current print at all —
+    // continuousIds is empty, so there is nothing to compute a drift/compositional split from.
+    const html = renderPrintPage({
+      print: basePrint({
+        print_id: "2026-08-15",
+        date: "2026-08-15",
+        constituent_changes: [
+          { model_id: "C", change: "admitted" },
+          { model_id: "Z", change: "removed" },
+        ],
+      }),
+      allPrints: [
+        {
+          print_id: "2026-08-14",
+          date: "2026-08-14",
+          status: "provisional",
+          dated_siu: "0.0020",
+          basket_costs: [{ model_id: "Z", cost_usd: "0.002" }],
+        },
+        { print_id: "2026-08-15", date: "2026-08-15", status: "provisional", dated_siu: "0.0019" },
+      ],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).toContain("admitted: C");
+    expect(html).toContain("removed: Z");
+    expect(html).not.toContain("is attributable to this composition change");
+  });
+
   it("links an anchored tx to the chain's block explorer, not a plain unlinked string", () => {
     const html = renderPrintPage({
       print: basePrint({

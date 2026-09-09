@@ -107,6 +107,7 @@ async function main(): Promise<void> {
     superseded_by: p.superseded_by,
     constituent_changes: p.constituent_changes,
     series: p.series,
+    basket_costs: p.basket_costs,
   });
   const allPrints: PrintIndexEntry[] = prints.map(toIndexEntry);
   const commodityIndexEntries = commodityPrints.map(toIndexEntry);

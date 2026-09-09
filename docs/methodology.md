@@ -622,6 +622,19 @@ commodity constituents — 43% of constituents (3 of 7) producing roughly 89% of
 cost that `dated_siu` is computed from. This is disclosed on the print page itself (computed live
 from that print's own `basket_costs`, not hand-written per print), not only here.
 
+**A registry composition change is quantified on the print that carries it, not just named.**
+Alongside the admitted/removed model list (Registry inclusion policy's constituent-change rule,
+above), the print page splits the move against the previous print into two mechanical components,
+computed live from both prints' own `basket_costs` — a compositional share (attributable to the
+admitted/removed constituents) and a continuous share (movement among constituents present in
+both prints), using the same equal-weighting formula the print itself uses, restricted to the
+qualifying set both prints share. The two always sum to the real observed move by construction.
+This deliberately stops short of naming a cause: it states what moved and by how much, never why —
+a mechanical split can't distinguish an actual market move from, say, a pricing-formula fix
+reaching a constituent for the first time. When that distinction matters, it's made in prose, in a
+`correction_notes` entry (Index governance, below) — see 2026-09-08's, which does exactly this for
+the reasoning-token pricing fix's first appearance in the very next print.
+
 **Routed-market-share weighting: investigated and rejected as unavailable, not merely deferred.**
 OpenRouter publishes a real, public Data API (`/api/v1/datasets/rankings-daily`, CC BY 4.0,
 live-updating per-model daily token totals) that looked, at first, like exactly the missing input.

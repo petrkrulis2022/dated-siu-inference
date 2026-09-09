@@ -13,6 +13,11 @@ export interface PrintIndexEntry {
   constituent_changes?: { model_id: string; change: "admitted" | "removed" }[];
   /** Absent means the blended Dated SIU itself — see print.schema.json's series field. */
   series?: "frontier" | "commodity";
+  /** Carried through so a later print's page can quantify how much of its move against this one
+   * is compositional (admitted/removed constituents) vs. movement among constituents present in
+   * both — see print-page.ts's renderConstituentChangesNotice. Optional for the same reason every
+   * other field here is: an entry built before this field existed must stay valid. */
+  basket_costs?: Print["basket_costs"];
 }
 
 /** Every published print, oldest first. Renders directly from data/prints/ — build1-spec.md §7. */

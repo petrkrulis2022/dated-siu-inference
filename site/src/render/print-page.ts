@@ -1,4 +1,5 @@
 import type { Print } from "@touchstone/sdk";
+import { computeDatedSiu, D, resolveWeights, type DecimalValue } from "@touchstone/print";
 import type { ChainInfo, PrintIndexEntry } from "../data.js";
 import { esc, formatDate, percent, truncateHex, usd } from "../format.js";
 import { buildVerifyInfo } from "../verify.js";
@@ -273,13 +274,67 @@ function renderPriorAttemptsNotice(print: Print): string {
   </div>`;
 }
 
+/** "+$0.0009" / "-$0.0002" — percent()'s sign convention (leading sign outside the currency
+ * symbol), applied to a DecimalValue instead of a ratio string. */
+function signedUsd(delta: DecimalValue): string {
+  const s = delta.toFixed(4);
+  return s.startsWith("-") ? `-$${s.slice(1)}` : `+$${s}`;
+}
+
+/**
+ * Splits a composition-changing print's move against the previous one into a compositional
+ * component (attributable to the admitted/removed constituents themselves) and a continuous
+ * component (movement among constituents present in both prints), computed live from both
+ * prints' own basket_costs via @touchstone/print's own aggregation (the same equal-weighting
+ * formula the print itself uses, restricted to the qualifying set both prints share) — never
+ * hand-written per print, so it can't go stale the way a prose figure would.
+ *
+ * totalDelta = driftDelta + compositionalDelta always holds by construction (a telescoping
+ * identity: compositionalDelta is defined as whatever's left after subtracting driftDelta from
+ * the real observed move), so this generalises correctly to any mix of admissions and removals.
+ * Deliberately does NOT attribute the move to any one admitted/removed model individually — with
+ * more than one change in the same print that split is order-dependent (there's no canonical
+ * order to attribute a nonlinear mean across), so this states only the two-way split.
+ *
+ * Deliberately neutral wording, and deliberately not "market signal": a compositional split
+ * can't distinguish an actual market move from, say, a pricing-formula fix landing — see
+ * docs/methodology.md's Index governance and, for a concrete instance, 2026-09-08's
+ * correction_notes, which is where that distinction, when it applies, is actually made in prose.
+ */
+function computeCompositionalSplit(print: Print, previous?: PrintIndexEntry): string {
+  if (!previous?.basket_costs) return "";
+  const withCost = (bc: Print["basket_costs"][number]): bc is typeof bc & { cost_usd: string } =>
+    bc.cost_usd !== undefined;
+  const prevMap = new Map(
+    previous.basket_costs.filter(withCost).map((b) => [b.model_id, new D(b.cost_usd)]),
+  );
+  const currMap = new Map(
+    print.basket_costs.filter(withCost).map((b) => [b.model_id, new D(b.cost_usd)]),
+  );
+  const continuousIds = [...prevMap.keys()].filter((id) => currMap.has(id));
+  if (continuousIds.length === 0) return "";
+
+  const { weights: contWeights } = resolveWeights(continuousIds);
+  const prevContinuous = computeDatedSiu(prevMap, contWeights);
+  const currContinuous = computeDatedSiu(currMap, contWeights);
+  const totalDelta = new D(print.dated_siu).minus(new D(previous.dated_siu));
+  const driftDelta = currContinuous.minus(prevContinuous);
+  const compositionalDelta = totalDelta.minus(driftDelta);
+  const plural = continuousIds.length === 1 ? "" : "s";
+
+  return ` Of the ${esc(usd(totalDelta.abs().toFixed(4)))} move since the previous print,
+    ${esc(signedUsd(compositionalDelta))} is attributable to this composition change and
+    ${esc(signedUsd(driftDelta))} to movement among the ${continuousIds.length}
+    constituent${plural} present in both prints — a mechanical split, not a judgement of cause.`;
+}
+
 /**
  * The registry inclusion policy requires a constituent change to be announced ahead of the
  * print it takes effect in — this is where a reader actually encounters that announcement,
  * not just in docs/methodology.md's prose. Without this, a reader six months from now sees the
  * headline figure jump between two consecutive prints with no explanation on the record itself.
  */
-function renderConstituentChangesNotice(print: Print): string {
+function renderConstituentChangesNotice(print: Print, previous?: PrintIndexEntry): string {
   if (!print.constituent_changes || print.constituent_changes.length === 0) return "";
   const admitted = print.constituent_changes.filter((c) => c.change === "admitted");
   const removed = print.constituent_changes.filter((c) => c.change === "removed");
@@ -292,7 +347,7 @@ function renderConstituentChangesNotice(print: Print): string {
   }
   return `<div class="change-note">
     <strong>Registry changed</strong> since the previous print — ${parts.join("; ")}. See the
-    registry inclusion policy in the methodology for why.
+    registry inclusion policy in the methodology for why.${computeCompositionalSplit(print, previous)}
   </div>`;
 }
 
@@ -354,7 +409,7 @@ export function renderPrintPage({
   ${renderCorrectionNotesNotice(print)}
   ${renderSupersessionNotice(print, basePath)}
   ${renderPriorAttemptsNotice(print)}
-  ${renderConstituentChangesNotice(print)}
+  ${renderConstituentChangesNotice(print, previous)}
   ${renderChangeNote(print, previous)}
   ${renderWeightingNotice(print)}
 </div>
