@@ -1,0 +1,39 @@
+{
+  "id": "52265659-baf4-9d09-8149-b34e3e162a00",
+  "object": "chat.completion",
+  "created": 1788932916,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```javascript\nexport function dedupeStable(nums) {\n  const seen = new Set();\n  return nums.filter((n) => {\n    if (seen.has(n)) return false;\n    seen.add(n);\n    return true;\n  });\n}\n```",
+        "reasoning_content": "The user wants a JavaScript function `dedupeStable(nums)` that removes duplicates while keeping first occurrences and original order.\n",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 734,
+    "completion_tokens": 55,
+    "total_tokens": 1081,
+    "prompt_tokens_details": {
+      "text_tokens": 734,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 292,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 27820000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

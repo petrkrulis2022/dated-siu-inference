@@ -1,25 +1,9 @@
 {
   "version": "SIU-2026a",
-  "print_id": "2026-09-09",
+  "print_id": "2026-09-09-frontier",
   "date": "2026-09-09",
   "status": "provisional",
   "basket_costs": [
-    {
-      "model_id": "deepseek-v3.2",
-      "cost_usd": "0.001814"
-    },
-    {
-      "model_id": "llama-3.3-70b-deepinfra",
-      "cost_usd": "0.000707"
-    },
-    {
-      "model_id": "mistral-small-3.2-24b-instruct",
-      "cost_usd": "0.000652"
-    },
-    {
-      "model_id": "qwen-2.5-72b-instruct",
-      "cost_usd": "0.002504"
-    },
     {
       "model_id": "claude-sonnet-5",
       "cost_usd": "0.023369"
@@ -49,120 +33,76 @@
     "source": "equal",
     "values": [
       {
-        "model_id": "deepseek-v3.2",
-        "weight": "0.100000"
-      },
-      {
-        "model_id": "llama-3.3-70b-deepinfra",
-        "weight": "0.100000"
-      },
-      {
-        "model_id": "mistral-small-3.2-24b-instruct",
-        "weight": "0.100000"
-      },
-      {
-        "model_id": "qwen-2.5-72b-instruct",
-        "weight": "0.100000"
-      },
-      {
         "model_id": "claude-sonnet-5",
-        "weight": "0.100000"
+        "weight": "0.166667"
       },
       {
         "model_id": "gpt-5.1",
-        "weight": "0.100000"
+        "weight": "0.166667"
       },
       {
         "model_id": "gemini-3.1-pro-preview",
-        "weight": "0.100000"
+        "weight": "0.166667"
       },
       {
         "model_id": "grok-4.6",
-        "weight": "0.100000"
+        "weight": "0.166667"
       },
       {
         "model_id": "claude-haiku-4-5",
-        "weight": "0.100000"
+        "weight": "0.166667"
       },
       {
         "model_id": "gpt-5.4-mini",
-        "weight": "0.100000"
+        "weight": "0.166667"
       }
     ]
   },
-  "dated_siu": "0.0089",
+  "dated_siu": "0.0138",
   "exchange_rate_table": [
-    {
-      "model_id": "deepseek-v3.2",
-      "usd_per_siu": "0.0018",
-      "spread_to_index": "-0.7952",
-      "siu_per_usd": "551.2"
-    },
-    {
-      "model_id": "llama-3.3-70b-deepinfra",
-      "usd_per_siu": "0.0007",
-      "spread_to_index": "-0.9202",
-      "siu_per_usd": "1415.0"
-    },
-    {
-      "model_id": "mistral-small-3.2-24b-instruct",
-      "usd_per_siu": "0.0007",
-      "spread_to_index": "-0.9264",
-      "siu_per_usd": "1534.5"
-    },
-    {
-      "model_id": "qwen-2.5-72b-instruct",
-      "usd_per_siu": "0.0025",
-      "spread_to_index": "-0.7174",
-      "siu_per_usd": "399.4"
-    },
     {
       "model_id": "claude-sonnet-5",
       "usd_per_siu": "0.0234",
-      "spread_to_index": "1.6376",
+      "spread_to_index": "0.6909",
       "siu_per_usd": "42.7"
     },
     {
       "model_id": "gpt-5.1",
       "usd_per_siu": "0.0090",
-      "spread_to_index": "0.0207",
+      "spread_to_index": "-0.3456",
       "siu_per_usd": "110.5"
     },
     {
       "model_id": "gemini-3.1-pro-preview",
       "usd_per_siu": "0.0204",
-      "spread_to_index": "1.3032",
+      "spread_to_index": "0.4765",
       "siu_per_usd": "49.0"
     },
     {
       "model_id": "grok-4.6",
       "usd_per_siu": "0.0171",
-      "spread_to_index": "0.9346",
+      "spread_to_index": "0.2402",
       "siu_per_usd": "58.3"
     },
     {
       "model_id": "claude-haiku-4-5",
       "usd_per_siu": "0.0076",
-      "spread_to_index": "-0.1370",
+      "spread_to_index": "-0.4468",
       "siu_per_usd": "130.7"
     },
     {
       "model_id": "gpt-5.4-mini",
       "usd_per_siu": "0.0053",
-      "spread_to_index": "-0.3998",
+      "spread_to_index": "-0.6152",
       "siu_per_usd": "188.0"
     }
   ],
   "sensitivity_block": [
     {
       "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
-      "dated_siu": "0.0063",
-      "delta": "-0.2898",
+      "dated_siu": "0.0099",
+      "delta": "-0.2869",
       "applies_to": [
-        "deepseek-v3.2",
-        "llama-3.3-70b-deepinfra",
-        "mistral-small-3.2-24b-instruct",
-        "qwen-2.5-72b-instruct",
         "claude-sonnet-5",
         "gpt-5.1",
         "gemini-3.1-pro-preview",
@@ -173,13 +113,9 @@
     },
     {
       "policy_variant": "batch-discount: 50% off input and output",
-      "dated_siu": "0.0044",
+      "dated_siu": "0.0069",
       "delta": "-0.5000",
       "applies_to": [
-        "deepseek-v3.2",
-        "llama-3.3-70b-deepinfra",
-        "mistral-small-3.2-24b-instruct",
-        "qwen-2.5-72b-instruct",
         "claude-sonnet-5",
         "gpt-5.1",
         "gemini-3.1-pro-preview",
@@ -199,18 +135,9 @@
     "siu_per_usd_mode": "ROUND_DOWN",
     "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. basket_cost carries more decimal places than dated_siu so the published print is reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
   },
-  "cost_of_production_usd": "1.4075",
+  "cost_of_production_usd": "1.3156",
   "price_snapshot_ref": "price-snapshot-merged-2026-09-09T05-45-49.291Z.json",
   "methodology_version": "v0-draft",
-  "prior_attempts": [
-    {
-      "attempted_at": "2026-09-09T04:34:29Z",
-      "reason": "No adapter for provider \"xai\": XAI_API_KEY not set",
-      "qualifying_models": 0,
-      "registered_models": 0,
-      "cost_usd": "0"
-    }
-  ],
   "constituent_changes": [
     {
       "model_id": "claude-sonnet-5",
@@ -225,12 +152,13 @@
       "change": "admitted"
     }
   ],
-  "signature": "0xfad1f9777c2003a65324d0658e6275fbca9977a726fddfa2630a3cf96fc9e70053bc490f8d6c8cd4ed0ebb224bbf15d28ea7b6963cf418aa4dce25fc18e870f7",
+  "series": "frontier",
+  "signature": "0xcd5b01d704977d1cd0a7bfb131cf5a6e412c1a8545ed12d5aa32f9f4a5a857bd7e1d15890e8cd85f731d9571ab9d91b797df9e20512b53ee6e41c911eff62778",
   "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
   "anchor": {
     "chain": "base-sepolia",
     "status": "anchored",
-    "tx_hash": "0x8abee0b88e18c464af0364dbf60e239839fa279a167226054c712529ea14b57f",
-    "posted_at": "2026-09-09T05:48:52.000Z"
+    "tx_hash": "0x099da87f9085db948917b5919d9098fe1de5c94e61c33464b26dfb301dafae43",
+    "posted_at": "2026-09-09T05:48:56.000Z"
   }
 }

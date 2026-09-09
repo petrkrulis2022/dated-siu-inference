@@ -1,0 +1,57 @@
+{
+  "snapshot_id": "2026-09-09T05:45:49.291Z",
+  "timestamp": "2026-09-09T05:45:49.291Z",
+  "source": "litellm",
+  "entries": [
+    {
+      "model_id": "deepseek-v3.2",
+      "price_in_usd_per_1m": "0.28",
+      "price_out_usd_per_1m": "0.4"
+    },
+    {
+      "model_id": "llama-3.3-70b-deepinfra",
+      "price_in_usd_per_1m": "0.1",
+      "price_out_usd_per_1m": "0.32"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-instruct",
+      "price_in_usd_per_1m": "0.075",
+      "price_out_usd_per_1m": "0.2"
+    },
+    {
+      "model_id": "qwen-2.5-72b-instruct",
+      "price_in_usd_per_1m": "0.36",
+      "price_out_usd_per_1m": "0.4"
+    },
+    {
+      "model_id": "claude-sonnet-5",
+      "price_in_usd_per_1m": "2",
+      "price_out_usd_per_1m": "10"
+    },
+    {
+      "model_id": "gpt-5.1",
+      "price_in_usd_per_1m": "1.25",
+      "price_out_usd_per_1m": "10"
+    },
+    {
+      "model_id": "gemini-3.1-pro-preview",
+      "price_in_usd_per_1m": "2",
+      "price_out_usd_per_1m": "12"
+    },
+    {
+      "model_id": "grok-4.6",
+      "price_in_usd_per_1m": "2",
+      "price_out_usd_per_1m": "6"
+    },
+    {
+      "model_id": "claude-haiku-4-5",
+      "price_in_usd_per_1m": "1",
+      "price_out_usd_per_1m": "5"
+    },
+    {
+      "model_id": "gpt-5.4-mini",
+      "price_in_usd_per_1m": "0.75",
+      "price_out_usd_per_1m": "4.5"
+    }
+  ]
+}
