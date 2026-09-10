@@ -1,0 +1,18 @@
+{
+  "run_id": "14bbaf64-29c6-4299-9593-c4e9aaadac09",
+  "model_id": "llama-3.3-70b-deepinfra",
+  "task_class": "T3",
+  "instance_id": "T3-01",
+  "seed": 3499072054,
+  "attempt": 1,
+  "usage": {
+    "input": 147,
+    "output": 67,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 93,
+  "gate_passed": true,
+  "raw_response_ref": "14bbaf64-29c6-4299-9593-c4e9aaadac09.raw.json",
+  "deviations": []
+}
