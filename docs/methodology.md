@@ -385,6 +385,24 @@ never republished or overwritten** — `writePrint` refuses outright if a final 
 exists for that date, since a reconciled, publicly-referenced number is not something later work
 gets to silently change.
 
+**Reconcile only against a figure the provider itself has finalised, never a pending or
+provisional one.** Every provider dashboard used for this (OpenRouter, Anthropic, OpenAI, Google,
+xAI) can show same-day usage before it's settled on their own side — reconciling against a number
+that later moves on the provider's own books would produce a `"final"` print built on a non-final
+input, exactly the quiet inaccuracy the evidence hierarchy (§2) exists to rule out. Wait for the
+provider's own figure to stop being provisional before running `reconcile`. `ReconciliationRecord`
+already carries `reconciled_at` for this reason — how long after the print's own `date`
+reconciliation actually happened is part of the record, not implicit.
+
+**Isolate the API key before trusting an account-level total.** Any of these five keys can be
+shared with something other than that day's print run — the same Anthropic key also powers the
+live chat widget's real-time responses and its weekly digest clustering job
+(`packages/chat-server`), and the same OpenAI key also powers the demo seller agents
+(`packages/agents/src/workers/seller.ts`) — so an account's daily total can silently include real
+cost this print didn't cause. Use each provider's own per-key usage breakdown, not the account
+total, whenever the key in question is shared; OpenRouter's activity log is already per-model, so
+it's clean regardless.
+
 ## 8. Signing and anchoring
 
 A print's body is canonicalised (RFC 8785 JCS, every field except `signature`/`public_key`
