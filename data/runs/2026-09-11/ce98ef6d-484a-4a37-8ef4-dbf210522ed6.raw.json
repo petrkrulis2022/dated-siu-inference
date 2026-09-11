@@ -1,0 +1,32 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "```javascript\nexport function filterAboveThreshold(nums, threshold) {\n    return nums.filter(num => num > threshold);\n}\n```",
+            "thoughtSignature": "EuEHCt4HARFNMg9SCBQB1CKtg8MTVWCA63Ta3N7HoFB5q+Sv6yigtLpjZqUIqu2DYe7tOlxEQgam+ubHuLi7+DPDjXVJInWMquOt5wZbg8IzvoDM9VQWTK9S7iViqEEqTu6MQ3gjdvrhyj/7C8JeZI0xm9hQT5v58fYRO8r1POHFei5YGz6ZuF/IViBt7Z/OCXlyDijiG9hg9D7f0ztHW0iAF8b1zwnAe1w9Q51j74VjosljYUYaAxZX9zk40IrKnSWX0bkSIVOh77e8Ma1poEAqRduFzusx8rNqGljYzFjnOsw0eWgkeFgi1JgUoL2n3+j9XfD4alry4xqol8NZiWJhUrxwRIFkB4iiv7Q++4OpdhrOzfepwYco8ABmZ67q+Np+WZWgk/HpObECESFAqoZB3zvo2cEXkNm4w9tyP3rfPxUqkRKIiloqZz+8WmVL6g9mAwe4iag7EVVxZDKGtn1rWDeRiF9GCCb6PB7TJSeycjmvRXKD53btLwpaTatFvNb2m3hiX25GMPYLp4CFdEw28hD5k5Motj4nqYY8mntoQGLZaVnV0k925QByfbfdW4/WVJMqc9ocWfSq3T44bCaDNEy8B1V05zhENZfCxoHYTISL1QVI3wMnhqoAE+O/64fblCYJfgtPmXg/sBkUA6sm89h0xUgahUYRj8hxPdjUXdPS7jmspi2BKmxtqtM+vqn0Fq3FE5znu/r4gFoBN+dxtFg82bNP9fiDC1oxwCTn7uQq+gVaJ2Nj3NI+UXN493qehuSt+/KyyaVze4hUG8nmAtTSFgVnTpUS8q3tS1ynEF83s0nnnIUsBqv9bCCM0Vko3yEMz79AtHwvsvetElzB7+fja+kw2CAibCj6PvzMCGKXVQhtxrUv1JJ/cRjhX7YBNdRh2QzO0GEicfiZX+y2zyNMdD9giBs/o+Qu5g1EFybvTJ3YLGPjtCPvcCLFJkk+rxoRjbU5MqacwYm3i94vSkdpZ1kWbRAVvlPMAO9yyglZ5NTKSFqrXNC7Cmq+V9C6oTe0EADXnDDA2WC+cCVipNFWzF/gvHFTC4VQ7aY4RRiVqYprzdQJ8Arrqi4JXf4K9JgEexJ0J2UxNzB+VGbgpdlHjufP+3hh2u3aRbA1NMZbCR0EMX/0zOvAVTOrzm/GhqhW02tfpMX3AorSTGHlh4y7eXwixgzpfCHhuk7ptjDaaL9PjZII3kD7+4+yQWcczj2n/UIiirSlSbYxSl3ayNBQBPB3Q+4hPI/LTcD3TZw9PMVFm3blb5TsEGsKiYolxR4/QtwGa6AY7MXzo1do20g/Bwnt6K4gW7q8CSE0WrkO"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 110,
+    "candidatesTokenCount": 31,
+    "totalTokenCount": 351,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 110
+      }
+    ],
+    "thoughtsTokenCount": 210,
+    "serviceTier": "standard"
+  },
+  "modelVersion": "gemini-3.1-pro-preview",
+  "responseId": "rlKjatfjItnSjMcPqaW8gAs"
+}
