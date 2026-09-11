@@ -102,7 +102,7 @@ export function renderForAgentsPage(): string {
 </section>
 
 <section class="block" id="try-it-here">
-  <h2>Try it here</h2>
+  <h2>Agent try it here</h2>
   <p class="note" id="try-it-here-status">Checking this browser for WebMCP support…</p>
   <div class="tool-grid">
     ${TRY_IT_HERE_TOOLS.map(

@@ -158,7 +158,7 @@ export function TryItHerePanel() {
 
   return (
     <section className="mt-14 border-t border-ploy-border-primary pt-14" id="try-it-here" aria-labelledby="try-it-here-title">
-      <h2 id="try-it-here-title" className="font-heading text-3xl font-normal md:text-4xl">Try it here</h2>
+      <h2 id="try-it-here-title" className="font-heading text-3xl font-normal md:text-4xl">Agent try it here</h2>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-ploy-text-secondary">{statusText}</p>
       <div className="mt-8 grid gap-6 md:grid-cols-3">
         {TOOLS.map((tool) => {
