@@ -41,7 +41,14 @@ for (const record of records) {
   costs.push(
     sumCosts([
       tokenCost(record.usage.input, price.price_in_usd_per_1m),
-      tokenCost(record.usage.output, price.price_out_usd_per_1m),
+      // record.usage.output + record.usage.reasoning at the output rate — same fix, same
+      // reasoning as packages/print/src/compute/class-cost.ts and cost-of-production.ts, and
+      // packages/agents/src/seller.ts: reasoning tokens are billed by the provider at the output
+      // rate (confirmed live, 2026-09-08), so computing this CLI's own cost from usage.output
+      // alone would understate it against a real invoice that does include reasoning cost — the
+      // exact wrong conclusion reconciliation exists to avoid ("the invoice looks off" when it's
+      // this script's own arithmetic that's wrong). This was the one place that fix missed.
+      tokenCost(record.usage.output + record.usage.reasoning, price.price_out_usd_per_1m),
     ]),
   );
 }
