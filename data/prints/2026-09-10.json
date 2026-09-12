@@ -209,5 +209,11 @@
     "status": "anchored",
     "tx_hash": "0xd93631890c6b5770ac2d163ac9e4a2e75585100cf9971196214438d37d6ed8dd",
     "posted_at": "2026-09-10T01:02:06.000Z"
-  }
+  },
+  "correction_notes": [
+    {
+      "published_at": "2026-09-12",
+      "note": "This print includes gemini-3.1-pro-preview, whose Google Cloud billing predates the point where it was isolated to this project alone. Before that, a real, unexplained cost gap was found between Google's actual billed Gemini cost and this project's own computed cost on every day independently checked (2026-09-08 through 2026-09-10 -- 2026-09-08 far larger than the others, but the gap wasn't confined to that one day). This project's own per-token pricing was independently verified against Google's real published rates and confirmed correct, ruling out a calculation error on this project's side -- but the cause of the gap itself was never established, and Gemini's own real invoice cost for any day before isolation cannot be attributed to this project with confidence. Because that evidence gap cannot be reconstructed after the fact, this print will remain status: \"provisional\" permanently, not through neglect. See docs/methodology.md's Index governance (§7) for the general policy and the isolation fix that resolves this for prints going forward."
+    }
+  ]
 }
