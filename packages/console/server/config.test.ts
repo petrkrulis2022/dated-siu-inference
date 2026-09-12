@@ -48,6 +48,7 @@ const FAKE_DEFAULT_CONFIG: ConsoleConfig = {
   printsDir: "/tmp/prints",
   runsDirRoot: "/tmp/runs",
   registryDir: "/tmp/registry",
+  reconciliationsDir: "/tmp/reconciliations",
   eventCachePath: "/tmp/events.json",
   localQuotesDir: "/tmp/quotes",
 };

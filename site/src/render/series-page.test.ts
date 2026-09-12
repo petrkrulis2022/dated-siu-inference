@@ -28,9 +28,11 @@ describe("renderSeriesPage", () => {
   });
 
   it("with several prints, draws a line and marks provisional vs. final distinctly", () => {
+    // status stays "provisional" on every entry (the field never changes on a print's own
+    // signed body, by design) — `final` is the derived field a reconciliation record sets.
     const html = renderSeriesPage({
       allPrints: [
-        entry({ print_id: "2026-08-04", date: "2026-08-04", status: "final", dated_siu: "0.0020" }),
+        entry({ print_id: "2026-08-04", date: "2026-08-04", final: true, dated_siu: "0.0020" }),
         entry({
           print_id: "2026-08-11",
           date: "2026-08-11",

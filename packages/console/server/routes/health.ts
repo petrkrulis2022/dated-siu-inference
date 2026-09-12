@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { createPublicClient, http, type Hex } from "viem";
-import { latestPriceSnapshotFile, loadPriceSnapshot } from "@touchstone/print";
+import { latestPriceSnapshotFile, loadPriceSnapshot, loadReconciledPrintIds } from "@touchstone/print";
 import type { ConsoleConfig } from "../config.js";
 import { loadAllPrints } from "../lib/prints.js";
 import { computeHealthReport } from "../lib/health-checks.js";
@@ -11,6 +11,7 @@ export function healthRouter(config: ConsoleConfig): Router {
   router.get("/", async (_req, res) => {
     try {
       const prints = await loadAllPrints(config.printsDir);
+      const reconciledPrintIds = await loadReconciledPrintIds(config.reconciliationsDir);
 
       const snapshotFile = await latestPriceSnapshotFile("openrouter").catch(() => null);
       const latestPriceSnapshot = snapshotFile ? await loadPriceSnapshot(snapshotFile) : null;
@@ -26,6 +27,7 @@ export function healthRouter(config: ConsoleConfig): Router {
         prints,
         latestPriceSnapshot,
         publisherEthBalanceWei,
+        reconciledPrintIds,
       });
       res.json(report);
     } catch (err) {

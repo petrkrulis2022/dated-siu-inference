@@ -48,6 +48,11 @@ export interface ComputeHealthInput {
   prints: Print[];
   latestPriceSnapshot: PriceSnapshot | null;
   publisherEthBalanceWei: string;
+  /** docs/methodology.md §7: which print_ids have a signed reconciliation record — this, not
+   * print.status (permanently "provisional" on every print's own signed body), is what "final"
+   * means. Defaults to empty so a caller not yet passing it degrades to "everything provisional
+   * past the window," the same behaviour this had before the field existed. */
+  reconciledPrintIds?: Set<string>;
   now?: Date;
   reconciliationWindowDays?: number;
 }
@@ -86,8 +91,9 @@ export function computeHealthReport(input: ComputeHealthInput): HealthReport {
     .filter((p) => !p.anchor || !ANCHORED_STATUSES.has(p.anchor.status))
     .map((p) => ({ print_id: p.print_id, date: p.date, anchorStatus: p.anchor?.status ?? "none" }));
 
+  const reconciledPrintIds = input.reconciledPrintIds ?? new Set<string>();
   const staleProvisionalPrints: StaleProvisionalPrint[] = input.prints
-    .filter((p) => p.status === "provisional")
+    .filter((p) => !reconciledPrintIds.has(p.print_id))
     .map((p) => {
       const days = Math.floor((now.getTime() - new Date(p.date).getTime()) / (1000 * 60 * 60 * 24));
       return { print_id: p.print_id, date: p.date, daysSincePublished: days };

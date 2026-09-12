@@ -2,6 +2,7 @@ import { cp, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Print } from "@touchstone/sdk";
+import { loadReconciledPrintIds } from "@touchstone/print";
 import {
   loadAllPrints,
   loadChainInfo,
@@ -20,6 +21,7 @@ import { renderForAgentsPage } from "./render/for-agents-page.js";
 const REPO_ROOT = resolve(process.cwd(), "..");
 const PRINTS_DIR = join(REPO_ROOT, "data/prints");
 const RUNS_DIR = join(REPO_ROOT, "data/runs");
+const RECONCILIATIONS_DIR = join(REPO_ROOT, "data/reconciliations");
 const INCIDENTS_DIR = join(REPO_ROOT, "data/prints/incidents");
 const DEPLOYMENT_FILE = join(REPO_ROOT, "data/deployments/base-sepolia.json");
 // Deliberately not "dist" — tsc already compiles this package's own TypeScript to dist/, and
@@ -90,6 +92,9 @@ async function main(): Promise<void> {
   const allPublishedPrints = await loadAllPrints(PRINTS_DIR);
   const incidents = await loadIncidents(INCIDENTS_DIR);
   const chain = await loadChainInfo(DEPLOYMENT_FILE);
+  // docs/methodology.md §7: a print is "final" when a signed reconciliation record exists for
+  // it, never by reading its own status field (which stays "provisional" forever, by design).
+  const reconciledPrintIds = await loadReconciledPrintIds(RECONCILIATIONS_DIR);
 
   // All three series read from the one shared data/prints/ directory — a print's detail page
   // is only ever written once, at prints/<id>.html, regardless of which series it belongs to.
@@ -108,6 +113,7 @@ async function main(): Promise<void> {
     constituent_changes: p.constituent_changes,
     series: p.series,
     basket_costs: p.basket_costs,
+    final: reconciledPrintIds.has(p.print_id),
   });
   const allPrints: PrintIndexEntry[] = prints.map(toIndexEntry);
   const commodityIndexEntries = commodityPrints.map(toIndexEntry);
@@ -132,7 +138,13 @@ async function main(): Promise<void> {
     join(OUT_DIR, "prints", "index.html"),
     renderLayout({
       title: "Touchstone Assay — Prints",
-      bodyHtml: renderPrintsList({ allPrints: prints, incidents, basePath: "../", chain }),
+      bodyHtml: renderPrintsList({
+        allPrints: prints,
+        incidents,
+        basePath: "../",
+        chain,
+        reconciledPrintIds,
+      }),
       basePath: "../",
     }),
   );
@@ -141,8 +153,11 @@ async function main(): Promise<void> {
     // its own series only. A Commodity SIU print sits beside other Commodity SIU prints, not
     // Dated SIU's, even though every detail page lives in the one shared prints/ directory.
     const seriesIndexEntries = print.series ? indexEntriesBySeries[print.series] : allPrints;
+    // docs/methodology.md §7: `.status` on the print itself stays "provisional" forever — the
+    // title reflects the derived reconciliation state instead, same as every other display.
+    const titleStatus = reconciledPrintIds.has(print.print_id) ? "final" : "provisional";
     const datedHtml = renderLayout({
-      title: `${print.series === "frontier" ? "Frontier SIU" : print.series === "commodity" ? "Commodity SIU" : "Dated SIU"} — ${print.date} (${print.status})`,
+      title: `${print.series === "frontier" ? "Frontier SIU" : print.series === "commodity" ? "Commodity SIU" : "Dated SIU"} — ${print.date} (${titleStatus})`,
       bodyHtml: renderPrintPage({
         print,
         allPrints: seriesIndexEntries,
@@ -202,6 +217,7 @@ async function main(): Promise<void> {
           basePath: "../../",
           chain,
           seriesLabel: label,
+          reconciledPrintIds,
         }),
         basePath: "../../",
       }),

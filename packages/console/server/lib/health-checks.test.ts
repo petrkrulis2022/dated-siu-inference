@@ -45,12 +45,15 @@ function fakeSnapshot(overrides: Partial<PriceSnapshot> = {}): PriceSnapshot {
 }
 
 describe("computeHealthReport", () => {
-  it("reports no issues for a clean, current, anchored, final state", () => {
-    const print = fakePrint({ status: "final" });
+  it("reports no issues for a clean, current, anchored, reconciled state", () => {
+    // print.status stays "provisional" (fakePrint's default, unchanged) — "final" is derived
+    // purely from reconciledPrintIds, docs/methodology.md §7.
+    const print = fakePrint();
     const report = computeHealthReport({
       prints: [print],
       latestPriceSnapshot: fakeSnapshot(),
       publisherEthBalanceWei: "1000000000000000000",
+      reconciledPrintIds: new Set(["2026-08-17"]),
     });
     expect(report.latestPrint).toEqual({ print_id: "2026-08-17", date: "2026-08-17" });
     expect(report.gateFailuresInLatestPrint).toHaveLength(0);
@@ -117,7 +120,19 @@ describe("computeHealthReport", () => {
     ]);
   });
 
-  it("flags a provisional print older than the reconciliation window", () => {
+  it("never flags a reconciled print as stale, however old, regardless of its own status field", () => {
+    const print = fakePrint({ print_id: "2026-08-01", date: "2026-08-01" });
+    const report = computeHealthReport({
+      prints: [print],
+      latestPriceSnapshot: null,
+      publisherEthBalanceWei: "0",
+      now: new Date("2026-09-12T00:00:00.000Z"),
+      reconciledPrintIds: new Set(["2026-08-01"]),
+    });
+    expect(report.staleProvisionalPrints).toHaveLength(0);
+  });
+
+  it("flags an unreconciled print older than the reconciliation window", () => {
     const print = fakePrint({ status: "provisional", date: "2026-08-01" });
     const report = computeHealthReport({
       prints: [print],

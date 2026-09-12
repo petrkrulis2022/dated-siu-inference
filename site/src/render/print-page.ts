@@ -211,7 +211,7 @@ function renderPrintArchive(
     .map(
       (p) => `<li>
         <a href="${basePath}prints/${esc(p.print_id)}.html">${esc(formatDate(p.date))}</a>
-        <span class="siu">${esc(usd(p.dated_siu))} · ${esc(p.status)}${p.superseded_by ? " · superseded" : ""}</span>
+        <span class="siu">${esc(usd(p.dated_siu))} · ${p.final ? "final" : "provisional"}${p.superseded_by ? " · superseded" : ""}</span>
       </li>`,
     )
     .join("\n");
@@ -398,13 +398,18 @@ export function renderPrintPage({
 }: PrintPageOptions): string {
   const previous = findPreviousPrint(allPrints, print);
   const runsUrl = `${runsBaseUrl}/${print.print_id}`;
+  // docs/methodology.md §7: print.status stays "provisional" on every print's own signed body
+  // forever — a print is "final" exactly when a signed reconciliation record exists for it,
+  // carried on its own allPrints entry as `.final` (build.ts), never read from `.status` here.
+  const isFinal = allPrints.find((p) => p.print_id === print.print_id)?.final ?? false;
+  const status = isFinal ? "final" : "provisional";
 
   return `<div class="headline">
   <div class="label">Dated SIU — ${esc(print.version)}</div>
   <div class="figure">${esc(usd(print.dated_siu))}</div>
   <div class="meta">
     <span>${esc(formatDate(print.date))}</span>
-    <span class="badge status-${esc(print.status)}">${esc(print.status)}</span>
+    <span class="badge status-${status}">${status}</span>
   </div>
   ${renderCorrectionNotesNotice(print)}
   ${renderSupersessionNotice(print, basePath)}

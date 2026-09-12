@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { createPublicClient, http, type Hex } from "viem";
-import { latestPriceSnapshotFile, loadPriceSnapshot } from "@touchstone/print";
+import { latestPriceSnapshotFile, loadPriceSnapshot, loadReconciledPrintIds } from "@touchstone/print";
 import { loadConfig, resolveVerifyOptions } from "../server/config.js";
 import { loadCache, writeCache } from "../server/indexer/cache.js";
 import { indexNewEvents } from "../server/indexer/index.js";
@@ -77,12 +77,16 @@ async function main(): Promise<void> {
   });
 
   const prints = await loadAllPrints(config.printsDir);
+  // docs/methodology.md §7: print.status stays "provisional" forever — final is derived from
+  // whether a signed reconciliation record exists for this print_id.
+  const reconciledPrintIds = await loadReconciledPrintIds(config.reconciliationsDir);
 
   const printRows = await Promise.all(
     prints.map(async (print) => ({
       print_id: print.print_id,
       date: print.date,
       status: print.status,
+      final: reconciledPrintIds.has(print.print_id),
       dated_siu: print.dated_siu,
       weights_source: print.weights.source,
       methodology_version: print.methodology_version,
@@ -146,7 +150,7 @@ async function main(): Promise<void> {
   }
   await writeJson(
     "health",
-    computeHealthReport({ prints, latestPriceSnapshot, publisherEthBalanceWei }),
+    computeHealthReport({ prints, latestPriceSnapshot, publisherEthBalanceWei, reconciledPrintIds }),
   );
 
   console.log(`[build-static-api] wrote static API for ${prints.length} print(s) -> ${OUT_DIR}`);

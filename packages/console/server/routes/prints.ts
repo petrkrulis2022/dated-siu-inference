@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { loadReconciledPrintIds } from "@touchstone/print";
 import type { ConsoleConfig } from "../config.js";
 import { resolveVerifyOptions } from "../config.js";
 import { loadAllPrints } from "../lib/prints.js";
@@ -10,11 +11,15 @@ export function printsRouter(config: ConsoleConfig): Router {
   router.get("/", async (_req, res) => {
     try {
       const prints = await loadAllPrints(config.printsDir);
+      // docs/methodology.md §7: print.status stays "provisional" forever — final is derived
+      // from whether a signed reconciliation record exists for this print_id.
+      const reconciledPrintIds = await loadReconciledPrintIds(config.reconciliationsDir);
       const rows = await Promise.all(
         prints.map(async (print) => ({
           print_id: print.print_id,
           date: print.date,
           status: print.status,
+          final: reconciledPrintIds.has(print.print_id),
           dated_siu: print.dated_siu,
           weights_source: print.weights.source,
           methodology_version: print.methodology_version,

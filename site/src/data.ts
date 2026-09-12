@@ -18,6 +18,15 @@ export interface PrintIndexEntry {
    * both — see print-page.ts's renderConstituentChangesNotice. Optional for the same reason every
    * other field here is: an entry built before this field existed must stay valid. */
   basket_costs?: Print["basket_costs"];
+  /**
+   * Whether a signed reconciliation record exists for this print — docs/methodology.md §7. This,
+   * not `status` (which stays "provisional" on every print's own signed body forever, by design),
+   * is what "final" actually means; computed once at build time from data/reconciliations/ via
+   * @touchstone/print's loadReconciledPrintIds and carried on every index entry so renderers stop
+   * reading `.status` to decide final-vs-provisional. Optional only so an entry built before this
+   * field existed still type-checks; build.ts always sets it.
+   */
+  final?: boolean;
 }
 
 /** Every published print, oldest first. Renders directly from data/prints/ — build1-spec.md §7. */

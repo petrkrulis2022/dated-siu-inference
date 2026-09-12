@@ -131,6 +131,25 @@ describe("renderPrintsList", () => {
     expect(html).toContain('href="../prints/2026-08-27.html"');
   });
 
+  it("shows final only for a print with a signed reconciliation record, never from print.status", () => {
+    // print.status is "provisional" on both fixtures here (the field never changes on the
+    // signed body, by design) — the badge must derive purely from reconciledPrintIds.
+    const html = renderPrintsList({
+      allPrints: [
+        print({ print_id: "2026-08-18", date: "2026-08-18" }),
+        print({ print_id: "2026-08-19", date: "2026-08-19" }),
+      ],
+      basePath: "../",
+      chain: CHAIN,
+      reconciledPrintIds: new Set(["2026-08-18"]),
+    });
+    // Rows render newest first, so 2026-08-19 comes before 2026-08-18 in the output.
+    const unreconciledRow = html.slice(html.indexOf("2026-08-19"), html.indexOf("2026-08-18"));
+    const reconciledRow = html.slice(html.indexOf("2026-08-18"));
+    expect(reconciledRow).toContain(">final<");
+    expect(unreconciledRow).toContain(">provisional<");
+  });
+
   it("shows an unanchored print's status rather than fabricating a tx link", () => {
     const html = renderPrintsList({
       allPrints: [print({ anchor: { chain: "base-sepolia", status: "stub" } })],

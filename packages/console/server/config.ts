@@ -30,6 +30,7 @@ export interface ConsoleConfig {
   printsDir: string;
   runsDirRoot: string;
   registryDir: string;
+  reconciliationsDir: string;
   eventCachePath: string;
   localQuotesDir: string;
 }
@@ -74,6 +75,7 @@ export function loadConfig(): ConsoleConfig {
     printsDir: resolve(repoRoot(), "data/prints"),
     runsDirRoot: resolve(repoRoot(), "data/runs"),
     registryDir: resolve(repoRoot(), "data/registry"),
+    reconciliationsDir: resolve(repoRoot(), "data/reconciliations"),
     eventCachePath: resolve(repoRoot(), "data/.cache/console/events.json"),
     localQuotesDir: resolve(repoRoot(), "data/.cache/quotes"),
   };

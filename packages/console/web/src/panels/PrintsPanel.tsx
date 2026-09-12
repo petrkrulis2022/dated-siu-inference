@@ -81,7 +81,7 @@ export function PrintsPanel({ config }: { config: ConfigResponse | null }): Reac
                 style={{ cursor: "pointer" }}
               >
                 <td>{p.date}</td>
-                <td>{p.status}</td>
+                <td>{p.final ? "final" : "provisional"}</td>
                 <td>{p.dated_siu}</td>
                 <td>{p.weights_source}</td>
                 <td>{p.methodology_version}</td>

@@ -1,6 +1,13 @@
 import type { Incident, PrintIndexEntry } from "../data.js";
 import { esc, formatDate, usd } from "../format.js";
 
+/** docs/methodology.md §7: `.status` stays "provisional" on every print's own signed body
+ * forever — a print is "final" exactly when a signed reconciliation record exists for it,
+ * carried on the index entry as `.final` (build.ts) rather than read from `.status` here. */
+function statusOf(p: Pick<PrintIndexEntry, "final">): "final" | "provisional" {
+  return p.final ? "final" : "provisional";
+}
+
 export interface SeriesPageOptions {
   /** Every published print, oldest first. */
   allPrints: PrintIndexEntry[];
@@ -57,10 +64,10 @@ function renderMultiPointChart(prints: PrintIndexEntry[]): string {
     .map((p) => {
       const markerClass = p.superseded_by
         ? "series-point-superseded"
-        : `series-point-${esc(p.status)}`;
+        : `series-point-${statusOf(p)}`;
       const title = p.superseded_by
         ? `${esc(formatDate(p.date))} — ${esc(usd(p.dated_siu))} (superseded by ${esc(p.superseded_by.print_id)}: ${esc(p.superseded_by.reason)})`
-        : `${esc(formatDate(p.date))} — ${esc(usd(p.dated_siu))} (${esc(p.status)})`;
+        : `${esc(formatDate(p.date))} — ${esc(usd(p.dated_siu))} (${statusOf(p)})`;
       const supersededAnnotation = p.superseded_by
         ? `<text x="${p.x.toFixed(1)}" y="${(p.y + 16).toFixed(1)}" text-anchor="middle" class="series-annotation">superseded</text>`
         : "";
@@ -93,7 +100,7 @@ function renderSinglePointChart(print: PrintIndexEntry): string {
   const y = CHART_HEIGHT / 2 - 10;
   return `<svg viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" role="img" aria-label="Dated SIU — first print" class="series-chart">
     <line x1="${PAD_X}" y1="${CHART_HEIGHT - PAD_BOTTOM}" x2="${CHART_WIDTH - PAD_X}" y2="${CHART_HEIGHT - PAD_BOTTOM}" class="series-axis" />
-    <circle cx="${x}" cy="${y}" r="5" class="series-point series-point-${esc(print.status)}"><title>${esc(formatDate(print.date))} — ${esc(usd(print.dated_siu))} (${esc(print.status)})</title></circle>
+    <circle cx="${x}" cy="${y}" r="5" class="series-point series-point-${statusOf(print)}"><title>${esc(formatDate(print.date))} — ${esc(usd(print.dated_siu))} (${statusOf(print)})</title></circle>
     <text x="${x}" y="${y - 14}" class="series-axis-label" text-anchor="middle">${esc(formatDate(print.date))}</text>
   </svg>`;
 }
@@ -181,7 +188,7 @@ export function renderSeriesPage({
   <div class="figure">${esc(usd(latest.dated_siu))}</div>
   <div class="meta">
     <span>${esc(formatDate(latest.date))}</span>
-    <span class="badge status-${esc(latest.status)}">${esc(latest.status)}</span>
+    <span class="badge status-${statusOf(latest)}">${statusOf(latest)}</span>
   </div>
 </div>
 

@@ -25,7 +25,11 @@ export interface PrintVerification {
 export interface PrintRow {
   print_id: string;
   date: string;
+  /** Stays "provisional" forever on the print's own signed body, by design — see `final`. */
   status: "provisional" | "final";
+  /** docs/methodology.md §7: whether a signed reconciliation record exists for this print_id —
+   * this, not `status`, is what "final" actually means. */
+  final: boolean;
   dated_siu: string;
   weights_source: "equal" | "routed-market-share";
   methodology_version: string;

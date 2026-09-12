@@ -14,12 +14,19 @@ export interface PrintsListOptions {
    * series-page.ts's detailBasePath is needed here. */
   basePath: string;
   chain: ChainInfo;
+  /** docs/methodology.md §7: which print_ids have a signed reconciliation record — this, not
+   * print.status (permanently "provisional" on every print's own signed body), is what "final"
+   * means. Built once per site build (build.ts), passed down rather than re-derived per row.
+   * Defaults to empty, matching `incidents`'s own convention — every print reads as provisional
+   * until a real reconciliation record exists. */
+  reconciledPrintIds?: Set<string>;
   /** "Prints", "Frontier SIU prints" or "Commodity SIU prints" — defaults to "Prints" for the
    * blended Dated SIU list. */
   seriesLabel?: string;
 }
 
-function renderStatusCell(print: Print, basePath: string): string {
+function renderStatusCell(print: Print, basePath: string, reconciledPrintIds: Set<string>): string {
+  const status = reconciledPrintIds.has(print.print_id) ? "final" : "provisional";
   const badges: string[] = [];
   if (print.prior_attempts && print.prior_attempts.length > 0) {
     const count = print.prior_attempts.length;
@@ -33,7 +40,7 @@ function renderStatusCell(print: Print, basePath: string): string {
       `<a class="badge status-superseded" href="${basePath}prints/${esc(print.superseded_by.print_id)}.html" title="${esc(print.superseded_by.reason)}">superseded</a>`,
     );
   }
-  return badges.length === 0 ? esc(print.status) : `${esc(print.status)} ${badges.join(" ")}`;
+  return badges.length === 0 ? esc(status) : `${esc(status)} ${badges.join(" ")}`;
 }
 
 function renderAnchorCell(print: Print, chain: ChainInfo): string {
@@ -71,6 +78,7 @@ export function renderPrintsList({
   incidents = [],
   basePath,
   chain,
+  reconciledPrintIds = new Set(),
   seriesLabel = "Dated SIU",
 }: PrintsListOptions): string {
   if (allPrints.length === 0 && incidents.length === 0) {
@@ -89,7 +97,7 @@ export function renderPrintsList({
     sortKey: p.print_id,
     html: `<tr class="${p.superseded_by ? "superseded" : ""}">
         <td><a href="${basePath}prints/${esc(p.print_id)}.html">${esc(formatDate(p.date))}</a></td>
-        <td>${renderStatusCell(p, basePath)}</td>
+        <td>${renderStatusCell(p, basePath, reconciledPrintIds)}</td>
         <td>${esc(usd(p.dated_siu))}</td>
         <td>${esc(p.weights.source)}</td>
         <td>${esc(p.methodology_version)}</td>

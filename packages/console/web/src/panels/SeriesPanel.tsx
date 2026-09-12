@@ -24,8 +24,10 @@ export function SeriesPanel(): React.JSX.Element {
 
   const chartData = (prints ?? []).map((p) => ({
     date: p.date,
-    provisional: p.status === "provisional" ? Number(p.dated_siu) : null,
-    final: p.status === "final" ? Number(p.dated_siu) : null,
+    // docs/methodology.md §7: `.final` (a reconciliation record's presence), never `.status`
+    // (permanently "provisional" on every print's own signed body).
+    provisional: !p.final ? Number(p.dated_siu) : null,
+    final: p.final ? Number(p.dated_siu) : null,
   }));
 
   return (

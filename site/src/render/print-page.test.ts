@@ -193,6 +193,63 @@ describe("renderPrintPage", () => {
     expect(archiveSection).not.toContain("2026-08-15.html");
   });
 
+  it("shows the headline badge as final only from a reconciliation record's presence, never print.status", () => {
+    // print.status itself is "provisional" here (as it always is, by design) — the badge and
+    // the archive list must derive from the current print's own allPrints entry (`.final`),
+    // never from this field, per docs/methodology.md §7.
+    const html = renderPrintPage({
+      print: basePrint({ print_id: "2026-08-15", status: "provisional" }),
+      allPrints: [
+        { print_id: "2026-08-14", date: "2026-08-14", status: "provisional", dated_siu: "0.0022" },
+        {
+          print_id: "2026-08-15",
+          date: "2026-08-15",
+          status: "provisional",
+          dated_siu: "0.0019",
+          final: true,
+        },
+      ],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).toContain('class="badge status-final">final<');
+  });
+
+  it("shows the headline badge as provisional when no reconciliation record exists, even on an old print", () => {
+    const html = renderPrintPage({
+      print: basePrint({ print_id: "2026-08-15", status: "provisional" }),
+      allPrints: [
+        { print_id: "2026-08-15", date: "2026-08-15", status: "provisional", dated_siu: "0.0019" },
+      ],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).toContain('class="badge status-provisional">provisional<');
+  });
+
+  it("shows the archive list's per-row status the same derived way, not from each entry's own status field", () => {
+    const html = renderPrintPage({
+      print: basePrint({ print_id: "2026-08-15" }),
+      allPrints: [
+        {
+          print_id: "2026-08-14",
+          date: "2026-08-14",
+          status: "provisional",
+          dated_siu: "0.0022",
+          final: true,
+        },
+        { print_id: "2026-08-15", date: "2026-08-15", status: "provisional", dated_siu: "0.0019" },
+      ],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    const archiveSection = html.slice(html.indexOf("All prints"));
+    expect(archiveSection).toContain("final");
+  });
+
   it("escapes a hostile model_id rather than injecting it into the page", () => {
     const html = renderPrintPage({
       print: basePrint({
