@@ -413,22 +413,26 @@ provider's own figure to stop being provisional before running `reconcile`. `Rec
 already carries `reconciled_at` for this reason — how long after the print's own `date`
 reconciliation actually happened is part of the record, not implicit.
 
-**A provider figure is only usable if it can be attributed to this project alone — isolate the
-key, or isolate the billing project, whichever the provider actually shares.** Any of these five
-providers can bill something other than that day's print run onto the same total: the same
+**A provider figure is only usable if it can be attributed to this project alone.** Any of these
+five providers can bill something other than that day's print run onto the same total: the same
 Anthropic key also powers the live chat widget's real-time responses and its weekly digest
 clustering job (`packages/chat-server`), the same OpenAI key also powers the demo seller agents
-(`packages/agents/src/workers/seller.ts`), and — found live, 2026-09-08 — Google Cloud bills by
-*project*, not by API key alone, so an unrelated service sharing the same Gemini project can
-inflate a day's figure well past anything the print's own token usage explains. Different
-providers achieve isolation differently, and this is disclosed per provider rather than assumed
-uniform: **structurally, by construction** — OpenRouter's activity log is already per-model, so
-it's clean regardless; Gemini is isolated by giving `gemini-3.1-pro-preview` its own Google Cloud
-project with nothing else billed to it, the same property OpenRouter has natively. **By filtering
-a shared total** — Anthropic and OpenAI's keys are shared with other real systems, so their own
-per-key (Anthropic) or per-key-scoped (OpenAI) usage breakdown must be used instead of the account
-total. Confirm which category a provider is in before trusting its figure; don't assume isolation
-that was never verified.
+(`packages/agents/src/workers/seller.ts`), and — found live, 2026-09-08 — a Gemini invoice figure
+showed a real ~2.7x spike against every neighbouring day, with no corresponding change in this
+project's own token usage that day. **State plainly what was and wasn't established, rather than
+letting a fix imply a diagnosis it doesn't have:** the specific mechanism behind that spike was
+never confirmed — the usage tracked as this project's own scope did not point to a second Google
+Cloud project being involved, but that isn't the same as knowing what did cause it. The fix
+applied is isolation itself, not a diagnosed cause: `gemini-3.1-pro-preview` now bills to its own
+dedicated project with nothing else on it, which makes every day's figure attributable by
+construction going forward regardless of what the 2026-09-08 spike actually was. Different
+providers achieve this differently, and it's disclosed per provider rather than assumed uniform:
+**structurally, by construction** — OpenRouter's activity log is already per-model, so it's clean
+regardless; Gemini, from its own dedicated project onward. **By filtering a shared total** —
+Anthropic and OpenAI's keys are shared with other real systems, so their own per-key (Anthropic)
+or per-key-scoped (OpenAI) usage breakdown must be used instead of the account total. Confirm
+which category a provider is in before trusting its figure; don't assume isolation that was never
+verified — and don't assume a diagnosis just because a fix was applied.
 
 **Use the exchange rate the provider's own invoice states, never one picked to make a conversion
 work.** A provider billing in a currency other than USD (Google Cloud, observed live) converts at
@@ -439,14 +443,25 @@ agreement forbids outright. Use the invoice's own stated USD figure directly.
 **The implied-rate check: a reusable contamination test for any non-USD provider, not a one-off
 fix.** Found live, 2026-09-08: dividing each day's real Kč figure by that day's own computed USD
 cost, across ten real days, gave a column ranging 22.9 to 33.1 — a genuine currency pair does not
-move that much day to day, so the ragged column was itself the signal that something other than
-exchange-rate noise was on that project, before the specific cause (unrelated billing sharing the
-same Gemini project) was confirmed. The general form: for any provider billing in a foreign
+move that much day to day, so the ragged column was itself the signal that something beyond
+exchange-rate noise was affecting the figure, days before the 2026-09-08 spike made the same
+underlying issue impossible to miss. The general form: for any provider billing in a foreign
 currency, back out the implied rate per day (real figure ÷ this project's own computed cost that
 day) across several real days. A flat column is consistent with clean isolation; a ragged one
-means investigate contamination before trusting any single day's figure, including one that looks
-unremarkable on its own — the spike is what's easy to spot, but the same non-uniform sharing
-would ripple through every day at a smaller, easier-to-miss scale.
+means investigate before trusting any single day's figure, including one that looks unremarkable
+on its own — the spike is what's easy to spot, but a smaller version of the same problem can
+ripple through every day at a scale that's easy to miss without running this check.
+
+**Rule out this project's own arithmetic before concluding a gap is attribution, not a
+calculation error.** Before treating any real-vs-computed mismatch as contamination or a missing
+isolation boundary, independently verify this project's own price snapshot against the provider's
+real, current published rate for that exact model — done live, 2026-09-08: Google's published
+Gemini pricing ($2/1M input, $12/1M output including thinking tokens, confirmed via
+`ai.google.dev/gemini-api/docs/pricing`) matched this project's own price snapshot exactly, which
+is what turned "something's wrong with Gemini" into a specific, testable claim about attribution
+rather than a suspicion this project's own maths might be wrong. Checking the counterparty's own
+published rate is cheap and immediate; assuming the gap is theirs without checking is not
+something this project's evidence hierarchy (§2) allows.
 
 ## 8. Signing and anchoring
 
