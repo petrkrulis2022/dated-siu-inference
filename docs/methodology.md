@@ -413,14 +413,40 @@ provider's own figure to stop being provisional before running `reconcile`. `Rec
 already carries `reconciled_at` for this reason — how long after the print's own `date`
 reconciliation actually happened is part of the record, not implicit.
 
-**Isolate the API key before trusting an account-level total.** Any of these five keys can be
-shared with something other than that day's print run — the same Anthropic key also powers the
-live chat widget's real-time responses and its weekly digest clustering job
-(`packages/chat-server`), and the same OpenAI key also powers the demo seller agents
-(`packages/agents/src/workers/seller.ts`) — so an account's daily total can silently include real
-cost this print didn't cause. Use each provider's own per-key usage breakdown, not the account
-total, whenever the key in question is shared; OpenRouter's activity log is already per-model, so
-it's clean regardless.
+**A provider figure is only usable if it can be attributed to this project alone — isolate the
+key, or isolate the billing project, whichever the provider actually shares.** Any of these five
+providers can bill something other than that day's print run onto the same total: the same
+Anthropic key also powers the live chat widget's real-time responses and its weekly digest
+clustering job (`packages/chat-server`), the same OpenAI key also powers the demo seller agents
+(`packages/agents/src/workers/seller.ts`), and — found live, 2026-09-08 — Google Cloud bills by
+*project*, not by API key alone, so an unrelated service sharing the same Gemini project can
+inflate a day's figure well past anything the print's own token usage explains. Different
+providers achieve isolation differently, and this is disclosed per provider rather than assumed
+uniform: **structurally, by construction** — OpenRouter's activity log is already per-model, so
+it's clean regardless; Gemini is isolated by giving `gemini-3.1-pro-preview` its own Google Cloud
+project with nothing else billed to it, the same property OpenRouter has natively. **By filtering
+a shared total** — Anthropic and OpenAI's keys are shared with other real systems, so their own
+per-key (Anthropic) or per-key-scoped (OpenAI) usage breakdown must be used instead of the account
+total. Confirm which category a provider is in before trusting its figure; don't assume isolation
+that was never verified.
+
+**Use the exchange rate the provider's own invoice states, never one picked to make a conversion
+work.** A provider billing in a currency other than USD (Google Cloud, observed live) converts at
+a fixed rate stated on its own invoice, not a live market rate assumed after the fact —
+back-converting with a guessed rate is inventing a number, the one thing this project's working
+agreement forbids outright. Use the invoice's own stated USD figure directly.
+
+**The implied-rate check: a reusable contamination test for any non-USD provider, not a one-off
+fix.** Found live, 2026-09-08: dividing each day's real Kč figure by that day's own computed USD
+cost, across ten real days, gave a column ranging 22.9 to 33.1 — a genuine currency pair does not
+move that much day to day, so the ragged column was itself the signal that something other than
+exchange-rate noise was on that project, before the specific cause (unrelated billing sharing the
+same Gemini project) was confirmed. The general form: for any provider billing in a foreign
+currency, back out the implied rate per day (real figure ÷ this project's own computed cost that
+day) across several real days. A flat column is consistent with clean isolation; a ragged one
+means investigate contamination before trusting any single day's figure, including one that looks
+unremarkable on its own — the spike is what's easy to spot, but the same non-uniform sharing
+would ripple through every day at a smaller, easier-to-miss scale.
 
 ## 8. Signing and anchoring
 
