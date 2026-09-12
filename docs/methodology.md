@@ -375,15 +375,34 @@ infer it.
 
 ## 7. Provisional versus final status, and reconciliation
 
-Every print is published `status: "provisional"` first (`packages/print/src/publication.ts`).
-Reconciliation compares the print's computed cost against a real provider invoice figure
-(`packages/harness/src/reconcile.ts`'s `reconcile`); a print is marked `"final"` only when the
-relative delta is within **2%** (`DEFAULT_RECONCILE_TOLERANCE = "0.02"`) of the invoiced amount.
-Outside that tolerance, the print stays provisional and the reconciliation report says so
-explicitly, pointing back at the run records or the invoice figure to re-check. **A final print is
-never republished or overwritten** — `writePrint` refuses outright if a final print already
-exists for that date, since a reconciled, publicly-referenced number is not something later work
-gets to silently change.
+Every print is published `status: "provisional"` (`packages/print/src/publication.ts`) — and
+**stays that way on its own signed body forever.** `status` is part of what a print's signature
+commits to (unlike `anchor`/`correction_notes`/`superseded_by`, which record events that happen
+*after* the print and are excluded from the signed body for exactly that reason): it's a claim
+about the print at the moment of signing — "this number is unreconciled." Editing it later, even
+to something true, would invalidate the original signature and desync the print from what's
+already anchored on-chain. So nothing ever does. Reconciliation is a **separate, signed, anchored
+record** — `data/reconciliations/<print_id>.json`, `@touchstone/sdk`'s `ReconciliationRecord`
+schema — that references a print by `print_id` without ever touching it.
+
+**A print is "final" exactly when a valid reconciliation record exists for it — presence, not a
+field.** The site and console derive this by checking `data/reconciliations/` for the print's id
+(`packages/print/src/publication.ts`'s `loadReconciledPrintIds`), never by reading `print.status`.
+A reconciliation record carries `computed_usd` (copied directly from the print's own
+`cost_of_production_usd` — already sums every recorded attempt across every measured model, so
+there is exactly one computation of a print's real cost, never a second one recomputed from run
+records that can silently drift from it), `invoice_usd` and a `provider_breakdown` (one entry per
+real billing source, so the total is auditable), `relative_delta`/`tolerance` from
+`packages/harness/src/reconcile.ts`'s `reconcile`, and its own `signature`/`public_key`/`anchor` —
+anchored via the identical `TouchstoneAttestation.postPrint(bodyHash, version)` a print uses (the
+contract never computes, validates or opines on a hash's contents, so no separate contract is
+needed). `packages/print/src/cli/reconcile.ts` only signs, anchors and writes one when the
+relative delta clears **2%** (`DEFAULT_RECONCILE_TOLERANCE = "0.02"`); outside that tolerance it
+prints a full report and writes nothing — the print simply staying without a record already
+discloses "not yet reconciled" honestly, the same way `correction_notes`' absence discloses "no
+correction has been published." **A written reconciliation record is never overwritten** —
+`writeReconciliation` uses the identical append-only guard as `writePrint`, for the identical
+reason: a signed, anchored record is a real artifact from the moment it exists.
 
 **Reconcile only against a figure the provider itself has finalised, never a pending or
 provisional one.** Every provider dashboard used for this (OpenRouter, Anthropic, OpenAI, Google,
@@ -760,8 +779,10 @@ removal — it may well be reachable again next print) and its weight is redistr
 remaining qualifying set for that print only. This is disclosed on the face of the print, not
 silently absorbed into the other models' weights.
 
-**Revision policy.** Every print starts `"provisional"` and becomes `"final"` only after
-reconciliation clears the 2% tolerance (§7). A correction to a print is never made by editing or
+**Revision policy.** Every print starts, and remains, `status: "provisional"` on its own signed
+body forever — reconciliation never edits it (§7). A print IS final exactly when a separate,
+signed, anchored reconciliation record exists for it, checked by presence, never by a field. A
+correction to a print is never made by editing or
 deleting the original — `writePrint` enforces this mechanically by refusing to overwrite _any_
 existing print file, provisional or final, unconditionally — corrections are published as
 **numbered revisions**, alongside the original, which remains in the public history exactly as it
