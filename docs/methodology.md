@@ -417,22 +417,33 @@ reconciliation actually happened is part of the record, not implicit.
 five providers can bill something other than that day's print run onto the same total: the same
 Anthropic key also powers the live chat widget's real-time responses and its weekly digest
 clustering job (`packages/chat-server`), the same OpenAI key also powers the demo seller agents
-(`packages/agents/src/workers/seller.ts`), and — found live, 2026-09-08 — a Gemini invoice figure
-showed a real ~2.7x spike against every neighbouring day, with no corresponding change in this
-project's own token usage that day. **State plainly what was and wasn't established, rather than
-letting a fix imply a diagnosis it doesn't have:** the specific mechanism behind that spike was
-never confirmed — the usage tracked as this project's own scope did not point to a second Google
-Cloud project being involved, but that isn't the same as knowing what did cause it. The fix
-applied is isolation itself, not a diagnosed cause: `gemini-3.1-pro-preview` now bills to its own
-dedicated project with nothing else on it, which makes every day's figure attributable by
-construction going forward regardless of what the 2026-09-08 spike actually was. Different
-providers achieve this differently, and it's disclosed per provider rather than assumed uniform:
-**structurally, by construction** — OpenRouter's activity log is already per-model, so it's clean
-regardless; Gemini, from its own dedicated project onward. **By filtering a shared total** —
-Anthropic and OpenAI's keys are shared with other real systems, so their own per-key (Anthropic)
-or per-key-scoped (OpenAI) usage breakdown must be used instead of the account total. Confirm
-which category a provider is in before trusting its figure; don't assume isolation that was never
-verified — and don't assume a diagnosis just because a fix was applied.
+(`packages/agents/src/workers/seller.ts`). Confirm which providers achieve this **structurally, by
+construction** (OpenRouter's activity log is already per-model, so it's clean regardless) versus
+**by filtering a shared total** (Anthropic and OpenAI's keys are shared with other real systems,
+so their own per-key usage breakdown must be used instead of the account total) — don't assume
+either without checking.
+
+**A wrong diagnosis published is worse than an honest "unknown," and this project has now made
+that exact mistake once — corrected, not hidden.** A real Gemini invoice figure showed a ~2.7x
+spike on 2026-09-08 against every neighbouring day, with no corresponding change in this
+project's own token usage that day, and a smaller but real mismatch against the dated exchange
+rate on every other day checked. An earlier version of this section concluded the cause was
+shared Google Cloud billing and stated that moving `gemini-3.1-pro-preview` to its own dedicated
+project would fix it — 24 already-published prints carried a correction note saying so. **That
+diagnosis was wrong.** Checked directly against Google's own account records: the API key this
+project has always used for Gemini (`siu-runs-prints`, created 2026-08-30) has been dedicated
+solely to this project's SIU print runs since its creation — no other project has ever used it.
+There was never a shared-billing boundary to cross, so isolating it changed nothing that needed
+changing. **Both the spike and the persistent gap remain genuinely unexplained**, and the
+corrected prints now say so plainly rather than repeating the wrong explanation. Candidates not
+yet ruled out, in the order worth checking: (1) whether the billed line covers more than this
+project's own inference calls — context caching, storage, a separate SKU, or free-tier spillover
+appearing as a charge; (2) whether Google's own invoice states a conversion rate materially
+different from the market rate used to estimate the gap; (3) whether Google's billing-day
+boundary aligns with the UTC day this project's prints use, which would smear cost across day
+boundaries and could produce exactly this kind of unstable per-day ratio; (4) whether the figure
+being read is net of credits or gross. None of these were checked before the wrong conclusion was
+published the first time — the lesson recorded here, not just the correction.
 
 **Use the exchange rate the provider's own invoice states, never one picked to make a conversion
 work.** A provider billing in a currency other than USD (Google Cloud, observed live) converts at
