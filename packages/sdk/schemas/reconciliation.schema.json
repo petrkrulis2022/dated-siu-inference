@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "reconciliation.schema.json",
+  "title": "ReconciliationRecord",
+  "description": "A signed, anchored attestation that a print's cost_of_production_usd has been checked against a real provider invoice total and found within tolerance — docs/methodology.md §7. Deliberately never edits the print it reconciles: the print's own signed body (including status, permanently \"provisional\") is untouched. A print is 'final' when a valid record like this one exists for its print_id, checked by presence, never by a field on the print itself. Same relationship as a Receipt to a quote: a small, signed record referencing another artifact rather than embedding it.",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "decimalString": {
+      "type": "string",
+      "pattern": "^-?[0-9]+(\\.[0-9]+)?$",
+      "description": "A decimal number encoded as a string. Never a JSON number — no floats in money maths."
+    },
+    "hexString": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]+$"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "Build 1 emits \"1.0\". A same-major bump is additive and safe for an existing consumer to accept; a major bump is not."
+    },
+    "print_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The print this record reconciles — data/prints/<print_id>.json. This record never edits that file; it only references it."
+    },
+    "computed_usd": {
+      "$ref": "#/definitions/decimalString",
+      "description": "Copied directly from the referenced print's own cost_of_production_usd — never recomputed independently. That field already sums every recorded attempt across every measured model (packages/print/src/compute/cost-of-production.ts), so there is exactly one computation of a print's real cost, not a second one that can silently drift from it."
+    },
+    "invoice_usd": {
+      "$ref": "#/definitions/decimalString",
+      "description": "The real total across every provider actually billed for this print, summed from provider_breakdown. Must equal the sum of provider_breakdown's own invoice_usd values — enforced at signing time, not just documented."
+    },
+    "provider_breakdown": {
+      "type": "array",
+      "minItems": 1,
+      "description": "One entry per real billing source consulted, so invoice_usd is auditable rather than a single opaque number. See docs/methodology.md §7 on isolating a shared API key's usage before recording a figure here.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "provider": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Matches a ModelRegistryEntry.provider value actually present in the referenced print's constituents (e.g. \"openrouter\", \"anthropic\", \"openai\", \"google\", \"xai\")."
+          },
+          "invoice_usd": { "$ref": "#/definitions/decimalString" }
+        },
+        "required": ["provider", "invoice_usd"]
+      }
+    },
+    "relative_delta": {
+      "$ref": "#/definitions/decimalString",
+      "description": "abs(computed_usd - invoice_usd) / invoice_usd — @touchstone/harness's relativeDelta."
+    },
+    "tolerance": {
+      "$ref": "#/definitions/decimalString",
+      "description": "The tolerance this reconciliation was checked against — DEFAULT_RECONCILE_TOLERANCE unless overridden. A record only ever exists when relative_delta was within this at signing time (see reconciled_at) — a reconciliation attempt that misses tolerance produces a console report, never a signed record; the print simply staying without one already discloses \"not yet reconciled\" honestly."
+    },
+    "reconciled_at": {
+      "type": "string",
+      "minLength": 1,
+      "description": "When this reconciliation actually happened — necessarily well after the print's own date, since it depends on a real provider invoice becoming available. How long after the print a reader sees this took is part of the record, not implicit."
+    },
+    "signature": { "$ref": "#/definitions/hexString" },
+    "public_key": { "$ref": "#/definitions/hexString" },
+    "anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Anchored via the same TouchstoneAttestation contract and client a print uses (postPrint(bodyHash, version) — the contract never computes, validates or opines on a hash's contents, so no separate contract or ABI is needed).",
+      "properties": {
+        "chain": { "type": "string", "minLength": 1 },
+        "status": { "type": "string", "enum": ["anchored", "already-anchored", "stub", "failed"] },
+        "tx_hash": { "type": "string" },
+        "posted_at": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["chain", "status"]
+    }
+  },
+  "required": [
+    "schema_version",
+    "print_id",
+    "computed_usd",
+    "invoice_usd",
+    "provider_breakdown",
+    "relative_delta",
+    "tolerance",
+    "reconciled_at",
+    "signature",
+    "public_key"
+  ]
+}

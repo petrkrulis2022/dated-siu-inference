@@ -5,4 +5,5 @@ export type { RunManifest } from "./generated/run-manifest.schema.js";
 export type { Print } from "./generated/print.schema.js";
 export type { TouchstoneQuote, SettlementEntry } from "./generated/datum-quote.schema.js";
 export type { Receipt } from "./generated/receipt.schema.js";
+export type { ReconciliationRecord } from "./generated/reconciliation.schema.js";
 export type { AgentRunRecord } from "./generated/agent-run-record.schema.js";
