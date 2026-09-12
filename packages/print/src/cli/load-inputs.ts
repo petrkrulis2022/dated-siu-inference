@@ -20,6 +20,10 @@ export function printsDir(): string {
   return resolve(repoRoot(), "data/prints");
 }
 
+export function reconciliationsDir(): string {
+  return resolve(repoRoot(), "data/reconciliations");
+}
+
 export async function loadRegistry(): Promise<ModelRegistryEntry[]> {
   return JSON.parse(await readFile(join(registryDir(), "models.json"), "utf-8"));
 }

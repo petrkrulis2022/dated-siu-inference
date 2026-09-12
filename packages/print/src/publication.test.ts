@@ -2,8 +2,15 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Print } from "@touchstone/sdk";
-import { buildPrintsIndex, isBlendedDatedSiuPrint, writePrint, writePrintsIndex } from "./publication.js";
+import type { Print, ReconciliationRecord } from "@touchstone/sdk";
+import {
+  buildPrintsIndex,
+  isBlendedDatedSiuPrint,
+  loadReconciledPrintIds,
+  writePrint,
+  writePrintsIndex,
+  writeReconciliation,
+} from "./publication.js";
 
 let dir: string;
 
@@ -156,6 +163,68 @@ describe("writePrint", () => {
       expect(latest.series).toBeUndefined();
     },
   );
+});
+
+function reconciliation(overrides: Partial<ReconciliationRecord> = {}): ReconciliationRecord {
+  return {
+    schema_version: "1.0",
+    print_id: "2026-08-14",
+    computed_usd: "1.00",
+    invoice_usd: "1.00",
+    provider_breakdown: [{ provider: "openrouter", invoice_usd: "1.00" }],
+    relative_delta: "0",
+    tolerance: "0.02",
+    reconciled_at: "2026-08-20T00:00:00Z",
+    signature: "0xabc",
+    public_key: "0xdef",
+    anchor: { chain: "base-sepolia", status: "anchored", tx_hash: "0x111" },
+    ...overrides,
+  };
+}
+
+describe("writeReconciliation", () => {
+  it("writes to data/reconciliations/<print_id>.json", async () => {
+    const r = reconciliation();
+    const { path } = await writeReconciliation(dir, r);
+    expect(path).toBe(join(dir, "2026-08-14.json"));
+    expect(JSON.parse(await readFile(path, "utf-8"))).toEqual(r);
+  });
+
+  it("refuses to overwrite an existing reconciliation record at that path", async () => {
+    await writeReconciliation(dir, reconciliation({ invoice_usd: "1.00" }));
+    await expect(
+      writeReconciliation(dir, reconciliation({ invoice_usd: "1.05" })),
+    ).rejects.toThrow(/already exists.*append-only/s);
+    const onDisk = JSON.parse(
+      await readFile(join(dir, "2026-08-14.json"), "utf-8"),
+    ) as ReconciliationRecord;
+    expect(onDisk.invoice_usd).toBe("1.00");
+  });
+
+  it("refuses to write over a print at the same path — real use always passes a separate reconciliationsDir, never printsDir", async () => {
+    await writePrint(dir, print());
+    // Demonstrates why cli/reconcile.ts must pass reconciliationsDir(), never printsDir(): the
+    // append-only guard checks path existence, not content, so pointing both writers at the
+    // same directory would correctly refuse rather than silently corrupt either file — but it
+    // also means a real reconciliation could never be written there at all.
+    await expect(writeReconciliation(dir, reconciliation())).rejects.toThrow(/already exists/);
+    const printOnDisk = JSON.parse(await readFile(join(dir, "2026-08-14.json"), "utf-8")) as Print;
+    expect(printOnDisk.status).toBe("provisional");
+  });
+});
+
+describe("loadReconciledPrintIds", () => {
+  it("returns the print_ids of every reconciliation record on disk", async () => {
+    await writeReconciliation(dir, reconciliation({ print_id: "2026-08-14" }));
+    await writeReconciliation(dir, reconciliation({ print_id: "2026-08-15" }));
+    const ids = await loadReconciledPrintIds(dir);
+    expect(ids).toEqual(new Set(["2026-08-14", "2026-08-15"]));
+  });
+
+  it("returns an empty set for a directory that doesn't exist yet", async () => {
+    const ids = await loadReconciledPrintIds(join(dir, "does-not-exist"));
+    expect(ids).toEqual(new Set());
+  });
 });
 
 describe("isBlendedDatedSiuPrint", () => {

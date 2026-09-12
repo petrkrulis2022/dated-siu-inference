@@ -1,6 +1,6 @@
 import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Print, RunRecord } from "@touchstone/sdk";
+import type { Print, ReconciliationRecord, RunRecord } from "@touchstone/sdk";
 
 export interface WritePrintResult {
   path: string;
@@ -151,4 +151,54 @@ export async function writePrintsIndex(printsDir: string): Promise<string> {
   const path = join(printsDir, "index.json");
   await writeFile(path, `${JSON.stringify(entries, null, 2)}\n`, "utf-8");
   return path;
+}
+
+export interface WriteReconciliationResult {
+  path: string;
+}
+
+/**
+ * Writes a signed, anchored reconciliation record to data/reconciliations/<print_id>.json —
+ * docs/methodology.md §7. Deliberately never touches the print it reconciles: `status` on a
+ * print's own signed body stays "provisional" forever (it's part of what was signed, unlike
+ * anchor/correction_notes/superseded_by, which record events after the print). A print is
+ * "final" exactly when a valid record like this one exists for its print_id — presence, not a
+ * field — see loadReconciledPrintIds.
+ *
+ * Same append-only guard as writePrint, same reasoning: a signed, anchored reconciliation record
+ * is a real artifact from the moment it exists, not something safe to silently redo. A genuinely
+ * corrected invoice figure gets a follow-up disclosure later, the same way a print correction is
+ * a numbered revision alongside the original, never a second write to the same path.
+ */
+export async function writeReconciliation(
+  reconciliationsDir: string,
+  record: ReconciliationRecord,
+): Promise<WriteReconciliationResult> {
+  await mkdir(reconciliationsDir, { recursive: true });
+  const path = join(reconciliationsDir, `${record.print_id}.json`);
+
+  const alreadyExists = await access(path)
+    .then(() => true)
+    .catch(() => false);
+  if (alreadyExists) {
+    throw new Error(
+      `Refusing to overwrite ${path}: a reconciliation record already exists for this ` +
+        `print_id. Reconciliation writes are append-only, same as writePrint.`,
+    );
+  }
+
+  const json = `${JSON.stringify(record, null, 2)}\n`;
+  await writeFile(path, json, "utf-8");
+  return { path };
+}
+
+/**
+ * Every print_id with a reconciliation record on disk — this, not any field on the print itself,
+ * is what "final" means (docs/methodology.md §7). Callers don't validate the record's signature
+ * here (a directory listing, same shape as listPrintFiles); a reader who needs to trust a
+ * specific record independently should verify it directly (verifyReconciliationSignature).
+ */
+export async function loadReconciledPrintIds(reconciliationsDir: string): Promise<Set<string>> {
+  const files = await readdir(reconciliationsDir).catch(() => [] as string[]);
+  return new Set(files.filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, "")));
 }

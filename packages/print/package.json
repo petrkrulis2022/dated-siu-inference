@@ -13,7 +13,8 @@
     "verify": "pnpm run build && node dist/cli/verify.js",
     "publish-print": "pnpm run build && node dist/cli/publish.js",
     "publish-unattended": "pnpm run build && node dist/cli/publish-unattended.js",
-    "verify-onchain": "pnpm run build && node dist/cli/verify-onchain.js"
+    "verify-onchain": "pnpm run build && node dist/cli/verify-onchain.js",
+    "reconcile": "pnpm run build && node dist/cli/reconcile.js"
   },
   "dependencies": {
     "@touchstone/basket": "workspace:*",

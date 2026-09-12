@@ -10,8 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "dry-run": "pnpm run build && node dist/cli/dry-run.js",
-    "run": "pnpm run build && node dist/cli/run.js",
-    "reconcile": "pnpm run build && node dist/cli/reconcile.js"
+    "run": "pnpm run build && node dist/cli/run.js"
   },
   "dependencies": {
     "@touchstone/basket": "workspace:*",
