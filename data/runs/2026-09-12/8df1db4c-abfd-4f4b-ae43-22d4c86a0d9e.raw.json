@@ -1,0 +1,46 @@
+{
+  "id": "gen-1789174656-bQOEpt0slTmFpZ4Ew6p0",
+  "object": "chat.completion",
+  "created": 1789174656,
+  "model": "meta-llama/llama-3.3-70b-instruct",
+  "provider": "DeepInfra",
+  "system_fingerprint": null,
+  "service_tier": null,
+  "choices": [
+    {
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": "stop",
+      "native_finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"tracking_id\": \"SH-221C54\", \"origin_city\": \"Toronto\", \"destination_city\": \"Tallinn\", \"weight_kg\": 101, \"status\": \"in_transit\", \"priority\": \"standard\"}",
+        "refusal": null,
+        "reasoning": null
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 963,
+    "completion_tokens": 50,
+    "total_tokens": 1013,
+    "cost": 0.0001123,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": 0.0001123,
+      "upstream_inference_prompt_cost": 0.0000963,
+      "upstream_inference_completions_cost": 0.000016
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "image_tokens": 0,
+      "audio_tokens": 0
+    }
+  }
+}
