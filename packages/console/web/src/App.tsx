@@ -7,6 +7,7 @@ import { ActivityPanel } from "./panels/ActivityPanel.js";
 import { QuotedVsPaidPanel } from "./panels/QuotedVsPaidPanel.js";
 import { HealthPanel } from "./panels/HealthPanel.js";
 import { ChatAnalyticsPanel } from "./panels/ChatAnalyticsPanel.js";
+import { ArcDemoPanel } from "./panels/ArcDemoPanel.js";
 
 const TABS = [
   { id: "series", label: "Series" },
@@ -16,6 +17,7 @@ const TABS = [
   { id: "quoted-vs-paid", label: "Quoted vs paid" },
   { id: "health", label: "Health" },
   { id: "chat", label: "Chat analytics" },
+  { id: "arc-demo", label: "Arc live demo" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -35,7 +37,10 @@ export function App(): React.JSX.Element {
     <div className="app">
       <div className="banner">
         Touchstone Assay operator console — read-only, localhost-only. Never writes to{" "}
-        <code>data/</code>, never signs, never sends a transaction.
+        <code>data/</code>, never signs, never sends a transaction — with one deliberate
+        exception: the "Arc live demo" tab, whose buttons call already-deployed Cloudflare Workers
+        that do sign and send real Arc Testnet transactions. No key or wallet client lives in this
+        app; every other tab stays exactly as read-only as this banner says.
         {config ? ` Chain: ${config.chainName} (${config.chainId}).` : ""}
       </div>
 
@@ -58,6 +63,7 @@ export function App(): React.JSX.Element {
       {tab === "quoted-vs-paid" && <QuotedVsPaidPanel config={config} />}
       {tab === "health" && <HealthPanel config={config} />}
       {tab === "chat" && <ChatAnalyticsPanel />}
+      {tab === "arc-demo" && <ArcDemoPanel />}
     </div>
   );
 }
