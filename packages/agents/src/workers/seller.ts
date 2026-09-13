@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { createAdapterFor } from "@touchstone/harness";
 import type { ModelRegistryEntry } from "@touchstone/sdk";
 import { handleInferCore, type SellerDeps, type SellerOptions } from "../seller.js";
@@ -171,6 +172,12 @@ function depsFor(options: SellerOptions): SellerDeps {
 }
 
 const app = new Hono<{ Bindings: Env }>();
+
+// Same reasoning as buyer.ts's own comment on this: open to any origin so the ETHOnline demo
+// page (a local HTML file, deliberately not a Claude Artifact) can fetch() a real quote directly
+// from the browser. A no-payment /infer call only ever returns a 402 + a signed quote — nothing
+// sensitive, nothing that spends anything.
+app.use("/infer", cors({ origin: "*", allowMethods: ["POST", "OPTIONS"] }));
 
 app.post("/infer", async (c) => {
   const options = optionsFor(c.env);

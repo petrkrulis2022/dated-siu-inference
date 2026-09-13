@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { runBuyerDemo, type SellerEndpoint } from "../buyer.js";
 import { clientsFor } from "../wallets.js";
 
@@ -36,6 +37,13 @@ interface StepResult {
 }
 
 const app = new Hono<{ Bindings: Env }>();
+
+// Open to any origin: this endpoint triggers a real but trivial-value testnet trade with no
+// admin action and no secret in the response body — added so the ETHOnline demo page (a plain
+// local HTML file, not a Claude Artifact, which the platform's own sandbox blocks from calling
+// arbitrary hosts entirely) can click-trigger a run from a browser. curl was never subject to
+// this; only fetch() from a page on a different origin is.
+app.use("/run", cors({ origin: "*", allowMethods: ["POST", "OPTIONS"] }));
 
 app.post("/run", async (c) => {
   const env = c.env;
