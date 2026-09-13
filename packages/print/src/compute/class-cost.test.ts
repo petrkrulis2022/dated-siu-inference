@@ -11,6 +11,7 @@ function rec(
   input = 1000,
   output = 1000,
   reasoning = 0,
+  cachedInput = 0,
 ): RunRecord {
   return {
     run_id: `${instanceId}-${attempt}`,
@@ -19,7 +20,7 @@ function rec(
     instance_id: instanceId,
     seed: 1,
     attempt,
-    usage: { input, output, cached_input: 0, reasoning },
+    usage: { input, output, cached_input: cachedInput, reasoning },
     latency_ms: 1,
     gate_passed: gatePassed,
     raw_response_ref: "r.json",
@@ -49,6 +50,25 @@ describe("computeClassCost", () => {
 
   it("is a no-op when reasoning is zero — every existing non-reasoning model's cost is unchanged", () => {
     const result = computeClassCost([rec("i0", 1, true, 1000, 1000, 0)], PRICE);
+    expect(result.cost?.toString()).toBe(PER_ATTEMPT);
+  });
+
+  it("prices cached_input tokens at the model's own cached rate, when the price snapshot has one", () => {
+    // Found live, 2026-09-13: RunRecord.usage.cached_input is captured by every adapter but was
+    // never priced by this formula, so real, billed cache-hit tokens were silently free. 1000
+    // input @ $1/1M + 1000 output @ $2/1M + 500 cached @ $0.10/1M = 0.003 + 0.00005 = 0.00305.
+    const result = computeClassCost(
+      [rec("i0", 1, true, 1000, 1000, 0, 500)],
+      { ...PRICE, price_cached_in_usd_per_1m: "0.10" },
+    );
+    expect(result.cost?.toString()).toBe("0.00305");
+  });
+
+  it("leaves cached_input unpriced (not guessed) when the model has no published cached rate", () => {
+    // A model with real cached_input usage but no price_cached_in_usd_per_1m in its snapshot
+    // entry (no source published one) must not silently default to the input rate or to zero
+    // pretending to be a real price — it stays unpriced, same as PER_ATTEMPT with no cached term.
+    const result = computeClassCost([rec("i0", 1, true, 1000, 1000, 0, 500)], PRICE);
     expect(result.cost?.toString()).toBe(PER_ATTEMPT);
   });
 

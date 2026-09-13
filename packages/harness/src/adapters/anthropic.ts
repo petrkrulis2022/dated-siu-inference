@@ -89,14 +89,15 @@ export function createAnthropicAdapter(apiKey: string): Adapter {
     // Same architectural rule as google.ts's createGoogleAdapter — see its doc comment. A no-op
     // today: standard (non-extended-thinking) calls report 0 thinking tokens, so this never
     // triggers unless extended thinking is explicitly enabled for a candidate later.
+    const truncatedResult = result;
     const truncatedByReasoning =
-      result.response.stop_reason === "max_tokens" &&
-      (result.response.usage.output_tokens_details?.thinking_tokens ?? 0) > 0;
+      truncatedResult.response.stop_reason === "max_tokens" &&
+      (truncatedResult.response.usage.output_tokens_details?.thinking_tokens ?? 0) > 0;
     if (truncatedByReasoning) {
       const accommodatedBudget = params.max_tokens * (1 + REASONING_BUDGET_MULTIPLE);
       deviations.push(
         `completion truncated by mandatory reasoning (stop_reason max_tokens, ` +
-          `${result.response.usage.output_tokens_details?.thinking_tokens} reasoning tokens ` +
+          `${truncatedResult.response.usage.output_tokens_details?.thinking_tokens} reasoning tokens ` +
           `against a ${params.max_tokens}-token task budget) — retried with reasoning accommodated ` +
           `above the task budget, capped at ${REASONING_BUDGET_MULTIPLE}x (${accommodatedBudget} tokens total)`,
       );
@@ -109,16 +110,26 @@ export function createAnthropicAdapter(apiKey: string): Adapter {
       .map((block) => block.text)
       .join("");
 
+    // Same real-cost fix as google.ts: the truncated first call is a real, separately-billed
+    // request whose own usage must be summed in, not discarded — see google.ts's comment for the
+    // full reasoning. Currently a no-op in practice (see comment above), kept structurally
+    // identical to google.ts/openai.ts so it's correct the moment extended thinking is enabled.
+    const truncatedUsage = truncatedByReasoning ? truncatedResult.response.usage : undefined;
+
     const result_: AdapterResult = {
       text,
       usage: {
-        input: response.usage.input_tokens,
-        output: response.usage.output_tokens,
-        cached_input: response.usage.cache_read_input_tokens ?? 0,
-        reasoning: response.usage.output_tokens_details?.thinking_tokens ?? 0,
+        input: response.usage.input_tokens + (truncatedUsage?.input_tokens ?? 0),
+        output: response.usage.output_tokens + (truncatedUsage?.output_tokens ?? 0),
+        cached_input:
+          (response.usage.cache_read_input_tokens ?? 0) +
+          (truncatedUsage?.cache_read_input_tokens ?? 0),
+        reasoning:
+          (response.usage.output_tokens_details?.thinking_tokens ?? 0) +
+          (truncatedUsage?.output_tokens_details?.thinking_tokens ?? 0),
       },
       latency_ms: latencyMs,
-      raw: response,
+      raw: truncatedByReasoning ? { truncated: truncatedResult.response, final: response } : response,
       deviations,
     };
     return result_;

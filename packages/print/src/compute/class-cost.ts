@@ -4,6 +4,13 @@ import { D, callCost, mean, type DecimalValue } from "../decimal.js";
 export interface ModelPrice {
   price_in_usd_per_1m: string;
   price_out_usd_per_1m: string;
+  /** Rate for cached/reused prompt tokens (RunRecord.usage.cached_input), when the price
+   * snapshot's source publishes one separately. Absent — not "0" — for a model with no
+   * separately-published cache rate: cached_input then goes unpriced for it, a known, disclosed
+   * gap rather than a guessed rate. Distinct from sensitivity.ts's cachePolicyVariant, which
+   * models a hypothetical alternative cache-adoption policy as a delta off the headline number —
+   * this field prices cache use that actually happened, in the headline number itself. */
+  price_cached_in_usd_per_1m?: string;
 }
 
 export interface ClassCost {
@@ -52,11 +59,25 @@ export function computeClassCost(records: RunRecord[], price: ModelPrice): Class
         // here isn't a methodology choice, it's a gap against this project's own definition — the
         // index measures realised cost from executed runs, and the run record already carries
         // this field (RunRecord.usage.reasoning), captured but previously never priced.
+        //
+        // record.usage.cached_input, same category of gap, found 2026-09-13: every adapter
+        // captures it (RunRecord.usage.cached_input is required by schema) but until now no price
+        // snapshot published a cached rate and no cost formula priced it, so real, billed
+        // cache-hit tokens were silently free in every published number. Priced only when the
+        // model's own price snapshot entry carries price_cached_in_usd_per_1m (sourced from
+        // LiteLLM's real cache_read_input_token_cost, e.g. gemini-3.1-pro-preview's real,
+        // published $0.20/1M — confirmed against ai.google.dev/gemini-api/docs/pricing directly,
+        // matches exactly); absent for a model with no published cache rate, cached_input stays
+        // unpriced for it rather than guessed. Distinct from sensitivity.ts's cachePolicyVariant,
+        // which prices a hypothetical alternative cache-adoption policy as a delta off the
+        // headline — this prices cache use that actually happened, in the headline itself.
         callCost(
           record.usage.input,
           record.usage.output + record.usage.reasoning,
           price.price_in_usd_per_1m,
           price.price_out_usd_per_1m,
+          record.usage.cached_input,
+          price.price_cached_in_usd_per_1m,
         ),
       );
       if (record.gate_passed) {

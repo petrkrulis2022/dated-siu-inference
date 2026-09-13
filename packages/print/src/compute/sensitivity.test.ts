@@ -90,4 +90,17 @@ describe("applyAdjustment", () => {
     applyAdjustment(PRICE, { inputMultiplier: "0.5", outputMultiplier: "0.5" });
     expect(PRICE).toEqual(original);
   });
+
+  it("preserves price_cached_in_usd_per_1m through an adjustment — it isn't scaled by input/output multipliers", () => {
+    // Found live, 2026-09-13: applyAdjustment used to return a fresh object with only
+    // price_in_usd_per_1m/price_out_usd_per_1m, silently dropping any other field — a real
+    // regression risk the moment a cached rate existed, since every sensitivity variant runs
+    // headline records through applyAdjustment before computeClassCost/computeCostOfProduction.
+    const priceWithCache = { ...PRICE, price_cached_in_usd_per_1m: "0.25" };
+    const adjusted = applyAdjustment(priceWithCache, {
+      inputMultiplier: "0.5",
+      outputMultiplier: "0.5",
+    });
+    expect(adjusted.price_cached_in_usd_per_1m).toBe("0.25");
+  });
 });

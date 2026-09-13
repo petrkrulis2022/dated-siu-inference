@@ -115,6 +115,14 @@ export async function buildPriceSnapshotFromLiteLLM(
       model_id: reg.id,
       price_in_usd_per_1m: perTokenToPer1M(match.input_cost_per_token),
       price_out_usd_per_1m: perTokenToPer1M(match.output_cost_per_token),
+      // Same ≤200k-tier-only simplification as input/output above (this snapshot already never
+      // captures the >200k-tier price either) — not a new limitation this introduces. Absent
+      // entirely rather than defaulted to 0 or to the input rate when LiteLLM has no cache field
+      // for this model: RunRecord.usage.cached_input then goes unpriced for it, a known, disclosed
+      // gap (docs/methodology.md), never a guessed number.
+      ...(match.cache_read_input_token_cost != null
+        ? { price_cached_in_usd_per_1m: perTokenToPer1M(match.cache_read_input_token_cost) }
+        : {}),
     });
   }
 

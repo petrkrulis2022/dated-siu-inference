@@ -139,5 +139,8 @@ describe("createAnthropicAdapter", () => {
     expect(result.text).toBe("56");
     expect(result.deviations).toHaveLength(1);
     expect(result.deviations[0]).toContain("truncated by mandatory reasoning");
+    // The truncated first call is real, separately-billed usage — summed with the final call's,
+    // not discarded: input 50+50=100, output 2+8=10, reasoning 95+90=185.
+    expect(result.usage).toEqual({ input: 100, output: 10, cached_input: 0, reasoning: 185 });
   });
 });

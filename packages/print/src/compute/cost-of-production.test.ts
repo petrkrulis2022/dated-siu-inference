@@ -3,7 +3,13 @@ import type { RunRecord } from "@touchstone/sdk";
 import { computeCostOfProduction } from "./cost-of-production.js";
 import type { ModelInput } from "./index.js";
 
-function rec(input: number, output: number, gatePassed: boolean, reasoning = 0): RunRecord {
+function rec(
+  input: number,
+  output: number,
+  gatePassed: boolean,
+  reasoning = 0,
+  cachedInput = 0,
+): RunRecord {
   return {
     run_id: Math.random().toString(),
     model_id: "m",
@@ -11,7 +17,7 @@ function rec(input: number, output: number, gatePassed: boolean, reasoning = 0):
     instance_id: "T1-00",
     seed: 1,
     attempt: 1,
-    usage: { input, output, cached_input: 0, reasoning },
+    usage: { input, output, cached_input: cachedInput, reasoning },
     latency_ms: 1,
     gate_passed: gatePassed,
     raw_response_ref: "r.json",
@@ -75,5 +81,32 @@ describe("computeCostOfProduction", () => {
       },
     ];
     expect(computeCostOfProduction(models).toString()).toBe("2");
+  });
+
+  it("prices cached_input tokens at the model's cached rate, same fix as computeClassCost", () => {
+    const models: ModelInput[] = [
+      {
+        model_id: "A",
+        price: {
+          price_in_usd_per_1m: "1.00",
+          price_out_usd_per_1m: "2.00",
+          price_cached_in_usd_per_1m: "0.20",
+        },
+        // 1,000,000 cached @ $0.20/1M = $0.20, previously silently $0.
+        records: [rec(0, 0, true, 0, 1_000_000)],
+      },
+    ];
+    expect(computeCostOfProduction(models).toString()).toBe("0.2");
+  });
+
+  it("leaves cached_input unpriced when the model has no published cached rate", () => {
+    const models: ModelInput[] = [
+      {
+        model_id: "A",
+        price: { price_in_usd_per_1m: "1.00", price_out_usd_per_1m: "2.00" },
+        records: [rec(0, 0, true, 0, 1_000_000)],
+      },
+    ];
+    expect(computeCostOfProduction(models).toString()).toBe("0");
   });
 });

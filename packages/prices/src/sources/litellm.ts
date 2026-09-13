@@ -6,6 +6,12 @@ export interface LiteLLMEntry {
   mode?: string;
   input_cost_per_token?: number;
   output_cost_per_token?: number;
+  /** Cache-hit read rate, when this model publishes one separately — e.g. Gemini 3.1 Pro
+   * Preview's real $0.20/1M cached-input rate (confirmed live against ai.google.dev/gemini-api/
+   * docs/pricing, 2026-09-13), independent of the ≤200k-tier field name here which only ever
+   * carries the ≤200k rate — see build-snapshot.ts's own comment on why the >200k tier isn't
+   * captured. */
+  cache_read_input_token_cost?: number;
   max_input_tokens?: number;
   max_output_tokens?: number;
   [key: string]: unknown;

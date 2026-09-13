@@ -82,14 +82,15 @@ export function createOpenAiAdapter(apiKey: string): Adapter {
     // uniformly to any provider reporting reasoning tokens separately whose completion was cut
     // off by the task budget with reasoning already consuming part of it; a no-op for a call
     // that didn't hit this (finish_reason "length" only fires on a real truncation).
+    const truncatedResult = result;
     const truncatedByReasoning =
-      result.response.choices[0]?.finish_reason === "length" &&
-      (result.response.usage.completion_tokens_details?.reasoning_tokens ?? 0) > 0;
+      truncatedResult.response.choices[0]?.finish_reason === "length" &&
+      (truncatedResult.response.usage.completion_tokens_details?.reasoning_tokens ?? 0) > 0;
     if (truncatedByReasoning) {
       const accommodatedBudget = params.max_tokens * (1 + REASONING_BUDGET_MULTIPLE);
       deviations.push(
         `completion truncated by mandatory reasoning (finish_reason length, ` +
-          `${result.response.usage.completion_tokens_details?.reasoning_tokens} reasoning tokens ` +
+          `${truncatedResult.response.usage.completion_tokens_details?.reasoning_tokens} reasoning tokens ` +
           `against a ${params.max_tokens}-token task budget) — retried with reasoning accommodated ` +
           `above the task budget, capped at ${REASONING_BUDGET_MULTIPLE}x (${accommodatedBudget} tokens total)`,
       );
@@ -97,16 +98,24 @@ export function createOpenAiAdapter(apiKey: string): Adapter {
     }
 
     const { response, latencyMs } = result;
+    // Same real-cost fix as google.ts: the truncated first call is a real, separately-billed
+    // request whose own usage must be summed in, not discarded — see google.ts's comment for the
+    // full reasoning.
+    const truncatedUsage = truncatedByReasoning ? truncatedResult.response.usage : undefined;
     const adapterResult: AdapterResult = {
       text: response.choices[0]?.message.content ?? "",
       usage: {
-        input: response.usage.prompt_tokens,
-        output: response.usage.completion_tokens,
-        cached_input: response.usage.prompt_tokens_details?.cached_tokens ?? 0,
-        reasoning: response.usage.completion_tokens_details?.reasoning_tokens ?? 0,
+        input: response.usage.prompt_tokens + (truncatedUsage?.prompt_tokens ?? 0),
+        output: response.usage.completion_tokens + (truncatedUsage?.completion_tokens ?? 0),
+        cached_input:
+          (response.usage.prompt_tokens_details?.cached_tokens ?? 0) +
+          (truncatedUsage?.prompt_tokens_details?.cached_tokens ?? 0),
+        reasoning:
+          (response.usage.completion_tokens_details?.reasoning_tokens ?? 0) +
+          (truncatedUsage?.completion_tokens_details?.reasoning_tokens ?? 0),
       },
       latency_ms: latencyMs,
-      raw: response,
+      raw: truncatedByReasoning ? { truncated: truncatedResult.response, final: response } : response,
       deviations,
     };
     return adapterResult;

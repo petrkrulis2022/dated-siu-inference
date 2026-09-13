@@ -82,19 +82,19 @@ export function createGoogleAdapter(apiKey: string): Adapter {
     // model only works in thinking mode") must not have its mandatory reasoning compete with the
     // answer for the same task-defined budget. That's not a level playing field across
     // architectures, it's a tighter constraint for one of them — a benchmark artifact, not the
-    // model's real capability at the price it actually charges (reasoning tokens are billed as
-    // output either way, so the cost is captured correctly regardless of this retry).
+    // model's real capability at the price it actually charges.
     // finishReason "MAX_TOKENS" + nonzero thoughtsTokenCount is the provider's own signal that
     // this happened, not an inference from output length. REASONING_BUDGET_MULTIPLE bounds the
     // accommodation so this can't become an unbounded allowance.
+    const truncatedResult = result;
     const truncatedByReasoning =
-      result.response.candidates[0]?.finishReason === "MAX_TOKENS" &&
-      (result.response.usageMetadata.thoughtsTokenCount ?? 0) > 0;
+      truncatedResult.response.candidates[0]?.finishReason === "MAX_TOKENS" &&
+      (truncatedResult.response.usageMetadata.thoughtsTokenCount ?? 0) > 0;
     if (truncatedByReasoning) {
       const accommodatedBudget = params.max_tokens * (1 + REASONING_BUDGET_MULTIPLE);
       deviations.push(
         `completion truncated by mandatory reasoning (finishReason MAX_TOKENS, ` +
-          `${result.response.usageMetadata.thoughtsTokenCount} reasoning tokens against a ` +
+          `${truncatedResult.response.usageMetadata.thoughtsTokenCount} reasoning tokens against a ` +
           `${params.max_tokens}-token task budget) — retried with reasoning accommodated above ` +
           `the task budget, capped at ${REASONING_BUDGET_MULTIPLE}x (${accommodatedBudget} tokens total)`,
       );
@@ -106,16 +106,30 @@ export function createGoogleAdapter(apiKey: string): Adapter {
       .map((part) => part.text ?? "")
       .join("");
 
+    // The truncated first call is a real, separately-billed generateContent request — found live,
+    // 2026-09-13: this project's own cost never priced it because `result` was reassigned wholesale
+    // above, discarding the first response's usageMetadata entirely rather than adding it in. Google
+    // bills both calls; this project's own number must sum both too, or it understates real cost on
+    // every instance this retry fires for (routine for gemini-3.1-pro-preview, since it can't turn
+    // thinking off). The truncated call's own usageMetadata is the real, provider-reported count for
+    // exactly what it consumed before hitting the budget — not an estimate.
+    const truncatedUsage = truncatedByReasoning ? truncatedResult.response.usageMetadata : undefined;
+
     const adapterResult: AdapterResult = {
       text,
       usage: {
-        input: response.usageMetadata.promptTokenCount,
-        output: response.usageMetadata.candidatesTokenCount,
-        cached_input: response.usageMetadata.cachedContentTokenCount ?? 0,
-        reasoning: response.usageMetadata.thoughtsTokenCount ?? 0,
+        input: response.usageMetadata.promptTokenCount + (truncatedUsage?.promptTokenCount ?? 0),
+        output:
+          response.usageMetadata.candidatesTokenCount + (truncatedUsage?.candidatesTokenCount ?? 0),
+        cached_input:
+          (response.usageMetadata.cachedContentTokenCount ?? 0) +
+          (truncatedUsage?.cachedContentTokenCount ?? 0),
+        reasoning:
+          (response.usageMetadata.thoughtsTokenCount ?? 0) +
+          (truncatedUsage?.thoughtsTokenCount ?? 0),
       },
       latency_ms: latencyMs,
-      raw: response,
+      raw: truncatedByReasoning ? { truncated: truncatedResult.response, final: response } : response,
       deviations,
     };
     return adapterResult;

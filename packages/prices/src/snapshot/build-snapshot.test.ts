@@ -99,6 +99,68 @@ describe("buildPriceSnapshotFromLiteLLM", () => {
     expect(result.entries[0].price_out_usd_per_1m).toBe("6");
   });
 
+  it("captures a published cache_read_input_token_cost as price_cached_in_usd_per_1m", async () => {
+    // Found live, 2026-09-13: gemini-3.1-pro-preview's real LiteLLM entry carries
+    // cache_read_input_token_cost: 2e-7 ($0.20/1M) — confirmed to match Google's own published
+    // rate at ai.google.dev/gemini-api/docs/pricing exactly. Sourced the same way as
+    // input/output: real, live, no hand-picked number.
+    const registry: ModelRegistryEntry[] = [
+      {
+        id: "gemini-3.1-pro-preview",
+        provider: "google",
+        endpoint: "https://generativelanguage.googleapis.com",
+        model_string: "gemini-3.1-pro-preview",
+        tier: "frontier",
+        open_weights: false,
+        host: "google",
+      },
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          "gemini-3.1-pro-preview": {
+            input_cost_per_token: 0.000002,
+            output_cost_per_token: 0.000012,
+            cache_read_input_token_cost: 2e-7,
+          },
+        }),
+      })),
+    );
+
+    const { snapshot: result } = await buildPriceSnapshotFromLiteLLM(registry, "t", "t");
+    expect(result.entries[0].price_cached_in_usd_per_1m).toBe("0.2");
+  });
+
+  it("omits price_cached_in_usd_per_1m entirely when the source has no cache rate for this model", async () => {
+    // Absent, not defaulted to "0" or to the input rate — a model with no published cache rate
+    // must leave cached_input genuinely unpriced downstream, never guessed.
+    const registry: ModelRegistryEntry[] = [
+      {
+        id: "grok-4.6",
+        provider: "xai",
+        endpoint: "https://api.x.ai/v1/chat/completions",
+        model_string: "grok-4.6",
+        tier: "frontier",
+        open_weights: false,
+        host: "xai",
+      },
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          "xai/grok-4.6": { input_cost_per_token: 0.000002, output_cost_per_token: 0.000006 },
+        }),
+      })),
+    );
+
+    const { snapshot: result } = await buildPriceSnapshotFromLiteLLM(registry, "t", "t");
+    expect(result.entries[0]).not.toHaveProperty("price_cached_in_usd_per_1m");
+  });
+
   it("still reports a genuinely absent model as unmatched, never fabricating a price", async () => {
     const registry: ModelRegistryEntry[] = [
       {

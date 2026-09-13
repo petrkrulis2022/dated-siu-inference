@@ -29,6 +29,7 @@ export function applyAdjustment(price: ModelPrice, adjustment?: PolicyAdjustment
     return price;
   }
   return {
+    ...price,
     price_in_usd_per_1m: new D(price.price_in_usd_per_1m)
       .times(adjustment.inputMultiplier)
       .toString(),

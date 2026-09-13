@@ -65,6 +65,20 @@ describe("createGoogleAdapter", () => {
     expect(result.deviations).toHaveLength(1);
     expect(result.deviations[0]).toContain("truncated by mandatory reasoning");
     expect(result.deviations[0]).toContain("400 tokens total"); // 100 * (1+3)
+    // The truncated first call is a real, separately-billed request — found live, 2026-09-13 —
+    // so its usage (50 input, 2 output, 95 reasoning) must be summed with the final call's (50,
+    // 8, 90), not discarded: input 100, output 10, reasoning 185.
+    expect(result.usage).toEqual({ input: 100, output: 10, cached_input: 0, reasoning: 185 });
+    expect(result.raw).toEqual({
+      truncated: {
+        candidates: [{ content: { parts: [{ text: "" }] }, finishReason: "MAX_TOKENS" }],
+        usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 2, thoughtsTokenCount: 95 },
+      },
+      final: {
+        candidates: [{ content: { parts: [{ text: "56" }] }, finishReason: "STOP" }],
+        usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 8, thoughtsTokenCount: 90 },
+      },
+    });
   });
 
   it("does not retry when the completion wasn't truncated by reasoning", async () => {
