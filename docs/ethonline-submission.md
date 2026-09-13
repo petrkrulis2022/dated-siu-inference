@@ -17,6 +17,26 @@ Everything else below is ready to paste in.
 
 ---
 
+## What pre-dates this hackathon, and what was built during it
+
+This is a Continuity-track submission: the project existed before ETHOnline 2026, and this
+submission is about the real work added during it. The git tag **`pre-ethonline-2026`** marks the
+exact last commit before any of that work started (`2db0d05`, 2026-09-05) — checking it out shows
+precisely what existed beforehand, rather than leaving a reviewer to infer it from commit dates.
+
+**Pre-dates the hackathon** (at or before `pre-ethonline-2026`): the Dated SIU index itself and its
+published methodology, the measurement harness and price snapshots, the MCP server (`get_index`,
+`get_quote`, `convert`, `verify_receipt`) with its Circle Gateway x402 paywall, and
+`TouchstoneAttestation`/`TouchstoneEscrow` deployed, tested, and demoed on Base Sepolia.
+
+**Built during the hackathon** (`02fc4f6` onward, the commit immediately after the tag): deploying
+both contracts to Arc Testnet, the buyer and two seller agents as real, persistent Cloudflare
+Workers running the full loop against Arc, `arc.live.test.ts`'s independent escrow-lifecycle
+coverage for Arc, the MCP server's `verify_receipt` tool extending its supported-chain list to
+include `arc-testnet`, and the mainnet-ready `TouchstoneAttestation` deploy script.
+
+---
+
 ## Track selection — recommendation
 
 Up to 3 Partner Prizes may be selected; each needs its own integration + feedback blurb. Two
