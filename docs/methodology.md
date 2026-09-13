@@ -423,56 +423,77 @@ construction** (OpenRouter's activity log is already per-model, so it's clean re
 so their own per-key usage breakdown must be used instead of the account total) — don't assume
 either without checking.
 
-**A wrong diagnosis published is worse than an honest "unknown," and this project has now made
-that exact mistake once — corrected, not hidden.** A real Gemini invoice figure showed a ~2.7x
-spike on 2026-09-08 against every neighbouring day, with no corresponding change in this
-project's own token usage that day, and a smaller but real mismatch against the dated exchange
-rate on every other day checked. An earlier version of this section concluded the cause was
-shared Google Cloud billing and stated that moving `gemini-3.1-pro-preview` to its own dedicated
-project would fix it — 24 already-published prints carried a correction note saying so. **That
-diagnosis was wrong.** Checked directly against Google's own account records: the API key this
-project has always used for Gemini (`siu-runs-prints`, created 2026-08-30) has been dedicated
-solely to this project's SIU print runs since its creation — no other project has ever used it.
-There was never a shared-billing boundary to cross, so isolating it changed nothing that needed
-changing. **Both the spike and the persistent gap remain genuinely unexplained**, and the
-corrected prints now say so plainly rather than repeating the wrong explanation. Candidates not
-yet ruled out, in the order worth checking: (1) whether the billed line covers more than this
-project's own inference calls — context caching, storage, a separate SKU, or free-tier spillover
-appearing as a charge; (2) whether Google's own invoice states a conversion rate materially
-different from the market rate used to estimate the gap; (3) whether Google's billing-day
-boundary aligns with the UTC day this project's prints use, which would smear cost across day
-boundaries and could produce exactly this kind of unstable per-day ratio; (4) whether the figure
-being read is net of credits or gross. None of these were checked before the wrong conclusion was
-published the first time — the lesson recorded here, not just the correction.
+**A wrong diagnosis published is worse than an honest "unknown," and this project made that exact
+mistake once before finding the real cause — corrected each time, not hidden.** A real Gemini
+invoice figure showed a ~2.7x spike on 2026-09-08 against every neighbouring day, and a smaller
+but real mismatch against this project's own computed cost on every other day checked. The first
+diagnosis (shared Google Cloud billing, fixed by dedicating the API key to this project alone) was
+wrong — the key had never been shared. The correction that followed said the cause was unknown.
+It no longer is.
+
+**The real cause, confirmed: two distinct bugs in this project's own code, neither about Google's
+billing at all.** Both fixed forward (commit `48ba69c`), neither ever recomputes or edits an
+already-published print.
+
+1. **`RunRecord.usage.cached_input` was captured by every provider adapter but priced by
+   neither cost formula.** `class-cost.ts` and `cost-of-production.ts` only ever priced `input`
+   and `output + reasoning` — real, billed cache-hit tokens were silently free in every published
+   number, for every model with cache usage, not only Gemini (deepseek-v3.2, mistral-small-3.2,
+   gpt-5.1 and grok-4.6 all show real historical cached-token usage too). This is now priced via a
+   new, optional `price_cached_in_usd_per_1m` on a price snapshot entry, sourced the same way as
+   input/output pricing already is — LiteLLM's own published `cache_read_input_token_cost` — never
+   defaulted to zero or to the input rate for a model with no published cache rate. This is
+   unrelated to this section's own `cachePolicyVariant` sensitivity tool, which models a
+   *hypothetical* alternative cache-adoption policy as a delta off the headline number; this fix
+   prices cache use that actually happened, in the headline number itself.
+2. **The larger effect, specific to Gemini: a real, separately-billed API call was silently
+   discarded.** `packages/harness/src/adapters/google.ts` (structurally also `anthropic.ts` and
+   `openai.ts`, though not yet triggered in practice for either) retries with a bigger completion
+   budget whenever mandatory reasoning consumes the whole budget before an answer is produced —
+   `gemini-3.1-pro-preview` cannot disable "thinking," so this fires on nearly every call. The
+   retry's response used to *replace* the first call's result outright, discarding its real,
+   billed input and reasoning tokens rather than adding them in. This is why Google's real per-day
+   billed token counts were consistently higher than this project's own recorded usage on ordinary
+   days, not only the spike day, and why 2026-09-08 (and 2026-08-30, this project's first day)
+   showed a real spike: the retry simply fired unusually often on those two days specifically.
+   Both calls' usage is now summed, and the raw response preserves both when this fires.
+
+Every affected print's own `correction_notes` states its exact, per-model retroactive
+cached-token dollar impact — bug (1) is precisely reconstructable from each print's own already-
+recorded run records, since `cached_input` counts were always captured correctly, only unpriced.
+Bug (2) is not: the discarded call's real input-token count and full raw response were never
+saved, so its dollar effect cannot be reconstructed after the fact, only bounded qualitatively
+from each affected record's own `deviations` entry (which does carry the discarded call's real
+reasoning-token count). This is why these prints stay `status: "provisional"` permanently even
+now that the cause is fully known — a known cause with a partially unrecoverable magnitude still
+isn't a number this project will publish as final.
 
 **Use the exchange rate the provider's own invoice states, never one picked to make a conversion
-work.** A provider billing in a currency other than USD (Google Cloud, observed live) converts at
-a fixed rate stated on its own invoice, not a live market rate assumed after the fact —
-back-converting with a guessed rate is inventing a number, the one thing this project's working
-agreement forbids outright. Use the invoice's own stated USD figure directly.
+work.** Still true in general for any non-USD provider — but it was not, in the end, what this
+gap was about. Back-converting with a guessed rate is inventing a number, the one thing this
+project's working agreement forbids outright; use the invoice's own stated USD figure directly
+when one is available.
 
-**The implied-rate check: a reusable contamination test for any non-USD provider, not a one-off
-fix.** Found live, 2026-09-08: dividing each day's real Kč figure by that day's own computed USD
-cost, across ten real days, gave a column ranging 22.9 to 33.1 — a genuine currency pair does not
-move that much day to day, so the ragged column was itself the signal that something beyond
-exchange-rate noise was affecting the figure, days before the 2026-09-08 spike made the same
-underlying issue impossible to miss. The general form: for any provider billing in a foreign
-currency, back out the implied rate per day (real figure ÷ this project's own computed cost that
-day) across several real days. A flat column is consistent with clean isolation; a ragged one
-means investigate before trusting any single day's figure, including one that looks unremarkable
-on its own — the spike is what's easy to spot, but a smaller version of the same problem can
-ripple through every day at a scale that's easy to miss without running this check.
+**The implied-rate check correctly flagged a real problem — on the wrong side of the ratio.**
+Found live, 2026-09-08: dividing each day's real Kč figure by that day's own computed USD cost,
+across ten real days, gave a column ranging 22.9 to 33.1 — read at the time as a currency-side
+signal. It wasn't: the ragged column was this project's own *denominator* moving around, because
+the computed USD cost it was divided by was itself wrong in the two ways above (unpriced cache
+tokens, discarded call usage), and how often the discarded-call bug fired varies day to day. The
+general technique is still sound and still worth keeping for any provider billing in a foreign
+currency — a flat implied-rate column is consistent with a clean read on both sides; a ragged one
+means investigate *both* the real figure and this project's own computed figure before assuming
+the problem is attribution or currency. Don't assume which side is wrong; this time it was the
+side that looked authoritative because it was this project's own number.
 
 **Rule out this project's own arithmetic before concluding a gap is attribution, not a
-calculation error.** Before treating any real-vs-computed mismatch as contamination or a missing
-isolation boundary, independently verify this project's own price snapshot against the provider's
-real, current published rate for that exact model — done live, 2026-09-08: Google's published
-Gemini pricing ($2/1M input, $12/1M output including thinking tokens, confirmed via
+calculation error — and "arithmetic" means the whole formula, not just the rate.** Google's
+published Gemini pricing ($2/1M input, $12/1M output including thinking tokens, confirmed via
 `ai.google.dev/gemini-api/docs/pricing`) matched this project's own price snapshot exactly, which
-is what turned "something's wrong with Gemini" into a specific, testable claim about attribution
-rather than a suspicion this project's own maths might be wrong. Checking the counterparty's own
-published rate is cheap and immediate; assuming the gap is theirs without checking is not
-something this project's evidence hierarchy (§2) allows.
+correctly ruled out a *rate* error. It did not rule out a *scope* error — which tokens get counted
+and priced at all — and that turned out to be exactly where both real bugs above lived. Checking
+the counterparty's own published rate is cheap and immediate and worth doing first, but confirming
+the rate is right is not the same as confirming the formula that rate feeds into is complete.
 
 ## 8. Signing and anchoring
 
