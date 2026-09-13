@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Touchstone on Arc — live demo</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Source+Sans+3:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg: #fbfaf7;
+    --surface: #f3f1ea;
+    --ink: #16161a;
+    --ink-muted: #5c5c61;
+    --rule: #d9d6cc;
+    --rule-strong: #16161a;
+    --accent: #24466f;
+    --accent-soft: #e4e9f0;
+    --good: #2d6a4f;
+    --good-soft: #e3efe8;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+    --sans: "Source Sans 3", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    --serif: "Newsreader", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.55;
+    padding: 2.5rem 1.25rem 4rem;
+  }
+  .page { max-width: 52rem; margin: 0 auto; }
+  a { color: var(--accent); }
+
+  header { border-bottom: 1px solid var(--rule-strong); padding-bottom: 1.25rem; margin-bottom: 2rem; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-muted); margin: 0 0 0.6rem;
+  }
+  h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(1.6rem, 4vw, 2.1rem); margin: 0 0 0.6rem; }
+  .dek { color: var(--ink-muted); max-width: 42rem; margin: 0; }
+  .dek code { font-family: var(--mono); font-size: 0.9em; }
+
+  h2 { font-family: var(--serif); font-weight: 600; font-size: 1.15rem; margin: 2rem 0 1rem; }
+
+  .agents { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  @media (max-width: 760px) { .agents { grid-template-columns: 1fr; } }
+  .agent-card {
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 1.1rem;
+    display: flex; flex-direction: column; gap: 0.6rem;
+  }
+  .agent-role {
+    font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--accent); font-weight: 500;
+  }
+  .agent-model { font-size: 0.92rem; color: var(--ink-muted); }
+  .agent-address {
+    font-family: var(--mono); font-size: 0.78rem; word-break: break-all; line-height: 1.4;
+  }
+  .agent-address a { color: var(--ink); text-decoration-color: var(--rule-strong); }
+  .quote-btn {
+    margin-top: auto; font-family: var(--sans); font-size: 0.82rem; font-weight: 500;
+    background: var(--bg); color: var(--accent); border: 1px solid var(--accent);
+    border-radius: 6px; padding: 0.5rem 0.7rem; cursor: pointer;
+  }
+  .quote-btn:hover { background: var(--accent-soft); }
+  .quote-btn:disabled { opacity: 0.5; cursor: default; }
+  .quote-result {
+    font-family: var(--mono); font-size: 0.76rem; background: var(--bg); border: 1px solid var(--rule);
+    border-radius: 6px; padding: 0.5rem 0.6rem; display: none; white-space: pre-wrap;
+  }
+  .quote-result.shown { display: block; }
+
+  .trade-panel {
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 1.5rem;
+    margin-top: 1.5rem;
+  }
+  .run-btn {
+    font-family: var(--sans); font-size: 1rem; font-weight: 600;
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 0.85rem 1.6rem; cursor: pointer;
+  }
+  .run-btn:hover { filter: brightness(1.1); }
+  .run-btn:disabled { opacity: 0.55; cursor: default; }
+  .trade-hint { font-size: 0.85rem; color: var(--ink-muted); margin: 0.6rem 0 0; }
+
+  .log {
+    margin-top: 1.25rem; font-family: var(--mono); font-size: 0.82rem; line-height: 1.7;
+    background: var(--bg); border: 1px solid var(--rule); border-radius: 6px; padding: 0.9rem 1rem;
+    white-space: pre-wrap; display: none; max-height: 22rem; overflow-y: auto;
+  }
+  .log.shown { display: block; }
+  .log .line { display: block; }
+  .log .line.ok { color: var(--good); }
+
+  .result-grid {
+    display: none; margin-top: 1.25rem; grid-template-columns: 1fr 1fr; gap: 0.9rem;
+  }
+  .result-grid.shown { display: grid; }
+  @media (max-width: 560px) { .result-grid { grid-template-columns: 1fr; } }
+  .result-tile {
+    background: var(--good-soft); border: 1px solid var(--good); border-radius: 8px; padding: 0.9rem 1rem;
+  }
+  .result-tile .label { font-family: var(--mono); font-size: 0.7rem; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--good); margin-bottom: 0.3rem; }
+  .result-tile .value { font-family: var(--mono); font-size: 0.85rem; word-break: break-all; }
+  .result-tile .value a { color: var(--ink); }
+
+  footer { margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid var(--rule);
+    font-family: var(--mono); font-size: 0.78rem; color: var(--ink-muted); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <p class="eyebrow">Touchstone Assay — live on Arc Testnet</p>
+    <h1>A buyer agent shopping between two sellers, priced in SIU</h1>
+    <p class="dek">Every address below is a real wallet on Arc Testnet. Every button below makes a
+      real network call — a real quote, or a real trade: an on-chain escrow funding, a real
+      inference call, and a real settlement. Nothing here is simulated.</p>
+  </header>
+
+  <h2>The agents</h2>
+  <div class="agents">
+    <div class="agent-card">
+      <div class="agent-role">Buyer</div>
+      <div class="agent-model">Compares both quotes by SIU, funds escrow, verifies the receipt</div>
+      <div class="agent-address">
+        <a href="https://testnet.arcscan.app/address/0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e" target="_blank" rel="noopener">0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e</a>
+      </div>
+    </div>
+    <div class="agent-card">
+      <div class="agent-role">Seller — A</div>
+      <div class="agent-model">mistral-small-3.2-24b (open-weight)</div>
+      <div class="agent-address">
+        <a href="https://testnet.arcscan.app/address/0xE9BC2a2eA6597E70211e7EA5FdD2bc5fC9591746" target="_blank" rel="noopener">0xE9BC2a2eA6597E70211e7EA5FdD2bc5fC9591746</a>
+      </div>
+      <button class="quote-btn" data-seller="a" data-url="https://arc-seller-a.touchstoneassay.com/infer">Get a real quote</button>
+      <pre class="quote-result" id="quote-a"></pre>
+    </div>
+    <div class="agent-card">
+      <div class="agent-role">Seller — B</div>
+      <div class="agent-model">gpt-5.4-mini (frontier)</div>
+      <div class="agent-address">
+        <a href="https://testnet.arcscan.app/address/0x129C99E2b037403512724E50A5Aa309a519D04Ea" target="_blank" rel="noopener">0x129C99E2b037403512724E50A5Aa309a519D04Ea</a>
+      </div>
+      <button class="quote-btn" data-seller="b" data-url="https://arc-seller-b.touchstoneassay.com/infer">Get a real quote</button>
+      <pre class="quote-result" id="quote-b"></pre>
+    </div>
+  </div>
+
+  <div class="trade-panel">
+    <h2 style="margin-top:0">Run the trade</h2>
+    <p class="dek" style="margin-bottom:1rem">Triggers the whole loop in one call: the buyer asks
+      both sellers for a quote, picks whichever is cheaper in SIU, locks USDC in the
+      <code>TouchstoneEscrow</code> contract, waits for that seller to run real inference and
+      settle for its real metered cost, then independently verifies the payment through the MCP
+      server. Takes roughly 60–150 real seconds — it's waiting on live inference and live chain
+      confirmations, not stalled.</p>
+    <button class="run-btn" id="run-trade">Run trade</button>
+    <p class="trade-hint" id="run-hint">Click to start. This spends trivial real testnet USDC.</p>
+    <div class="log" id="log"></div>
+    <div class="result-grid" id="result-grid"></div>
+  </div>
+
+  <footer>docs/arc-demo.html — Touchstone Assay, ETHOnline 2026</footer>
+</div>
+
+<script>
+const BUYER_URL = "https://touchstone-arc-buyer.perklur.workers.dev/run";
+const ARCSCAN_TX = "https://testnet.arcscan.app/tx/";
+
+document.querySelectorAll(".quote-btn").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const out = document.getElementById("quote-" + btn.dataset.seller);
+    btn.disabled = true;
+    btn.textContent = "Asking…";
+    out.classList.add("shown");
+    out.textContent = "Requesting a real quote from " + btn.dataset.url + " …";
+    try {
+      const res = await fetch(btn.dataset.url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      const body = await res.json();
+      const q = (body.extensions && body.extensions.touchstone_quote) || body;
+      out.textContent =
+        "siu: " + q.siu + "  (cap " + q.siu_max + ")\n" +
+        "model: " + q.model + "\n" +
+        "usd cap: $" + q.amount_usd_max + "\n" +
+        "seller_id: " + q.seller_id;
+    } catch (err) {
+      out.textContent = "Request failed: " + (err && err.message ? err.message : String(err));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Get a real quote";
+    }
+  });
+});
+
+function logLine(text, ok) {
+  const log = document.getElementById("log");
+  const line = document.createElement("span");
+  line.className = "line" + (ok ? " ok" : "");
+  line.textContent = text;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+document.getElementById("run-trade").addEventListener("click", async () => {
+  const btn = document.getElementById("run-trade");
+  const hint = document.getElementById("run-hint");
+  const log = document.getElementById("log");
+  const resultGrid = document.getElementById("result-grid");
+  btn.disabled = true;
+  log.textContent = "";
+  log.classList.add("shown");
+  resultGrid.classList.remove("shown");
+  resultGrid.innerHTML = "";
+
+  const start = Date.now();
+  const timer = setInterval(() => {
+    hint.textContent = "Running — " + Math.round((Date.now() - start) / 1000) + "s elapsed (real inference + real chain confirmations)…";
+  }, 1000);
+
+  logLine("POST " + BUYER_URL);
+  try {
+    const res = await fetch(BUYER_URL, { method: "POST" });
+    const body = await res.json();
+    clearInterval(timer);
+
+    if (!body.ok) {
+      hint.textContent = "Run failed.";
+      logLine("ERROR: " + (body.error || "unknown error"));
+      return;
+    }
+
+    (body.log || []).forEach((line) => logLine(line, /tx |matched=true|settled/.test(line)));
+    hint.textContent = "Done in " + Math.round(body.latencyMs / 1000) + "s.";
+
+    const fullLog = (body.log || []).join("\n");
+    const fundMatch = fullLog.match(/escrow funded — tx (0x[a-fA-F0-9]+)/);
+    const settleMatch = fullLog.match(/settled \$([0-9.]+), tx (0x[a-fA-F0-9]+)/);
+    const verifyMatch = fullLog.match(/matched=(true|false) amount_paid_usd=\$([0-9.]+) amount_quoted_usd=\$([0-9.]+)/);
+    const sellerMatch = fullLog.match(/cheaper in SIU: (seller-[ab])/);
+
+    const tiles = [];
+    if (sellerMatch) tiles.push(["Winning seller", sellerMatch[1]]);
+    if (fundMatch) tiles.push(["Escrow funded — tx", `<a href="${ARCSCAN_TX}${fundMatch[1]}" target="_blank" rel="noopener">${fundMatch[1]}</a>`]);
+    if (settleMatch) tiles.push(["Settled $" + settleMatch[1] + " — tx", `<a href="${ARCSCAN_TX}${settleMatch[2]}" target="_blank" rel="noopener">${settleMatch[2]}</a>`]);
+    if (verifyMatch) tiles.push(["verify_receipt", "matched=" + verifyMatch[1] + " · paid $" + verifyMatch[2] + " of $" + verifyMatch[3] + " quoted"]);
+
+    resultGrid.innerHTML = tiles
+      .map(([label, value]) => `<div class="result-tile"><div class="label">${label}</div><div class="value">${value}</div></div>`)
+      .join("");
+    resultGrid.classList.add("shown");
+  } catch (err) {
+    clearInterval(timer);
+    hint.textContent = "Request failed.";
+    logLine("ERROR: " + (err && err.message ? err.message : String(err)));
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
