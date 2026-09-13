@@ -4,7 +4,14 @@ const BUYER_URL = "https://touchstone-arc-buyer.perklur.workers.dev/run";
 const ARCSCAN_ADDRESS = "https://testnet.arcscan.app/address/";
 const ARCSCAN_TX = "https://testnet.arcscan.app/tx/";
 
-const AGENTS = [
+interface AgentInfo {
+  role: string;
+  detail: string;
+  address: string;
+  quoteUrl?: string;
+}
+
+const AGENTS: AgentInfo[] = [
   {
     role: "Buyer",
     detail: "Compares both quotes by SIU, funds escrow, verifies the receipt",
@@ -22,7 +29,7 @@ const AGENTS = [
     address: "0x129C99E2b037403512724E50A5Aa309a519D04Ea",
     quoteUrl: "https://arc-seller-b.touchstoneassay.com/infer",
   },
-] as const;
+];
 
 interface TouchstoneQuote {
   siu: string;
@@ -187,7 +194,7 @@ export function ArcDemoPanel(): React.JSX.Element {
                 <button
                   className="arc-quote-btn"
                   disabled={quoteLoading[agent.role]}
-                  onClick={() => getQuote(agent.role, agent.quoteUrl)}
+                  onClick={() => getQuote(agent.role, agent.quoteUrl as string)}
                 >
                   {quoteLoading[agent.role] ? "Asking…" : "Get a real quote"}
                 </button>
