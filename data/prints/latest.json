@@ -1,48 +1,48 @@
 {
   "version": "SIU-2026a",
-  "print_id": "2026-09-12",
-  "date": "2026-09-12",
+  "print_id": "2026-09-13",
+  "date": "2026-09-13",
   "status": "provisional",
   "basket_costs": [
     {
       "model_id": "deepseek-v3.2",
-      "cost_usd": "0.001823"
+      "cost_usd": "0.001817"
     },
     {
       "model_id": "llama-3.3-70b-deepinfra",
-      "cost_usd": "0.000709"
+      "cost_usd": "0.000723"
     },
     {
       "model_id": "mistral-small-3.2-24b-instruct",
-      "cost_usd": "0.000655"
+      "cost_usd": "0.000653"
     },
     {
       "model_id": "qwen-2.5-72b-instruct",
-      "cost_usd": "0.002518"
+      "cost_usd": "0.002509"
     },
     {
       "model_id": "claude-sonnet-5",
-      "cost_usd": "0.023513"
+      "cost_usd": "0.023418"
     },
     {
       "model_id": "gpt-5.1",
-      "cost_usd": "0.009213"
+      "cost_usd": "0.009086"
     },
     {
       "model_id": "gemini-3.1-pro-preview",
-      "cost_usd": "0.020996"
+      "cost_usd": "0.020386"
     },
     {
       "model_id": "grok-4.6",
-      "cost_usd": "0.017043"
+      "cost_usd": "0.017012"
     },
     {
       "model_id": "claude-haiku-4-5",
-      "cost_usd": "0.007682"
+      "cost_usd": "0.007672"
     },
     {
       "model_id": "gpt-5.4-mini",
-      "cost_usd": "0.005299"
+      "cost_usd": "0.005285"
     }
   ],
   "weights": {
@@ -95,69 +95,69 @@
     {
       "model_id": "deepseek-v3.2",
       "usd_per_siu": "0.0018",
-      "spread_to_index": "-0.7962",
-      "siu_per_usd": "548.5"
+      "spread_to_index": "-0.7948",
+      "siu_per_usd": "550.2"
     },
     {
       "model_id": "llama-3.3-70b-deepinfra",
       "usd_per_siu": "0.0007",
-      "spread_to_index": "-0.9207",
-      "siu_per_usd": "1410.4"
+      "spread_to_index": "-0.9183",
+      "siu_per_usd": "1382.3"
     },
     {
       "model_id": "mistral-small-3.2-24b-instruct",
       "usd_per_siu": "0.0007",
-      "spread_to_index": "-0.9268",
-      "siu_per_usd": "1526.3"
+      "spread_to_index": "-0.9262",
+      "siu_per_usd": "1530.9"
     },
     {
       "model_id": "qwen-2.5-72b-instruct",
       "usd_per_siu": "0.0025",
-      "spread_to_index": "-0.7185",
-      "siu_per_usd": "397.0"
+      "spread_to_index": "-0.7167",
+      "siu_per_usd": "398.5"
     },
     {
       "model_id": "claude-sonnet-5",
-      "usd_per_siu": "0.0235",
-      "spread_to_index": "1.6285",
-      "siu_per_usd": "42.5"
+      "usd_per_siu": "0.0234",
+      "spread_to_index": "1.6442",
+      "siu_per_usd": "42.7"
     },
     {
       "model_id": "gpt-5.1",
-      "usd_per_siu": "0.0092",
-      "spread_to_index": "0.0300",
-      "siu_per_usd": "108.5"
+      "usd_per_siu": "0.0091",
+      "spread_to_index": "0.0260",
+      "siu_per_usd": "110.0"
     },
     {
       "model_id": "gemini-3.1-pro-preview",
-      "usd_per_siu": "0.0210",
-      "spread_to_index": "1.3472",
-      "siu_per_usd": "47.6"
+      "usd_per_siu": "0.0204",
+      "spread_to_index": "1.3019",
+      "siu_per_usd": "49.0"
     },
     {
       "model_id": "grok-4.6",
       "usd_per_siu": "0.0170",
-      "spread_to_index": "0.9053",
-      "siu_per_usd": "58.6"
+      "spread_to_index": "0.9209",
+      "siu_per_usd": "58.7"
     },
     {
       "model_id": "claude-haiku-4-5",
       "usd_per_siu": "0.0077",
-      "spread_to_index": "-0.1412",
-      "siu_per_usd": "130.1"
+      "spread_to_index": "-0.1337",
+      "siu_per_usd": "130.3"
     },
     {
       "model_id": "gpt-5.4-mini",
       "usd_per_siu": "0.0053",
-      "spread_to_index": "-0.4076",
-      "siu_per_usd": "188.7"
+      "spread_to_index": "-0.4033",
+      "siu_per_usd": "189.2"
     }
   ],
   "sensitivity_block": [
     {
       "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
-      "dated_siu": "0.0064",
-      "delta": "-0.2885",
+      "dated_siu": "0.0063",
+      "delta": "-0.2893",
       "applies_to": [
         "deepseek-v3.2",
         "llama-3.3-70b-deepinfra",
@@ -173,7 +173,7 @@
     },
     {
       "policy_variant": "batch-discount: 50% off input and output",
-      "dated_siu": "0.0045",
+      "dated_siu": "0.0044",
       "delta": "-0.5000",
       "applies_to": [
         "deepseek-v3.2",
@@ -199,29 +199,21 @@
     "siu_per_usd_mode": "ROUND_DOWN",
     "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. basket_cost carries more decimal places than dated_siu so the published print is reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
   },
-  "cost_of_production_usd": "1.4380",
-  "price_snapshot_ref": "price-snapshot-merged-2026-09-12T00-57-01.474Z.json",
+  "cost_of_production_usd": "1.4109",
+  "price_snapshot_ref": "price-snapshot-merged-2026-09-13T01-04-43.253Z.json",
   "methodology_version": "v0-draft",
-  "signature": "0x7520af167bb9fc040eea92bb05e8289810a348147721a1dba97297fd2c838f247b5a998d503df8ba250f7f67f2d2a6d8846e79ed4c844f06a0320f7b9eea15a5",
+  "signature": "0xdc7cdad8e87105269972f36ba297b67bb61b82858f6fe2947aeb6140b4eeb1d02fd40f371b014d83cc9c9cb0fdf91a88d4d9762ce054f10a03c65a91cfd0bb24",
   "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
   "anchor": {
     "chain": "base-sepolia",
     "status": "anchored",
-    "tx_hash": "0x8fc3fd13d8026e79a65ecc8033d509312b3db3324ae482c62a3df23217884294",
-    "posted_at": "2026-09-12T01:00:02.000Z"
+    "tx_hash": "0xdfdee369e297ee000c89ca3e07a499c28d46c816c7bc6c24c932f6fe5212153f",
+    "posted_at": "2026-09-13T01:07:32.000Z"
   },
   "correction_notes": [
     {
-      "published_at": "2026-09-12",
-      "note": "This print includes gemini-3.1-pro-preview, whose Google Cloud billing predates the point where it was isolated to this project alone. Before that, a real, unexplained cost gap was found between Google's actual billed Gemini cost and this project's own computed cost on every day independently checked (2026-09-08 through 2026-09-10 -- 2026-09-08 far larger than the others, but the gap wasn't confined to that one day). This project's own per-token pricing was independently verified against Google's real published rates and confirmed correct, ruling out a calculation error on this project's side -- but the cause of the gap itself was never established, and Gemini's own real invoice cost for any day before isolation cannot be attributed to this project with confidence. Because that evidence gap cannot be reconstructed after the fact, this print will remain status: \"provisional\" permanently, not through neglect. See docs/methodology.md's Index governance (§7) for the general policy and the isolation fix that resolves this for prints going forward."
-    },
-    {
-      "published_at": "2026-09-12",
-      "note": "Correction to this print's own correction note above: that note framed the real-vs-computed Gemini cost gap around Google Cloud billing \"isolation,\" implying a shared project or key might explain it. That's now confirmed wrong. The Gemini API key this project uses (siu-runs-prints, created 2026-08-30) has been dedicated solely to this project's SIU print runs since its creation -- no other Google Cloud project has ever used it. There was no shared-billing contamination to isolate, and moving it to its own dedicated project changed nothing that needed changing. The real gap -- a real ~2.7x cost spike on 2026-09-08 against every neighbouring day, and a persistent mismatch against the real, dated exchange rate found on every other day checked -- remains genuinely unexplained. This project's own per-token pricing was already independently verified against Google's real published rates and confirmed correct, so it isn't a calculation error on this project's side either. This print's status stays \"provisional\" for the honest reason that a real gap's real cause is still unknown -- not because a diagnosed shared-billing problem was found and fixed, which the correction note above incorrectly implied. See docs/methodology.md's Index governance (§7) for the current, corrected state of this investigation."
-    },
-    {
       "published_at": "2026-09-13",
-      "note": "Correction to this print's own two prior correction notes above: the first attributed a real Gemini cost gap to shared Google Cloud billing; the second retracted that as wrong but said the true cause remained unknown. Both are now superseded -- the cause is confirmed, and it is two distinct, real bugs in this project's own code, both now fixed forward (commit 48ba69c). (1) RunRecord.usage.cached_input was captured by every provider adapter but never priced by this project's cost formula -- a real, unconditional gap, not specific to Gemini. For this print specifically: gemini-3.1-pro-preview: 81827 cached tokens, $0.016365; grok-4.6: 7296 cached tokens, $0.000004 -- together understating the published cost_of_production_usd ($1.4380) by $0.016369. This is not the hypothetical cache-adoption policy docs/methodology.md's sensitivity block already models (cachePolicyVariant) -- this cache use actually happened and was actually billed. (2) Separately, and the larger effect for gemini-3.1-pro-preview: the Google adapter (also the Anthropic and OpenAI adapters, structurally, though not yet triggered in practice for either) discarded a real, separately-billed API call's usage whenever Gemini's mandatory reasoning -- thinking cannot be disabled for this model -- consumed the whole completion budget and triggered an internal retry with a bigger one; only the retry's usage was ever recorded. This fires on nearly every gemini-3.1-pro-preview call, which is why Google's real per-day billed token counts (confirmed against the real Cloud Billing SKU breakdown) were consistently higher than this project's own recorded usage, including on ordinary days, and why 2026-09-08 specifically (and 2026-08-30, this project's first day) showed a real spike: this retry simply fired unusually often on those two days. Each affected run record's own deviations field carries the discarded call's real reasoning-token count; its real input-token count and full raw response were never saved, so this piece cannot be reconstructed precisely after the fact -- unlike (1) above, which is exact. Neither bug is corrected on this print's own signed cost_of_production_usd or dated_siu -- a published print's signed body is never edited -- so this print remains status: \"provisional\" permanently: bug (1)'s effect is now precisely known (above), but bug (2)'s cannot be fully reconstructed, so full retroactive reconciliation of this print isn't achievable. See docs/methodology.md's Index governance for the current, corrected explanation."
+      "note": "This print was published (2026-09-13, automated daily run) before two real bugs in this project's own code were fixed (commit 48ba69c), both affecting its own cost_of_production_usd. (1) RunRecord.usage.cached_input was captured by every provider adapter but never priced by this project's cost formula -- a real, unconditional gap, not specific to any one provider. For this print specifically: gemini-3.1-pro-preview: 84506 cached tokens, $0.016901; grok-4.6: 7296 cached tokens, $0.000004 -- together understating the published cost_of_production_usd ($1.4109) by $0.016905. This is not a hypothetical cache-adoption policy (see docs/methodology.md's sensitivity block, cachePolicyVariant, which is unrelated) -- this cache use actually happened and was actually billed. (2) Separately, and larger for gemini-3.1-pro-preview specifically: the Google adapter discarded a real, separately-billed API call's usage whenever Gemini's mandatory reasoning consumed the whole completion budget and triggered an internal retry with a bigger one -- only the retry's usage was recorded, not the first, truncated call's. This fires on nearly every gemini-3.1-pro-preview call. Its real input-token count and full raw response were never saved for this print's own run records (captured only after the fix), so this piece cannot be reconstructed precisely, unlike (1) above. Neither bug is corrected on this print's own signed cost_of_production_usd or dated_siu -- a published print's signed body is never edited -- so this print remains status: \"provisional\" permanently. See docs/methodology.md's Index governance for the full explanation."
     }
   ]
 }

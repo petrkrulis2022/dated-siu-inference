@@ -209,5 +209,11 @@
     "status": "anchored",
     "tx_hash": "0xdfdee369e297ee000c89ca3e07a499c28d46c816c7bc6c24c932f6fe5212153f",
     "posted_at": "2026-09-13T01:07:32.000Z"
-  }
+  },
+  "correction_notes": [
+    {
+      "published_at": "2026-09-13",
+      "note": "This print was published (2026-09-13, automated daily run) before two real bugs in this project's own code were fixed (commit 48ba69c), both affecting its own cost_of_production_usd. (1) RunRecord.usage.cached_input was captured by every provider adapter but never priced by this project's cost formula -- a real, unconditional gap, not specific to any one provider. For this print specifically: gemini-3.1-pro-preview: 84506 cached tokens, $0.016901; grok-4.6: 7296 cached tokens, $0.000004 -- together understating the published cost_of_production_usd ($1.4109) by $0.016905. This is not a hypothetical cache-adoption policy (see docs/methodology.md's sensitivity block, cachePolicyVariant, which is unrelated) -- this cache use actually happened and was actually billed. (2) Separately, and larger for gemini-3.1-pro-preview specifically: the Google adapter discarded a real, separately-billed API call's usage whenever Gemini's mandatory reasoning consumed the whole completion budget and triggered an internal retry with a bigger one -- only the retry's usage was recorded, not the first, truncated call's. This fires on nearly every gemini-3.1-pro-preview call. Its real input-token count and full raw response were never saved for this print's own run records (captured only after the fix), so this piece cannot be reconstructed precisely, unlike (1) above. Neither bug is corrected on this print's own signed cost_of_production_usd or dated_siu -- a published print's signed body is never edited -- so this print remains status: \"provisional\" permanently. See docs/methodology.md's Index governance for the full explanation."
+    }
+  ]
 }
