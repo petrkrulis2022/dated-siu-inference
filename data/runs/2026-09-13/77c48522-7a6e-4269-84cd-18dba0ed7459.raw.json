@@ -1,0 +1,39 @@
+{
+  "id": "47e6e9eb-25b4-930c-aba8-cb9bef9511fd",
+  "object": "chat.completion",
+  "created": 1789261633,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```javascript\nexport function cappedRunningTotal(nums, cap) {\n  const result = [];\n  let total = 0;\n  for (const num of nums) {\n    total = Math.min(total + num, cap);\n    result.push(total);\n  }\n  return result;\n}\n```",
+        "reasoning_content": "The user wants a JavaScript function `cappedRunningTotal(nums, cap)` that returns an array of the running total of `nums`, except the total is never allowed to exceed `cap`. Once adding an element wou...```javascript\nexport function cappedRunningTotal(nums, cap) {\n  const result = [];\n  let total = 0;\n  for (const num of nums) {\n    total = Math.min(total + num, cap);\n    result.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 778,
+    "completion_tokens": 62,
+    "total_tokens": 1304,
+    "prompt_tokens_details": {
+      "text_tokens": 778,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 464,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 47120000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

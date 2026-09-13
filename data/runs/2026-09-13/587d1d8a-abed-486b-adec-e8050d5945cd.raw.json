@@ -1,0 +1,39 @@
+{
+  "id": "83b9a68e-a4f3-9bb2-bd41-b5c7ea367da0",
+  "object": "chat.completion",
+  "created": 1789261637,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```javascript\nexport function dedupeStable(nums) {\n  const seen = new Set();\n  const result = [];\n  for (const n of nums) {\n    if (!seen.has(n)) {\n      seen.add(n);\n      result.push(n);\n    }\n  }\n  return result;\n}\n```",
+        "reasoning_content": "The user wants me to write a JavaScript function `dedupeStable(nums)` that returns a new array with duplicate values removed, keeping only each value's first occurrence and preserving the original rel...",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 734,
+    "completion_tokens": 66,
+    "total_tokens": 1099,
+    "prompt_tokens_details": {
+      "text_tokens": 734,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 299,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 28900000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

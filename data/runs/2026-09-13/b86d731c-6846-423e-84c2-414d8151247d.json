@@ -1,0 +1,20 @@
+{
+  "run_id": "b86d731c-6846-423e-84c2-414d8151247d",
+  "model_id": "grok-4.6",
+  "task_class": "T1",
+  "instance_id": "T1-01",
+  "seed": 2763459660,
+  "attempt": 1,
+  "usage": {
+    "input": 1578,
+    "output": 63,
+    "cached_input": 512,
+    "reasoning": 262
+  },
+  "latency_ms": 4414,
+  "gate_passed": true,
+  "raw_response_ref": "b86d731c-6846-423e-84c2-414d8151247d.raw.json",
+  "deviations": [
+    "mandatory reasoning (thinking cannot be disabled) — 262 reasoning tokens used, billed separately from and not counted against max_tokens"
+  ]
+}
