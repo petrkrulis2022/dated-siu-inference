@@ -23,6 +23,7 @@ export function printsRouter(config: ConsoleConfig): Router {
           dated_siu: print.dated_siu,
           weights_source: print.weights.source,
           methodology_version: print.methodology_version,
+          correction_notes_count: print.correction_notes?.length ?? 0,
           anchor_tx_hash: print.anchor?.tx_hash ?? null,
           anchor_status: print.anchor?.status ?? "none",
           verification: await verifyPrintOnChain(print, () => resolveVerifyOptions(print, config)),

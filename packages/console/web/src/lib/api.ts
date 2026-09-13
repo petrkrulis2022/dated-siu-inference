@@ -34,6 +34,9 @@ export interface PrintRow {
   weights_source: "equal" | "routed-market-share";
   methodology_version: string;
   cost_of_production_usd: string;
+  /** docs/methodology.md's revision policy: a fact disclosed after publication that doesn't
+   * change dated_siu. Count only here — the full text is in PrintDetailResponse.print. */
+  correction_notes_count: number;
   anchor_tx_hash: string | null;
   anchor_status: string;
   verification: PrintVerification;

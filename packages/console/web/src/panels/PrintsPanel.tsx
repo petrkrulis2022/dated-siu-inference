@@ -69,6 +69,7 @@ export function PrintsPanel({ config }: { config: ConfigResponse | null }): Reac
               <th>Weights</th>
               <th>Methodology</th>
               <th>Cost</th>
+              <th>Corrections</th>
               <th>Anchor</th>
               <th>Signature</th>
             </tr>
@@ -86,6 +87,18 @@ export function PrintsPanel({ config }: { config: ConfigResponse | null }): Reac
                 <td>{p.weights_source}</td>
                 <td>{p.methodology_version}</td>
                 <td>${p.cost_of_production_usd}</td>
+                <td>
+                  {p.correction_notes_count > 0 ? (
+                    <span
+                      className="badge warn"
+                      title="This print has been corrected after publication — see its own correction notice below, or the public print page."
+                    >
+                      {p.correction_notes_count}
+                    </span>
+                  ) : (
+                    <span className="muted">—</span>
+                  )}
+                </td>
                 <td>
                   {p.anchor_tx_hash ? (
                     <ExplorerLink config={config} kind="tx" value={p.anchor_tx_hash} />
@@ -120,6 +133,10 @@ interface SensitivityRow {
   delta: string;
   applies_to?: string[];
 }
+interface CorrectionNote {
+  published_at: string;
+  note: string;
+}
 interface PrintFields {
   print_id: string;
   cost_of_production_usd: string;
@@ -127,6 +144,38 @@ interface PrintFields {
   market_spread?: string;
   exchange_rate_table: ExchangeRateRow[];
   sensitivity_block: SensitivityRow[];
+  correction_notes?: CorrectionNote[];
+}
+
+function CorrectionNotices({ notes }: { notes: CorrectionNote[] }): React.JSX.Element | null {
+  if (notes.length === 0) return null;
+  // Same prominence as the public site's own renderCorrectionNotesNotice — docs/methodology.md's
+  // revision policy: a fact disclosed after publication that doesn't change dated_siu. Rendered
+  // first, before anything else about this print, not buried in the raw-JSON dump below — found
+  // live, 2026-09-13: this console showed no correction notices at all, while the public site
+  // rendered them prominently, making this the one view an operator could read without ever
+  // seeing a disclosure that applied to the print in front of them.
+  return (
+    <div
+      style={{
+        marginBottom: 16,
+        padding: 12,
+        borderRadius: 6,
+        border: "1px solid #7a5c00",
+        background: "#2a2210",
+      }}
+    >
+      <strong>Correction notice</strong> — published after this print, disclosing a fact that does
+      not change dated_siu:
+      <ul className="link-list">
+        {notes.map((n, i) => (
+          <li key={i}>
+            {n.published_at} — {n.note}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function PrintDetail({ detail }: { detail: PrintDetailResponse }): React.JSX.Element {
@@ -134,6 +183,8 @@ function PrintDetail({ detail }: { detail: PrintDetailResponse }): React.JSX.Ele
   return (
     <div style={{ marginTop: 16, borderTop: "1px solid #262b38", paddingTop: 16 }}>
       <h3>{print.print_id}</h3>
+
+      <CorrectionNotices notes={print.correction_notes ?? []} />
 
       <div className="stat-row">
         <div className="stat">
