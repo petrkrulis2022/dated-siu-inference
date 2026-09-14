@@ -4,30 +4,37 @@ import { composeTweetText } from "./tweet-text.js";
 
 function print(overrides: Partial<Print> = {}): Print {
   return {
-    print_id: "2026-09-13",
-    date: "2026-09-13",
-    dated_siu: "0.0089",
+    print_id: "2026-09-14",
+    date: "2026-09-14",
+    dated_siu: "0.0110",
+    exchange_rate_table: [
+      { model_id: "a" },
+      { model_id: "b" },
+      { model_id: "c", excluded_reason: "provider outage" },
+    ],
     ...overrides,
-  } as Print;
+  } as unknown as Print;
 }
 
 describe("composeTweetText", () => {
-  it("states provisional plainly, and links to this print's own page", () => {
-    const text = composeTweetText(print(), false);
+  it("counts only qualifying (non-excluded) models, never a hardcoded number", () => {
+    const text = composeTweetText(print());
+    expect(text).toContain("measured across 2 models");
+  });
+
+  it("uses the print's own real dated_siu verbatim — never invents a number", () => {
+    const text = composeTweetText(print({ dated_siu: "0.0090" }));
+    expect(text).toContain("Dated SIU today: $0.0090");
+  });
+
+  it("matches the exact approved template", () => {
+    const text = composeTweetText(print());
     expect(text).toBe(
-      "Dated SIU — $0.0089 (2026-09-13, provisional).\nhttps://prints.touchstoneassay.com/prints/2026-09-13",
+      "Dated SIU today: $0.0110\n" +
+        "The benchmark price of one unit of completed AI work — a fixed basket of tasks, measured " +
+        "across 2 models by actually buying the inference and reconciling against invoices.\n" +
+        "Published daily. Signed. Anchored on Base.\n" +
+        "https://prints.touchstoneassay.com",
     );
-  });
-
-  it("states final when a reconciliation record exists for this print", () => {
-    const text = composeTweetText(print(), true);
-    expect(text).toContain("final");
-    expect(text).not.toContain("provisional");
-  });
-
-  it("never invents a number — uses the print's own real dated_siu and print_id verbatim", () => {
-    const text = composeTweetText(print({ print_id: "2026-09-12-frontier", dated_siu: "0.0091" }), false);
-    expect(text).toContain("$0.0091");
-    expect(text).toContain("prints/2026-09-12-frontier");
   });
 });

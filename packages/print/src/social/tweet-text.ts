@@ -1,9 +1,17 @@
 import type { Print } from "@touchstone/sdk";
 
-/** Same rule every other surface (site, console) already follows — docs/methodology.md §7:
- * "final" is presence of a reconciliation record, never print.status (permanently "provisional"
- * on the signed body itself). */
-export function composeTweetText(print: Print, isFinal: boolean): string {
-  const status = isFinal ? "final" : "provisional";
-  return `Dated SIU — $${print.dated_siu} (${print.date}, ${status}).\nhttps://prints.touchstoneassay.com/prints/${print.print_id}`;
+/**
+ * Model count is derived from the print's own exchange_rate_table (excluded_reason absent =
+ * qualified), never hardcoded — registry composition changes over time (models get admitted or
+ * excluded), and a fixed number in this template would silently go stale the next time it does.
+ */
+export function composeTweetText(print: Print): string {
+  const modelCount = print.exchange_rate_table.filter((row) => !row.excluded_reason).length;
+  return (
+    `Dated SIU today: $${print.dated_siu}\n` +
+    `The benchmark price of one unit of completed AI work — a fixed basket of tasks, measured ` +
+    `across ${modelCount} models by actually buying the inference and reconciling against invoices.\n` +
+    `Published daily. Signed. Anchored on Base.\n` +
+    `https://prints.touchstoneassay.com`
+  );
 }

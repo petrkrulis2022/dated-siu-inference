@@ -1,8 +1,7 @@
 import { join } from "node:path";
-import { loadReconciledPrintIds } from "../publication.js";
 import { composeTweetText } from "../social/tweet-text.js";
 import { postTweet, type TwitterCredentials } from "../social/twitter.js";
-import { loadPrint, printsDir, reconciliationsDir } from "./load-inputs.js";
+import { loadPrint, printsDir } from "./load-inputs.js";
 
 function credentialsFromEnv(): TwitterCredentials {
   const apiKey = process.env.X_API_KEY;
@@ -25,8 +24,7 @@ if (!target) {
 
 const path = join(printsDir(), `${target}.json`);
 const print = await loadPrint(path);
-const reconciled = await loadReconciledPrintIds(reconciliationsDir());
-const text = composeTweetText(print, reconciled.has(print.print_id));
+const text = composeTweetText(print);
 
 console.log("Posting:\n" + text);
 const credentials = credentialsFromEnv();
