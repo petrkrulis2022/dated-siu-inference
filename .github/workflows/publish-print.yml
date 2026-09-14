@@ -176,6 +176,24 @@ jobs:
           Automated daily run. Cadence and cut-off: docs/methodology.md, Index governance."
           git push origin main
 
+      # Deliberately continue-on-error: a Twitter/X API hiccup must never mark a successful,
+      # already signed-and-anchored, already-pushed print's run as failed — same reasoning this
+      # workflow's own header comment gives for why site publication isn't gated on the JS/
+      # Solidity suite. Only ever fires for the headline Dated SIU print (this step's own
+      # PRINT_ID), never the same day's -frontier/-commodity sub-prints, so this is one tweet a
+      # day. Verified live, 2026-09-13, against the real API before this step was added —
+      # https://x.com/touchstoneassay/status/2099389774620450981.
+      - name: Tweet the print
+        if: steps.publish.outputs.status == 'published'
+        continue-on-error: true
+        env:
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_KEY_SECRET: ${{ secrets.X_API_KEY_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
+          PRINT_ID: ${{ steps.resolve.outputs.print_id }}
+        run: pnpm --filter @touchstone/print exec node dist/cli/tweet.js "$PRINT_ID"
+
       # A missed day is disclosed on the public site (site/src/data.ts's loadIncidents), not
       # silently absent — the same "the record must tell the truth" principle the supersession
       # and superseded-print disclosures already follow. Deliberately narrow: this only ever
