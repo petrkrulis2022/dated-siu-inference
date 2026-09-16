@@ -1,0 +1,21 @@
+{
+  "run_id": "079b2abc-db98-4621-9467-0d6c507be8bc",
+  "model_id": "llama-3.3-70b-deepinfra",
+  "task_class": "T2",
+  "instance_id": "T2-03",
+  "seed": 1903970201,
+  "attempt": 1,
+  "usage": {
+    "input": 21429,
+    "output": 29,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 298,
+  "gate_passed": true,
+  "raw_response_ref": "079b2abc-db98-4621-9467-0d6c507be8bc.raw.json",
+  "deviations": [
+    "retry 1: OpenAI-compatible request failed: 429",
+    "retry 2: OpenAI-compatible request failed: 429"
+  ]
+}

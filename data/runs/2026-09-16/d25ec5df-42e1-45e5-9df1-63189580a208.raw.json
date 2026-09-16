@@ -1,0 +1,39 @@
+{
+  "id": "14260ef4-ae6a-9dc5-92f0-ee8feee6ef71",
+  "object": "chat.completion",
+  "created": 1789520520,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "0B165E\n989041\n9B9802\n1459C2",
+        "reasoning_content": "The user wants me to extract archival access codes from the document. Let me find all the internal notes with access codes.\n",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21644,
+    "completion_tokens": 17,
+    "total_tokens": 21846,
+    "prompt_tokens_details": {
+      "text_tokens": 21644,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 185,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 437320000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

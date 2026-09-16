@@ -1,0 +1,18 @@
+{
+  "run_id": "9e103a80-32b5-47ba-82e8-4145bb639a85",
+  "model_id": "deepseek-v3.2",
+  "task_class": "T1",
+  "instance_id": "T1-01",
+  "seed": 231663730,
+  "attempt": 1,
+  "usage": {
+    "input": 918,
+    "output": 63,
+    "cached_input": 192,
+    "reasoning": 0
+  },
+  "latency_ms": 205,
+  "gate_passed": true,
+  "raw_response_ref": "9e103a80-32b5-47ba-82e8-4145bb639a85.raw.json",
+  "deviations": []
+}
