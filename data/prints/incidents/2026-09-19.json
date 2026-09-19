@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-19",
+  "run_url": "https://github.com/petrkrulis2022/dated-siu-inference/actions/runs/35411053333",
+  "reason": "Refusing to publish: only 3 of 6 frontier-tier models qualified (minimum 4) \u2014 the overall qualifying count is high enough, but a blend that has lost an entire tier is a measurement of a different market, not a thinner measurement of the same one. See methodology.md's registry inclusion policy.",
+  "infra_failures": "45 instance(s) had an infrastructure failure and produced no run record:\n  gpt-5.1 / T1: 5x rate_limit \u2014 \"OpenAI request failed: 429\"\n  gpt-5.1 / T2: 5x rate_limit \u2014 \"OpenAI request failed: 429\"\n  gpt-5.1 / T3: 5x rate_limit \u2014 \"OpenAI request failed: 429\"\n  gemini-3.1-pro-preview / T1: 5x rate_limit \u2014 \"Google request failed: 429\"\n  gemini-3.1-pro-preview / T2: 5x rate_limit \u2014 \"Google request failed: 429\"\n  gemini-3.1-pro-preview / T3: 5x rate_limit \u2014 \"Google request failed: 429\"\n  gpt-5.4-mini / T1: 5x rate_limit \u2014 \"OpenAI request failed: 429\"\n  gpt-5.4-mini / T2: 5x rate_limit \u2014 \"OpenAI request failed: 429\"\n  gpt-5.4-mini / T3: 5x rate_limit \u2014 \"OpenAI request failed: 429\"",
+  "qualifying_models": null,
+  "registered_models": null,
+  "cost_usd": null,
+  "prior_attempts": null,
+  "occurred_at": "2026-09-19T01:03:07Z"
+}
