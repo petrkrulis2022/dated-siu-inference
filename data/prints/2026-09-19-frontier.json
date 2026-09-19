@@ -1,25 +1,9 @@
 {
   "version": "SIU-2026a",
-  "print_id": "2026-09-19",
+  "print_id": "2026-09-19-frontier",
   "date": "2026-09-19",
   "status": "provisional",
   "basket_costs": [
-    {
-      "model_id": "deepseek-v3.2",
-      "cost_usd": "0.001824"
-    },
-    {
-      "model_id": "llama-3.3-70b-deepinfra",
-      "cost_usd": "0.000713"
-    },
-    {
-      "model_id": "mistral-small-3.2-24b-instruct",
-      "cost_usd": "0.000656"
-    },
-    {
-      "model_id": "qwen-2.5-72b-instruct",
-      "cost_usd": "0.002517"
-    },
     {
       "model_id": "claude-sonnet-5",
       "cost_usd": "0.023548"
@@ -49,73 +33,33 @@
     "source": "equal",
     "values": [
       {
-        "model_id": "deepseek-v3.2",
-        "weight": "0.111111"
-      },
-      {
-        "model_id": "llama-3.3-70b-deepinfra",
-        "weight": "0.111111"
-      },
-      {
-        "model_id": "mistral-small-3.2-24b-instruct",
-        "weight": "0.111111"
-      },
-      {
-        "model_id": "qwen-2.5-72b-instruct",
-        "weight": "0.111111"
-      },
-      {
         "model_id": "claude-sonnet-5",
-        "weight": "0.111111"
+        "weight": "0.200000"
       },
       {
         "model_id": "gemini-3.1-pro-preview",
-        "weight": "0.111111"
+        "weight": "0.200000"
       },
       {
         "model_id": "grok-4.6",
-        "weight": "0.111111"
+        "weight": "0.200000"
       },
       {
         "model_id": "claude-haiku-4-5",
-        "weight": "0.111111"
+        "weight": "0.200000"
       },
       {
         "model_id": "gpt-5.4-mini",
-        "weight": "0.111111"
+        "weight": "0.200000"
       }
     ]
   },
-  "dated_siu": "0.0109",
+  "dated_siu": "0.0186",
   "exchange_rate_table": [
-    {
-      "model_id": "deepseek-v3.2",
-      "usd_per_siu": "0.0018",
-      "spread_to_index": "-0.8334",
-      "siu_per_usd": "548.1"
-    },
-    {
-      "model_id": "llama-3.3-70b-deepinfra",
-      "usd_per_siu": "0.0007",
-      "spread_to_index": "-0.9348",
-      "siu_per_usd": "1401.6"
-    },
-    {
-      "model_id": "mistral-small-3.2-24b-instruct",
-      "usd_per_siu": "0.0007",
-      "spread_to_index": "-0.9401",
-      "siu_per_usd": "1525.4"
-    },
-    {
-      "model_id": "qwen-2.5-72b-instruct",
-      "usd_per_siu": "0.0025",
-      "spread_to_index": "-0.7701",
-      "siu_per_usd": "397.2"
-    },
     {
       "model_id": "claude-sonnet-5",
       "usd_per_siu": "0.0235",
-      "spread_to_index": "1.1508",
+      "spread_to_index": "0.2684",
       "siu_per_usd": "42.4"
     },
     {
@@ -125,38 +69,34 @@
     {
       "model_id": "gemini-3.1-pro-preview",
       "usd_per_siu": "0.0391",
-      "spread_to_index": "2.5736",
+      "spread_to_index": "1.1074",
       "siu_per_usd": "25.5"
     },
     {
       "model_id": "grok-4.6",
       "usd_per_siu": "0.0171",
-      "spread_to_index": "0.5633",
+      "spread_to_index": "-0.0781",
       "siu_per_usd": "58.4"
     },
     {
       "model_id": "claude-haiku-4-5",
       "usd_per_siu": "0.0077",
-      "spread_to_index": "-0.2972",
+      "spread_to_index": "-0.5855",
       "siu_per_usd": "129.9"
     },
     {
       "model_id": "gpt-5.4-mini",
       "usd_per_siu": "0.0053",
-      "spread_to_index": "-0.5121",
+      "spread_to_index": "-0.7122",
       "siu_per_usd": "187.1"
     }
   ],
   "sensitivity_block": [
     {
       "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
-      "dated_siu": "0.0079",
-      "delta": "-0.2774",
+      "dated_siu": "0.0135",
+      "delta": "-0.2741",
       "applies_to": [
-        "deepseek-v3.2",
-        "llama-3.3-70b-deepinfra",
-        "mistral-small-3.2-24b-instruct",
-        "qwen-2.5-72b-instruct",
         "claude-sonnet-5",
         "gpt-5.1",
         "gemini-3.1-pro-preview",
@@ -167,13 +107,9 @@
     },
     {
       "policy_variant": "batch-discount: 50% off input and output",
-      "dated_siu": "0.0055",
+      "dated_siu": "0.0093",
       "delta": "-0.5000",
       "applies_to": [
-        "deepseek-v3.2",
-        "llama-3.3-70b-deepinfra",
-        "mistral-small-3.2-24b-instruct",
-        "qwen-2.5-72b-instruct",
         "claude-sonnet-5",
         "gpt-5.1",
         "gemini-3.1-pro-preview",
@@ -193,24 +129,16 @@
     "siu_per_usd_mode": "ROUND_DOWN",
     "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. basket_cost carries more decimal places than dated_siu so the published print is reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
   },
-  "cost_of_production_usd": "1.5471",
+  "cost_of_production_usd": "1.4778",
   "price_snapshot_ref": "price-snapshot-merged-2026-09-19T07-10-06.801Z.json",
   "methodology_version": "v0-draft",
-  "prior_attempts": [
-    {
-      "attempted_at": "2026-09-19T04:36:01Z",
-      "reason": "Refusing to publish: only 3 of 6 frontier-tier models qualified (minimum 4) — the overall qualifying count is high enough, but a blend that has lost an entire tier is a measurement of a different market, not a thinner measurement of the same one. See methodology.md's registry inclusion policy.",
-      "qualifying_models": 0,
-      "registered_models": 0,
-      "cost_usd": "0"
-    }
-  ],
-  "signature": "0x177a20e33aa6cc9f04d9e87ee7d50753f8b6ad7af658d11b7a34e2581fb64646199b503c04dbe0e47aca39411fb614b706e403daa13342632831f1e58aaf02bd",
+  "series": "frontier",
+  "signature": "0x6ca79ad34db88cc423895ed83ae6af2bf16483ce01a98ac0a792c5b4f3c8ce8e2913f1ea79e4f185f692fbcf92b391dd64c9bd4a2536744e5b87e92a1afe5a94",
   "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
   "anchor": {
     "chain": "base-sepolia",
     "status": "anchored",
-    "tx_hash": "0x23564edf19d55f46a0d08c6b4d05782e8d1be6a95fecf70bbc1ee7d3434c48d9",
-    "posted_at": "2026-09-19T07:18:08.000Z"
+    "tx_hash": "0xdf12b0e89e51a29446a70240cbff8e4e9e6c90369f45a6a4053610930b15bbcc",
+    "posted_at": "2026-09-19T07:18:12.000Z"
   }
 }

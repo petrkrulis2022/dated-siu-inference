@@ -1,0 +1,39 @@
+{
+  "id": "3463c64a-a177-9872-89a4-a1d3fa7fbd66",
+  "object": "chat.completion",
+  "created": 1789802268,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "50DAB4\nF0BE05\nF9B2F6\n61A6C6",
+        "reasoning_content": "The user wants me to read the archive log and list every access code I find, one per line, in the order they appear. Output only the codes, nothing else.\n",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21446,
+    "completion_tokens": 22,
+    "total_tokens": 21836,
+    "prompt_tokens_details": {
+      "text_tokens": 21446,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 368,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 444640000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
