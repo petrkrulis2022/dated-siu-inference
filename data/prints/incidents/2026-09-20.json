@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-20",
+  "run_url": "https://github.com/petrkrulis2022/dated-siu-inference/actions/runs/35480436104",
+  "reason": "Refusing to publish: only 3 of 4 commodity-tier models qualified (minimum 4) \u2014 the overall qualifying count is high enough, but a blend that has lost an entire tier is a measurement of a different market, not a thinner measurement of the same one. See methodology.md's registry inclusion policy.",
+  "infra_failures": "13 instance(s) had an infrastructure failure and produced no run record:\n  qwen-2.5-72b-instruct / T2: 5x rate_limit \u2014 \"OpenAI-compatible request failed: 429\"\n  qwen-2.5-72b-instruct / T1: 4x rate_limit \u2014 \"OpenAI-compatible request failed: 429\"\n  qwen-2.5-72b-instruct / T3: 3x rate_limit \u2014 \"OpenAI-compatible request failed: 429\"\n  gemini-3.1-pro-preview / T3: 1x rate_limit \u2014 \"Google request failed: 429\"",
+  "qualifying_models": null,
+  "registered_models": null,
+  "cost_usd": null,
+  "prior_attempts": null,
+  "occurred_at": "2026-09-20T01:08:07Z"
+}
