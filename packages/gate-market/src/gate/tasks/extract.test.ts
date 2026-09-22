@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { evaluateGate, runGateHardeningChecks } from "../executor.js";
+import { expectVerdict, expectVerdictReasonMatches } from "../test-helpers.js";
 import {
   EXTRACT_REFERENCE,
   EXTRACT_KNOWN_GOOD,
@@ -24,14 +25,12 @@ import {
 describe("the real invoice-extraction reference task", () => {
   it("Gate 1 (trivial) is genuinely defeated by an all-empty, schema-valid submission", async () => {
     const result = await evaluateGate(EXTRACT_GATE_1_TRIVIAL, EXTRACT_REFERENCE, SCHEMA_VALID_EMPTY);
-    expect(result.ok).toBe(true);
-    expect(result.verdict?.accept).toBe(true);
+    expectVerdict(result, true);
   }, 15000);
 
   it("Gate 2 (text-scan) is genuinely defeated by the duplicate-key field-order trick", async () => {
     const result = await evaluateGate(EXTRACT_GATE_2_TEXT_SCAN, EXTRACT_REFERENCE, FIELD_ORDER_GAMING);
-    expect(result.ok).toBe(true);
-    expect(result.verdict?.accept).toBe(true);
+    expectVerdict(result, true);
   }, 15000);
 
   it("Gate 3 (hardened) rejects every named adversarial technique and accepts the real extraction", async () => {
@@ -42,11 +41,11 @@ describe("the real invoice-extraction reference task", () => {
     const nullish = await evaluateGate(EXTRACT_GATE_3_HARDENED, EXTRACT_REFERENCE, NULL_SEMANTICS_ADVERSARIAL);
     const reordered = await evaluateGate(EXTRACT_GATE_3_HARDENED, EXTRACT_REFERENCE, FIELD_ORDER_GAMING);
 
-    expect(good.verdict?.accept).toBe(true);
-    expect(empty.verdict?.accept).toBe(false);
-    expect(fabricated.verdict?.accept).toBe(false);
-    expect(nullish.verdict?.accept).toBe(false);
-    expect(reordered.verdict?.accept).toBe(false);
+    expectVerdict(good, true);
+    expectVerdict(empty, false);
+    expectVerdict(fabricated, false);
+    expectVerdict(nullish, false);
+    expectVerdict(reordered, false);
   }, 60000);
 
   it("the full G1-G5 pipeline passes hardening Gate 1 up to Gate 3", async () => {
@@ -86,9 +85,8 @@ describe("pathological submissions against the extract gate", () => {
   it("deep nesting is rejected, not stack-overflowed or hung", async () => {
     const start = Date.now();
     const result = await evaluateGate(EXTRACT_GATE_3_HARDENED, EXTRACT_REFERENCE, PATHOLOGICAL_DEEP_NESTING);
-    expect(result.ok).toBe(true);
-    expect(result.verdict?.accept).toBe(false);
-    expect(result.verdict?.reason).toMatch(/nesting-depth limit/);
+    expectVerdict(result, false);
+    expectVerdictReasonMatches(result, /nesting-depth limit/);
     // Caught by the guard immediately, not by the 15s wall-clock kill — the two are different
     // failure modes and this test is specifically about the former.
     expect(Date.now() - start).toBeLessThan(5000);
@@ -97,20 +95,18 @@ describe("pathological submissions against the extract gate", () => {
   it("a wide, amplifying structure is rejected by the global node-count limit, not just per-level width", async () => {
     const start = Date.now();
     const result = await evaluateGate(EXTRACT_GATE_3_HARDENED, EXTRACT_REFERENCE, PATHOLOGICAL_WIDE_EXPANSION);
-    expect(result.ok).toBe(true);
-    expect(result.verdict?.accept).toBe(false);
-    expect(result.verdict?.reason).toMatch(/node-count limit/);
+    expectVerdict(result, false);
+    expectVerdictReasonMatches(result, /node-count limit/);
     expect(Date.now() - start).toBeLessThan(5000);
   }, 15000);
 
   it("a multi-megabyte string field is rejected before it can pressure the sandbox's memory cap", async () => {
     const start = Date.now();
     const result = await evaluateGate(EXTRACT_GATE_3_HARDENED, EXTRACT_REFERENCE, PATHOLOGICAL_HUGE_STRING);
-    expect(result.ok).toBe(true);
-    expect(result.verdict?.accept).toBe(false);
+    expectVerdict(result, false);
     // Caught by the raw-length pre-check (before JSON.parse), not the per-value string-length
     // check after parsing — this submission's JSON.stringify output already exceeds it.
-    expect(result.verdict?.reason).toMatch(/raw size limit/);
+    expectVerdictReasonMatches(result, /raw size limit/);
     expect(Date.now() - start).toBeLessThan(5000);
   }, 15000);
 });

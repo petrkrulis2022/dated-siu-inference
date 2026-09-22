@@ -36,9 +36,36 @@ export interface GateVerdict {
   reason: string;
 }
 
+/**
+ * Every real attempt to run a gate ends in exactly one of these, and callers must not conflate
+ * them (review, 2026-09-22 — the reason this type exists at all): a real bug found live where
+ * three identical infra failures compared as "equal" and were reported as a deterministic
+ * verdict, having never actually computed one.
+ *
+ * - `verdict`: the gate spec ran to completion and produced a real accept/reject. The only kind
+ *   that may ever contribute to a "passed" result.
+ * - `gate_error`: the gate spec itself is broken — syntax error, threw, no exported `gate()` —
+ *   deterministically, reproducibly, regardless of host load. Counted as "did not accept" where
+ *   that's the safe default (G2/G4), but never silently treated as a real verdict.
+ * - `infra_failure`: the *harness* didn't finish the attempt — sandbox setup failed to start, a
+ *   wall-clock timeout fired, or no readable result came back at all. Transient by nature (the
+ *   same gate+submission run again, under less host load, would very likely resolve either other
+ *   way) — retried automatically (see executor.ts's evaluateGateWithRetry) and, if still
+ *   unresolved after retries, must make the check it belongs to fail explicitly rather than ever
+ *   resolve to "passed".
+ */
+export type GateOutcome =
+  | { kind: "verdict"; verdict: GateVerdict }
+  | { kind: "gate_error"; error: string }
+  | { kind: "infra_failure"; error: string };
+
 export interface CheckResult {
   passed: boolean;
   reason: string;
+  /** Set when `passed: false` is specifically because an infra_failure could not be resolved
+   * after retries — never because a real verdict was computed. Distinguishes "the harness
+   * couldn't tell" from "the gate genuinely failed this check", per review 2026-09-22. */
+  infraFailure?: boolean;
 }
 
 /** The full input to one gate-hardening job's G1-G5 checks (spec §2.4). Note `originalGate` and

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { evaluateGate, runGateHardeningChecks } from "../executor.js";
+import { expectVerdict } from "../test-helpers.js";
 import {
   CODE_REFERENCE,
   CODE_KNOWN_GOOD,
@@ -21,14 +22,12 @@ import {
 describe("the real dedupeSorted reference task", () => {
   it("Gate 1 (trivial) is genuinely defeated by the unmodified seeded bug", async () => {
     const result = await evaluateGate(CODE_GATE_1_TRIVIAL, CODE_REFERENCE, CODE_ADVERSARIAL_ORIGINAL_BUG);
-    expect(result.ok).toBe(true);
-    expect(result.verdict?.accept).toBe(true);
+    expectVerdict(result, true);
   }, 15000);
 
   it("Gate 2 (single case) is genuinely defeated by hard-coding the exact test input", async () => {
     const result = await evaluateGate(CODE_GATE_2_SINGLE_CASE, CODE_REFERENCE, CODE_ADVERSARIAL_HARDCODED);
-    expect(result.ok).toBe(true);
-    expect(result.verdict?.accept).toBe(true);
+    expectVerdict(result, true);
   }, 15000);
 
   it("Gate 3 (hardened) rejects every adversarial technique and accepts the real fix", async () => {
@@ -40,11 +39,11 @@ describe("the real dedupeSorted reference task", () => {
     const stubbed = await evaluateGate(CODE_GATE_3_HARDENED, CODE_REFERENCE, CODE_ADVERSARIAL_STUBBED);
     const swallowed = await evaluateGate(CODE_GATE_3_HARDENED, CODE_REFERENCE, CODE_ADVERSARIAL_EXCEPTION_SWALLOWING);
 
-    expect(good.verdict?.accept).toBe(true);
-    expect(bug.verdict?.accept).toBe(false);
-    expect(hardcoded.verdict?.accept).toBe(false);
-    expect(stubbed.verdict?.accept).toBe(false);
-    expect(swallowed.verdict?.accept).toBe(false);
+    expectVerdict(good, true);
+    expectVerdict(bug, false);
+    expectVerdict(hardcoded, false);
+    expectVerdict(stubbed, false);
+    expectVerdict(swallowed, false);
   }, 60000);
 
   it("the full G1-G5 pipeline passes hardening Gate 1 up to Gate 3", async () => {

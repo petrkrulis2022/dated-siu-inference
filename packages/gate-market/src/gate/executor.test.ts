@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { evaluateGate, runGateHardeningChecks } from "./executor.js";
-import type { GateSpec, ReferenceTaskInstance, Submission } from "./types.js";
+import { evaluateGate, outcomesAgree, runGateHardeningChecks } from "./executor.js";
+import { expectGateError, expectVerdict } from "./test-helpers.js";
+import type { GateOutcome, GateSpec, ReferenceTaskInstance, Submission } from "./types.js";
 
 /**
  * Deliberately minimal, illustrative fixtures — proving the G1-G5 mechanism itself, not the real
@@ -55,14 +56,12 @@ const ADVERSARIAL: Submission = { files: { "answer.txt": "plausible-looking but 
 describe("evaluateGate", () => {
   it("runs a gate spec and returns its verdict", async () => {
     const result = await evaluateGate(HARDENED_GATE, REFERENCE, KNOWN_GOOD);
-    expect(result.ok).toBe(true);
-    expect(result.verdict?.accept).toBe(true);
+    expectVerdict(result, true);
   });
 
-  it("reports a syntax error as a failed execution, not a thrown exception", async () => {
+  it("reports a syntax error as a gate_error, not a thrown exception or an infra_failure", async () => {
     const result = await evaluateGate(SYNTAX_ERROR_GATE, REFERENCE, KNOWN_GOOD);
-    expect(result.ok).toBe(false);
-    expect(result.error).toBeTruthy();
+    expectGateError(result);
   });
 
   // retry: found live, 2026-09-22 — this specific sandboxed evaluation intermittently produces
@@ -87,13 +86,54 @@ describe("evaluateGate", () => {
     };
     try {
       const result = await evaluateGate(maliciousGate, REFERENCE, KNOWN_GOOD);
-      expect(result.ok).toBe(true);
-      const reported = JSON.parse(result.verdict!.reason);
+      expect(result.kind).toBe("verdict");
+      if (result.kind !== "verdict") return;
+      const reported = JSON.parse(result.verdict.reason);
       expect(reported.sentinel).toBeNull();
       expect(reported.reached).toBe(false);
     } finally {
       delete process.env.TOUCHSTONE_GATE_TEST_SENTINEL;
     }
+  });
+});
+
+/**
+ * Pure, deterministic, zero flake — the comparison logic G5 rests on, tested directly with fixed
+ * inputs rather than through a real random gate. Replaces what used to be an integration test with
+ * a genuinely random fixture (a ~25% per-run chance of a false negative, found live in CI,
+ * 2026-09-22) — that fixture proved the same logic no more thoroughly than this table does, at
+ * the cost of sometimes not proving it at all.
+ */
+describe("outcomesAgree", () => {
+  const v = (accept: boolean): GateOutcome & { kind: "verdict" } => ({ kind: "verdict", verdict: { accept, reason: "" } });
+  const ge: GateOutcome & { kind: "gate_error" } = { kind: "gate_error", error: "broken" };
+
+  it("agrees when all three verdicts accept", () => {
+    expect(outcomesAgree([v(true), v(true), v(true)])).toBe(true);
+  });
+
+  it("agrees when all three verdicts reject", () => {
+    expect(outcomesAgree([v(false), v(false), v(false)])).toBe(true);
+  });
+
+  it("disagrees when verdicts differ", () => {
+    expect(outcomesAgree([v(true), v(false), v(true)])).toBe(false);
+    expect(outcomesAgree([v(true), v(true), v(false)])).toBe(false);
+  });
+
+  it("agrees when all three are gate_error — a gate that deterministically breaks every time is still consistent", () => {
+    expect(outcomesAgree([ge, ge, ge])).toBe(true);
+  });
+
+  it("disagrees when some runs verdict and others gate_error — the same gate spec behaving differently in kind is real non-determinism", () => {
+    expect(outcomesAgree([v(true), ge, v(true)])).toBe(false);
+    expect(outcomesAgree([ge, v(false), ge])).toBe(false);
+  });
+
+  it("agrees trivially for zero or one outcome", () => {
+    expect(outcomesAgree([])).toBe(true);
+    expect(outcomesAgree([v(true)])).toBe(true);
+    expect(outcomesAgree([ge])).toBe(true);
   });
 });
 
@@ -156,37 +196,86 @@ describe("runGateHardeningChecks — G1-G5", () => {
       adversarialSubmissions: [ADVERSARIAL],
     });
     expect(result.g1.passed).toBe(false);
+    expect(result.g1.infraFailure).toBeFalsy();
     // A gate that can't even execute can't have meaningfully checked anything else.
     expect(result.passed).toBe(false);
   }, 20000);
+});
 
-  // Deliberately NOT retried, per review 2026-09-22: this test exercises G5's own
-  // determinism-detection logic — the property the entire gate-hardening class rests on. A retry
-  // here would be exactly the failure mode to avoid: silently absorbing a run where the executor
-  // failed to notice real non-determinism, which is indistinguishable from the fixture's own
-  // designed 25% chance of a false negative (see below) without inspecting *why* it passed.
-  // See README.md's "Test retries" section for the full audit of what is and isn't retried here.
-  it("fails G5 when the hardened gate is non-deterministic", { timeout: 20000 }, async () => {
-    const randomGate: GateSpec = {
-      taskClass: "extract",
-      source: `export async function gate() { return { accept: Math.random() > 0.5, reason: "random" }; }`,
+/**
+ * The bug this whole rewrite exists for (review, 2026-09-22): a persistent infra failure must
+ * never be reported as a deterministic verdict, and a real change in verdict must never be
+ * absorbed by a retry. Tested via `runGateHardeningChecks`'s injectable `evaluate` — a queue-based
+ * mock standing in for `evaluateGateWithRetry` (i.e. already "post-retry": these outcomes are what
+ * the harness settled on after its own bounded infra retries, real or not). Deterministic, every
+ * run, no sandbox involved — the sandbox itself is exercised for real by every other test file in
+ * this package.
+ */
+describe("runGateHardeningChecks — infra failure vs. verdict (the bug this fixes)", () => {
+  function queueEvaluator(outcomes: GateOutcome[]) {
+    let i = 0;
+    return async (): Promise<GateOutcome> => {
+      if (i >= outcomes.length) throw new Error(`queueEvaluator exhausted after ${outcomes.length} calls`);
+      return outcomes[i++];
     };
-    const result = await runGateHardeningChecks({
-      taskClass: "extract",
-      originalGate: WEAK_ORIGINAL_GATE,
-      hardenedGate: randomGate,
-      referenceInstance: REFERENCE,
-      knownGoodSubmission: KNOWN_GOOD,
-      adversarialSubmissions: [ADVERSARIAL],
-    });
-    // Probabilistic by nature of what's under test: 3 independent fair-coin draws agree with
-    // probability 0.5^3 + 0.5^3 = 25% (corrected 2026-09-22 — an earlier version of this comment
-    // said ~1-in-8, which was simply wrong arithmetic). p=0.5 is provably the *best* achievable
-    // here: biasing the coin either direction only raises the agreement probability, and G5's own
-    // fixed 3-run design (spec §2.4) means there's no way to lower this further without either
-    // changing what G5 checks or retrying — and retrying this specific test is the one thing the
-    // review flagged as off-limits. So: an accepted, undisguised 25% flake rate on this one test,
-    // never masked, rather than a quieter and worse alternative.
+  }
+  const verdict = (accept: boolean): GateOutcome => ({ kind: "verdict", verdict: { accept, reason: "mock" } });
+  const infra: GateOutcome = { kind: "infra_failure", error: "mock infra failure" };
+
+  it("G5 fails, with infraFailure set, when all three determinism-check runs are unresolved infra failures — never reported as deterministic", async () => {
+    // Call order: g1 probe, g2 (1 adversarial), g4 (1 adversarial), g5 x3.
+    const evaluate = queueEvaluator([verdict(true), verdict(false), verdict(false), infra, infra, infra]);
+    const result = await runGateHardeningChecks(
+      {
+        taskClass: "extract",
+        originalGate: WEAK_ORIGINAL_GATE,
+        hardenedGate: HARDENED_GATE,
+        referenceInstance: REFERENCE,
+        knownGoodSubmission: KNOWN_GOOD,
+        adversarialSubmissions: [ADVERSARIAL],
+      },
+      evaluate,
+    );
+    // The exact bug found live: before this fix, three identical "execution-failed" sentinels
+    // compared as equal and g5.passed came back true, having never computed a real verdict.
     expect(result.g5.passed).toBe(false);
+    expect(result.g5.infraFailure).toBe(true);
+    expect(result.passed).toBe(false);
+  });
+
+  it("G5 fails, without infraFailure, when the three runs are real, disagreeing verdicts", async () => {
+    const evaluate = queueEvaluator([verdict(true), verdict(false), verdict(false), verdict(true), verdict(false), verdict(true)]);
+    const result = await runGateHardeningChecks(
+      {
+        taskClass: "extract",
+        originalGate: WEAK_ORIGINAL_GATE,
+        hardenedGate: HARDENED_GATE,
+        referenceInstance: REFERENCE,
+        knownGoodSubmission: KNOWN_GOOD,
+        adversarialSubmissions: [ADVERSARIAL],
+      },
+      evaluate,
+    );
+    expect(result.g5.passed).toBe(false);
+    expect(result.g5.infraFailure).toBeFalsy();
+    expect(result.g5.reason).toContain("non-deterministic");
+  });
+
+  it("the whole result fails with infraFailure, not a verdict, when the G1 probe itself is an unresolved infra failure", async () => {
+    const evaluate = queueEvaluator([infra]);
+    const result = await runGateHardeningChecks(
+      {
+        taskClass: "extract",
+        originalGate: WEAK_ORIGINAL_GATE,
+        hardenedGate: HARDENED_GATE,
+        referenceInstance: REFERENCE,
+        knownGoodSubmission: KNOWN_GOOD,
+        adversarialSubmissions: [ADVERSARIAL],
+      },
+      evaluate,
+    );
+    expect(result.g1.passed).toBe(false);
+    expect(result.g1.infraFailure).toBe(true);
+    expect(result.passed).toBe(false);
   });
 });
