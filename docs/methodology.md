@@ -1034,3 +1034,101 @@ index-governance sections above are written to make that transition mechanical r
 aspirational: objective admission/removal criteria, disclosed weighting, non-destructive revision
 history, and a stated error procedure are exactly the properties a neutral governance body would
 need to inherit and be able to audit from day one, not properties invented for the handover.
+
+---
+
+## 10. The unit: definition and magnitude
+
+**Added 2026-09-22**, prompted by scoping `docs/gate-market-spec.md` and `docs/monetary-design.md` —
+the first documents to need a precise, sub-basket SIU magnitude rather than only the blended
+headline. Settles that companion document's build-order item 1 ("fix the SIU scale") as
+**verified sound — no rescale.**
+
+### 10.1 What one SIU actually is
+
+One SIU is the **index-weighted cost of one representative task** — not the cost of running the
+full basket. Precisely, from the real computation (`packages/print/src/compute/class-cost.ts`,
+`basket-cost.ts`, `weights.ts`):
+
+```
+classCost[model, class]  = mean cost of one passing task instance in that class
+basketCost[model]        = Σ_class classWeight[class] × classCost[model, class]   (classWeight sums to 1)
+dated_siu                = Σ_model  modelWeight[model]  × basketCost[model]        (modelWeight sums to 1)
+```
+
+Both weighted sums have weights summing to 1 — the arithmetic is a weighted **average** at both
+levels (across the three task classes, then across the qualifying constituent set), never a sum
+over the basket's fifteen instances. `dated_siu` is already, by construction, the price of *one*
+task, not fifteen.
+
+### 10.2 The design documents said something else, and were wrong
+
+Design doc v4 §3 and the unit-and-currency paper describe SIU as "the cost of completing the
+Benchmark Basket" — language that reads as a full, fifteen-instance basket run. That wording is
+inaccurate and is **superseded by this section**. The code was right; the prose describing it
+wasn't, off by roughly the basket's own size (5 instances × 3 classes at weights 0.50/0.30/0.20).
+The gap went unnoticed because nothing had previously needed the sub-basket magnitude stated
+precisely — only a second instrument quoting fractions of a SIU (`WorkClaim`'s `quantity_siu`,
+the Gate Market's `measured_rate_siu_per_hour`) surfaced it.
+
+### 10.3 The real evidence
+
+From the 2026-09-20 print (`dated_siu = $0.0108`), each qualifying constituent's own `usd_per_siu`
+converted into "how many SIU is one of its own representative tasks" (`usd_per_siu ÷ dated_siu`):
+
+| Model | usd_per_siu | one task, in SIU |
+| --- | --- | --- |
+| llama-3.3-70b-deepinfra / mistral-small-3.2-24b-instruct | $0.0007 | 0.065 |
+| deepseek-v3.2 | $0.0018 | 0.167 |
+| qwen-2.5-72b-instruct | $0.0025 | 0.231 |
+| gpt-5.4-mini | $0.0054 | 0.500 |
+| claude-haiku-4-5 | $0.0077 | 0.713 |
+| gpt-5.1 | $0.0093 | 0.861 |
+| grok-4.6 | $0.0172 | 1.593 |
+| claude-sonnet-5 | $0.0236 | 2.185 |
+| gemini-3.1-pro-preview | $0.0391 | 3.620 |
+
+Single tasks range **0.065 to 3.62 SIU** across the real qualifying set, centred near 1 — exactly
+the band ordinary single-task quoting wants. No rescale is needed: the existing definition already
+delivers what a subdivision scheme would otherwise be introduced to achieve.
+
+### 10.4 mSIU — named, not invented
+
+The same table in milli-SIU (1 mSIU = 1/1000 SIU):
+
+| Model | mSIU per task |
+| --- | --- |
+| llama-3.3-70b-deepinfra / mistral-small-3.2-24b-instruct | 65 |
+| deepseek-v3.2 | 167 |
+| qwen-2.5-72b-instruct | 231 |
+| gpt-5.4-mini | 500 |
+| claude-haiku-4-5 | 713 |
+| gpt-5.1 | 861 |
+| grok-4.6 | 1,593 |
+| claude-sonnet-5 | 2,185 |
+| gemini-3.1-pro-preview | 3,620 |
+
+65 to 3,620 mSIU per task, integers throughout, with the cheapest real constituent clearing the
+floor at 65. This is the real, measured unit the integer-reasoning experiment
+(`docs/monetary-design.md` §3.3) should quote in — derived from an actual print, never asserted.
+
+### 10.5 What this fixes for chain-linking
+
+Chain-linking, as proposed in `docs/monetary-design.md`, exists to preserve "the magnitude of one
+SIU" across future basket versions. A link ratio can only preserve a magnitude someone has written
+down, and until this section nothing had. From this print onward: **a link ratio scales a new
+basket version so that one SIU remains the index-weighted cost of one representative task at the
+reference quality gate** — never the new basket's own instance count, whatever that turns out to
+be. Any future transition away from `SIU-2026a` is computed and checked against §10.1's definition,
+not the earlier "cost of the basket" prose.
+
+### 10.6 Correcting "0.0003 SIU per MCP call"
+
+That figure, and the "0.3 mSIU" subdivision it was meant to motivate, were never a measurement.
+They originated as an illustrative example in an early prompt ("an agent should see 0.0003 SIU =
+$0.001"), implying **$3.33 per SIU** — a rate no print has produced or approached; every published
+`dated_siu` to date has run in the $0.009–$0.014 range. The figure then propagated, unchanged,
+into the unit-and-currency paper `docs/monetary-design.md` §3.1 cites. It is corrected there
+directly by its author. The one place it had reached this repo's own code — a doc-comment worked
+example in `packages/mcp-server/src/tools/get-quote.ts`, with no bearing on that function's actual
+(and correct) computation — is fixed in the same commit as this addendum.

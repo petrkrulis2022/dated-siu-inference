@@ -59,7 +59,7 @@ Prepaid provider credits backed by provider commitments; reference-rate licensin
 
 1. **The print is computed from executed runs only.** Published list prices inform exchange rates and are never inputs to the print. Evidence ranks: executed runs and reconciled invoices first, routed-market realised flows second, list prices last.
 2. **The escrow contract is non-custodial.** Funds move only to the pre-agreed seller, back to the buyer, or to the fee treasury. No admin path to user money exists in any code path.
-3. **No token in build 1.** If a task seems to require minting something, stop and ask.
+3. **No token in build 1.** If a task seems to require minting something, stop and ask. **Sanctioned exception (2026-09-22):** the Gate Market fSIU testbed (`docs/gate-market-spec.md`, companion `docs/monetary-design.md`) mints `WorkClaim` (ERC-1155 "dated work claims"), `CapacityBond`, and `ClaimRouter` — testnet only, explicitly a closed experiment measuring whether agents choose fSIU over USDC, never a build-1 product surface. This exception is scoped to that testbed alone; it does not open the door to wSIU/SIUSD or any other token in the main print/escrow pipeline.
 4. **No floats in money maths.** Decimal strings or integer minor units throughout. Rounding applied at publication only, per stated rules.
 5. **Never use public benchmark datasets.** HumanEval and similar are in every training set. Task instances are generated from public templates with a per-print seed; the seed is published after the print so anyone can reproduce.
 6. **Quality gates are objective in v1.** No judge models — they cost money, add variance, and import someone else's opinion into the number.

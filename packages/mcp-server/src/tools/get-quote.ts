@@ -12,7 +12,8 @@ export interface GetQuoteInput {
 export interface GetQuoteOutput {
   siu_per_call: string;
   /** The same call's cost in USD — what actually settles over x402, alongside the SIU figure,
-   * so an agent sees "0.0003 SIU = $0.001 USDC" rather than SIU alone. Not `wSIU`: that stays
+   * so an agent sees e.g. "0.09 SIU = $0.001 USDC" rather than SIU alone (illustrative ratio:
+   * real prints have run $0.009-$0.014/SIU — see methodology.md §10). Not `wSIU`: that stays
    * gated on wSIU existing at all (Build 2, CLAUDE.md), and quoting in a token that doesn't
    * exist isn't possible — SIU is the work-denominated unit, wSIU would only ever be its
    * transferable wrapper. */
@@ -32,7 +33,8 @@ const TASK_CLASSES = new Set<string>(["T1", "T2", "T3"]);
  * per-class figure. `siu_per_call` is derived, not invented: `@touchstone/print`'s `computeClassCost`
  * — the same function that builds the print itself — run fresh against the print's own
  * referenced run records for this (task_class, model), divided by the model's own published
- * `usd_per_siu` (one call's cost as a fraction of one whole SIU basket).
+ * `usd_per_siu` (one call's cost as a fraction of one SIU — methodology.md §10.1: one SIU is
+ * already the index-weighted cost of one representative task, never the full basket).
  *
  * Takes already-loaded `print`, `snapshot`, and every run record for `input.model` (server.ts
  * loads them from `data/`, including the empty-directory case) — this function is pure
