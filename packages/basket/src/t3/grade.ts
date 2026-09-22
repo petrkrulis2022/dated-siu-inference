@@ -9,6 +9,14 @@ import { RUNNER_SOURCE } from "./runner-source.js";
 const DEFAULT_TIMEOUT_MS = 5000;
 const MAX_HEAP_MB = 256;
 
+// `spawn` inherits the full parent environment — every provider key this process holds — unless
+// `env` is passed explicitly. T3 executes model-generated code; that code isn't adversarial by
+// design, but a model writing a stray debug print (`console.log(process.env)`) is plausible, and
+// this sandbox's own stdout/stderr can be embedded in a GradeResult.reason on a parse failure
+// (see the catch branch below). PATH is the only thing the child needs — to resolve `unshare`
+// and `node` themselves — nothing else is passed through.
+const SAFE_SPAWN_ENV: NodeJS.ProcessEnv = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
+
 /** Strips a ```js/```javascript fence if present; otherwise returns the text as-is. */
 function extractCode(raw: string): string {
   const fenced = raw.match(/```(?:js|javascript)?\s*([\s\S]*?)\s*```/i);
@@ -73,7 +81,7 @@ function runSandboxed(
         `--max-old-space-size=${MAX_HEAP_MB}`,
         "runner.mjs",
       ],
-      { cwd: tempDir, timeout: timeoutMs, killSignal: "SIGKILL" },
+      { cwd: tempDir, timeout: timeoutMs, killSignal: "SIGKILL", env: SAFE_SPAWN_ENV },
     );
 
     child.stdout.on("data", (chunk) => {

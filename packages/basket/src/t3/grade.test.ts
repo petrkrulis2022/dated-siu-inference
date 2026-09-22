@@ -65,4 +65,23 @@ describe("gradeT3", () => {
     const result = await gradeT3(instance, code);
     expect(result.passed).toBe(false);
   }, 10000);
+
+  it("does not inherit the parent environment: a candidate that branches on a real env var this process holds sees it as unset", async () => {
+    const sentinel = "TOUCHSTONE_T3_TEST_SECRET";
+    process.env[sentinel] = "leak-if-inherited";
+    try {
+      const code = `
+          export function filterAboveThreshold(nums, threshold) {
+            if (process.env.${sentinel}) throw new Error("env leaked into sandbox");
+            return nums.filter(n => n > threshold);
+          }
+        `;
+      const result = await gradeT3(instance, code);
+      // If SAFE_SPAWN_ENV regresses to inheriting process.env, every test case throws and this
+      // flips to false — the regression this test exists to catch.
+      expect(result.passed).toBe(true);
+    } finally {
+      delete process.env[sentinel];
+    }
+  }, 10000);
 });
