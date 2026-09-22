@@ -114,7 +114,8 @@ contract EscrowHandlerCoverageTest is Test {
         address[2] memory sellers = [makeAddr("s1"), makeAddr("s2")];
 
         MockUSDC usdc = new MockUSDC();
-        TouchstoneEscrow escrow = new TouchstoneEscrow(IERC20(address(usdc)), makeAddr("treasury"), 50);
+        TouchstoneEscrow escrow =
+            new TouchstoneEscrow(IERC20(address(usdc)), makeAddr("treasury"), 50);
         EscrowHandler handler = new EscrowHandler(escrow, usdc, buyers, sellers);
 
         for (uint256 i = 0; i < buyers.length; i++) {

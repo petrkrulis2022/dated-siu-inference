@@ -127,7 +127,8 @@ contract EscrowHandler is CommonBase, StdUtils {
     /// Sum of maxAmount across every escrow still Open — what the contract must be holding.
     function sumOpenEscrows() external view returns (uint256 total) {
         for (uint256 i = 0; i < quoteHashes.length; i++) {
-            (,, TouchstoneEscrow.Status status,,, uint256 maxAmount) = escrow.escrows(quoteHashes[i]);
+            (,, TouchstoneEscrow.Status status,,, uint256 maxAmount) =
+                escrow.escrows(quoteHashes[i]);
             if (status == TouchstoneEscrow.Status.Open) total += maxAmount;
         }
     }

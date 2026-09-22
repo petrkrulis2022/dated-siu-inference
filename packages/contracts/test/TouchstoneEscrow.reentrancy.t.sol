@@ -110,7 +110,8 @@ contract TouchstoneEscrowReentrancyTest is Test {
         assertTrue(token.reentryAttempted());
         assertFalse(token.reentrySucceeded(), "reentrancy guard must refuse a nested open");
 
-        (,, TouchstoneEscrow.Status statusNew,,,) = escrow.escrows(keccak256("reentrant-second-escrow"));
+        (,, TouchstoneEscrow.Status statusNew,,,) =
+            escrow.escrows(keccak256("reentrant-second-escrow"));
         assertEq(uint8(statusNew), uint8(TouchstoneEscrow.Status.None), "no escrow was created");
     }
 
@@ -123,7 +124,8 @@ contract TouchstoneEscrowReentrancyTest is Test {
         assertTrue(token.reentryAttempted());
         assertFalse(token.reentrySucceeded(), "reentrancy guard must refuse a nested open");
 
-        (,, TouchstoneEscrow.Status statusNew,,,) = escrow.escrows(keccak256("reentrant-second-escrow"));
+        (,, TouchstoneEscrow.Status statusNew,,,) =
+            escrow.escrows(keccak256("reentrant-second-escrow"));
         assertEq(uint8(statusNew), uint8(TouchstoneEscrow.Status.None), "no escrow was created");
     }
 
