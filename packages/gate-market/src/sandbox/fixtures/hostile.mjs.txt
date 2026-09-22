@@ -1,0 +1,58 @@
+// The permanent hostile fixture (gate-market-spec.md §1, per-review addition 2026-09-22): every
+// submission WORKER-CODE writes as an adversary is, by design, trying at least one of these five
+// vectors. This fixture tries all five at once, so containment is proven jointly rather than
+// per-vector, and it stays in the adversarial fixture set permanently rather than as a one-off
+// test — any future change to the sandbox re-runs this exact file.
+//
+// Filename ends in .txt rather than .mjs: this is staged content for `runSandboxed`'s `files`
+// map at test/run time, not a module this package itself imports or executes directly.
+import { readFileSync, appendFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+
+const isBombChild = process.argv.includes("--bomb-child");
+
+function bomb() {
+  try {
+    spawn(process.execPath, [process.argv[1], "--bomb-child"], { stdio: "ignore" });
+  } catch {
+    /* contained or exhausted — either is the point */
+  }
+}
+
+if (!isBombChild) {
+  const results = {};
+
+  // Vector 1: env exfiltration.
+  results.env = {
+    keyCount: Object.keys(process.env).length,
+    sentinel: process.env.TOUCHSTONE_HOSTILE_SENTINEL ?? null,
+  };
+
+  // Vector 2: network egress.
+  try {
+    await fetch("https://example.com");
+    results.network = { reached: true };
+  } catch (e) {
+    results.network = { reached: false, error: String(e) };
+  }
+
+  // Vector 3: path traversal out of scratch.
+  try {
+    readFileSync("../.env", "utf-8");
+    results.pathTraversal = { blocked: false };
+  } catch {
+    results.pathTraversal = { blocked: true };
+  }
+
+  appendFileSync("/scratch/hostile-results.json", JSON.stringify(results) + "\n");
+}
+
+// Vectors 4 and 5, deliberately last and deliberately non-returning: a fork bomb (every 20ms,
+// including from every child this spawns) combined with a CPU busy-loop. The three results above
+// are already flushed to disk before this point, precisely so the harness can read them even
+// though this process — and everything it spawned — only ever stops because the harness's own
+// wall-clock kill tears down the whole sandbox namespace.
+setInterval(bomb, 20);
+while (true) {
+  /* busy-loop */
+}
