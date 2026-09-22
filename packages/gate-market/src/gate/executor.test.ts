@@ -160,10 +160,13 @@ describe("runGateHardeningChecks — G1-G5", () => {
     expect(result.passed).toBe(false);
   }, 20000);
 
-  // retry: this check is a coin flip by construction (3 independent 50/50 draws, ~1-in-8 chance
-  // they happen to agree) — see the comment below. Retrying drops the false-negative rate to
-  // ~0.2% without weakening what's actually being checked.
-  it("fails G5 when the hardened gate is non-deterministic", { retry: 2, timeout: 20000 }, async () => {
+  // Deliberately NOT retried, per review 2026-09-22: this test exercises G5's own
+  // determinism-detection logic — the property the entire gate-hardening class rests on. A retry
+  // here would be exactly the failure mode to avoid: silently absorbing a run where the executor
+  // failed to notice real non-determinism, which is indistinguishable from the fixture's own
+  // designed 25% chance of a false negative (see below) without inspecting *why* it passed.
+  // See README.md's "Test retries" section for the full audit of what is and isn't retried here.
+  it("fails G5 when the hardened gate is non-deterministic", { timeout: 20000 }, async () => {
     const randomGate: GateSpec = {
       taskClass: "extract",
       source: `export async function gate() { return { accept: Math.random() > 0.5, reason: "random" }; }`,
@@ -176,10 +179,14 @@ describe("runGateHardeningChecks — G1-G5", () => {
       knownGoodSubmission: KNOWN_GOOD,
       adversarialSubmissions: [ADVERSARIAL],
     });
-    // Probabilistic by nature of what's under test (3 independent 50/50 draws): about a 1-in-8
-    // chance this particular run's 3 samples happen to agree and this assertion is wrong. Proving
-    // the *mechanism* checks for consistency, not a security property, so this is an accepted,
-    // documented flake risk rather than one worth re-architecting the executor to avoid.
+    // Probabilistic by nature of what's under test: 3 independent fair-coin draws agree with
+    // probability 0.5^3 + 0.5^3 = 25% (corrected 2026-09-22 — an earlier version of this comment
+    // said ~1-in-8, which was simply wrong arithmetic). p=0.5 is provably the *best* achievable
+    // here: biasing the coin either direction only raises the agreement probability, and G5's own
+    // fixed 3-run design (spec §2.4) means there's no way to lower this further without either
+    // changing what G5 checks or retrying — and retrying this specific test is the one thing the
+    // review flagged as off-limits. So: an accepted, undisguised 25% flake rate on this one test,
+    // never masked, rather than a quieter and worse alternative.
     expect(result.g5.passed).toBe(false);
   });
 });
