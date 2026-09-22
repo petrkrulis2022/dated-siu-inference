@@ -15,6 +15,8 @@ export const WORK_CLAIM_ABI = parseAbi([
   "function balanceOf(address account, uint256 id) external view returns (uint256)",
   "function everPresented(uint256 tokenId, address holder) external view returns (bool)",
   "function settled(uint256 tokenId, address holder) external view returns (bool)",
+  "function safeTransferFrom(address from, address to, uint256 id, uint256 value, bytes data) external",
+  "function settleWindowClose(uint256 tokenId, address holder, uint256 microUsdPerSiu) external",
   "event Minted(uint256 indexed tokenId, address indexed issuer, address indexed buyer, bytes32 classId, uint256 quantity, uint64 windowFrom, uint64 windowTo)",
 ]);
 

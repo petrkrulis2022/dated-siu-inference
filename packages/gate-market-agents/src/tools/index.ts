@@ -2,7 +2,9 @@ import { requestQuoteTool } from "./request-quote.js";
 import { issueQuoteTool } from "./issue-quote.js";
 import { payTool } from "./pay.js";
 import { mintClaimTool } from "./mint-claim.js";
+import { transferClaimTool } from "./transfer-claim.js";
 import { redeemClaimTool } from "./redeem-claim.js";
+import { settleWindowCloseTool } from "./settle-window-close.js";
 import { serveRedemptionTool } from "./serve-redemption.js";
 import { submitJobTool } from "./submit-job.js";
 import { getBalancesTool } from "./get-balances.js";
@@ -20,7 +22,9 @@ export const TOOLS = {
   issue_quote: issueQuoteTool,
   pay: payTool,
   mint_claim: mintClaimTool,
+  transfer_claim: transferClaimTool,
   redeem_claim: redeemClaimTool,
+  settle_window_close: settleWindowCloseTool,
   serve_redemption: serveRedemptionTool,
   submit_job: submitJobTool,
   get_balances: getBalancesTool,

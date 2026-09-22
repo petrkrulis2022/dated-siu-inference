@@ -26,7 +26,10 @@ function estimatedSpendUsd(args: Args): string {
   return minorUnitsToUsd(totalMicroUsd.toString());
 }
 
-export const mintClaimTool: ToolDefinition<Args, { txHash: string; tokenId: string }> = {
+export const mintClaimTool: ToolDefinition<
+  Args,
+  { txHash: string; tokenId: string; issuer: string }
+> = {
   name: "mint_claim",
   argsSchema,
   spendUsd: estimatedSpendUsd,
@@ -48,7 +51,11 @@ export const mintClaimTool: ToolDefinition<Args, { txHash: string; tokenId: stri
       try {
         const decoded = decodeEventLog({ abi: WORK_CLAIM_ABI, ...log });
         if (decoded.eventName === "Minted") {
-          return { txHash: receipt.transactionHash, tokenId: decoded.args.tokenId.toString() };
+          return {
+            txHash: receipt.transactionHash,
+            tokenId: decoded.args.tokenId.toString(),
+            issuer: decoded.args.issuer,
+          };
         }
       } catch {
         // Not a Minted log (or not decodable against this ABI) — skip, other events may share
