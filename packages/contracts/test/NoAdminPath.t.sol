@@ -6,6 +6,9 @@ import {stdJson} from "forge-std/StdJson.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TouchstoneEscrow} from "../src/TouchstoneEscrow.sol";
 import {TouchstoneAttestation} from "../src/TouchstoneAttestation.sol";
+import {CapacityBond} from "../src/CapacityBond.sol";
+import {ClaimRouter} from "../src/ClaimRouter.sol";
+import {WorkClaim} from "../src/WorkClaim.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
 
 /**
@@ -32,6 +35,9 @@ contract NoAdminPathTest is Test {
     TouchstoneEscrow internal escrow;
     TouchstoneAttestation internal attestation;
     MockUSDC internal usdc;
+    CapacityBond internal bond;
+    ClaimRouter internal router;
+    WorkClaim internal workClaim;
 
     address internal treasury = makeAddr("treasury");
     address internal publisher = makeAddr("publisher");
@@ -40,6 +46,13 @@ contract NoAdminPathTest is Test {
         usdc = new MockUSDC();
         escrow = new TouchstoneEscrow(IERC20(address(usdc)), treasury, 50);
         attestation = new TouchstoneAttestation(publisher);
+
+        uint64 nonce = vm.getNonce(address(this));
+        address predictedWorkClaimAddr = vm.computeCreateAddress(address(this), nonce + 2);
+        bond = new CapacityBond(IERC20(address(usdc)), predictedWorkClaimAddr);
+        router = new ClaimRouter(bond);
+        workClaim = new WorkClaim(IERC20(address(usdc)), bond, router);
+        require(address(workClaim) == predictedWorkClaimAddr, "sanity: address prediction");
     }
 
     // ------------------------------------------------------------------ helpers
@@ -183,7 +196,8 @@ contract NoAdminPathTest is Test {
             "no receive: ETH must not be able to enter and become stranded"
         );
         assertFalse(
-            _hasAbiEntryOfType("out/TouchstoneEscrow.sol/TouchstoneEscrow.json", "fallback"), "no fallback"
+            _hasAbiEntryOfType("out/TouchstoneEscrow.sol/TouchstoneEscrow.json", "fallback"),
+            "no fallback"
         );
     }
 
@@ -210,13 +224,15 @@ contract NoAdminPathTest is Test {
     // ------------------------------------------------------------------ TouchstoneAttestation
 
     function test_attestation_hasExactlyOneStateMutatingFunction() public view {
-        string[] memory names = _mutatingFunctions("out/TouchstoneAttestation.sol/TouchstoneAttestation.json");
+        string[] memory names =
+            _mutatingFunctions("out/TouchstoneAttestation.sol/TouchstoneAttestation.json");
         assertEq(names.length, 1, "TouchstoneAttestation must expose only postPrint");
         assertTrue(_contains(names, "postPrint"));
     }
 
     function test_attestation_hasNoPublisherRotationOrAdmin() public view {
-        string[] memory names = _mutatingFunctions("out/TouchstoneAttestation.sol/TouchstoneAttestation.json");
+        string[] memory names =
+            _mutatingFunctions("out/TouchstoneAttestation.sol/TouchstoneAttestation.json");
         string[6] memory forbidden = [
             "setPublisher",
             "transferOwnership",
@@ -232,6 +248,152 @@ contract NoAdminPathTest is Test {
 
     function test_attestation_bytecodeHasNoDelegatecallOrSelfdestruct() public view {
         bytes memory code = address(attestation).code;
+        assertGt(code.length, 0);
+        assertFalse(_usesOpcode(code, 0xF4), "DELEGATECALL would allow a proxy/upgrade path");
+        assertFalse(_usesOpcode(code, 0xF2));
+        assertFalse(_usesOpcode(code, 0xFF));
+    }
+
+    // ------------------------------------------------------------------ CapacityBond
+
+    /// The three headroom/bond-mutating functions are restricted to `onlyWorkClaim` — real
+    /// access control, not an admin path, and already fuzzed structurally in
+    /// WorkClaim.invariant.t.sol (an attacker calling them directly must always revert). This
+    /// test is the narrower, ABI-level claim: the *set* of mutating functions is exactly the
+    /// four expected ones, nothing else, so a future added setter/sweep/pause is caught here too.
+    function test_capacityBond_hasExactlyFourStateMutatingFunctions() public view {
+        string[] memory names = _mutatingFunctions("out/CapacityBond.sol/CapacityBond.json");
+        assertEq(names.length, 4, "CapacityBond gained or lost a state-mutating function");
+        assertTrue(_contains(names, "createLot"));
+        assertTrue(_contains(names, "consumeHeadroom"));
+        assertTrue(_contains(names, "restoreHeadroom"));
+        assertTrue(_contains(names, "drawForDefault"));
+    }
+
+    function test_capacityBond_hasNoAdminShapedFunction() public view {
+        string[] memory names = _mutatingFunctions("out/CapacityBond.sol/CapacityBond.json");
+        string[13] memory forbidden = [
+            "setWorkClaim",
+            "setIssuanceRatio",
+            "setOwner",
+            "transferOwnership",
+            "renounceOwnership",
+            "withdraw",
+            "emergencyWithdraw",
+            "rescue",
+            "rescueTokens",
+            "sweep",
+            "pause",
+            "unpause",
+            "initialize"
+        ];
+        for (uint256 i = 0; i < forbidden.length; i++) {
+            assertFalse(
+                _contains(names, forbidden[i]),
+                string.concat("CapacityBond must not expose ", forbidden[i])
+            );
+        }
+    }
+
+    function test_capacityBond_hasNoReceiveOrFallback() public view {
+        assertFalse(_hasAbiEntryOfType("out/CapacityBond.sol/CapacityBond.json", "receive"));
+        assertFalse(_hasAbiEntryOfType("out/CapacityBond.sol/CapacityBond.json", "fallback"));
+    }
+
+    function test_capacityBond_bytecodeHasNoDelegatecallOrSelfdestruct() public view {
+        bytes memory code = address(bond).code;
+        assertGt(code.length, 0);
+        assertFalse(_usesOpcode(code, 0xF4), "DELEGATECALL would allow a proxy/upgrade path");
+        assertFalse(_usesOpcode(code, 0xF2));
+        assertFalse(_usesOpcode(code, 0xFF));
+    }
+
+    function test_capacityBond_immutablesCannotBeChanged() public view {
+        assertEq(address(bond.usdc()), address(usdc));
+        assertEq(bond.workClaim(), address(workClaim));
+        string[] memory names = _mutatingFunctions("out/CapacityBond.sol/CapacityBond.json");
+        assertEq(names.length, 4);
+    }
+
+    // ------------------------------------------------------------------ WorkClaim
+
+    /// Seven, not three: mint/presentForRedemption/serveRedemption/settleWindowClose are this
+    /// contract's own, plus safeTransferFrom/safeBatchTransferFrom/setApprovalForAll from the
+    /// ERC-1155 standard itself (MinimalERC1155.sol) — expected, not a gap; a token that can't be
+    /// transferred isn't the fungible-within-tenor instrument the spec calls for.
+    function test_workClaim_hasExactlySevenStateMutatingFunctions() public view {
+        string[] memory names = _mutatingFunctions("out/WorkClaim.sol/WorkClaim.json");
+        assertEq(names.length, 7, "WorkClaim gained or lost a state-mutating function");
+        assertTrue(_contains(names, "mint"));
+        assertTrue(_contains(names, "presentForRedemption"));
+        assertTrue(_contains(names, "serveRedemption"));
+        assertTrue(_contains(names, "settleWindowClose"));
+        assertTrue(_contains(names, "safeTransferFrom"));
+        assertTrue(_contains(names, "safeBatchTransferFrom"));
+        assertTrue(_contains(names, "setApprovalForAll"));
+    }
+
+    function test_workClaim_hasNoAdminShapedFunction() public view {
+        string[] memory names = _mutatingFunctions("out/WorkClaim.sol/WorkClaim.json");
+        string[12] memory forbidden = [
+            "setUri",
+            "setBond",
+            "setRouter",
+            "setOwner",
+            "transferOwnership",
+            "renounceOwnership",
+            "withdraw",
+            "emergencyWithdraw",
+            "rescue",
+            "sweep",
+            "pause",
+            "initialize"
+        ];
+        for (uint256 i = 0; i < forbidden.length; i++) {
+            assertFalse(
+                _contains(names, forbidden[i]),
+                string.concat("WorkClaim must not expose ", forbidden[i])
+            );
+        }
+    }
+
+    function test_workClaim_hasNoReceiveOrFallback() public view {
+        assertFalse(_hasAbiEntryOfType("out/WorkClaim.sol/WorkClaim.json", "receive"));
+        assertFalse(_hasAbiEntryOfType("out/WorkClaim.sol/WorkClaim.json", "fallback"));
+    }
+
+    function test_workClaim_bytecodeHasNoDelegatecallOrSelfdestruct() public view {
+        bytes memory code = address(workClaim).code;
+        assertGt(code.length, 0);
+        assertFalse(_usesOpcode(code, 0xF4), "DELEGATECALL would allow a proxy/upgrade path");
+        assertFalse(_usesOpcode(code, 0xF2));
+        assertFalse(_usesOpcode(code, 0xFF));
+    }
+
+    function test_workClaim_immutablesCannotBeChanged() public view {
+        assertEq(address(workClaim.usdc()), address(usdc));
+        assertEq(address(workClaim.bond()), address(bond));
+        assertEq(address(workClaim.router()), address(router));
+        string[] memory names = _mutatingFunctions("out/WorkClaim.sol/WorkClaim.json");
+        assertEq(names.length, 7);
+    }
+
+    // ------------------------------------------------------------------ ClaimRouter
+
+    /// `route` is a view function — ClaimRouter holds no state of its own beyond the immutable
+    /// bond reference, so it has zero state-mutating functions at all.
+    function test_claimRouter_hasZeroStateMutatingFunctions() public view {
+        string[] memory names = _mutatingFunctions("out/ClaimRouter.sol/ClaimRouter.json");
+        assertEq(names.length, 0, "ClaimRouter must have no state-mutating functions");
+    }
+
+    function test_claimRouter_hasNoReceiveOrFallback() public view {
+        assertFalse(_hasAbiEntryOfType("out/ClaimRouter.sol/ClaimRouter.json", "receive"));
+        assertFalse(_hasAbiEntryOfType("out/ClaimRouter.sol/ClaimRouter.json", "fallback"));
+    }
+
+    function test_claimRouter_bytecodeHasNoDelegatecallOrSelfdestruct() public view {
+        bytes memory code = address(router).code;
         assertGt(code.length, 0);
         assertFalse(_usesOpcode(code, 0xF4), "DELEGATECALL would allow a proxy/upgrade path");
         assertFalse(_usesOpcode(code, 0xF2));
