@@ -38,7 +38,14 @@ export async function runDefaultAndReroute(
 
   const now = Math.floor(Date.now() / 1000);
   const windowFrom = now - 60;
-  const windowTo = now + 5; // short — the scenario advances the devnet's clock past this
+  // Wide enough to survive real transaction latency — mint, transfer, and present are all real
+  // on-chain txs before this window needs to still be open, and each one's own round-trip can
+  // take several real seconds in a loaded CI environment (confirmed live: an earlier 5-second
+  // window closed for real before present_for_redemption even ran, reverting with WindowClosed —
+  // not a bug in the contract, a bug in this fixture conflating "wall-clock time to confirm three
+  // txs" with "the simulated window duration"). The devnet's own clock, not wall time, is what
+  // actually closes the window — see the explicit advanceTime call below.
+  const windowTo = now + 600;
 
   const headroomBeforeMintRecord = await buyer.callTool(
     "check_headroom",
@@ -81,8 +88,9 @@ export async function runDefaultAndReroute(
   );
 
   // ISSUER-A's harness path is "down" for this window — nobody ever calls serve_redemption.
-  // Advance the devnet's own clock past windowTo, then settle.
-  await advanceTime(devnet.rpcUrl, 10);
+  // Advance the devnet's own clock well past windowTo (600s from mint), then settle — 700s
+  // clears it regardless of how much real wall-clock time the preceding txs themselves took.
+  await advanceTime(devnet.rpcUrl, 700);
 
   const holderUsdcBeforeRecord = await holder.callTool(
     "get_balances",
