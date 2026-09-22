@@ -21,6 +21,7 @@ export type {
  * fixtures instead of writing new, weaker duplicates. Same combination `code.test.ts`'s own "the
  * full G1-G5 pipeline" test already proves works end to end. */
 export {
+  COMMERCIAL_INTENT as CODE_COMMERCIAL_INTENT,
   CODE_REFERENCE,
   CODE_KNOWN_GOOD,
   CODE_GATE_1_TRIVIAL,
@@ -32,6 +33,7 @@ export {
   CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
 } from "./gate/tasks/code.js";
 export {
+  COMMERCIAL_INTENT as EXTRACT_COMMERCIAL_INTENT,
   EXTRACT_REFERENCE,
   EXTRACT_KNOWN_GOOD,
   EXTRACT_GATE_1_TRIVIAL,
