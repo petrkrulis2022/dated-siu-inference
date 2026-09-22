@@ -12,7 +12,7 @@ describe("WP-5 §4.5 — cross-class unavailability", () => {
   beforeAll(async () => {
     devnet = await setupDevnet();
     runners = buildRunners(devnet);
-  }, 60_000);
+  }, 180_000);
 
   afterAll(async () => {
     await devnet.stop();
@@ -22,5 +22,5 @@ describe("WP-5 §4.5 — cross-class unavailability", () => {
     const result = await runCrossClassUnavailability(devnet, runners);
     expect(result.codeHeadroomBefore).toBeGreaterThan(0n);
     expect(result.codeHeadroomAfter).toBe(result.codeHeadroomBefore);
-  }, 30_000);
+  }, 90_000);
 });

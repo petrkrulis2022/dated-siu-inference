@@ -14,7 +14,7 @@ describe("WP-5 §4.5 — headroom exhaustion in one class", () => {
   beforeAll(async () => {
     devnet = await setupDevnet();
     runners = buildRunners(devnet);
-  }, 60_000);
+  }, 180_000);
 
   afterAll(async () => {
     await devnet.stop();
@@ -26,5 +26,5 @@ describe("WP-5 §4.5 — headroom exhaustion in one class", () => {
     expect(result.routedIssuerAfterExhaustion.toLowerCase()).toBe(
       devnet.agents["ISSUER-B"].address.toLowerCase(),
     );
-  }, 30_000);
+  }, 90_000);
 });

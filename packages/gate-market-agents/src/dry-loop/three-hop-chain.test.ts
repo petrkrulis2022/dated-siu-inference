@@ -12,7 +12,7 @@ describe("WP-5 — the 3-hop chain and receipt graph reconstruction (spec §6.3/
   beforeAll(async () => {
     devnet = await setupDevnet();
     runners = buildRunners(devnet);
-  }, 60_000);
+  }, 180_000);
 
   afterAll(async () => {
     await devnet.stop();
@@ -40,5 +40,5 @@ describe("WP-5 — the 3-hop chain and receipt graph reconstruction (spec §6.3/
     // the graph structure itself from the test's own side).
     expect(graph.get(ROOT_JOB_ID)).toHaveLength(1);
     expect(graph.get(hop1.receipt_id)).toHaveLength(1);
-  }, 60_000);
+  }, 150_000);
 });

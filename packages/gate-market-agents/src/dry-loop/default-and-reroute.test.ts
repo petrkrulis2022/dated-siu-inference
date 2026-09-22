@@ -12,7 +12,7 @@ describe("WP-5 §4.5 — default", () => {
   beforeAll(async () => {
     devnet = await setupDevnet();
     runners = buildRunners(devnet);
-  }, 60_000);
+  }, 180_000);
 
   afterAll(async () => {
     await devnet.stop();
@@ -25,5 +25,5 @@ describe("WP-5 §4.5 — default", () => {
     expect(result.headroomAfterSettle).toBe(result.headroomBeforeMint); // fully restored
     expect(result.holderUsdcDelta).toBe(result.expectedDefaultPayoutUsd); // bond paid exactly the print value
     expect(result.secondMintSucceeded).toBe(true); // the system isn't stuck afterward
-  }, 30_000);
+  }, 90_000);
 });

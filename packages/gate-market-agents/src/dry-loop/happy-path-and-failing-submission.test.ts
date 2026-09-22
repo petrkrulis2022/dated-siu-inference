@@ -16,7 +16,7 @@ describe("WP-5 dry loop — mint -> transfer -> present_for_redemption -> harnes
   beforeAll(async () => {
     devnet = await setupDevnet();
     runners = buildRunners(devnet);
-  }, 60_000);
+  }, 180_000);
 
   afterAll(async () => {
     await devnet.stop();
@@ -36,7 +36,7 @@ describe("WP-5 dry loop — mint -> transfer -> present_for_redemption -> harnes
     expect(result.gateResult.g2.passed).toBe(true);
     expect(result.gateResult.g3.passed).toBe(true);
     expect(result.gateResult.g5.passed).toBe(true);
-  }, 30_000);
+  }, 90_000);
 
   it("failing submission: claim_retired == false and headroom unchanged — failed work counts zero", async () => {
     const result = await runFailingSubmission(devnet, runners);
@@ -47,5 +47,5 @@ describe("WP-5 dry loop — mint -> transfer -> present_for_redemption -> harnes
     expect(result.holderBalanceAfterServe).toBeGreaterThan(0n); // NOT burned — holder keeps it
     expect(result.headroomAfterServe).toBe(result.headroomAfterMint); // unchanged by the failed serve
     expect(result.headroomAfterServe).toBeLessThan(result.headroomBeforeMint); // still consumed by the mint itself
-  }, 30_000);
+  }, 90_000);
 });

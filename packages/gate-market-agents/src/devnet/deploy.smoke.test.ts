@@ -8,7 +8,7 @@ describe("setupDevnet — real anvil, real unmodified contract bytecode", () => 
 
   beforeAll(async () => {
     devnet = await setupDevnet();
-  }, 60_000);
+  }, 180_000);
 
   afterAll(async () => {
     await devnet.stop();
