@@ -46,6 +46,21 @@ import {MinimalERC1155} from "./MinimalERC1155.sol";
  * contract's own invariants (headroom conservation, exactly-once payout, access control) hold
  * regardless of whether the supplied rate is honest; a dishonest rate is a pricing-manipulation
  * risk, a structurally different problem from the conservation properties fuzzed here.
+ *
+ * ## Price precision — fixed 2026-09-22, review flagged before any real settlement ran
+ *
+ * The rate parameter is `microUsdPerSiu`: an integer count of millionths of a dollar per whole
+ * SIU, matching USDC's own 6 decimals (`packages/sdk/src/money/units.ts`'s `USDC_DECIMALS`) and
+ * with two full digits of headroom over `dated_siu`'s published precision — 4 decimal places,
+ * half-up (`docs/methodology.md`'s rounding table; e.g. `"0.0107"`) — so any real print rate
+ * converts to `microUsdPerSiu` exactly, never a lossy approximation of the published number.
+ * `_usdcAmount` truncates only in its final `/ 1000` step (converting the mSIU quantity into
+ * USDC minor units), bounded at under 1 USDC minor unit (1e-6 USD) of error *total*, regardless
+ * of `quantity` — not per-mSIU, so it does not scale with claim size the way an earlier version
+ * of this parameter did (see git history: `usdPerMilliSiu`, one decimal digit too coarse to hold
+ * `dated_siu`'s own precision, silently truncating real rates like $0.0107/SIU to $0.010 or
+ * $0.011/SIU — several percent of a real settlement, undetectable by fuzzing alone since the
+ * invariant suite's fixtures use round test prices, not real print magnitudes).
  */
 contract WorkClaim is MinimalERC1155, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -128,17 +143,19 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard {
     /**
      * @notice Mints `quantity` mSIU of a claim in `classId` for the delivery window
      *         [`windowFrom`, `windowTo`), routed to an issuer with headroom — the buyer never
-     *         picks (ClaimRouter.sol). Pulls `quantity * usdPerMilliSiu` from the caller.
-     * @dev `usdPerMilliSiu` is caller-supplied — see this contract's "Known limitation".
+     *         picks (ClaimRouter.sol). Pulls the USDC value of `quantity` at `microUsdPerSiu`
+     *         from the caller.
+     * @dev `microUsdPerSiu` is caller-supplied — see this contract's "Known limitation" and
+     *      "Price precision" notes.
      */
     function mint(
         bytes32 classId,
         uint256 quantity,
         uint64 windowFrom,
         uint64 windowTo,
-        uint256 usdPerMilliSiu
+        uint256 microUsdPerSiu
     ) external nonReentrant returns (uint256 tokenId) {
-        if (quantity == 0 || usdPerMilliSiu == 0) revert ZeroAmount();
+        if (quantity == 0 || microUsdPerSiu == 0) revert ZeroAmount();
         if (windowTo <= windowFrom) revert BadWindow();
 
         address issuer = router.route(classId, quantity);
@@ -161,8 +178,22 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard {
 
         _mint(msg.sender, tokenId, quantity, "");
 
-        uint256 totalUsd = quantity * usdPerMilliSiu;
+        uint256 totalUsd = _usdcAmount(quantity, microUsdPerSiu);
         usdc.safeTransferFrom(msg.sender, issuer, totalUsd);
+    }
+
+    /**
+     * @dev Converts an mSIU quantity to USDC minor units at `microUsdPerSiu` — see this
+     *      contract's "Price precision" doc comment for the unit derivation and the truncation
+     *      bound. Truncates (rounds toward zero) in the final division only, by construction
+     *      under 1 USDC minor unit of error regardless of `quantityMilliSiu`'s size.
+     */
+    function _usdcAmount(uint256 quantityMilliSiu, uint256 microUsdPerSiu)
+        internal
+        pure
+        returns (uint256)
+    {
+        return (quantityMilliSiu * microUsdPerSiu) / 1000;
     }
 
     /**
@@ -228,7 +259,7 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard {
      *      required so a defaulted position cannot pay out twice, the settlement-side mirror of
      *      serveRedemption's headroom-restoration idempotency.
      */
-    function settleWindowClose(uint256 tokenId, address holder, uint256 usdPerMilliSiu)
+    function settleWindowClose(uint256 tokenId, address holder, uint256 microUsdPerSiu)
         external
         nonReentrant
     {
@@ -248,7 +279,7 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard {
         bond.restoreHeadroom(ct.issuer, ct.classId, quantity);
 
         if (everPresented[tokenId][holder]) {
-            uint256 amountUsdc = quantity * usdPerMilliSiu;
+            uint256 amountUsdc = _usdcAmount(quantity, microUsdPerSiu);
             emit Defaulted(tokenId, holder, quantity, amountUsdc);
             bond.drawForDefault(ct.issuer, ct.classId, holder, amountUsdc);
         } else {

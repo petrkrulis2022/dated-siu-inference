@@ -207,8 +207,9 @@ this table is reported here in full rather than rounded up to "100%", per this r
 
 ### Known limitation
 
-`CapacityBond.drawForDefault` and `WorkClaim.mint`/`settleWindowClose` take a USD-per-mSIU rate as
-a caller-supplied parameter, not one verified against an on-chain print.
+`WorkClaim.mint`/`settleWindowClose` take a USD-per-SIU rate (`microUsdPerSiu`) as a
+caller-supplied parameter, not one verified against an on-chain print — `CapacityBond.drawForDefault`
+itself only ever receives the already-computed USDC amount, never the rate.
 `TouchstoneAttestation` stores only `bodyHash => postedAt`, nothing numeric — the honest fix
 requires reproducing the print body's exact JCS canonicalisation on-chain, real work deliberately
 out of scope here, disclosed rather than half-solved. Mirrors `TouchstoneEscrow`'s own disclosed
@@ -216,6 +217,20 @@ out of scope here, disclosed rather than half-solved. Mirrors `TouchstoneEscrow`
 conservation, exactly-once payout, access control) hold regardless of whether the supplied rate
 is honest — a dishonest rate is a pricing-manipulation risk, structurally different from the
 conservation properties fuzzed above.
+
+**Fixed 2026-09-22, before any real settlement ran:** the rate parameter was originally
+`usdPerMilliSiu` — a whole number of USDC minor units per mSIU, which can only express USD/SIU
+prices in $0.001 steps. `dated_siu` publishes to 4 decimal places (`docs/methodology.md`'s
+rounding table; e.g. `"0.0107"`), one digit finer than that — a real rate would have silently
+truncated to the nearest $0.001/SIU on every mint and every default settlement, a multi-percent
+value leak on the one path where the bond pays real USDC out, invisible to the invariant suite
+above because its fixtures use round test prices rather than real print magnitudes. Renamed to
+`microUsdPerSiu` (matches USDC's own 6 decimals, `packages/sdk/src/money/units.ts`'s
+`USDC_DECIMALS`) and the final USDC amount is computed as `quantity * microUsdPerSiu / 1000`,
+truncating only in that last division — bounded under 1 USDC minor unit (1e-6 USD) of error
+*total*, not per mSIU. `WorkClaim.t.sol`'s `test_mintPricingHoldsRealPrintRateExactly` is the
+regression test, using the real 2026-09-22 print's own `dated_siu` ($0.0107/SIU) against a
+deliberately non-round quantity so the division can't cancel out by luck.
 
 **Hard precondition before this goes to Arc — see this file's own section below.**
 
