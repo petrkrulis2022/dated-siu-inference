@@ -1,0 +1,4 @@
+# Spec §8.3's own "YOUR GOAL" line: "scored on jobs passed and cost per SIU delivered."
+metrics:
+  - jobs_passed
+  - cost_per_siu_delivered

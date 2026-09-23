@@ -1,0 +1,6 @@
+# ISSUER-A/ISSUER-B's real tool grant, per spec §8.2's "WHAT YOU CAN DO" list.
+tools:
+  - mint_claim
+  - serve_redemption
+  - check_headroom
+  - get_print

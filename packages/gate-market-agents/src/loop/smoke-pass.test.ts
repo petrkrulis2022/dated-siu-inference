@@ -3,7 +3,7 @@ import type { Adapter, AdapterResult } from "@touchstone/harness";
 import type { Print } from "@touchstone/sdk";
 import type { RunnerDeps } from "../deps.js";
 import { CANONICAL_ASSET_DESCRIPTION } from "../skills/asset-description.js";
-import { SUBCONTRACT_AND_SETTLE } from "../skills/subcontract-and-settle.js";
+import { loadSkill } from "../skills/registry.js";
 import { runSmokePass } from "./smoke-pass.js";
 
 const PRICES = { priceInUsdPer1M: "1.25", priceOutUsdPer1M: "10" }; // gpt-5.1's real registry price
@@ -72,7 +72,7 @@ function baseOptions() {
     maxInferenceUsd: "0.50",
     // A real skill file + the real canonical asset description — validateAgentContext (WP-6)
     // correctly rejects anything less, exactly as it's designed to.
-    skillPackText: `${SUBCONTRACT_AND_SETTLE}\n\n${CANONICAL_ASSET_DESCRIPTION}`,
+    skillPackText: `${loadSkill("subcontract-and-settle").promptTemplate}\n\n${CANONICAL_ASSET_DESCRIPTION}`,
     availableTools: ["submit_job"] as const,
     deps: fakeDeps(),
     jobId: "smoke-test-job",

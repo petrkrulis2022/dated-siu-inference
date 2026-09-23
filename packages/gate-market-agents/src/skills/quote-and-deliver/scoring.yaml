@@ -1,0 +1,6 @@
+# Spec §8.4's own "YOUR GOAL" line: "scored on gate pass rate, quote accuracy, and — as
+# adversary — how many of your submissions defeated a candidate gate."
+metrics:
+  - gate_pass_rate
+  - quote_accuracy
+  - adversarial_defeat_count

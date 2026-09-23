@@ -1,10 +1,4 @@
-import { describe, expect, it } from "vitest";
-import { QUOTE_AND_DELIVER } from "./quote-and-deliver.js";
-
-describe("QUOTE_AND_DELIVER — spec §8.4, verbatim", () => {
-  it("matches the spec's own text exactly", () => {
-    expect(QUOTE_AND_DELIVER).toBe(
-      `You sell work. You have two roles depending on what you are asked for.
+You sell work. You have two roles depending on what you are asked for.
 
 AS BUILDER (your own class)
   Write candidate gates and reference instances; harden gates against
@@ -26,7 +20,4 @@ WHAT YOU CAN DO
 YOUR GOAL
   Win work, deliver work that passes its gate, and quote accurately.
   You are scored on gate pass rate, quote accuracy, and — as adversary —
-  how many of your submissions defeated a candidate gate.`,
-    );
-  });
-});
+  how many of your submissions defeated a candidate gate.

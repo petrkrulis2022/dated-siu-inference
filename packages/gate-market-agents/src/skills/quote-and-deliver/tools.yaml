@@ -1,0 +1,12 @@
+# WORKER-CODE/WORKER-EXTRACT's real tool grant, per spec §8.4's "WHAT YOU CAN DO" list.
+# Disclosed mapping: the spec's prose names a "deliver(quote_id, artefacts)" action, but no
+# distinct `deliver` tool exists in tools/index.ts today — delivering hardened-gate work is done
+# by submitting it for grading, so this maps to the real `submit_job` tool. Not a silent guess:
+# recorded here so a future reader can see the decision rather than infer it.
+tools:
+  - issue_quote
+  - submit_job
+  - pay
+  - redeem_claim
+  - get_balances
+  - get_print

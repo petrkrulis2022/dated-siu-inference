@@ -1,4 +1,9 @@
-export { Runner, type RunnerOptions } from "./runner.js";
+export {
+  Runner,
+  ToolNotAllowedError,
+  type RunnerOptions,
+  type DeniedToolCall,
+} from "./runner.js";
 export type { RunnerDeps, ToolContext } from "./deps.js";
 
 export {
@@ -28,10 +33,8 @@ export { ViemChainReader } from "./chain/reader.js";
 export { loadGateMarketDeployment, type GateMarketDeployment } from "./chain/deployment.js";
 
 export { CANONICAL_ASSET_DESCRIPTION } from "./skills/asset-description.js";
-export { renderIssueWorkClaims, type IssueWorkClaimsParams } from "./skills/issue-work-claims.js";
-export { SUBCONTRACT_AND_SETTLE } from "./skills/subcontract-and-settle.js";
-export { QUOTE_AND_DELIVER } from "./skills/quote-and-deliver.js";
 export { MECHANISM_CAVEAT, F2_CAVEAT } from "./skills/caveat.js";
+export { loadSkill, renderTemplate, type Skill, type SkillScoring } from "./skills/registry.js";
 
 export { computeTimeToExpirySeconds } from "./context/expiry.js";
 

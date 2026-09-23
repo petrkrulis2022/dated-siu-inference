@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Print } from "@touchstone/sdk";
-import { Runner } from "./runner.js";
+import { Runner, ToolNotAllowedError } from "./runner.js";
+import type { ToolName } from "./tools/index.js";
 import { BudgetCeiling, CeilingExceededError } from "./budget/ceiling.js";
 import { assembleContext, serializeContext } from "./context/assemble.js";
 import type { RunnerDeps } from "./deps.js";
@@ -52,13 +53,14 @@ function fakeDeps(overrides: Partial<RunnerDeps> = {}): RunnerDeps {
   };
 }
 
-function newRunner(deps: RunnerDeps = fakeDeps()): Runner {
+function newRunner(deps: RunnerDeps = fakeDeps(), allowedTools?: readonly ToolName[]): Runner {
   return new Runner({
     agentId: "ORCHESTRATOR",
     windowId: "2026-W39",
     privateKeyHex: TEST_PRIVATE_KEY,
     rpcUrl: "http://127.0.0.1:1", // never actually dialed by this file's tests — see comment above
     deps,
+    allowedTools,
     ceiling: new BudgetCeiling({
       "ISSUER-A": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
       "ISSUER-B": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
@@ -215,5 +217,36 @@ describe("Runner — budget ceiling wiring", () => {
     await expect(
       runner.callTool("get_print", { printId: "2026-09-22" }, { turn: 1, jobId: "job-1" }),
     ).resolves.toBeDefined();
+  });
+});
+
+describe("Runner — tool-allowlist enforcement (WP-9 item 3, spec §12.3)", () => {
+  it("denies and records a call outside allowedTools", async () => {
+    const runner = newRunner(fakeDeps(), ["get_print"]);
+
+    await expect(
+      runner.callTool("submit_job", { taskClass: "code" }, { turn: 1, jobId: "job-1" }),
+    ).rejects.toThrow(ToolNotAllowedError);
+
+    expect(runner.deniedToolCalls()).toEqual([{ turn: 1, jobId: "job-1", toolName: "submit_job" }]);
+    expect(runner.toolCallRecords()).toEqual([]);
+  });
+
+  it("allows a call that is in allowedTools", async () => {
+    const runner = newRunner(fakeDeps(), ["get_print"]);
+
+    await expect(
+      runner.callTool("get_print", { printId: "2026-09-22" }, { turn: 1, jobId: "job-1" }),
+    ).resolves.toBeDefined();
+    expect(runner.deniedToolCalls()).toEqual([]);
+  });
+
+  it("allows every tool when allowedTools is omitted — unrestricted, matching every existing dry-loop scenario", async () => {
+    const runner = newRunner();
+
+    await expect(
+      runner.callTool("get_print", { printId: "2026-09-22" }, { turn: 1, jobId: "job-1" }),
+    ).resolves.toBeDefined();
+    expect(runner.deniedToolCalls()).toEqual([]);
   });
 });

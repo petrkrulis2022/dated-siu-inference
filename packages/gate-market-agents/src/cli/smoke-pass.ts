@@ -11,7 +11,7 @@ import {
   CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
 } from "@touchstone/task-pack-gate-hardening";
 import { buildCommonPack } from "../pack/build.js";
-import { SUBCONTRACT_AND_SETTLE } from "../skills/subcontract-and-settle.js";
+import { loadSkill } from "../skills/registry.js";
 import type { ModelPrices } from "../budget/inference-cost.js";
 import type { RunnerDeps } from "../deps.js";
 import { runSmokePass } from "../loop/smoke-pass.js";
@@ -99,7 +99,8 @@ YOUR JOB THIS RUN
   If every one of G1-G5 comes back passed, respond done with a short summary.
 `;
 
-  const skillPackText = `${SUBCONTRACT_AND_SETTLE}\n\n${commonPack}\n\n${jobDescription}`;
+  const orchestratorSkill = loadSkill("subcontract-and-settle");
+  const skillPackText = `${orchestratorSkill.promptTemplate}\n\n${commonPack}\n\n${jobDescription}`;
 
   console.log(`Starting P4 smoke pass — ORCHESTRATOR alone, model=${MODEL_STRING}`);
   console.log(`Bounds: maxTurns=${MAX_TURNS}, maxInferenceUsd=$${MAX_INFERENCE_USD}\n`);
@@ -112,7 +113,7 @@ YOUR JOB THIS RUN
     maxTurns: MAX_TURNS,
     maxInferenceUsd: MAX_INFERENCE_USD,
     skillPackText,
-    availableTools: ["submit_job", "get_balances"],
+    availableTools: orchestratorSkill.allowedTools,
     deps: buildDeps(),
     jobId: "p4-smoke-pass",
     fixedArgsByTool: { submit_job: submitJobArgs },

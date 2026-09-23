@@ -1,0 +1,8 @@
+# ORCHESTRATOR's real tool grant — spec §8.3's "WHAT YOU CAN DO" list, mapped to the real
+# ToolName values in tools/index.ts. Runner.callTool denies and logs any call outside this list.
+tools:
+  - request_quote
+  - pay
+  - submit_job
+  - get_balances
+  - get_print

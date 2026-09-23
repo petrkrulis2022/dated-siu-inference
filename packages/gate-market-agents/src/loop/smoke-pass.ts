@@ -99,6 +99,10 @@ export async function runSmokePass(options: SmokePassOptions): Promise<SmokePass
     rpcUrl: UNUSED_RPC_URL,
     deps: options.deps,
     ceiling,
+    // Real enforcement (WP-9 item 3): the same list already shown to the model via
+    // buildTurnPrompt's "YOUR AVAILABLE TOOLS THIS TURN" text is now what Runner.callTool
+    // actually denies against, not just advisory prompt copy.
+    allowedTools: options.availableTools,
   });
 
   const turnLogs: TurnLog[] = [];

@@ -1,0 +1,6 @@
+# Derived from spec §8.2's own "YOUR GOAL"/"WHAT YOU MUST NOT DO" text: sell claims, serve every
+# routed redemption inside its window, never default against the bond.
+metrics:
+  - claims_sold_usdc
+  - redemptions_served
+  - defaults

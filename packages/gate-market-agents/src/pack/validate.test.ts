@@ -2,8 +2,17 @@ import { describe, expect, it } from "vitest";
 import { CODE_COMMERCIAL_INTENT, CODE_GATE_3_HARDENED } from "@touchstone/task-pack-gate-hardening";
 import { assembleContext } from "../context/assemble.js";
 import { buildCommonPack } from "./build.js";
-import { renderIssueWorkClaims } from "../skills/issue-work-claims.js";
+import { loadSkill, renderTemplate } from "../skills/registry.js";
 import { ContextValidationError, validateAgentContext } from "./validate.js";
+
+const ISSUE_WORK_CLAIMS_PARAMS = {
+  class: "code",
+  measured_rate: "120",
+  committed_hours: "1000",
+  from: "2026-09-22",
+  until: "2026-09-29",
+  amount: "60000",
+};
 
 function cleanPackText(): string {
   const pack = buildCommonPack({
@@ -21,14 +30,7 @@ function cleanPackText(): string {
     ],
     printsByClass: {},
   });
-  const skill = renderIssueWorkClaims({
-    class: "code",
-    measuredRate: "120",
-    committedHours: "1000",
-    from: "2026-09-22",
-    until: "2026-09-29",
-    amount: "60000",
-  });
+  const skill = renderTemplate(loadSkill("issue-work-claims").promptTemplate, ISSUE_WORK_CLAIMS_PARAMS);
   return `${skill}\n\n${pack}`;
 }
 
@@ -76,14 +78,7 @@ describe("validateAgentContext", () => {
   });
 
   it("halts when the asset description is paraphrased rather than verbatim", () => {
-    const skill = renderIssueWorkClaims({
-      class: "code",
-      measuredRate: "120",
-      committedHours: "1000",
-      from: "2026-09-22",
-      until: "2026-09-29",
-      amount: "60000",
-    });
+    const skill = renderTemplate(loadSkill("issue-work-claims").promptTemplate, ISSUE_WORK_CLAIMS_PARAMS);
     // A pack with NO canonical asset description at all — the omission case, not just a reworded
     // one, since any drift (including total absence) must fail this check.
     const context = assembleContext("ISSUER-A", skill, []);

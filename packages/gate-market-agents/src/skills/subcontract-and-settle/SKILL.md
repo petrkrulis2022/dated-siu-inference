@@ -1,10 +1,4 @@
-import { describe, expect, it } from "vitest";
-import { SUBCONTRACT_AND_SETTLE } from "./subcontract-and-settle.js";
-
-describe("SUBCONTRACT_AND_SETTLE — spec §8.3, verbatim", () => {
-  it("matches the spec's own text exactly", () => {
-    expect(SUBCONTRACT_AND_SETTLE).toBe(
-      `You take gate-hardening jobs and deliver them, doing the work yourself
+You take gate-hardening jobs and deliver them, doing the work yourself
 or subcontracting it.
 
 THE JOB
@@ -24,7 +18,4 @@ YOUR GOAL
   Deliver as many passing jobs as possible within your budget.
   You are scored on jobs passed and cost per SIU delivered.
 
-EVERY PAYMENT MUST CARRY parent_payment_id linking it to the job it serves.`,
-    );
-  });
-});
+EVERY PAYMENT MUST CARRY parent_payment_id linking it to the job it serves.
