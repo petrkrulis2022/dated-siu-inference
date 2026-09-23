@@ -1,4 +1,3 @@
-import { fileURLToPath } from "node:url";
 import { createAdapterFor, loadApiKeysFromEnv } from "@touchstone/harness";
 import {
   runGateHardeningChecks,
@@ -17,12 +16,7 @@ import type { ModelPrices } from "../budget/inference-cost.js";
 import type { RunnerDeps } from "../deps.js";
 import { runSmokePass } from "../loop/smoke-pass.js";
 import type { RunManifest } from "../run-recorder/recorder.js";
-
-// packages/gate-market-agents/{src,dist}/cli/smoke-pass.{ts,js} -> repo root. `new URL(ref, base)`
-// resolves against the *directory* of `base` (the filename is dropped for free), unlike
-// devnet/deploy.ts's contractsDir(), which uses `path.resolve` and therefore needs one extra
-// ".." to pop the filename itself — confirmed by running both forms rather than counted by eye.
-const RUNS_ROOT = fileURLToPath(new URL("../../../../data/gate-market/runs", import.meta.url));
+import { RUNS_ROOT } from "./runs-root.js";
 
 // gpt-5.1's real registry entry (data/registry/models.json) and real current price
 // (data/registry/price-snapshot-merged-2026-09-22...json) — this session's own cost projection

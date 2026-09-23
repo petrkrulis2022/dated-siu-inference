@@ -68,3 +68,9 @@ export {
   type ValidatorVerdictRecord,
 } from "./run-recorder/recorder.js";
 export { computeBasicMetrics, type BasicMetrics } from "./run-recorder/replay.js";
+export {
+  computeBenchDiff,
+  formatBenchDiffReport,
+  type BenchDiffReport,
+  type FieldDiff,
+} from "./run-recorder/bench-diff.js";
