@@ -8,11 +8,13 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "smoke-pass": "pnpm run build && node --env-file=../../.env dist/cli/smoke-pass.js"
   },
   "dependencies": {
     "@touchstone/agents": "workspace:*",
     "@touchstone/gate-market": "workspace:*",
+    "@touchstone/harness": "workspace:*",
     "@touchstone/print": "workspace:*",
     "@touchstone/sdk": "workspace:*",
     "viem": "^2.55.16",

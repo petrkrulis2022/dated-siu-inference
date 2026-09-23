@@ -177,6 +177,9 @@ importers:
       '@touchstone/gate-market':
         specifier: workspace:*
         version: link:../gate-market
+      '@touchstone/harness':
+        specifier: workspace:*
+        version: link:../harness
       '@touchstone/print':
         specifier: workspace:*
         version: link:../print
