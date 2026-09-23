@@ -11,6 +11,8 @@ function fakeCtx(overrides: { isReconciled?: (id: string) => Promise<boolean> } 
         claimBalance: async () => 0n,
         headroom: async () => 0n,
         issuanceLimit: async () => 0n,
+        claimWindow: async () => ({ windowFrom: 0n, windowTo: 0n }),
+        currentBlockTimestamp: async () => 0n,
       },
       deployment: {
         network: { name: "test", chainId: 0 },

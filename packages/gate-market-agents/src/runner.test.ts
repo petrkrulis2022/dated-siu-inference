@@ -28,6 +28,8 @@ function fakeChainReader(): ChainReader {
     claimBalance: async () => 0n,
     headroom: async () => 0n,
     issuanceLimit: async () => 0n,
+    claimWindow: async () => ({ windowFrom: 0n, windowTo: 0n }),
+    currentBlockTimestamp: async () => 0n,
   };
 }
 
@@ -58,12 +60,12 @@ function newRunner(deps: RunnerDeps = fakeDeps()): Runner {
     rpcUrl: "http://127.0.0.1:1", // never actually dialed by this file's tests — see comment above
     deps,
     ceiling: new BudgetCeiling({
-      "ISSUER-A": { maxUsdcSpend: "1", maxInferenceTurns: 10 },
-      "ISSUER-B": { maxUsdcSpend: "1", maxInferenceTurns: 10 },
-      ORCHESTRATOR: { maxUsdcSpend: "1", maxInferenceTurns: 10 },
-      "WORKER-CODE": { maxUsdcSpend: "1", maxInferenceTurns: 10 },
-      "WORKER-EXTRACT": { maxUsdcSpend: "1", maxInferenceTurns: 10 },
-      HEDGER: { maxUsdcSpend: "1", maxInferenceTurns: 10 },
+      "ISSUER-A": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      "ISSUER-B": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      ORCHESTRATOR: { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      "WORKER-CODE": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      "WORKER-EXTRACT": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      HEDGER: { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
     }),
   });
 }
@@ -107,12 +109,12 @@ describe("Runner — budget ceiling wiring", () => {
   it("halts the agent once its turn ceiling is hit, per §9.3", async () => {
     const deps = fakeDeps();
     const ceiling = new BudgetCeiling({
-      "ISSUER-A": { maxUsdcSpend: "1", maxInferenceTurns: 10 },
-      "ISSUER-B": { maxUsdcSpend: "1", maxInferenceTurns: 10 },
-      ORCHESTRATOR: { maxUsdcSpend: "1", maxInferenceTurns: 1 },
-      "WORKER-CODE": { maxUsdcSpend: "1", maxInferenceTurns: 10 },
-      "WORKER-EXTRACT": { maxUsdcSpend: "1", maxInferenceTurns: 10 },
-      HEDGER: { maxUsdcSpend: "1", maxInferenceTurns: 10 },
+      "ISSUER-A": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      "ISSUER-B": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      ORCHESTRATOR: { maxUsdcSpend: "1", maxInferenceTurns: 1, maxInferenceUsd: "1" },
+      "WORKER-CODE": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      "WORKER-EXTRACT": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      HEDGER: { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
     });
     const runner = new Runner({
       agentId: "ORCHESTRATOR",
@@ -136,12 +138,12 @@ describe("Runner — budget ceiling wiring", () => {
   it("does not double-count a turn when a single turn makes multiple tool calls", async () => {
     const deps = fakeDeps();
     const ceiling = new BudgetCeiling({
-      "ISSUER-A": { maxUsdcSpend: "1", maxInferenceTurns: 10 },
-      "ISSUER-B": { maxUsdcSpend: "1", maxInferenceTurns: 10 },
-      ORCHESTRATOR: { maxUsdcSpend: "1", maxInferenceTurns: 1 },
-      "WORKER-CODE": { maxUsdcSpend: "1", maxInferenceTurns: 10 },
-      "WORKER-EXTRACT": { maxUsdcSpend: "1", maxInferenceTurns: 10 },
-      HEDGER: { maxUsdcSpend: "1", maxInferenceTurns: 10 },
+      "ISSUER-A": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      "ISSUER-B": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      ORCHESTRATOR: { maxUsdcSpend: "1", maxInferenceTurns: 1, maxInferenceUsd: "1" },
+      "WORKER-CODE": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      "WORKER-EXTRACT": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      HEDGER: { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
     });
     const runner = new Runner({
       agentId: "ORCHESTRATOR",
@@ -157,5 +159,61 @@ describe("Runner — budget ceiling wiring", () => {
     await runner.callTool("get_print", { printId: "2026-09-22" }, { turn: 1, jobId: "job-1" });
 
     expect(ceiling.remaining("ORCHESTRATOR", "2026-W39").turns).toBe(0);
+  });
+
+  it("checks meta.projectedInferenceUsd against the real dollar ceiling before the tool runs (pre-WP-7 fix, spec §12.2a)", async () => {
+    const deps = fakeDeps();
+    const ceiling = new BudgetCeiling({
+      "ISSUER-A": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      "ISSUER-B": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      ORCHESTRATOR: { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "0.10" },
+      "WORKER-CODE": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      "WORKER-EXTRACT": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      HEDGER: { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+    });
+    const runner = new Runner({
+      agentId: "ORCHESTRATOR",
+      windowId: "2026-W39",
+      privateKeyHex: TEST_PRIVATE_KEY,
+      rpcUrl: "http://127.0.0.1:1",
+      deps,
+      ceiling,
+    });
+
+    // A single projected turn costing more than the whole window's inference budget must refuse
+    // the tool call outright — the real model call this would represent in WP-7 never happens.
+    await expect(
+      runner.callTool(
+        "get_print",
+        { printId: "2026-09-22" },
+        { turn: 1, jobId: "job-1", projectedInferenceUsd: "0.50" },
+      ),
+    ).rejects.toThrow(CeilingExceededError);
+  });
+
+  it("omitting projectedInferenceUsd skips the dollar check entirely — no live model loop calls this yet", async () => {
+    const deps = fakeDeps();
+    const ceiling = new BudgetCeiling({
+      "ISSUER-A": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      "ISSUER-B": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      ORCHESTRATOR: { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "0" },
+      "WORKER-CODE": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      "WORKER-EXTRACT": { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+      HEDGER: { maxUsdcSpend: "1", maxInferenceTurns: 10, maxInferenceUsd: "1" },
+    });
+    const runner = new Runner({
+      agentId: "ORCHESTRATOR",
+      windowId: "2026-W39",
+      privateKeyHex: TEST_PRIVATE_KEY,
+      rpcUrl: "http://127.0.0.1:1",
+      deps,
+      ceiling,
+    });
+
+    // maxInferenceUsd is 0 — if the check ran unconditionally this would refuse. It doesn't,
+    // because no projectedInferenceUsd was supplied.
+    await expect(
+      runner.callTool("get_print", { printId: "2026-09-22" }, { turn: 1, jobId: "job-1" }),
+    ).resolves.toBeDefined();
   });
 });

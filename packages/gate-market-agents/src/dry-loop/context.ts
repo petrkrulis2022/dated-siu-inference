@@ -27,8 +27,14 @@ const DRY_LOOP_PRINT: Print = {
  * so the scripted sequences never trip it by accident. */
 function generousCeiling(): BudgetCeiling {
   const limits = Object.fromEntries(
-    AGENT_IDS.map((id) => [id, { maxUsdcSpend: "1000000", maxInferenceTurns: 100000 }]),
-  ) as Record<AgentId, { maxUsdcSpend: string; maxInferenceTurns: number }>;
+    AGENT_IDS.map((id) => [
+      id,
+      { maxUsdcSpend: "1000000", maxInferenceTurns: 100000, maxInferenceUsd: "1000000" },
+    ]),
+  ) as Record<
+    AgentId,
+    { maxUsdcSpend: string; maxInferenceTurns: number; maxInferenceUsd: string }
+  >;
   return new BudgetCeiling(limits);
 }
 

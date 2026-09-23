@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { FrictionLogWriter, type FrictionLogEntry } from "./log.js";
+import { F2_CAVEAT, MECHANISM_CAVEAT } from "../skills/caveat.js";
 
 describe("FrictionLogWriter", () => {
   let runsRoot: string;
@@ -29,6 +30,7 @@ describe("FrictionLogWriter", () => {
       conversion_reason: "seller would not accept my class of claim",
       missing_information: "no way to see which classes a seller accepts before requesting a quote",
       decision_confidence: "low",
+      time_to_expiry_seconds: null,
     };
 
     await writer.append(entry);
@@ -52,6 +54,7 @@ describe("FrictionLogWriter", () => {
       conversion_reason: null,
       missing_information: null,
       decision_confidence: "high",
+      time_to_expiry_seconds: null,
     };
     await writer.append(base);
     await writer.append({ ...base, turn: 2 });
@@ -62,5 +65,46 @@ describe("FrictionLogWriter", () => {
       .split("\n")
       .map((line) => JSON.parse(line));
     expect(lines.map((l) => l.turn)).toEqual([1, 2]);
+  });
+
+  it("writes the real mechanism-not-demand caveat into the run directory (pre-WP-7 fix, spec §1.1)", async () => {
+    const writer = new FrictionLogWriter(runsRoot, "run-1");
+    await writer.append({
+      agent: "ORCHESTRATOR",
+      turn: 1,
+      job_id: "job-1",
+      attempted: "x",
+      outcome: "y",
+      could_not_express: null,
+      forced_conversion: false,
+      conversion_reason: null,
+      missing_information: null,
+      decision_confidence: "high",
+      time_to_expiry_seconds: null,
+    });
+
+    const caveat = JSON.parse(await readFile(path.join(runsRoot, "run-1", "caveat.json"), "utf-8"));
+    expect(caveat.mechanism_caveat).toBe(MECHANISM_CAVEAT);
+    expect(caveat.f2_caveat).toBe(F2_CAVEAT);
+  });
+
+  it("carries a real time_to_expiry_seconds on a redeem/hold-relevant entry — spec §7.1a", async () => {
+    const writer = new FrictionLogWriter(runsRoot, "run-1");
+    await writer.append({
+      agent: "WORKER-EXTRACT",
+      turn: 5,
+      job_id: "job-1",
+      attempted: "redeem_claim",
+      outcome: "presented",
+      could_not_express: null,
+      forced_conversion: false,
+      conversion_reason: null,
+      missing_information: null,
+      decision_confidence: "high",
+      time_to_expiry_seconds: 1800,
+    });
+
+    const contents = await readFile(path.join(runsRoot, "run-1", "friction-log.jsonl"), "utf-8");
+    expect(JSON.parse(contents.trim()).time_to_expiry_seconds).toBe(1800);
   });
 });

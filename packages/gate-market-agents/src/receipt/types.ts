@@ -29,4 +29,10 @@ export interface GateMarketReceipt {
   claim_retired: boolean;
   usage: { input_tokens: number; output_tokens: number; retries: number };
   artefact_hashes: { gate_spec: string; adversarial_cases: string[] };
+  /** Spec §1.1's mechanism-not-demand caveat, verbatim (`skills/caveat.ts`'s
+   * `MECHANISM_CAVEAT`) — carried on every receipt, not just the summary this receipt might feed
+   * into later. Pre-WP-7 fix, 2026-09-23: "a caveat bolted on afterwards is a caveat that was
+   * missing when the numbers were first read." `receipt/emit.ts`'s `buildReceipt` sets this
+   * directly, not as a caller-supplied parameter, so no receipt can be built without it. */
+  mechanism_caveat: string;
 }

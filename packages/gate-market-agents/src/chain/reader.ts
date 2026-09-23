@@ -9,11 +9,23 @@ import type { GateMarketDeployment } from "./deployment.js";
  * interface (not a concrete class used directly) so `budget`/`tools` tests inject a mock and
  * never touch a live chain, mirroring `packages/agents/src/seller.ts`'s `SellerDeps` pattern.
  */
+export interface ClaimWindow {
+  windowFrom: bigint;
+  windowTo: bigint;
+}
+
 export interface ChainReader {
   usdcBalance(account: Hex): Promise<bigint>;
   claimBalance(tokenId: bigint, account: Hex): Promise<bigint>;
   headroom(issuer: Hex, classId: Hex): Promise<bigint>;
   issuanceLimit(issuer: Hex, classId: Hex): Promise<bigint>;
+  /** A claim's real minted window — the source of truth for `time_to_expiry` (spec §7.1a). */
+  claimWindow(tokenId: bigint): Promise<ClaimWindow>;
+  /** The devnet/chain's own clock — not `Date.now()`. `default-and-reroute.ts`'s own
+   * `advanceTime` already established why: an anvil devnet's clock can be warped independent of
+   * real wall time, so anything computing "time until this window closes" must read the same
+   * clock the contract itself checks. */
+  currentBlockTimestamp(): Promise<bigint>;
 }
 
 export class ViemChainReader implements ChainReader {
@@ -60,5 +72,20 @@ export class ViemChainReader implements ChainReader {
       functionName: "issuanceLimit",
       args: [issuer, classId],
     });
+  }
+
+  async claimWindow(tokenId: bigint): Promise<ClaimWindow> {
+    const [, , windowFrom, windowTo] = await this.client.readContract({
+      address: this.deployment.workClaim.address as Hex,
+      abi: WORK_CLAIM_ABI,
+      functionName: "claimTypes",
+      args: [tokenId],
+    });
+    return { windowFrom, windowTo };
+  }
+
+  async currentBlockTimestamp(): Promise<bigint> {
+    const block = await this.client.getBlock();
+    return block.timestamp;
   }
 }

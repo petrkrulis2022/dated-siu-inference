@@ -1,5 +1,6 @@
 import type { G1ToG5Result } from "@touchstone/gate-market";
 import type { AgentId } from "../identity/resolve.js";
+import { MECHANISM_CAVEAT } from "../skills/caveat.js";
 import type { GateMarketReceipt } from "./types.js";
 
 export interface BuildReceiptInput {
@@ -56,5 +57,6 @@ export function buildReceipt(input: BuildReceiptInput): GateMarketReceipt {
       gate_spec: input.gateSpecHash,
       adversarial_cases: input.adversarialCaseHashes,
     },
+    mechanism_caveat: MECHANISM_CAVEAT,
   };
 }

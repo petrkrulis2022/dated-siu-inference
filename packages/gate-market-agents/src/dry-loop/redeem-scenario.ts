@@ -42,6 +42,9 @@ export interface RedeemScenarioResult {
   holderBalanceAfterServe: bigint;
   gateResult: G1ToG5Result;
   receipt: GateMarketReceipt;
+  /** Real, read from the claim's actual on-chain window at the moment of presenting — spec
+   * §7.1a, pre-WP-7 fix. */
+  timeToExpirySeconds: number;
 }
 
 function issuerAgentIdFor(devnet: DevnetHandle, issuerAddress: string): AgentId {
@@ -123,11 +126,12 @@ export async function runRedeemScenario(
   );
 
   const taskSpecHash = keccak256(stringToBytes(`gate-hardening:${jobId}`));
-  await holder.callTool(
+  const redeemRecord = await holder.callTool(
     "redeem_claim",
     { tokenId: mintResult.tokenId, taskSpecHash },
     { turn: 3, jobId },
   );
+  const { timeToExpirySeconds } = redeemRecord.result as { timeToExpirySeconds: number };
 
   const gateResultRecord = await holder.callTool(
     "submit_job",
@@ -209,5 +213,6 @@ export async function runRedeemScenario(
     holderBalanceAfterServe,
     gateResult,
     receipt,
+    timeToExpirySeconds,
   };
 }

@@ -36,6 +36,12 @@ describe("WP-5 dry loop — mint -> transfer -> present_for_redemption -> harnes
     expect(result.gateResult.g2.passed).toBe(true);
     expect(result.gateResult.g3.passed).toBe(true);
     expect(result.gateResult.g5.passed).toBe(true);
+
+    // Real, read from the claim's actual on-chain window (windowTo = mint time + 3600s) — spec
+    // §7.1a, pre-WP-7 fix. Not zero (the window is genuinely still open at redemption) and not
+    // more than the window's own real width.
+    expect(result.timeToExpirySeconds).toBeGreaterThan(0);
+    expect(result.timeToExpirySeconds).toBeLessThanOrEqual(3600);
   }, 90_000);
 
   it("failing submission: claim_retired == false and headroom unchanged — failed work counts zero", async () => {

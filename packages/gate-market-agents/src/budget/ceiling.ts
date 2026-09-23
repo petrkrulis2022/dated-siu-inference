@@ -17,20 +17,24 @@ export interface BudgetLimits {
    * repo (CLAUDE.md hard invariant 4). */
   maxUsdcSpend: string;
   maxInferenceTurns: number;
+  /** Spec §12.2a's `inference_ceiling_usd` — a real dollar cap on model inference spend,
+   * distinct from `maxInferenceTurns` (a turn *count*, which stops meaning anything once one
+   * agent's turns cost ten times another's — pre-WP-7 fix, 2026-09-23). Checked against the
+   * *projected* worst-case cost of the next turn (`recordInferenceSpend`), before it happens. */
+  maxInferenceUsd: string;
 }
 
 export class CeilingExceededError extends Error {
   constructor(
     public readonly agentId: AgentId,
     public readonly windowId: string,
-    public readonly kind: "spend" | "turns",
+    public readonly kind: "spend" | "turns" | "inference",
   ) {
     super(
-      kind === "spend"
-        ? `${agentId} hit its USDC spend ceiling for window ${windowId} — halting this agent, ` +
-            "the run continues for the others (spec §9.3)."
-        : `${agentId} hit its inference-turn ceiling for window ${windowId} — halting this ` +
-            "agent, the run continues for the others (spec §9.3).",
+      `${agentId} hit its ${
+        { spend: "USDC spend", turns: "inference-turn", inference: "inference-dollar" }[kind]
+      } ceiling for window ${windowId} — halting this agent, the run continues for the others ` +
+        "(spec §9.3).",
     );
     this.name = "CeilingExceededError";
   }
@@ -38,6 +42,7 @@ export class CeilingExceededError extends Error {
 
 interface WindowState {
   spentUsdc: DecimalValue;
+  spentInferenceUsd: DecimalValue;
   turnsUsed: number;
   halted: boolean;
 }
@@ -63,7 +68,12 @@ export class BudgetCeiling {
     const key = this.key(agentId, windowId);
     let state = this.windows.get(key);
     if (!state) {
-      state = { spentUsdc: new D(0), turnsUsed: 0, halted: false };
+      state = {
+        spentUsdc: new D(0),
+        spentInferenceUsd: new D(0),
+        turnsUsed: 0,
+        halted: false,
+      };
       this.windows.set(key, state);
     }
     return state;
@@ -103,12 +113,35 @@ export class BudgetCeiling {
     state.spentUsdc = projected;
   }
 
-  remaining(agentId: AgentId, windowId: string): { spendUsdc: string; turns: number } {
+  /** Throws `CeilingExceededError` and marks the agent halted for this window if
+   * `projectedUsd` (the *worst-case* dollar cost of the next turn — see
+   * `budget/inference-cost.ts`'s `projectedTurnCostUsd`) would push cumulative inference spend
+   * past `maxInferenceUsd`. Call before the real model call it's projecting, not after — spec
+   * §12.2a: "projected inference cost... against that agent's inference_ceiling_usd." Separate
+   * from `recordSpend` (on-chain USDC) and `recordTurn` (a turn count) — a run can legitimately
+   * hit any one of the three first, and each is its own real property worth its own halt reason. */
+  recordInferenceSpend(agentId: AgentId, windowId: string, projectedUsd: string): void {
+    const state = this.stateFor(agentId, windowId);
+    if (state.halted) throw new CeilingExceededError(agentId, windowId, "inference");
+    const limit = new D(this.limits[agentId].maxInferenceUsd);
+    const projected = state.spentInferenceUsd.plus(new D(projectedUsd));
+    if (projected.greaterThan(limit)) {
+      state.halted = true;
+      throw new CeilingExceededError(agentId, windowId, "inference");
+    }
+    state.spentInferenceUsd = projected;
+  }
+
+  remaining(
+    agentId: AgentId,
+    windowId: string,
+  ): { spendUsdc: string; turns: number; inferenceUsd: string } {
     const state = this.stateFor(agentId, windowId);
     const limit = this.limits[agentId];
     return {
       spendUsdc: new D(limit.maxUsdcSpend).minus(state.spentUsdc).toFixed(6),
       turns: limit.maxInferenceTurns - state.turnsUsed,
+      inferenceUsd: new D(limit.maxInferenceUsd).minus(state.spentInferenceUsd).toFixed(6),
     };
   }
 }

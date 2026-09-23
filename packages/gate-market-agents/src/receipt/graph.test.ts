@@ -25,6 +25,7 @@ function fakeReceipt(overrides: Partial<GateMarketReceipt>): GateMarketReceipt {
     claim_retired: true,
     usage: { input_tokens: 0, output_tokens: 0, retries: 0 },
     artefact_hashes: { gate_spec: "0x0", adversarial_cases: [] },
+    mechanism_caveat: "test fixture — not the real caveat text",
     ...overrides,
   };
 }

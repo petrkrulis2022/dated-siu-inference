@@ -23,7 +23,7 @@ export {
 export { TOOLS, type ToolDefinition, type ToolName } from "./tools/index.js";
 
 export { WORK_CLAIM_ABI, CAPACITY_BOND_ABI, USDC_BALANCE_ABI } from "./chain/abi.js";
-export type { ChainReader } from "./chain/reader.js";
+export type { ChainReader, ClaimWindow } from "./chain/reader.js";
 export { ViemChainReader } from "./chain/reader.js";
 export { loadGateMarketDeployment, type GateMarketDeployment } from "./chain/deployment.js";
 
@@ -31,6 +31,17 @@ export { CANONICAL_ASSET_DESCRIPTION } from "./skills/asset-description.js";
 export { renderIssueWorkClaims, type IssueWorkClaimsParams } from "./skills/issue-work-claims.js";
 export { SUBCONTRACT_AND_SETTLE } from "./skills/subcontract-and-settle.js";
 export { QUOTE_AND_DELIVER } from "./skills/quote-and-deliver.js";
+export { MECHANISM_CAVEAT, F2_CAVEAT } from "./skills/caveat.js";
+
+export { computeTimeToExpirySeconds } from "./context/expiry.js";
+
+export {
+  estimateTokens,
+  projectedTurnCostUsd,
+  realizedTurnCostUsd,
+  isZeroUsd,
+  type ModelPrices,
+} from "./budget/inference-cost.js";
 
 export {
   buildCommonPack,

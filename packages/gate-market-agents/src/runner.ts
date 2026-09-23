@@ -57,7 +57,16 @@ export class Runner {
   async callTool(
     toolName: ToolName,
     args: unknown,
-    meta: { turn: number; jobId: string },
+    meta: {
+      turn: number;
+      jobId: string;
+      /** The worst-case dollar cost of the model turn this tool call is part of — real token
+       * counts × the agent's real `reasoning_model` registry price
+       * (`budget/inference-cost.ts`'s `projectedTurnCostUsd`). Optional: no live model loop
+       * calls this package yet (that's WP-7), so nothing to project until one does — the
+       * mechanism is real and tested now, wired end-to-end once a real turn loop can compute it. */
+      projectedInferenceUsd?: string;
+    },
   ): Promise<ToolCallRecord> {
     if (this.#ceiling.isHalted(this.agentId, this.windowId)) {
       throw new CeilingExceededError(this.agentId, this.windowId, "turns");
@@ -65,6 +74,9 @@ export class Runner {
     if (!this.#countedTurns.has(meta.turn)) {
       this.#ceiling.recordTurn(this.agentId, this.windowId);
       this.#countedTurns.add(meta.turn);
+    }
+    if (meta.projectedInferenceUsd) {
+      this.#ceiling.recordInferenceSpend(this.agentId, this.windowId, meta.projectedInferenceUsd);
     }
 
     // See tools/index.ts's own doc comment on why TOOLS carries no shared supertype annotation —
