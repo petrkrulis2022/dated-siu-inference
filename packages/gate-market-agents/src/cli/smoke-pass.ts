@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { createAdapterFor, loadApiKeysFromEnv } from "@touchstone/harness";
 import {
   runGateHardeningChecks,
@@ -15,6 +16,13 @@ import { loadSkill } from "../skills/registry.js";
 import type { ModelPrices } from "../budget/inference-cost.js";
 import type { RunnerDeps } from "../deps.js";
 import { runSmokePass } from "../loop/smoke-pass.js";
+import type { RunManifest } from "../run-recorder/recorder.js";
+
+// packages/gate-market-agents/{src,dist}/cli/smoke-pass.{ts,js} -> repo root. `new URL(ref, base)`
+// resolves against the *directory* of `base` (the filename is dropped for free), unlike
+// devnet/deploy.ts's contractsDir(), which uses `path.resolve` and therefore needs one extra
+// ".." to pop the filename itself — confirmed by running both forms rather than counted by eye.
+const RUNS_ROOT = fileURLToPath(new URL("../../../../data/gate-market/runs", import.meta.url));
 
 // gpt-5.1's real registry entry (data/registry/models.json) and real current price
 // (data/registry/price-snapshot-merged-2026-09-22...json) — this session's own cost projection
@@ -102,8 +110,17 @@ YOUR JOB THIS RUN
   const orchestratorSkill = loadSkill("subcontract-and-settle");
   const skillPackText = `${orchestratorSkill.promptTemplate}\n\n${commonPack}\n\n${jobDescription}`;
 
+  const runId = `p4-smoke-pass-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  const manifest: RunManifest = {
+    benchVersion: "0.0.0",
+    packVersion: "gate-hardening/code@0.0.0",
+    agentConfigs: { ORCHESTRATOR: { reasoningModel: MODEL_STRING } },
+    seed: "p4-smoke-pass — no seeded randomness in this loop",
+  };
+
   console.log(`Starting P4 smoke pass — ORCHESTRATOR alone, model=${MODEL_STRING}`);
-  console.log(`Bounds: maxTurns=${MAX_TURNS}, maxInferenceUsd=$${MAX_INFERENCE_USD}\n`);
+  console.log(`Bounds: maxTurns=${MAX_TURNS}, maxInferenceUsd=$${MAX_INFERENCE_USD}`);
+  console.log(`Run recorded to: ${RUNS_ROOT}/${runId}\n`);
 
   const result = await runSmokePass({
     adapter,
@@ -116,6 +133,9 @@ YOUR JOB THIS RUN
     availableTools: orchestratorSkill.allowedTools,
     deps: buildDeps(),
     jobId: "p4-smoke-pass",
+    runsRoot: RUNS_ROOT,
+    runId,
+    manifest,
     fixedArgsByTool: { submit_job: submitJobArgs },
     onTurn: (turn) => {
       console.log(

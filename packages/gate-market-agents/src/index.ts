@@ -60,3 +60,11 @@ export {
 } from "./pack/validate.js";
 
 export { runPackSelfCheck, type PackSelfCheckResult } from "./pack-runner/run-pack-self-check.js";
+
+export {
+  RunRecorder,
+  recordedAgentIds,
+  type RunManifest,
+  type ValidatorVerdictRecord,
+} from "./run-recorder/recorder.js";
+export { computeBasicMetrics, type BasicMetrics } from "./run-recorder/replay.js";

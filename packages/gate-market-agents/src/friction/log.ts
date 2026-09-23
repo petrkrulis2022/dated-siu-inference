@@ -35,11 +35,13 @@ export interface FrictionLogEntry {
 }
 
 /**
- * Appends one JSON-line-per-entry to `data/gate-market/runs/<runId>/friction-log.jsonl` — mirrors
- * this repo's existing `data/runs/` convention for immutable, append-only per-run records.
+ * Appends one JSON-line-per-entry to `<runsRoot>/<runId>/friction/friction-log.jsonl` — the
+ * `friction/` subfolder is spec §14.4's own `/runs/<run_id>/` layout (WP-9's `RunRecorder`,
+ * `run-recorder/recorder.ts`, owns the rest of that layout and constructs this writer at the
+ * matching path); before WP-9 this wrote directly into the run root.
  *
  * Pre-WP-7 fix, 2026-09-23: also writes `caveat.json` (spec §1.1's `MECHANISM_CAVEAT`/`F2_CAVEAT`,
- * verbatim — `skills/caveat.ts`) into the same run directory, once, the first time this writer is
+ * verbatim — `skills/caveat.ts`) into the same directory, once, the first time this writer is
  * used — colocated with every friction-log line it ever produces, so whoever reads the directory
  * later can't separate the data from the caveat that qualifies it.
  */
@@ -49,9 +51,9 @@ export class FrictionLogWriter {
   private caveatWritten = false;
 
   constructor(runsRoot: string, runId: string) {
-    const runDir = path.join(runsRoot, runId);
-    this.filePath = path.join(runDir, "friction-log.jsonl");
-    this.caveatPath = path.join(runDir, "caveat.json");
+    const frictionDir = path.join(runsRoot, runId, "friction");
+    this.filePath = path.join(frictionDir, "friction-log.jsonl");
+    this.caveatPath = path.join(frictionDir, "caveat.json");
   }
 
   async append(entry: FrictionLogEntry): Promise<void> {

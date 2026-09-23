@@ -9,8 +9,9 @@ import { BudgetCeiling, CeilingExceededError } from "../budget/ceiling.js";
 import { Runner } from "../runner.js";
 import type { RunnerDeps } from "../deps.js";
 import type { AgentId } from "../identity/resolve.js";
-import { validateAgentContext } from "../pack/validate.js";
+import { ContextValidationError, validateAgentContext } from "../pack/validate.js";
 import type { ToolName } from "../tools/index.js";
+import { RunRecorder, type RunManifest } from "../run-recorder/recorder.js";
 import { buildTurnPrompt } from "./prompt.js";
 import { ModelResponseParseError, parseModelResponse } from "./parse-tool-call.js";
 
@@ -44,6 +45,12 @@ export interface SmokePassOptions {
    * it just doesn't have to retype a payload it was already given verbatim in its own prompt. */
   fixedArgsByTool?: Partial<Record<ToolName, unknown>>;
   onTurn?: (turn: TurnLog) => void;
+  /** WP-9: every real invocation of this loop now writes the spec §14.4 run layout
+   * (`runsRoot/runId/`) via `RunRecorder` — contexts before each model call, every validator
+   * verdict including passes, and the final result as `metrics.json`. */
+  runsRoot: string;
+  runId: string;
+  manifest: RunManifest;
 }
 
 export interface TurnLog {
@@ -105,32 +112,43 @@ export async function runSmokePass(options: SmokePassOptions): Promise<SmokePass
     allowedTools: options.availableTools,
   });
 
+  const recorder = new RunRecorder(options.runsRoot, options.runId, options.manifest);
+  const finalize = (result: SmokePassResult): SmokePassResult => {
+    recorder.finalizeMetrics(result);
+    return result;
+  };
+
   const turnLogs: TurnLog[] = [];
   let totalRealizedUsd = 0;
 
   for (let turn = 1; turn <= options.maxTurns; turn++) {
     if (ceiling.isHalted(AGENT_ID, WINDOW_ID)) {
-      return {
+      return finalize({
         turnsUsed: turn - 1,
         totalRealizedUsd: totalRealizedUsd.toFixed(6),
         done: false,
         haltedReason: "ceiling",
         turnLogs,
-      };
+      });
     }
 
     const context = assembleContext(AGENT_ID, options.skillPackText, runner.toolCallRecords());
+    // Persisted before the model call — spec §14.4: "what makes an F1 result defensible six
+    // months later — you can prove no preference language was present rather than asserting it."
+    recorder.recordContext(AGENT_ID, turn, context);
 
     try {
       validateAgentContext(context);
-    } catch {
-      return {
+      recorder.recordValidatorVerdict(AGENT_ID, turn, null);
+    } catch (err) {
+      if (err instanceof ContextValidationError) recorder.recordValidatorVerdict(AGENT_ID, turn, err);
+      return finalize({
         turnsUsed: turn - 1,
         totalRealizedUsd: totalRealizedUsd.toFixed(6),
         done: false,
         haltedReason: "validation_failed",
         turnLogs,
-      };
+      });
     }
 
     const prompt = buildTurnPrompt(context, options.availableTools);
@@ -149,13 +167,13 @@ export async function runSmokePass(options: SmokePassOptions): Promise<SmokePass
       ceiling.recordInferenceSpend(AGENT_ID, WINDOW_ID, projectedUsd);
     } catch (err) {
       if (err instanceof CeilingExceededError) {
-        return {
+        return finalize({
           turnsUsed: turn - 1,
           totalRealizedUsd: totalRealizedUsd.toFixed(6),
           done: false,
           haltedReason: "ceiling",
           turnLogs,
-        };
+        });
       }
       throw err;
     }
@@ -183,13 +201,13 @@ export async function runSmokePass(options: SmokePassOptions): Promise<SmokePass
       });
       options.onTurn?.(turnLogs[turnLogs.length - 1]);
       if (err instanceof ModelResponseParseError) {
-        return {
+        return finalize({
           turnsUsed: turn,
           totalRealizedUsd: totalRealizedUsd.toFixed(6),
           done: false,
           haltedReason: "parse_error",
           turnLogs,
-        };
+        });
       }
       throw err;
     }
@@ -205,13 +223,13 @@ export async function runSmokePass(options: SmokePassOptions): Promise<SmokePass
     options.onTurn?.(turnLogs[turnLogs.length - 1]);
 
     if ("done" in intent) {
-      return {
+      return finalize({
         turnsUsed: turn,
         totalRealizedUsd: totalRealizedUsd.toFixed(6),
         done: true,
         summary: intent.summary,
         turnLogs,
-      };
+      });
     }
 
     try {
@@ -226,23 +244,23 @@ export async function runSmokePass(options: SmokePassOptions): Promise<SmokePass
       await runner.callTool(intent.tool, args, { turn, jobId: options.jobId });
     } catch (err) {
       if (err instanceof CeilingExceededError) {
-        return {
+        return finalize({
           turnsUsed: turn,
           totalRealizedUsd: totalRealizedUsd.toFixed(6),
           done: false,
           haltedReason: "ceiling",
           turnLogs,
-        };
+        });
       }
       throw err;
     }
   }
 
-  return {
+  return finalize({
     turnsUsed: options.maxTurns,
     totalRealizedUsd: totalRealizedUsd.toFixed(6),
     done: false,
     haltedReason: "max_turns",
     turnLogs,
-  };
+  });
 }

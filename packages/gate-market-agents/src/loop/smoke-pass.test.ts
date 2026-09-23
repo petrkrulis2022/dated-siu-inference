@@ -1,10 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Adapter, AdapterResult } from "@touchstone/harness";
 import type { Print } from "@touchstone/sdk";
 import type { RunnerDeps } from "../deps.js";
 import { CANONICAL_ASSET_DESCRIPTION } from "../skills/asset-description.js";
 import { loadSkill } from "../skills/registry.js";
+import type { RunManifest } from "../run-recorder/recorder.js";
 import { runSmokePass } from "./smoke-pass.js";
+
+const MANIFEST: RunManifest = {
+  benchVersion: "0.0.0",
+  packVersion: "gate-hardening/code@0.0.0",
+  agentConfigs: {},
+  seed: "smoke-pass-test-seed",
+};
 
 const PRICES = { priceInUsdPer1M: "1.25", priceOutUsdPer1M: "10" }; // gpt-5.1's real registry price
 
@@ -63,7 +74,7 @@ const SUBMIT_JOB_ARGS = JSON.stringify({
   adversarialSubmissions: [],
 });
 
-function baseOptions() {
+function baseOptions(runsRoot: string) {
   return {
     modelString: "gpt-5.1",
     prices: PRICES,
@@ -76,13 +87,26 @@ function baseOptions() {
     availableTools: ["submit_job"] as const,
     deps: fakeDeps(),
     jobId: "smoke-test-job",
+    runsRoot,
+    runId: "smoke-pass-test-run",
+    manifest: MANIFEST,
   };
 }
 
 describe("runSmokePass", () => {
+  let runsRoot: string;
+
+  beforeEach(async () => {
+    runsRoot = await mkdtemp(path.join(tmpdir(), "gate-market-smoke-pass-"));
+  });
+
+  afterEach(async () => {
+    await rm(runsRoot, { recursive: true, force: true });
+  });
+
   it("completes in the real turn count when the model calls submit_job then signals done", async () => {
     const result = await runSmokePass({
-      ...baseOptions(),
+      ...baseOptions(runsRoot),
       adapter: scriptedAdapter([
         `{"tool": "submit_job", "args": ${SUBMIT_JOB_ARGS}}`,
         '{"done": true, "summary": "job passed G1-G5"}',
@@ -98,7 +122,7 @@ describe("runSmokePass", () => {
 
   it("halts with parse_error on an unparseable response rather than retrying or guessing", async () => {
     const result = await runSmokePass({
-      ...baseOptions(),
+      ...baseOptions(runsRoot),
       adapter: scriptedAdapter(["I'm not sure what to do."]),
     });
 
@@ -109,7 +133,7 @@ describe("runSmokePass", () => {
 
   it("stops at exactly maxTurns if the model never signals done", async () => {
     const result = await runSmokePass({
-      ...baseOptions(),
+      ...baseOptions(runsRoot),
       maxTurns: 3,
       adapter: scriptedAdapter([`{"tool": "submit_job", "args": ${SUBMIT_JOB_ARGS}}`]),
     });
@@ -125,7 +149,7 @@ describe("runSmokePass", () => {
     // halt within a handful of turns rather than the full 20, proving the ceiling is real, not
     // just present in config.
     const result = await runSmokePass({
-      ...baseOptions(),
+      ...baseOptions(runsRoot),
       maxInferenceUsd: "0.01",
       adapter: scriptedAdapter([`{"tool": "submit_job", "args": ${SUBMIT_JOB_ARGS}}`]),
     });
@@ -141,7 +165,7 @@ describe("runSmokePass", () => {
     // is what actually fires, proving both bounds independently rather than only ever hitting
     // whichever is checked first.
     const result = await runSmokePass({
-      ...baseOptions(),
+      ...baseOptions(runsRoot),
       maxTurns: 5,
       maxInferenceUsd: "1000",
       adapter: scriptedAdapter([`{"tool": "submit_job", "args": ${SUBMIT_JOB_ARGS}}`]),

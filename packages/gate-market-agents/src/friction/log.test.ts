@@ -35,7 +35,7 @@ describe("FrictionLogWriter", () => {
 
     await writer.append(entry);
 
-    const contents = await readFile(path.join(runsRoot, "run-1", "friction-log.jsonl"), "utf-8");
+    const contents = await readFile(path.join(runsRoot, "run-1", "friction", "friction-log.jsonl"), "utf-8");
     const lines = contents.trim().split("\n");
     expect(lines).toHaveLength(1);
     expect(JSON.parse(lines[0])).toEqual(entry);
@@ -59,7 +59,7 @@ describe("FrictionLogWriter", () => {
     await writer.append(base);
     await writer.append({ ...base, turn: 2 });
 
-    const contents = await readFile(path.join(runsRoot, "run-1", "friction-log.jsonl"), "utf-8");
+    const contents = await readFile(path.join(runsRoot, "run-1", "friction", "friction-log.jsonl"), "utf-8");
     const lines = contents
       .trim()
       .split("\n")
@@ -83,7 +83,7 @@ describe("FrictionLogWriter", () => {
       time_to_expiry_seconds: null,
     });
 
-    const caveat = JSON.parse(await readFile(path.join(runsRoot, "run-1", "caveat.json"), "utf-8"));
+    const caveat = JSON.parse(await readFile(path.join(runsRoot, "run-1", "friction", "caveat.json"), "utf-8"));
     expect(caveat.mechanism_caveat).toBe(MECHANISM_CAVEAT);
     expect(caveat.f2_caveat).toBe(F2_CAVEAT);
   });
@@ -104,7 +104,7 @@ describe("FrictionLogWriter", () => {
       time_to_expiry_seconds: 1800,
     });
 
-    const contents = await readFile(path.join(runsRoot, "run-1", "friction-log.jsonl"), "utf-8");
+    const contents = await readFile(path.join(runsRoot, "run-1", "friction", "friction-log.jsonl"), "utf-8");
     expect(JSON.parse(contents.trim()).time_to_expiry_seconds).toBe(1800);
   });
 });
