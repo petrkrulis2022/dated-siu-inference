@@ -1,5 +1,5 @@
 import type { Print } from "@touchstone/sdk";
-import { runGateHardeningChecks } from "@touchstone/gate-market";
+import { runGateHardeningChecks } from "@touchstone/task-pack-gate-hardening";
 import { Runner } from "../runner.js";
 import { BudgetCeiling } from "../budget/ceiling.js";
 import { ViemChainReader } from "../chain/reader.js";

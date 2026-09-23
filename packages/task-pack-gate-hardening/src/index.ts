@@ -42,3 +42,10 @@ export {
   NULL_SEMANTICS_ADVERSARIAL,
   FIELD_ORDER_GAMING,
 } from "./gate/tasks/extract.js";
+
+/** WP-9: the `@touchstone/task-pack-sdk` `TaskPack` adapter — the bench loads this instead of
+ * importing gate-hardening fixtures directly. The granular fixtures above stay exported too;
+ * `packages/gate-market-agents/src/dry-loop/*` still composes them directly for its own scripted
+ * (no-model) scenarios. */
+export { CODE_GATE_HARDENING_PACK, EXTRACT_GATE_HARDENING_PACK } from "./pack.js";
+export type { GateHardeningReference } from "./pack.js";

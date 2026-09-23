@@ -163,20 +163,11 @@ importers:
         specifier: ^8.2.1
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.9.0)
 
-  packages/gate-market:
-    devDependencies:
-      '@types/node':
-        specifier: ^26.2.0
-        version: 26.2.0
-
   packages/gate-market-agents:
     dependencies:
       '@touchstone/agents':
         specifier: workspace:*
         version: link:../agents
-      '@touchstone/gate-market':
-        specifier: workspace:*
-        version: link:../gate-market
       '@touchstone/harness':
         specifier: workspace:*
         version: link:../harness
@@ -186,13 +177,25 @@ importers:
       '@touchstone/sdk':
         specifier: workspace:*
         version: link:../sdk
+      '@touchstone/task-pack-gate-hardening':
+        specifier: workspace:*
+        version: link:../task-pack-gate-hardening
+      '@touchstone/task-pack-sdk':
+        specifier: workspace:*
+        version: link:../task-pack-sdk
       viem:
         specifier: ^2.55.16
         version: 2.55.16(typescript@6.0.3)(zod@3.25.76)
+      yaml:
+        specifier: ^2.6.1
+        version: 2.9.0
       zod:
         specifier: ^3.24.1
         version: 3.25.76
     devDependencies:
+      '@touchstone/task-pack-trivial-accept':
+        specifier: workspace:*
+        version: link:../task-pack-trivial-accept
       '@types/node':
         specifier: ^26.2.0
         version: 26.2.0
@@ -327,6 +330,32 @@ importers:
       json-schema-to-typescript:
         specifier: ^15.0.4
         version: 15.0.4
+
+  packages/task-pack-gate-hardening:
+    dependencies:
+      '@touchstone/task-pack-sdk':
+        specifier: workspace:*
+        version: link:../task-pack-sdk
+    devDependencies:
+      '@types/node':
+        specifier: ^26.2.0
+        version: 26.2.0
+
+  packages/task-pack-sdk:
+    devDependencies:
+      '@types/node':
+        specifier: ^26.2.0
+        version: 26.2.0
+
+  packages/task-pack-trivial-accept:
+    dependencies:
+      '@touchstone/task-pack-sdk':
+        specifier: workspace:*
+        version: link:../task-pack-sdk
+    devDependencies:
+      '@types/node':
+        specifier: ^26.2.0
+        version: 26.2.0
 
   site:
     dependencies:

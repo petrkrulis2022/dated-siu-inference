@@ -1,4 +1,4 @@
-import { CODE_GATE_3_HARDENED } from "@touchstone/gate-market";
+import { CODE_GATE_3_HARDENED } from "@touchstone/task-pack-gate-hardening";
 import type { Runner } from "../runner.js";
 import type { AgentId } from "../identity/resolve.js";
 import type { DevnetHandle } from "../devnet/deploy.js";

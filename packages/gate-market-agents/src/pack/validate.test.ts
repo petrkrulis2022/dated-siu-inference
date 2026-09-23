@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CODE_COMMERCIAL_INTENT, CODE_GATE_3_HARDENED } from "@touchstone/gate-market";
+import { CODE_COMMERCIAL_INTENT, CODE_GATE_3_HARDENED } from "@touchstone/task-pack-gate-hardening";
 import { assembleContext } from "../context/assemble.js";
 import { buildCommonPack } from "./build.js";
 import { renderIssueWorkClaims } from "../skills/issue-work-claims.js";

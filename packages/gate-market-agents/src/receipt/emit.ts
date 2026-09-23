@@ -1,4 +1,4 @@
-import type { G1ToG5Result } from "@touchstone/gate-market";
+import type { G1ToG5Result } from "@touchstone/task-pack-gate-hardening";
 import type { AgentId } from "../identity/resolve.js";
 import { MECHANISM_CAVEAT } from "../skills/caveat.js";
 import type { GateMarketReceipt } from "./types.js";

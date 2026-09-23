@@ -1,4 +1,4 @@
-import type { TaskClass } from "@touchstone/gate-market";
+import type { TaskClass } from "@touchstone/task-pack-gate-hardening";
 import { QUOTE_SCHEMA_VERSION } from "@touchstone/sdk";
 import { CANONICAL_ASSET_DESCRIPTION } from "../skills/asset-description.js";
 import { formatToolList } from "./tool-descriptions.js";

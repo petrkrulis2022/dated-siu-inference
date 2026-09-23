@@ -1,8 +1,11 @@
-# @touchstone/gate-market
+# @touchstone/task-pack-gate-hardening
 
-The Gate Market testbed (`docs/gate-market-spec.md`). WP-1: the sandboxed harness and gate
-executor. See that spec for the full design; this file tracks package-specific operational notes
-that don't belong in the spec itself.
+The Gate Market testbed's (`docs/gate-market-spec.md`) first task pack. WP-1: the sandboxed
+harness and gate executor; WP-9 relocated this package from `packages/gate-market` and added the
+`TaskPack` adapter (`src/pack.ts`) so the bench (`packages/gate-market-agents`) can load it
+through `@touchstone/task-pack-sdk`'s shared interface instead of importing gate-hardening
+specifics directly. See the spec for the full design; this file tracks package-specific
+operational notes that don't belong in the spec itself.
 
 ## Test retries — the full audit
 

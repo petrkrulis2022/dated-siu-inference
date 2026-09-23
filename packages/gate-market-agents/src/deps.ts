@@ -1,6 +1,6 @@
 import type { Print } from "@touchstone/sdk";
 import type { ChainClients } from "@touchstone/agents";
-import type { GateHardeningJobInputs, G1ToG5Result } from "@touchstone/gate-market";
+import type { GateHardeningJobInputs, G1ToG5Result } from "@touchstone/task-pack-gate-hardening";
 import type { ChainReader } from "./chain/reader.js";
 import type { GateMarketDeployment } from "./chain/deployment.js";
 import type { DualRenderer } from "./context/dual-render.js";

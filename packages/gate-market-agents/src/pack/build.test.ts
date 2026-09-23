@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CODE_COMMERCIAL_INTENT, CODE_GATE_3_HARDENED } from "@touchstone/gate-market";
+import { CODE_COMMERCIAL_INTENT, CODE_GATE_3_HARDENED } from "@touchstone/task-pack-gate-hardening";
 import { buildCommonPack } from "./build.js";
 import { CANONICAL_ASSET_DESCRIPTION } from "../skills/asset-description.js";
 

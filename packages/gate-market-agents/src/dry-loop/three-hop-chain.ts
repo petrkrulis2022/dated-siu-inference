@@ -4,7 +4,7 @@ import type { DevnetHandle } from "../devnet/deploy.js";
 import { buildReceiptGraph, assertChildPaymentsWithinParent } from "../receipt/graph.js";
 import type { GateMarketReceipt } from "../receipt/types.js";
 import { runRedeemScenario } from "./redeem-scenario.js";
-import { CODE_GATE_3_HARDENED } from "@touchstone/gate-market";
+import { CODE_GATE_3_HARDENED } from "@touchstone/task-pack-gate-hardening";
 
 export const ROOT_JOB_ID = "three-hop-root";
 /** The operator's stated job budget — an illustrative devnet fixture, not derived from a real

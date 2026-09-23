@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { GateHardeningJobInputs, G1ToG5Result } from "@touchstone/gate-market";
+import type { GateHardeningJobInputs, G1ToG5Result } from "@touchstone/task-pack-gate-hardening";
 import type { ToolDefinition } from "./types.js";
 
 const gateSpecSchema = z.object({ taskClass: z.enum(["code", "extract"]), source: z.string() });

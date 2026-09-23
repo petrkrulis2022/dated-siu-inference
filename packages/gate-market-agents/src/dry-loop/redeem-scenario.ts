@@ -1,5 +1,5 @@
 import { keccak256, stringToBytes } from "viem";
-import type { GateSpec, G1ToG5Result } from "@touchstone/gate-market";
+import type { GateSpec, G1ToG5Result } from "@touchstone/task-pack-gate-hardening";
 import {
   CODE_REFERENCE,
   CODE_KNOWN_GOOD,
@@ -8,7 +8,7 @@ import {
   CODE_ADVERSARIAL_HARDCODED,
   CODE_ADVERSARIAL_STUBBED,
   CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
-} from "@touchstone/gate-market";
+} from "@touchstone/task-pack-gate-hardening";
 import { minorUnitsToUsd } from "@touchstone/sdk";
 import type { Runner } from "../runner.js";
 import type { AgentId } from "../identity/resolve.js";

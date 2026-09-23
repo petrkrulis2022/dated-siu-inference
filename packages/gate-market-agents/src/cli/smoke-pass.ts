@@ -9,7 +9,7 @@ import {
   CODE_ADVERSARIAL_HARDCODED,
   CODE_ADVERSARIAL_STUBBED,
   CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
-} from "@touchstone/gate-market";
+} from "@touchstone/task-pack-gate-hardening";
 import { buildCommonPack } from "../pack/build.js";
 import { SUBCONTRACT_AND_SETTLE } from "../skills/subcontract-and-settle.js";
 import type { ModelPrices } from "../budget/inference-cost.js";

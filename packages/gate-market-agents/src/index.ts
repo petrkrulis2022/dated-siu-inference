@@ -55,3 +55,5 @@ export {
   ContextValidationError,
   type ValidationFailureKind,
 } from "./pack/validate.js";
+
+export { runPackSelfCheck, type PackSelfCheckResult } from "./pack-runner/run-pack-self-check.js";

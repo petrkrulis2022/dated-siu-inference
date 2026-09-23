@@ -13,14 +13,17 @@
   },
   "dependencies": {
     "@touchstone/agents": "workspace:*",
-    "@touchstone/gate-market": "workspace:*",
     "@touchstone/harness": "workspace:*",
     "@touchstone/print": "workspace:*",
     "@touchstone/sdk": "workspace:*",
+    "@touchstone/task-pack-gate-hardening": "workspace:*",
+    "@touchstone/task-pack-sdk": "workspace:*",
     "viem": "^2.55.16",
+    "yaml": "^2.6.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@touchstone/task-pack-trivial-accept": "workspace:*",
     "@types/node": "^26.2.0"
   }
 }
