@@ -68,10 +68,30 @@ export interface CheckResult {
   infraFailure?: boolean;
 }
 
-/** The full input to one gate-hardening job's G1-G5 checks (spec §2.4). Note `originalGate` and
- * `hardenedGate` are deliberately separate: G1/G2/G3/G5 check the hardened gate, but G4 checks
- * the *original* candidate gate — proving the adversarial cases found something real against the
- * starting point, not a strawman rebuilt to make G4 trivially true. */
+/**
+ * One reference document/task the gate author never sees — a held-out instance of the same
+ * class, used only to grade whether an authored gate actually generalizes rather than memorizing
+ * the one instance it was shown. Found live, 2026-09-23: a gate can pass G1-G5 perfectly by
+ * embedding the one reference instance's expected values as literals rather than ever reading
+ * `referenceDir` at runtime — G1-G5 never varies the reference instance, so "memorized this one
+ * case" and "actually verifies" are indistinguishable to those five checks alone. G6 (below)
+ * exists specifically to tell them apart.
+ */
+export interface HeldOutInstance {
+  referenceInstance: ReferenceTaskInstance;
+  knownGoodSubmission: Submission;
+  adversarialSubmissions: Submission[];
+}
+
+/** The full input to one gate-hardening job's G1-G6 checks (spec §2.4, plus G6 — see
+ * `HeldOutInstance`'s own doc comment for why G6 exists). Note `originalGate` and `hardenedGate`
+ * are deliberately separate: G1/G2/G3/G5/G6 check the hardened gate, but G4 checks the
+ * *original* candidate gate — proving the adversarial cases found something real against the
+ * starting point, not a strawman rebuilt to make G4 trivially true.
+ *
+ * `heldOutInstances` is a required, minimum-length-1 tuple, not an optional field defaulting to
+ * "skip if absent" — an empty or omitted held-out set would make G6 pass by construction, which
+ * is exactly the silent gap it exists to close. */
 export interface GateHardeningJobInputs {
   taskClass: TaskClass;
   originalGate: GateSpec;
@@ -79,14 +99,18 @@ export interface GateHardeningJobInputs {
   referenceInstance: ReferenceTaskInstance;
   knownGoodSubmission: Submission;
   adversarialSubmissions: Submission[];
+  heldOutInstances: readonly [HeldOutInstance, ...HeldOutInstance[]];
 }
 
-export interface G1ToG5Result {
+export interface GateHardeningResult {
   g1: CheckResult;
   g2: CheckResult;
   g3: CheckResult;
   g4: CheckResult;
   g5: CheckResult;
-  /** True only if every one of G1-G5 passed. */
+  /** Generalization: does the hardened gate work on reference instances it never saw, or only
+   * the one it was authored against? See `HeldOutInstance`'s own doc comment. */
+  g6: CheckResult;
+  /** True only if every one of G1-G6 passed. */
   passed: boolean;
 }

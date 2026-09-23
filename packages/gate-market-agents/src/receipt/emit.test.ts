@@ -18,6 +18,7 @@ function baseInput() {
       g3: { passed: true, reason: "ok" },
       g4: { passed: true, reason: "ok" },
       g5: { passed: true, reason: "ok" },
+      g6: { passed: true, reason: "ok" },
       passed: true,
     },
     settlementAsset: "usdc",
@@ -45,6 +46,7 @@ describe("buildReceipt â€” the mechanism-not-demand caveat (pre-WP-7 fix, spec Â
         g3: { passed: true, reason: "ok" },
         g4: { passed: true, reason: "ok" },
         g5: { passed: true, reason: "ok" },
+        g6: { passed: true, reason: "ok" },
         passed: false,
       },
     });

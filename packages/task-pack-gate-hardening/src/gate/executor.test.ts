@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { evaluateGate, outcomesAgree, runGateHardeningChecks } from "./executor.js";
 import { expectGateError, expectVerdict } from "./test-helpers.js";
-import type { GateOutcome, GateSpec, ReferenceTaskInstance, Submission } from "./types.js";
+import type { GateOutcome, GateSpec, HeldOutInstance, ReferenceTaskInstance, Submission } from "./types.js";
 
 /**
  * Deliberately minimal, illustrative fixtures — proving the G1-G5 mechanism itself, not the real
@@ -52,6 +52,15 @@ const KNOWN_GOOD: Submission = { files: { "answer.txt": "this submission does co
 // Non-empty (defeats the weak original gate's only check) but lacks the keyword (correctly
 // rejected by the hardened gate) — exactly the shape of case gate-market-spec.md §2.4 describes.
 const ADVERSARIAL: Submission = { files: { "answer.txt": "plausible-looking but missing the word" } };
+// Illustrative G6 fixture, same minimal spirit as the rest of this file — HARDENED_GATE never
+// reads referenceDir at all (it only checks the submission text for the keyword), so it already
+// generalizes trivially; reusing the same submissions as a stand-in "held-out" instance is
+// sufficient to exercise G6's mechanism without needing a second real reference document.
+const HELD_OUT: HeldOutInstance = {
+  referenceInstance: REFERENCE,
+  knownGoodSubmission: KNOWN_GOOD,
+  adversarialSubmissions: [ADVERSARIAL],
+};
 
 describe("evaluateGate", () => {
   it("runs a gate spec and returns its verdict", async () => {
@@ -137,7 +146,7 @@ describe("outcomesAgree", () => {
   });
 });
 
-describe("runGateHardeningChecks — G1-G5", () => {
+describe("runGateHardeningChecks — G1-G6", () => {
   it("passes every check for a genuinely hardened gate against a genuinely weak original", async () => {
     const result = await runGateHardeningChecks({
       taskClass: "extract",
@@ -146,12 +155,14 @@ describe("runGateHardeningChecks — G1-G5", () => {
       referenceInstance: REFERENCE,
       knownGoodSubmission: KNOWN_GOOD,
       adversarialSubmissions: [ADVERSARIAL],
+      heldOutInstances: [HELD_OUT],
     });
     expect(result.g1.passed).toBe(true);
     expect(result.g2.passed).toBe(true);
     expect(result.g3.passed).toBe(true);
     expect(result.g4.passed).toBe(true);
     expect(result.g5.passed).toBe(true);
+    expect(result.g6.passed).toBe(true);
     expect(result.passed).toBe(true);
   }, 20000);
 
@@ -165,6 +176,7 @@ describe("runGateHardeningChecks — G1-G5", () => {
       referenceInstance: REFERENCE,
       knownGoodSubmission: KNOWN_GOOD,
       adversarialSubmissions: [ADVERSARIAL],
+      heldOutInstances: [HELD_OUT],
     });
     expect(result.g3.passed).toBe(false);
     expect(result.passed).toBe(false);
@@ -181,6 +193,7 @@ describe("runGateHardeningChecks — G1-G5", () => {
       referenceInstance: REFERENCE,
       knownGoodSubmission: KNOWN_GOOD,
       adversarialSubmissions: [nonDefeatingAdversarial],
+      heldOutInstances: [HELD_OUT],
     });
     expect(result.g4.passed).toBe(false);
     expect(result.passed).toBe(false);
@@ -194,10 +207,34 @@ describe("runGateHardeningChecks — G1-G5", () => {
       referenceInstance: REFERENCE,
       knownGoodSubmission: KNOWN_GOOD,
       adversarialSubmissions: [ADVERSARIAL],
+      heldOutInstances: [HELD_OUT],
     });
     expect(result.g1.passed).toBe(false);
     expect(result.g1.infraFailure).toBeFalsy();
     // A gate that can't even execute can't have meaningfully checked anything else.
+    expect(result.passed).toBe(false);
+  }, 20000);
+
+  it("fails G6 when the hardened gate rejects a held-out instance's known-good submission", async () => {
+    // HARDENED_GATE only ever checks the submission text for "PASS" — the held-out known-good
+    // here deliberately lacks it, standing in for a gate that only recognizes the one instance
+    // it was authored against.
+    const nonGeneralizingHeldOut: HeldOutInstance = {
+      referenceInstance: REFERENCE,
+      knownGoodSubmission: { files: { "answer.txt": "correct for this instance, but no keyword" } },
+      adversarialSubmissions: [ADVERSARIAL],
+    };
+    const result = await runGateHardeningChecks({
+      taskClass: "extract",
+      originalGate: WEAK_ORIGINAL_GATE,
+      hardenedGate: HARDENED_GATE,
+      referenceInstance: REFERENCE,
+      knownGoodSubmission: KNOWN_GOOD,
+      adversarialSubmissions: [ADVERSARIAL],
+      heldOutInstances: [nonGeneralizingHeldOut],
+    });
+    expect(result.g6.passed).toBe(false);
+    expect(result.g6.reason).toContain("does not generalize");
     expect(result.passed).toBe(false);
   }, 20000);
 });
@@ -223,8 +260,19 @@ describe("runGateHardeningChecks — infra failure vs. verdict (the bug this fix
   const infra: GateOutcome = { kind: "infra_failure", error: "mock infra failure" };
 
   it("G5 fails, with infraFailure set, when all three determinism-check runs are unresolved infra failures — never reported as deterministic", async () => {
-    // Call order: g1 probe, g2 (1 adversarial), g4 (1 adversarial), g5 x3.
-    const evaluate = queueEvaluator([verdict(true), verdict(false), verdict(false), infra, infra, infra]);
+    // Call order: g1 probe, g2 (1 adversarial), g4 (1 adversarial), g5 x3, g6 (1 held-out
+    // known-good + 1 held-out adversarial) — scripted to pass cleanly since this test is about
+    // G5's own behavior, not G6's.
+    const evaluate = queueEvaluator([
+      verdict(true),
+      verdict(false),
+      verdict(false),
+      infra,
+      infra,
+      infra,
+      verdict(true),
+      verdict(false),
+    ]);
     const result = await runGateHardeningChecks(
       {
         taskClass: "extract",
@@ -233,6 +281,7 @@ describe("runGateHardeningChecks — infra failure vs. verdict (the bug this fix
         referenceInstance: REFERENCE,
         knownGoodSubmission: KNOWN_GOOD,
         adversarialSubmissions: [ADVERSARIAL],
+        heldOutInstances: [HELD_OUT],
       },
       evaluate,
     );
@@ -244,7 +293,16 @@ describe("runGateHardeningChecks — infra failure vs. verdict (the bug this fix
   });
 
   it("G5 fails, without infraFailure, when the three runs are real, disagreeing verdicts", async () => {
-    const evaluate = queueEvaluator([verdict(true), verdict(false), verdict(false), verdict(true), verdict(false), verdict(true)]);
+    const evaluate = queueEvaluator([
+      verdict(true),
+      verdict(false),
+      verdict(false),
+      verdict(true),
+      verdict(false),
+      verdict(true),
+      verdict(true),
+      verdict(false),
+    ]);
     const result = await runGateHardeningChecks(
       {
         taskClass: "extract",
@@ -253,6 +311,7 @@ describe("runGateHardeningChecks — infra failure vs. verdict (the bug this fix
         referenceInstance: REFERENCE,
         knownGoodSubmission: KNOWN_GOOD,
         adversarialSubmissions: [ADVERSARIAL],
+        heldOutInstances: [HELD_OUT],
       },
       evaluate,
     );
@@ -262,6 +321,8 @@ describe("runGateHardeningChecks — infra failure vs. verdict (the bug this fix
   });
 
   it("the whole result fails with infraFailure, not a verdict, when the G1 probe itself is an unresolved infra failure", async () => {
+    // Only one queued outcome — the G1 probe short-circuits via allFail() before G2/G4/G5/G6
+    // ever call evaluate again, so nothing else needs to be scripted.
     const evaluate = queueEvaluator([infra]);
     const result = await runGateHardeningChecks(
       {
@@ -271,6 +332,7 @@ describe("runGateHardeningChecks — infra failure vs. verdict (the bug this fix
         referenceInstance: REFERENCE,
         knownGoodSubmission: KNOWN_GOOD,
         adversarialSubmissions: [ADVERSARIAL],
+        heldOutInstances: [HELD_OUT],
       },
       evaluate,
     );

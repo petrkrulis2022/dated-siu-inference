@@ -13,7 +13,8 @@ export type {
   GateOutcome,
   CheckResult,
   GateHardeningJobInputs,
-  G1ToG5Result,
+  GateHardeningResult,
+  HeldOutInstance,
 } from "./gate/index.js";
 
 /** The real `code`/`extract` reference tasks built in WP-1 — exported from the package root so
@@ -31,6 +32,7 @@ export {
   CODE_ADVERSARIAL_HARDCODED,
   CODE_ADVERSARIAL_STUBBED,
   CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
+  CODE_HELD_OUT_INSTANCES,
 } from "./gate/tasks/code.js";
 export {
   COMMERCIAL_INTENT as EXTRACT_COMMERCIAL_INTENT,
@@ -41,6 +43,8 @@ export {
   PLAUSIBLE_FABRICATION,
   NULL_SEMANTICS_ADVERSARIAL,
   FIELD_ORDER_GAMING,
+  EXTRACT_HELD_OUT_INSTANCES,
+  EXTRACT_ANSWER_KEY_REGRESSION,
 } from "./gate/tasks/extract.js";
 
 /** WP-9: the `@touchstone/task-pack-sdk` `TaskPack` adapter — the bench loads this instead of

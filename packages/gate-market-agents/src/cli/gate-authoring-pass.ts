@@ -8,6 +8,7 @@ import {
   NULL_SEMANTICS_ADVERSARIAL,
   FIELD_ORDER_GAMING,
   EXTRACT_COMMERCIAL_INTENT,
+  EXTRACT_HELD_OUT_INSTANCES,
 } from "@touchstone/task-pack-gate-hardening";
 import { loadSkill } from "../skills/registry.js";
 import { CANONICAL_ASSET_DESCRIPTION } from "../skills/asset-description.js";
@@ -28,7 +29,7 @@ const MAX_INFERENCE_USD = "2";
 
 /**
  * submit_job never touches ctx.clients (same as the P4 smoke pass) — real deps are only the
- * real, no-model, sandboxed G1-G5 executor; everything chain-shaped is stubbed/unused.
+ * real, no-model, sandboxed G1-G6 executor; everything chain-shaped is stubbed/unused.
  */
 function buildDeps(): RunnerDeps {
   return {
@@ -87,14 +88,25 @@ due_date.
 
 HOW A GATE IS AUTHORED (technical contract, not a solution):
   Your gate's source is a JavaScript ES module. It must export:
-    export async function gate({ submissionDir }) {
-      // read submissionDir + "/answer.json", parse it, compare it, and
-      // return { accept: <boolean>, reason: <string> }
+    export async function gate({ referenceDir, submissionDir }) {
+      // referenceDir contains the real source document for THIS grading run, at
+      // referenceDir + "/source-document.txt" — read it every time you are called.
+      // submissionDir contains the submission being graded, at
+      // submissionDir + "/answer.json" — read and parse it.
+      // Derive the correct values from referenceDir's document, compare them to the
+      // submission, and return { accept: <boolean>, reason: <string> }.
     }
   It runs inside a sandbox with only node:fs available — no network, no other imports beyond
-  node builtins. It is graded against a real, held-out submission you do not see: your gate must
-  decide, on its own, whether that submission's answer.json genuinely matches what the source
-  document above says, field for field, exactly — not merely shaped correctly.
+  node builtins.
+
+  IMPORTANT — read this carefully: your gate will be graded not only against the document shown
+  to you above, but also against several other real invoices you have never seen, each with its
+  own submission to grade. A gate that hard-codes this run's specific values (the literal string
+  "INV-4471", "128.50", etc.) will pass grading against this document and then fail on every
+  other one — it will never even be asked to grade this exact document more than once. Your gate
+  must derive the expected values from referenceDir's document at the moment it runs, every time,
+  not from values you compute once now and embed as literals. This is not a matter of style: a
+  gate that cannot do this is not a verifier and is worthless for its real purpose.
 
 TO SUBMIT YOUR GATE, respond with exactly:
   {"tool": "submit_job", "args": {"source": "<your full gate module source as a JSON string>"}}
@@ -136,6 +148,7 @@ TO SUBMIT YOUR GATE, respond with exactly:
       referenceInstance: EXTRACT_REFERENCE,
       knownGoodSubmission: EXTRACT_KNOWN_GOOD,
       adversarialSubmissions: [PLAUSIBLE_FABRICATION, NULL_SEMANTICS_ADVERSARIAL, FIELD_ORDER_GAMING],
+      heldOutInstances: EXTRACT_HELD_OUT_INSTANCES,
     },
     runsRoot: RUNS_ROOT,
     runId,

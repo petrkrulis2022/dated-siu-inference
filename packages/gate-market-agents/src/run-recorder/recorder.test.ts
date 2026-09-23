@@ -25,7 +25,7 @@ function fakeReceipt(overrides: Partial<GateMarketReceipt> = {}): GateMarketRece
     executor: "WORKER-CODE",
     class: "code",
     siu_delivered: 1,
-    gate_results: { G1: true, G2: true, G3: true, G4: true, G5: true },
+    gate_results: { G1: true, G2: true, G3: true, G4: true, G5: true, G6: true },
     settlement_asset: "USDC",
     settlement_amount: 1,
     usdc_equivalent_at_print: "0.0108",

@@ -1,4 +1,4 @@
-import type { GateSpec, ReferenceTaskInstance, Submission } from "../types.js";
+import type { GateSpec, HeldOutInstance, ReferenceTaskInstance, Submission } from "../types.js";
 
 /**
  * The `code` reference task (gate-market-spec.md §2.5): repair a seeded bug, pinned test suite.
@@ -197,3 +197,95 @@ export const CODE_ADVERSARIAL_EXCEPTION_SWALLOWING: Submission = {
 `,
   },
 };
+
+/**
+ * G6 (types.ts's `HeldOutInstance` doc comment): `CODE_GATE_3_HARDENED` already dynamically
+ * imports and invokes the submission's own function against fresh randomized inputs every run,
+ * so it cannot be gamed by memorizing one input/output pair the way `extract`'s original gate
+ * could. The narrower gap this actually tests for `code`: does an authored gate invoke the
+ * submission at all, or could it degenerate to comparing submission *text* against a memorized
+ * string? Four held-out pairs, reusing the same `CODE_REFERENCE` task (the vulnerability is
+ * about how the gate treats a submission's *text* vs. its *behavior*, not about the reference
+ * task itself) — each a correct implementation that is textually unrecognizable next to
+ * `KNOWN_GOOD_SOURCE`, paired with a textually-distinct wrong one. A text-comparison gate fails
+ * every held-out known-good (false reject) without ever calling `dedupeSorted` to find out.
+ */
+function heldOut(knownGoodSource: string, wrongSource: string): HeldOutInstance {
+  return {
+    referenceInstance: CODE_REFERENCE,
+    knownGoodSubmission: { files: { "answer.mjs": knownGoodSource } },
+    adversarialSubmissions: [{ files: { "answer.mjs": wrongSource } }],
+  };
+}
+
+export const CODE_HELD_OUT_INSTANCES: readonly [HeldOutInstance, ...HeldOutInstance[]] = [
+  // filter-based, correct — paired with a filter whose condition is inverted (keeps duplicates,
+  // drops uniques).
+  heldOut(
+    `export function dedupeSorted(arr) {
+  return arr.filter((v, i) => i === 0 || v !== arr[i - 1]);
+}
+`,
+    `export function dedupeSorted(arr) {
+  return arr.filter((v, i) => i === 0 || v === arr[i - 1]);
+}
+`,
+  ),
+  // reduce-based, correct — paired with a reduce that never dedupes at all.
+  heldOut(
+    `export function dedupeSorted(arr) {
+  return arr.reduce((acc, v) => {
+    if (acc.length === 0 || acc[acc.length - 1] !== v) acc.push(v);
+    return acc;
+  }, []);
+}
+`,
+    `export function dedupeSorted(arr) {
+  return arr.reduce((acc, v) => {
+    acc.push(v);
+    return acc;
+  }, []);
+}
+`,
+  ),
+  // Set-based, correct (Set preserves first-seen order, which equals dedup order on sorted
+  // input) — paired with a submission that just truncates the array.
+  heldOut(
+    `export function dedupeSorted(arr) {
+  return [...new Set(arr)];
+}
+`,
+    `export function dedupeSorted(arr) {
+  return arr.slice(0, Math.floor(arr.length / 2));
+}
+`,
+  ),
+  // index-based while-loop, correct — paired with the exact seeded-bug pattern from
+  // BUGGY_SOURCE above (">=" instead of "!=="), textually distinct source. Found live while
+  // building this fixture: an earlier draft used ">" instead of ">=", which is silently
+  // equivalent to "!==" for sorted input (never less-than, so "different" and "greater" mean
+  // the same thing) — not a bug at all under this domain's own precondition. ">=" is the real
+  // bug: true unconditionally for sorted input, so it dedupes nothing.
+  heldOut(
+    `export function dedupeSorted(arr) {
+  const out = [];
+  let i = 0;
+  while (i < arr.length) {
+    out.push(arr[i]);
+    let j = i + 1;
+    while (j < arr.length && arr[j] === arr[i]) j++;
+    i = j;
+  }
+  return out;
+}
+`,
+    `export function dedupeSorted(arr) {
+  const out = [];
+  for (let i = 0; i < arr.length; i++) {
+    if (i === 0 || arr[i] >= arr[i - 1]) out.push(arr[i]);
+  }
+  return out;
+}
+`,
+  ),
+];

@@ -18,7 +18,7 @@ export interface GateMarketReceipt {
   executor: AgentId;
   class: "code" | "extract";
   siu_delivered: number;
-  gate_results: { G1: boolean; G2: boolean; G3: boolean; G4: boolean; G5: boolean };
+  gate_results: { G1: boolean; G2: boolean; G3: boolean; G4: boolean; G5: boolean; G6: boolean };
   settlement_asset: string;
   settlement_amount: number;
   usdc_equivalent_at_print: string;

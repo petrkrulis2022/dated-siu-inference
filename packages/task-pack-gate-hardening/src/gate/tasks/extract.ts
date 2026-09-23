@@ -1,4 +1,4 @@
-import type { GateSpec, ReferenceTaskInstance, Submission } from "../types.js";
+import type { GateSpec, HeldOutInstance, ReferenceTaskInstance, Submission } from "../types.js";
 
 /**
  * The `extract` reference task (gate-market-spec.md §2.5): structured extraction to a pinned
@@ -188,29 +188,174 @@ export async function gate({ submissionDir }) {
  * Gate 3 — hardened: proper JSON.parse (last-key-wins, closing the duplicate-key hole
  * structurally rather than by scanning text), key-based access only (never string/positional
  * comparison — closes field-order gaming a second, independent way), and exact-match comparison
- * against the pinned expected values (closes fabrication and null-semantics placeholders, since
- * neither matches exactly).
+ * against expected values derived from the reference document *at gate-runtime*.
+ *
+ * Rewritten 2026-09-23, G6 (types.ts's `HeldOutInstance` doc comment): the original version of
+ * this gate baked `EXPECTED` in as a literal computed at fixture-authoring time — a real,
+ * structural answer-key, not a verifier, exactly the same shape a real single-agent run
+ * independently produced (see `EXTRACT_ANSWER_KEY_REGRESSION` below). It happened to pass G1-G5
+ * because those checks never vary the reference document. This version reads
+ * `referenceDir/source-document.txt` at runtime and derives its own expectations from that text
+ * — it would produce the right answer for a different invoice it has never seen, which is the
+ * property G6 actually tests.
  */
 export const EXTRACT_GATE_3_HARDENED: GateSpec = {
   taskClass: "extract",
   source: `${PATHOLOGICAL_GUARDS_SOURCE}
 import { readFileSync } from "node:fs";
-const EXPECTED = ${JSON.stringify(EXPECTED)};
 const REQUIRED_KEYS = ${JSON.stringify(REQUIRED_KEYS)};
 
-export async function gate({ submissionDir }) {
+// Plain string search rather than a regex — the label text itself never contains regex
+// metacharacters, and this avoids any risk of a mismatched escape between this generator and the
+// generated source (found worth avoiding, not merely convenient, while writing this).
+function extractField(text, label) {
+  const marker = label + ":";
+  const idx = text.indexOf(marker);
+  if (idx === -1) return null;
+  const rest = text.slice(idx + marker.length);
+  const newlineIdx = rest.indexOf("\\n");
+  return (newlineIdx === -1 ? rest : rest.slice(0, newlineIdx)).trim();
+}
+
+export async function gate({ referenceDir, submissionDir }) {
+  const docRaw = readFileSync(referenceDir + "/source-document.txt", "utf-8");
+  const expected = {
+    invoice_number: extractField(docRaw, "Invoice number"),
+    vendor: extractField(docRaw, "Vendor"),
+    total_amount: Number(extractField(docRaw, "Total amount")),
+    currency: extractField(docRaw, "Currency"),
+    due_date: extractField(docRaw, "Due date"),
+  };
+
   const raw = readFileSync(submissionDir + "/answer.json", "utf-8");
   const parsed = parseGuarded(raw);
   if (parsed.error) return { accept: false, reason: parsed.error };
   const obj = parsed.value;
 
   // Key-based access on the already-resolved (last-key-wins) parsed object — never re-reads the
-  // raw text, so a duplicate-key trick can't present a different value than the one checked here.
-  const wrong = REQUIRED_KEYS.filter((k) => obj[k] !== EXPECTED[k]); // exact match, stated policy
+  // raw submission text, so a duplicate-key trick can't present a different value than the one
+  // checked here.
+  const wrong = REQUIRED_KEYS.filter((k) => obj[k] !== expected[k]); // exact match, stated policy
   return {
     accept: wrong.length === 0,
     reason: wrong.length === 0 ? "every field matches exactly" : "incorrect field(s): " + wrong.join(", "),
   };
+}
+`,
+};
+
+/**
+ * G6: does the hardened gate above actually generalize to invoices it never saw, or does it
+ * (like the original version of this same fixture) only recognize the one document it was
+ * authored against? Four held-out invoices, each with real, distinct values and its own matching
+ * known-good/adversarial pair — never shown to a gate author, only used to grade.
+ */
+interface HeldOutInvoice {
+  invoiceNumber: string;
+  vendor: string;
+  totalAmount: number;
+  currency: string;
+  dueDate: string;
+}
+
+function buildHeldOutInvoice(invoice: HeldOutInvoice): HeldOutInstance {
+  const document = `INVOICE
+Invoice number: ${invoice.invoiceNumber}
+Vendor: ${invoice.vendor}
+Total amount: ${invoice.totalAmount.toFixed(2)}
+Currency: ${invoice.currency}
+Due date: ${invoice.dueDate}
+`;
+  const expected = {
+    invoice_number: invoice.invoiceNumber,
+    vendor: invoice.vendor,
+    total_amount: invoice.totalAmount,
+    currency: invoice.currency,
+    due_date: invoice.dueDate,
+  };
+  const referenceInstance: ReferenceTaskInstance = {
+    taskClass: "extract",
+    files: {
+      "source-document.txt": document,
+      "commercial-intent.txt": COMMERCIAL_INTENT,
+    },
+  };
+  const knownGoodSubmission: Submission = { files: { "answer.json": JSON.stringify(expected) } };
+  const adversarialSubmission: Submission = {
+    files: {
+      "answer.json": JSON.stringify({
+        invoice_number: "WRONG-0000",
+        vendor: "Wrong Vendor Inc",
+        total_amount: 0,
+        currency: "XXX",
+        due_date: "1970-01-01",
+      }),
+    },
+  };
+  return { referenceInstance, knownGoodSubmission, adversarialSubmissions: [adversarialSubmission] };
+}
+
+export const EXTRACT_HELD_OUT_INSTANCES: readonly [HeldOutInstance, ...HeldOutInstance[]] = [
+  buildHeldOutInvoice({
+    invoiceNumber: "INV-7812",
+    vendor: "Blue River Textiles",
+    totalAmount: 452.0,
+    currency: "EUR",
+    dueDate: "2026-11-15",
+  }),
+  buildHeldOutInvoice({
+    invoiceNumber: "INV-2290",
+    vendor: "Nordwind Logistics GmbH",
+    totalAmount: 89.99,
+    currency: "USD",
+    dueDate: "2026-09-30",
+  }),
+  buildHeldOutInvoice({
+    invoiceNumber: "INV-5567",
+    vendor: "Cedar & Finch Supply Co",
+    totalAmount: 1204.75,
+    currency: "GBP",
+    dueDate: "2026-12-01",
+  }),
+  buildHeldOutInvoice({
+    invoiceNumber: "INV-0043",
+    vendor: "Meridian Office Solutions",
+    totalAmount: 15.0,
+    currency: "USD",
+    dueDate: "2026-10-20",
+  }),
+];
+
+/**
+ * Real, not hypothetical: the exact gate a single-agent measurement pass produced live,
+ * 2026-09-23 (`data/gate-market/runs/extract-gate-authoring-2026-09-23T12-49-02-789Z/
+ * metrics.json`) — gemini-3.1-pro-preview, given the source document and asked to author a
+ * hardened extract gate from scratch. It passed G1-G5 in one turn, $0.005912, on the strength of
+ * exactly the same answer-key structure `EXTRACT_GATE_3_HARDENED` itself had before this rewrite.
+ * A permanent regression fixture: G6 must reject this, proving it catches the exact degenerate
+ * strategy actually observed, not a hypothetical one — see extract.test.ts.
+ */
+export const EXTRACT_ANSWER_KEY_REGRESSION: GateSpec = {
+  taskClass: "extract",
+  source: `import fs from 'node:fs';
+import path from 'node:path';
+
+export async function gate({ submissionDir }) {
+  try {
+    const answerPath = path.join(submissionDir, 'answer.json');
+    const content = fs.readFileSync(answerPath, 'utf8');
+    const data = JSON.parse(content);
+
+    if (data.invoice_number !== 'INV-4471') return { accept: false, reason: 'bad invoice_number' };
+    if (data.vendor !== 'Acme Bolts Ltd') return { accept: false, reason: 'bad vendor' };
+    if (String(data.total_amount) !== '128.50' && String(data.total_amount) !== '128.5') return { accept: false, reason: 'bad total_amount' };
+    if (data.currency !== 'USD') return { accept: false, reason: 'bad currency' };
+    if (data.due_date !== '2026-10-01') return { accept: false, reason: 'bad due_date' };
+
+    return { accept: true, reason: 'pass' };
+  } catch (e) {
+    return { accept: false, reason: e.message };
+  }
 }
 `,
 };

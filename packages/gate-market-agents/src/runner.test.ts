@@ -45,6 +45,7 @@ function fakeDeps(overrides: Partial<RunnerDeps> = {}): RunnerDeps {
       g3: { passed: true, reason: "ok" },
       g4: { passed: true, reason: "ok" },
       g5: { passed: true, reason: "ok" },
+      g6: { passed: true, reason: "ok" },
       passed: true,
     }),
     loadPrint: async () => ({ print_id: "2026-09-22" }) as unknown as Print,
@@ -86,6 +87,13 @@ describe("Runner — key isolation (the WP-4 regression test)", () => {
         referenceInstance: { taskClass: "code", files: {} },
         knownGoodSubmission: { files: {} },
         adversarialSubmissions: [],
+        heldOutInstances: [
+          {
+            referenceInstance: { taskClass: "code", files: {} },
+            knownGoodSubmission: { files: {} },
+            adversarialSubmissions: [],
+          },
+        ],
       },
       { turn: 2, jobId: "job-1" },
     );

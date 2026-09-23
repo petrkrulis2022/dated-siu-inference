@@ -1,4 +1,4 @@
-import type { G1ToG5Result } from "@touchstone/task-pack-gate-hardening";
+import type { GateHardeningResult } from "@touchstone/task-pack-gate-hardening";
 import type { AgentId } from "../identity/resolve.js";
 import { MECHANISM_CAVEAT } from "../skills/caveat.js";
 import type { GateMarketReceipt } from "./types.js";
@@ -12,10 +12,10 @@ export interface BuildReceiptInput {
   executor: AgentId;
   taskClass: "code" | "extract";
   siuDelivered: number;
-  /** The real G1-G5 result from a `submit_job` tool call — `claim_retired` is derived from its
+  /** The real G1-G6 result from a `submit_job` tool call — `claim_retired` is derived from its
    * own `passed` field, never set independently, so a receipt can never claim a retirement the
    * gate didn't actually grant. */
-  gateResult: G1ToG5Result;
+  gateResult: GateHardeningResult;
   settlementAsset: string;
   settlementAmount: number;
   usdcEquivalentAtPrint: string;
@@ -45,6 +45,7 @@ export function buildReceipt(input: BuildReceiptInput): GateMarketReceipt {
       G3: input.gateResult.g3.passed,
       G4: input.gateResult.g4.passed,
       G5: input.gateResult.g5.passed,
+      G6: input.gateResult.g6.passed,
     },
     settlement_asset: input.settlementAsset,
     settlement_amount: input.settlementAmount,

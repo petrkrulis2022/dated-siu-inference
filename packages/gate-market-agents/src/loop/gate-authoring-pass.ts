@@ -1,5 +1,12 @@
 import type { Adapter, AdapterParams } from "@touchstone/harness";
-import type { G1ToG5Result, GateSpec, ReferenceTaskInstance, Submission, TaskClass } from "@touchstone/task-pack-gate-hardening";
+import type {
+  GateHardeningResult,
+  GateSpec,
+  HeldOutInstance,
+  ReferenceTaskInstance,
+  Submission,
+  TaskClass,
+} from "@touchstone/task-pack-gate-hardening";
 import { assembleContext } from "../context/assemble.js";
 import {
   projectedTurnCostUsd,
@@ -47,6 +54,7 @@ export interface GateAuthoringPassOptions {
     referenceInstance: ReferenceTaskInstance;
     knownGoodSubmission: Submission;
     adversarialSubmissions: Submission[];
+    heldOutInstances: readonly [HeldOutInstance, ...HeldOutInstance[]];
   };
   runsRoot: string;
   runId: string;
@@ -61,7 +69,7 @@ export interface TurnLog {
   realizedUsd: string;
   latencyMs: number;
   parsed: string;
-  /** Set only on a real submit_job attempt — the real per-check G1-G5 outcome, so a report can
+  /** Set only on a real submit_job attempt — the real per-check G1-G6 outcome, so a report can
    * distinguish "spent this turn reasoning/parsing" from "spent this turn on a failed attempt,
    * and here is exactly why it failed." */
   gateResult?: { passed: boolean; summary: string };
@@ -82,14 +90,15 @@ const WINDOW_ID = "gate-authoring-pass";
 const UNUSED_PRIVATE_KEY = "0xa715563de5d5c011627720140757574d96bcfc02bdf2e0ee1f68d64e171fe89a";
 const UNUSED_RPC_URL = "http://127.0.0.1:1";
 
-function summarizeGateResult(result: G1ToG5Result): string {
-  if (result.passed) return "G1-G5 all passed";
+function summarizeGateResult(result: GateHardeningResult): string {
+  if (result.passed) return "G1-G6 all passed";
   const checks = [
     ["G1", result.g1],
     ["G2", result.g2],
     ["G3", result.g3],
     ["G4", result.g4],
     ["G5", result.g5],
+    ["G6", result.g6],
   ] as const;
   return checks
     .filter(([, check]) => !check.passed)
@@ -241,11 +250,12 @@ export async function runGateAuthoringPass(options: GateAuthoringPassOptions): P
       referenceInstance: options.envelope.referenceInstance,
       knownGoodSubmission: options.envelope.knownGoodSubmission,
       adversarialSubmissions: options.envelope.adversarialSubmissions,
+      heldOutInstances: options.envelope.heldOutInstances,
     };
 
     try {
       const record = await runner.callTool(intent.tool, args, { turn, jobId: options.jobId });
-      const gateResult = record.result as G1ToG5Result;
+      const gateResult = record.result as GateHardeningResult;
       const gateResultSummary = summarizeGateResult(gateResult);
 
       turnLogs.push({

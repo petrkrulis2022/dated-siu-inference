@@ -8,5 +8,6 @@ export type {
   GateOutcome,
   CheckResult,
   GateHardeningJobInputs,
-  G1ToG5Result,
+  GateHardeningResult,
+  HeldOutInstance,
 } from "./types.js";

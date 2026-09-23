@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Adapter, AdapterResult } from "@touchstone/harness";
-import type { G1ToG5Result } from "@touchstone/task-pack-gate-hardening";
+import type { GateHardeningResult } from "@touchstone/task-pack-gate-hardening";
 import type { Print } from "@touchstone/sdk";
 import type { RunnerDeps } from "../deps.js";
 import type { RunManifest } from "../run-recorder/recorder.js";
@@ -13,22 +13,24 @@ import { runGateAuthoringPass, type GateAuthoringPassOptions } from "./gate-auth
 
 const PRICES = { priceInUsdPer1M: "2", priceOutUsdPer1M: "12" }; // gemini-3.1-pro-preview's real registry price
 
-const PASS: G1ToG5Result = {
+const PASS: GateHardeningResult = {
   g1: { passed: true, reason: "ok" },
   g2: { passed: true, reason: "ok" },
   g3: { passed: true, reason: "ok" },
   g4: { passed: true, reason: "ok" },
   g5: { passed: true, reason: "ok" },
+  g6: { passed: true, reason: "ok" },
   passed: true,
 };
 
-function failResult(reason: string): G1ToG5Result {
+function failResult(reason: string): GateHardeningResult {
   return {
     g1: { passed: true, reason: "ok" },
     g2: { passed: false, reason },
     g3: { passed: true, reason: "ok" },
     g4: { passed: true, reason: "ok" },
     g5: { passed: true, reason: "ok" },
+    g6: { passed: true, reason: "ok" },
     passed: false,
   };
 }
@@ -102,6 +104,13 @@ function baseOptions(
       referenceInstance: { taskClass: "extract", files: {} },
       knownGoodSubmission: { files: { "answer.json": "{}" } },
       adversarialSubmissions: [],
+      heldOutInstances: [
+        {
+          referenceInstance: { taskClass: "extract", files: {} },
+          knownGoodSubmission: { files: { "answer.json": "{}" } },
+          adversarialSubmissions: [],
+        },
+      ],
     },
     runsRoot,
     runId: "gate-authoring-test-run",
@@ -129,12 +138,12 @@ describe("runGateAuthoringPass", () => {
     expect(result.passed).toBe(true);
     expect(result.turnsUsed).toBe(1);
     expect(result.haltedReason).toBeUndefined();
-    expect(result.turnLogs[0].gateResult).toEqual({ passed: true, summary: "G1-G5 all passed" });
+    expect(result.turnLogs[0].gateResult).toEqual({ passed: true, summary: "G1-G6 all passed" });
   });
 
   it("retries across multiple failing attempts before eventually succeeding", async () => {
     let call = 0;
-    const runGateHardeningChecks = async (): Promise<G1ToG5Result> => {
+    const runGateHardeningChecks = async (): Promise<GateHardeningResult> => {
       call++;
       return call < 3 ? failResult(`attempt ${call} still wrong`) : PASS;
     };
@@ -213,7 +222,7 @@ describe("runGateAuthoringPass", () => {
 
   it("never lets the model's own args override the fixed envelope's taskClass or fixtures", async () => {
     let capturedArgs: unknown;
-    const runGateHardeningChecks = async (args: unknown): Promise<G1ToG5Result> => {
+    const runGateHardeningChecks = async (args: unknown): Promise<GateHardeningResult> => {
       capturedArgs = args;
       return PASS;
     };

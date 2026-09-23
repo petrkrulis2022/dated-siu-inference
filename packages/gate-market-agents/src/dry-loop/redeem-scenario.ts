@@ -1,5 +1,5 @@
 import { keccak256, stringToBytes } from "viem";
-import type { GateSpec, G1ToG5Result } from "@touchstone/task-pack-gate-hardening";
+import type { GateSpec, GateHardeningResult } from "@touchstone/task-pack-gate-hardening";
 import {
   CODE_REFERENCE,
   CODE_KNOWN_GOOD,
@@ -8,6 +8,7 @@ import {
   CODE_ADVERSARIAL_HARDCODED,
   CODE_ADVERSARIAL_STUBBED,
   CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
+  CODE_HELD_OUT_INSTANCES,
 } from "@touchstone/task-pack-gate-hardening";
 import { minorUnitsToUsd } from "@touchstone/sdk";
 import type { Runner } from "../runner.js";
@@ -40,7 +41,7 @@ export interface RedeemScenarioResult {
   headroomAfterMint: bigint;
   headroomAfterServe: bigint;
   holderBalanceAfterServe: bigint;
-  gateResult: G1ToG5Result;
+  gateResult: GateHardeningResult;
   receipt: GateMarketReceipt;
   /** Real, read from the claim's actual on-chain window at the moment of presenting — spec
    * §7.1a, pre-WP-7 fix. */
@@ -147,10 +148,11 @@ export async function runRedeemScenario(
         CODE_ADVERSARIAL_STUBBED,
         CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
       ],
+      heldOutInstances: CODE_HELD_OUT_INSTANCES,
     },
     { turn: 4, jobId },
   );
-  const gateResult = gateResultRecord.result as G1ToG5Result;
+  const gateResult = gateResultRecord.result as GateHardeningResult;
 
   const receiptRef = keccak256(stringToBytes(`receipt:${jobId}`));
   await issuer.callTool(

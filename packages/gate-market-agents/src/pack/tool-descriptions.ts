@@ -22,7 +22,7 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   serve_redemption:
     "serve_redemption(tokenId, holder, quantity, passed, receiptRef) -> issuer-only: reports a redemption's outcome",
   submit_job:
-    "submit_job(taskClass, originalGate, hardenedGate, referenceInstance, knownGoodSubmission, adversarialSubmissions) -> runs the real G1-G5 checks",
+    "submit_job(taskClass, originalGate, hardenedGate, referenceInstance, knownGoodSubmission, adversarialSubmissions, heldOutInstances) -> runs the real G1-G6 checks",
   get_balances:
     "get_balances(account, tokenIds?) -> real USDC balance (decimal and integer minor-unit forms) plus claim balances",
   get_print: "get_print(printId) -> the real print body plus whether it's final",

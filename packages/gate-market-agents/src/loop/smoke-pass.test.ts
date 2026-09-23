@@ -43,6 +43,7 @@ function fakeDeps(): RunnerDeps {
       g3: { passed: true, reason: "ok" },
       g4: { passed: true, reason: "ok" },
       g5: { passed: true, reason: "ok" },
+      g6: { passed: true, reason: "ok" },
       passed: true,
     }),
     loadPrint: async () => ({ print_id: "2026-09-22" }) as unknown as Print,
@@ -72,6 +73,9 @@ const SUBMIT_JOB_ARGS = JSON.stringify({
   referenceInstance: { taskClass: "code", files: {} },
   knownGoodSubmission: { files: {} },
   adversarialSubmissions: [],
+  heldOutInstances: [
+    { referenceInstance: { taskClass: "code", files: {} }, knownGoodSubmission: { files: {} }, adversarialSubmissions: [] },
+  ],
 });
 
 function baseOptions(runsRoot: string) {

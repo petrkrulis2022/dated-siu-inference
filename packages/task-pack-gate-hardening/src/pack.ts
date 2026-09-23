@@ -1,8 +1,9 @@
 import type { GateResult, TaskPack } from "@touchstone/task-pack-sdk";
 import { runGateHardeningChecks } from "./gate/executor.js";
 import type {
-  G1ToG5Result,
+  GateHardeningResult,
   GateSpec,
+  HeldOutInstance,
   ReferenceTaskInstance,
   Submission,
   TaskClass,
@@ -15,6 +16,7 @@ import {
   CODE_GATE_1_TRIVIAL,
   CODE_GATE_2_SINGLE_CASE,
   CODE_GATE_3_HARDENED,
+  CODE_HELD_OUT_INSTANCES,
   CODE_KNOWN_GOOD,
   CODE_REFERENCE,
 } from "./gate/tasks/code.js";
@@ -22,6 +24,7 @@ import {
   EXTRACT_GATE_1_TRIVIAL,
   EXTRACT_GATE_2_TEXT_SCAN,
   EXTRACT_GATE_3_HARDENED,
+  EXTRACT_HELD_OUT_INSTANCES,
   EXTRACT_KNOWN_GOOD,
   EXTRACT_REFERENCE,
   FIELD_ORDER_GAMING,
@@ -43,16 +46,18 @@ export interface GateHardeningReference {
   referenceInstance: ReferenceTaskInstance;
   knownGoodSubmission: Submission;
   adversarialSubmissions: Submission[];
+  heldOutInstances: readonly [HeldOutInstance, ...HeldOutInstance[]];
 }
 
-function summarize(result: G1ToG5Result): string {
-  if (result.passed) return "G1-G5 all passed";
+function summarize(result: GateHardeningResult): string {
+  if (result.passed) return "G1-G6 all passed";
   const checks = [
     ["G1", result.g1],
     ["G2", result.g2],
     ["G3", result.g3],
     ["G4", result.g4],
     ["G5", result.g5],
+    ["G6", result.g6],
   ] as const;
   const failed = checks.filter(([, check]) => !check.passed);
   return failed.map(([name, check]) => `${name} failed: ${check.reason}`).join("; ");
@@ -69,6 +74,7 @@ async function gateHardeningGate(
     referenceInstance: reference.referenceInstance,
     knownGoodSubmission: reference.knownGoodSubmission,
     adversarialSubmissions: reference.adversarialSubmissions,
+    heldOutInstances: reference.heldOutInstances,
   });
   return { accept: result.passed, reason: summarize(result) };
 }
@@ -82,6 +88,7 @@ interface BuildArgs {
   referenceInstance: ReferenceTaskInstance;
   knownGoodSubmission: Submission;
   adversarialSubmissions: Submission[];
+  heldOutInstances: readonly [HeldOutInstance, ...HeldOutInstance[]];
 }
 
 /**
@@ -99,6 +106,7 @@ function buildGateHardeningPack(args: BuildArgs): TaskPack<GateSpec, GateHardeni
     referenceInstance: args.referenceInstance,
     knownGoodSubmission: args.knownGoodSubmission,
     adversarialSubmissions: args.adversarialSubmissions,
+    heldOutInstances: args.heldOutInstances,
   };
   return {
     name: `gate-hardening/${args.taskClass}`,
@@ -128,6 +136,7 @@ export const CODE_GATE_HARDENING_PACK: TaskPack<GateSpec, GateHardeningReference
     CODE_ADVERSARIAL_STUBBED,
     CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
   ],
+  heldOutInstances: CODE_HELD_OUT_INSTANCES,
 });
 
 export const EXTRACT_GATE_HARDENING_PACK: TaskPack<GateSpec, GateHardeningReference> = buildGateHardeningPack({
@@ -139,4 +148,5 @@ export const EXTRACT_GATE_HARDENING_PACK: TaskPack<GateSpec, GateHardeningRefere
   referenceInstance: EXTRACT_REFERENCE,
   knownGoodSubmission: EXTRACT_KNOWN_GOOD,
   adversarialSubmissions: [PLAUSIBLE_FABRICATION, NULL_SEMANTICS_ADVERSARIAL, FIELD_ORDER_GAMING],
+  heldOutInstances: EXTRACT_HELD_OUT_INSTANCES,
 });

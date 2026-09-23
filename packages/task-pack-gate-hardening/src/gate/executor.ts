@@ -5,7 +5,8 @@ import type {
   GateHardeningJobInputs,
   GateSpec,
   GateOutcome,
-  G1ToG5Result,
+  GateHardeningResult,
+  HeldOutInstance,
   ReferenceTaskInstance,
   Submission,
   CheckResult,
@@ -158,9 +159,9 @@ export async function evaluateGateWithRetry(
   return last;
 }
 
-function allFail(reason: string, infraFailure = false): G1ToG5Result {
+function allFail(reason: string, infraFailure = false): GateHardeningResult {
   const fail: CheckResult = { passed: false, reason, ...(infraFailure ? { infraFailure: true } : {}) };
-  return { g1: fail, g2: fail, g3: fail, g4: fail, g5: fail, passed: false };
+  return { g1: fail, g2: fail, g3: fail, g4: fail, g5: fail, g6: fail, passed: false };
 }
 
 /** Sequential, not `Promise.all` — found live, 2026-09-22: running several evaluateGate calls
@@ -207,8 +208,64 @@ export function outcomesAgree(outcomes: (GateOutcome & { kind: "verdict" | "gate
 }
 
 /**
- * gate-market-spec.md §2.4's five checks. Deliberately mechanical — no judgment calls, every
- * result traces to a real sandboxed execution. G1/G2/G3/G5 evaluate the *hardened* gate; G4
+ * G6 — generalization (found live, 2026-09-23, not speculated): a gate can pass G1-G5 by
+ * embedding the *one* reference instance's expected values as literals, never reading
+ * `referenceDir` at runtime. G1-G5 never vary the reference instance, so that strategy is
+ * invisible to them. This evaluates the hardened gate against a reference instance it was never
+ * authored against — its own known-good must be accepted, every one of its own adversarial
+ * submissions must be rejected. Sequential, not `Promise.all` — same reasoning as
+ * `evaluateSequentially` above (concurrent sandboxed evaluations proved unreliable under real
+ * host load); not reused directly since its return type is pinned to `GateOutcome`, not this
+ * check's own richer per-instance result.
+ */
+async function evaluateHeldOutInstance(
+  hardenedGate: GateSpec,
+  instance: HeldOutInstance,
+  evaluate: typeof evaluateGateWithRetry,
+): Promise<{ passed: boolean; infraFailure: boolean; reason: string }> {
+  const goodOutcome = await evaluate(hardenedGate, instance.referenceInstance, instance.knownGoodSubmission);
+  if (goodOutcome.kind === "infra_failure") {
+    return {
+      passed: false,
+      infraFailure: true,
+      reason: "held-out known-good could not be evaluated after retries — infrastructure failure, not a verdict",
+    };
+  }
+  if (!wasAccepted(goodOutcome)) {
+    return {
+      passed: false,
+      infraFailure: false,
+      reason: "held-out known-good was rejected — the gate does not generalize to this held-out instance",
+    };
+  }
+
+  const adversarialResults: GateOutcome[] = [];
+  for (const submission of instance.adversarialSubmissions) {
+    adversarialResults.push(await evaluate(hardenedGate, instance.referenceInstance, submission));
+  }
+  const infraFailures = adversarialResults.filter((r) => r.kind === "infra_failure").length;
+  if (infraFailures > 0) {
+    return {
+      passed: false,
+      infraFailure: true,
+      reason: `${infraFailures}/${adversarialResults.length} held-out adversarial case(s) could not be evaluated after retries — infrastructure failure, not a verdict`,
+    };
+  }
+  const wronglyAccepted = adversarialResults.filter(wasAccepted).length;
+  if (wronglyAccepted > 0) {
+    return {
+      passed: false,
+      infraFailure: false,
+      reason: `${wronglyAccepted}/${adversarialResults.length} held-out adversarial case(s) were incorrectly accepted — the gate does not generalize`,
+    };
+  }
+  return { passed: true, infraFailure: false, reason: "held-out instance passed" };
+}
+
+/**
+ * gate-market-spec.md §2.4's five checks, plus G6 (generalization — see `HeldOutInstance`'s own
+ * doc comment in types.ts for why it exists). Deliberately mechanical — no judgment calls, every
+ * result traces to a real sandboxed execution. G1/G2/G3/G5/G6 evaluate the *hardened* gate; G4
  * evaluates the *original* candidate gate — see types.ts's GateHardeningJobInputs doc comment for
  * why that split matters (G4 without it would be checking the adversary against a strawman).
  *
@@ -224,7 +281,7 @@ export function outcomesAgree(outcomes: (GateOutcome & { kind: "verdict" | "gate
 export async function runGateHardeningChecks(
   inputs: GateHardeningJobInputs,
   evaluate: typeof evaluateGateWithRetry = evaluateGateWithRetry,
-): Promise<G1ToG5Result> {
+): Promise<GateHardeningResult> {
   const g1Outcome = await evaluate(inputs.hardenedGate, inputs.referenceInstance, inputs.knownGoodSubmission);
   if (g1Outcome.kind === "infra_failure") {
     return allFail(
@@ -300,5 +357,30 @@ export async function runGateHardeningChecks(
           };
         })();
 
-  return { g1, g2, g3, g4, g5, passed: g1.passed && g2.passed && g3.passed && g4.passed && g5.passed };
+  const heldOutResults: { passed: boolean; infraFailure: boolean; reason: string }[] = [];
+  for (const instance of inputs.heldOutInstances) {
+    heldOutResults.push(await evaluateHeldOutInstance(inputs.hardenedGate, instance, evaluate));
+  }
+  const g6InfraFailures = heldOutResults.filter((r) => r.infraFailure).length;
+  const g6Failed = heldOutResults.filter((r) => !r.passed && !r.infraFailure);
+  const g6: CheckResult = {
+    passed: g6InfraFailures === 0 && g6Failed.length === 0,
+    infraFailure: g6InfraFailures > 0,
+    reason:
+      g6InfraFailures > 0
+        ? `${g6InfraFailures}/${heldOutResults.length} held-out instance(s) could not be evaluated after retries — infrastructure failure, not a verdict`
+        : g6Failed.length > 0
+          ? `${g6Failed.length}/${heldOutResults.length} held-out instance(s) failed to generalize: ${g6Failed.map((r) => r.reason).join("; ")}`
+          : `hardened gate generalized correctly across all ${heldOutResults.length} held-out instance(s)`,
+  };
+
+  return {
+    g1,
+    g2,
+    g3,
+    g4,
+    g5,
+    g6,
+    passed: g1.passed && g2.passed && g3.passed && g4.passed && g5.passed && g6.passed,
+  };
 }

@@ -11,6 +11,7 @@ import {
   CODE_ADVERSARIAL_HARDCODED,
   CODE_ADVERSARIAL_STUBBED,
   CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
+  CODE_HELD_OUT_INSTANCES,
 } from "./code.js";
 
 /**
@@ -46,7 +47,7 @@ describe("the real dedupeSorted reference task", () => {
     expectVerdict(swallowed, false);
   }, 60000);
 
-  it("the full G1-G5 pipeline passes hardening Gate 1 up to Gate 3", async () => {
+  it("the full G1-G6 pipeline passes hardening Gate 1 up to Gate 3", async () => {
     const result = await runGateHardeningChecks({
       taskClass: "code",
       originalGate: CODE_GATE_1_TRIVIAL,
@@ -59,6 +60,7 @@ describe("the real dedupeSorted reference task", () => {
         CODE_ADVERSARIAL_STUBBED,
         CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
       ],
+      heldOutInstances: CODE_HELD_OUT_INSTANCES,
     });
 
     expect(result.g1.passed).toBe(true);
@@ -70,6 +72,11 @@ describe("the real dedupeSorted reference task", () => {
     // genuinely pass it.
     expect(result.g4.passed).toBe(true);
     expect(result.g5.passed).toBe(true);
+    // G6: CODE_GATE_3_HARDENED dynamically invokes the submission's own function — it should
+    // accept every held-out alternate correct implementation and reject every held-out wrong
+    // one, proving it tests behavior rather than memorized text. This is the real, not assumed,
+    // confirmation that the design-review conclusion in types.ts's own doc comment holds.
+    expect(result.g6.passed).toBe(true);
     expect(result.passed).toBe(true);
-  }, 90000);
+  }, 150000);
 });

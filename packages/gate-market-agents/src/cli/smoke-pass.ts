@@ -9,6 +9,7 @@ import {
   CODE_ADVERSARIAL_HARDCODED,
   CODE_ADVERSARIAL_STUBBED,
   CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
+  CODE_HELD_OUT_INSTANCES,
 } from "@touchstone/task-pack-gate-hardening";
 import { buildCommonPack } from "../pack/build.js";
 import { loadSkill } from "../skills/registry.js";
@@ -31,7 +32,7 @@ const MAX_INFERENCE_USD = "0.50";
 /**
  * P4's real exit condition (spec §9.1) needs no claim/mint/redeem tools — see `loop/smoke-pass.ts`'s
  * own doc comment for why. `runGateHardeningChecks` is the real, no-model, already-proven-in-WP-1
- * sandboxed G1-G5 executor; everything else in `RunnerDeps` is unused by `submit_job` and is
+ * sandboxed G1-G6 executor; everything else in `RunnerDeps` is unused by `submit_job` and is
  * stubbed accordingly rather than wired to a real chain this smoke pass doesn't need.
  */
 function buildDeps(): RunnerDeps {
@@ -89,6 +90,10 @@ async function main(): Promise<void> {
       CODE_ADVERSARIAL_STUBBED,
       CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
     ],
+    // G6, added after this script's own real historical run (this field didn't exist yet at the
+    // time — see docs/gate-market-spec.md's G6 addition) — required by submit_job's schema now;
+    // without it, re-running this script would fail validation before any real API call.
+    heldOutInstances: CODE_HELD_OUT_INSTANCES,
   };
 
   const jobDescription = `
@@ -98,7 +103,7 @@ YOUR JOB THIS RUN
   task, known-good submission, adversarial submissions) is already prepared for you — you do not
   need to write or transcribe it. To submit it, respond with exactly:
   {"tool": "submit_job", "args": "USE_PROVIDED_PAYLOAD"}
-  If every one of G1-G5 comes back passed, respond done with a short summary.
+  If every one of G1-G6 comes back passed, respond done with a short summary.
 `;
 
   const orchestratorSkill = loadSkill("subcontract-and-settle");
