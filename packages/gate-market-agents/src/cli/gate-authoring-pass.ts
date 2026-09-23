@@ -10,6 +10,7 @@ import {
   EXTRACT_COMMERCIAL_INTENT,
 } from "@touchstone/task-pack-gate-hardening";
 import { loadSkill } from "../skills/registry.js";
+import { CANONICAL_ASSET_DESCRIPTION } from "../skills/asset-description.js";
 import type { ModelPrices } from "../budget/inference-cost.js";
 import type { RunnerDeps } from "../deps.js";
 import { runGateAuthoringPass } from "../loop/gate-authoring-pass.js";
@@ -103,7 +104,7 @@ TO SUBMIT YOUR GATE, respond with exactly:
   resubmit within your turn budget.
 `;
 
-  const skillPackText = `${workerSkill.promptTemplate}\n\n${jobDescription}`;
+  const skillPackText = `${workerSkill.promptTemplate}\n\n${CANONICAL_ASSET_DESCRIPTION}\n\n${jobDescription}`;
 
   const runId = `extract-gate-authoring-${new Date().toISOString().replace(/[:.]/g, "-")}`;
   const manifest: RunManifest = {
