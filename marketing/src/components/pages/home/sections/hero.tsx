@@ -16,7 +16,7 @@ export function Hero() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 overflow-x-auto px-5 py-3 font-mono text-[0.65rem] uppercase tracking-[0.12em] md:px-8">
           <span className="whitespace-nowrap">Dated SIU <b className="font-medium">{CURRENT_PRINT.value}</b></span>
           <span className="whitespace-nowrap text-ploy-text-inverse-secondary">Settlement / USDC</span>
-          <span className="whitespace-nowrap text-ploy-text-inverse-secondary">Index print / Weekly · Signed</span>
+          <span className="whitespace-nowrap text-ploy-text-inverse-secondary">Index print / Daily · Signed</span>
           <span className="whitespace-nowrap text-ploy-text-inverse-secondary">Method / Versioned</span>
         </div>
       </div>
@@ -24,8 +24,8 @@ export function Hero() {
       <div className="mx-auto max-w-7xl px-5 pb-16 md:px-8 md:pb-24">
         <div className="hero__copy grid gap-10 pt-14 md:grid-cols-12 md:gap-8 md:pt-20">
           <div className="md:col-span-8">
-            <h1 id="hero-title" className="hero__title max-w-4xl text-balance font-heading text-5xl font-normal leading-[0.98] tracking-[-0.025em] md:text-7xl">Touchstone Assay publishes Dated SIU.</h1>
-            <p className="mt-7 max-w-2xl font-heading text-2xl leading-tight text-ploy-text-secondary md:text-3xl">The benchmark price of AI inference work.</p>
+            <h1 id="hero-title" className="hero__title max-w-4xl text-balance font-heading text-5xl font-normal leading-[0.98] tracking-[-0.025em] md:text-7xl">The unit of account for agent commerce.</h1>
+            <p className="mt-7 max-w-2xl font-heading text-2xl leading-tight text-ploy-text-secondary md:text-3xl">Dated SIU — the daily price of one unit of verified AI work. Measured by buying it, not surveying.</p>
           </div>
           <div className="max-w-md md:col-span-4 md:pt-2"><p className="text-base leading-7 text-ploy-text-secondary">One SIU is a fixed quantity of AI work: a versioned benchmark basket of inference tasks completed at a defined quality threshold.</p><p className="mt-5 font-mono text-[0.62rem] uppercase tracking-[0.16em] text-ploy-text-secondary">A measurement standard · not a currency · nothing for sale</p></div>
         </div>

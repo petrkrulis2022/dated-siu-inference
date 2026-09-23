@@ -5,7 +5,9 @@ import { Hero } from "./sections/hero";
 import { HowItWorks } from "./sections/how-it-works";
 import { Method } from "./sections/method";
 import { Problem } from "./sections/problem";
+import { Proof } from "./sections/proof";
 import { Roadmap } from "./sections/roadmap";
+import { UnitOfAccount } from "./sections/unit-of-account";
 
 /**
  * @ployComponent
@@ -19,6 +21,8 @@ export function HomePage() {
   return (
     <main id="top" className="min-h-screen bg-ploy-background-primary text-ploy-text-primary selection:bg-ploy-accent-primary selection:text-ploy-text-inverse">
       <Hero />
+      <Proof />
+      <UnitOfAccount />
       <Problem />
       <Analogy />
       <HowItWorks />

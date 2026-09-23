@@ -29,7 +29,7 @@ export function Method() {
         </div>
         <div className="mt-12 grid gap-8 md:grid-cols-12">
           <p className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-ploy-accent-primary md:col-span-3">Publication cadence</p>
-          <p className="max-w-4xl leading-7 text-ploy-text-inverse-secondary md:col-span-9">Prints are published weekly on a stated schedule, marked provisional until reconciled against provider invoices, and corrections are published as numbered revisions alongside originals which are never edited or deleted.</p>
+          <p className="max-w-4xl leading-7 text-ploy-text-inverse-secondary md:col-span-9">Prints are published daily on a stated schedule, marked provisional until reconciled against provider invoices, and corrections are published as numbered revisions alongside originals which are never edited or deleted.</p>
         </div>
       </div>
     </section>

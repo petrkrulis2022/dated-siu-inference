@@ -9,6 +9,6 @@ interface SiteConfig {
 export const SITE_CONFIG: SiteConfig = {
   name: "Touchstone Assay",
   description:
-    "Touchstone Assay publishes Dated SIU, the benchmark price of AI inference work — measured by executing a versioned task basket, not by surveying list prices.",
+    "Dated SIU — the daily price of one unit of verified AI work, measured by buying it, not surveying.",
   sourceSitemapUrl: "",
 };
