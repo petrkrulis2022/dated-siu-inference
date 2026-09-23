@@ -1,0 +1,28 @@
+{
+  "model": "claude-haiku-4-5-20251001",
+  "id": "msg_011CfKU4cmjCC3jYjBBrCQw8",
+  "type": "message",
+  "role": "assistant",
+  "content": [
+    {
+      "type": "text",
+      "text": "A03F94\n9516F3\n3C56DD\n98A378"
+    }
+  ],
+  "container": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "stop_details": null,
+  "usage": {
+    "input_tokens": 22926,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_5m_input_tokens": 0,
+      "ephemeral_1h_input_tokens": 0
+    },
+    "output_tokens": 21,
+    "service_tier": "standard",
+    "inference_geo": "not_available"
+  }
+}
