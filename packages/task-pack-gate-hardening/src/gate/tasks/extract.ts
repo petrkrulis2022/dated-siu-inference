@@ -45,6 +45,12 @@ export const EXTRACT_REFERENCE: ReferenceTaskInstance = {
   files: {
     "source-document.txt": SOURCE_DOCUMENT,
     "commercial-intent.txt": COMMERCIAL_INTENT,
+    // Ground truth as data (found necessary live, 2026-09-24 — see EXTRACT_GATE_3_HARDENED's own
+    // doc comment): a deterministic gate can only know the right answer on a document it wasn't
+    // authored against if something supplies it. Re-deriving it by parsing the document only
+    // works when the layout is easy enough for whatever parser the gate happens to use — which
+    // makes "verification" just another brittle extractor, tuned to one template.
+    "expected.json": JSON.stringify(EXPECTED),
   },
 };
 
@@ -187,17 +193,28 @@ export async function gate({ submissionDir }) {
 /**
  * Gate 3 — hardened: proper JSON.parse (last-key-wins, closing the duplicate-key hole
  * structurally rather than by scanning text), key-based access only (never string/positional
- * comparison — closes field-order gaming a second, independent way), and exact-match comparison
- * against expected values derived from the reference document *at gate-runtime*.
+ * comparison — closes field-order gaming a second, independent way), and a robust comparison
+ * against ground truth supplied as data.
  *
- * Rewritten 2026-09-23, G6 (types.ts's `HeldOutInstance` doc comment): the original version of
- * this gate baked `EXPECTED` in as a literal computed at fixture-authoring time — a real,
- * structural answer-key, not a verifier, exactly the same shape a real single-agent run
- * independently produced (see `EXTRACT_ANSWER_KEY_REGRESSION` below). It happened to pass G1-G5
- * because those checks never vary the reference document. This version reads
- * `referenceDir/source-document.txt` at runtime and derives its own expectations from that text
- * — it would produce the right answer for a different invoice it has never seen, which is the
- * property G6 actually tests.
+ * Rewritten twice, both times live, 2026-09-23 and 2026-09-24. v1 baked `EXPECTED` in as a
+ * literal computed at fixture-authoring time — a real answer-key, not a verifier (see
+ * `EXTRACT_ANSWER_KEY_REGRESSION`). v2 (this file's previous version) fixed that by parsing
+ * `referenceDir/source-document.txt` at gate-runtime instead — but that only works when the
+ * document's layout matches what the parser expects. Confirmed live: evaluated against two
+ * genuinely different invoice layouts (different field labels, a DD/MM/YYYY date, currency
+ * embedded in the amount line), it rejected correct submissions on both (see
+ * `EXTRACT_LAYOUT_SPECIFIC_REGRESSION`) — it was a second, layout-specific extractor, not a
+ * verifier. A deterministic gate can only know the right answer on a document it wasn't authored
+ * against if something *supplies* it; re-deriving it by parsing only works when the layout is
+ * easy enough for whatever parser the gate happens to use, which just relocates the brittleness.
+ *
+ * v3 (this version): ground truth as data. Reads `referenceDir/expected.json` — real data,
+ * supplied by the operator for every reference instance (see `EXTRACT_REFERENCE`'s own comment),
+ * never re-derived — and compares the submission against it with `valuesMatch`, which tolerates
+ * the ways a genuinely correct answer can be legitimately represented (a number as a JSON string,
+ * incidental whitespace) while remaining exact about actual content. Gate-hardening for this
+ * class now means hardening the *comparison*, which is exactly what the adversarial fixtures
+ * below already attack.
  */
 export const EXTRACT_GATE_3_HARDENED: GateSpec = {
   taskClass: "extract",
@@ -205,27 +222,25 @@ export const EXTRACT_GATE_3_HARDENED: GateSpec = {
 import { readFileSync } from "node:fs";
 const REQUIRED_KEYS = ${JSON.stringify(REQUIRED_KEYS)};
 
-// Plain string search rather than a regex — the label text itself never contains regex
-// metacharacters, and this avoids any risk of a mismatched escape between this generator and the
-// generated source (found worth avoiding, not merely convenient, while writing this).
-function extractField(text, label) {
-  const marker = label + ":";
-  const idx = text.indexOf(marker);
-  if (idx === -1) return null;
-  const rest = text.slice(idx + marker.length);
-  const newlineIdx = rest.indexOf("\\n");
-  return (newlineIdx === -1 ? rest : rest.slice(0, newlineIdx)).trim();
+// Exact about content, tolerant of legitimate representation differences only: a number is
+// compared numerically (accepts "128.50" or 128.5 for the same real value; rejects anything that
+// doesn't reduce to the same number, including a wrong number), a string is compared trimmed.
+// Neither rule makes a genuinely wrong value match — see this gate's own doc comment for why
+// that distinction is the whole point of this rewrite.
+function valuesMatch(expected, actual) {
+  if (typeof expected === "number") {
+    const actualNum = typeof actual === "number" ? actual : Number(actual);
+    return !Number.isNaN(actualNum) && actualNum === expected;
+  }
+  if (typeof expected === "string") {
+    return typeof actual === "string" && actual.trim() === expected.trim();
+  }
+  return actual === expected;
 }
 
 export async function gate({ referenceDir, submissionDir }) {
-  const docRaw = readFileSync(referenceDir + "/source-document.txt", "utf-8");
-  const expected = {
-    invoice_number: extractField(docRaw, "Invoice number"),
-    vendor: extractField(docRaw, "Vendor"),
-    total_amount: Number(extractField(docRaw, "Total amount")),
-    currency: extractField(docRaw, "Currency"),
-    due_date: extractField(docRaw, "Due date"),
-  };
+  const expectedRaw = readFileSync(referenceDir + "/expected.json", "utf-8");
+  const expected = JSON.parse(expectedRaw);
 
   const raw = readFileSync(submissionDir + "/answer.json", "utf-8");
   const parsed = parseGuarded(raw);
@@ -235,10 +250,10 @@ export async function gate({ referenceDir, submissionDir }) {
   // Key-based access on the already-resolved (last-key-wins) parsed object — never re-reads the
   // raw submission text, so a duplicate-key trick can't present a different value than the one
   // checked here.
-  const wrong = REQUIRED_KEYS.filter((k) => obj[k] !== expected[k]); // exact match, stated policy
+  const wrong = REQUIRED_KEYS.filter((k) => !valuesMatch(expected[k], obj[k]));
   return {
     accept: wrong.length === 0,
-    reason: wrong.length === 0 ? "every field matches exactly" : "incorrect field(s): " + wrong.join(", "),
+    reason: wrong.length === 0 ? "every field matches" : "incorrect field(s): " + wrong.join(", "),
   };
 }
 `,
@@ -246,9 +261,14 @@ export async function gate({ referenceDir, submissionDir }) {
 
 /**
  * G6: does the hardened gate above actually generalize to invoices it never saw, or does it
- * (like the original version of this same fixture) only recognize the one document it was
- * authored against? Four held-out invoices, each with real, distinct values and its own matching
- * known-good/adversarial pair — never shown to a gate author, only used to grade.
+ * (like both prior versions of this same fixture) only recognize the one document — or one
+ * document *layout* — it was authored against? Six held-out invoices: four sharing the primary
+ * document's own layout with different real values, and two in genuinely different real-world
+ * layouts (different field labels, a different date format, currency embedded in the amount
+ * line) — layout is irrelevant to grading now that the gate compares against `expected.json`
+ * rather than parsing the document, and these two are the real proof of that, not an assumption.
+ * Each instance has its own matching known-good/adversarial pair — never shown to a gate author,
+ * only used to grade.
  */
 interface HeldOutInvoice {
   invoiceNumber: string;
@@ -258,7 +278,7 @@ interface HeldOutInvoice {
   dueDate: string;
 }
 
-function buildHeldOutInvoice(invoice: HeldOutInvoice): HeldOutInstance {
+function heldOutInvoiceFromFields(invoice: HeldOutInvoice): HeldOutInstance {
   const document = `INVOICE
 Invoice number: ${invoice.invoiceNumber}
 Vendor: ${invoice.vendor}
@@ -273,11 +293,22 @@ Due date: ${invoice.dueDate}
     currency: invoice.currency,
     due_date: invoice.dueDate,
   };
+  return heldOutInvoiceFromDocument(document, expected);
+}
+
+/** The general form — takes the raw document text and the ground truth directly, so a held-out
+ * instance's document can use any real-world layout, not just the primary instance's own
+ * "Label: value" template. */
+function heldOutInvoiceFromDocument(
+  document: string,
+  expected: { invoice_number: string; vendor: string; total_amount: number; currency: string; due_date: string },
+): HeldOutInstance {
   const referenceInstance: ReferenceTaskInstance = {
     taskClass: "extract",
     files: {
       "source-document.txt": document,
       "commercial-intent.txt": COMMERCIAL_INTENT,
+      "expected.json": JSON.stringify(expected),
     },
   };
   const knownGoodSubmission: Submission = { files: { "answer.json": JSON.stringify(expected) } };
@@ -296,34 +327,74 @@ Due date: ${invoice.dueDate}
 }
 
 export const EXTRACT_HELD_OUT_INSTANCES: readonly [HeldOutInstance, ...HeldOutInstance[]] = [
-  buildHeldOutInvoice({
+  heldOutInvoiceFromFields({
     invoiceNumber: "INV-7812",
     vendor: "Blue River Textiles",
     totalAmount: 452.0,
     currency: "EUR",
     dueDate: "2026-11-15",
   }),
-  buildHeldOutInvoice({
+  heldOutInvoiceFromFields({
     invoiceNumber: "INV-2290",
     vendor: "Nordwind Logistics GmbH",
     totalAmount: 89.99,
     currency: "USD",
     dueDate: "2026-09-30",
   }),
-  buildHeldOutInvoice({
+  heldOutInvoiceFromFields({
     invoiceNumber: "INV-5567",
     vendor: "Cedar & Finch Supply Co",
     totalAmount: 1204.75,
     currency: "GBP",
     dueDate: "2026-12-01",
   }),
-  buildHeldOutInvoice({
+  heldOutInvoiceFromFields({
     invoiceNumber: "INV-0043",
     vendor: "Meridian Office Solutions",
     totalAmount: 15.0,
     currency: "USD",
     dueDate: "2026-10-20",
   }),
+  // Letterhead layout: vendor is not a labelled field at all (just the top line), "Invoice No."
+  // instead of "Invoice number", a DD/MM/YYYY date, currency+amount combined on one line, no
+  // separate "Currency:" line. The real diagnostic fixture that first proved v2 of this gate
+  // (the source-parsing version) was a layout-specific extractor, not a verifier.
+  heldOutInvoiceFromDocument(
+    `INVOICE
+
+Blue Harbor Consulting
+88 Wharf Street, Portsmouth
+
+Invoice No.: INV-6620
+Date: 25/12/2026
+Amount Due: USD 2450.00
+`,
+    {
+      invoice_number: "INV-6620",
+      vendor: "Blue Harbor Consulting",
+      total_amount: 2450,
+      currency: "USD",
+      due_date: "2026-12-25",
+    },
+  ),
+  // "Invoice #" instead of "Invoice number", currency embedded directly in the amount line
+  // ("EUR 4500.75") rather than a separate field. The second real diagnostic fixture.
+  heldOutInvoiceFromDocument(
+    `INVOICE
+
+Invoice #: INV-3381
+Vendor: Cascade Ironworks Ltd
+Total amount: EUR 4500.75
+Due date: 2026-11-15
+`,
+    {
+      invoice_number: "INV-3381",
+      vendor: "Cascade Ironworks Ltd",
+      total_amount: 4500.75,
+      currency: "EUR",
+      due_date: "2026-11-15",
+    },
+  ),
 ];
 
 /**
@@ -355,6 +426,86 @@ export async function gate({ submissionDir }) {
     return { accept: true, reason: 'pass' };
   } catch (e) {
     return { accept: false, reason: e.message };
+  }
+}
+`,
+};
+
+/**
+ * Real, not hypothetical: the exact gate the *second* single-agent measurement pass produced
+ * live, 2026-09-23 (`data/gate-market/runs/extract-gate-authoring-2026-09-23T16-36-16-497Z/
+ * metrics.json`) — gemini-3.1-pro-preview, this time correctly told `referenceDir` exists and
+ * warned explicitly not to hard-code the document's values. It didn't hard-code anything — it
+ * regex-parsed `referenceDir/source-document.txt` at runtime, genuinely dynamic. It passed G1-G6
+ * in one turn ($0.0149) against the four *same-layout* held-out invoices above, then failed for
+ * real (confirmed by hand before writing this fix, not assumed) against two invoices in
+ * different real-world layouts: a regex tuned to one template passes only that template. A
+ * permanent regression fixture: G6, with the two diverse-layout instances included, must reject
+ * this — proving the expanded held-out set catches the exact degenerate strategy actually
+ * observed a second time, not a hypothetical one — see extract.test.ts.
+ */
+export const EXTRACT_LAYOUT_SPECIFIC_REGRESSION: GateSpec = {
+  taskClass: "extract",
+  source: `import fs from 'node:fs';
+import path from 'node:path';
+
+export async function gate({ referenceDir, submissionDir }) {
+  try {
+    const sourcePath = path.join(referenceDir, 'source-document.txt');
+    const submissionPath = path.join(submissionDir, 'answer.json');
+
+    const sourceText = fs.readFileSync(sourcePath, 'utf8');
+    const submissionText = fs.readFileSync(submissionPath, 'utf8');
+
+    let submission;
+    try {
+      submission = JSON.parse(submissionText);
+    } catch (e) {
+      return { accept: false, reason: 'Submission is not valid JSON' };
+    }
+
+    const expected = {};
+    const lines = sourceText.split(/\\r?\\n/);
+    for (const line of lines) {
+      const matchInvoice = line.match(/^Invoice number:\\s*(.+)$/i);
+      if (matchInvoice) expected.invoice_number = matchInvoice[1].trim();
+
+      const matchVendor = line.match(/^Vendor:\\s*(.+)$/i);
+      if (matchVendor) expected.vendor = matchVendor[1].trim();
+
+      const matchAmount = line.match(/^Total amount:\\s*(.+)$/i);
+      if (matchAmount) expected.total_amount = matchAmount[1].trim();
+
+      const matchCurrency = line.match(/^Currency:\\s*(.+)$/i);
+      if (matchCurrency) expected.currency = matchCurrency[1].trim();
+
+      const matchDate = line.match(/^Due date:\\s*(.+)$/i);
+      if (matchDate) expected.due_date = matchDate[1].trim();
+    }
+
+    const requiredFields = ['invoice_number', 'vendor', 'total_amount', 'currency', 'due_date'];
+    for (const field of requiredFields) {
+      if (!expected[field]) {
+        return { accept: false, reason: \`Could not parse expected \${field} from source document\` };
+      }
+      if (submission[field] === undefined) {
+        return { accept: false, reason: \`Submission missing required field: \${field}\` };
+      }
+
+      const expVal = String(expected[field]);
+      const subVal = String(submission[field]);
+
+      if (expVal !== subVal) {
+        if (field === 'total_amount' && !isNaN(Number(expVal)) && Number(expVal) === Number(subVal)) {
+          continue;
+        }
+        return { accept: false, reason: \`Mismatch in \${field}: expected \${expVal}, got \${subVal}\` };
+      }
+    }
+
+    return { accept: true, reason: 'All fields match exactly' };
+  } catch (e) {
+    return { accept: false, reason: \`Error during validation: \${e.message}\` };
   }
 }
 `,

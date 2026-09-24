@@ -45,6 +45,7 @@ export {
   FIELD_ORDER_GAMING,
   EXTRACT_HELD_OUT_INSTANCES,
   EXTRACT_ANSWER_KEY_REGRESSION,
+  EXTRACT_LAYOUT_SPECIFIC_REGRESSION,
 } from "./gate/tasks/extract.js";
 
 /** WP-9: the `@touchstone/task-pack-sdk` `TaskPack` adapter — the bench loads this instead of

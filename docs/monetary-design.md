@@ -245,6 +245,12 @@ The path from the first to the second is exactly how forwards became futures: st
 
 That also makes the build order self-testing. If the standardised claim never trades secondhand, there was no demand for a transferable work instrument — learned before capitalising a default fund rather than after.
 
+### 5.6 A class is redeemable only if its task spec can carry the means of verification
+
+Found live in the Gate Market testbed, not derived on paper: REDEEM (§4.4 of the testbed spec) has the holder present a task spec, and a deterministic gate grades the result against it. That grading is only possible if the task spec itself carries something to check against — ground truth for an extraction task, a pinned test suite for a code-repair task. Where it does not, no gate, however well-written, can do better than weaker *property* checks (values appear verbatim in the source, formats are internally consistent) — which catch fabrication but not mis-assignment (a vendor and customer swapped, a value from the wrong field). Re-deriving the answer by re-running the same computation the holder was supposed to perform does not fix this: it only works when that computation is easy enough to reimplement cheaply and reliably, at which point the "gate" is really a second, competing implementation of the task, brittle to exactly the same real-world variation (a document laid out differently, an edge case the reimplementation didn't anticipate) that the original task exists to handle.
+
+The consequence is structural, not a testbed detail: **a work class is only redeemable if its real task spec requires the holder to supply, or the operator to pin, the means of verification alongside the work itself.** `code` already satisfies this by construction — a pinned test suite is a normal part of software work. `extract`-shaped classes do not, automatically; they need real ground truth attached to each task instance. A class proposed for fSIU without an answer to "what does REDEEM actually check this against, and where does that live" is not yet specified well enough to gate — this is a precondition to state explicitly before adding new work classes, not something to discover mid-run.
+
 ## 6. Fungibility by tenor, and the curve
 
 ### 6.1 The fungibility objection, and its standard answer

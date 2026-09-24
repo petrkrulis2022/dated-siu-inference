@@ -63,10 +63,11 @@ async function main(): Promise<void> {
 
   const workerSkill = loadSkill("quote-and-deliver");
 
-  // Real reference material only — the source document itself, never the known-good submission
-  // (which would hand the model its own literal answer) and never the original/trivial gate or
-  // the adversarial submissions (see this pass's own plan: measuring general robustness
-  // reasoning, not pattern-matching against fixtures a real WP-7 worker wouldn't see either).
+  // Real reference material only — the source document and its ground truth, never the
+  // known-good submission (which would hand the model its own literal answer) and never the
+  // original/trivial gate or the adversarial submissions (see this pass's own plan: measuring
+  // general robustness reasoning, not pattern-matching against fixtures a real WP-7 worker
+  // wouldn't see either).
   const sourceDocument = EXTRACT_REFERENCE.files["source-document.txt"];
 
   const jobDescription = `
@@ -89,24 +90,32 @@ due_date.
 HOW A GATE IS AUTHORED (technical contract, not a solution):
   Your gate's source is a JavaScript ES module. It must export:
     export async function gate({ referenceDir, submissionDir }) {
-      // referenceDir contains the real source document for THIS grading run, at
-      // referenceDir + "/source-document.txt" — read it every time you are called.
+      // referenceDir contains the real ground truth for THIS grading run, as data, at
+      // referenceDir + "/expected.json" — a JSON object with the correct invoice_number,
+      // vendor, total_amount, currency and due_date. Read it fresh every time you are called;
+      // referenceDir + "/source-document.txt" (the same document shown to you above) is also
+      // present for your own context, but you do not need to parse it — expected.json already
+      // holds the answer for whichever document is being graded.
       // submissionDir contains the submission being graded, at
       // submissionDir + "/answer.json" — read and parse it.
-      // Derive the correct values from referenceDir's document, compare them to the
-      // submission, and return { accept: <boolean>, reason: <string> }.
+      // Compare the submission against expected.json and return
+      // { accept: <boolean>, reason: <string> }.
     }
   It runs inside a sandbox with only node:fs available — no network, no other imports beyond
   node builtins.
 
   IMPORTANT — read this carefully: your gate will be graded not only against the document shown
   to you above, but also against several other real invoices you have never seen, each with its
-  own submission to grade. A gate that hard-codes this run's specific values (the literal string
-  "INV-4471", "128.50", etc.) will pass grading against this document and then fail on every
-  other one — it will never even be asked to grade this exact document more than once. Your gate
-  must derive the expected values from referenceDir's document at the moment it runs, every time,
-  not from values you compute once now and embed as literals. This is not a matter of style: a
-  gate that cannot do this is not a verifier and is worthless for its real purpose.
+  own expected.json and its own submission to grade. A gate that hard-codes this run's specific
+  values (the literal string "INV-4471", "128.50", etc.) as JavaScript literals in your source
+  will pass grading against this document and then fail on every other one — it will never even
+  be asked to grade this exact document more than once. Your gate must read
+  referenceDir/expected.json at the moment it runs, every time, not embed values you observed now
+  as literals. This is not a matter of style: a gate that cannot do this is not a verifier and is
+  worthless for its real purpose. Your comparison should be exact about actual content but may
+  tolerate legitimate representation differences — e.g. a number given as the JSON string "128.50"
+  versus the number 128.5 is the same real value; incidental surrounding whitespace on a string is
+  not a different value. Neither tolerance should ever make a genuinely wrong value match.
 
 TO SUBMIT YOUR GATE, respond with exactly:
   {"tool": "submit_job", "args": {"source": "<your full gate module source as a JSON string>"}}

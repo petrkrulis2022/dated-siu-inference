@@ -108,8 +108,11 @@ This is the machine-checkable rule that decides whether a gate-hardening job cou
 | **G3** | The pinned known-good submission is **accepted** by the hardened gate | Fail → 0 SIU (over-tightening counts as failure) |
 | **G4** | At least one adversarial case **passed** the original candidate gate | Fail → 0 SIU (the job found nothing) |
 | **G5** | Gate executes deterministically: same input, same verdict, three runs | Fail → 0 SIU |
+| **G6** | Against N held-out reference instances the gate author never saw, the hardened gate **accepts** each one's known-good submission and **rejects** each one's adversarial submissions | Fail → 0 SIU (the job doesn't generalize) |
 
 **G3 and G4 together are the point.** G4 without G3 rewards writing a gate that rejects everything; G3 without G4 rewards a gate nobody attacked. Both, and the job has genuinely improved discrimination.
+
+**G6 exists because G1–G5 alone has a hole, found live rather than by inspection.** A single-agent measurement pass asked one model to author a `extract` gate from scratch, with no candidate gate or example shown to it. Its first real gate passed G1–G5 in one turn: it had read the one source document handed to it, computed the five expected values itself, and hard-coded them as JavaScript literals — an answer key, not a verifier, useless against any document but that one. Nothing in G1–G5 asks whether a gate generalizes to a document it hasn't seen, so embedding the solution is the cheapest way to pass. G6 closes that hole directly. Rerunning the same pass under G1–G6 surfaced a second, narrower hole one level down: a gate that reads the source document at runtime and hard-codes nothing can still be layout-specific — a regex tuned to one document's field labels, date format and line structure passes only documents sharing that template, and rejects a correct submission on a document laid out differently. For `extract` specifically, the fix is structural, not a better regex: a deterministic gate can only know the right answer on a document it wasn't authored against if something *supplies* the ground truth as data (see §2.6); re-deriving it by parsing only works when the gate's parser happens to match the document's layout, which just relocates the brittleness. Both real gates are kept as permanent regression fixtures — G6 must reject each of them, proving it catches the exact degenerate strategies actually observed, not hypothetical ones.
 
 ### 2.5 Two classes, and why two
 
@@ -124,6 +127,8 @@ Two classes rather than one because the monetary design makes per-class claims p
 
 So agents do not burn budget inventing scaffolding: the reference harness, the pinned known-good submissions, three seeded candidate gates per class of deliberately varying weakness, and the commercial-intent statement for each class ("a buyer paying for this wants…"), which is what an adversarial submission must violate while still passing.
 
+For `extract`, this now includes real ground truth as data — `expected.json` in the reference instance's directory, alongside `source-document.txt` — not just the document itself (see G6 above). A deterministic gate can only know the right answer on a document it wasn't authored against if something supplies it; for `code`, that role is already filled procedurally by the pinned test suite. Where a class's real task spec cannot carry the means of verification, no deterministic gate — however well-written — can grade held-out work beyond weaker property checks (values appear verbatim in the source, formats valid, internally consistent), which catch fabrication but not mis-assignment. See `docs/monetary-design.md` §5.6 for the redemption consequence.
+
 ## 3. The agent roster
 
 Six agents. Every extra persona costs budget and adds no finding — eight expert advisors return eight mirrors of the documents they were given.
@@ -132,7 +137,7 @@ Six agents. Every extra persona costs budget and adds no finding — eight exper
 | --- | --- | --- | --- | --- |
 | **ISSUER-A** | `issue-work-claims` | Provider A, model A | Capacity lot + bond | Sell dated claims for USDC and serve every routed redemption inside its window |
 | **ISSUER-B** | `issue-work-claims` | Provider B, model B | Capacity lot + bond | Same, at a **different measured rate** |
-| **ORCHESTRATOR** | `subcontract-and-settle` | — | USDC **and** fSIU | Deliver gate-hardening jobs passing G1–G5, under budget |
+| **ORCHESTRATOR** | `subcontract-and-settle` | — | USDC **and** fSIU | Deliver gate-hardening jobs passing G1–G6, under budget |
 | **WORKER-CODE** | `quote-and-deliver` | — | USDC **and** fSIU | Win and deliver `code` work; act as adversary on `extract` jobs |
 | **WORKER-EXTRACT** | `quote-and-deliver` | — | USDC **and** fSIU | Win and deliver `extract` work; act as adversary on `code` jobs |
 | **HEDGER** | `buy-forward-to-hedge` | — | USDC | Deliver 10 jobs at a flat agreed price without losing money when the print moves |
@@ -144,7 +149,7 @@ Scored automatically from receipts, never self-reported.
 | Agent | Scored on |
 | --- | --- |
 | ISSUERS | Fulfilment rate; claims sold; headroom restored; defaults; time-to-serve |
-| ORCHESTRATOR | Jobs passing G1–G5; cost per delivered SIU; hops per job |
+| ORCHESTRATOR | Jobs passing G1–G6; cost per delivered SIU; hops per job |
 | WORKERS | Gate pass rate; quote accuracy (quoted vs actual); adversarial yield (how many of its attacks defeated a candidate gate) |
 | HEDGER | P&L across the print move, hedged vs unhedged arm |
 
@@ -162,7 +167,7 @@ This list matters as much as the roster.
 
 v4 §10 requires separation of duties between the party writing a receipt and the party verifying it. A verifier agent that can be paid is a corruptible gate, and an LLM judge would reintroduce exactly the ungateable-output problem the task design avoids.
 
-So: **G1–G5 execute in the harness.** Deterministic, no model in the loop, same verdict every time. The verifier holds no wallet and has no goal.
+So: **G1–G6 execute in the harness.** Deterministic, no model in the loop, same verdict every time. The verifier holds no wallet and has no goal.
 
 ### 3.4 Why HEDGER exists
 
@@ -259,7 +264,7 @@ TRANSFER  claim moves agent→agent, free, no print read, no issuer involvement
 
 REDEEM    holder presents claim + task spec inside the window →
           router picks an issuer with headroom in that class →
-          harness executes → G1–G5 run → pass: claim retired,
+          harness executes → G1–G6 run → pass: claim retired,
           headroom restored, receipt emitted; fail: claim NOT retired,
           holder may re-present within the window
 

@@ -9,6 +9,7 @@ import {
   EXTRACT_GATE_3_HARDENED,
   EXTRACT_HELD_OUT_INSTANCES,
   EXTRACT_ANSWER_KEY_REGRESSION,
+  EXTRACT_LAYOUT_SPECIFIC_REGRESSION,
   SCHEMA_VALID_EMPTY,
   PLAUSIBLE_FABRICATION,
   NULL_SEMANTICS_ADVERSARIAL,
@@ -73,9 +74,11 @@ describe("the real invoice-extraction reference task", () => {
     // submissions satisfy (even FIELD_ORDER_GAMING, whose parsed object still has every key).
     expect(result.g4.passed).toBe(true);
     expect(result.g5.passed).toBe(true);
-    // G6: the rewritten hardened gate parses referenceDir/source-document.txt at runtime, so it
-    // must correctly accept and reject across four invoices it was never authored against — the
-    // real, measured proof that this fixture is a verifier now, not an answer key.
+    // G6: the rewritten hardened gate reads referenceDir/expected.json as ground-truth data — it
+    // never re-derives values by parsing the document — so it must correctly accept and reject
+    // across all six held-out invoices it was never authored against, including the two in
+    // genuinely different real-world layouts. The real, measured proof that this fixture is a
+    // verifier now, not an answer key or a layout-specific extractor.
     expect(result.g6.passed).toBe(true);
     expect(result.passed).toBe(true);
   }, 150000);
@@ -110,6 +113,34 @@ describe("G6 catches the real answer-key gate a single-agent run actually produc
     expect(result.g3.passed).toBe(true);
     expect(result.g5.passed).toBe(true);
     // The property that matters: it never generalizes to a document it hasn't seen.
+    expect(result.g6.passed).toBe(false);
+    expect(result.passed).toBe(false);
+  }, 150000);
+
+  it("EXTRACT_LAYOUT_SPECIFIC_REGRESSION fails G6 once the held-out set includes diverse layouts", async () => {
+    const result = await runGateHardeningChecks({
+      taskClass: "extract",
+      originalGate: EXTRACT_GATE_1_TRIVIAL,
+      hardenedGate: EXTRACT_LAYOUT_SPECIFIC_REGRESSION,
+      referenceInstance: EXTRACT_REFERENCE,
+      knownGoodSubmission: EXTRACT_KNOWN_GOOD,
+      adversarialSubmissions: [
+        SCHEMA_VALID_EMPTY,
+        PLAUSIBLE_FABRICATION,
+        NULL_SEMANTICS_ADVERSARIAL,
+        FIELD_ORDER_GAMING,
+      ],
+      heldOutInstances: EXTRACT_HELD_OUT_INSTANCES,
+    });
+
+    // Real, confirming the finding: it reads the source document at runtime and hard-codes
+    // nothing, so it looks like a genuine verifier against the four same-layout held-out invoices.
+    expect(result.g1.passed).toBe(true);
+    expect(result.g2.passed).toBe(true);
+    expect(result.g3.passed).toBe(true);
+    expect(result.g5.passed).toBe(true);
+    // The property that matters: a regex tuned to one document layout doesn't generalize to a
+    // genuinely different one — the two diverse-layout held-out invoices are what expose it.
     expect(result.g6.passed).toBe(false);
     expect(result.passed).toBe(false);
   }, 150000);
