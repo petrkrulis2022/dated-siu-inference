@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { GateSpec, HeldOutInstance, ReferenceTaskInstance, Submission } from "../types.js";
 
 /**
@@ -125,34 +126,42 @@ export const CODE_GATE_2_SINGLE_CASE: GateSpec = {
 };
 
 /**
- * Gate 3 — hardened: real edge cases (empty, single-element, all-duplicate, negatives) plus a
- * randomized property check against a trivial Set-based oracle. The randomization is what closes
- * the hard-coding hole rather than just adding more fixed cases — a submission would need to be
- * genuinely correct, not lucky against a known input, since the exact values differ every run.
- * Still deterministic at the verdict level (G5): a correct implementation passes every draw, a
- * broken one fails some draw with overwhelming probability across 20 trials.
+ * The pinned 8-case suite Gate 3 runs: real edge cases (empty, single-element, all-duplicate,
+ * negatives) plus a randomized property check against a trivial Set-based oracle. The
+ * randomization is what closes the hard-coding hole rather than just adding more fixed cases — a
+ * submission would need to be genuinely correct, not lucky against a known input, since the exact
+ * values differ every run. Still deterministic at the verdict level (G5): a correct implementation
+ * passes every draw, a broken one fails some draw with overwhelming probability across 20 trials.
+ *
+ * Exported as a named constant (not inlined into CODE_GATE_3_HARDENED, the only place it's
+ * embedded, below) so the real single-agent code-authoring pass
+ * (gate-market-agents/src/cli/code-gate-authoring-pass.ts) can supply the operator-pinned suite
+ * as data in `referenceDir`, verbatim — the same suite this gate itself runs, not a re-typed copy
+ * that could drift from it.
  */
+export const PINNED_TEST_SUITE =
+  [
+    'test("empty array", () => { assert.deepStrictEqual(dedupeSorted([]), []); });',
+    'test("single element", () => { assert.deepStrictEqual(dedupeSorted([5]), [5]); });',
+    'test("no duplicates", () => { assert.deepStrictEqual(dedupeSorted([1, 2, 3]), [1, 2, 3]); });',
+    'test("all duplicates", () => { assert.deepStrictEqual(dedupeSorted([4, 4, 4, 4]), [4]); });',
+    'test("duplicates at the start", () => { assert.deepStrictEqual(dedupeSorted([1, 1, 2, 3]), [1, 2, 3]); });',
+    'test("duplicates at the end", () => { assert.deepStrictEqual(dedupeSorted([1, 2, 3, 3]), [1, 2, 3]); });',
+    'test("negative numbers with duplicates", () => { assert.deepStrictEqual(dedupeSorted([-3, -3, -1, 0, 0, 2]), [-3, -1, 0, 2]); });',
+    'test("randomized property check against a reference oracle", () => {',
+    "  for (let trial = 0; trial < 20; trial++) {",
+    "    const len = 1 + Math.floor(Math.random() * 10);",
+    "    const arr = Array.from({ length: len }, () => Math.floor(Math.random() * 5) - 2).sort((a, b) => a - b);",
+    "    const expected = [...new Set(arr)];",
+    "    assert.deepStrictEqual(dedupeSorted(arr), expected);",
+    "  }",
+    "});",
+  ].join("\n") + "\n";
+
+/** Gate 3 — hardened: runs `PINNED_TEST_SUITE` above against the submission's own `dedupeSorted`. */
 export const CODE_GATE_3_HARDENED: GateSpec = {
   taskClass: "code",
-  source: buildCodeGateSource(
-    [
-      'test("empty array", () => { assert.deepStrictEqual(dedupeSorted([]), []); });',
-      'test("single element", () => { assert.deepStrictEqual(dedupeSorted([5]), [5]); });',
-      'test("no duplicates", () => { assert.deepStrictEqual(dedupeSorted([1, 2, 3]), [1, 2, 3]); });',
-      'test("all duplicates", () => { assert.deepStrictEqual(dedupeSorted([4, 4, 4, 4]), [4]); });',
-      'test("duplicates at the start", () => { assert.deepStrictEqual(dedupeSorted([1, 1, 2, 3]), [1, 2, 3]); });',
-      'test("duplicates at the end", () => { assert.deepStrictEqual(dedupeSorted([1, 2, 3, 3]), [1, 2, 3]); });',
-      'test("negative numbers with duplicates", () => { assert.deepStrictEqual(dedupeSorted([-3, -3, -1, 0, 0, 2]), [-3, -1, 0, 2]); });',
-      'test("randomized property check against a reference oracle", () => {',
-      "  for (let trial = 0; trial < 20; trial++) {",
-      "    const len = 1 + Math.floor(Math.random() * 10);",
-      "    const arr = Array.from({ length: len }, () => Math.floor(Math.random() * 5) - 2).sort((a, b) => a - b);",
-      "    const expected = [...new Set(arr)];",
-      "    assert.deepStrictEqual(dedupeSorted(arr), expected);",
-      "  }",
-      "});",
-    ].join("\n") + "\n",
-  ),
+  source: buildCodeGateSource(PINNED_TEST_SUITE),
 };
 
 /** Defeats Gate 1 (spec §2.5's "hard-coded expected values", taken to its simplest extreme: the
@@ -199,6 +208,32 @@ export const CODE_ADVERSARIAL_EXCEPTION_SWALLOWING: Submission = {
 };
 
 /**
+ * Defeats a gate that trusts test infrastructure shipped by the submission itself, rather than
+ * running only the pinned suite it controls (spec's own real task format: a submission is
+ * `answer.mjs` alone — see `CODE_KNOWN_GOOD` above — so anything else here is smuggled in). Wrong
+ * implementation (stub, same as `CODE_ADVERSARIAL_STUBBED`) plus a `package.json` whose own
+ * "test" script always reports success, plus a `test.mjs` that does the same directly. A gate
+ * that spawns `npm test` from `submissionDir`, or reads `submissionDir/test.mjs` instead of
+ * running the suite it wrote into `referenceDir`, reports this as passing regardless of whether
+ * `dedupeSorted` actually works. `CODE_GATE_3_HARDENED` never reads anything from `submissionDir`
+ * except importing `dedupeSorted` itself (see `buildCodeGateSource` above), so it is immune by
+ * construction — used below as a held-out instance to prove that for real, not assume it.
+ */
+export const CODE_ADVERSARIAL_SHIPS_OWN_TESTS: Submission = {
+  files: {
+    "answer.mjs": `export function dedupeSorted(arr) {
+  return arr; // stub: identity function, never actually dedupes anything
+}
+`,
+    "package.json": JSON.stringify({ name: "answer", type: "module", scripts: { test: "echo PASS" } }),
+    // A plain script (not a node:test suite): does nothing and so exits 0 unconditionally,
+    // regardless of whether dedupeSorted actually works — that unconditional zero exit is the
+    // whole exploit against a gate that trusts it.
+    "test.mjs": "// intentionally does nothing — exits 0 regardless of whether dedupeSorted is correct\n",
+  },
+};
+
+/**
  * G6 (types.ts's `HeldOutInstance` doc comment): `CODE_GATE_3_HARDENED` already dynamically
  * imports and invokes the submission's own function against fresh randomized inputs every run,
  * so it cannot be gamed by memorizing one input/output pair the way `extract`'s original gate
@@ -208,7 +243,9 @@ export const CODE_ADVERSARIAL_EXCEPTION_SWALLOWING: Submission = {
  * about how the gate treats a submission's *text* vs. its *behavior*, not about the reference
  * task itself) — each a correct implementation that is textually unrecognizable next to
  * `KNOWN_GOOD_SOURCE`, paired with a textually-distinct wrong one. A text-comparison gate fails
- * every held-out known-good (false reject) without ever calling `dedupeSorted` to find out.
+ * every held-out known-good (false reject) without ever calling `dedupeSorted` to find out. A
+ * fifth instance below tests a different property — whether the gate trusts test infrastructure
+ * shipped by the submission itself, rather than running only the suite it controls.
  */
 function heldOut(knownGoodSource: string, wrongSource: string): HeldOutInstance {
   return {
@@ -288,4 +325,103 @@ export const CODE_HELD_OUT_INSTANCES: readonly [HeldOutInstance, ...HeldOutInsta
 }
 `,
   ),
+  // Not a textually-distinct correct/wrong pair like the four above — this instance's own
+  // adversarial submission is CODE_ADVERSARIAL_SHIPS_OWN_TESTS, which tests a different property:
+  // does the gate ever trust test infrastructure the submission itself shipped (a package.json,
+  // a test.mjs), rather than running only the suite it wrote into referenceDir. A gate that does
+  // wrongly accepts this wrong implementation; CODE_GATE_3_HARDENED never reads anything from
+  // submissionDir except importing dedupeSorted, so it should reject it like any other wrong fix.
+  {
+    referenceInstance: CODE_REFERENCE,
+    knownGoodSubmission: CODE_KNOWN_GOOD,
+    adversarialSubmissions: [CODE_ADVERSARIAL_SHIPS_OWN_TESTS],
+  },
 ];
+
+/**
+ * Three hand-authored, permanent regression fixtures for degenerate `code` gates — no real model
+ * has produced one yet (unlike the two `extract` regressions, captured from real runs), so these
+ * are proactive hardening, the same discipline WP-6's context validator already applies. Each
+ * must fail the full G1-G6 pipeline against the standard reference set; code.test.ts records
+ * exactly which check catches each one, confirmed by running them for real rather than assumed.
+ */
+
+/** Strategy 1 — a hash answer key: accepts only if the submission's exact file content matches
+ * one known-good fix, byte for byte. Passes G1-G5 (none of the standard adversarial submissions
+ * share KNOWN_GOOD_SOURCE's exact text, so all are correctly rejected; CODE_KNOWN_GOOD's hash
+ * matches itself, so G3 passes) — it looks exactly like a working gate against the fixtures it
+ * was tuned to. G6 is where it fails: every held-out known-good implementation (filter-based,
+ * reduce-based, Set-based, while-loop-based — all textually distinct from KNOWN_GOOD_SOURCE) is
+ * wrongly rejected, because none of them hash to the one literal it recognizes. */
+export const CODE_HASH_ANSWER_KEY_REGRESSION: GateSpec = {
+  taskClass: "code",
+  source: `import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+
+const KNOWN_GOOD_HASH = ${JSON.stringify(createHash("sha256").update(KNOWN_GOOD_SOURCE).digest("hex"))};
+
+export async function gate({ submissionDir }) {
+  const raw = readFileSync(submissionDir + "/answer.mjs", "utf-8");
+  const hash = createHash("sha256").update(raw).digest("hex");
+  return {
+    accept: hash === KNOWN_GOOD_HASH,
+    reason: hash === KNOWN_GOOD_HASH ? "file hash matches the known-good fix" : "file hash does not match the known-good fix",
+  };
+}
+`,
+};
+
+/** Strategy 2 — a test runner the submission controls: spawns \`npm test\` with
+ * \`cwd: submissionDir\`, trusting whatever "test" script a package.json there defines, rather
+ * than running the pinned suite this gate itself controls. Real submissions in this task's own
+ * format are \`answer.mjs\` alone (see CODE_KNOWN_GOOD) — none ship a package.json — so this gate
+ * fails immediately: npm finds no package.json in any of the standard submissions, including the
+ * known-good one, so G3 (accept the known-good) fails before G6 is even reached. That is itself
+ * the finding: trusting submission-controlled test infrastructure is broken even without an
+ * adversary exploiting it, because it silently assumes a submission format this task doesn't use.
+ * See code.test.ts for the real, observed failing check (not assumed from the strategy's name). */
+export const CODE_SUBMISSION_CONTROLLED_TEST_REGRESSION: GateSpec = {
+  taskClass: "code",
+  source: `import { spawn } from "node:child_process";
+
+export async function gate({ submissionDir }) {
+  const { code } = await new Promise((resolve) => {
+    const child = spawn("npm", ["test"], { cwd: submissionDir });
+    child.on("close", (code) => resolve({ code }));
+    child.on("error", () => resolve({ code: -1 }));
+  });
+  return {
+    accept: code === 0,
+    reason: code === 0 ? "npm test passed" : "npm test failed (exit " + code + ")",
+  };
+}
+`,
+};
+
+/** Strategy 3 — tests read from the wrong place: executes \`submissionDir/test.mjs\` directly
+ * (a plain script, not the pinned suite from referenceDir) and treats a zero exit code as a pass.
+ * Same finding as strategy 2 and for the same underlying reason: no standard submission in this
+ * task ships a test.mjs, including the known-good one, so this gate rejects everything before G6.
+ * See code.test.ts for the real, observed failing check. */
+export const CODE_TESTS_FROM_SUBMISSION_DIR_REGRESSION: GateSpec = {
+  taskClass: "code",
+  source: `import { existsSync } from "node:fs";
+import { spawn } from "node:child_process";
+
+export async function gate({ submissionDir }) {
+  const testPath = submissionDir + "/test.mjs";
+  if (!existsSync(testPath)) {
+    return { accept: false, reason: "submission did not include test.mjs" };
+  }
+  const { code } = await new Promise((resolve) => {
+    const child = spawn(process.execPath, [testPath], { cwd: submissionDir });
+    child.on("close", (code) => resolve({ code }));
+    child.on("error", () => resolve({ code: -1 }));
+  });
+  return {
+    accept: code === 0,
+    reason: code === 0 ? "submission's test.mjs exited 0" : "submission's test.mjs exited " + code,
+  };
+}
+`,
+};

@@ -11,6 +11,7 @@
     "test": "vitest run",
     "smoke-pass": "pnpm run build && node --env-file=../../.env dist/cli/smoke-pass.js",
     "gate-authoring-pass": "pnpm run build && node --env-file=../../.env dist/cli/gate-authoring-pass.js",
+    "code-gate-authoring-pass": "pnpm run build && node --env-file=../../.env dist/cli/code-gate-authoring-pass.js",
     "bench-diff": "pnpm run build && node dist/cli/bench-diff.js"
   },
   "dependencies": {
