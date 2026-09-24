@@ -74,12 +74,19 @@ export function createAnthropicAdapter(apiKey: string): Adapter {
   return async (modelString, prompt, params) => {
     const deviations: string[] = [];
     let result: { response: AnthropicResponse; latencyMs: number };
+    // Reused for the reasoning-truncation retry below — found live, 2026-09-24: that retry
+    // hardcoded `true`, so a model that had already been confirmed to reject `temperature` (the
+    // catch branch right below) would resend it anyway and 400 again, uncaught, the moment its
+    // completion was also long enough to trip the reasoning-budget retry. Both accommodations are
+    // real and independent; the second must not re-litigate what the first already determined.
+    let includeTemperature = true;
     try {
       result = await callAnthropic(apiKey, modelString, prompt, params, true, params.max_tokens);
     } catch (err) {
       if (!mentionsTemperature(err)) {
         throw err;
       }
+      includeTemperature = false;
       deviations.push(
         "temperature forced to provider default (request without temperature=0 was rejected)",
       );
@@ -101,7 +108,7 @@ export function createAnthropicAdapter(apiKey: string): Adapter {
           `against a ${params.max_tokens}-token task budget) — retried with reasoning accommodated ` +
           `above the task budget, capped at ${REASONING_BUDGET_MULTIPLE}x (${accommodatedBudget} tokens total)`,
       );
-      result = await callAnthropic(apiKey, modelString, prompt, params, true, accommodatedBudget);
+      result = await callAnthropic(apiKey, modelString, prompt, params, includeTemperature, accommodatedBudget);
     }
 
     const { response, latencyMs } = result;

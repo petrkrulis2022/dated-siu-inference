@@ -143,4 +143,50 @@ describe("createAnthropicAdapter", () => {
     // not discarded: input 50+50=100, output 2+8=10, reasoning 95+90=185.
     expect(result.usage).toEqual({ input: 100, output: 10, cached_input: 0, reasoning: 185 });
   });
+
+  it("does not resend temperature on the reasoning-truncation retry once the model has already rejected it", async () => {
+    // Found live, 2026-09-24: a model that both rejects `temperature` (call 1) and needs the
+    // reasoning-budget retry (call 2 truncated) previously had its 3rd call hardcode
+    // `includeTemperature: true`, resending the very param call 1 established was rejected — a
+    // real, uncaught 400 on a real run (claude-sonnet-5, a long gate-authoring prompt).
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const call = fetchMock.mock.calls.length;
+      const body = JSON.parse(init.body as string);
+      if (call === 1) {
+        expect(body.temperature).toBe(0);
+        return {
+          ok: false,
+          status: 400,
+          json: async () => ({ error: { message: "`temperature` is deprecated for this model." } }),
+        };
+      }
+      expect(body.temperature).toBeUndefined();
+      if (call === 2) {
+        return {
+          ok: true,
+          json: async () => ({
+            content: [{ type: "text", text: "" }],
+            stop_reason: "max_tokens",
+            usage: { input_tokens: 50, output_tokens: 2, output_tokens_details: { thinking_tokens: 95 } },
+          }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          content: [{ type: "text", text: "56" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 50, output_tokens: 8, output_tokens_details: { thinking_tokens: 90 } },
+        }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = createAnthropicAdapter("test-key");
+    const result = await adapter("claude-sonnet-5", "prompt", PARAMS);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(result.text).toBe("56");
+    expect(result.deviations).toHaveLength(2);
+  });
 });

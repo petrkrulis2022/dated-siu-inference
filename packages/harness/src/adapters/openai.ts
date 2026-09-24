@@ -66,12 +66,17 @@ export function createOpenAiAdapter(apiKey: string): Adapter {
   return async (modelString, prompt, params) => {
     const deviations: string[] = [];
     let result: { response: OpenAiResponse; latencyMs: number };
+    // Reused for the reasoning-truncation retry below — see anthropic.ts's identical fix and its
+    // doc comment for the real failure this closes: that retry must not resend `temperature` once
+    // the first call has already established the model rejects it.
+    let includeTemperature = true;
     try {
       result = await callOpenAi(apiKey, modelString, prompt, params, true, params.max_tokens);
     } catch (err) {
       if (!mentionsTemperature(err)) {
         throw err;
       }
+      includeTemperature = false;
       deviations.push(
         "temperature forced to provider default (request without temperature=0 was rejected)",
       );
@@ -94,7 +99,7 @@ export function createOpenAiAdapter(apiKey: string): Adapter {
           `against a ${params.max_tokens}-token task budget) — retried with reasoning accommodated ` +
           `above the task budget, capped at ${REASONING_BUDGET_MULTIPLE}x (${accommodatedBudget} tokens total)`,
       );
-      result = await callOpenAi(apiKey, modelString, prompt, params, true, accommodatedBudget);
+      result = await callOpenAi(apiKey, modelString, prompt, params, includeTemperature, accommodatedBudget);
     }
 
     const { response, latencyMs } = result;

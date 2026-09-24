@@ -81,6 +81,47 @@ describe("createGoogleAdapter", () => {
     });
   });
 
+  it("does not resend temperature on the reasoning-truncation retry once the model has already rejected it", async () => {
+    // Same real bug as anthropic.test.ts's identical test — see its comment.
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const call = fetchMock.mock.calls.length;
+      const body = JSON.parse(init.body as string);
+      if (call === 1) {
+        expect(body.generationConfig.temperature).toBe(0);
+        return {
+          ok: false,
+          status: 400,
+          json: async () => ({ error: { message: "temperature parameter is not supported" } }),
+        };
+      }
+      expect(body.generationConfig.temperature).toBeUndefined();
+      if (call === 2) {
+        return {
+          ok: true,
+          json: async () => ({
+            candidates: [{ content: { parts: [{ text: "" }] }, finishReason: "MAX_TOKENS" }],
+            usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 2, thoughtsTokenCount: 95 },
+          }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          candidates: [{ content: { parts: [{ text: "56" }] }, finishReason: "STOP" }],
+          usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 8, thoughtsTokenCount: 90 },
+        }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = createGoogleAdapter("test-key");
+    const result = await adapter("gemini-3.1-pro-preview", "prompt", PARAMS);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(result.text).toBe("56");
+    expect(result.deviations).toHaveLength(2);
+  });
+
   it("does not retry when the completion wasn't truncated by reasoning", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
