@@ -1,0 +1,25 @@
+{
+  "passed": true,
+  "passedBy": "ORCHESTRATOR",
+  "totalRealizedUsd": "0.008965",
+  "turnsByAgent": {
+    "ORCHESTRATOR": 1
+  },
+  "haltedReason": {},
+  "turnLogsByAgent": {
+    "ORCHESTRATOR": [
+      {
+        "turn": 1,
+        "promptChars": 6965,
+        "projectedUsd": "0.0471775",
+        "realizedUsd": "0.008965",
+        "latencyMs": 11178,
+        "parsed": "{\"tool\":\"submit_job\",\"args\":{\"source\":\"import { promises as fs } from 'node:fs';\\nimport path from 'node:path';\\nimport { spawn } from 'node:child_process';\\n\\nexport async function gate({ referenceDir, submissionDir }) {\\n  const pinnedPath = path.join(referenceDir, 'pinned-test-cases.txt');\\n  let pinnedTests;\\n  try {\\n    pinnedTests = await fs.readFile(pinnedPath, 'utf8');\\n  } catch (err) {\\n    return { accept: false, reason: `Failed to read pinned test cases: ${err.message}` };\\n  }\\n\\n  const testFilePath = path.join(referenceDir, 'gate-test-runner.mjs');\\n\\n  const testFileSource = `import test from \\\"node:test\\\";\\nimport assert from \\\"node:assert/strict\\\";\\nimport { dedupeSorted } from ${JSON.stringify(path.relative(referenceDir, path.join(submissionDir, 'answer.mjs')).replace(/\\\\\\\\/g, '/'))};\\n\\n${pinnedTests}\\n`;\\n\\n  try {\\n    await fs.writeFile(testFilePath, testFileSource, 'utf8');\\n  } catch (err) {\\n    return { accept: false, reason: `Failed to write test runner: ${err.message}` };\\n  }\\n\\n  const nodePath = process.execPath;\\n\\n  const result = await new Promise((resolve) => {\\n    const child = spawn(nodePath, ['--test', testFilePath], {\\n      stdio: ['ignore', 'pipe', 'pipe'],\\n      env: { ...process.env, NODE_ENV: 'test' },\\n    });\\n\\n    let stdout = '';\\n    let stderr = '';\\n\\n    child.stdout.on('data', (data) => {\\n      stdout += data.toString();\\n    });\\n\\n    child.stderr.on('data', (data) => {\\n      stderr += data.toString();\\n    });\\n\\n    child.on('error', (err) => {\\n      resolve({ code: null, stdout, stderr: stderr + `\\\\nSpawn error: ${err.message}` });\\n    });\\n\\n    child.on('close', (code) => {\\n      resolve({ code, stdout, stderr });\\n    });\\n  });\\n\\n  if (result.code === 0) {\\n    return { accept: true, reason: 'All pinned tests passed.' };\\n  }\\n\\n  const reasonParts = [];\\n  reasonParts.push('Pinned tests failed.');\\n  if (result.code !== null) {\\n    reasonParts.push(`exit code: ${result.code}`);\\n  } else {\\n    reasonParts.push('test process did not exit normally');\\n  }\\n  if (result.stderr.trim()) {\\n    reasonParts.push(`stderr: ${result.stderr.trim()}`);\\n  }\\n\\n  return { accept: false, reason: reasonParts.join(' ')};\\n}\\n\"}}",
+        "gateResult": {
+          "passed": true,
+          "summary": "G1-G6 all passed"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+benchVersion: 0.0.0
+packVersion: gate-hardening/code@0.0.0
+agentConfigs:
+  ORCHESTRATOR:
+    reasoningModel: gpt-5.1
+  WORKER-CODE:
+    reasoningModel: claude-sonnet-5
+  WORKER-EXTRACT:
+    reasoningModel: gemini-3.1-pro-preview
+  ISSUER-A:
+    reasoningModel: grok-4.6
+    capacityModel: grok-4.6
+  ISSUER-B:
+    reasoningModel: grok-4.6
+    capacityModel: gemini-3.1-pro-preview
+  HEDGER:
+    reasoningModel: gpt-5.1
+  validated: packages/gate-market-agents/src/pack/model-assignment.ts's
+    validateModelAssignment — WORKER-CODE/WORKER-EXTRACT distinct families
+    (anthropic/google), ORCHESTRATOR+both workers span 3 families
+    (openai/anthropic/google), ISSUER-A/ISSUER-B capacityModel differ
+    (xai/google).
+seed: p4-full-run-2026-09-25
