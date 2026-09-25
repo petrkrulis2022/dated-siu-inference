@@ -144,6 +144,60 @@ Both are fixed as of 2026-09-25. A quantified, per-print backfill of the correct
 cost for every affected print is separate, deferred follow-up work — today's correction discloses
 the structural fact; it does not yet compute the historical dollar figures.
 
+### Open question: cached discount versus what a one-off buyer pays
+
+Surfaced 2026-09-25, while reconciling which models the cached-input wiring bug actually affects.
+**Real cached usage is unevenly distributed across providers, for a reason unrelated to how expensive
+a model is to run: it tracks how the harness itself repeats work, and which providers turn that
+repetition into a cache hit automatically.** Checked directly, not assumed:
+
+- `MAX_ATTEMPTS = { T1: 1, T2: 1, T3: 3 }` (`packages/harness/src/orchestrator.ts`) retries a T3
+  instance on gate failure only, resending an identical prompt — one real, confirmed source of
+  repetition, common to every provider. Separately, and larger for `gemini-3.1-pro-preview`
+  specifically: the Google adapter's own retry-on-reasoning-truncation behavior (this section's
+  "Reasoning-token pricing" above) resends the same truncated prefix with a bigger completion
+  budget whenever its mandatory reasoning consumes the whole budget — structurally present in the
+  Anthropic/OpenAI adapters too but, confirmed by reading each adapter, never triggered in
+  practice for either. `openai-compatible.ts` (OpenRouter-routed models, including `grok-4.6`) has
+  no such retry — confirmed by reading it, its own comment states this explicitly, since reasoning
+  tokens there are billed separately and never consume `max_tokens`. `grok-4.6`'s own real cache
+  hits are real (below) but this pass did not trace their exact source beyond ruling out the
+  adapter retry — plausibly the T3 retry-on-failure case, or a shared prefix (e.g. a common system
+  preamble) repeated across a basket's own instances, which is a materially different case: a real
+  buyer purchasing the whole basket, not a single task in isolation, would legitimately see that
+  same repetition too. Left unresolved here rather than guessed at.
+
+  Real per-model cached-token counts vary accordingly (`data/runs/`, full project history):
+  `gemini-3.1-pro-preview` 2,244,720; `grok-4.6` 127,488; `deepseek-v3.2` 114,240;
+  `mistral-small-3.2-24b-instruct` 29,440 — and zero, always, for `claude-sonnet-5` (390 records
+  checked) and `claude-haiku-4-5` (315 checked), because `anthropic.ts` never sets a
+  `cache_control` breakpoint on any outgoing request, and Anthropic's caching is strictly opt-in
+  per request — a model can carry a real published cached rate and still never earn a cache hit,
+  deterministically, if the adapter never asks for one.
+
+**This means the index currently prices auto-caching providers partly on a discount this
+project's own sampling design creates — a repeated or resent prefix a genuine one-off buyer,
+running the task once, would never send — while Anthropic constituents earn no such discount
+regardless, purely because their adapter doesn't opt in.** Both "price at what this project
+actually paid" (the current behavior, cache-discounted where a real hit occurred) and "price at
+the full rate a single-shot buyer pays" (treat every cached token as an ordinary input token) are
+defensible bases for a benchmark that claims to price *the completed task*, not *this project's
+own execution pattern* — but which one the index measures is a choice, not something that should
+be left implicit in adapter behavior.
+
+**Quantified, real, 2026-09-25** (live-fetched current prices, this print's own real run records,
+recomputed via the real `buildModelInputs`/`computePrint` path, not an illustrative fixture):
+pricing `deepseek-v3.2`/`mistral-small-3.2-24b-instruct`/`grok-4.6`/`gemini-3.1-pro-preview`'s real
+cached tokens at the full input rate instead of the cached rate moves `dated_siu` from `0.01125`
+to `0.01231` — **+9.4%**, driven mostly by `gemini-3.1-pro-preview` (its own basket cost moves from
+`0.040218` to `0.049055`, +22%, matching its outsized share of real cached-token volume above).
+This is comparable in size to the Cache policy section's own hypothetical worked note above
+(−12.3%) — not a corner case.
+
+**Left open, not resolved here — a decision for after WP-7:** which basis the index should use.
+Neither is implemented as a change; this section exists so the choice is visible and quantified,
+not inherited silently from whichever adapters happen to opt into a provider's caching.
+
 ### Verification discipline for pricing fixes
 
 **Every pricing-affecting fix must be confirmed against the very next real published print — that
