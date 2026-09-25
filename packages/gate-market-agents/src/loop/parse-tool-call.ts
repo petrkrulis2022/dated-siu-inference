@@ -1,13 +1,32 @@
 import type { ToolName } from "../tools/index.js";
 
+/**
+ * Spec §8.6's friction log is meant as "evidence from an agent that transacted, not opinion from
+ * one that read a spec" — the qualitative fields (`could_not_express`, `forced_conversion`,
+ * `missing_information`) genuinely require the agent's own real-time self-report, not something
+ * a loop can synthesize after the fact. Optional on every response: a model that omits it still
+ * gets a real (if minimal) friction-log entry — the loop supplies conservative defaults — rather
+ * than the whole turn failing to parse over a field most models won't reliably remember to fill
+ * in from a first prompt revision.
+ */
+export interface FrictionReport {
+  could_not_express?: string | null;
+  forced_conversion?: boolean;
+  conversion_reason?: string | null;
+  missing_information?: string | null;
+  decision_confidence?: "low" | "medium" | "high";
+}
+
 export interface ToolCallIntent {
   tool: ToolName;
   args: unknown;
+  friction?: FrictionReport;
 }
 
 export interface DoneIntent {
   done: true;
   summary: string;
+  friction?: FrictionReport;
 }
 
 export class ModelResponseParseError extends Error {
@@ -48,15 +67,23 @@ export function parseModelResponse(text: string): ToolCallIntent | DoneIntent {
   }
   const obj = parsed as Record<string, unknown>;
 
+  // Conditionally spread rather than always setting `friction: undefined` — "omitted entirely
+  // when absent" is the real, tested property (parse-tool-call.test.ts), matching this prompt's
+  // own "do not invent friction that did not happen" instruction to the model.
+  const frictionField =
+    typeof obj.friction === "object" && obj.friction !== null
+      ? { friction: obj.friction as FrictionReport }
+      : {};
+
   if (obj.done === true) {
     if (typeof obj.summary !== "string") {
       throw new ModelResponseParseError(text);
     }
-    return { done: true, summary: obj.summary };
+    return { done: true, summary: obj.summary, ...frictionField };
   }
 
   if (typeof obj.tool !== "string") {
     throw new ModelResponseParseError(text);
   }
-  return { tool: obj.tool as ToolName, args: obj.args };
+  return { tool: obj.tool as ToolName, args: obj.args, ...frictionField };
 }

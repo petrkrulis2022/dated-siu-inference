@@ -1,0 +1,13 @@
+# HEDGER's real tool grant — spec §3/§3.4's description (buy a forward from ISSUER-A or don't;
+# deliver 10 jobs at a flat price) mapped to the real ToolName values in tools/index.ts. No §8.x
+# subsection exists for this skill in the spec (a real gap, closed here 2026-09-25, WP-7) —
+# grounded in §3.4's own prose and the same tool set subcontract-and-settle/quote-and-deliver
+# already use for the equivalent buy/deliver actions, not a fresh guess.
+tools:
+  - mint_claim
+  - request_quote
+  - pay
+  - redeem_claim
+  - submit_job
+  - get_balances
+  - get_print

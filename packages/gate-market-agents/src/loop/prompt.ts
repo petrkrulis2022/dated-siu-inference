@@ -5,7 +5,19 @@ import type { ToolName } from "../tools/index.js";
 const RESPONSE_FORMAT_INSTRUCTIONS = `Respond with exactly one JSON object and nothing else.
 
 To call a tool: {"tool": "<tool_name>", "args": {...}}
-To end your turn, once the job is delivered (or you have no further useful action): {"done": true, "summary": "<what happened>"}`;
+To end your turn, once the job is delivered (or you have no further useful action): {"done": true, "summary": "<what happened>"}
+
+Optionally, on either response shape, add a "friction" field reporting anything real about
+*this* turn's decision — appended to your friction log every turn regardless (spec §8.6):
+{"friction": {
+  "could_not_express": "<something you wanted to do but had no tool for, or null>",
+  "forced_conversion": <true only if you had to convert between assets/units you would not have
+    chosen to, false otherwise>,
+  "conversion_reason": "<why, if forced_conversion is true, or null>",
+  "missing_information": "<something you needed but weren't given, or null>",
+  "decision_confidence": "low" | "medium" | "high"
+}}
+Omit "friction" entirely if none of this applies this turn — do not invent friction that did not happen.`;
 
 /**
  * `packages/harness`'s `Adapter` is plain text in, plain text out — this builds the full prompt

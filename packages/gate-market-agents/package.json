@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@touchstone/agents": "workspace:*",
+    "@touchstone/basket": "workspace:*",
     "@touchstone/harness": "workspace:*",
     "@touchstone/print": "workspace:*",
     "@touchstone/sdk": "workspace:*",

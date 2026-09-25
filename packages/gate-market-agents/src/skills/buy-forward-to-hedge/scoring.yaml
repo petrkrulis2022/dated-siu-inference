@@ -1,0 +1,4 @@
+# Spec §3.1's own HEDGER scoring row: "P&L across the print move, hedged vs unhedged arm."
+# The arm comparison itself is P6/WP-8's job; this pass records the one metric that feeds it.
+metrics:
+  - pnl_usd

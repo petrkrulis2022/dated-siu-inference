@@ -16,11 +16,13 @@ function repoRoot(): string {
 }
 
 /**
- * `CapacityBond`/`ClaimRouter`/`WorkClaim` are not deployed to Base Sepolia yet — only
- * `packages/contracts/script/DeployGateMarket.s.sol` exists (per this session's own explicit
- * "not deploying without being asked" instinct). This throws with an actionable message rather
- * than returning placeholder addresses, matching `StubSettlementReader`'s and `Erc8004Resolver`'s
- * precedent of failing loudly instead of fabricating a plausible-looking value.
+ * `CapacityBond`/`ClaimRouter`/`WorkClaim` are deployed to Base Sepolia as of 2026-09-25 (WP-7) —
+ * `data/deployments/base-sepolia-gate-market.json` records the real addresses, verified on
+ * Basescan, plus both issuers' real bonded capacity lots. This still throws with an actionable
+ * message rather than returning placeholder addresses whenever that file is absent (a fresh
+ * checkout that hasn't run the deploy script, or a caller pointed at a different, not-yet-
+ * deployed chain's file) — matching `StubSettlementReader`'s and `Erc8004Resolver`'s precedent of
+ * failing loudly instead of fabricating a plausible-looking value.
  */
 export function loadGateMarketDeployment(
   file = "data/deployments/base-sepolia-gate-market.json",

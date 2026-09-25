@@ -1,5 +1,5 @@
 import { clientsFor, type ChainClients } from "@touchstone/agents";
-import { BudgetCeiling, CeilingExceededError } from "./budget/ceiling.js";
+import { CeilingExceededError, type SpendCeiling } from "./budget/ceiling.js";
 import { DualRenderer } from "./context/dual-render.js";
 import type { ToolCallRecord } from "./context/assemble.js";
 import { TOOLS, type ToolDefinition, type ToolName } from "./tools/index.js";
@@ -12,7 +12,9 @@ export interface RunnerOptions {
   privateKeyHex: string;
   rpcUrl: string;
   deps: RunnerDeps;
-  ceiling: BudgetCeiling;
+  /** `BudgetCeiling` for a single-agent pass, or (WP-7) `ExperimentBudget` when the run/
+   * experiment-wide layers above it also apply — `Runner` only needs the shape both satisfy. */
+  ceiling: SpendCeiling;
   /** The calling agent's loaded skill's `tools.yaml` list (`skills/registry.ts`'s `loadSkill`).
    * Optional and unrestricted when omitted — WP-5's dry-loop scenarios and this package's own
    * scripted tests drive tools directly, with no skill in the loop, and must keep working
@@ -58,7 +60,7 @@ export class Runner {
   #privateKeyHex: string;
   #clients: ChainClients;
   #deps: RunnerDeps;
-  #ceiling: BudgetCeiling;
+  #ceiling: SpendCeiling;
   #allowedTools?: readonly ToolName[];
   #dualRenderer = new DualRenderer();
   #records: ToolCallRecord[] = [];

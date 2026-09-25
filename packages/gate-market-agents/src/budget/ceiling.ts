@@ -40,6 +40,16 @@ export class CeilingExceededError extends Error {
   }
 }
 
+/** The shape `Runner` actually depends on — `BudgetCeiling` and (WP-7) `ExperimentBudget`, which
+ * wraps a `BudgetCeiling` with the run/experiment-wide layers above it, both satisfy this
+ * structurally, so `Runner` can take either without knowing which. */
+export interface SpendCeiling {
+  isHalted(agentId: AgentId, windowId: string): boolean;
+  recordTurn(agentId: AgentId, windowId: string): void;
+  recordSpend(agentId: AgentId, windowId: string, usdcAmount: string): void;
+  recordInferenceSpend(agentId: AgentId, windowId: string, projectedUsd: string): void;
+}
+
 interface WindowState {
   spentUsdc: DecimalValue;
   spentInferenceUsd: DecimalValue;
@@ -52,7 +62,7 @@ interface WindowState {
  * called from the tool-call dispatch path (`Runner.callTool`) before a turn/spend is allowed to
  * proceed — never after, so a ceiling hit can never be exceeded even by one call.
  */
-export class BudgetCeiling {
+export class BudgetCeiling implements SpendCeiling {
   private readonly limits: Record<AgentId, BudgetLimits>;
   private readonly windows = new Map<string, WindowState>();
 

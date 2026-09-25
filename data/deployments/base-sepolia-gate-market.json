@@ -1,0 +1,147 @@
+{
+  "network": {
+    "name": "Base Sepolia",
+    "chainId": 84532,
+    "explorer": "https://sepolia.basescan.org",
+    "note": "Testnet only, per WP-7's own standing instruction. No mainnet address, no real funds, no live API key in any agent-reachable code path."
+  },
+  "source": {
+    "gitCommit": "318817e6dea809bf7738b14999e9e62929a33f40",
+    "gitCommitShort": "318817e",
+    "treeCleanAtDeploy": false,
+    "treeCleanAtDeployNote": "Deployed mid-build: the working tree carried WP-7's own in-progress TypeScript (model-assignment validator, ExperimentBudget, window/seed scheduling, the six-agent loop, the buy-forward-to-hedge skill) at deploy time. None of that touches the Solidity contracts themselves — CapacityBond/ClaimRouter/WorkClaim were unchanged since gitCommit above (the settlement-rate band clamp, 504e059). Recorded honestly rather than claiming a clean-tree deploy that didn't happen.",
+    "path": "packages/contracts"
+  },
+  "compiler": {
+    "solc": "0.8.24+commit.e11b9ed9",
+    "evmVersion": "shanghai",
+    "optimizer": {
+      "enabled": true,
+      "runs": 200
+    },
+    "bytecodeHash": "none",
+    "evmVersionRationale": "Same pin as base-sepolia.json's own TouchstoneAttestation/TouchstoneEscrow deployment — shanghai keeps Arc a deployment target rather than a rewrite; also why RateAttestationVerifier.sol hand-rolls EIP-712 instead of using OZ's MCOPY-emitting EIP712 base."
+  },
+  "deployedAt": {
+    "unix": 1790365534,
+    "iso": "2026-09-25T19:45:34Z"
+  },
+  "deployer": "0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e",
+  "usdc": {
+    "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    "symbol": "USDC",
+    "decimals": 6,
+    "source": "Same address base-sepolia.json already verified (Circle official documentation, Circle's MCP server, 2026-08-16) — reused, not re-resolved.",
+    "verifiedOnChain": "symbol() == 'USDC' and decimals() == 6, already established by the prior deployment on this same chain"
+  },
+  "capacityBond": { "address": "0xC4030792e815e6D08Ae5f434B84A3DCCa2FBe999" },
+  "claimRouter": { "address": "0x88fbBF79727bB3c903D5C94a860033959Ba88Ec8" },
+  "workClaim": { "address": "0x7583BB12751F0EA622F5Aa8F69df37c1506F9061" },
+  "contractsDetail": {
+    "note": "Documentary detail beyond what GateMarketDeployment's own strict interface reads (chain/deployment.ts) — the flat capacityBond/claimRouter/workClaim keys above are the ones actually parsed; this block mirrors base-sepolia.json's own richer per-contract convention for audit purposes.",
+    "CapacityBond": {
+      "address": "0xC4030792e815e6D08Ae5f434B84A3DCCa2FBe999",
+      "deploymentTx": "0x210dc00b99cc60a9e558eebc50d22605368de796bbcadb9d332b87a6621dec9c",
+      "blockNumber": 47298623,
+      "gasUsed": 683626,
+      "constructorArgs": {
+        "usdc_": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        "workClaim_": "0x7583BB12751F0EA622F5Aa8F69df37c1506F9061"
+      },
+      "constructorArgOrder": ["usdc_", "workClaim_"],
+      "constructorArgsEncoded": "0x000000000000000000000000036cbd53842c5426634e7929541ec2318f3dcf7e0000000000000000000000007583bb12751f0ea622f5aa8f69df37c1506f9061",
+      "verified": {
+        "explorer": "Basescan",
+        "status": "Pass - Verified",
+        "guid": "1afmx4cfvthgyra1ftxpwsmhhaqa7wijghbvkqsmlbzhvintjv"
+      },
+      "explorerUrl": "https://sepolia.basescan.org/address/0xC4030792e815e6D08Ae5f434B84A3DCCa2FBe999",
+      "notes": "workClaim_ is WorkClaim's own address, precomputed via vm.computeCreateAddress before WorkClaim existed — DeployGateMarket.s.sol's own require(address(workClaim) == predictedWorkClaim) held live, confirmed by the deploy succeeding at all."
+    },
+    "ClaimRouter": {
+      "address": "0x88fbBF79727bB3c903D5C94a860033959Ba88Ec8",
+      "deploymentTx": "0xf8bb9a331480df5a80ea118dac81830b94af75966bd0da47ecded5537074f98d",
+      "blockNumber": 47298623,
+      "gasUsed": 250543,
+      "constructorArgs": {
+        "bond_": "0xC4030792e815e6D08Ae5f434B84A3DCCa2FBe999"
+      },
+      "constructorArgOrder": ["bond_"],
+      "constructorArgsEncoded": "0x000000000000000000000000c4030792e815e6d08ae5f434b84a3dcca2fbe999",
+      "verified": {
+        "explorer": "Basescan",
+        "status": "Pass - Verified",
+        "guid": "2qiv6zdyfmd28rjy1rpfgg1bcus5lqmprcuj2lc3hmj5aktayx"
+      },
+      "explorerUrl": "https://sepolia.basescan.org/address/0x88fbBF79727bB3c903D5C94a860033959Ba88Ec8"
+    },
+    "WorkClaim": {
+      "address": "0x7583BB12751F0EA622F5Aa8F69df37c1506F9061",
+      "deploymentTx": "0x0d07e34f481c7584360f3b4208f1edbaff64b5ddef8ffff1e39c09ef1daf7de9",
+      "blockNumber": 47298623,
+      "gasUsed": 2318279,
+      "constructorArgs": {
+        "usdc_": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        "bond_": "0xC4030792e815e6D08Ae5f434B84A3DCCa2FBe999",
+        "router_": "0x88fbBF79727bB3c903D5C94a860033959Ba88Ec8",
+        "publisher_": "0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a"
+      },
+      "constructorArgOrder": ["usdc_", "bond_", "router_", "publisher_"],
+      "constructorArgsEncoded": "0x000000000000000000000000036cbd53842c5426634e7929541ec2318f3dcf7e000000000000000000000000c4030792e815e6d08ae5f434b84a3dcca2fbe99900000000000000000000000088fbbf79727bb3c903d5c94a860033959ba88ec8000000000000000000000000284ff2f8605ff8afeda6959b856bb7e6d48f845a",
+      "verified": {
+        "explorer": "Basescan",
+        "status": "Pass - Verified",
+        "guid": "ixd4fkq8ib88mgsqavxrwefmytxvbsssyn7qlnxiuutrva1uek"
+      },
+      "explorerUrl": "https://sepolia.basescan.org/address/0x7583BB12751F0EA622F5Aa8F69df37c1506F9061",
+      "notes": "publisher_ is the same TOUCHSTONE_PUBLISHER_ADDRESS used by TouchstoneAttestation on this chain and by RateAttestationVerifier's own EIP-712 rate attestations (94b1e0e, 2026-09-25) — one key, two message types, domain-separated. Includes the SETTLEMENT_RATE_BAND_BPS clamp (504e059) and the real rate-attestation binding (94b1e0e) — this bytecode is current, not WP-5's pre-fix version."
+    }
+  },
+  "capacityLots": {
+    "note": "Bonded live, 2026-09-25, immediately after deploy+verify — real testnet USDC, real transactions, both classes (code/extract) per issuer, deliberately unequal measured rates per spec §3.5's own worked example (measured 120 vs 80 SIU/capacity-hour). classId = keccak256(bytes(\"code\")) / keccak256(bytes(\"extract\")) — confirmed to match packages/gate-market-agents' own CLASS_CODE/CLASS_EXTRACT constants independently via cast keccak.",
+    "classIds": {
+      "code": "0x2dc081a8d6d4714c79b5abd2e9b08c3a33b4ef1dcf946ef8b8cf6c495014f47b",
+      "extract": "0xc3a71ae87b7c3ebddac6a71a0769398904aa1c025ba79ce83e237d582b484491"
+    },
+    "ISSUER-A": {
+      "address": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+      "measuredRateMilliSiuPerHour": 120000,
+      "committedCapacityHours": 1000,
+      "bondedUsdcPerClass": 10000000,
+      "issuanceLimitPerClass": 60000000,
+      "confirmedLiveHeadroom": { "code": 60000000, "extract": 60000000 }
+    },
+    "ISSUER-B": {
+      "address": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "measuredRateMilliSiuPerHour": 80000,
+      "committedCapacityHours": 1000,
+      "bondedUsdcPerClass": 10000000,
+      "issuanceLimitPerClass": 40000000,
+      "confirmedLiveHeadroom": { "code": 40000000, "extract": 40000000 }
+    }
+  },
+  "roster": {
+    "note": "Six fresh keypairs generated 2026-09-25 for WP-7, each funded with 0.001 real Base Sepolia ETH (gas) from the deployer. Private keys held only in .env.gate-market-agents (gitignored via the repo's own .env.* pattern), never committed. Model assignment (spec §12.2a) validated by packages/gate-market-agents/src/pack/model-assignment.ts before any run.",
+    "addresses": {
+      "ISSUER-A": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+      "ISSUER-B": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "ORCHESTRATOR": "0x8Bf6De67D0B9705520Cdf5a348f5763e2175F363",
+      "WORKER-CODE": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+      "WORKER-EXTRACT": "0x2cd53E449F6cF45c51f600e167b4D2630128c8F3",
+      "HEDGER": "0xf1B22259b355434a3b84A381Ef5c8d96Eb6C1614"
+    },
+    "modelAssignment": {
+      "ORCHESTRATOR": { "reasoningModel": "gpt-5.1" },
+      "WORKER-CODE": { "reasoningModel": "claude-sonnet-5" },
+      "WORKER-EXTRACT": { "reasoningModel": "gemini-3.1-pro-preview" },
+      "ISSUER-A": { "reasoningModel": "grok-4.6", "capacityModel": "grok-4.6" },
+      "ISSUER-B": { "reasoningModel": "grok-4.6", "capacityModel": "gemini-3.1-pro-preview" },
+      "HEDGER": { "reasoningModel": "gpt-5.1" },
+      "validated": "packages/gate-market-agents/src/pack/model-assignment.ts's validateModelAssignment — WORKER-CODE/WORKER-EXTRACT distinct families (anthropic/google), ORCHESTRATOR+both workers span 3 families (openai/anthropic/google), ISSUER-A/ISSUER-B capacityModel differ (xai/google)."
+    }
+  },
+  "mainnetRequirements": [
+    "Same as packages/contracts/README.md's own Gate Market mainnet preconditions: split the publisher key (print-signing vs rate-attestation-signing) before any real deployment, and the CapacityBond-goes-to-a-new-chain precondition (the daily print-publish automation must anchor to that chain's own TouchstoneAttestation first).",
+    "Generate a real publisher key on an air-gapped machine — the testnet key used here has passed through repository-adjacent files, same caveat as base-sepolia.json's TouchstoneAttestation entry."
+  ]
+}

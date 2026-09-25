@@ -125,6 +125,28 @@ EVERY TURN, APPEND TO YOUR FRICTION LOG (see schema).
   });
 });
 
+describe("loadSkill — buy-forward-to-hedge, spec §3/§3.4 (no §8.x section exists for this skill)", () => {
+  // Unlike the three skills above, the spec never wrote out a §8.x "WHAT YOU CAN DO" block for
+  // HEDGER — confirmed by reading the spec directly (WP-7 planning, 2026-09-25). This SKILL.md is
+  // authored, grounded in §3's roster row and §3.4's own prose (the forward/flat-price
+  // commitment), not a verbatim copy — so this test checks the real properties that matter
+  // (the commitment is stated, the tool grant is real and complete) rather than byte-matching
+  // spec text that doesn't exist.
+  it("states the flat-price commitment and the forward-or-spot choice", () => {
+    const skill = loadSkill("buy-forward-to-hedge");
+    expect(skill.promptTemplate).toContain("flat\n  price fixed today");
+    expect(skill.promptTemplate).toContain("mint_claim(class, quantity, window)");
+  });
+
+  it("declares its real tool grant and scoring metric", () => {
+    const skill = loadSkill("buy-forward-to-hedge");
+    expect(skill.allowedTools).toEqual([
+      "mint_claim", "request_quote", "pay", "redeem_claim", "submit_job", "get_balances", "get_print",
+    ]);
+    expect(skill.scoring.metrics).toEqual(["pnl_usd"]);
+  });
+});
+
 describe("loadSkill — real tool-name validation", () => {
   it("throws if tools.yaml ever names a tool that doesn't exist in tools/index.ts", () => {
     // A drift-guard, not a hypothetical: this is the same class of bug the pre-WP-7 fix and
@@ -132,7 +154,9 @@ describe("loadSkill — real tool-name validation", () => {
     // fixture skill directory to point this at without adding one — so this documents the
     // invariant by construction: every real skill directory's tools.yaml already passed this
     // check (loadSkill would have thrown above if it hadn't), which is the property that matters.
-    for (const name of ["subcontract-and-settle", "quote-and-deliver", "issue-work-claims"]) {
+    for (const name of [
+      "subcontract-and-settle", "quote-and-deliver", "issue-work-claims", "buy-forward-to-hedge",
+    ]) {
       expect(() => loadSkill(name)).not.toThrow();
     }
   });

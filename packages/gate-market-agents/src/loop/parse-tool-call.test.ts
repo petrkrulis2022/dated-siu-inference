@@ -38,4 +38,39 @@ describe("parseModelResponse", () => {
   it("throws on done:true with a missing summary", () => {
     expect(() => parseModelResponse('{"done": true}')).toThrow(ModelResponseParseError);
   });
+
+  it("parses an optional friction report alongside a tool call", () => {
+    const result = parseModelResponse(
+      '{"tool": "get_print", "args": {"printId": "2026-09-22"}, "friction": ' +
+        '{"could_not_express": "wanted to see the other issuer\'s rate", "forced_conversion": false, ' +
+        '"conversion_reason": null, "missing_information": null, "decision_confidence": "medium"}}',
+    );
+    expect(result).toEqual({
+      tool: "get_print",
+      args: { printId: "2026-09-22" },
+      friction: {
+        could_not_express: "wanted to see the other issuer's rate",
+        forced_conversion: false,
+        conversion_reason: null,
+        missing_information: null,
+        decision_confidence: "medium",
+      },
+    });
+  });
+
+  it("parses an optional friction report alongside a done response", () => {
+    const result = parseModelResponse(
+      '{"done": true, "summary": "finished", "friction": {"forced_conversion": true, "conversion_reason": "only USDC was quoted"}}',
+    );
+    expect(result).toEqual({
+      done: true,
+      summary: "finished",
+      friction: { forced_conversion: true, conversion_reason: "only USDC was quoted" },
+    });
+  });
+
+  it("omits friction entirely when the model doesn't include it — never invented", () => {
+    const result = parseModelResponse('{"tool": "get_print", "args": {}}');
+    expect(result).not.toHaveProperty("friction");
+  });
 });
