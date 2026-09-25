@@ -198,6 +198,11 @@
       "minLength": 1,
       "description": "build1-spec.md §7 publishes 'methodology version and link'."
     },
+    "methodology_revision": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Which rule set (docs/methodology.md's Revision history table) actually produced this print's published figures — distinct from methodology_version, which has never changed despite several rule changes that altered published values (found live, 2026-09-25). Optional and forward-only: absent on every print published before this field existed, present from the print that introduces it onward — no historical print is touched to add it retroactively."
+    },
     "cost_of_production_usd": {
       "$ref": "#/definitions/decimalString",
       "description": "build1-spec.md §7's round-2 decision: what producing this print actually cost, summed across every recorded attempt for every measured model — not just the qualifying, weighted subset. Published beside the print, not folded into it."

@@ -37,6 +37,11 @@ export interface PrintInput {
   price_snapshot_ref: string;
   methodology_version: string;
   methodology_url?: string;
+  /** Which entry in docs/methodology.md's Revision history table actually produced this print,
+   * e.g. "rules-2026-09-25" — distinct from methodology_version (see that field's own schema
+   * doc comment for why). Omitted for a caller that doesn't supply one, so no historical print
+   * needs touching to add this retroactively. */
+  methodology_revision?: string;
   rounding?: RoundingRules;
   sensitivityVariants?: PolicyVariant[];
 }
@@ -171,6 +176,10 @@ export function computePrint(input: PrintInput): ComputePrintResult {
 
   if (input.methodology_url) {
     body.methodology_url = input.methodology_url;
+  }
+
+  if (input.methodology_revision) {
+    body.methodology_revision = input.methodology_revision;
   }
 
   // Floor and market spread are omitted entirely when no measured floor is supplied, rather

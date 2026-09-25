@@ -170,6 +170,10 @@ export interface Print {
    */
   methodology_url?: string;
   /**
+   * Which rule set (docs/methodology.md's Revision history table) actually produced this print's published figures — distinct from methodology_version, which has never changed despite several rule changes that altered published values (found live, 2026-09-25). Optional and forward-only: absent on every print published before this field existed, present from the print that introduces it onward — no historical print is touched to add it retroactively.
+   */
+  methodology_revision?: string;
+  /**
    * A decimal number encoded as a string. Never a JSON number — no floats in money maths.
    */
   cost_of_production_usd: string;

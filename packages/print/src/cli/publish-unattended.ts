@@ -66,6 +66,11 @@ interface PriorIncidentRecord {
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
+/** docs/methodology.md's Revision history table — bump this when a future rule change alters
+ * published values, and add the matching row there. Every print from this one onward states
+ * which rule set produced it, forward-only; no historical print needs the field retroactively. */
+const METHODOLOGY_REVISION = "rules-2026-09-25";
+
 const printId = process.argv[2] || new Date().toISOString().slice(0, 10);
 const printDate = DATE_PATTERN.test(printId) ? printId : new Date().toISOString().slice(0, 10);
 
@@ -247,6 +252,7 @@ try {
     models,
     price_snapshot_ref: snapshotFile,
     methodology_version: "v0-draft",
+    methodology_revision: METHODOLOGY_REVISION,
     privateKeyHex,
     attestationClient,
     spendCeilingUsd: effectiveSpendCeilingUsd,
@@ -328,6 +334,7 @@ try {
         models: seriesModels,
         price_snapshot_ref: snapshotFile,
         methodology_version: "v0-draft",
+        methodology_revision: METHODOLOGY_REVISION,
         privateKeyHex,
         attestationClient,
         series,

@@ -105,13 +105,25 @@ accepted.
 
 **Worked note — cache policy alone can move a print by over 12%.** From the checked-in worked
 example (`docs/siu-worked-example.md`, illustrative fixtures, not real prices): starting from a
-baseline print of `$0.0383`, applying a hypothetical cache policy to a single model in the
+baseline print of `$0.03833`, applying a hypothetical cache policy to a single model in the
 reference set — 40% of that model's T2 input served from cache at 10% of the input price — moves
-the print to `$0.0336`, a **`−12.3%`** delta, computed by the same `cachePolicyVariant`/sensitivity
+the print to `$0.03360`, a **`−12.3%`** delta, computed by the same `cachePolicyVariant`/sensitivity
 code path (`packages/print/src/compute/sensitivity.ts`) that produces every print's disclosed
 sensitivity block. This is exactly why cache policy must be stated and fixed, not left to reader
 inference: a policy choice invisible in the headline number can move it by more than a typical
 day's market movement in the underlying models' list prices.
+
+**Checked whether commodity constituents have real, unpriced cached usage the way
+gemini-3.1-pro-preview/gpt-5.1/grok-4.6 did (the bug fixed 2026-09-13, below) — confirmed they do,
+and confirmed it is not the same bug.** `deepseek-v3.2` and `mistral-small-3.2-24b-instruct` (both
+commodity constituents) genuinely had nonzero `RunRecord.usage.cached_input` on several real days
+(e.g. `data/runs/2026-09-08/`: 832 and 448 cached tokens respectively). But neither model has ever
+had a published `price_cached_in_usd_per_1m` in any real price snapshot this project has taken
+(`data/registry/price-snapshot-merged-*.json`) — and the cost formula's own stated policy (above,
+and `packages/print/src/decimal.ts`'s `callCost`) is that cached usage with no published cached
+rate is priced at input+output only, deliberately, rather than at a guessed rate. That is this
+policy working as designed, not a gap: no commodity print carries a cached_input correction note
+because none of them computed anything wrong.
 
 ### Batch-discount policy
 
@@ -276,6 +288,31 @@ never parses a print value; `CapacityBond.sol`'s functions all take plain `uint2
 supplied by an off-chain caller. Nothing in this repository parses the `dated_siu` string itself
 into minor units anywhere, on-chain or off. Recorded here so this is checked again before any
 future code does add that parsing.
+
+### Revision history
+
+`methodology_version` (published on every print) has never changed — it has read `"v0-draft"`
+since the first print, including across every real methodology change below, because it names the
+basket/schema generation, not a specific rule set. That leaves no machine-readable way to know
+which rules actually produced a given print's figures — a real gap, found live 2026-09-25 while
+disclosing the rounding fix above.
+
+**Fixed forward only.** `methodology_revision` (optional, on the print body,
+`packages/sdk/schemas/print.schema.json`) states which row of this table produced that print,
+from the print that first carries it onward. No historical print gains the field retroactively —
+the table below is how a reader maps a print published *before* this field existed to the rules
+that actually applied, by date.
+
+| Revision id | Effective date | What changed | Commit |
+| --- | --- | --- | --- |
+| `rules-2026-08-30` | 2026-08-30 | Baseline — the rules every print from the first one through the next row's date was computed under. | — |
+| `rules-2026-09-08` | 2026-09-08 | Reasoning tokens priced at the output rate; the per-tier minimum-qualifying-count gate applied alongside the overall one. | `0ffebc2`, `f4fd47a` |
+| `rules-2026-09-13` | 2026-09-13 | `cached_input` usage priced where a published cached rate exists. | `29d4be2` |
+| `rules-2026-09-25` | 2026-09-25 | `dated_siu` rounds to 4 significant figures, not a fixed 4 decimal places. | `d729ef4` |
+
+A print's own `date` field, checked against this table, tells a reader which row applied even for
+a print published before `methodology_revision` existed — this table is the durable record; the
+field is the machine-readable shortcut going forward.
 
 ## 4. Contamination control
 

@@ -55,6 +55,19 @@ describe("validatePrint", () => {
     expect(result.valid).toBe(false);
   });
 
+  it("accepts a print with methodology_revision present — optional, forward-only", () => {
+    const result = validatePrint({ ...validPrint, methodology_revision: "rules-2026-09-25" });
+    expect(result.valid).toBe(true);
+  });
+
+  it("accepts a print with methodology_revision absent — every historical print stays valid", () => {
+    // validPrint itself already omits it; asserted explicitly here so a future edit to validPrint
+    // that accidentally adds it wouldn't silently stop covering this case.
+    expect("methodology_revision" in validPrint).toBe(false);
+    const result = validatePrint(validPrint);
+    expect(result.valid).toBe(true);
+  });
+
   it("accepts the current significant-figures rounding shape (dated_siu_sig_figs)", () => {
     const result = validatePrint({
       ...validPrint,

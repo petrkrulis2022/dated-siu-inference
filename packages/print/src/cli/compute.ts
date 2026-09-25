@@ -26,6 +26,10 @@ if (!printId) {
 // otherwise take it from argv or fall back to today. Conflating the two silently produced an
 // invalid `date` field, which the refuse-to-sign guard then caught.
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** docs/methodology.md's Revision history table — see publish-unattended.ts's identical
+ * constant for the doc comment. */
+const METHODOLOGY_REVISION = "rules-2026-09-25";
 const dateArg = process.argv.find((a) => a.startsWith("date="))?.slice(5);
 const printDate =
   dateArg ?? (DATE_PATTERN.test(printId) ? printId : new Date().toISOString().slice(0, 10));
@@ -97,6 +101,7 @@ const { body } = computePrint({
   // print says so in weights.source. Inventing shares would be worse than declaring equal.
   price_snapshot_ref: snapshotFile,
   methodology_version: "v0-draft",
+  methodology_revision: METHODOLOGY_REVISION,
   floor,
   sensitivityVariants: [
     cachePolicyVariant({

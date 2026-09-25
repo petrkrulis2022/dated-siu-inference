@@ -46,6 +46,11 @@ import {
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
+/** docs/methodology.md's Revision history table — see publish-unattended.ts's identical
+ * constant for the doc comment; kept in sync manually since the two CLIs don't share a common
+ * module for this one line. */
+const METHODOLOGY_REVISION = "rules-2026-09-25";
+
 const printId = process.argv[2] ?? new Date().toISOString().slice(0, 10);
 const printDate = DATE_PATTERN.test(printId) ? printId : new Date().toISOString().slice(0, 10);
 const skipConfirm = process.argv.includes("--yes");
@@ -168,6 +173,7 @@ const result = await publishPrint(printsDir(), {
   models,
   price_snapshot_ref: snapshotFile,
   methodology_version: "v0-draft",
+  methodology_revision: METHODOLOGY_REVISION,
   privateKeyHex,
   attestationClient,
   runsDirPath: runsDirFor(printId),
@@ -243,6 +249,7 @@ for (const { series, seriesModels, registryIds } of tierGroups) {
       models: seriesModels,
       price_snapshot_ref: snapshotFile,
       methodology_version: "v0-draft",
+      methodology_revision: METHODOLOGY_REVISION,
       privateKeyHex,
       attestationClient,
       series,

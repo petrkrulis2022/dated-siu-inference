@@ -124,6 +124,18 @@ describe("worked example reproduction", () => {
     expect(body.market_spread).toBeUndefined();
   });
 
+  it("omits methodology_revision when the caller doesn't supply one — no historical print needs it retroactively", () => {
+    expect(body.methodology_revision).toBeUndefined();
+  });
+
+  it("carries methodology_revision through when the caller does supply one", () => {
+    const { body: withRevision } = computePrint({
+      ...workedExampleInput(),
+      methodology_revision: "rules-2026-09-25",
+    });
+    expect(withRevision.methodology_revision).toBe("rules-2026-09-25");
+  });
+
   it("states its rounding rules in the print body", () => {
     expect(body.rounding.mode).toBe("ROUND_HALF_UP");
     expect(body.rounding.siu_per_usd_mode).toBe("ROUND_DOWN");
