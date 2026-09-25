@@ -119,6 +119,10 @@
     {
       "published_at": "2026-09-25",
       "note": "dated_siu previously rounded to a fixed 4 decimal places rather than 4 significant figures — found live and fixed the same day, 2026-09-25 (docs/methodology.md's Rounding section). At this print's price level that was too coarse to show real day-to-day movement. This print's signed body is never edited — the published figure (0.0014) stands. Recomputed from this print's own published basket_costs and weights (Σ weight × basket_cost, rounded under the corrected 4-significant-figure rule, reproducible by anyone from this print's own published figures alone), the real value is 0.001437."
+    },
+    {
+      "published_at": "2026-09-25",
+      "note": "This print was published under the belief that cached-input pricing (rules-2026-09-13, commit 29d4be2) was already live — docs/methodology.md stated this as fact. It was not: buildModelInputs never forwarded a price snapshot's price_cached_in_usd_per_1m to the cost formula, for any model, from any source, until this was found and fixed live 2026-09-25 (commit 327d7b9, docs/methodology.md's rules-2026-09-25b). For this print specifically, real nonzero cached_input usage on deepseek-v3.2, mistral-small-3.2-24b-instruct — already present in this print's own run records — was still priced at zero in this print's own signed cost_of_production_usd and basket_costs, contrary to what the methodology this print's date falls under claimed. This print's signed body is never edited. The exact, per-model corrected dollar figure is not computed here — that quantified backfill is separate, deferred follow-up work; this note discloses the structural fact, not yet the number."
     }
   ]
 }

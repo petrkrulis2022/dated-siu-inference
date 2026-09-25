@@ -218,5 +218,11 @@
     "status": "anchored",
     "tx_hash": "0x87c60984f1d186dca85c8f1c44da563dc9ace38ae4bb94992e480d76d35dc043",
     "posted_at": "2026-09-20T04:34:34.000Z"
-  }
+  },
+  "correction_notes": [
+    {
+      "published_at": "2026-09-25",
+      "note": "This print was published under the belief that cached-input pricing (rules-2026-09-13, commit 29d4be2) was already live — docs/methodology.md stated this as fact. It was not: buildModelInputs never forwarded a price snapshot's price_cached_in_usd_per_1m to the cost formula, for any model, from any source, until this was found and fixed live 2026-09-25 (commit 327d7b9, docs/methodology.md's rules-2026-09-25b). For this print specifically, real nonzero cached_input usage on deepseek-v3.2, gemini-3.1-pro-preview, grok-4.6, mistral-small-3.2-24b-instruct — already present in this print's own run records — was still priced at zero in this print's own signed cost_of_production_usd and basket_costs, contrary to what the methodology this print's date falls under claimed. This print's signed body is never edited. The exact, per-model corrected dollar figure is not computed here — that quantified backfill is separate, deferred follow-up work; this note discloses the structural fact, not yet the number."
+    }
+  ]
 }
