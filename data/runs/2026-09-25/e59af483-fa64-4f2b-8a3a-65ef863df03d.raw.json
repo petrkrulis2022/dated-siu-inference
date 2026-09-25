@@ -1,0 +1,39 @@
+{
+  "id": "72b8820f-e7fe-947a-8756-dd91d355e2e9",
+  "object": "chat.completion",
+  "created": 1790298104,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "97B6AD\nBDD3EA\n6CE015\nA62BE4",
+        "reasoning_content": "The user wants me to read the archive log and find all internal notes that state archival access codes for named annexes. I need to list every access code, one per line, in the order they appear, and ...",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21898,
+    "completion_tokens": 18,
+    "total_tokens": 22294,
+    "prompt_tokens_details": {
+      "text_tokens": 21898,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 378,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 454040000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
