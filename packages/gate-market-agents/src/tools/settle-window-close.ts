@@ -7,7 +7,14 @@ import type { ToolDefinition } from "./types.js";
 const argsSchema = z.object({
   tokenId: z.string(),
   holder: z.string(),
-  microUsdPerSiu: z.string(),
+  /** A pre-signed rate attestation — only actually checked on-chain when this settlement turns
+   * out to be a Default (WorkClaim.sol's own doc comment: never verified on the Expire path).
+   * An Expire-only caller may pass empty/zero placeholders here; see chain/rate-attestation.ts
+   * for the real signer a Default-expecting caller must use instead. */
+  printId: z.string(),
+  nanoUsdPerSiu: z.string(),
+  validUntil: z.string(),
+  signature: z.string(),
 });
 
 type Args = z.infer<typeof argsSchema>;
@@ -27,7 +34,16 @@ export const settleWindowCloseTool: ToolDefinition<Args, { txHash: string }> = {
       address: ctx.deps.deployment.workClaim.address as Hex,
       abi: WORK_CLAIM_ABI,
       functionName: "settleWindowClose",
-      args: [BigInt(args.tokenId), args.holder as Hex, BigInt(args.microUsdPerSiu)],
+      args: [
+        BigInt(args.tokenId),
+        args.holder as Hex,
+        {
+          printId: args.printId,
+          nanoUsdPerSiu: BigInt(args.nanoUsdPerSiu),
+          validUntil: BigInt(args.validUntil),
+        },
+        args.signature as Hex,
+      ],
     });
     return { txHash: receipt.transactionHash };
   },

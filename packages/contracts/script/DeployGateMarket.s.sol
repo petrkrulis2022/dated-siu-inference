@@ -25,6 +25,12 @@ import {WorkClaim} from "../src/WorkClaim.sol";
  *
  * Required env:
  *   TOUCHSTONE_GATE_MARKET_USDC   optional override; defaults to Base Sepolia USDC below
+ *   TOUCHSTONE_PUBLISHER_ADDRESS  the address permitted to sign settlement rate attestations —
+ *                                 same env var Deploy.s.sol already reads for
+ *                                 TouchstoneAttestation's own publisher, and the same real key
+ *                                 (packages/print/src/sign/sign.ts's TOUCHSTONE_PUBLISHER_KEY) —
+ *                                 see WorkClaim.sol's "Settlement-rate binding" doc comment for
+ *                                 why reusing the one key to sign both message types is safe.
  */
 contract DeployGateMarket is Script {
     uint256 internal constant BASE_SEPOLIA_CHAIN_ID = 84532;
@@ -39,6 +45,7 @@ contract DeployGateMarket is Script {
         );
 
         address usdc = vm.envOr("TOUCHSTONE_GATE_MARKET_USDC", BASE_SEPOLIA_USDC);
+        address publisher = vm.envAddress("TOUCHSTONE_PUBLISHER_ADDRESS");
 
         vm.startBroadcast();
         (, address deployer,) = vm.readCallers();
@@ -47,7 +54,7 @@ contract DeployGateMarket is Script {
 
         CapacityBond bond = new CapacityBond(IERC20(usdc), predictedWorkClaim);
         ClaimRouter router = new ClaimRouter(bond);
-        WorkClaim workClaim = new WorkClaim(IERC20(usdc), bond, router);
+        WorkClaim workClaim = new WorkClaim(IERC20(usdc), bond, router, publisher);
         vm.stopBroadcast();
 
         require(address(workClaim) == predictedWorkClaim, "WorkClaim address prediction mismatch");
@@ -61,5 +68,6 @@ contract DeployGateMarket is Script {
         console.log("  usdc:            ", usdc);
         console.log("  bond:            ", address(bond));
         console.log("  router:          ", address(router));
+        console.log("  publisher:       ", publisher);
     }
 }

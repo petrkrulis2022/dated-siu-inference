@@ -15,6 +15,7 @@ contract DeployGateMarketTest is Test {
 
     function setUp() public {
         script = new DeployGateMarket();
+        vm.setEnv("TOUCHSTONE_PUBLISHER_ADDRESS", "0x0000000000000000000000000000000000000A11");
     }
 
     function test_run_revertsOnAnyChainOtherThanBaseSepolia() public {

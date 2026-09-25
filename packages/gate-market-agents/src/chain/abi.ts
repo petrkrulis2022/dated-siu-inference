@@ -7,10 +7,10 @@ import { parseAbi } from "viem";
  * lives only in `packages/contracts/out/`, outside the pnpm workspace.
  */
 export const WORK_CLAIM_ABI = parseAbi([
-  "function mint(bytes32 classId, uint256 quantity, uint64 windowFrom, uint64 windowTo, uint256 microUsdPerSiu) external returns (uint256 tokenId)",
+  "function mint(bytes32 classId, uint256 quantity, uint64 windowFrom, uint64 windowTo, (string printId, uint256 nanoUsdPerSiu, uint64 validUntil) att, bytes signature) external returns (uint256 tokenId)",
   "function presentForRedemption(uint256 tokenId, bytes32 taskSpecHash) external",
   "function serveRedemption(uint256 tokenId, address holder, uint256 quantity, bool passed, bytes32 receiptRef) external",
-  "function settleWindowClose(uint256 tokenId, address holder, uint256 microUsdPerSiu) external",
+  "function settleWindowClose(uint256 tokenId, address holder, (string printId, uint256 nanoUsdPerSiu, uint64 validUntil) att, bytes signature) external",
   "function tokenIdFor(address issuer, bytes32 classId, uint64 windowFrom, uint64 windowTo) external pure returns (uint256)",
   "function balanceOf(address account, uint256 id) external view returns (uint256)",
   "function everPresented(uint256 tokenId, address holder) external view returns (bool)",

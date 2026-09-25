@@ -35,6 +35,12 @@ contract WorkClaimInvariantTest is Test {
     address[3] internal holders;
     address internal attacker;
 
+    /// Same test-only publisher key/signature discipline as WorkClaim.t.sol — real secp256k1,
+    /// not a stub. The handler holds the key itself (constructor below) since it's the one
+    /// actually calling mint/settleWindowClose during fuzzing.
+    uint256 internal constant PUBLISHER_PK = 0xA11CE;
+    address internal publisher = vm.addr(PUBLISHER_PK);
+
     bytes32 internal constant CLASS_A = keccak256("classA");
     bytes32 internal constant CLASS_B = keccak256("classB");
 
@@ -51,7 +57,7 @@ contract WorkClaimInvariantTest is Test {
         address predictedClaimAddr = vm.computeCreateAddress(address(this), nonce + 2);
         bond = new CapacityBond(IERC20(address(usdc)), predictedClaimAddr);
         router = new ClaimRouter(bond);
-        claim = new WorkClaim(IERC20(address(usdc)), bond, router);
+        claim = new WorkClaim(IERC20(address(usdc)), bond, router, publisher);
         require(address(claim) == predictedClaimAddr, "sanity: address prediction");
 
         // Both issuers bond into both classes — real cross-issuer routing pressure, matching the
@@ -73,7 +79,8 @@ contract WorkClaimInvariantTest is Test {
             usdc.approve(address(claim), type(uint256).max);
         }
 
-        handler = new WorkClaimHandler(usdc, bond, router, claim, issuers, holders, attacker);
+        handler =
+            new WorkClaimHandler(usdc, bond, router, claim, issuers, holders, attacker, PUBLISHER_PK);
         // The handler itself mints more USDC to holders/issuers as needed mid-run — tracked via
         // the handler's own balance-based conservation check below rather than a fixed ghost
         // total, since MockUSDC.mint is permissionless and the handler uses it freely.
@@ -174,33 +181,71 @@ contract WorkClaimInvariantTest is Test {
  * reachable — same purpose as EscrowHandlerCoverageTest in TouchstoneEscrow.invariant.t.sol.
  */
 contract WorkClaimHandlerCoverageTest is Test {
+    /// Extracted from the test itself purely to keep function-local variable counts under the
+    /// EVM's stack-depth limit ("stack too deep") — solc's own error naming this exact spot once
+    /// the rate-attestation publisher key/address were added inline. Split into two helpers, not
+    /// one, because even the single-helper version still tripped the same limit.
+    struct DeployedContracts {
+        MockUSDC usdc;
+        CapacityBond bond;
+        ClaimRouter router;
+        WorkClaim claim;
+    }
+
+    function _deployContracts(address publisher) internal returns (DeployedContracts memory d) {
+        d.usdc = new MockUSDC();
+        uint64 nonce = vm.getNonce(address(this));
+        address predictedClaimAddr = vm.computeCreateAddress(address(this), nonce + 2);
+        d.bond = new CapacityBond(IERC20(address(d.usdc)), predictedClaimAddr);
+        d.router = new ClaimRouter(d.bond);
+        d.claim = new WorkClaim(IERC20(address(d.usdc)), d.bond, d.router, publisher);
+        require(address(d.claim) == predictedClaimAddr);
+    }
+
+    function _fundAndDeployHandler(
+        DeployedContracts memory d,
+        address[2] memory issuers,
+        address[3] memory holders,
+        address attacker,
+        bytes32 classA,
+        uint256 publisherPk
+    ) internal returns (WorkClaimHandler handler) {
+        d.usdc.mint(issuers[0], 10_000_000_000);
+        vm.startPrank(issuers[0]);
+        d.usdc.approve(address(d.bond), type(uint256).max);
+        d.bond.createLot(classA, 1000, 500, 1_000_000_000);
+        vm.stopPrank();
+        for (uint256 i = 0; i < holders.length; i++) {
+            d.usdc.mint(holders[i], 5_000_000_000);
+            vm.prank(holders[i]);
+            d.usdc.approve(address(d.claim), type(uint256).max);
+        }
+
+        handler = new WorkClaimHandler(
+            d.usdc, d.bond, d.router, d.claim, issuers, holders, attacker, publisherPk
+        );
+    }
+
+    function _deployHandler(
+        address[2] memory issuers,
+        address[3] memory holders,
+        address attacker,
+        bytes32 classA,
+        uint256 publisherPk
+    ) internal returns (WorkClaim claim, WorkClaimHandler handler) {
+        DeployedContracts memory d = _deployContracts(vm.addr(publisherPk));
+        handler = _fundAndDeployHandler(d, issuers, holders, attacker, classA, publisherPk);
+        claim = d.claim;
+    }
+
     function test_handlerReachesEveryLifecyclePath() public {
         address[2] memory issuers = [makeAddr("i1"), makeAddr("i2")];
         address[3] memory holders = [makeAddr("h1"), makeAddr("h2"), makeAddr("h3")];
         address attacker = makeAddr("attacker");
         bytes32 classA = keccak256("classA");
 
-        MockUSDC usdc = new MockUSDC();
-        uint64 nonce = vm.getNonce(address(this));
-        address predictedClaimAddr = vm.computeCreateAddress(address(this), nonce + 2);
-        CapacityBond bond = new CapacityBond(IERC20(address(usdc)), predictedClaimAddr);
-        ClaimRouter router = new ClaimRouter(bond);
-        WorkClaim claim = new WorkClaim(IERC20(address(usdc)), bond, router);
-        require(address(claim) == predictedClaimAddr);
-
-        usdc.mint(issuers[0], 10_000_000_000);
-        vm.startPrank(issuers[0]);
-        usdc.approve(address(bond), type(uint256).max);
-        bond.createLot(classA, 1000, 500, 1_000_000_000);
-        vm.stopPrank();
-        for (uint256 i = 0; i < holders.length; i++) {
-            usdc.mint(holders[i], 5_000_000_000);
-            vm.prank(holders[i]);
-            usdc.approve(address(claim), type(uint256).max);
-        }
-
-        WorkClaimHandler handler =
-            new WorkClaimHandler(usdc, bond, router, claim, issuers, holders, attacker);
+        (WorkClaim claim, WorkClaimHandler handler) =
+            _deployHandler(issuers, holders, attacker, classA, 0xA11CE);
 
         handler.mint(0, 0, 100, 1);
         assertEq(handler.ghostMints(), 1, "handler can mint");

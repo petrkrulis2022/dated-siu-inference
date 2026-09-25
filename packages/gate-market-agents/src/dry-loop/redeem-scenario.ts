@@ -17,7 +17,7 @@ import type { DevnetHandle } from "../devnet/deploy.js";
 import { CLASS_CODE } from "../devnet/deploy.js";
 import { buildReceipt } from "../receipt/emit.js";
 import type { GateMarketReceipt } from "../receipt/types.js";
-import { DRY_LOOP_MICRO_USD_PER_SIU } from "./context.js";
+import { DRY_LOOP_NANO_USD_PER_SIU, signDryLoopRateAttestation } from "./context.js";
 
 export interface RedeemScenarioParams {
   devnet: DevnetHandle;
@@ -90,6 +90,7 @@ export async function runRedeemScenario(
     (headroomBeforeMintRecord.result as { headroom: string }).headroom,
   );
 
+  const rateAttestation = await signDryLoopRateAttestation(devnet);
   const mintRecord = await buyer.callTool(
     "mint_claim",
     {
@@ -97,7 +98,7 @@ export async function runRedeemScenario(
       quantity: quantity.toString(),
       windowFrom,
       windowTo,
-      microUsdPerSiu: DRY_LOOP_MICRO_USD_PER_SIU.toString(),
+      ...rateAttestation,
     },
     { turn: 1, jobId },
   );
@@ -186,7 +187,7 @@ export async function runRedeemScenario(
       .balance,
   );
 
-  const settlementAmountMicroUsd = (quantity * DRY_LOOP_MICRO_USD_PER_SIU) / 1000n;
+  const settlementAmountMicroUsd = (quantity * DRY_LOOP_NANO_USD_PER_SIU) / 1_000_000n;
   const receipt = buildReceipt({
     receiptId: `receipt:${jobId}`,
     parentPaymentId: params.parentPaymentId,

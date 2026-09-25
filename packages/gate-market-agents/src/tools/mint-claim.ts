@@ -10,19 +10,24 @@ const argsSchema = z.object({
   quantity: z.string(),
   windowFrom: z.number().int(),
   windowTo: z.number().int(),
-  /** microUsdPerSiu — see WorkClaim.sol's "Price precision" doc comment: an integer count of
-   * millionths of a dollar per SIU, matching USDC's own 6 decimals. Passed as a decimal string
-   * here (repo convention: no floats in money maths) and parsed to bigint in the handler. */
-  microUsdPerSiu: z.string(),
+  /** A pre-signed RateAttestationVerifier.RateAttestation (packages/contracts/src/
+   * RateAttestationVerifier.sol) plus its signature — never produced by this tool itself, which
+   * has no access to the publisher key. `nanoUsdPerSiu`/`validUntil` are decimal strings (repo
+   * convention: no floats in money maths), parsed to bigint in the handler. See
+   * chain/rate-attestation.ts for the real signer this attestation must come from. */
+  printId: z.string(),
+  nanoUsdPerSiu: z.string(),
+  validUntil: z.string(),
+  signature: z.string(),
 });
 
 type Args = z.infer<typeof argsSchema>;
 
 /** `spendUsd` estimates the USDC this mint pulls from the caller — quantity (mSIU) *
- * microUsdPerSiu / 1000, mirroring `WorkClaim._usdcAmount`'s own formula exactly so the budget
- * ceiling sees the same number the contract will actually charge. */
+ * nanoUsdPerSiu / 1_000_000, mirroring `WorkClaim._usdcAmount`'s own formula exactly so the
+ * budget ceiling sees the same number the contract will actually charge. */
 function estimatedSpendUsd(args: Args): string {
-  const totalMicroUsd = (BigInt(args.quantity) * BigInt(args.microUsdPerSiu)) / 1000n;
+  const totalMicroUsd = (BigInt(args.quantity) * BigInt(args.nanoUsdPerSiu)) / 1_000_000n;
   return minorUnitsToUsd(totalMicroUsd.toString());
 }
 
@@ -43,7 +48,12 @@ export const mintClaimTool: ToolDefinition<
         BigInt(args.quantity),
         BigInt(args.windowFrom),
         BigInt(args.windowTo),
-        BigInt(args.microUsdPerSiu),
+        {
+          printId: args.printId,
+          nanoUsdPerSiu: BigInt(args.nanoUsdPerSiu),
+          validUntil: BigInt(args.validUntil),
+        },
+        args.signature as Hex,
       ],
     });
 

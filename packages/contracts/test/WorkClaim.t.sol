@@ -6,6 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {CapacityBond} from "../src/CapacityBond.sol";
 import {ClaimRouter} from "../src/ClaimRouter.sol";
 import {WorkClaim} from "../src/WorkClaim.sol";
+import {RateAttestationVerifier} from "../src/RateAttestationVerifier.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
 
 /// Functional coverage of the real lifecycle — mint, present, serve (pass and fail), default,
@@ -26,10 +27,17 @@ contract WorkClaimTest is Test {
 
     /// The real 2026-09-22 print's dated_siu ($0.0107/SIU), not a round illustrative number —
     /// deliberately, since this is exactly the precision test_mintPricingHoldsRealPrintRateExactly
-    /// below needs: dated_siu is published to 4 decimal places (docs/methodology.md's rounding
-    /// table), and microUsdPerSiu = 0.0107 * 1e6 = 10_700 holds that exactly, with two digits of
-    /// headroom to spare — see WorkClaim.sol's "Price precision" doc comment.
-    uint256 internal constant PRICE_MICRO_USD_PER_SIU = 10_700;
+    /// below needs. nanoUsdPerSiu = 0.0107 * 1e9 = 10_700_000 — RateAttestationVerifier's scale,
+    /// not the old microUsdPerSiu one — see WorkClaim.sol's "Price precision" doc comment.
+    uint256 internal constant PRICE_NANO_USD_PER_SIU = 10_700_000;
+
+    /// The test-only key WorkClaim trusts as its rate-attestation publisher — a real secp256k1
+    /// key/signature pair via vm.sign, not a stub, same discipline as every other real signature
+    /// this repo tests (packages/print/src/sign/sign.test.ts).
+    uint256 internal constant PUBLISHER_PK = 0xA11CE;
+    address internal publisher = vm.addr(PUBLISHER_PK);
+
+    string internal constant PRINT_ID = "2026-09-22";
 
     function setUp() public {
         usdc = new MockUSDC();
@@ -48,7 +56,7 @@ contract WorkClaimTest is Test {
         router = new ClaimRouter(bond);
         assertEq(address(router), predictedRouterAddr, "sanity: ClaimRouter address prediction");
 
-        claim = new WorkClaim(IERC20(address(usdc)), bond, router);
+        claim = new WorkClaim(IERC20(address(usdc)), bond, router, publisher);
         assertEq(address(claim), predictedClaimAddr, "sanity: WorkClaim address prediction");
 
         usdc.mint(issuer, 1_000_000_000);
@@ -65,9 +73,55 @@ contract WorkClaimTest is Test {
         windowTo = uint64(block.timestamp + 8 days);
     }
 
+    /// Signs a real RateAttestation with PUBLISHER_PK, against WorkClaim's own real domain
+    /// separator (`claim.rateAttestationDomainSeparator()` — never recomputed by hand here, so
+    /// this test can't silently drift from what the contract actually verifies).
+    function _signRate(uint256 nanoUsdPerSiu, string memory printId, uint64 validUntil)
+        internal
+        view
+        returns (RateAttestationVerifier.RateAttestation memory att, bytes memory signature)
+    {
+        return _signRateAs(PUBLISHER_PK, nanoUsdPerSiu, printId, validUntil);
+    }
+
+    function _signRateAs(uint256 signerPk, uint256 nanoUsdPerSiu, string memory printId, uint64 validUntil)
+        internal
+        view
+        returns (RateAttestationVerifier.RateAttestation memory att, bytes memory signature)
+    {
+        att = RateAttestationVerifier.RateAttestation({
+            printId: printId,
+            nanoUsdPerSiu: nanoUsdPerSiu,
+            validUntil: validUntil
+        });
+        bytes32 structHash = keccak256(
+            abi.encode(
+                keccak256("RateAttestation(string printId,uint256 nanoUsdPerSiu,uint64 validUntil)"),
+                keccak256(bytes(att.printId)),
+                att.nanoUsdPerSiu,
+                att.validUntil
+            )
+        );
+        bytes32 digest = keccak256(
+            abi.encodePacked("\x19\x01", claim.rateAttestationDomainSeparator(), structHash)
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPk, digest);
+        signature = abi.encodePacked(r, s, v);
+    }
+
+    function _realRate() internal view returns (RateAttestationVerifier.RateAttestation memory att, bytes memory signature) {
+        return _signRate(PRICE_NANO_USD_PER_SIU, PRINT_ID, uint64(block.timestamp + 365 days));
+    }
+
     function _mint(uint256 quantity) internal returns (uint256 tokenId) {
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _realRate();
         vm.prank(buyer);
-        tokenId = claim.mint(CLASS_CODE, quantity, windowFrom, windowTo, PRICE_MICRO_USD_PER_SIU);
+        tokenId = claim.mint(CLASS_CODE, quantity, windowFrom, windowTo, att, sig);
+    }
+
+    function _settle(uint256 tokenId, address holder) internal {
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _realRate();
+        claim.settleWindowClose(tokenId, holder, att, sig);
     }
 
     function test_mintConsumesHeadroomAndPaysIssuer() public {
@@ -82,7 +136,9 @@ contract WorkClaimTest is Test {
         // exact here since 500 is a multiple of the formula's /1000 divisor; the non-round-
         // quantity case (real truncation bound) is exercised by
         // test_mintPricingHoldsRealPrintRateExactly below.
-        assertEq(usdc.balanceOf(issuer), issuerBalBefore + (500 * PRICE_MICRO_USD_PER_SIU) / 1000);
+        assertEq(
+            usdc.balanceOf(issuer), issuerBalBefore + (500 * PRICE_NANO_USD_PER_SIU) / 1_000_000
+        );
     }
 
     /// The regression test for the bug review flagged 2026-09-22: the prior parameter
@@ -94,8 +150,9 @@ contract WorkClaimTest is Test {
     /// deliberately non-round quantity (333 mSIU) so the division doesn't cancel out by luck.
     function test_mintPricingHoldsRealPrintRateExactly() public {
         uint256 issuerBalBefore = usdc.balanceOf(issuer);
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _realRate();
         vm.prank(buyer);
-        claim.mint(CLASS_CODE, 333, windowFrom, windowTo, PRICE_MICRO_USD_PER_SIU);
+        claim.mint(CLASS_CODE, 333, windowFrom, windowTo, att, sig);
 
         // Exact value: 0.333 SIU * $0.0107/SIU = $0.0035631 = 3563.1 USDC minor units. The
         // contract truncates the fractional minor unit (Solidity has no fractional minor units),
@@ -158,7 +215,7 @@ contract WorkClaimTest is Test {
         uint256 headroomBefore = bond.headroom(issuer, CLASS_CODE);
         uint256 buyerUsdcBefore = usdc.balanceOf(buyer);
 
-        claim.settleWindowClose(tokenId, buyer, PRICE_MICRO_USD_PER_SIU);
+        _settle(tokenId, buyer);
 
         assertEq(claim.balanceOf(buyer, tokenId), 0, "burned on default");
         assertEq(
@@ -166,7 +223,7 @@ contract WorkClaimTest is Test {
         );
         assertEq(
             usdc.balanceOf(buyer),
-            buyerUsdcBefore + (500 * PRICE_MICRO_USD_PER_SIU) / 1000,
+            buyerUsdcBefore + (500 * PRICE_NANO_USD_PER_SIU) / 1_000_000,
             "bond paid the holder"
         );
     }
@@ -179,7 +236,7 @@ contract WorkClaimTest is Test {
         uint256 buyerUsdcBefore = usdc.balanceOf(buyer);
         uint256 bondedBefore = _bondedAmount();
 
-        claim.settleWindowClose(tokenId, buyer, PRICE_MICRO_USD_PER_SIU);
+        _settle(tokenId, buyer);
 
         assertEq(claim.balanceOf(buyer, tokenId), 0, "burned on expire");
         assertEq(
@@ -198,13 +255,19 @@ contract WorkClaimTest is Test {
     function test_settleWindowClose_revertsASecondTime() public {
         uint256 tokenId = _mint(500);
         vm.warp(windowTo);
-        claim.settleWindowClose(tokenId, buyer, PRICE_MICRO_USD_PER_SIU);
+        _settle(tokenId, buyer);
 
+        // Signed before expectRevert, deliberately: vm.expectRevert treats the very next
+        // external call as "the" call under test, and _realRate()'s own
+        // rateAttestationDomainSeparator() staticcall would otherwise be mistaken for it,
+        // consuming the expectation before settleWindowClose ever runs — found live writing
+        // this test.
+        (WorkClaim.RateAttestation memory att, bytes memory sig) = _realRate();
         // AlreadySettled, not NothingToSettle: the contract checks the settled latch before the
         // balance, correctly, since it's the more precise reason — this assertion originally
         // expected the wrong one.
         vm.expectRevert(WorkClaim.AlreadySettled.selector);
-        claim.settleWindowClose(tokenId, buyer, PRICE_MICRO_USD_PER_SIU);
+        claim.settleWindowClose(tokenId, buyer, att, sig);
     }
 
     function test_serveRedemption_revertsForNonRoutedIssuer() public {
@@ -243,10 +306,73 @@ contract WorkClaimTest is Test {
         uint256 buyerUsdcBefore = usdc.balanceOf(buyer);
         uint256 holder2UsdcBefore = usdc.balanceOf(holder2);
 
-        claim.settleWindowClose(tokenId, buyer, PRICE_MICRO_USD_PER_SIU);
-        claim.settleWindowClose(tokenId, holder2, PRICE_MICRO_USD_PER_SIU);
+        _settle(tokenId, buyer);
+        _settle(tokenId, holder2);
 
         assertGt(usdc.balanceOf(buyer), buyerUsdcBefore, "buyer defaulted and was paid");
         assertEq(usdc.balanceOf(holder2), holder2UsdcBefore, "holder2 expired, no payout");
+    }
+
+    // ------------------------------------------------------------------ rate-attestation binding
+    // The real fix (WorkClaim.sol's own "Settlement-rate binding" doc comment): mint and default
+    // settlement used to take the rate as a bare, unverified uint256. These four cases are the
+    // ones review asked to be shown fuzzed/negative-tested explicitly, plus the expiry guard the
+    // mechanism itself depends on.
+
+    /// A genuine publisher signature over one rate does not authorise a *different* rate — the
+    /// signature is over the whole struct, not just the printId, so tampering with
+    /// nanoUsdPerSiu after signing must invalidate it.
+    function test_mint_revertsOnTamperedRate() public {
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _realRate();
+        att.nanoUsdPerSiu = att.nanoUsdPerSiu + 1; // tampered after signing, signature unchanged
+
+        vm.prank(buyer);
+        vm.expectRevert(); // InvalidRateAttestation(recovered, publisher) — recovered != publisher
+        claim.mint(CLASS_CODE, 500, windowFrom, windowTo, att, sig);
+    }
+
+    /// A well-formed attestation signed by any key other than the registered publisher must be
+    /// rejected — the entire point of the fix. `attackerPk` signs a structurally identical
+    /// message; only the signer differs.
+    function test_settleWindowClose_revertsOnAttestationFromWrongSigner() public {
+        uint256 tokenId = _mint(500);
+        vm.warp(windowFrom + 1);
+        vm.prank(buyer);
+        claim.presentForRedemption(tokenId, keccak256("task-1"));
+        vm.warp(windowTo);
+
+        uint256 attackerPk = 0xBAD;
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
+            _signRateAs(attackerPk, PRICE_NANO_USD_PER_SIU, PRINT_ID, uint64(block.timestamp + 1 days));
+
+        vm.expectRevert(); // InvalidRateAttestation(recovered, publisher) — recovered == vm.addr(attackerPk)
+        claim.settleWindowClose(tokenId, buyer, att, sig);
+    }
+
+    /// An expired attestation — genuinely signed by the real publisher, for the real rate — must
+    /// still be rejected once `validUntil` has passed. The standard EIP-712 replay guard; without
+    /// it a single real attestation would stay usable forever.
+    function test_mint_revertsOnExpiredAttestation() public {
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
+            _signRate(PRICE_NANO_USD_PER_SIU, PRINT_ID, uint64(block.timestamp));
+        vm.warp(block.timestamp + 1);
+
+        vm.prank(buyer);
+        vm.expectRevert(); // RateAttestationExpired(validUntil, currentTimestamp)
+        claim.mint(CLASS_CODE, 500, windowFrom, windowTo, att, sig);
+    }
+
+    /// `printId` is accepted opaquely — RateAttestationVerifier.sol's own doc comment states
+    /// plainly that this contract does not check it against the claim's own window, and that
+    /// staying honest about that (rather than a false sense of enforcement) is deliberate.
+    /// Confirmed here for real, not just asserted in prose: a genuine attestation for a printId
+    /// that obviously doesn't match this claim's own class/window still succeeds.
+    function test_mint_acceptsGenuineAttestationForAnyPrintId_printIdIsNotEnforcedOnChain() public {
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
+            _signRate(PRICE_NANO_USD_PER_SIU, "2099-01-01-not-the-real-print", uint64(block.timestamp + 1 days));
+
+        vm.prank(buyer);
+        uint256 tokenId = claim.mint(CLASS_CODE, 500, windowFrom, windowTo, att, sig);
+        assertEq(claim.balanceOf(buyer, tokenId), 500);
     }
 }

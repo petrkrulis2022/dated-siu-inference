@@ -7,6 +7,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {CapacityBond} from "./CapacityBond.sol";
 import {ClaimRouter} from "./ClaimRouter.sol";
 import {MinimalERC1155} from "./MinimalERC1155.sol";
+import {RateAttestationVerifier} from "./RateAttestationVerifier.sol";
 
 /**
  * @title WorkClaim
@@ -39,30 +40,43 @@ import {MinimalERC1155} from "./MinimalERC1155.sol";
  * All three restore headroom. If any one of them didn't, claims nobody touched would silently and
  * permanently lock issuance capacity — the property `WorkClaim.invariant.t.sol` fuzzes hardest.
  *
- * ## Known limitation
+ * ## Settlement-rate binding — fixed 2026-09-25, real and exploitable, not just disclosed
  *
- * Mint price and default settlement both take a USD-per-SIU rate as a caller-supplied parameter,
- * not one verified against an on-chain print — see CapacityBond.sol's matching disclosure. This
- * contract's own invariants (headroom conservation, exactly-once payout, access control) hold
- * regardless of whether the supplied rate is honest; a dishonest rate is a pricing-manipulation
- * risk, a structurally different problem from the conservation properties fuzzed here.
+ * Mint price and default settlement used to take a USD-per-SIU rate as a bare, unverified
+ * `uint256` parameter. `settleWindowClose` is deliberately permissionless (any caller may trigger
+ * it, for any holder, for liveness — see that function's own doc comment) and `holder` is a
+ * caller-supplied address, not `msg.sender`; the only other check on the default payout was that
+ * the bond had the funds. So an unverified rate meant any caller could drain a lot's entire
+ * bonded USDC by settling even a trivial defaulted claim at an arbitrarily inflated rate — not a
+ * disclosed limitation to route around, a working drain, found live 2026-09-25 while reviewing
+ * an unrelated rounding fix, before this contract was ever deployed anywhere. Symmetrically, an
+ * unverified rate at mint let a buyer consume real issuer headroom while paying an arbitrarily
+ * low price.
  *
- * ## Price precision — fixed 2026-09-22, review flagged before any real settlement ran
+ * Both `mint` and `settleWindowClose` now take a `RateAttestationVerifier.RateAttestation` plus
+ * its signature in place of the bare rate — see that contract's own doc comment for exactly what
+ * is and isn't verified. This does not verify a print's full body against
+ * `TouchstoneAttestation`'s anchored hash (real, non-trivial on-chain JCS work, still out of
+ * scope); it verifies that the real, registered publisher attested this specific rate for this
+ * specific print id, which is the number this contract actually uses.
  *
- * The rate parameter is `microUsdPerSiu`: an integer count of millionths of a dollar per whole
- * SIU, matching USDC's own 6 decimals (`packages/sdk/src/money/units.ts`'s `USDC_DECIMALS`) and
- * with two full digits of headroom over `dated_siu`'s published precision — 4 decimal places,
- * half-up (`docs/methodology.md`'s rounding table; e.g. `"0.0107"`) — so any real print rate
- * converts to `microUsdPerSiu` exactly, never a lossy approximation of the published number.
- * `_usdcAmount` truncates only in its final `/ 1000` step (converting the mSIU quantity into
- * USDC minor units), bounded at under 1 USDC minor unit (1e-6 USD) of error *total*, regardless
- * of `quantity` — not per-mSIU, so it does not scale with claim size the way an earlier version
- * of this parameter did (see git history: `usdPerMilliSiu`, one decimal digit too coarse to hold
- * `dated_siu`'s own precision, silently truncating real rates like $0.0107/SIU to $0.010 or
- * $0.011/SIU — several percent of a real settlement, undetectable by fuzzing alone since the
- * invariant suite's fixtures use round test prices, not real print magnitudes).
+ * ## Price precision — the rate scale carries real headroom this time
+ *
+ * The rate is `nanoUsdPerSiu`: nano-USD (1e-9 USD) per whole SIU — three more decimal digits than
+ * `RateAttestationVerifier`'s predecessor scale (`microUsdPerSiu`, 1e-6 USD, matching USDC's own
+ * 6 decimals) carried. That earlier scale was fixed 2026-09-22 specifically because it needed "two
+ * full digits of headroom over dated_siu's published precision" — true when `dated_siu` was a
+ * fixed 4 decimal places, false the moment it started rounding to 4 significant figures instead
+ * (docs/methodology.md's Rounding section, 2026-09-25): a real Commodity SIU value already needs
+ * all 6 of that scale's decimal places, zero headroom left. `nanoUsdPerSiu` starts with real
+ * headroom instead of needing this exact fix again the next time the index falls further.
+ * `_usdcAmount` truncates only in its final `/ 1_000_000` step (converting the mSIU quantity and
+ * nano-USD rate into USDC minor units), bounded at under 1 USDC minor unit (1e-6 USD) of error
+ * *total* regardless of `quantity` — the same bound a single final truncating division always
+ * gives, independent of the divisor's own size (see git history for the two earlier, coarser
+ * scales this same bound was stated against: `usdPerMilliSiu`, then `microUsdPerSiu`).
  */
-contract WorkClaim is MinimalERC1155, ReentrancyGuard {
+contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
     using SafeERC20 for IERC20;
 
     struct ClaimType {
@@ -123,7 +137,10 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard {
     error AlreadySettled();
     error InsufficientRedemption(uint256 requested, uint256 balance);
 
-    constructor(IERC20 usdc_, CapacityBond bond_, ClaimRouter router_) MinimalERC1155("") {
+    constructor(IERC20 usdc_, CapacityBond bond_, ClaimRouter router_, address publisher_)
+        MinimalERC1155("")
+        RateAttestationVerifier(publisher_, "Touchstone Rate Attestation", "1")
+    {
         if (address(usdc_) == address(0)) revert UsdcZero();
         if (address(bond_) == address(0)) revert BondZero();
         if (address(router_) == address(0)) revert RouterZero();
@@ -143,20 +160,24 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard {
     /**
      * @notice Mints `quantity` mSIU of a claim in `classId` for the delivery window
      *         [`windowFrom`, `windowTo`), routed to an issuer with headroom — the buyer never
-     *         picks (ClaimRouter.sol). Pulls the USDC value of `quantity` at `microUsdPerSiu`
-     *         from the caller.
-     * @dev `microUsdPerSiu` is caller-supplied — see this contract's "Known limitation" and
-     *      "Price precision" notes.
+     *         picks (ClaimRouter.sol). Pulls the USDC value of `quantity` at the rate `att`
+     *         attests, from the caller.
+     * @dev `att`/`signature` must be a genuine, unexpired attestation from `publisher` — see
+     *      RateAttestationVerifier.sol. Caller-controlled before this fix (see this contract's
+     *      "Settlement-rate binding" note); now cryptographically bound to the real publisher.
      */
     function mint(
         bytes32 classId,
         uint256 quantity,
         uint64 windowFrom,
         uint64 windowTo,
-        uint256 microUsdPerSiu
+        RateAttestation calldata att,
+        bytes calldata signature
     ) external nonReentrant returns (uint256 tokenId) {
-        if (quantity == 0 || microUsdPerSiu == 0) revert ZeroAmount();
+        if (quantity == 0) revert ZeroAmount();
         if (windowTo <= windowFrom) revert BadWindow();
+        uint256 nanoUsdPerSiu = _verifyRateAttestation(att, signature);
+        if (nanoUsdPerSiu == 0) revert ZeroAmount();
 
         address issuer = router.route(classId, quantity);
         tokenId = tokenIdFor(issuer, classId, windowFrom, windowTo);
@@ -178,22 +199,22 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard {
 
         _mint(msg.sender, tokenId, quantity, "");
 
-        uint256 totalUsd = _usdcAmount(quantity, microUsdPerSiu);
+        uint256 totalUsd = _usdcAmount(quantity, nanoUsdPerSiu);
         usdc.safeTransferFrom(msg.sender, issuer, totalUsd);
     }
 
     /**
-     * @dev Converts an mSIU quantity to USDC minor units at `microUsdPerSiu` — see this
+     * @dev Converts an mSIU quantity to USDC minor units at `nanoUsdPerSiu` — see this
      *      contract's "Price precision" doc comment for the unit derivation and the truncation
      *      bound. Truncates (rounds toward zero) in the final division only, by construction
      *      under 1 USDC minor unit of error regardless of `quantityMilliSiu`'s size.
      */
-    function _usdcAmount(uint256 quantityMilliSiu, uint256 microUsdPerSiu)
+    function _usdcAmount(uint256 quantityMilliSiu, uint256 nanoUsdPerSiu)
         internal
         pure
         returns (uint256)
     {
-        return (quantityMilliSiu * microUsdPerSiu) / 1000;
+        return (quantityMilliSiu * nanoUsdPerSiu) / 1_000_000;
     }
 
     /**
@@ -259,10 +280,18 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard {
      *      required so a defaulted position cannot pay out twice, the settlement-side mirror of
      *      serveRedemption's headroom-restoration idempotency.
      */
-    function settleWindowClose(uint256 tokenId, address holder, uint256 microUsdPerSiu)
-        external
-        nonReentrant
-    {
+    /// @dev `att`/`signature` are only verified — and only need to be genuine — on the Defaulted
+    ///      branch, where they're actually used to compute a payout. A caller settling a claim
+    ///      they already know will Expire (no presentation ever made, checked via the public
+    ///      `everPresented` mapping before calling) may pass an empty/zero attestation; it is
+    ///      never checked, and its liveness cost (anyone can clean up an expired claim without
+    ///      needing a real signed rate first) is exactly why this stays permissionless.
+    function settleWindowClose(
+        uint256 tokenId,
+        address holder,
+        RateAttestation calldata att,
+        bytes calldata signature
+    ) external nonReentrant {
         ClaimType storage ct = claimTypes[tokenId];
         if (!ct.exists) revert NothingToSettle();
         if (block.timestamp < ct.windowTo) revert WindowNotClosedYet();
@@ -279,7 +308,8 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard {
         bond.restoreHeadroom(ct.issuer, ct.classId, quantity);
 
         if (everPresented[tokenId][holder]) {
-            uint256 amountUsdc = _usdcAmount(quantity, microUsdPerSiu);
+            uint256 nanoUsdPerSiu = _verifyRateAttestation(att, signature);
+            uint256 amountUsdc = _usdcAmount(quantity, nanoUsdPerSiu);
             emit Defaulted(tokenId, holder, quantity, amountUsdc);
             bond.drawForDefault(ct.issuer, ct.classId, holder, amountUsdc);
         } else {

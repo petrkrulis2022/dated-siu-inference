@@ -13,12 +13,12 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   issue_quote: "issue_quote(quoteBody) -> a signed touchstone-quote",
   pay: "pay(quote, settler) -> opens and funds escrow for a signed quote, returns a tx hash",
   mint_claim:
-    "mint_claim(classId, quantity, windowFrom, windowTo, microUsdPerSiu) -> mints a claim, routed to an issuer with headroom, returns tokenId + the routed issuer",
+    "mint_claim(classId, quantity, windowFrom, windowTo, printId, nanoUsdPerSiu, validUntil, signature) -> mints a claim, routed to an issuer with headroom, returns tokenId + the routed issuer",
   transfer_claim: "transfer_claim(to, tokenId, quantity) -> free ERC-1155 transfer",
   redeem_claim:
     "redeem_claim(tokenId, taskSpecHash) -> presents your claim for redemption inside its window",
   settle_window_close:
-    "settle_window_close(tokenId, holder, microUsdPerSiu) -> settles a closed window (Defaulted or Expired), permissionless",
+    "settle_window_close(tokenId, holder, printId, nanoUsdPerSiu, validUntil, signature) -> settles a closed window (Defaulted or Expired), permissionless; the rate attestation is only checked when the window Defaulted",
   serve_redemption:
     "serve_redemption(tokenId, holder, quantity, passed, receiptRef) -> issuer-only: reports a redemption's outcome",
   submit_job:

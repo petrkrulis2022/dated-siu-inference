@@ -3,7 +3,7 @@ import type { Runner } from "../runner.js";
 import type { AgentId } from "../identity/resolve.js";
 import type { DevnetHandle } from "../devnet/deploy.js";
 import { CLASS_CODE } from "../devnet/deploy.js";
-import { DRY_LOOP_MICRO_USD_PER_SIU } from "./context.js";
+import { signDryLoopRateAttestation } from "./context.js";
 
 export interface HeadroomExhaustionResult {
   issuerAHeadroomBefore: bigint;
@@ -40,6 +40,8 @@ export async function runHeadroomExhaustion(
     throw new Error("runHeadroomExhaustion requires ISSUER-A to start with real headroom.");
   }
 
+  const rateAttestation = await signDryLoopRateAttestation(devnet);
+
   // One mint sized to exactly ISSUER-A's current headroom — fully exhausts it in a single call
   // rather than looping thousands of small mints.
   await buyer.callTool(
@@ -49,7 +51,7 @@ export async function runHeadroomExhaustion(
       quantity: issuerAHeadroomBefore.toString(),
       windowFrom,
       windowTo,
-      microUsdPerSiu: DRY_LOOP_MICRO_USD_PER_SIU.toString(),
+      ...rateAttestation,
     },
     { turn: 2, jobId },
   );
@@ -76,7 +78,7 @@ export async function runHeadroomExhaustion(
       quantity: "10",
       windowFrom,
       windowTo,
-      microUsdPerSiu: DRY_LOOP_MICRO_USD_PER_SIU.toString(),
+      ...rateAttestation,
     },
     { turn: 4, jobId },
   );

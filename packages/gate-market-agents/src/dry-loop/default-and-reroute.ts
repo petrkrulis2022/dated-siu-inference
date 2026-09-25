@@ -5,7 +5,7 @@ import type { AgentId } from "../identity/resolve.js";
 import type { DevnetHandle } from "../devnet/deploy.js";
 import { CLASS_CODE } from "../devnet/deploy.js";
 import { advanceTime } from "../devnet/anvil.js";
-import { DRY_LOOP_MICRO_USD_PER_SIU } from "./context.js";
+import { DRY_LOOP_NANO_USD_PER_SIU, signDryLoopRateAttestation } from "./context.js";
 
 export interface DefaultAndRerouteResult {
   holderBalanceAfterSettle: bigint;
@@ -47,6 +47,8 @@ export async function runDefaultAndReroute(
   // actually closes the window — see the explicit advanceTime call below.
   const windowTo = now + 600;
 
+  const rateAttestation = await signDryLoopRateAttestation(devnet);
+
   const headroomBeforeMintRecord = await buyer.callTool(
     "check_headroom",
     { issuer: issuerA.address, classId: CLASS_CODE },
@@ -63,7 +65,7 @@ export async function runDefaultAndReroute(
       quantity: quantity.toString(),
       windowFrom,
       windowTo,
-      microUsdPerSiu: DRY_LOOP_MICRO_USD_PER_SIU.toString(),
+      ...rateAttestation,
     },
     { turn: 2, jobId },
   );
@@ -107,7 +109,7 @@ export async function runDefaultAndReroute(
     {
       tokenId: mintResult.tokenId,
       holder: holder.address,
-      microUsdPerSiu: DRY_LOOP_MICRO_USD_PER_SIU.toString(),
+      ...rateAttestation,
     },
     { turn: 6, jobId },
   );
@@ -151,7 +153,7 @@ export async function runDefaultAndReroute(
         quantity: "5",
         windowFrom: Math.floor(Date.now() / 1000) - 60,
         windowTo: Math.floor(Date.now() / 1000) + 3600,
-        microUsdPerSiu: DRY_LOOP_MICRO_USD_PER_SIU.toString(),
+        ...rateAttestation,
       },
       { turn: 10, jobId },
     );
@@ -159,7 +161,7 @@ export async function runDefaultAndReroute(
     secondMintSucceeded = false;
   }
 
-  const expectedDefaultPayoutMicroUsd = (quantity * DRY_LOOP_MICRO_USD_PER_SIU) / 1000n;
+  const expectedDefaultPayoutMicroUsd = (quantity * DRY_LOOP_NANO_USD_PER_SIU) / 1_000_000n;
 
   return {
     holderBalanceAfterSettle,

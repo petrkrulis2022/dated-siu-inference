@@ -51,7 +51,7 @@ contract NoAdminPathTest is Test {
         address predictedWorkClaimAddr = vm.computeCreateAddress(address(this), nonce + 2);
         bond = new CapacityBond(IERC20(address(usdc)), predictedWorkClaimAddr);
         router = new ClaimRouter(bond);
-        workClaim = new WorkClaim(IERC20(address(usdc)), bond, router);
+        workClaim = new WorkClaim(IERC20(address(usdc)), bond, router, publisher);
         require(address(workClaim) == predictedWorkClaimAddr, "sanity: address prediction");
     }
 

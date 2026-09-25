@@ -43,7 +43,7 @@ interface RawDeployment {
   workClaim: Hex;
 }
 
-async function runForgeScriptDeploy(rpcUrl: string): Promise<RawDeployment> {
+async function runForgeScriptDeploy(rpcUrl: string, publisherAddress: Hex): Promise<RawDeployment> {
   await execFileAsync(
     "forge",
     [
@@ -55,7 +55,7 @@ async function runForgeScriptDeploy(rpcUrl: string): Promise<RawDeployment> {
       "--private-key",
       ANVIL_DEFAULT_PRIVATE_KEY,
     ],
-    { cwd: contractsDir() },
+    { cwd: contractsDir(), env: { ...process.env, TOUCHSTONE_PUBLISHER_ADDRESS: publisherAddress } },
   );
 
   const broadcastPath = path.join(
@@ -118,6 +118,11 @@ export interface DevnetHandle {
   rpcUrl: string;
   deployment: GateMarketDeployment;
   agents: Record<AgentId, ProvisionedAgent>;
+  /** The private key `WorkClaim`'s immutable `publisher` was deployed with on this devnet —
+   * freshly generated per run, same as every agent's own key. A dry-loop scenario signs a real
+   * rate attestation with this (chain/rate-attestation.ts's `signRateAttestation`) before any
+   * `mint_claim`/`settle_window_close` call that will actually Default. */
+  publisherPrivateKeyHex: Hex;
   stop: () => Promise<void>;
 }
 
@@ -145,7 +150,13 @@ export async function setupDevnet(): Promise<DevnetHandle> {
 }
 
 async function provisionDevnet(devnet: LocalDevnet): Promise<DevnetHandle> {
-  const raw = await runForgeScriptDeploy(devnet.rpcUrl);
+  // Freshly generated per run, same as every agent's own key below — its matching address is
+  // WorkClaim's immutable `publisher`, deployed by DeployGateMarketLocal.s.sol from the
+  // TOUCHSTONE_PUBLISHER_ADDRESS env var runForgeScriptDeploy sets, not a fixed local constant,
+  // so a dry-loop scenario holding only this handle can actually sign valid attestations.
+  const publisherPrivateKeyHex = generatePrivateKey();
+  const publisherAddress = privateKeyToAccount(publisherPrivateKeyHex).address;
+  const raw = await runForgeScriptDeploy(devnet.rpcUrl, publisherAddress);
 
   const deployerAccount = privateKeyToAccount(ANVIL_DEFAULT_PRIVATE_KEY);
   const publicClient = createPublicClient({ transport: http(devnet.rpcUrl) });
@@ -247,5 +258,5 @@ async function provisionDevnet(devnet: LocalDevnet): Promise<DevnetHandle> {
     workClaim: { address: raw.workClaim },
   };
 
-  return { rpcUrl: devnet.rpcUrl, deployment, agents, stop: devnet.stop };
+  return { rpcUrl: devnet.rpcUrl, deployment, agents, publisherPrivateKeyHex, stop: devnet.stop };
 }

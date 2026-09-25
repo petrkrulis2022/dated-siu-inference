@@ -18,7 +18,15 @@ import {MockUSDC} from "../test/mocks/MockUSDC.sol";
  * Deploys the four contracts only — no bonded lots, no funded agents. Per-agent identity
  * (fresh keys, funding, `createLot` calls) is provisioned from the TypeScript side
  * (`packages/gate-market-agents/src/devnet/deploy.ts`), since those identities are generated
- * per test run and this script has no way to know them in advance.
+ * per test run and this script has no way to know them in advance. The rate-attestation
+ * publisher key is one of those TS-generated identities too, for the same reason — its address
+ * is passed in here via TOUCHSTONE_PUBLISHER_ADDRESS, same as DeployGateMarket.s.sol's real
+ * deploy, rather than a fixed local constant, so dry-loop scenarios can actually sign valid
+ * attestations with the matching private key `deploy.ts` alone holds.
+ *
+ * Required env:
+ *   TOUCHSTONE_PUBLISHER_ADDRESS  the address permitted to sign settlement rate attestations —
+ *                                 see WorkClaim.sol's "Settlement-rate binding" doc comment.
  */
 contract DeployGateMarketLocal is Script {
     uint256 internal constant ANVIL_CHAIN_ID = 31337;
@@ -28,6 +36,8 @@ contract DeployGateMarketLocal is Script {
             block.chainid == ANVIL_CHAIN_ID,
             "DeployGateMarketLocal.s.sol targets a local anvil devnet (chainid 31337) only."
         );
+
+        address publisher = vm.envAddress("TOUCHSTONE_PUBLISHER_ADDRESS");
 
         vm.startBroadcast();
         (, address deployer,) = vm.readCallers();
@@ -40,7 +50,7 @@ contract DeployGateMarketLocal is Script {
         MockUSDC usdc = new MockUSDC();
         CapacityBond bond = new CapacityBond(IERC20(address(usdc)), predictedWorkClaim);
         ClaimRouter router = new ClaimRouter(bond);
-        WorkClaim workClaim = new WorkClaim(IERC20(address(usdc)), bond, router);
+        WorkClaim workClaim = new WorkClaim(IERC20(address(usdc)), bond, router, publisher);
         vm.stopBroadcast();
 
         require(address(workClaim) == predictedWorkClaim, "WorkClaim address prediction mismatch");

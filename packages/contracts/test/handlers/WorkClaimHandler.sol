@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {CapacityBond} from "../../src/CapacityBond.sol";
 import {ClaimRouter} from "../../src/ClaimRouter.sol";
 import {WorkClaim} from "../../src/WorkClaim.sol";
+import {RateAttestationVerifier} from "../../src/RateAttestationVerifier.sol";
 import {MockUSDC} from "../mocks/MockUSDC.sol";
 
 /**
@@ -56,6 +57,10 @@ contract WorkClaimHandler is Test {
     uint256 public ghostUnauthorisedServeSucceeded;
     uint256 public ghostDoubleServeOnRetiredSucceeded;
 
+    /// Same test-only publisher key WorkClaim was deployed to trust — the handler signs every
+    /// rate attestation it uses itself, real secp256k1 via vm.sign, not a stub.
+    uint256 internal immutable publisherPk;
+
     constructor(
         MockUSDC usdc_,
         CapacityBond bond_,
@@ -63,7 +68,8 @@ contract WorkClaimHandler is Test {
         WorkClaim claim_,
         address[2] memory issuers_,
         address[3] memory holders_,
-        address attacker_
+        address attacker_,
+        uint256 publisherPk_
     ) {
         usdc = usdc_;
         bond = bond_;
@@ -72,6 +78,35 @@ contract WorkClaimHandler is Test {
         issuers = issuers_;
         holders = holders_;
         attacker = attacker_;
+        publisherPk = publisherPk_;
+    }
+
+    /// A generously-valid (1 year), fixed-rate attestation — the fuzz depth here targets the
+    /// conservation/access-control properties WorkClaim.invariant.t.sol's own doc comment names,
+    /// not rate-attestation edge cases (those are WorkClaim.t.sol's own, explicit, unit tests).
+    function _rate()
+        internal
+        view
+        returns (RateAttestationVerifier.RateAttestation memory att, bytes memory sig)
+    {
+        att = RateAttestationVerifier.RateAttestation({
+            printId: "handler-fixed-rate",
+            nanoUsdPerSiu: 1_000_000,
+            validUntil: uint64(block.timestamp + 365 days)
+        });
+        bytes32 structHash = keccak256(
+            abi.encode(
+                keccak256("RateAttestation(string printId,uint256 nanoUsdPerSiu,uint64 validUntil)"),
+                keccak256(bytes(att.printId)),
+                att.nanoUsdPerSiu,
+                att.validUntil
+            )
+        );
+        bytes32 digest = keccak256(
+            abi.encodePacked("\x19\x01", claim.rateAttestationDomainSeparator(), structHash)
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(publisherPk, digest);
+        sig = abi.encodePacked(r, s, v);
     }
 
     function knownTokenIdCount() external view returns (uint256) {
@@ -111,8 +146,9 @@ contract WorkClaimHandler is Test {
 
         if (usdc.balanceOf(buyer) < quantity * 1000) usdc.mint(buyer, quantity * 1000 * 10);
 
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _rate();
         vm.prank(buyer);
-        try claim.mint(classId, quantity, windowFrom, windowTo, 1000) returns (uint256 tokenId) {
+        try claim.mint(classId, quantity, windowFrom, windowTo, att, sig) returns (uint256 tokenId) {
             _addKnownTokenId(tokenId);
             ghostMints++;
         } catch {}
@@ -216,7 +252,8 @@ contract WorkClaimHandler is Test {
 
         vm.warp(block.timestamp >= windowTo ? block.timestamp : windowTo);
 
-        try claim.settleWindowClose(tokenId, holder, 1000) {
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _rate();
+        try claim.settleWindowClose(tokenId, holder, att, sig) {
             if (wasPresented) ghostDefaults++;
             else ghostExpires++;
         } catch {
@@ -289,13 +326,15 @@ contract WorkClaimHandler is Test {
         if (!claim.settled(tokenId, holder)) {
             // Get it into the settled state first — success or failure (e.g. zero balance) here
             // isn't what's under test, only what happens on the *second* attempt below.
-            try claim.settleWindowClose(tokenId, holder, 1000) {} catch {}
+            (RateAttestationVerifier.RateAttestation memory firstAtt, bytes memory firstSig) = _rate();
+            try claim.settleWindowClose(tokenId, holder, firstAtt, firstSig) {} catch {}
         }
         if (!claim.settled(tokenId, holder)) return; // nothing reached a terminal state to replay against
 
         uint256 bondedBefore = _bondedAmountFor(tokenId);
 
-        try claim.settleWindowClose(tokenId, holder, 1000) {
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _rate();
+        try claim.settleWindowClose(tokenId, holder, att, sig) {
             ghostDoubleServeOnRetiredSucceeded++;
         } catch {
             ghostRejectedDoubleServesOnRetired++;

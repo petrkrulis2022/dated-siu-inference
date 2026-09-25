@@ -2,7 +2,7 @@ import type { Runner } from "../runner.js";
 import type { AgentId } from "../identity/resolve.js";
 import type { DevnetHandle } from "../devnet/deploy.js";
 import { CLASS_CODE, CLASS_EXTRACT } from "../devnet/deploy.js";
-import { DRY_LOOP_MICRO_USD_PER_SIU } from "./context.js";
+import { signDryLoopRateAttestation } from "./context.js";
 
 export interface CrossClassUnavailabilityResult {
   codeHeadroomBefore: bigint;
@@ -52,6 +52,7 @@ export async function runCrossClassUnavailability(
     );
   }
 
+  const rateAttestation = await signDryLoopRateAttestation(devnet);
   await buyer.callTool(
     "mint_claim",
     {
@@ -59,7 +60,7 @@ export async function runCrossClassUnavailability(
       quantity: extractHeadroomBefore.toString(),
       windowFrom,
       windowTo,
-      microUsdPerSiu: DRY_LOOP_MICRO_USD_PER_SIU.toString(),
+      ...rateAttestation,
     },
     { turn: 3, jobId },
   );
