@@ -343,3 +343,30 @@ Sepolia only. Before any `CapacityBond` is deployed to Arc:
 
 A default is already the stressed path in this design. Its price source cannot be the thing that
 turns out to be untested the first time it's actually needed.
+
+## Hard precondition before mainnet: split the publisher key
+
+`WorkClaim`'s immutable `publisher` (found live, 2026-09-25, and fixed the same day — see
+`RateAttestationVerifier.sol`'s and `WorkClaim.sol`'s own doc comments) is the same key that
+signs every daily print (`packages/print/src/sign/sign.ts`, invoked automatically every day by
+`.github/workflows/publish-print.yml`). Before this fix, a compromised publisher key could forge a
+print — a real but reputational failure. Now that key can also sign a rate attestation that
+`mint`/`settleWindowClose` will act on directly, so the same compromise can drain a bond's real
+USDC. A key that signs automatically in CI, every day, with no human in the loop, is the wrong
+key to also hold that authority.
+
+**Before any mainnet `CapacityBond`/`WorkClaim` deployment:**
+
+1. Print-signing and rate-attestation-signing must use two separate keys. The print-signing key
+   can stay in routine CI automation — a forged print is still only reputational, the same as
+   today. The rate-attestation key must not: it should be held more tightly (e.g. a hardware-backed
+   or multisig-gated signer invoked only when a real settlement needs a fresh attestation), not
+   available to the same automated daily job.
+2. `WorkClaim`'s `SETTLEMENT_RATE_BAND_BPS` defense-in-depth band (±50%, see that constant's own
+   doc comment for how it's grounded in real print history) bounds how much a single forged
+   attestation can drain — it is a second layer, not a substitute for the key split. A band alone
+   still lets a compromised key drain up to the band's own limit on every open lot.
+
+Neither of these is implemented in code — both are operational preconditions, tracked here
+alongside this file's other hard preconditions, so they are checked before any real key ever signs
+a real rate attestation, not discovered afterward.

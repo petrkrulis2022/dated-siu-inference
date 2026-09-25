@@ -60,6 +60,15 @@ import {RateAttestationVerifier} from "./RateAttestationVerifier.sol";
  * scope); it verifies that the real, registered publisher attested this specific rate for this
  * specific print id, which is the number this contract actually uses.
  *
+ * A genuine signature alone still leaves the publisher key as a single point of failure — it now
+ * signs value-bearing rates, not just prints, and signs automatically in CI every day. Two more
+ * layers, added the same day this was found exploitable: `SETTLEMENT_RATE_BAND_BPS` rejects a
+ * settlement rate too far from the rate genuinely attested at this tokenId's first mint (defense
+ * in depth — bounds a single forged-but-signed attestation, never a substitute for a real
+ * signature); and README.md's "Hard precondition before mainnet: split the publisher key" records,
+ * as an operational precondition rather than code, that print-signing and rate-attestation-signing
+ * must use separate keys before any mainnet deployment.
+ *
  * ## Price precision — the rate scale carries real headroom this time
  *
  * The rate is `nanoUsdPerSiu`: nano-USD (1e-9 USD) per whole SIU — three more decimal digits than
@@ -85,7 +94,34 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
         uint64 windowFrom;
         uint64 windowTo;
         bool exists;
+        /// @dev The verified rate attested at this tokenId's first mint — never overwritten by a
+        ///      later mint into the same tokenId. See SETTLEMENT_RATE_BAND_BPS's own doc comment
+        ///      for what this is checked against and why.
+        uint256 referenceNanoUsdPerSiu;
     }
+
+    /// @notice Defense-in-depth: a settlement rate more than this many basis points away from
+    ///         `ClaimType.referenceNanoUsdPerSiu` (the genuinely-attested rate recorded at this
+    ///         tokenId's first mint) is rejected outright, even though it carries a valid
+    ///         publisher signature. The publisher key now signs value-bearing rate attestations,
+    ///         not just prints (see this contract's "Settlement-rate binding" doc comment) — this
+    ///         bounds how much a single compromised or mis-issued attestation can drain, on top of
+    ///         (never instead of) requiring a genuine signature.
+    /// @dev 5000 bps (±50%). Grounded in the real print history, not picked arbitrarily: the
+    ///      largest single-day move Commodity SIU has ever shown, recomputed from every published
+    ///      commodity print's own basket_costs/weights (2026-09-01 through 2026-09-25, 24 prints),
+    ///      is 1.38%. A ±50% band leaves roughly 35x headroom over the largest real movement this
+    ///      index has ever shown day-to-day, while still meaningfully bounding an attacker, who
+    ///      needs a large multiple of the true rate to drain a bond, not a realistic market move.
+    ///      This is a fixed percentage, not scaled by the claim's own window length — a disclosed
+    ///      simplification for this testbed pass, the same style as CapacityBond.sol's own
+    ///      ISSUANCE_RATIO_BPS ("not because it's correct... but because the testbed needs a
+    ///      number"). A real production system would want the band to scale with how long a
+    ///      window can stay open, which this does not attempt.
+    uint16 public constant SETTLEMENT_RATE_BAND_BPS = 5000;
+    uint16 private constant BAND_BPS_DENOMINATOR = 10_000;
+
+    error SettlementRateOutOfBand(uint256 rate, uint256 referenceRate, uint16 bandBps);
 
     IERC20 public immutable usdc;
     CapacityBond public immutable bond;
@@ -189,7 +225,8 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
                 classId: classId,
                 windowFrom: windowFrom,
                 windowTo: windowTo,
-                exists: true
+                exists: true,
+                referenceNanoUsdPerSiu: nanoUsdPerSiu
             });
         }
 
@@ -215,6 +252,19 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
         returns (uint256)
     {
         return (quantityMilliSiu * nanoUsdPerSiu) / 1_000_000;
+    }
+
+    /// @dev Reverts if `rate` falls outside ±SETTLEMENT_RATE_BAND_BPS of `referenceRate` — see
+    ///      that constant's own doc comment for why this band and why it's checked here only
+    ///      (the Defaulted settlement path, the one place a verified rate pays out real USDC).
+    function _checkSettlementRateInBand(uint256 rate, uint256 referenceRate) internal pure {
+        uint256 lowerBound =
+            (referenceRate * (BAND_BPS_DENOMINATOR - SETTLEMENT_RATE_BAND_BPS)) / BAND_BPS_DENOMINATOR;
+        uint256 upperBound =
+            (referenceRate * (BAND_BPS_DENOMINATOR + SETTLEMENT_RATE_BAND_BPS)) / BAND_BPS_DENOMINATOR;
+        if (rate < lowerBound || rate > upperBound) {
+            revert SettlementRateOutOfBand(rate, referenceRate, SETTLEMENT_RATE_BAND_BPS);
+        }
     }
 
     /**
@@ -309,6 +359,7 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
 
         if (everPresented[tokenId][holder]) {
             uint256 nanoUsdPerSiu = _verifyRateAttestation(att, signature);
+            _checkSettlementRateInBand(nanoUsdPerSiu, ct.referenceNanoUsdPerSiu);
             uint256 amountUsdc = _usdcAmount(quantity, nanoUsdPerSiu);
             emit Defaulted(tokenId, holder, quantity, amountUsdc);
             bond.drawForDefault(ct.issuer, ct.classId, holder, amountUsdc);

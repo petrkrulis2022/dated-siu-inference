@@ -416,4 +416,112 @@ contract WorkClaimTest is Test {
         vm.expectRevert(ECDSA.ECDSAInvalidSignature.selector);
         claim.mint(CLASS_CODE, 500, windowFrom, windowTo, att, degenerateSig);
     }
+
+    // ------------------------------------------------------------------ settlement-rate band
+    // Defense-in-depth added the same day as the rate-attestation fix itself: a genuine, unexpired,
+    // correctly-signed attestation can still be rejected at settlement if its rate falls too far
+    // from the rate genuinely attested at this tokenId's first mint. See WorkClaim.sol's
+    // SETTLEMENT_RATE_BAND_BPS doc comment for why ±50%, grounded in real print history.
+
+    function _presentAndCloseWindow(uint256 tokenId) internal {
+        vm.warp(windowFrom + 1);
+        vm.prank(buyer);
+        claim.presentForRedemption(tokenId, keccak256("task-1"));
+        vm.warp(windowTo);
+    }
+
+    /// A genuine attestation for a *different* rate than the one recorded at mint still settles
+    /// normally as long as it's within the band — the band bounds an outlier, it doesn't pin the
+    /// rate to the mint-time value exactly.
+    function test_settleWindowClose_acceptsRateWithinBand() public {
+        uint256 tokenId = _mint(500);
+        _presentAndCloseWindow(tokenId);
+
+        uint256 withinBandRate = (PRICE_NANO_USD_PER_SIU * 149) / 100; // +49%, inside ±50%
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
+            _signRate(withinBandRate, PRINT_ID, uint64(block.timestamp + 1 days));
+
+        uint256 buyerUsdcBefore = usdc.balanceOf(buyer);
+        claim.settleWindowClose(tokenId, buyer, att, sig);
+        assertGt(usdc.balanceOf(buyer), buyerUsdcBefore, "settled at the in-band rate");
+    }
+
+    function test_settleWindowClose_revertsOnRateAboveBand() public {
+        uint256 tokenId = _mint(500);
+        _presentAndCloseWindow(tokenId);
+
+        uint256 aboveBandRate = (PRICE_NANO_USD_PER_SIU * 151) / 100; // +51%, outside ±50%
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
+            _signRate(aboveBandRate, PRINT_ID, uint64(block.timestamp + 1 days));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                WorkClaim.SettlementRateOutOfBand.selector,
+                aboveBandRate,
+                PRICE_NANO_USD_PER_SIU,
+                claim.SETTLEMENT_RATE_BAND_BPS()
+            )
+        );
+        claim.settleWindowClose(tokenId, buyer, att, sig);
+    }
+
+    function test_settleWindowClose_revertsOnRateBelowBand() public {
+        uint256 tokenId = _mint(500);
+        _presentAndCloseWindow(tokenId);
+
+        uint256 belowBandRate = (PRICE_NANO_USD_PER_SIU * 49) / 100; // -51%, outside ±50%
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
+            _signRate(belowBandRate, PRINT_ID, uint64(block.timestamp + 1 days));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                WorkClaim.SettlementRateOutOfBand.selector,
+                belowBandRate,
+                PRICE_NANO_USD_PER_SIU,
+                claim.SETTLEMENT_RATE_BAND_BPS()
+            )
+        );
+        claim.settleWindowClose(tokenId, buyer, att, sig);
+    }
+
+    /// Fuzzes both the mint-time reference rate and the settlement rate's offset from it. The
+    /// oracle (`lowerBound`/`upperBound`) replicates WorkClaim's own `_checkSettlementRateInBand`
+    /// arithmetic exactly, rather than an independent deltaBps threshold, so integer-division
+    /// rounding can never disagree between test and contract at the boundary.
+    function testFuzz_settleWindowClose_rateBand(uint256 mintRate, int256 deltaBps) public {
+        // Lower-bounded so `_usdcAmount(500, mintRate)` never truncates to zero (500 * mintRate
+        // must clear 1_000_000) — otherwise even the band-accepting path hits CapacityBond's own,
+        // unrelated ZeroAmount revert on a zero draw, not the property this test checks. Upper-
+        // bounded well under the bond's real 60,000,000 balance even at the band's own +50%
+        // ceiling and this test's fixed 500 mSIU quantity, so every in-band case is a real,
+        // InsufficientBond-free settlement.
+        mintRate = bound(mintRate, 10_000, 50_000_000);
+        deltaBps = bound(deltaBps, -9999, 9999);
+
+        (RateAttestationVerifier.RateAttestation memory mintAtt, bytes memory mintSig) =
+            _signRate(mintRate, PRINT_ID, uint64(block.timestamp + 1 days));
+        vm.prank(buyer);
+        uint256 tokenId = claim.mint(CLASS_CODE, 500, windowFrom, windowTo, mintAtt, mintSig);
+        _presentAndCloseWindow(tokenId);
+
+        uint256 settlementRate = deltaBps >= 0
+            ? mintRate + (mintRate * uint256(deltaBps)) / 10_000
+            : mintRate - (mintRate * uint256(-deltaBps)) / 10_000;
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
+            _signRate(settlementRate, PRINT_ID, uint64(block.timestamp + 1 days));
+
+        uint16 bandBps = claim.SETTLEMENT_RATE_BAND_BPS();
+        uint256 lowerBound = (mintRate * (10_000 - bandBps)) / 10_000;
+        uint256 upperBound = (mintRate * (10_000 + bandBps)) / 10_000;
+        bool inBand = settlementRate >= lowerBound && settlementRate <= upperBound;
+
+        if (!inBand) {
+            vm.expectRevert(
+                abi.encodeWithSelector(
+                    WorkClaim.SettlementRateOutOfBand.selector, settlementRate, mintRate, bandBps
+                )
+            );
+        }
+        claim.settleWindowClose(tokenId, buyer, att, sig);
+    }
 }

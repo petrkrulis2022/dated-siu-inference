@@ -189,7 +189,7 @@ contract WorkClaimHandler is Test {
     // ------------------------------------------------------------------ serve (pass) and serve (fail, self-checked)
 
     function _issuerOf(uint256 tokenId) internal view returns (address issuer, bool exists) {
-        (address i,,,, bool e) = claim.claimTypes(tokenId);
+        (address i,,,, bool e,) = claim.claimTypes(tokenId);
         return (i, e);
     }
 
@@ -220,7 +220,7 @@ contract WorkClaimHandler is Test {
         if (bal == 0) return;
         uint256 quantity = bound(quantitySeed, 1, bal);
 
-        (, bytes32 classId,,,) = claim.claimTypes(tokenId);
+        (, bytes32 classId,,,,) = claim.claimTypes(tokenId);
         uint256 headroomBefore = bond.headroom(issuer, classId);
 
         vm.prank(issuer);
@@ -244,7 +244,7 @@ contract WorkClaimHandler is Test {
     function settleWindowClose(uint256 tokenIdSeed, uint256 holderSeed) external {
         if (knownTokenIds.length == 0) return;
         uint256 tokenId = knownTokenIds[bound(tokenIdSeed, 0, knownTokenIds.length - 1)];
-        (,,, uint64 windowTo, bool exists) = claim.claimTypes(tokenId);
+        (,,, uint64 windowTo, bool exists,) = claim.claimTypes(tokenId);
         if (!exists) return;
         address holder = holders[bound(holderSeed, 0, holders.length - 1)];
         bool wasPresented = claim.everPresented(tokenId, holder);
@@ -317,7 +317,7 @@ contract WorkClaimHandler is Test {
     function attackerDoubleSettle(uint256 tokenIdSeed, uint256 holderSeed) external {
         if (knownTokenIds.length == 0) return;
         uint256 tokenId = knownTokenIds[bound(tokenIdSeed, 0, knownTokenIds.length - 1)];
-        (,, uint64 windowFrom, uint64 windowTo, bool exists) = claim.claimTypes(tokenId);
+        (,, uint64 windowFrom, uint64 windowTo, bool exists,) = claim.claimTypes(tokenId);
         windowFrom; // silence unused-var warning; window bounds read for clarity only
         if (!exists) return;
         (address holder,) = _holderWithBalance(tokenId, holderSeed);
@@ -347,7 +347,7 @@ contract WorkClaimHandler is Test {
     }
 
     function _bondedAmountFor(uint256 tokenId) internal view returns (uint256 bondedUsdc) {
-        (address issuer, bytes32 classId,,,) = claim.claimTypes(tokenId);
+        (address issuer, bytes32 classId,,,,) = claim.claimTypes(tokenId);
         (,, bondedUsdc,,) = bond.lots(issuer, classId);
     }
 
@@ -366,7 +366,7 @@ contract WorkClaimHandler is Test {
     function sumLiveClaims(address issuer, bytes32 classId) external view returns (uint256 total) {
         for (uint256 i = 0; i < knownTokenIds.length; i++) {
             uint256 tokenId = knownTokenIds[i];
-            (address tIssuer, bytes32 tClass,,, bool exists) = claim.claimTypes(tokenId);
+            (address tIssuer, bytes32 tClass,,, bool exists,) = claim.claimTypes(tokenId);
             if (!exists || tIssuer != issuer || tClass != classId) continue;
             for (uint256 h = 0; h < holders.length; h++) {
                 total += claim.balanceOf(holders[h], tokenId);
