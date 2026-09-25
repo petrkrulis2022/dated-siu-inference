@@ -7,6 +7,7 @@ import {CapacityBond} from "../src/CapacityBond.sol";
 import {ClaimRouter} from "../src/ClaimRouter.sol";
 import {WorkClaim} from "../src/WorkClaim.sol";
 import {RateAttestationVerifier} from "../src/RateAttestationVerifier.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
 
 /// Functional coverage of the real lifecycle — mint, present, serve (pass and fail), default,
@@ -374,5 +375,45 @@ contract WorkClaimTest is Test {
         vm.prank(buyer);
         uint256 tokenId = claim.mint(CLASS_CODE, 500, windowFrom, windowTo, att, sig);
         assertEq(claim.balanceOf(buyer, tokenId), 500);
+    }
+
+    /// `RateAttestationVerifier._verifyRateAttestation` calls `ECDSA.recoverCalldata`, not raw
+    /// `ecrecover` — this confirms, explicitly, rather than leaving it to incidental coverage,
+    /// that a real high-s (malleable) signature is rejected. Built from a genuine signature by
+    /// flipping to its mathematically valid malleable counterpart (same signer, same hash) —
+    /// exactly the transformation OZ's own ECDSA.sol doc comment describes — not a fabricated s.
+    function test_mint_revertsOnHighSMalleableSignature() public {
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _realRate();
+        require(sig.length == 65, "sanity: expected a 65-byte r||s||v signature");
+
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+        assembly {
+            r := mload(add(sig, 0x20))
+            s := mload(add(sig, 0x40))
+            v := byte(0, mload(add(sig, 0x60)))
+        }
+        bytes32 highS = bytes32(SECP256K1_ORDER - uint256(s));
+        uint8 flippedV = v == 27 ? 28 : 27;
+        bytes memory malleableSig = abi.encodePacked(r, highS, flippedV);
+
+        vm.prank(buyer);
+        vm.expectRevert(abi.encodeWithSelector(ECDSA.ECDSAInvalidSignatureS.selector, highS));
+        claim.mint(CLASS_CODE, 500, windowFrom, windowTo, att, malleableSig);
+    }
+
+    /// Confirms, explicitly, that `ecrecover` returning `address(0)` (a malformed-but-65-byte
+    /// signature — r=0 is not a valid curve point x-coordinate) is rejected rather than silently
+    /// treated as "recovered to the zero address, which happens not to equal publisher anyway".
+    /// `ECDSA.recoverCalldata` reverts with `ECDSAInvalidSignature` before this contract's own
+    /// `recovered != publisher` check is ever reached.
+    function test_mint_revertsOnZeroAddressRecovery() public {
+        (RateAttestationVerifier.RateAttestation memory att,) = _realRate();
+        bytes memory degenerateSig = abi.encodePacked(bytes32(0), bytes32(uint256(1)), uint8(27));
+
+        vm.prank(buyer);
+        vm.expectRevert(ECDSA.ECDSAInvalidSignature.selector);
+        claim.mint(CLASS_CODE, 500, windowFrom, windowTo, att, degenerateSig);
     }
 }

@@ -38,6 +38,19 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
  *      spare. 1e9 gives 3 more digits of headroom than dated_siu needs at any price level this
  *      index has reached or is likely to reach soon, without repeating the same mistake.
  *
+ *      Verified 2026-09-25 against an independent implementation, not just against itself:
+ *      `WorkClaim.t.sol`'s own signing helper computes this same struct hash/domain by hand, so a
+ *      second, real cross-implementation check was added — a genuine viem `signTypedData` call
+ *      (`packages/gate-market-agents/src/chain/rate-attestation.ts`, the same function the real
+ *      pipeline uses) verified against this real, unmodified, `forge build`-compiled bytecode on a
+ *      live anvil devnet (`packages/gate-market-agents/src/devnet/
+ *      rate-attestation-cross-implementation.test.ts`), including that a wrong chainId or wrong
+ *      verifyingContract in the signed domain is rejected. Zero-address-recovery rejection and
+ *      high-s (malleable) signature rejection — already provided by `ECDSA.recoverCalldata` below,
+ *      confirmed by reading OZ's source directly — are each covered by an explicit Foundry test
+ *      (`WorkClaim.t.sol`'s `test_mint_revertsOnZeroAddressRecovery`/
+ *      `test_mint_revertsOnHighSMalleableSignature`), not left to incidental coverage.
+ *
  *      EIP-712 domain separator and typed-data hashing are hand-rolled here rather than built on
  *      OpenZeppelin's `EIP712` base contract — found live: that contract's dependency chain
  *      (`EIP712` -> `ShortStrings` -> ... -> `Strings` -> `Bytes.sol`) emits `MCOPY` unconditionally,
