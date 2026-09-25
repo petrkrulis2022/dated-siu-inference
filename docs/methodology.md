@@ -229,8 +229,8 @@ headline. `siu_per_usd` (how much work a dollar buys) truncates rather than roun
 never overstate what a buyer gets for their money — the one place in the print where the rounding
 direction is a deliberate bias, stated here rather than left for a reader to notice.
 
-**`dated_siu` rounds to significant figures, not a fixed decimal-place count — found live,
-2026-09-25, and fixed the same day.** The rule was originally 4 decimal places, applied uniformly
+**`dated_siu` rounds to significant figures, not a fixed decimal-place count, effective
+2026-09-25** (found live and fixed the same day). The rule was originally 4 decimal places, applied uniformly
 across the blended headline and both tier series (Frontier SIU, Commodity SIU). That undercounts
 real precision once a series' price level falls low enough: at Commodity SIU's level (~$0.0014),
 4 decimal places is only about 2 significant figures — coarser than the series' own real
@@ -256,12 +256,26 @@ plot this recomputed figure as a second, clearly labelled line alongside the can
 one, so the real historical movement this rounding rule had hidden is visible without implying
 any published, signed figure changed.
 
+**The recomputed figure restores rounding precision only — it is not a claim of a print's true
+economic value.** 24 of the corrected prints (the blended headline and Frontier SIU prints from
+2026-08-30 through 2026-09-13) have `basket_costs` that were *also* built from under-priced usage
+— the reasoning-token and cached-input pricing bugs, disclosed in each of those prints' own
+earlier `correction_notes`. For those prints, the rounding-corrected figure is the unrounded
+version of a value already known, via that print's own other correction notes, to need a further
+correction this recomputation does not make. A second correction_notes entry on each of those 24
+prints states this explicitly, rather than leaving the first note's "the real value is X" phrasing
+to be read as more than it is.
+
 Checked whether any on-chain or off-chain code depends on `dated_siu` having exactly 4 decimal
 places (a fixed-width parse into an integer minor-unit amount would break under a variable decimal
-count): none does, as of this writing. `CapacityBond.sol`'s functions all take plain `uint256`
-amounts supplied by an off-chain caller; nothing in this repository parses the `dated_siu` string
-itself into minor units anywhere, on-chain or off. Recorded here so this is checked again before
-any future code does add that parsing.
+count): none does, as of this writing, checked broadly across the settlement and quoting code
+paths specifically, not just the contract — `packages/mcp-server/src/tools/get-quote.ts` builds a
+quote from `exchange_rate_table.usd_per_siu` (unchanged, still fixed 4dp), never `dated_siu`
+itself; `packages/mcp-server/src/settlement/reader.ts` binds a settlement to its quote by hash,
+never parses a print value; `CapacityBond.sol`'s functions all take plain `uint256` amounts
+supplied by an off-chain caller. Nothing in this repository parses the `dated_siu` string itself
+into minor units anywhere, on-chain or off. Recorded here so this is checked again before any
+future code does add that parsing.
 
 ## 4. Contamination control
 

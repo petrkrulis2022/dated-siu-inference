@@ -104,7 +104,7 @@ function renderMultiPointChart(prints: PrintIndexEntry[]): string {
 
   return `<svg viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" role="img" aria-label="Dated SIU over time" class="series-chart">
     <line x1="${PAD_X}" y1="${CHART_HEIGHT - PAD_BOTTOM}" x2="${CHART_WIDTH - PAD_X}" y2="${CHART_HEIGHT - PAD_BOTTOM}" class="series-axis" />
-    <polyline points="${derivedLine}" class="series-line-derived" fill="none"><title>Recomputed from each print's own published basket_costs and weights — derived, not the canonical published figure.</title></polyline>
+    <polyline points="${derivedLine}" class="series-line-derived" fill="none"><title>Recomputed from each print's own published basket_costs and weights — restores rounding precision only, not a claim of the true economic value. See a print's own correction_notes for any separately-disclosed pricing issue.</title></polyline>
     <polyline points="${line}" class="series-line" fill="none" />
     ${markers}
     ${firstLabel}
@@ -220,7 +220,7 @@ export function renderSeriesPage({
     <span class="legend-marker series-point series-point-superseded"></span> superseded
     ${
       allPrints.length > 1
-        ? `<span class="legend-marker series-line-derived-legend"></span> recomputed from signed basket costs — derived, not the canonical published figure`
+        ? `<span class="legend-marker series-line-derived-legend"></span> recomputed from signed basket costs — restores rounding precision only, not a claim of the true value`
         : ""
     }
   </p>

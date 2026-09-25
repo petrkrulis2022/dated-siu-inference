@@ -226,6 +226,10 @@
     {
       "published_at": "2026-09-25",
       "note": "dated_siu previously rounded to a fixed 4 decimal places rather than 4 significant figures — found live and fixed the same day, 2026-09-25 (docs/methodology.md's Rounding section). At this print's price level that was too coarse to show real day-to-day movement. This print's signed body is never edited — the published figure (0.0090) stands. Recomputed from this print's own published basket_costs and weights (Σ weight × basket_cost, rounded under the corrected 4-significant-figure rule, reproducible by anyone from this print's own published figures alone), the real value is 0.009023."
+    },
+    {
+      "published_at": "2026-09-25",
+      "note": "Correction to this print's own rounding correction note above: that note's phrase \"the real value is X\" overstated what the recomputation shows. It restores rounding precision only — the precision a fixed 4-decimal-place rounding rule removed, recovered by recomputing Σ weight × basket_cost from this print's own published figures. It is not a claim that the recomputed figure is this print's true economic value. This print's own basket_costs are also affected by the reasoning-token and/or cached-input pricing correction disclosed elsewhere in these notes — usage that was under-priced before that fix landed — so the recomputed rounding figure is the unrounded version of a value already known to need that separate correction too, which this recomputation does not make. See docs/methodology.md's Rounding section for the general statement of this limit."
     }
   ]
 }

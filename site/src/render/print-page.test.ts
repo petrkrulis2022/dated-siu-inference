@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Print } from "@touchstone/sdk";
-import { renderPrintPage } from "./print-page.js";
+import { classifyCorrectionNote, renderPrintPage } from "./print-page.js";
 
 function basePrint(overrides: Partial<Print> = {}): Print {
   return {
@@ -320,6 +320,73 @@ describe("renderPrintPage", () => {
     });
     expect(html).toContain("Correction notice");
     expect(html).toContain("provider billing failure");
+  });
+
+  it("classifies real correction notes by keyword — precision, pricing, attribution, other", () => {
+    // Real note text (data/prints/2026-09-25-commodity.json and siblings) and the real Gemini
+    // saga (data/prints/2026-09-10.json), not invented fixtures.
+    expect(
+      classifyCorrectionNote(
+        "dated_siu previously rounded to a fixed 4 decimal places rather than 4 significant figures",
+      ),
+    ).toBe("precision");
+    expect(classifyCorrectionNote("Correction to this print's own rounding correction note above: it restores rounding precision only")).toBe(
+      "precision",
+    );
+    expect(
+      classifyCorrectionNote(
+        "A reasoning-token cost gap affected this print: gemini-3.1-pro-preview's reasoning tokens were not priced.",
+      ),
+    ).toBe("pricing");
+    expect(
+      classifyCorrectionNote(
+        "This print includes gemini-3.1-pro-preview, whose Google Cloud billing predates the point where it was isolated to this project alone.",
+      ),
+    ).toBe("attribution");
+    expect(classifyCorrectionNote("claude-sonnet-5 produced zero run records due to a provider billing outage.")).toBe(
+      "other",
+    );
+  });
+
+  it("summarises several correction notes by type above the full list", () => {
+    const html = renderPrintPage({
+      print: basePrint({
+        print_id: "2026-09-08",
+        correction_notes: [
+          {
+            published_at: "2026-09-08",
+            note: "claude-sonnet-5 produced zero run records due to a provider outage.",
+          },
+          {
+            published_at: "2026-09-08",
+            note: "gemini-3.1-pro-preview's reasoning tokens were not priced — corrected.",
+          },
+          {
+            published_at: "2026-09-25",
+            note: "dated_siu previously rounded to a fixed 4 decimal places — the real value is 0.0060.",
+          },
+        ],
+      }),
+      allPrints: [],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).toContain("3 corrections: 1 precision, 1 pricing, 1 other");
+  });
+
+  it("omits the summary line for a single correction note", () => {
+    const html = renderPrintPage({
+      print: basePrint({
+        print_id: "2026-09-08",
+        correction_notes: [{ published_at: "2026-09-08", note: "A single, isolated correction." }],
+      }),
+      allPrints: [],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).not.toContain("1 correction:");
   });
 
   it("shows no correction notice for a print with none", () => {

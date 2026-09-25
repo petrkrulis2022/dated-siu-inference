@@ -235,6 +235,55 @@ function renderSupersessionNotice(print: Print, basePath: string): string {
   </div>`;
 }
 
+type CorrectionNoteType = "precision" | "pricing" | "attribution" | "other";
+
+/**
+ * A lightweight, keyword-based read of what a correction note is about — not a schema field.
+ * correction_notes has no `type` today, and retrofitting one onto the ~100+ historical notes
+ * already published (the Gemini cost-gap saga, every prior correction) would be a much bigger,
+ * riskier rewrite than a grouped summary needs. This infers from the note's own prose instead,
+ * used only to group notes under the short summary line below when there are several — the full,
+ * unclassified prose is still rendered beneath, unchanged, for every note regardless of how it
+ * was classified.
+ */
+export function classifyCorrectionNote(note: string): CorrectionNoteType {
+  const lower = note.toLowerCase();
+  if (lower.includes("dated_siu previously rounded") || lower.includes("restores rounding precision")) {
+    return "precision";
+  }
+  if (lower.includes("reasoning") || lower.includes("cached_input") || lower.includes("cache")) {
+    return "pricing";
+  }
+  // "billing" alone is too broad — a provider-outage note ("a provider-side billing failure")
+  // is not the same kind of thing as the Gemini cost-gap attribution saga; found live writing
+  // this classifier's own test. "gemini cloud billing"/"shared project"/"isolat" are specific
+  // enough to that saga not to also match an unrelated outage disclosure.
+  if (
+    lower.includes("gemini") &&
+    (lower.includes("cloud billing") || lower.includes("shared project") || lower.includes("isolat"))
+  ) {
+    return "attribution";
+  }
+  return "other";
+}
+
+const CORRECTION_TYPE_ORDER: CorrectionNoteType[] = ["precision", "pricing", "attribution", "other"];
+
+/** "4 corrections: 2 pricing, 1 precision, 1 attribution" — only categories actually present are
+ * listed, in a fixed order so the same category always reads in the same place across prints. */
+function summarizeCorrectionNotes(notes: readonly { note: string }[]): string {
+  const counts = new Map<CorrectionNoteType, number>();
+  for (const { note } of notes) {
+    const type = classifyCorrectionNote(note);
+    counts.set(type, (counts.get(type) ?? 0) + 1);
+  }
+  const parts = CORRECTION_TYPE_ORDER.filter((type) => counts.has(type)).map(
+    (type) => `${counts.get(type)} ${type}`,
+  );
+  const plural = notes.length === 1 ? "correction" : "corrections";
+  return `${notes.length} ${plural}: ${parts.join(", ")}`;
+}
+
 /**
  * The revision policy's error procedure (methodology.md's Index governance): a fact discovered
  * after publication that doesn't change dated_siu — unlike renderSupersessionNotice, there's no
@@ -242,14 +291,23 @@ function renderSupersessionNotice(print: Print, basePath: string): string {
  * prominent of the disclosure notices deliberately: it exists specifically for the failure mode
  * where a reader would otherwise mistake a computed-correctly-from-incomplete-data number for a
  * real market move.
+ *
+ * With several notes, a short summary line (grouped by classifyCorrectionNote) sits above the
+ * full list — found live, 2026-09-25: some prints had accumulated 4-7 notes, becoming a wall a
+ * reader would reasonably skim past, defeating the point of disclosing at all.
  */
 function renderCorrectionNotesNotice(print: Print): string {
   if (!print.correction_notes || print.correction_notes.length === 0) return "";
+  const summary =
+    print.correction_notes.length >= 2
+      ? `<p class="note">${esc(summarizeCorrectionNotes(print.correction_notes))}</p>`
+      : "";
   const items = print.correction_notes
     .map((n) => `<li>${esc(formatDate(n.published_at.slice(0, 10)))} — ${esc(n.note)}</li>`)
     .join("\n");
   return `<div class="change-note">
     <strong>Correction notice</strong> — published after this print, disclosing a fact that does not change dated_siu:
+    ${summary}
     <ul class="link-list">${items}</ul>
   </div>`;
 }
