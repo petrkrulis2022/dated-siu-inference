@@ -54,4 +54,43 @@ describe("validatePrint", () => {
     const result = validatePrint({ ...validPrint, status: "draft" });
     expect(result.valid).toBe(false);
   });
+
+  it("accepts the current significant-figures rounding shape (dated_siu_sig_figs)", () => {
+    const result = validatePrint({
+      ...validPrint,
+      rounding: {
+        dated_siu_sig_figs: 4,
+        basket_cost_dp: 6,
+        usd_per_siu_dp: 4,
+        spread_dp: 4,
+        siu_per_usd_dp: 1,
+        mode: "ROUND_HALF_UP",
+        siu_per_usd_mode: "ROUND_DOWN",
+      },
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects a rounding object carrying both dated_siu_dp and dated_siu_sig_figs at once", () => {
+    const result = validatePrint({
+      ...validPrint,
+      rounding: { ...validPrint.rounding, dated_siu_sig_figs: 4 },
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  it("rejects a rounding object carrying neither dated_siu_dp nor dated_siu_sig_figs", () => {
+    const result = validatePrint({
+      ...validPrint,
+      rounding: {
+        basket_cost_dp: 6,
+        usd_per_siu_dp: 4,
+        spread_dp: 4,
+        siu_per_usd_dp: 1,
+        mode: "ROUND_HALF_UP",
+        siu_per_usd_mode: "ROUND_DOWN",
+      },
+    });
+    expect(result.valid).toBe(false);
+  });
 });

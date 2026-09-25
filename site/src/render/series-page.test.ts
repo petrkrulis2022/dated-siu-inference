@@ -153,6 +153,38 @@ describe("renderSeriesPage", () => {
     expect(html).toContain('href="prints/2026-08-30.html"');
   });
 
+  it("plots a second, distinctly-classed line from recomputed_dated_siu when it differs from the published figure", () => {
+    const html = renderSeriesPage({
+      allPrints: [
+        entry({ print_id: "2026-09-01", date: "2026-09-01", dated_siu: "0.0014", recomputed_dated_siu: "0.001414" }),
+        entry({ print_id: "2026-09-02", date: "2026-09-02", dated_siu: "0.0014", recomputed_dated_siu: "0.001431" }),
+      ],
+      basePath: "",
+    });
+    expect(html).toContain("series-line-derived");
+    expect(html).toContain("series-line-derived-legend");
+    expect(html).toContain("recomputed from signed basket costs");
+  });
+
+  it("falls back to the published dated_siu for the derived line when recomputed_dated_siu is absent", () => {
+    // Every entry built before this field existed must still render a sensible (flat, matching
+    // the canonical line) derived line rather than crash or plot NaN.
+    const html = renderSeriesPage({
+      allPrints: [
+        entry({ print_id: "2026-08-18", date: "2026-08-18", dated_siu: "0.0015" }),
+        entry({ print_id: "2026-08-19", date: "2026-08-19", dated_siu: "0.0016" }),
+      ],
+      basePath: "",
+    });
+    expect(html).not.toContain("NaN");
+    expect(html).toContain("series-line-derived");
+  });
+
+  it("omits the derived-line legend entry on a single-point chart, matching the absent polyline", () => {
+    const html = renderSeriesPage({ allPrints: [entry({})], basePath: "" });
+    expect(html).not.toContain("series-line-derived-legend");
+  });
+
   it("shows no registry-change annotation when nothing changed", () => {
     const html = renderSeriesPage({
       allPrints: [entry({}), entry({ print_id: "2026-08-19", date: "2026-08-19" })],

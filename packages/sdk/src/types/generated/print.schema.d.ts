@@ -140,18 +140,29 @@ export interface Print {
     }[]
   ];
   /**
-   * The publication rounding rules this print applied. Rounding happens at publication only — every intermediate value is computed at full decimal precision.
+   * The publication rounding rules this print applied. Rounding happens at publication only — every intermediate value is computed at full decimal precision. Exactly one of dated_siu_dp (the historical fixed-decimal-place rule) or dated_siu_sig_figs (the current significant-figures rule, in effect from print date 2026-09-25 — see docs/methodology.md's Rounding section) is present, never both — a print's own rounding object is a faithful record of the rule it actually used.
    */
-  rounding: {
-    dated_siu_dp: number;
-    basket_cost_dp: number;
-    usd_per_siu_dp: number;
-    spread_dp: number;
-    siu_per_usd_dp: number;
-    mode: string;
-    siu_per_usd_mode: string;
-    notes?: string;
-  };
+  rounding:
+    | {
+        dated_siu_dp: number;
+        basket_cost_dp: number;
+        usd_per_siu_dp: number;
+        spread_dp: number;
+        siu_per_usd_dp: number;
+        mode: string;
+        siu_per_usd_mode: string;
+        notes?: string;
+      }
+    | {
+        dated_siu_sig_figs: number;
+        basket_cost_dp: number;
+        usd_per_siu_dp: number;
+        spread_dp: number;
+        siu_per_usd_dp: number;
+        mode: string;
+        siu_per_usd_mode: string;
+        notes?: string;
+      };
   price_snapshot_ref: string;
   methodology_version: string;
   /**

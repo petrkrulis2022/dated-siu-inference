@@ -49,8 +49,11 @@ A 20%, B 35%, C 45%.
 ## Expected print
 
 ```
-Dated SIU = 0.20×0.07725 + 0.35×0.04830 + 0.45×0.01327 = 0.0383
+Dated SIU = 0.20×0.07725 + 0.35×0.04830 + 0.45×0.01327 = 0.03833
 ```
+
+(4 significant figures — `docs/methodology.md`'s Rounding section — not a fixed decimal-place
+count; the underlying full-precision value is 0.03832605.)
 
 ## Expected exchange-rate table
 
@@ -69,6 +72,6 @@ If 40% of T2 input (20,000 tokens) is served from cache at 10% of input price, *
 B only**:
 
 ```
-B T2 becomes 0.0885 → B basket 0.0348 → print 0.0336
+B T2 becomes 0.0885 → B basket 0.0348 → print 0.03360
 Expected delta: −12.3%
 ```

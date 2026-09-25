@@ -41,21 +41,38 @@ const PAD_BOTTOM = 32;
  * the site's existing design register (styles.css's own header comment).
  */
 function renderMultiPointChart(prints: PrintIndexEntry[]): string {
-  const values = prints.map((p) => Number(p.dated_siu));
+  // recomputed_dated_siu (data.ts's recomputeDatedSiu) can genuinely differ from dated_siu now —
+  // the whole reason it exists — so the vertical scale has to cover both series, or the derived
+  // line could clip against bounds computed from the canonical one alone.
+  const derivedOf = (p: PrintIndexEntry) => p.recomputed_dated_siu ?? p.dated_siu;
+  const values = prints.flatMap((p) => [Number(p.dated_siu), Number(derivedOf(p))]);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const span = max - min || 1; // flat series: keep the line centered rather than dividing by 0.
   const plotWidth = CHART_WIDTH - PAD_X * 2;
   const plotHeight = CHART_HEIGHT - PAD_TOP - PAD_BOTTOM;
 
+  const xOf = (i: number) => (prints.length === 1 ? PAD_X : PAD_X + (plotWidth * i) / (prints.length - 1));
+  const yOf = (value: number) => {
+    const t = (value - min) / span;
+    return PAD_TOP + plotHeight * (1 - t);
+  };
+
   const points = prints.map((p, i) => {
-    const x = prints.length === 1 ? PAD_X : PAD_X + (plotWidth * i) / (prints.length - 1);
-    const t = (Number(p.dated_siu) - min) / span;
-    const y = PAD_TOP + plotHeight * (1 - t);
+    const x = xOf(i);
+    const y = yOf(Number(p.dated_siu));
     return { ...p, x, y };
   });
 
   const line = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+
+  // Derived line: recomputed from each print's own published basket_costs/weights — see
+  // docs/methodology.md's Rounding section for why this can show real movement the canonical
+  // (published, signed) dated_siu figure lost to a coarser historical rounding rule. Plain
+  // polyline, no per-point markers — the canonical markers above already carry the tooltips.
+  const derivedLine = prints
+    .map((p, i) => `${xOf(i).toFixed(1)},${yOf(Number(derivedOf(p))).toFixed(1)}`)
+    .join(" ");
 
   // Superseded is rendered as a distinct marker style, layered over the status-based one — the
   // chart shows every print that was ever published, including a same-day redo's predecessor.
@@ -87,6 +104,7 @@ function renderMultiPointChart(prints: PrintIndexEntry[]): string {
 
   return `<svg viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" role="img" aria-label="Dated SIU over time" class="series-chart">
     <line x1="${PAD_X}" y1="${CHART_HEIGHT - PAD_BOTTOM}" x2="${CHART_WIDTH - PAD_X}" y2="${CHART_HEIGHT - PAD_BOTTOM}" class="series-axis" />
+    <polyline points="${derivedLine}" class="series-line-derived" fill="none"><title>Recomputed from each print's own published basket_costs and weights — derived, not the canonical published figure.</title></polyline>
     <polyline points="${line}" class="series-line" fill="none" />
     ${markers}
     ${firstLabel}
@@ -200,6 +218,11 @@ export function renderSeriesPage({
     <span class="legend-marker series-point series-point-final"></span> final
     <span class="legend-marker series-point series-point-provisional"></span> provisional
     <span class="legend-marker series-point series-point-superseded"></span> superseded
+    ${
+      allPrints.length > 1
+        ? `<span class="legend-marker series-line-derived-legend"></span> recomputed from signed basket costs — derived, not the canonical published figure`
+        : ""
+    }
   </p>
   ${renderIncidentsNote(incidents)}
   ${renderConstituentChangeNotes(allPrints, detailBasePath)}

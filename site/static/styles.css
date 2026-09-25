@@ -457,6 +457,24 @@ footer.site-footer p {
   vertical-align: middle;
 }
 
+/* The recomputed-from-signed-basket-costs line (series-page.ts's renderMultiPointChart) —
+   dashed and muted so it always reads as derived, never mistaken for the canonical published
+   dated_siu line even at a glance. */
+.series-line-derived {
+  stroke: var(--ink-muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 2;
+}
+
+.legend-marker.series-line-derived-legend {
+  border-radius: 0;
+  width: 1.1rem;
+  height: 0;
+  border: none;
+  border-top: 2px dashed var(--ink-muted);
+  vertical-align: middle;
+}
+
 /* Model identity, not a value judgment — dash pattern distinguishes lines, not color, to stay
    consistent with the site's monochrome register. */
 .model-line-1,

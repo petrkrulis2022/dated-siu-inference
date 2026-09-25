@@ -43,7 +43,7 @@ describe("verifyPrint", () => {
     expect(result.discrepancies).toContainEqual({
       field: "dated_siu",
       published: "0.0400",
-      recomputed: "0.0383",
+      recomputed: "0.03833",
     });
   });
 

@@ -8,6 +8,7 @@ import {
   loadChainInfo,
   loadIncidents,
   loadRunRecordsFor,
+  recomputeDatedSiu,
   type PrintIndexEntry,
 } from "./data.js";
 import { renderLayout } from "./render/layout.js";
@@ -109,6 +110,7 @@ async function main(): Promise<void> {
     date: p.date,
     status: p.status,
     dated_siu: p.dated_siu,
+    recomputed_dated_siu: recomputeDatedSiu(p),
     superseded_by: p.superseded_by,
     constituent_changes: p.constituent_changes,
     series: p.series,

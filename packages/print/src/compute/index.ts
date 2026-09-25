@@ -1,6 +1,6 @@
 import type { Print, RunRecord } from "@touchstone/sdk";
 import { D, type DecimalValue } from "../decimal.js";
-import { DEFAULT_ROUNDING, roundDown, roundHalfUp, type RoundingRules } from "../rounding.js";
+import { DEFAULT_ROUNDING, roundDatedSiu, roundDown, roundHalfUp, type RoundingRules } from "../rounding.js";
 import { computeClassCost, type ModelPrice } from "./class-cost.js";
 import { computeBasketCost, type ClassWeights, type TaskClass } from "./basket-cost.js";
 import { computeDatedSiu, resolveWeights } from "./weights.js";
@@ -139,7 +139,7 @@ export function computePrint(input: PrintInput): ComputePrintResult {
     );
     return {
       policy_variant: variant.name,
-      dated_siu: roundHalfUp(variantIndex.datedSiu, rounding.dated_siu_dp),
+      dated_siu: roundDatedSiu(variantIndex.datedSiu, rounding),
       delta: roundHalfUp(
         variantIndex.datedSiu.minus(base.datedSiu).dividedBy(base.datedSiu),
         rounding.spread_dp,
@@ -155,7 +155,7 @@ export function computePrint(input: PrintInput): ComputePrintResult {
     status: input.status,
     basket_costs,
     weights: { source: base.weightSource, values: weightValues },
-    dated_siu: roundHalfUp(base.datedSiu, rounding.dated_siu_dp),
+    dated_siu: roundDatedSiu(base.datedSiu, rounding),
     exchange_rate_table,
     sensitivity_block,
     rounding,

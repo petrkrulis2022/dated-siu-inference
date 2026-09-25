@@ -212,22 +212,56 @@ Every intermediate value in the pipeline is kept at full decimal precision; roun
 exactly once, at the point a value is written into the published print
 (`packages/print/src/rounding.ts`'s `DEFAULT_ROUNDING`):
 
-| Field             | Decimal places | Mode                 |
-| ----------------- | -------------- | -------------------- |
-| `dated_siu`       | 4              | half-up              |
-| `basket_cost`     | 6              | half-up              |
-| `usd_per_siu`     | 4              | half-up              |
-| `spread_to_index` | 4              | half-up              |
-| `siu_per_usd`     | 1              | **down** (truncated) |
+| Field             | Precision              | Mode                 |
+| ----------------- | ---------------------- | --------------------- |
+| `dated_siu`       | 4 significant figures | half-up              |
+| `basket_cost`     | 6 decimal places       | half-up              |
+| `usd_per_siu`     | 4 decimal places       | half-up              |
+| `spread_to_index` | 4 decimal places       | half-up              |
+| `siu_per_usd`     | 1 decimal place        | **down** (truncated) |
 
-`basket_cost` is deliberately carried to more decimal places than the headline `dated_siu` figure:
-at 4dp a reader cannot reproduce the published Dated SIU from the published basket costs and
-weights alone — the rounding error compounds across models enough to shift the last published
-digit. Reproducibility from a print's own published figures is the entire claim the index rests
-on, so the working figures carry more precision than the headline. `siu_per_usd` (how much work a
-dollar buys) truncates rather than rounds, so it can never overstate what a buyer gets for their
-money — the one place in the print where the rounding direction is a deliberate bias, stated here
-rather than left for a reader to notice.
+`basket_cost` is deliberately carried to more decimal places than `dated_siu` needs at any price
+level it has reached or is likely to: at 4dp a reader cannot reproduce the published Dated SIU
+from the published basket costs and weights alone — the rounding error compounds across models
+enough to shift the last published digit. Reproducibility from a print's own published figures is
+the entire claim the index rests on, so the working figures carry more precision than the
+headline. `siu_per_usd` (how much work a dollar buys) truncates rather than rounds, so it can
+never overstate what a buyer gets for their money — the one place in the print where the rounding
+direction is a deliberate bias, stated here rather than left for a reader to notice.
+
+**`dated_siu` rounds to significant figures, not a fixed decimal-place count — found live,
+2026-09-25, and fixed the same day.** The rule was originally 4 decimal places, applied uniformly
+across the blended headline and both tier series (Frontier SIU, Commodity SIU). That undercounts
+real precision once a series' price level falls low enough: at Commodity SIU's level (~$0.0014),
+4 decimal places is only about 2 significant figures — coarser than the series' own real
+day-to-day movement (roughly 1-3%). The result: every day from 2026-09-01 through 2026-09-24
+published the identical `"0.0014"`, even though the true value moved every day (confirmed by
+recomputing `Σ weight × basket_cost` from each affected print's own published `basket_costs` and
+`weights` — both already carried at 6dp specifically so this recomputation is possible from a
+print's own published figures alone, per the reproducibility point above). The same failure mode
+already reaches the blended Dated SIU headline as its own price has fallen with the cost of
+inference (by design, not a defect) — several days in August published an identical flattened
+figure for the same reason, and by 2026-09 individual days were already down to 3 significant
+figures at 4dp. A fixed decimal-place count would keep needing this fix again as the index falls
+further; significant figures scale with the price and don't.
+
+None of the affected historical prints are recomputed or replaced — the revision policy's
+unconditional never-edit guarantee stands, the same as every prior correction. Each one carries a
+`correction_notes` entry stating both the originally published figure and the figure recomputed
+under the corrected rule, from that print's own published `basket_costs`/`weights` — reproducible
+by any reader, not merely asserted. `correction_notes` is excluded from the signed payload
+(`packages/print/src/sign/canonicalise.ts`), so none of this touches any print's signature or
+on-chain anchor. The public site's series charts (`site/src/render/series-page.ts`) additionally
+plot this recomputed figure as a second, clearly labelled line alongside the canonical published
+one, so the real historical movement this rounding rule had hidden is visible without implying
+any published, signed figure changed.
+
+Checked whether any on-chain or off-chain code depends on `dated_siu` having exactly 4 decimal
+places (a fixed-width parse into an integer minor-unit amount would break under a variable decimal
+count): none does, as of this writing. `CapacityBond.sol`'s functions all take plain `uint256`
+amounts supplied by an off-chain caller; nothing in this repository parses the `dated_siu` string
+itself into minor units anywhere, on-chain or off. Recorded here so this is checked again before
+any future code does add that parsing.
 
 ## 4. Contamination control
 

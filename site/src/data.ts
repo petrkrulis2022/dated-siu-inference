@@ -1,14 +1,41 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Print, RunRecord } from "@touchstone/sdk";
+import { D, roundSignificantFigures, sum } from "@touchstone/print";
 
 const NON_PRINT_FILES = new Set(["latest.json", "index.json"]);
+
+/**
+ * `Σ weight × basket_cost`, rounded to the same 4-significant-figure rule the print pipeline
+ * itself now uses (`packages/print/src/rounding.ts`'s `DEFAULT_ROUNDING`, docs/methodology.md's
+ * Rounding section) — recomputed from a print's own already-published, already-signed
+ * `basket_costs`/`weights` fields, not a new mechanism. Used to plot a second series-chart line
+ * carrying real precision a print's own `dated_siu` field lost to a coarser historical rounding
+ * rule (found live, 2026-09-25 — 23 straight days of Commodity SIU published the identical
+ * "0.0014"). Undefined only if a print is missing the fields a published print always has —
+ * never silently 0.
+ */
+export function recomputeDatedSiu(print: Pick<Print, "basket_costs" | "weights">): string | undefined {
+  const costByModel = new Map(
+    print.basket_costs.filter((r) => r.cost_usd !== undefined).map((r) => [r.model_id, r.cost_usd as string]),
+  );
+  const terms = [];
+  for (const { model_id, weight } of print.weights.values) {
+    const cost = costByModel.get(model_id);
+    if (cost === undefined) return undefined;
+    terms.push(new D(weight).times(cost));
+  }
+  return roundSignificantFigures(sum(terms), 4);
+}
 
 export interface PrintIndexEntry {
   print_id: string;
   date: string;
   status: "provisional" | "final";
   dated_siu: string;
+  /** `recomputeDatedSiu` above, carried on the index entry so the series chart can plot it
+   * alongside the canonical `dated_siu` — derived, not itself a published/signed figure. */
+  recomputed_dated_siu?: string;
   superseded_by?: { print_id: string; reason: string };
   constituent_changes?: { model_id: string; change: "admitted" | "removed" }[];
   /** Absent means the blended Dated SIU itself — see print.schema.json's series field. */

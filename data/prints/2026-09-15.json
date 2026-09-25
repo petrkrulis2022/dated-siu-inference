@@ -209,5 +209,11 @@
     "status": "anchored",
     "tx_hash": "0x175f484a65ac3f43b2a2f8cc8f1703313ddf72e9f0be1b673f5afce266000b53",
     "posted_at": "2026-09-15T01:04:24.000Z"
-  }
+  },
+  "correction_notes": [
+    {
+      "published_at": "2026-09-25",
+      "note": "dated_siu previously rounded to a fixed 4 decimal places rather than 4 significant figures — found live and fixed the same day, 2026-09-25 (docs/methodology.md's Rounding section). At this print's price level that was too coarse to show real day-to-day movement. This print's signed body is never edited — the published figure (0.0107) stands. Recomputed from this print's own published basket_costs and weights (Σ weight × basket_cost, rounded under the corrected 4-significant-figure rule, reproducible by anyone from this print's own published figures alone), the real value is 0.01067."
+    }
+  ]
 }

@@ -3,7 +3,7 @@ import { computePrint } from "./compute/index.js";
 import { computeClassCost } from "./compute/class-cost.js";
 import { cachePolicyVariant } from "./compute/sensitivity.js";
 import { D } from "./decimal.js";
-import { formatDeltaPercent, formatSpreadPercent } from "./rounding.js";
+import { formatDeltaPercent, formatSpreadPercent, roundDatedSiu } from "./rounding.js";
 import { workedExampleInput } from "./worked-example.fixture.js";
 
 /**
@@ -60,9 +60,9 @@ describe("worked example reproduction", () => {
     expect(byId.D).toBeUndefined();
   });
 
-  it("reproduces the Dated SIU of $0.0383", () => {
+  it("reproduces the Dated SIU of $0.03833 (4 significant figures)", () => {
     expect(computed.datedSiu.toString()).toBe("0.03832605");
-    expect(body.dated_siu).toBe("0.0383");
+    expect(body.dated_siu).toBe("0.03833");
   });
 
   it("reproduces the exchange-rate table: $0.0773/+102%/12.9, $0.0483/+26%/20.7, $0.0133/-65%/75.3", () => {
@@ -99,7 +99,9 @@ describe("worked example reproduction", () => {
     });
 
     const variant = withSensitivity.sensitivity_block[0];
-    expect(variant.dated_siu).toBe("0.0336");
+    // "0.03360", not "0.0336" — 4 significant figures shown explicitly (the 4th, a zero, was
+    // checked and is real, not merely a shorter string that happens to be numerically equal).
+    expect(variant.dated_siu).toBe("0.03360");
     expect(formatDeltaPercent(variant.delta)).toBe("-12.3%");
     expect(variant.applies_to).toEqual(["B"]);
   });
@@ -114,7 +116,7 @@ describe("worked example reproduction", () => {
       if (!row.cost_usd) continue;
       total = total.plus(new D(row.cost_usd).times(weights.get(row.model_id) as string));
     }
-    expect(total.toFixed(4, D.ROUND_HALF_UP)).toBe(body.dated_siu);
+    expect(roundDatedSiu(total, body.rounding)).toBe(body.dated_siu);
   });
 
   it("omits floor and market_spread when no measured floor is supplied", () => {
@@ -125,7 +127,7 @@ describe("worked example reproduction", () => {
   it("states its rounding rules in the print body", () => {
     expect(body.rounding.mode).toBe("ROUND_HALF_UP");
     expect(body.rounding.siu_per_usd_mode).toBe("ROUND_DOWN");
-    expect(body.rounding.dated_siu_dp).toBe(4);
+    expect(body.rounding.dated_siu_sig_figs).toBe(4);
     expect(body.rounding.basket_cost_dp).toBe(6);
   });
 });
