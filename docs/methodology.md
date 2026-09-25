@@ -113,17 +113,49 @@ sensitivity block. This is exactly why cache policy must be stated and fixed, no
 inference: a policy choice invisible in the headline number can move it by more than a typical
 day's market movement in the underlying models' list prices.
 
-**Checked whether commodity constituents have real, unpriced cached usage the way
-gemini-3.1-pro-preview/gpt-5.1/grok-4.6 did (the bug fixed 2026-09-13, below) — confirmed they do,
-and confirmed it is not the same bug.** `deepseek-v3.2` and `mistral-small-3.2-24b-instruct` (both
-commodity constituents) genuinely had nonzero `RunRecord.usage.cached_input` on several real days
-(e.g. `data/runs/2026-09-08/`: 832 and 448 cached tokens respectively). But neither model has ever
-had a published `price_cached_in_usd_per_1m` in any real price snapshot this project has taken
-(`data/registry/price-snapshot-merged-*.json`) — and the cost formula's own stated policy (above,
-and `packages/print/src/decimal.ts`'s `callCost`) is that cached usage with no published cached
-rate is priced at input+output only, deliberately, rather than at a guessed rate. That is this
-policy working as designed, not a gap: no commodity print carries a cached_input correction note
-because none of them computed anything wrong.
+**Reopened 2026-09-25: the earlier "not a gap" conclusion below was itself wrong, on two
+independent counts, both now corrected.** An earlier pass asked whether `deepseek-v3.2`/
+`mistral-small-3.2-24b-instruct` had real, unpriced cached usage the way
+gemini-3.1-pro-preview/grok-4.6 did, and concluded no — neither model had a published
+`price_cached_in_usd_per_1m`, so per this section's own stated policy, leaving them unpriced was
+policy working as designed. Both halves of that were checked against the wrong source:
+
+1. **The real, billing source for an OpenRouter-routed model is that model's own per-host
+   endpoint, not LiteLLM's canonical entry.** Both models are `provider: "openrouter"` in the
+   registry, so LiteLLM's price map was never even consulted for them. OpenRouter's real
+   `/models/{id}/endpoints` response already carries `pricing.input_cache_read` for the exact
+   host entries this project's registry matches on — confirmed live, 2026-09-25: DeepInfra /
+   `deepseek-v3.2` at $0.13/1M, Parasail / `mistral-small-3.2-24b-instruct` at $0.05/1M, each
+   cross-checked against that host's own public pricing page and identical. `buildPriceSnapshotFromOpenRouter`
+   (`packages/prices/src/snapshot/build-snapshot.ts`) simply never read this field, for any
+   OpenRouter-routed model — fixed the same day.
+2. **Separately, and far larger in scope: `price_cached_in_usd_per_1m` was never actually reaching
+   the cost formula for *any* model, from *any* source, from the day it was introduced.**
+   `buildModelInputs` (`packages/print/src/cli/load-inputs.ts`) — the one function every
+   publish/verify path uses to turn a price-snapshot entry into the price `computeClassCost`
+   receives — never copied this field through. See "Reasoning-token pricing" above (the
+   `rules-2026-09-25b` correction) for the full account: this affected six frontier models with a
+   real published cached rate, not only the two commodity ones this reopened check started from,
+   though only `gemini-3.1-pro-preview` and `grok-4.6` (alongside these two commodity models) show
+   real nonzero cached usage in practice. Every real print dated 2026-09-14 through 2026-09-24
+   carries a `correction_notes` entry disclosing this.
+
+Both are fixed as of 2026-09-25. A quantified, per-print backfill of the corrected cached-input
+cost for every affected print is separate, deferred follow-up work — today's correction discloses
+the structural fact; it does not yet compute the historical dollar figures.
+
+### Verification discipline for pricing fixes
+
+**Every pricing-affecting fix must be confirmed against the very next real published print — that
+the expected numeric change actually appeared — not only by a unit test.** This is not a
+hypothetical discipline: the cached-input wiring bug above shipped with real unit tests passing
+(the cost formula correctly prices cached tokens when given a price that includes one; the
+snapshot builder correctly sources one from LiteLLM) and stayed dead code in the real pipeline for
+twelve real days, because nothing checked the one remaining hop — whether a real print's own
+published number actually moved. The reasoning-token fix (`rules-2026-09-08`) was caught this way,
+by someone watching for the predicted jump and seeing it; the cached-input fix was not, and no
+process required it to be. `docs/reconciliation-checklist.md` records the same lesson for what it
+means for a print to be reconciliation-ready.
 
 ### Batch-discount policy
 
@@ -307,8 +339,9 @@ that actually applied, by date.
 | --- | --- | --- | --- |
 | `rules-2026-08-30` | 2026-08-30 | Baseline — the rules every print from the first one through the next row's date was computed under. | — |
 | `rules-2026-09-08` | 2026-09-08 | Reasoning tokens priced at the output rate; the per-tier minimum-qualifying-count gate applied alongside the overall one. | `0ffebc2`, `f4fd47a` |
-| `rules-2026-09-13` | 2026-09-13 | `cached_input` usage priced where a published cached rate exists. | `29d4be2` |
+| `rules-2026-09-13` | 2026-09-13 | `cached_input` usage priced where a published cached rate exists. **This row's own effective date was wrong — see `rules-2026-09-25b` below.** | `29d4be2` |
 | `rules-2026-09-25` | 2026-09-25 | `dated_siu` rounds to 4 significant figures, not a fixed 4 decimal places. | `d729ef4` |
+| `rules-2026-09-25b` | 2026-09-25 | Found live: `rules-2026-09-13`'s own fix never actually took effect. The cost formula, the schema field, and the snapshot sourcing all landed on 2026-09-13 — but `buildModelInputs` (`packages/print/src/cli/load-inputs.ts`), the one function every publish/verify path uses to turn a snapshot entry into the price the cost formula receives, never copied `price_cached_in_usd_per_1m` through. Every real print from 2026-09-14 through 2026-09-24 still priced cached_input at zero, silently, for every model — this row is the actual effective date. See this section's "Verification discipline for pricing fixes" note below for why this stayed undetected for twelve days. | *(fill in on commit)* |
 
 A print's own `date` field, checked against this table, tells a reader which row applied even for
 a print published before `methodology_revision` existed — this table is the durable record; the
@@ -524,13 +557,21 @@ already-published print.
    neither cost formula.** `class-cost.ts` and `cost-of-production.ts` only ever priced `input`
    and `output + reasoning` — real, billed cache-hit tokens were silently free in every published
    number, for every model with cache usage, not only Gemini (deepseek-v3.2, mistral-small-3.2,
-   gpt-5.1 and grok-4.6 all show real historical cached-token usage too). This is now priced via a
-   new, optional `price_cached_in_usd_per_1m` on a price snapshot entry, sourced the same way as
-   input/output pricing already is — LiteLLM's own published `cache_read_input_token_cost` — never
-   defaulted to zero or to the input rate for a model with no published cache rate. This is
-   unrelated to this section's own `cachePolicyVariant` sensitivity tool, which models a
+   gpt-5.1 and grok-4.6 all show real historical cached-token usage too). A new, optional
+   `price_cached_in_usd_per_1m` on a price snapshot entry was added the same day, sourced the same
+   way as input/output pricing already is — LiteLLM's own published `cache_read_input_token_cost`
+   — never defaulted to zero or to the input rate for a model with no published cache rate. This
+   is unrelated to this section's own `cachePolicyVariant` sensitivity tool, which models a
    *hypothetical* alternative cache-adoption policy as a delta off the headline number; this fix
    prices cache use that actually happened, in the headline number itself.
+   **Correction, 2026-09-25: this did not actually happen until 2026-09-25 — see
+   `rules-2026-09-25b` in the Revision history table below and this print's own
+   `correction_notes` for every real print dated 2026-09-14 through 2026-09-24.** The field, the
+   formula, and the snapshot sourcing were all real and correct from 2026-09-13; the one function
+   that hands a snapshot's price to that formula (`buildModelInputs`) never forwarded this
+   specific field, so cached tokens stayed priced at zero on every real print for twelve more
+   days regardless. This paragraph originally stated the fix as already live — that statement was
+   false when read against what the pipeline actually computed, not merely imprecise.
 2. **The larger effect, specific to Gemini: a real, separately-billed API call was silently
    discarded.** `packages/harness/src/adapters/google.ts` (structurally also `anthropic.ts` and
    `openai.ts`, though not yet triggered in practice for either) retries with a bigger completion

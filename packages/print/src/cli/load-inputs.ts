@@ -155,6 +155,17 @@ export function buildModelInputs(
       price: {
         price_in_usd_per_1m: price.price_in_usd_per_1m,
         price_out_usd_per_1m: price.price_out_usd_per_1m,
+        // Found live 2026-09-25, while tracing why an OpenRouter-sourced cached rate never
+        // reached a real print: this field was never copied through here at all, for any source
+        // — the cached-input pricing fix (29d4be2, 2026-09-13) added it to the schema, the cost
+        // formula, and litellm.ts's snapshot sourcing, but never to the one place that actually
+        // hands a price to computeClassCost/computeCostOfProduction. Every model with a real,
+        // published cached rate (not only the OpenRouter-routed ones this session was checking)
+        // has been priced at zero on cached_input in every real print since, contradicting
+        // docs/methodology.md's own "priced where a published cached rate exists" claim.
+        ...(price.price_cached_in_usd_per_1m != null
+          ? { price_cached_in_usd_per_1m: price.price_cached_in_usd_per_1m }
+          : {}),
       },
       records: modelRecords,
     });

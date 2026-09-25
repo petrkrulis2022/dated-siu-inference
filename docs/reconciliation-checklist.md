@@ -7,10 +7,18 @@ _A print is "final" only when a signed `ReconciliationRecord` exists for it — 
 
 ## 1. Pick the print
 
-Any print published with commit `48ba69c` or later (2026-09-14 onward) — that's the fix for the
-two real Gemini bugs (cached-input tokens never priced; a real API call discarded on Gemini's
-reasoning-truncation retry). Reconciling an earlier print will refuse for reasons already known
-and disclosed in its own `correction_notes` — not a useful test.
+**Correction, 2026-09-25: only reconcile a print dated 2026-09-25 or later.** This section
+originally said 2026-09-14 onward (commit `48ba69c`) was reconciliation-ready because it fixed
+"two real Gemini bugs." That was wrong for one of the two: the discarded-retry-call fix was
+genuinely live from 2026-09-14, but the cached-input pricing fix was not — a separate bug
+(`buildModelInputs` never forwarding a snapshot's `price_cached_in_usd_per_1m`, see
+`docs/methodology.md`'s `rules-2026-09-25b`) meant cached tokens stayed priced at zero on every
+real print through 2026-09-24 regardless. Reconciling any print from that window tests only the
+retry-discard fix; a residual gap against a provider's real invoice on those dates is expected,
+not a new problem, and does not mean the retry-discard fix itself is incomplete. The first print
+genuinely computed with both fixes live is the first one published 2026-09-25 or later. Reconciling
+an earlier print will refuse for reasons already known and disclosed in its own `correction_notes`
+— not a useful test.
 
 ### Standing cadence, settled 2026-09-17
 
@@ -29,9 +37,11 @@ that the check can be skipped.** If any provider's dashboard still shows that We
 processing/estimated on the Friday, wait a day rather than reconcile against a number that could
 still move — see §2.
 
-First real one: **2026-09-16**, run 2026-09-18 (a two-day gap from a Wednesday print, ahead of
-the Friday cadence starting properly the following week) — this one specifically verifies the
-two Gemini fixes actually closed the real gap, before settling into the regular rhythm above.
+**Correction, 2026-09-25: 2026-09-16 does not verify this — see the correction at the top of §1.**
+It was picked to specifically verify both Gemini fixes had closed the real gap; only one of the
+two was actually live that day. No reconciliation has in fact been run yet
+(`data/reconciliations/` does not exist as of this correction). The first real one should instead
+target the first Wednesday print dated 2026-09-25 or later, run two days after per §2 below.
 
 ## 2. Wait for real, finalized billing — not same-day
 

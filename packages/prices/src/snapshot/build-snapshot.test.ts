@@ -63,6 +63,80 @@ describe("buildPriceSnapshotFromOpenRouter", () => {
       byId["llama-host-b"].price_in_usd_per_1m,
     );
   });
+
+  it("captures a published input_cache_read as price_cached_in_usd_per_1m", async () => {
+    // Found live, 2026-09-25: OpenRouter's own per-host endpoint pricing already carries this
+    // field when the host publishes one — this builder simply never read it before, so real,
+    // billed cached_input usage on every OpenRouter-routed model priced at zero regardless of
+    // what the host actually charged (docs/methodology.md's Cache policy section). Confirmed
+    // against the real endpoints API for deepseek-v3.2 (DeepInfra, $0.13/1M cached input).
+    const registry: ModelRegistryEntry[] = [
+      {
+        id: "deepseek-v3.2",
+        provider: "openrouter",
+        endpoint: "https://openrouter.ai/api/v1/chat/completions",
+        model_string: "deepseek/deepseek-v3.2",
+        tier: "open-weight-hosted",
+        open_weights: true,
+        host: "deepinfra",
+      },
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          data: {
+            id: "deepseek/deepseek-v3.2",
+            endpoints: [
+              {
+                provider_name: "DeepInfra",
+                pricing: { prompt: "0.00000026", completion: "0.00000038", input_cache_read: "0.00000013" },
+              },
+            ],
+          },
+        }),
+      })),
+    );
+
+    const { snapshot } = await buildPriceSnapshotFromOpenRouter(registry, "t", "t");
+    expect(snapshot.entries[0].price_cached_in_usd_per_1m).toBe("0.13");
+  });
+
+  it("omits price_cached_in_usd_per_1m entirely when the host has no cache rate", async () => {
+    // Absent, not defaulted to "0" or to the input rate — same discipline
+    // buildPriceSnapshotFromLiteLLM's own equivalent case already holds to.
+    const registry: ModelRegistryEntry[] = [
+      {
+        id: "mistral-small-3.2-24b-instruct",
+        provider: "openrouter",
+        endpoint: "https://openrouter.ai/api/v1/chat/completions",
+        model_string: "mistralai/mistral-small-3.2-24b-instruct",
+        tier: "open-weight-hosted",
+        open_weights: true,
+        host: "deepinfra",
+      },
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          data: {
+            id: "mistralai/mistral-small-3.2-24b-instruct",
+            endpoints: [
+              { provider_name: "DeepInfra", pricing: { prompt: "0.000000075", completion: "0.0000002" } },
+            ],
+          },
+        }),
+      })),
+    );
+
+    const { snapshot } = await buildPriceSnapshotFromOpenRouter(registry, "t", "t");
+    expect(snapshot.entries[0]).not.toHaveProperty("price_cached_in_usd_per_1m");
+  });
 });
 
 describe("buildPriceSnapshotFromLiteLLM", () => {

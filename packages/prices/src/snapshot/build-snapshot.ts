@@ -64,6 +64,15 @@ export async function buildPriceSnapshotFromOpenRouter(
       model_id: reg.id,
       price_in_usd_per_1m: perTokenToPer1M(match.pricing.prompt),
       price_out_usd_per_1m: perTokenToPer1M(match.pricing.completion),
+      // Found live 2026-09-25: this host-routed pricing already carries its own cache-hit rate
+      // when the host publishes one — this snapshot builder simply never read it before, so every
+      // OpenRouter-routed model with real cached_input usage priced those tokens at zero
+      // regardless of what the host actually billed (docs/methodology.md's Cache policy section).
+      // Same optional-field pattern buildPriceSnapshotFromLiteLLM already uses below: absent
+      // entirely, never defaulted to 0 or guessed, when the host has no separate cache rate.
+      ...(match.pricing.input_cache_read != null
+        ? { price_cached_in_usd_per_1m: perTokenToPer1M(match.pricing.input_cache_read) }
+        : {}),
     });
   }
 

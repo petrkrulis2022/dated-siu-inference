@@ -17,6 +17,12 @@ export interface OpenRouterEndpoint {
   pricing: {
     prompt: string;
     completion: string;
+    /** Cache-hit read rate, when this host publishes one separately — confirmed live 2026-09-25
+     * against the real endpoints API for deepseek-v3.2 (DeepInfra, $0.13/1M) and
+     * mistral-small-3.2-24b-instruct (Parasail, $0.05/1M), both cross-checked against each host's
+     * own public pricing page. Optional: absent for a host with no separately-published cache
+     * rate. */
+    input_cache_read?: string;
     [key: string]: string | number | undefined;
   };
 }
