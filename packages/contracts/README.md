@@ -363,7 +363,11 @@ key to also hold that authority.
    or multisig-gated signer invoked only when a real settlement needs a fresh attestation), not
    available to the same automated daily job.
 2. `WorkClaim`'s `SETTLEMENT_RATE_BAND_BPS` defense-in-depth band (±50%, see that constant's own
-   doc comment for how it's grounded in real print history) bounds how much a single forged
+   doc comment for how it's grounded in real print history) clamps a settlement rate too far from
+   the rate recorded at mint to the nearest band edge, rather than reverting — a genuine rate can
+   legitimately fall outside the band (this index has already shown a real >30% one-day move from
+   a composition change), and a revert there would trap a defaulted holder's funds permanently,
+   worse than the attack the band defends against. Clamping still bounds how much a single forged
    attestation can drain — it is a second layer, not a substitute for the key split. A band alone
    still lets a compromised key drain up to the band's own limit on every open lot.
 

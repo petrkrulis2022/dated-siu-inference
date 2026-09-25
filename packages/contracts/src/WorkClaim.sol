@@ -102,11 +102,12 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
 
     /// @notice Defense-in-depth: a settlement rate more than this many basis points away from
     ///         `ClaimType.referenceNanoUsdPerSiu` (the genuinely-attested rate recorded at this
-    ///         tokenId's first mint) is rejected outright, even though it carries a valid
-    ///         publisher signature. The publisher key now signs value-bearing rate attestations,
-    ///         not just prints (see this contract's "Settlement-rate binding" doc comment) — this
-    ///         bounds how much a single compromised or mis-issued attestation can drain, on top of
-    ///         (never instead of) requiring a genuine signature.
+    ///         tokenId's first mint) is clamped to the nearest band edge before it is used to pay
+    ///         out, even though it carries a valid publisher signature. The publisher key now
+    ///         signs value-bearing rate attestations, not just prints (see this contract's
+    ///         "Settlement-rate binding" doc comment) — this bounds how much a single compromised
+    ///         or mis-issued attestation can drain, on top of (never instead of) requiring a
+    ///         genuine signature.
     /// @dev 5000 bps (±50%). Grounded in the real print history, not picked arbitrarily: the
     ///      largest single-day move Commodity SIU has ever shown, recomputed from every published
     ///      commodity print's own basket_costs/weights (2026-09-01 through 2026-09-25, 24 prints),
@@ -118,10 +119,25 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
     ///      ISSUANCE_RATIO_BPS ("not because it's correct... but because the testbed needs a
     ///      number"). A real production system would want the band to scale with how long a
     ///      window can stay open, which this does not attempt.
+    ///
+    ///      Clamps rather than reverts — found live, 2026-09-25: this index has already shown a
+    ///      real single-day move over 30% from a basket composition change (a registry admission
+    ///      or exclusion moves dated_siu discontinuously, unlike ordinary day-to-day price drift),
+    ///      and a real methodology change could move it further still. A genuine attestation for
+    ///      such a rate would revert forever under the old design — a defaulted claim that can
+    ///      never settle traps the holder's funds permanently, which is a worse outcome than the
+    ///      attack this band defends against. Clamping still bounds a forged rate's damage to the
+    ///      band edge and still lets a legitimate holder collect a real, bounded payout instead of
+    ///      nothing.
     uint16 public constant SETTLEMENT_RATE_BAND_BPS = 5000;
     uint16 private constant BAND_BPS_DENOMINATOR = 10_000;
 
-    error SettlementRateOutOfBand(uint256 rate, uint256 referenceRate, uint16 bandBps);
+    /// @notice Emitted only when a genuinely-verified settlement rate actually fell outside the
+    ///         band and was clamped — never emitted for an in-band rate, so its mere presence is
+    ///         itself a signal worth watching operationally.
+    event SettlementRateClamped(
+        uint256 indexed tokenId, uint256 attestedNanoUsdPerSiu, uint256 clampedNanoUsdPerSiu, uint256 referenceNanoUsdPerSiu
+    );
 
     IERC20 public immutable usdc;
     CapacityBond public immutable bond;
@@ -254,17 +270,22 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
         return (quantityMilliSiu * nanoUsdPerSiu) / 1_000_000;
     }
 
-    /// @dev Reverts if `rate` falls outside ±SETTLEMENT_RATE_BAND_BPS of `referenceRate` — see
-    ///      that constant's own doc comment for why this band and why it's checked here only
-    ///      (the Defaulted settlement path, the one place a verified rate pays out real USDC).
-    function _checkSettlementRateInBand(uint256 rate, uint256 referenceRate) internal pure {
+    /// @dev Returns `rate` unchanged if within ±SETTLEMENT_RATE_BAND_BPS of `referenceRate`,
+    ///      otherwise the nearest band edge — see that constant's own doc comment for why this
+    ///      clamps rather than reverts, and why it's checked here only (the Defaulted settlement
+    ///      path, the one place a verified rate pays out real USDC).
+    function _clampToSettlementBand(uint256 rate, uint256 referenceRate)
+        internal
+        pure
+        returns (uint256)
+    {
         uint256 lowerBound =
             (referenceRate * (BAND_BPS_DENOMINATOR - SETTLEMENT_RATE_BAND_BPS)) / BAND_BPS_DENOMINATOR;
         uint256 upperBound =
             (referenceRate * (BAND_BPS_DENOMINATOR + SETTLEMENT_RATE_BAND_BPS)) / BAND_BPS_DENOMINATOR;
-        if (rate < lowerBound || rate > upperBound) {
-            revert SettlementRateOutOfBand(rate, referenceRate, SETTLEMENT_RATE_BAND_BPS);
-        }
+        if (rate < lowerBound) return lowerBound;
+        if (rate > upperBound) return upperBound;
+        return rate;
     }
 
     /**
@@ -359,8 +380,14 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
 
         if (everPresented[tokenId][holder]) {
             uint256 nanoUsdPerSiu = _verifyRateAttestation(att, signature);
-            _checkSettlementRateInBand(nanoUsdPerSiu, ct.referenceNanoUsdPerSiu);
-            uint256 amountUsdc = _usdcAmount(quantity, nanoUsdPerSiu);
+            uint256 clampedNanoUsdPerSiu =
+                _clampToSettlementBand(nanoUsdPerSiu, ct.referenceNanoUsdPerSiu);
+            if (clampedNanoUsdPerSiu != nanoUsdPerSiu) {
+                emit SettlementRateClamped(
+                    tokenId, nanoUsdPerSiu, clampedNanoUsdPerSiu, ct.referenceNanoUsdPerSiu
+                );
+            }
+            uint256 amountUsdc = _usdcAmount(quantity, clampedNanoUsdPerSiu);
             emit Defaulted(tokenId, holder, quantity, amountUsdc);
             bond.drawForDefault(ct.issuer, ct.classId, holder, amountUsdc);
         } else {

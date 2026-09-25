@@ -446,57 +446,72 @@ contract WorkClaimTest is Test {
         assertGt(usdc.balanceOf(buyer), buyerUsdcBefore, "settled at the in-band rate");
     }
 
-    function test_settleWindowClose_revertsOnRateAboveBand() public {
+    /// A genuine attestation above the band settles at the upper band edge, not the raw attested
+    /// rate — never reverting is the whole point: a defaulted claim that could never settle would
+    /// trap the holder's funds permanently, worse than the attack this band defends against.
+    function test_settleWindowClose_clampsRateAboveBandToUpperEdge() public {
         uint256 tokenId = _mint(500);
         _presentAndCloseWindow(tokenId);
 
         uint256 aboveBandRate = (PRICE_NANO_USD_PER_SIU * 151) / 100; // +51%, outside ±50%
+        uint256 upperBound = (PRICE_NANO_USD_PER_SIU * 150) / 100; // the band's own +50% edge
         (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
             _signRate(aboveBandRate, PRINT_ID, uint64(block.timestamp + 1 days));
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                WorkClaim.SettlementRateOutOfBand.selector,
-                aboveBandRate,
-                PRICE_NANO_USD_PER_SIU,
-                claim.SETTLEMENT_RATE_BAND_BPS()
-            )
-        );
+        vm.expectEmit(true, false, false, true, address(claim));
+        emit WorkClaim.SettlementRateClamped(tokenId, aboveBandRate, upperBound, PRICE_NANO_USD_PER_SIU);
+
+        uint256 buyerUsdcBefore = usdc.balanceOf(buyer);
         claim.settleWindowClose(tokenId, buyer, att, sig);
+        assertEq(
+            usdc.balanceOf(buyer) - buyerUsdcBefore,
+            (500 * upperBound) / 1_000_000,
+            "paid at the clamped upper-edge rate, not the raw attested (higher) one"
+        );
     }
 
-    function test_settleWindowClose_revertsOnRateBelowBand() public {
+    /// Symmetric case: a genuine attestation below the band settles at the lower band edge —
+    /// generous to the holder relative to the (lower) attested rate, never a revert.
+    function test_settleWindowClose_clampsRateBelowBandToLowerEdge() public {
         uint256 tokenId = _mint(500);
         _presentAndCloseWindow(tokenId);
 
         uint256 belowBandRate = (PRICE_NANO_USD_PER_SIU * 49) / 100; // -51%, outside ±50%
+        uint256 lowerBound = (PRICE_NANO_USD_PER_SIU * 50) / 100; // the band's own -50% edge
         (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
             _signRate(belowBandRate, PRINT_ID, uint64(block.timestamp + 1 days));
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                WorkClaim.SettlementRateOutOfBand.selector,
-                belowBandRate,
-                PRICE_NANO_USD_PER_SIU,
-                claim.SETTLEMENT_RATE_BAND_BPS()
-            )
-        );
+        vm.expectEmit(true, false, false, true, address(claim));
+        emit WorkClaim.SettlementRateClamped(tokenId, belowBandRate, lowerBound, PRICE_NANO_USD_PER_SIU);
+
+        uint256 buyerUsdcBefore = usdc.balanceOf(buyer);
         claim.settleWindowClose(tokenId, buyer, att, sig);
+        assertEq(
+            usdc.balanceOf(buyer) - buyerUsdcBefore,
+            (500 * lowerBound) / 1_000_000,
+            "paid at the clamped lower-edge rate, not the raw attested (lower) one"
+        );
     }
 
     /// Fuzzes both the mint-time reference rate and the settlement rate's offset from it. The
-    /// oracle (`lowerBound`/`upperBound`) replicates WorkClaim's own `_checkSettlementRateInBand`
+    /// oracle (`lowerBound`/`upperBound`) replicates WorkClaim's own `_clampToSettlementBand`
     /// arithmetic exactly, rather than an independent deltaBps threshold, so integer-division
-    /// rounding can never disagree between test and contract at the boundary.
+    /// rounding can never disagree between test and contract at the boundary. Asserts the two
+    /// properties the user explicitly asked for: settlement never reverts on a genuine
+    /// out-of-band rate, and the actual payout never exceeds what the band edge itself allows.
     function testFuzz_settleWindowClose_rateBand(uint256 mintRate, int256 deltaBps) public {
         // Lower-bounded so `_usdcAmount(500, mintRate)` never truncates to zero (500 * mintRate
         // must clear 1_000_000) — otherwise even the band-accepting path hits CapacityBond's own,
         // unrelated ZeroAmount revert on a zero draw, not the property this test checks. Upper-
         // bounded well under the bond's real 60,000,000 balance even at the band's own +50%
-        // ceiling and this test's fixed 500 mSIU quantity, so every in-band case is a real,
-        // InsufficientBond-free settlement.
+        // ceiling and this test's fixed 500 mSIU quantity, so a clamped settlement is always a
+        // real, InsufficientBond-free payout.
         mintRate = bound(mintRate, 10_000, 50_000_000);
-        deltaBps = bound(deltaBps, -9999, 9999);
+        // Deliberately allowed to push settlementRate arbitrarily far outside the band in either
+        // direction (not just to the ±9999bps edge of the old design) — this is exactly the case
+        // that used to revert forever; a huge deltaBps is the realistic shape of "a real
+        // methodology change could move the rate further than any band."
+        deltaBps = bound(deltaBps, -9999, 100_000);
 
         (RateAttestationVerifier.RateAttestation memory mintAtt, bytes memory mintSig) =
             _signRate(mintRate, PRINT_ID, uint64(block.timestamp + 1 days));
@@ -513,15 +528,29 @@ contract WorkClaimTest is Test {
         uint16 bandBps = claim.SETTLEMENT_RATE_BAND_BPS();
         uint256 lowerBound = (mintRate * (10_000 - bandBps)) / 10_000;
         uint256 upperBound = (mintRate * (10_000 + bandBps)) / 10_000;
-        bool inBand = settlementRate >= lowerBound && settlementRate <= upperBound;
+        uint256 expectedClampedRate =
+            settlementRate < lowerBound ? lowerBound : (settlementRate > upperBound ? upperBound : settlementRate);
 
-        if (!inBand) {
-            vm.expectRevert(
-                abi.encodeWithSelector(
-                    WorkClaim.SettlementRateOutOfBand.selector, settlementRate, mintRate, bandBps
-                )
-            );
+        if (expectedClampedRate != settlementRate) {
+            vm.expectEmit(true, false, false, true, address(claim));
+            emit WorkClaim.SettlementRateClamped(tokenId, settlementRate, expectedClampedRate, mintRate);
         }
+
+        uint256 buyerUsdcBefore = usdc.balanceOf(buyer);
+        // Never reverts due to the band, regardless of how far out of band settlementRate is —
+        // the whole point of clamping over reverting.
         claim.settleWindowClose(tokenId, buyer, att, sig);
+
+        uint256 actualAmountUsdc = usdc.balanceOf(buyer) - buyerUsdcBefore;
+        assertEq(
+            actualAmountUsdc,
+            (500 * expectedClampedRate) / 1_000_000,
+            "payout uses the clamped rate, never the raw attested one"
+        );
+        assertLe(
+            actualAmountUsdc,
+            (500 * upperBound) / 1_000_000,
+            "clamped payout never exceeds the band-edge amount, however far out of band the real rate was"
+        );
     }
 }
