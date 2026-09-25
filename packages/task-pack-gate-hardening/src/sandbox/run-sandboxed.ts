@@ -61,12 +61,39 @@ export interface SandboxRunResult {
 const STANDARD_RO_BINDS = ["/usr", "/bin", "/lib"] as const;
 const OPTIONAL_RO_BINDS = ["/lib64", "/usr/lib"] as const;
 
+/**
+ * Found live, 2026-09-25: any sandboxed script that calls `fetch` crashes the whole process with
+ * `RangeError: WebAssembly.instantiate(): Out of memory` — undici's lazily-loaded llhttp WASM
+ * parser needs more virtual address space than this sandbox's own `memoryLimitKb` ceiling (a
+ * *real* defence, proven live 2026-09-22 to bound a genuine `Buffer.alloc` loop to ~540MB — see
+ * that option's own doc comment) leaves room for. Confirmed this is not a namespace/isolation
+ * problem: reproduces with a bare `ulimit -v` completely outside bwrap, on Node 20 (this repo's
+ * CI-pinned major version) through Node 23 alike, and needs the ceiling raised to 16GB+ before it
+ * stops — which would have let a real allocation loop consume ~35x more real memory before being
+ * stopped (measured: 1948 x 10MB chunks vs. ~54 before). Raising the ceiling to accommodate fetch
+ * was rejected for exactly that reason.
+ *
+ * This shim is the fix instead: it makes `fetch` fail the same way a real denied network call
+ * would — `TypeError: fetch failed`, the exact shape undici itself throws — without ever letting
+ * undici's real implementation run, so its WASM parser is never loaded and the crash never
+ * occurs. This is NOT what enforces network denial — `--unshare-all` (real, kernel-level network
+ * namespace isolation, confirmed separately via a raw `net.createConnection` to a real external IP
+ * returning `ENETUNREACH` in under 100ms) is, unconditionally, for every networking primitive,
+ * with or without this shim. This exists purely so the one specific higher-level API with this
+ * WASM quirk fails cleanly and catchably instead of crashing the sandboxed process outright —
+ * pure robustness, layered on top of a boundary that holds regardless.
+ */
+const FETCH_DENIAL_SHIM_RELPATH = ".touchstone-fetch-denial-shim.mjs";
+const FETCH_DENIAL_SHIM_CONTENT =
+  'globalThis.fetch = async () => { throw new TypeError("fetch failed"); };\n';
+
 async function writeStagedFiles(scratchDir: string, files: Record<string, string>): Promise<void> {
   for (const [relPath, content] of Object.entries(files)) {
     const fullPath = join(scratchDir, relPath);
     await mkdir(dirname(fullPath), { recursive: true });
     await writeFile(fullPath, content, "utf-8");
   }
+  await writeFile(join(scratchDir, FETCH_DENIAL_SHIM_RELPATH), FETCH_DENIAL_SHIM_CONTENT, "utf-8");
 }
 
 function buildBwrapArgs(
@@ -102,6 +129,7 @@ function buildBwrapArgs(
     "--",
     process.execPath,
     `--max-old-space-size=${maxHeapMb}`,
+    `--import=${join("/scratch", FETCH_DENIAL_SHIM_RELPATH)}`,
     join("/scratch", entry),
     ...args,
   ];
