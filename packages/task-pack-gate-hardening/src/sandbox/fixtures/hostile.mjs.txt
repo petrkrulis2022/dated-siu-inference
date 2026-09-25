@@ -8,6 +8,9 @@
 // map at test/run time, not a module this package itself imports or executes directly.
 import { readFileSync, appendFileSync } from "node:fs";
 import { spawn } from "node:child_process";
+import net from "node:net";
+import dgram from "node:dgram";
+import dns from "node:dns/promises";
 
 const isBombChild = process.argv.includes("--bomb-child");
 
@@ -28,13 +31,33 @@ if (!isBombChild) {
     sentinel: process.env.TOUCHSTONE_HOSTILE_SENTINEL ?? null,
   };
 
-  // Vector 2: network egress.
-  try {
-    await fetch("https://example.com");
-    results.network = { reached: true };
-  } catch (e) {
-    results.network = { reached: false, error: String(e) };
-  }
+  // Vector 2: network egress — tested via raw kernel primitives, not fetch. `fetch` is denied by
+  // a shim (run-sandboxed.ts, "found live 2026-09-25") that makes it fail the same way a real
+  // denied call would, without ever invoking undici's real implementation (which crashes the
+  // whole process under this sandbox's own memory ceiling before it ever reaches the network).
+  // A fetch-based assertion here would only prove the shim runs, not that the kernel actually
+  // blocks the network — TCP, UDP, and DNS resolution below go straight to the kernel boundary
+  // (--unshare-all) the shim has nothing to do with.
+  results.network = {
+    tcp: await new Promise((resolve) => {
+      const sock = net.createConnection({ host: "93.184.216.34", port: 80, timeout: 2000 });
+      sock.on("connect", () => { sock.destroy(); resolve({ blocked: false }); });
+      sock.on("error", (e) => resolve({ blocked: true, error: String(e.code ?? e) }));
+      sock.on("timeout", () => { sock.destroy(); resolve({ blocked: false, error: "TIMEOUT" }); });
+    }),
+    udp: await new Promise((resolve) => {
+      const sock = dgram.createSocket("udp4");
+      sock.on("error", (e) => { sock.close(); resolve({ blocked: true, error: String(e.code ?? e) }); });
+      sock.send(Buffer.from("probe"), 53, "8.8.8.8", (err) => {
+        sock.close();
+        resolve(err ? { blocked: true, error: String(err.code ?? err) } : { blocked: false });
+      });
+    }),
+    dns: await dns.lookup("example.com").then(
+      (addrs) => ({ blocked: false, addrs }),
+      (e) => ({ blocked: true, error: String(e.code ?? e) }),
+    ),
+  };
 
   // Vector 3: path traversal out of scratch.
   try {

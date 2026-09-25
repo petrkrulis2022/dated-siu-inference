@@ -44,7 +44,12 @@ describe("the permanent hostile fixture", () => {
     // see run-sandboxed.test.ts's "does not inherit the parent environment" for the same case.
     expect(results.env.keyCount).toBe(1);
     expect(results.env.sentinel).toBeNull();
-    expect(results.network.reached).toBe(false);
+    // Each asserted independently, straight against the kernel boundary (--unshare-all) — not
+    // fetch, which is shimmed to avoid a crash and therefore proves nothing about isolation itself
+    // (see hostile.mjs.txt's own Vector 2 comment and run-sandboxed.ts's shim doc comment).
+    expect(results.network.tcp.blocked).toBe(true);
+    expect(results.network.udp.blocked).toBe(true);
+    expect(results.network.dns.blocked).toBe(true);
     expect(results.pathTraversal.blocked).toBe(true);
 
     await cleanupScratch(result.scratchDir);

@@ -47,7 +47,13 @@ describe("runSandboxed", () => {
     await cleanupScratch(result.scratchDir);
   });
 
-  it("denies network access: fetch never reaches a real host", async () => {
+  // `fetch` is shimmed (run-sandboxed.ts, "found live 2026-09-25") to fail the same way a real
+  // denied call would, without ever invoking undici's real implementation — which otherwise
+  // crashes the whole process under this sandbox's own memory ceiling before it ever reaches the
+  // network. That means a fetch-based assertion proves the shim runs, not that the kernel denies
+  // the network — this test is scoped to exactly that (the shim's own behaviour); the three tests
+  // below it are the real isolation proof, straight against the kernel boundary.
+  it("fetch fails via the denial shim (this proves the shim runs, not network isolation itself)", async () => {
     const result = await runSandboxed({
       ...DEFAULT_OPTS,
       files: {
@@ -64,6 +70,75 @@ describe("runSandboxed", () => {
     });
     const parsed = JSON.parse(result.stdout.trim());
     expect(parsed.reached).toBe(false);
+    await cleanupScratch(result.scratchDir);
+  });
+
+  // The real isolation proof: --unshare-all, straight against the kernel, no higher-level API in
+  // between. A real external IP is used for tcp/udp (93.184.216.34, example.com's own real
+  // address) so this can never pass because DNS itself was the only thing blocked.
+  it("denies network access: a raw TCP connect gets a network-unreachable error", async () => {
+    const result = await runSandboxed({
+      ...DEFAULT_OPTS,
+      files: {
+        "entry.mjs": `
+          import net from "node:net";
+          const result = await new Promise((resolve) => {
+            const sock = net.createConnection({ host: "93.184.216.34", port: 80, timeout: 2000 });
+            sock.on("connect", () => { sock.destroy(); resolve({ blocked: false }); });
+            sock.on("error", (e) => resolve({ blocked: true, error: String(e.code ?? e) }));
+            sock.on("timeout", () => { sock.destroy(); resolve({ blocked: false, error: "TIMEOUT" }); });
+          });
+          console.log(JSON.stringify(result));
+        `,
+      },
+      entry: "entry.mjs",
+    });
+    const parsed = JSON.parse(result.stdout.trim());
+    expect(parsed.blocked).toBe(true);
+    await cleanupScratch(result.scratchDir);
+  });
+
+  it("denies network access: a raw UDP send gets a network-unreachable error", async () => {
+    const result = await runSandboxed({
+      ...DEFAULT_OPTS,
+      files: {
+        "entry.mjs": `
+          import dgram from "node:dgram";
+          const result = await new Promise((resolve) => {
+            const sock = dgram.createSocket("udp4");
+            sock.on("error", (e) => { sock.close(); resolve({ blocked: true, error: String(e.code ?? e) }); });
+            sock.send(Buffer.from("probe"), 53, "8.8.8.8", (err) => {
+              sock.close();
+              resolve(err ? { blocked: true, error: String(err.code ?? err) } : { blocked: false });
+            });
+          });
+          console.log(JSON.stringify(result));
+        `,
+      },
+      entry: "entry.mjs",
+    });
+    const parsed = JSON.parse(result.stdout.trim());
+    expect(parsed.blocked).toBe(true);
+    await cleanupScratch(result.scratchDir);
+  });
+
+  it("denies network access: DNS resolution itself fails", async () => {
+    const result = await runSandboxed({
+      ...DEFAULT_OPTS,
+      files: {
+        "entry.mjs": `
+          import dns from "node:dns/promises";
+          const result = await dns.lookup("example.com").then(
+            (addrs) => ({ blocked: false, addrs }),
+            (e) => ({ blocked: true, error: String(e.code ?? e) }),
+          );
+          console.log(JSON.stringify(result));
+        `,
+      },
+      entry: "entry.mjs",
+    });
+    const parsed = JSON.parse(result.stdout.trim());
+    expect(parsed.blocked).toBe(true);
     await cleanupScratch(result.scratchDir);
   });
 
