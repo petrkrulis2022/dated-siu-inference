@@ -12,6 +12,7 @@ import {
 import { DEFAULT_BACKOFF, withBackoff, classifyFailure, type BackoffOptions, type FailureCategory } from "./retry.js";
 import { createLimiter } from "./concurrency.js";
 import { buildRunRecord } from "./run-record.js";
+import { AdapterHttpError } from "./adapters/types.js";
 
 export interface OrchestratorTask {
   registryEntry: ModelRegistryEntry;
@@ -39,6 +40,14 @@ export interface InstanceOutcome {
   /** How many retries were attempted before infraFailure was recorded — 0 means the error was
    * non-retryable (failed immediately, retrying would not have helped) rather than exhausted. */
   infraFailureRetries?: number;
+  /** The provider's own real response body for an AdapterHttpError — found live, 2026-09-26,
+   * investigating claude-haiku-4-5's real 400s on 2026-09-17/09-25: infraFailure only ever kept
+   * a generic wrapper message ("Anthropic request failed: 400"), never the actual JSON body each
+   * adapter already captures on AdapterHttpError but had nowhere to go — so the one piece of
+   * information that would have explained the real cause was silently discarded at the exact
+   * moment it was known, unrecoverable from any log or committed record afterward. Absent for a
+   * non-HTTP infra failure (network/timeout), which has no such body to keep. */
+  infraFailureBody?: string;
 }
 
 /** T3 gets up to 3 graded attempts per build1-spec.md §3; T1/T2 are single-shot. */
@@ -99,6 +108,7 @@ async function runOneInstance(
         infraFailure: err instanceof Error ? err.message : String(err),
         infraFailureCategory: classifyFailure(err),
         infraFailureRetries: retryErrors.length,
+        ...(err instanceof AdapterHttpError ? { infraFailureBody: JSON.stringify(err.body) } : {}),
       };
     }
 

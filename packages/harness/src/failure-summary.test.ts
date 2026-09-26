@@ -92,4 +92,24 @@ describe("formatInfraFailureSummary", () => {
     expect(text).toContain("model-a / T1: 1x rate_limit");
     expect(text).toContain("rate limited");
   });
+
+  it("includes the provider's own real response body when the failure carried one", () => {
+    // Found live, 2026-09-26: without this, an HTTP 400's own real cause is unrecoverable from
+    // any log or committed record the moment the process exits — a generic wrapper message like
+    // "Anthropic request failed: 400" is everything a future incident's own CI log would show.
+    const text = formatInfraFailureSummary([
+      outcome(entry("model-a"), "T1", {
+        infraFailureCategory: "auth_or_bad_request",
+        infraFailure: "Anthropic request failed: 400",
+        infraFailureBody: '{"type":"error","error":{"type":"invalid_request_error","message":"real cause here"}}',
+      }),
+    ]);
+    expect(text).toContain("real response body:");
+    expect(text).toContain("real cause here");
+  });
+
+  it("omits the response-body line entirely when there isn't one (network/timeout failures)", () => {
+    const text = formatInfraFailureSummary([outcome(entry("model-a"), "T1")]); // no infraFailureBody
+    expect(text).not.toContain("real response body:");
+  });
 });
