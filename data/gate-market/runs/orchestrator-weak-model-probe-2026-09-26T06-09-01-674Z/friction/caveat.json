@@ -1,0 +1,4 @@
+{
+  "mechanism_caveat": "Both issuers in this run are backed by Touchstone's own API accounts. Issuer credit risk — the thing that makes a work claim an instrument rather than a gift card — is absent by construction. This run proves mechanism, not demand, and no result from it is evidence that a third-party issuer would behave the same way.",
+  "f2_caveat": "And on F2 specifically: because both issuers are Touchstone-backed, a forward issued here cannot default. HEDGER therefore tests price-risk transfer only, not credit-risk transfer, which is the easier half. \"The forward worked\" must never be read as \"the forward survives an issuer failing.\""
+}

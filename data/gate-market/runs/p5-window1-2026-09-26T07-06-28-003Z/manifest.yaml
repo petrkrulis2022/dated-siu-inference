@@ -1,0 +1,48 @@
+benchVersion: 0.0.0
+packVersion: gate-hardening/code@0.0.0
+agentConfigs:
+  ORCHESTRATOR:
+    reasoningModel: mistral-small-3.2-24b-instruct
+  WORKER-CODE:
+    reasoningModel: claude-sonnet-5
+  WORKER-EXTRACT:
+    reasoningModel: gemini-3.1-pro-preview
+  ISSUER-A:
+    reasoningModel: grok-4.6
+    capacityModel: grok-4.6
+  ISSUER-B:
+    reasoningModel: grok-4.6
+    capacityModel: gemini-3.1-pro-preview
+  HEDGER:
+    reasoningModel: gpt-5.1
+  validated: packages/gate-market-agents/src/pack/model-assignment.ts's
+    validateModelAssignment — WORKER-CODE/WORKER-EXTRACT distinct families
+    (anthropic/google), ORCHESTRATOR+both workers span 3 families
+    (mistralai/anthropic/google), ISSUER-A/ISSUER-B capacityModel differ
+    (xai/google). Re-run and re-confirmed 2026-09-26 after the ORCHESTRATOR
+    reassignment below.
+  orchestratorReassignment:
+    date: 2026-09-26
+    from: gpt-5.1
+    to: mistral-small-3.2-24b-instruct
+    reason: P4 showed every authoring run finishing in one turn regardless of model
+      — a capable ORCHESTRATOR has no reason to subcontract, so P5 window 1
+      could never show emergent delegation with gpt-5.1 still assigned.
+      Reassigned to a weaker, cheaper, non-frontier model per the user's own
+      stated preference (make delegation rational, not scripted), verified
+      empirically first rather than assumed.
+    empiricalVerification:
+      runDir: data/gate-market/runs/orchestrator-weak-model-probe-2026-09-26T06-09-01-674Z/
+      finding: "Failed to solo the same P4-style gate-authoring job cleanly. Two real,
+        distinct signals, both disclosed rather than only citing the parse
+        failure: (1) the raw response was prose-wrapped with markdown fences
+        plus a separate trailing friction JSON block, breaking the simple
+        first-brace/last-brace parser; (2) its own attempted gate source
+        contained a genuine bug (execSync called with an argv-array second
+        argument — execSync takes a command string plus options, not argv like
+        execFile/spawn). Together: real evidence of lower capability, not just a
+        formatting quirk."
+      outcome: Used as the real ORCHESTRATOR model per the plan's own decision rule
+        (fails/struggles solo -> use it, delegation is rational) rather than
+        falling back to a scripted skill-level authoring prohibition.
+seed: p5-window1-2026-09-26

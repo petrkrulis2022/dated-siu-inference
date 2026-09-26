@@ -1,0 +1,46 @@
+{
+  "passed": true,
+  "passedBy": "WORKER-CODE",
+  "totalRealizedUsd": "0.172642",
+  "turnsByAgent": {
+    "ORCHESTRATOR": 1,
+    "WORKER-CODE": 1,
+    "WORKER-EXTRACT": 0,
+    "ISSUER-A": 0,
+    "ISSUER-B": 0
+  },
+  "haltedReason": {},
+  "turnLogsByAgent": {
+    "ORCHESTRATOR": [
+      {
+        "turn": 1,
+        "promptChars": 9168,
+        "projectedUsd": "0.00110628",
+        "realizedUsd": "0.00039837",
+        "latencyMs": 620,
+        "parsed": "{\"tool\":\"submit_job\",\"args\":{\"source\":\"export async function gate({ referenceDir, submissionDir }) {\\n  const { test } = require('node:test');\\n  const assert = require('node:assert/strict');\\n  const fs = require('node:fs');\\n  const path = require('node:path');\\n\\n  // Read the pinned test cases\\n  const testCases = fs.readFileSync(path.join(referenceDir, 'pinned-test-cases.txt'), 'utf8')\\n    .split('---')[1]\\n    .trim()\\n    .split('\\\\n')\\n    .filter(line => line.trim() !== '');\\n\\n  // Import the submission's dedupeSorted function\\n  const submissionModule = require(path.join(submissionDir, 'answer.mjs'));\\n  const { dedupeSorted } = submissionModule;\\n\\n  // Run all test cases\\n  for (const testCase of testCases) {\\n    try {\\n      // Execute the test case in a new context\\n      const testFn = new Function('dedupeSorted', 'assert', testCase);\\n      testFn(dedupeSorted, assert);\\n    } catch (error) {\\n      return { accept: false, reason: `Test case failed: ${error.message}` };\\n    }\\n  }\\n\\n  return { accept: true, reason: 'All test cases passed' };\\n}\"}}",
+        "gateResult": {
+          "passed": false,
+          "summary": "G1 failed: hardened gate did not execute (G1): ReferenceError: require is not defined\n    at Module.gate (file:///scratch/gate-spec.mjs:2:20)\n    at file:///scratch/entry.mjs:7:31; G2 failed: hardened gate did not execute (G1): ReferenceError: require is not defined\n    at Module.gate (file:///scratch/gate-spec.mjs:2:20)\n    at file:///scratch/entry.mjs:7:31; G3 failed: hardened gate did not execute (G1): ReferenceError: require is not defined\n    at Module.gate (file:///scratch/gate-spec.mjs:2:20)\n    at file:///scratch/entry.mjs:7:31; G4 failed: hardened gate did not execute (G1): ReferenceError: require is not defined\n    at Module.gate (file:///scratch/gate-spec.mjs:2:20)\n    at file:///scratch/entry.mjs:7:31; G5 failed: hardened gate did not execute (G1): ReferenceError: require is not defined\n    at Module.gate (file:///scratch/gate-spec.mjs:2:20)\n    at file:///scratch/entry.mjs:7:31; G6 failed: hardened gate did not execute (G1): ReferenceError: require is not defined\n    at Module.gate (file:///scratch/gate-spec.mjs:2:20)\n    at file:///scratch/entry.mjs:7:31"
+        }
+      }
+    ],
+    "WORKER-CODE": [
+      {
+        "turn": 1,
+        "promptChars": 7460,
+        "projectedUsd": "0.04873",
+        "realizedUsd": "0.172244",
+        "latencyMs": 110565,
+        "parsed": "{\"tool\":\"submit_job\",\"args\":{\"source\":\"import { readFileSync, writeFileSync, existsSync } from 'node:fs';\\nimport { spawnSync } from 'node:child_process';\\nimport path from 'node:path';\\nimport { pathToFileURL } from 'node:url';\\n\\nexport async function gate({ referenceDir, submissionDir }) {\\n  const pinnedPath = path.join(referenceDir, 'pinned-test-cases.txt');\\n  let pinnedSrc;\\n  try {\\n    pinnedSrc = readFileSync(pinnedPath, 'utf8');\\n  } catch (e) {\\n    return { accept: false, reason: 'Could not read pinned test cases: ' + e.message };\\n  }\\n\\n  const answerPath = path.join(submissionDir, 'answer.mjs');\\n  if (!existsSync(answerPath)) {\\n    return { accept: false, reason: 'answer.mjs not found in submission.' };\\n  }\\n\\n  const answerUrl = pathToFileURL(answerPath).href;\\n\\n  const expectedTestCount = (pinnedSrc.match(/\\\\btest\\\\s*\\\\(/g) || []).length;\\n  if (expectedTestCount === 0) {\\n    return { accept: false, reason: 'Could not find any test cases in pinned test file.' };\\n  }\\n\\n  const runnerSrc =\\n    \\\"import test from 'node:test';\\\\n\\\" +\\n    \\\"import assert from 'node:assert/strict';\\\\n\\\" +\\n    \\\"const _origRandom = Math.random.bind(Math);\\\\n\\\" +\\n    \\\"let _mod;\\\\n\\\" +\\n    \\\"try {\\\\n\\\" +\\n    \\\"  _mod = await import(\\\" + JSON.stringify(answerUrl) + \\\");\\\\n\\\" +\\n    \\\"} catch (e) {\\\\n\\\" +\\n    \\\"  console.error('IMPORT_FAILED: ' + (e && e.stack || e));\\\\n\\\" +\\n    \\\"  process.exit(1);\\\\n\\\" +\\n    \\\"}\\\\n\\\" +\\n    \\\"if (Math.random !== _origRandom) { Math.random = _origRandom; }\\\\n\\\" +\\n    \\\"const dedupeSorted = _mod && _mod.dedupeSorted;\\\\n\\\" +\\n    \\\"if (typeof dedupeSorted !== 'function') {\\\\n\\\" +\\n    \\\"  console.error('NO_EXPORT: dedupeSorted is not exported as a function');\\\\n\\\" +\\n    \\\"  process.exit(1);\\\\n\\\" +\\n    \\\"}\\\\n\\\\n\\\" +\\n    pinnedSrc +\\n    \\\"\\\\n\\\";\\n\\n  const runnerPath = path.join(referenceDir, 'gate-runner.mjs');\\n  try {\\n    writeFileSync(runnerPath, runnerSrc, 'utf8');\\n  } catch (e) {\\n    return { accept: false, reason: 'Could not write runner file: ' + e.message };\\n  }\\n\\n  const result = spawnSync(\\n    process.execPath,\\n    ['--test', '--test-reporter=tap', '--test-reporter-destination=stdout', runnerPath],\\n    { encoding: 'utf8', timeout: 15000 }\\n  );\\n\\n  const stdout = result.stdout || '';\\n  const stderr = result.stderr || '';\\n\\n  if (result.error) {\\n    return { accept: false, reason: 'Failed to execute test runner: ' + result.error.message };\\n  }\\n  if (result.signal) {\\n    return { accept: false, reason: 'Test runner terminated by signal ' + result.signal + ' (possible timeout/hang). stdout: ' + stdout.slice(-2000) };\\n  }\\n\\n  const testsMatch = stdout.match(/# tests (\\\\d+)/);\\n  const passMatch = stdout.match(/# pass (\\\\d+)/);\\n  const failMatch = stdout.match(/# fail (\\\\d+)/);\\n\\n  const testsRan = testsMatch ? parseInt(testsMatch[1], 10) : 0;\\n  const passed = passMatch ? parseInt(passMatch[1], 10) : 0;\\n  const failed = failMatch ? parseInt(failMatch[1], 10) : 0;\\n\\n  if (result.status !== 0) {\\n    return {\\n      accept: false,\\n      reason: 'Test process exited with status ' + result.status + '. tests=' + testsRan + ' pass=' + passed + ' fail=' + failed + '\\\\n' + stdout.slice(-2000) + stderr.slice(-1000)\\n    };\\n  }\\n\\n  if (testsRan !== expectedTestCount) {\\n    return {\\n      accept: false,\\n      reason: 'Expected ' + expectedTestCount + ' pinned tests to run but observed ' + testsRan + ' (possible early exit or tampering). stdout tail: ' + stdout.slice(-2000)\\n    };\\n  }\\n\\n  if (failed !== 0 || passed !== expectedTestCount) {\\n    return {\\n      accept: false,\\n      reason: 'Not all pinned tests passed. tests=' + testsRan + ' pass=' + passed + ' fail=' + failed + '\\\\n' + stdout.slice(-2000)\\n    };\\n  }\\n\\n  return { accept: true, reason: 'All ' + expectedTestCount + ' pinned test cases passed (verified test count, pass count, fail count, and exit code).' };\\n}\\n\"}}",
+        "gateResult": {
+          "passed": true,
+          "summary": "G1-G6 all passed"
+        }
+      }
+    ],
+    "WORKER-EXTRACT": [],
+    "ISSUER-A": [],
+    "ISSUER-B": []
+  }
+}
