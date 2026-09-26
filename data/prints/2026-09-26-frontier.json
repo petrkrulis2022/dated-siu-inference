@@ -1,25 +1,9 @@
 {
   "version": "SIU-2026a",
-  "print_id": "2026-09-26",
+  "print_id": "2026-09-26-frontier",
   "date": "2026-09-26",
   "status": "provisional",
   "basket_costs": [
-    {
-      "model_id": "deepseek-v3.2",
-      "cost_usd": "0.001823"
-    },
-    {
-      "model_id": "llama-3.3-70b-deepinfra",
-      "cost_usd": "0.000709"
-    },
-    {
-      "model_id": "mistral-small-3.2-24b-instruct",
-      "cost_usd": "0.000655"
-    },
-    {
-      "model_id": "qwen-2.5-72b-instruct",
-      "cost_usd": "0.002520"
-    },
     {
       "model_id": "claude-sonnet-5",
       "cost_usd": "0.023450"
@@ -49,79 +33,39 @@
     "source": "equal",
     "values": [
       {
-        "model_id": "deepseek-v3.2",
-        "weight": "0.111111"
-      },
-      {
-        "model_id": "llama-3.3-70b-deepinfra",
-        "weight": "0.111111"
-      },
-      {
-        "model_id": "mistral-small-3.2-24b-instruct",
-        "weight": "0.111111"
-      },
-      {
-        "model_id": "qwen-2.5-72b-instruct",
-        "weight": "0.111111"
-      },
-      {
         "model_id": "claude-sonnet-5",
-        "weight": "0.111111"
+        "weight": "0.200000"
       },
       {
         "model_id": "gpt-5.1",
-        "weight": "0.111111"
+        "weight": "0.200000"
       },
       {
         "model_id": "grok-4.6",
-        "weight": "0.111111"
+        "weight": "0.200000"
       },
       {
         "model_id": "claude-haiku-4-5",
-        "weight": "0.111111"
+        "weight": "0.200000"
       },
       {
         "model_id": "gpt-5.4-mini",
-        "weight": "0.111111"
+        "weight": "0.200000"
       }
     ]
   },
-  "dated_siu": "0.007626",
+  "dated_siu": "0.01258",
   "exchange_rate_table": [
-    {
-      "model_id": "deepseek-v3.2",
-      "usd_per_siu": "0.0018",
-      "spread_to_index": "-0.7610",
-      "siu_per_usd": "548.5"
-    },
-    {
-      "model_id": "llama-3.3-70b-deepinfra",
-      "usd_per_siu": "0.0007",
-      "spread_to_index": "-0.9071",
-      "siu_per_usd": "1411.0"
-    },
-    {
-      "model_id": "mistral-small-3.2-24b-instruct",
-      "usd_per_siu": "0.0007",
-      "spread_to_index": "-0.9141",
-      "siu_per_usd": "1526.3"
-    },
-    {
-      "model_id": "qwen-2.5-72b-instruct",
-      "usd_per_siu": "0.0025",
-      "spread_to_index": "-0.6695",
-      "siu_per_usd": "396.7"
-    },
     {
       "model_id": "claude-sonnet-5",
       "usd_per_siu": "0.0234",
-      "spread_to_index": "2.0751",
+      "spread_to_index": "0.8633",
       "siu_per_usd": "42.6"
     },
     {
       "model_id": "gpt-5.1",
       "usd_per_siu": "0.0091",
-      "spread_to_index": "0.1947",
+      "spread_to_index": "-0.2761",
       "siu_per_usd": "109.7"
     },
     {
@@ -131,32 +75,28 @@
     {
       "model_id": "grok-4.6",
       "usd_per_siu": "0.0174",
-      "spread_to_index": "1.2787",
+      "spread_to_index": "0.3808",
       "siu_per_usd": "57.5"
     },
     {
       "model_id": "claude-haiku-4-5",
       "usd_per_siu": "0.0077",
-      "spread_to_index": "0.0077",
+      "spread_to_index": "-0.3894",
       "siu_per_usd": "130.1"
     },
     {
       "model_id": "gpt-5.4-mini",
       "usd_per_siu": "0.0053",
-      "spread_to_index": "-0.3046",
+      "spread_to_index": "-0.5786",
       "siu_per_usd": "188.5"
     }
   ],
   "sensitivity_block": [
     {
       "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
-      "dated_siu": "0.005262",
-      "delta": "-0.3099",
+      "dated_siu": "0.008709",
+      "delta": "-0.3080",
       "applies_to": [
-        "deepseek-v3.2",
-        "llama-3.3-70b-deepinfra",
-        "mistral-small-3.2-24b-instruct",
-        "qwen-2.5-72b-instruct",
         "claude-sonnet-5",
         "gpt-5.1",
         "gemini-3.1-pro-preview",
@@ -167,13 +107,9 @@
     },
     {
       "policy_variant": "batch-discount: 50% off input and output",
-      "dated_siu": "0.003823",
-      "delta": "-0.4986",
+      "dated_siu": "0.006311",
+      "delta": "-0.4985",
       "applies_to": [
-        "deepseek-v3.2",
-        "llama-3.3-70b-deepinfra",
-        "mistral-small-3.2-24b-instruct",
-        "qwen-2.5-72b-instruct",
         "claude-sonnet-5",
         "gpt-5.1",
         "gemini-3.1-pro-preview",
@@ -193,25 +129,17 @@
     "siu_per_usd_mode": "ROUND_DOWN",
     "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. dated_siu rounds to significant figures, not a fixed decimal-place count, so its precision scales with the price rather than being lost as it falls (found live, 2026-09-25 — see docs/methodology.md's Rounding section). basket_cost carries more decimal places than dated_siu needs at any price level so the published print stays reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
   },
-  "cost_of_production_usd": "1.1084",
+  "cost_of_production_usd": "1.0158",
   "price_snapshot_ref": "price-snapshot-merged-2026-09-25T00-59-34.865Z.json",
   "methodology_version": "v0-draft",
   "methodology_revision": "rules-2026-09-25",
-  "prior_attempts": [
-    {
-      "attempted_at": "2026-09-26T04:32:17Z",
-      "reason": "Run failed before publish.log had a diagnostic message — see the linked run's full log.",
-      "qualifying_models": 0,
-      "registered_models": 0,
-      "cost_usd": "0"
-    }
-  ],
-  "signature": "0xdf1506371d54e34b830c79c849440537a194c038a0c5285b363ba2511d3c0c21388ef544727c6d54fdc032bfe9876545b6fa1f9879649392f9a31e271179d85e",
+  "series": "frontier",
+  "signature": "0xe69066b180b4b16215665816e5dc9de6c4f9d42d5dcedd5028f72b309204d5e50d4ba776e32ff1972a53d3dd890da9173e17739e587e2c1c18302c7b869ed352",
   "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
   "anchor": {
     "chain": "base-sepolia",
     "status": "anchored",
-    "tx_hash": "0x93653057f5743810f7e3eff16272fa1f3d98d43bf25311c9db08eaa2c131fc67",
-    "posted_at": "2026-09-26T11:12:44.000Z"
+    "tx_hash": "0xab31ab1fbca98643ccdefabe53f729310e1e69b794f59282c93ecd8da27c9a17",
+    "posted_at": "2026-09-26T11:12:50.000Z"
   }
 }

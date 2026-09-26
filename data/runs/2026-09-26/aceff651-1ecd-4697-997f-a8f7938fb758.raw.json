@@ -1,0 +1,39 @@
+{
+  "id": "a5672b8f-7cc9-94eb-af8d-6bba79e23377",
+  "object": "chat.completion",
+  "created": 1790421142,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "DD80EB\n80BD36\n29537F\n1D19BD",
+        "reasoning_content": "I will scan the archive log for access codes and list them in order.\n\nFour access codes were found: DD80EB, 80BD36, 29537F, and 1D19BD.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21617,
+    "completion_tokens": 16,
+    "total_tokens": 22024,
+    "prompt_tokens_details": {
+      "text_tokens": 21617,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 391,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 456760000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
