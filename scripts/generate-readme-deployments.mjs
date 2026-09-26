@@ -30,7 +30,20 @@ function loadDeploymentFiles() {
     .map((f) => ({
       network: f.replace(/\.json$/, ""),
       record: JSON.parse(readFileSync(join(deploymentsDir, f), "utf-8")),
-    }));
+    }))
+    .filter(({ network, record }) => {
+      // Found live, 2026-09-26: this whole script assumes every file here is a
+      // TouchstoneAttestation/TouchstoneEscrow deployment (record.contracts.*) — true for every
+      // file when this script was written, but data/deployments/ has since gained a genuinely
+      // different-shaped record (base-sepolia-gate-market.json: CapacityBond/ClaimRouter/
+      // WorkClaim, no `contracts` wrapper at all, its own separate WP-7 experiment, never meant
+      // to appear in this README section). That crashed this script outright rather than simply
+      // skipping the file it doesn't know how to render — and because docs:deployments:check is
+      // a gating CI step, this silently red-lit every push since the file was first committed.
+      if (record.contracts?.TouchstoneAttestation && record.contracts?.TouchstoneEscrow) return true;
+      console.warn(`Skipping ${network}.json: not a TouchstoneAttestation/TouchstoneEscrow deployment record.`);
+      return false;
+    });
 }
 
 function renderContractRow(name, contract) {
