@@ -321,7 +321,10 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
     const marketBoardText = board.renderFor(agent.agentId, agent.erc8004Id);
     const redemptionText = redemption.renderFor(agent.agentId);
     const transferText = redemption.renderForHolder(agent.agentId);
-    const boardSectionText = [marketBoardText, redemptionText, transferText].filter(Boolean).join("\n\n");
+    const deliveryOwedText = redemption.renderForIssuerAwaitingDelivery(agent.agentId);
+    const boardSectionText = [marketBoardText, redemptionText, transferText, deliveryOwedText]
+      .filter(Boolean)
+      .join("\n\n");
     const prompt = buildTurnPrompt(context, toolOrderByAgent[agent.agentId], boardSectionText);
     const projectedUsd = projectedTurnCostUsd(Math.ceil(prompt.length / 4), agent.maxOutputTokens, agent.prices);
 
@@ -472,7 +475,13 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       // eventual serve_redemption call references the same job an on-chain observer could
       // independently recompute. Skipped when quarantined: a non-deterministic gate result is not
       // a trustworthy verdict to route toward a real redemption.
-      if (gateResult) {
+      //
+      // Found live, 2026-09-26 (see data/gate-market/first-real-default-2026-09-26.json):
+      // redemption grades the routed ISSUER's own delivery, never the holder's — the holder
+      // supplies only a task spec; the gate grades the issuer's own served output
+      // (WorkClaim.sol's own top doc comment). A submit_job call from any agent OTHER than the
+      // routed issuer for this claim must never reach the tracker, whatever its own verdict.
+      if (gateResult && agent.agentId === redemption.state().issuerAgentId) {
         redemption.recordGraded(gateResult.passed, keccak256(stringToBytes(`receipt:${options.job.jobId}`)));
       }
 

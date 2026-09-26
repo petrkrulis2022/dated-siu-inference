@@ -53,8 +53,23 @@ export class RedemptionTracker {
     this.#state.holder = holder;
   }
 
+  /**
+   * Found live, 2026-09-26 (P5 window 1, real Base Sepolia run — see
+   * data/gate-market/first-real-default-2026-09-26.json): redemption in this system grades the
+   * ROUTED ISSUER's own delivery (its capacity_model actually attempting the work), never the
+   * holder's — the contract's own invariants (WorkClaim.sol's top doc comment: "redemption
+   * failure in this system is always issuer-attributable, since the holder supplies only a task
+   * spec and the gate grades the issuer's own served output") assume this. A failing attempt is
+   * real and worth logging (the caller's own friction log already does), but is never terminal —
+   * only a genuine pass ever makes this tracker "ready to serve"; the issuer keeps trying within
+   * its own turns otherwise, and an attempt that never passes is settled once, at window close,
+   * by settleWindowClose's own real default path (WorkClaim.sol) — never by a false report here.
+   * The caller (loop/full-run.ts) is responsible for calling this ONLY when the grading attempt
+   * was genuinely the routed issuer's own — see this class's own issuerAgentId, set at mint.
+   */
   recordGraded(passed: boolean, receiptRef: string): void {
-    this.#state.passed = passed;
+    if (!passed) return;
+    this.#state.passed = true;
     this.#state.receiptRef = receiptRef;
   }
 
@@ -89,6 +104,26 @@ export class RedemptionTracker {
       "A WORK CLAIM WAS TRANSFERRED TO YOU",
       `  tokenId ${this.#state.tokenId}, quantity ${this.#state.quantity}.`,
       "  Confirm with get_balances (pass this tokenId), then call redeem_claim once ready.",
+    ].join("\n");
+  }
+
+  /** Small, structured text telling the routed issuer a claim has genuinely been presented
+   * against it and it now owes real work — the corrected economic model's own missing piece:
+   * without this, the issuer would have no way to know it must start delivering at all, since
+   * `renderFor` below only ever shows once a genuine pass already exists. Empty once a pass is
+   * in (deliver is done, `renderFor` takes over) or once served. */
+  renderForIssuerAwaitingDelivery(agentId: AgentId): string {
+    const s = this.#state;
+    if (s.issuerAgentId !== agentId || s.holder === undefined || s.passed !== undefined || s.served) {
+      return "";
+    }
+    return [
+      "A CLAIM WAS PRESENTED AGAINST YOU",
+      `  tokenId ${s.tokenId}, holder ${s.holder}, quantity ${s.quantity}.`,
+      "  You owe this work. Call submit_job with a real deliverable until it genuinely passes,",
+      "  then call serve_redemption to report the pass. A failed attempt is not final — keep",
+      "  trying within the window. Never report a fail; an undelivered claim defaults against",
+      "  your bond automatically when the window closes, you do not report that yourself.",
     ].join("\n");
   }
 

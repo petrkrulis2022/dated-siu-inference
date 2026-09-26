@@ -717,10 +717,13 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
     // that unsolved discovery problem; what this test verifies instead is real either way — that
     // WORKER-CODE only acts once its own real, on-chain balance for that token is genuinely
     // nonzero, never before.
+    //
+    // Corrected 2026-09-26 (real role-confusion fix — data/gate-market/
+    // first-real-default-2026-09-26.json): WORKER-CODE is the HOLDER here, and redemption grades
+    // the ISSUER's own delivery, never the holder's — so WORKER-CODE only presents the claim and
+    // then waits; it never calls submit_job for this claim at all.
     let mintedTokenId: string | undefined;
-    let workerCall = 0;
     const workerAdapter: Adapter = async (_model, prompt) => {
-      workerCall++;
       if (!mintedTokenId) {
         return respond(
           JSON.stringify({ tool: "get_balances", args: { account: devnet.agents["WORKER-CODE"].address, tokenIds: [] } }),
@@ -745,29 +748,32 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
           JSON.stringify({ tool: "redeem_claim", args: { tokenId: mintedTokenId, taskSpecHash } }),
         );
       }
-      const alreadySubmitted = /called submit_job/.test(prompt);
-      if (!alreadySubmitted) {
-        return respond(JSON.stringify({ tool: "submit_job", args: { source: CODE_GATE_3_HARDENED.source } }));
-      }
-      return respond(JSON.stringify({ done: true, summary: "redeemed and delivered" }));
+      return respond(JSON.stringify({ done: true, summary: "presented, waiting on the issuer to deliver" }));
     };
 
+    // ISSUER-A is the one who now does the real work: waits for "A CLAIM WAS PRESENTED AGAINST
+    // YOU", then authors and submits the real, proven-passing gate itself.
     const issuerPrompts: string[] = [];
     const issuerAdapter: Adapter = async (_model, prompt) => {
       issuerPrompts.push(prompt);
-      const match = prompt.match(
+      const readyMatch = prompt.match(
         /tokenId (\S+), holder (\S+), quantity (\S+), real graded result: passed=(true|false), receiptRef (\S+)/,
       );
-      if (!match) {
-        return respond(JSON.stringify({ tool: "get_print", args: { printId: "redemption-wiring-test-print" } }));
+      if (readyMatch) {
+        const [, tokenId, holder, quantity, passed, receiptRef] = readyMatch;
+        return respond(
+          JSON.stringify({
+            tool: "serve_redemption",
+            args: { tokenId, agentId: holder, quantity, passed: passed === "true", receiptRef },
+          }),
+        );
       }
-      const [, tokenId, holder, quantity, passed, receiptRef] = match;
-      return respond(
-        JSON.stringify({
-          tool: "serve_redemption",
-          args: { tokenId, agentId: holder, quantity, passed: passed === "true", receiptRef },
-        }),
-      );
+      const presentedMatch = /A CLAIM WAS PRESENTED AGAINST YOU/.test(prompt);
+      const alreadySubmitted = /called submit_job/.test(prompt);
+      if (presentedMatch && !alreadySubmitted) {
+        return respond(JSON.stringify({ tool: "submit_job", args: { source: CODE_GATE_3_HARDENED.source } }));
+      }
+      return respond(JSON.stringify({ tool: "get_print", args: { printId: "redemption-wiring-test-print" } }));
     };
 
     const job: JobEnvelope = {
@@ -812,8 +818,8 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
       windowId: "w-redemption",
       roster: [
         rosterConfig("ORCHESTRATOR", orchestratorAdapter, ["mint_claim", "transfer_claim"]),
-        rosterConfig("WORKER-CODE", workerAdapter, ["get_balances", "redeem_claim", "submit_job"]),
-        rosterConfig("ISSUER-A", issuerAdapter, ["get_print", "serve_redemption"]),
+        rosterConfig("WORKER-CODE", workerAdapter, ["get_balances", "redeem_claim"]),
+        rosterConfig("ISSUER-A", issuerAdapter, ["get_print", "submit_job", "serve_redemption"]),
       ],
       job,
       maxTurnsPerAgent: 6,
@@ -824,7 +830,7 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
     });
 
     expect(result.passed).toBe(true);
-    expect(result.passedBy).toBe("WORKER-CODE");
+    expect(result.passedBy).toBe("ISSUER-A"); // the routed issuer delivered — not the holder
 
     // ISSUER-A never saw a pending redemption until every real fact was actually in. Matched on
     // the tracker's own real, structured line (not the bare phrase "PENDING REDEMPTION ROUTED TO
@@ -852,5 +858,140 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
       devnet.agents["WORKER-CODE"].address as Hex,
     );
     expect(holderBalance).toBe(0n); // burned on a genuine pass, same invariant happy-path.ts checks
+  }, 90_000);
+
+  it("a holder's own submit_job attempt — even a genuinely passing one — never feeds the redemption tracker, never routes anything to the issuer, and never burns or defaults the claim", async () => {
+    // The explicit regression for the real 2026-09-26 incident (data/gate-market/
+    // first-real-default-2026-09-26.json): redemption grades the routed ISSUER's own delivery,
+    // never the holder's. Here the holder submits the SAME real, proven-passing gate itself —
+    // the strongest version of the property, since even a genuine pass from the wrong agent must
+    // not count.
+    const rosterConfig = (agentId: AgentId, adapter: Adapter, availableTools: RosterAgentConfig["availableTools"]): RosterAgentConfig => ({
+      agentId,
+      adapter,
+      modelString: "test",
+      prices: PRICES,
+      skillPackText: CANONICAL_ASSET_DESCRIPTION,
+      availableTools,
+      privateKeyHex: devnet.agents[agentId].privateKeyHex,
+      address: devnet.agents[agentId].address,
+      erc8004Id: erc8004IdFor(devnet.agents[agentId].address),
+      rpcUrl: devnet.rpcUrl,
+      maxOutputTokens: 3000,
+    });
+    const respond = (text: string): AdapterResult => ({
+      text, usage: { input: 100, output: 50, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+    });
+
+    let orchestratorCall = 0;
+    const orchestratorAdapter: Adapter = async () => {
+      orchestratorCall++;
+      if (orchestratorCall === 1) {
+        return respond(JSON.stringify({ tool: "mint_claim", args: { quantity: "10" } }));
+      }
+      return respond(JSON.stringify({ done: true, summary: "minted, not transferring in this test" }));
+    };
+
+    // ISSUER-A does nothing but poll — it never receives a delivery-owed prompt because the
+    // holder never actually presents (only the issuer's mint-time role is exercised here).
+    const issuerPrompts: string[] = [];
+    const issuerAdapter: Adapter = async (_model, prompt) => {
+      issuerPrompts.push(prompt);
+      return respond(JSON.stringify({ tool: "get_print", args: { printId: "regression-test-print" } }));
+    };
+
+    // A holder who was never transferred anything, presented nothing, yet still attempts the
+    // real work directly against this window's own job — the adversarial case the fix must
+    // reject regardless of what the holder's own attempt actually produces.
+    let attackerCall = 0;
+    const attackerAdapter: Adapter = async () => {
+      attackerCall++;
+      if (attackerCall === 1) {
+        return respond(JSON.stringify({ tool: "submit_job", args: { source: CODE_GATE_3_HARDENED.source } }));
+      }
+      return respond(JSON.stringify({ done: true, summary: "attempted the work directly" }));
+    };
+
+    const job: JobEnvelope = {
+      jobId: "role-confusion-regression-test",
+      taskClass: "code",
+      originalGate: CODE_GATE_1_TRIVIAL,
+      referenceInstance: CODE_REFERENCE,
+      knownGoodSubmission: CODE_KNOWN_GOOD,
+      adversarialSubmissions: [
+        CODE_ADVERSARIAL_ORIGINAL_BUG,
+        CODE_ADVERSARIAL_HARDCODED,
+        CODE_ADVERSARIAL_STUBBED,
+        CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
+      ],
+      heldOutInstances: CODE_HELD_OUT_INSTANCES,
+    };
+    const mintContext: MintContext = {
+      publisherPrivateKeyHex: devnet.publisherPrivateKeyHex,
+      printId: "regression-test-print",
+      nanoUsdPerSiu: 10_000_000n,
+      validitySeconds: 3600n,
+    };
+    const ceiling = new BudgetCeiling(
+      Object.fromEntries(
+        AGENT_IDS.map((id) => [id, { maxUsdcSpend: "1000000", maxInferenceTurns: 100, maxInferenceUsd: "1000000" }]),
+      ) as Record<AgentId, { maxUsdcSpend: string; maxInferenceTurns: number; maxInferenceUsd: string }>,
+    );
+    const budget = new ExperimentBudget({ ceiling, runCapUsd: "1000000", experimentCapUsd: "1000000", ledgerPath });
+    const deps: RunnerDeps = {
+      chainReader: new ViemChainReader(devnet.deployment, devnet.rpcUrl),
+      deployment: devnet.deployment,
+      escrowAddress: "0x0000000000000000000000000000000000dead",
+      runGateHardeningChecks,
+      loadPrint: async () => ({ print_id: "regression-test-print" }) as unknown as Print,
+      isReconciled: async () => false,
+    };
+
+    const issuerHeadroomBefore = await deps.chainReader.headroom(
+      devnet.agents["ISSUER-A"].address as Hex,
+      keccak256(stringToBytes("code")),
+    );
+
+    const result = await runFullRunWindow({
+      windowId: "w-role-confusion-regression",
+      roster: [
+        rosterConfig("ORCHESTRATOR", orchestratorAdapter, ["mint_claim"]),
+        rosterConfig("WORKER-CODE", attackerAdapter, ["submit_job"]),
+        rosterConfig("ISSUER-A", issuerAdapter, ["get_print", "serve_redemption"]),
+      ],
+      job,
+      maxTurnsPerAgent: 2,
+      budget,
+      deps,
+      runsRoot, runId: "run-role-confusion-regression", manifest: MANIFEST,
+      mintContext,
+    });
+
+    // WORKER-CODE's own submit_job call genuinely passed G1-G6 (a real, proven-passing gate) —
+    // the window's own bookkeeping correctly reflects that some agent delivered a real pass...
+    expect(result.passed).toBe(true);
+    expect(result.passedBy).toBe("WORKER-CODE");
+    // ...but that pass must never reach the redemption tracker or the routed issuer, since
+    // WORKER-CODE was never the routed issuer for the minted claim. Matched on the tracker's own
+    // real, structured lines (not the bare phrase "PENDING REDEMPTION ROUTED TO YOU" — that
+    // phrase is also named, as a hint, inside serve_redemption's own real tool description shown
+    // every turn regardless of tracker state; see tool-descriptions.ts).
+    const REDEMPTION_READY_PATTERN = /tokenId (\S+), holder (\S+), quantity (\S+), real graded result: passed=(true|false), receiptRef (\S+)/;
+    const DELIVERY_OWED_PATTERN = /tokenId (\S+), holder (\S+), quantity (\S+)\./;
+    for (const prompt of issuerPrompts) {
+      expect(REDEMPTION_READY_PATTERN.test(prompt)).toBe(false);
+      expect(DELIVERY_OWED_PATTERN.test(prompt)).toBe(false);
+    }
+    expect(result.turnLogsByAgent["ISSUER-A"].some((log) => log.parsed.includes("serve_redemption"))).toBe(false);
+
+    // And the real, on-chain consequence: ISSUER-A's real headroom was consumed by the real mint
+    // and never restored — no burn, no default draw happened for WORKER-CODE's own unrouted
+    // attempt. A holder's own work, however good, moved nothing.
+    expect(result.turnsByAgent.ORCHESTRATOR).toBeGreaterThan(0);
+    const issuerHeadroomAfter = await deps.chainReader.headroom(
+      devnet.agents["ISSUER-A"].address as Hex,
+      keccak256(stringToBytes("code")),
+    );
+    expect(issuerHeadroomAfter).toBeLessThan(issuerHeadroomBefore);
   }, 90_000);
 });

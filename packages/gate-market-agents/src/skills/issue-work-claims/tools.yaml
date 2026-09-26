@@ -1,6 +1,13 @@
 # ISSUER-A/ISSUER-B's real tool grant, per spec §8.2's "WHAT YOU CAN DO" list.
+#
+# submit_job added 2026-09-26 (real role-confusion fix, see
+# data/gate-market/first-real-default-2026-09-26.json): redemption grades the routed issuer's own
+# delivery, never the holder's (WorkClaim.sol's own top doc comment: "the gate grades the
+# issuer's own served output") — the spec's own §8.2 list predates any live run reaching this
+# point and never granted the one tool an issuer actually needs to deliver on a presented claim.
 tools:
   - mint_claim
+  - submit_job
   - serve_redemption
   - check_headroom
   - get_print

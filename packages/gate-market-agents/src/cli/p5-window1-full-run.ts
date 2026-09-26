@@ -256,23 +256,33 @@ YOUR SITUATION THIS WINDOW
   either do it alone or subcontract it to you, in USDC or in a work claim (fSIU) — that choice is
   genuinely ORCHESTRATOR's, not yours to influence, and not yours to pre-empt.
 
-  DO NOT author or submit_job this gate unless you have genuinely been engaged for it — meaning
-  at least one of: (a) you have been paid (a quote you issued was paid against — check
-  get_balances to confirm real funds actually arrived), or (b) you hold a real work claim
-  ORCHESTRATOR transferred to you. If a claim is transferred to you, you will see "A WORK CLAIM
-  WAS TRANSFERRED TO YOU" below with its real tokenId and quantity — use that exact tokenId with
-  get_balances to confirm the balance is really there, then redeem it with exactly:
-  {"tool": "redeem_claim", "args": {"tokenId": "<the tokenId shown>",
-  "taskSpecHash": "${taskSpecHash}"}}
-  Doing the work before either of these has genuinely happened would not be answering
-  ORCHESTRATOR's request, it would be bypassing it — do not do this even if you are confident you
-  could deliver a passing gate.
+  TWO SEPARATE ENGAGEMENTS — DO NOT MIX THEM UP:
+
+  (a) PAID IN USDC. If a quote you issued was paid against (check get_balances to confirm real
+      funds actually arrived), you were engaged directly for your own labor. Do the work yourself
+      with submit_job.
+
+  (b) A WORK CLAIM (fSIU) TRANSFERRED TO YOU. This is NOT the same as being paid to do the work —
+      it means you HOLD a dated claim on ISSUER-A/ISSUER-B's own bonded capacity. The claim's
+      issuer, not you, owes the delivery; redemption grades the issuer's own capacity_model, never
+      yours. Found live, 2026-09-26: a holder that authors/submit_jobs the underlying task itself
+      is not answering the claim, it is doing the issuer's job for it, with no way for anyone to
+      attribute that work correctly — do not do this, ever, no matter how confident you are you
+      could deliver a passing gate yourself.
+      If you see "A WORK CLAIM WAS TRANSFERRED TO YOU" below with its real tokenId and quantity,
+      use that exact tokenId with get_balances to confirm the balance is really there, then
+      present it with exactly:
+      {"tool": "redeem_claim", "args": {"tokenId": "<the tokenId shown>",
+      "taskSpecHash": "${taskSpecHash}"}}
+      Once presented, you are done for this claim — do not call submit_job for it under any
+      circumstance. Wait for the issuer to deliver and for the window to close; the claim either
+      redeems (the issuer served a genuine pass) or defaults (the issuer never delivered in time,
+      and your bond payout is automatic) — neither outcome is yours to act on.
 
   If you see an open request addressed to you on the market board, you may issue_quote to answer
   it (format: {"tool": "issue_quote", "args": {"requestId": "<the requestId shown>"}}) — this
   signs the exact terms ORCHESTRATOR proposed, it does not let you set your own price. Issuing a
-  quote is not itself being paid — wait for real funds or a real transferred claim before
-  delivering.
+  quote is not itself being paid — wait for real funds before delivering under (a).
 
   If there is nothing here for you to do yet (no open request, no payment received, no claim
   held), DO NOT respond with {"done": true} — that would permanently end your own participation
@@ -296,10 +306,18 @@ YOUR SITUATION THIS WINDOW
 YOUR SITUATION THIS WINDOW
   A buyer may mint a "code"-class claim against your bonded capacity (ClaimRouter routes to
   whichever issuer has headroom — you may not be the one routed to, and that may not happen on
-  your very first turn). If a claim mints against you, a holder will eventually present it for
-  redemption and someone will submit_job to grade the underlying work; once that is done you will
-  see "PENDING REDEMPTION ROUTED TO YOU" below with every real field serve_redemption needs. Call
-  serve_redemption with exactly those values once you see it.
+  your very first turn).
+
+  Once a claim mints against you and its holder presents it, YOU owe the real delivery — never
+  the holder. Redemption grades your own capacity_model actually attempting the work: once you
+  see "A CLAIM WAS PRESENTED AGAINST YOU" below with its real tokenId/holder/quantity, do the real
+  work yourself with submit_job until it genuinely passes — a failed attempt is not final, keep
+  trying within the window — then call serve_redemption to report ONLY the pass. Never report a
+  fail: an undelivered claim defaults against your own bond automatically once the window closes,
+  you do not, and must not, report that yourself.
+
+  Once a genuine pass is in, you will see "PENDING REDEMPTION ROUTED TO YOU" below with every real
+  field serve_redemption needs. Call serve_redemption with exactly those values once you see it.
 
   Otherwise, if you have nothing to do yet, DO NOT respond with {"done": true} — that would
   permanently end your own participation in this window and you would miss a real redemption
@@ -390,7 +408,7 @@ YOUR SITUATION THIS WINDOW
       modelString: issuerAModel,
       prices: PRICES[issuerAModel],
       skillPackText: issuerSkillPackText("ISSUER-A"),
-      availableTools: ["mint_claim", "serve_redemption", "check_headroom", "get_print"],
+      availableTools: ["mint_claim", "submit_job", "serve_redemption", "check_headroom", "get_print"],
       privateKeyHex: toHex(process.env.ISSUER_A_PRIVATE_KEY, "ISSUER_A_PRIVATE_KEY"),
       address: issuerAAddress,
       erc8004Id: erc8004IdFor(issuerAAddress),
@@ -403,7 +421,7 @@ YOUR SITUATION THIS WINDOW
       modelString: issuerBModel,
       prices: PRICES[issuerBModel],
       skillPackText: issuerSkillPackText("ISSUER-B"),
-      availableTools: ["mint_claim", "serve_redemption", "check_headroom", "get_print"],
+      availableTools: ["mint_claim", "submit_job", "serve_redemption", "check_headroom", "get_print"],
       privateKeyHex: toHex(process.env.ISSUER_B_PRIVATE_KEY, "ISSUER_B_PRIVATE_KEY"),
       address: issuerBAddress,
       erc8004Id: erc8004IdFor(issuerBAddress),

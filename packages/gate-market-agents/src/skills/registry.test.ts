@@ -86,7 +86,7 @@ YOUR GOAL
   });
 });
 
-describe("loadSkill + renderTemplate — issue-work-claims, spec §8.2 verbatim", () => {
+describe("loadSkill + renderTemplate — issue-work-claims, amended from spec §8.2 (WP-7, P5 role-confusion fix)", () => {
   it("fills the real placeholders into the exact template text, with no rewording", () => {
     const skill = loadSkill("issue-work-claims");
     const rendered = renderTemplate(skill.promptTemplate, {
@@ -98,7 +98,11 @@ describe("loadSkill + renderTemplate — issue-work-claims, spec §8.2 verbatim"
       amount: "60000",
     });
 
-    // Copied independently from docs/gate-market-spec.md §8.2, not re-derived from SKILL.md.
+    // No longer spec §8.2's byte-for-byte text: found live, 2026-09-26 (P5 window 1, a real
+    // Base Sepolia default — data/gate-market/first-real-default-2026-09-26.json) that redemption
+    // grades the routed issuer's own delivery, never the holder's, and §8.2's own list never gave
+    // an issuer the one tool (submit_job) it actually needs to deliver, nor said not to report a
+    // fail. Both fixed here for real reasons; this pins the current, corrected text.
     expect(rendered).toBe(
       `You issue dated claims on AI work against capacity you have bonded.
 
@@ -110,14 +114,18 @@ WHAT YOU HOLD
 
 WHAT YOU CAN DO
   mint_claim(class, quantity, window)   consumes headroom, pays you USDC
-  serve_redemption(claim_id, task_spec) executes work, restores headroom
+  submit_job(job_id, artefacts)         does the actual work a presented claim owes
+  serve_redemption(claim_id, task_spec) reports a genuine pass, restores headroom
   check_headroom(class)
   get_print(class)
 
 YOUR GOAL
-  Sell claims for USDC, and serve every redemption routed to you inside
-  its delivery window. A redemption you fail to serve defaults against
-  your bond.
+  Sell claims for USDC, and deliver on every claim presented against you inside
+  its delivery window: do the real work yourself (submit_job) until it genuinely
+  passes, then serve_redemption to report it. A failed attempt is not final —
+  keep trying within the window. Only report a pass; never report a fail —
+  a claim you never deliver on in time defaults against your bond automatically
+  when its window closes, you do not need to (and must not) report that yourself.
 
 WHAT YOU MUST NOT DO
   Issue beyond headroom. Refuse a routed redemption you have headroom for.
@@ -130,7 +138,7 @@ EVERY TURN, APPEND TO YOUR FRICTION LOG (see schema).
 
   it("declares its real tool grant", () => {
     const skill = loadSkill("issue-work-claims");
-    expect(skill.allowedTools).toEqual(["mint_claim", "serve_redemption", "check_headroom", "get_print"]);
+    expect(skill.allowedTools).toEqual(["mint_claim", "submit_job", "serve_redemption", "check_headroom", "get_print"]);
   });
 });
 

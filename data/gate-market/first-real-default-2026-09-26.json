@@ -1,0 +1,32 @@
+{
+  "event": "settleWindowClose — Defaulted branch",
+  "date": "2026-09-26",
+  "network": "base-sepolia",
+  "tokenId": "8965782683005017051783814780434406697068723737345248537262072811241248572566",
+  "classId": "0x2dc081a8d6d4714c79b5abd2e9b08c3a33b4ef1dcf946ef8b8cf6c495014f47b",
+  "holder": "WORKER-CODE",
+  "issuer": "ISSUER-A",
+  "quantityDefaulted": "10000",
+  "usdcPaidToHolderMicroUsd": "100000",
+  "cause": "Issuer-side serving failure, not a genuine default by the holder's own work. ISSUER-A never delivered — its own capacity_model never ran to grade the work it owed. The real bug: this window's redemption tracker (packages/gate-market-agents/src/loop/redemption-tracker.ts) routed WORKER-CODE's (the holder's) own first, failed submit_job attempt to ISSUER-A as the graded verdict, and ISSUER-A correctly reported that verdict via serveRedemption(passed=false). WORKER-CODE's later, genuinely passing submit_job attempt was never re-routed to ISSUER-A because the tracker is single-serve. The window then closed with the claim unsettled. This is the first real on-chain default this testbed has produced.",
+  "resolution": "Deliberately triggered via settleWindowClose (permissionless), rather than a corrected serveRedemption(passed=true), per explicit instruction: ISSUER-A never delivered, so reporting a pass would record a delivery that did not happen. The default correctly pays the holder from the issuer's bond and restores the issuer's headroom — the real invariant this window was actually testing (an issuer who never serves loses via its own bond, at real cost) held, even though the underlying cause was a software bug in the redemption tracker's routing, not a genuine capacity failure by ISSUER-A.",
+  "transaction": {
+    "hash": "0x9ee8394ce37cb1dc42a5d793abc1f24239aa047c55d489db40eb8a2f27bdee96",
+    "status": "success",
+    "triggeredBy": "deployer address (permissionless call — any address may trigger settleWindowClose once a claim's window has closed)"
+  },
+  "balancesBefore": {
+    "workerCodeClaimBalance": "10000",
+    "workerCodeUsdcBalanceMicroUsd": "0",
+    "issuerAHeadroomCodeClass": "59940000"
+  },
+  "balancesAfter": {
+    "workerCodeClaimBalance": "0",
+    "workerCodeUsdcBalanceMicroUsd": "100000",
+    "issuerAHeadroomCodeClass": "59950000"
+  },
+  "realFixesRequiredBeforeAnyFurtherRun": [
+    "Contract: serveRedemption has no window-closed check, letting a late passed=true report race settleWindowClose and escape a genuine default — needs a revert-after-close guard, fuzzed, and redeployed to Base Sepolia.",
+    "Loop/role-confusion: redemption must grade the ISSUER's own delivery (via its capacity_model), never the holder's own submitted work — the redemption tracker's routing is the real root cause of this event."
+  ]
+}
