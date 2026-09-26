@@ -1,0 +1,100 @@
+benchVersion: 0.0.0
+packVersion: gate-hardening/code@0.0.0
+agentConfigs:
+  ORCHESTRATOR:
+    reasoningModel: gpt-5.1
+  WORKER-CODE:
+    reasoningModel: claude-sonnet-5
+  WORKER-EXTRACT:
+    reasoningModel: gemini-3.1-pro-preview
+  ISSUER-A:
+    reasoningModel: grok-4.6
+    capacityModel: grok-4.6
+  ISSUER-B:
+    reasoningModel: grok-4.6
+    capacityModel: gemini-3.1-pro-preview
+  HEDGER:
+    reasoningModel: gpt-5.1
+  validated: packages/gate-market-agents/src/pack/model-assignment.ts's
+    validateModelAssignment — WORKER-CODE/WORKER-EXTRACT distinct families
+    (anthropic/google), ORCHESTRATOR+both workers span 3 families
+    (openai/anthropic/google), ISSUER-A/ISSUER-B capacityModel differ
+    (xai/google). Re-run and re-confirmed 2026-09-26 after restoring
+    ORCHESTRATOR to gpt-5.1 (see orchestratorReassignment below) — the
+    alternative, claude-sonnet-5, also validates (2 deciding families instead of
+    3) but was not used.
+  orchestratorReassignment:
+    history:
+      - date: 2026-09-26T06:00:00Z
+        from: gpt-5.1
+        to: mistral-small-3.2-24b-instruct
+        reason: P4 showed every authoring run finishing in one turn regardless of model
+          — a capable ORCHESTRATOR has no reason to subcontract, so P5 window 1
+          could never show emergent delegation with gpt-5.1 still assigned.
+          Reassigned to a weaker, cheaper, non-frontier model per the user's own
+          stated preference (make delegation rational, not scripted), verified
+          empirically first rather than assumed.
+        empiricalVerification:
+          runDir: data/gate-market/runs/orchestrator-weak-model-probe-2026-09-26T06-09-01-674Z/
+          finding: "Failed to solo the same P4-style gate-authoring job cleanly. Two real,
+            distinct signals, both disclosed rather than only citing the parse
+            failure: (1) the raw response was prose-wrapped with markdown fences
+            plus a separate trailing friction JSON block, breaking the simple
+            first-brace/last-brace parser; (2) its own attempted gate source
+            contained a genuine bug (execSync called with an argv-array second
+            argument — execSync takes a command string plus options, not argv
+            like execFile/spawn). Together: real evidence of lower capability,
+            not just a formatting quirk."
+          outcome: Used as the real ORCHESTRATOR model per the plan's own decision rule
+            (fails/struggles solo -> use it, delegation is rational).
+      - date: 2026-09-26T07:15:00Z
+        from: mistral-small-3.2-24b-instruct
+        to: gpt-5.1
+        reason: "The weak-model window
+          (data/gate-market/runs/p5-window1-2026-09-26T07-06-28-003Z/) showed a
+          second, more severe failure mode: on its second real turn (context now
+          including its own first failed attempt),
+          mistral-small-3.2-24b-instruct produced no parseable tool-call JSON at
+          all and was removed from the run before ever facing a
+          delegation/asset-choice decision. A weak enough model to guarantee it
+          can't solo the job is also too weak to reliably coordinate at all —
+          the two properties don't separate cleanly for this model. User's own
+          correction: pair a capable model with a structural constraint instead
+          (information asymmetry — see docs/gate-market-spec.md's own §8.3 vs
+          the ORCHESTRATOR-specific job description in
+          packages/gate-market-agents/src/cli/p5-window1-full-run.ts, which now
+          withholds the technical contract/reference materials from
+          ORCHESTRATOR's own prompt entirely, so it cannot author regardless of
+          model capability). Multi-hop/delegation is now a required, disclosed
+          structural property of this window, not an emergent one — but F1's own
+          question (which asset an agent pays in when it has a real, unbiased
+          choice) was never about whether delegation happens, so it stays a
+          genuine, unscripted measurement."
+seed: p5-window1-2026-09-26
+toolOrderByAgent:
+  ORCHESTRATOR:
+    - get_print
+    - request_quote
+    - mint_claim
+    - check_headroom
+    - pay
+    - submit_job
+    - transfer_claim
+    - get_balances
+  WORKER-CODE:
+    - submit_job
+    - pay
+    - redeem_claim
+    - issue_quote
+    - get_balances
+    - get_print
+  ISSUER-A:
+    - get_print
+    - check_headroom
+    - serve_redemption
+    - mint_claim
+  ISSUER-B:
+    - mint_claim
+    - check_headroom
+    - serve_redemption
+    - get_print
