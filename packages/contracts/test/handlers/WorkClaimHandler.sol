@@ -56,6 +56,12 @@ contract WorkClaimHandler is Test {
     /// of who the caller was — this is the direct check for that.
     uint256 public ghostUnauthorisedServeSucceeded;
     uint256 public ghostDoubleServeOnRetiredSucceeded;
+    /// Found live, 2026-09-26 (Gate Market testbed, real Base Sepolia run): serveRedemption had
+    /// no window-closed check, letting a routed issuer race settleWindowClose's own permissionless
+    /// default with a late passed=true report. Incremented ONLY if a serve call made after the
+    /// claim's own window has already closed still succeeds — must stay zero now that
+    /// serveRedemption reverts on a closed window (WorkClaim.sol).
+    uint256 public ghostServeSucceededAfterWindowClosed;
 
     /// Same test-only publisher key WorkClaim was deployed to trust — the handler signs every
     /// rate attestation it uses itself, real secp256k1 via vm.sign, not a stub.
@@ -201,11 +207,18 @@ contract WorkClaimHandler is Test {
         (address holder, uint256 bal) = _holderWithBalance(tokenId, holderSeed);
         if (bal == 0) return;
         uint256 quantity = bound(quantitySeed, 1, bal);
+        bool windowAlreadyClosed = _windowClosed(tokenId);
 
         vm.prank(issuer);
         try claim.serveRedemption(tokenId, holder, quantity, true, keccak256("r")) {
             ghostServePasses++;
+            if (windowAlreadyClosed) ghostServeSucceededAfterWindowClosed++;
         } catch {}
+    }
+
+    function _windowClosed(uint256 tokenId) internal view returns (bool) {
+        (,,, uint64 windowTo,,) = claim.claimTypes(tokenId);
+        return block.timestamp >= windowTo;
     }
 
     /// The property review asked to fuzz hardest: a failed serve must leave the claim balance and
@@ -222,10 +235,12 @@ contract WorkClaimHandler is Test {
 
         (, bytes32 classId,,,,) = claim.claimTypes(tokenId);
         uint256 headroomBefore = bond.headroom(issuer, classId);
+        bool windowAlreadyClosed = _windowClosed(tokenId);
 
         vm.prank(issuer);
         try claim.serveRedemption(tokenId, holder, quantity, false, keccak256("r")) {
             ghostServeFails++;
+            if (windowAlreadyClosed) ghostServeSucceededAfterWindowClosed++;
             assertEq(
                 claim.balanceOf(holder, tokenId),
                 bal,

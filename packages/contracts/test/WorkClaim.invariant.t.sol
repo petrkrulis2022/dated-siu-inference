@@ -134,6 +134,18 @@ contract WorkClaimInvariantTest is Test {
         );
     }
 
+    /// Found live, 2026-09-26 (Gate Market testbed, real Base Sepolia run): serveRedemption had
+    /// no window-closed check, letting a routed issuer race settleWindowClose's own permissionless
+    /// default with a late passed=true report for work never actually delivered in time. Must stay
+    /// zero now that serveRedemption reverts once a claim's own window has closed.
+    function invariant_noServeSucceededAfterWindowClosed() public view {
+        assertEq(
+            handler.ghostServeSucceededAfterWindowClosed(),
+            0,
+            "a serve call succeeded after its claim's window had already closed"
+        );
+    }
+
     /// Property 3: draining the bond. A second settlement of an already-terminal claim must
     /// never succeed.
     function invariant_noDoubleSettlementEverSucceeded() public view {

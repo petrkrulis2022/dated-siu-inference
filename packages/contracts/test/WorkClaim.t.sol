@@ -204,6 +204,54 @@ contract WorkClaimTest is Test {
         assertEq(claim.balanceOf(buyer, tokenId), 0);
     }
 
+    /// Found live, 2026-09-26 (Gate Market testbed, real Base Sepolia run): serveRedemption had
+    /// no window-closed check, so a routed issuer that never delivered in time could race
+    /// settleWindowClose's own permissionless default with a late passed=true report the moment
+    /// it saw the default coming, escaping a genuine default for work it never actually served in
+    /// time. This is the regression: once the window has closed, serveRedemption must revert —
+    /// disposition belongs to settleWindowClose alone from that point on.
+    function test_serveRedemption_revertsAfterWindowClosed() public {
+        uint256 tokenId = _mint(500);
+        vm.warp(windowFrom + 1);
+        vm.prank(buyer);
+        claim.presentForRedemption(tokenId, keccak256("task-1"));
+
+        vm.warp(windowTo);
+        vm.prank(issuer);
+        vm.expectRevert(WorkClaim.WindowClosed.selector);
+        claim.serveRedemption(tokenId, buyer, 500, true, keccak256("receipt-1"));
+    }
+
+    /// The other half of the same regression: closing off the late-pass escape hatch must not
+    /// break the real default path it was found racing against — settleWindowClose still resolves
+    /// correctly (burns, restores headroom, pays the holder from the bond) once serveRedemption
+    /// can no longer intervene after close.
+    function test_settleWindowClose_stillDefaultsCorrectly_afterServeRedemptionWindowGuardAdded() public {
+        uint256 tokenId = _mint(500);
+        vm.warp(windowFrom + 1);
+        vm.prank(buyer);
+        claim.presentForRedemption(tokenId, keccak256("task-1"));
+
+        vm.warp(windowTo);
+        vm.prank(issuer);
+        vm.expectRevert(WorkClaim.WindowClosed.selector);
+        claim.serveRedemption(tokenId, buyer, 500, true, keccak256("receipt-1"));
+
+        uint256 headroomBefore = bond.headroom(issuer, CLASS_CODE);
+        uint256 buyerUsdcBefore = usdc.balanceOf(buyer);
+        _settle(tokenId, buyer);
+
+        assertEq(claim.balanceOf(buyer, tokenId), 0, "burned on default");
+        assertEq(
+            bond.headroom(issuer, CLASS_CODE), headroomBefore + 500, "headroom restored on default"
+        );
+        assertEq(
+            usdc.balanceOf(buyer),
+            buyerUsdcBefore + (500 * PRICE_NANO_USD_PER_SIU) / 1_000_000,
+            "bond paid the holder"
+        );
+    }
+
     function test_settleWindowClose_defaultsWhenPresentedButNeverServedSuccessfully() public {
         uint256 tokenId = _mint(500);
         vm.warp(windowFrom + 1);

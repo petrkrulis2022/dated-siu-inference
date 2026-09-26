@@ -325,6 +325,14 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
         ClaimType storage ct = claimTypes[tokenId];
         if (!ct.exists) revert NothingToPresent();
         if (msg.sender != ct.issuer) revert NotTheRoutedIssuer();
+        // Found live, 2026-09-26: without this, a routed issuer that never served in time could
+        // race settleWindowClose's own permissionless default with a late passed=true report once
+        // it saw the default coming, escaping a genuine default with a same-block or same-mempool
+        // "pass" for work it never actually delivered in time — the same real value settleWindowClose
+        // itself protects against `AlreadySettled()`, from the other side of the same window. Once
+        // the window has closed, redemption's real disposition is settleWindowClose's alone —
+        // Redeemed, Defaulted, and Expired are meant to be mutually exclusive terminal states.
+        if (block.timestamp >= ct.windowTo) revert WindowClosed();
         if (quantity == 0) revert ZeroAmount();
         if (quantity > balanceOf(holder, tokenId)) {
             revert InsufficientRedemption(quantity, balanceOf(holder, tokenId));
