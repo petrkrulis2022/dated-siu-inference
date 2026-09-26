@@ -48,8 +48,30 @@ describe("familyFor", () => {
     expect(() => familyFor("nonexistent-model", REGISTRY)).toThrow(ModelAssignmentError);
   });
 
-  it("throws for a registered but non-frontier-tier model", () => {
-    expect(() => familyFor("mistral-small-3.2-24b-instruct", REGISTRY)).toThrow(ModelAssignmentError);
+  it("accepts a non-frontier, open-weight-hosted model — relaxed 2026-09-25 for WP-7's P5 delegation test", () => {
+    expect(() => familyFor("mistral-small-3.2-24b-instruct", REGISTRY)).not.toThrow();
+  });
+
+  it("derives family from model_string's own prefix for open-weight-hosted models, not the shared 'openrouter' provider", () => {
+    const registryWithMultipleOpenWeight: ModelRegistryEntry[] = [
+      ...REGISTRY,
+      {
+        id: "deepseek-v3.2",
+        provider: "openrouter",
+        endpoint: "https://openrouter.ai/api/v1/chat/completions",
+        model_string: "deepseek/deepseek-v3.2",
+        tier: "open-weight-hosted",
+        open_weights: true,
+        host: "deepinfra",
+      },
+    ];
+    const mistralFamily = familyFor("mistral-small-3.2-24b-instruct", registryWithMultipleOpenWeight);
+    const deepseekFamily = familyFor("deepseek-v3.2", registryWithMultipleOpenWeight);
+    expect(mistralFamily).toBe("mistralai");
+    expect(deepseekFamily).toBe("deepseek");
+    // The real property this fix exists for: both share provider "openrouter" but must not be
+    // treated as the same family — that's the bug relying on `provider` alone would reintroduce.
+    expect(mistralFamily).not.toBe(deepseekFamily);
   });
 });
 

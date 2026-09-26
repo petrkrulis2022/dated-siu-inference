@@ -1,8 +1,16 @@
 # ORCHESTRATOR's real tool grant — spec §8.3's "WHAT YOU CAN DO" list, mapped to the real
 # ToolName values in tools/index.ts. Runner.callTool denies and logs any call outside this list.
+#
+# mint_claim/transfer_claim/check_headroom added 2026-09-25 (WP-7, P5 planning): spec §8.3's own
+# list only ever named the USDC path (request_quote+pay) — as written, ORCHESTRATOR could never
+# structurally choose fSIU at all, which forecloses the exact question P5 exists to test. Adding
+# the real fSIU path here, not scripting the choice elsewhere.
 tools:
   - request_quote
   - pay
+  - mint_claim
+  - transfer_claim
+  - check_headroom
   - submit_job
   - get_balances
   - get_print

@@ -3,12 +3,11 @@ import type { AgentId } from "../identity/resolve.js";
 
 /**
  * Spec §12.2a's two fields, "never one": `reasoningModel` (every agent — what it thinks with)
- * and `capacityModel` (issuers only — what serves redemptions of the claims they issue). Scoped
- * to `tier: "frontier"` registry entries only, per the run's own "frontier tier model assignment"
- * decision — this also collapses "model family" to that entry's own `provider` field, since every
- * real frontier-tier registry entry today is one model per provider (`familyFor` below would need
- * a real per-model family field instead of `provider` the day a second frontier model shares a
- * provider — checked, not the case as of 2026-09-25).
+ * and `capacityModel` (issuers only — what serves redemptions of the claims they issue). Spec
+ * §12.2a itself only requires "only admitted, priced models" — no tier restriction — so any
+ * registered, priced model is assignable, not only `tier: "frontier"` (that was this project's
+ * own earlier default, relaxed 2026-09-25 for WP-7's P5 delegation test, which specifically needs
+ * a weaker, non-frontier model assignable to ORCHESTRATOR).
  */
 export interface ModelAssignment {
   reasoningModel: string;
@@ -24,21 +23,24 @@ export class ModelAssignmentError extends Error {
   }
 }
 
-/** Throws, never guesses, for a model outside the frontier tier or absent from the registry —
- * the same "throws, never warns" convention `pack/validate.ts` and `budget/model-prices.ts`
- * already use for a real-dollar/real-run mistake. */
+/** Throws, never guesses, for a model absent from the registry — the same "throws, never warns"
+ * convention `pack/validate.ts` and `budget/model-prices.ts` already use for a real-dollar/real-run
+ * mistake.
+ *
+ * Family is `provider` for a frontier/mid-tier entry (already a clean 1:1 with the real developer
+ * — anthropic/openai/google/xai, confirmed against the current registry) but `provider` alone is
+ * wrong for the open-weight-hosted tier: every one of those entries is `provider: "openrouter"`
+ * regardless of which real lab trained the weights, which would wrongly treat e.g. DeepSeek and
+ * Mistral as the same family. `model_string`'s own prefix before the first "/" is the real
+ * developer for that tier (confirmed against every current open-weight-hosted entry: "deepseek",
+ * "meta-llama", "mistralai", "qwen") and is used instead whenever present. */
 export function familyFor(modelId: string, registry: readonly ModelRegistryEntry[]): string {
   const entry = registry.find((r) => r.id === modelId);
   if (!entry) {
     throw new ModelAssignmentError(`"${modelId}" is not a registered model.`);
   }
-  if (entry.tier !== "frontier") {
-    throw new ModelAssignmentError(
-      `"${modelId}" is tier "${entry.tier}", not "frontier" — this run's model assignment is ` +
-        "scoped to frontier-tier models only.",
-    );
-  }
-  return entry.provider;
+  const slashIndex = entry.model_string.indexOf("/");
+  return slashIndex === -1 ? entry.provider : entry.model_string.slice(0, slashIndex);
 }
 
 /**
@@ -88,8 +90,8 @@ export function validateModelAssignment(
         "capacity models leave the two-issuer comparison with nothing to compare.",
     );
   }
-  // Confirms both are real, registered, frontier-tier models too (throws via familyFor if not) —
-  // capacityModel isn't otherwise validated above since it never feeds familyOf.
+  // Confirms both are real, registered models too (throws via familyFor if not) — capacityModel
+  // isn't otherwise validated above since it never feeds familyOf.
   familyFor(issuerACapacity, registry);
   familyFor(issuerBCapacity, registry);
 }

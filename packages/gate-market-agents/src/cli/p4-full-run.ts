@@ -19,6 +19,7 @@ import type { ModelPrices } from "../budget/inference-cost.js";
 import { BudgetCeiling } from "../budget/ceiling.js";
 import { ExperimentBudget } from "../budget/experiment-budget.js";
 import { validateModelAssignment, type ModelAssignments } from "../pack/model-assignment.js";
+import { erc8004IdFor } from "../identity/resolve.js";
 import type { RunnerDeps } from "../deps.js";
 import { loadGateMarketDeployment } from "../chain/deployment.js";
 import { ViemChainReader } from "../chain/reader.js";
@@ -202,6 +203,8 @@ TO SUBMIT YOUR GATE, respond with exactly:
         skillPackText,
         availableTools: ["submit_job"],
         privateKeyHex: process.env.ORCHESTRATOR_PRIVATE_KEY ?? "",
+        address: process.env.ORCHESTRATOR_ADDRESS ?? "",
+        erc8004Id: erc8004IdFor(process.env.ORCHESTRATOR_ADDRESS ?? ""),
         rpcUrl: process.env.BASE_SEPOLIA_RPC_URL ?? "",
         maxOutputTokens: MAX_OUTPUT_TOKENS,
       },

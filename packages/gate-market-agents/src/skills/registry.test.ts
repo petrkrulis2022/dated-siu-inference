@@ -20,7 +20,10 @@ THE JOB
 
 WHAT YOU CAN DO
   request_quote(seller, task_spec)      receive a signed quote
-  pay(seller, asset, amount, parent_payment_id)
+  pay(seller, asset, amount, parent_payment_id)     pays in USDC
+  mint_claim(classId, quantity, window) buys a dated work claim from an issuer
+  transfer_claim(to, tokenId, quantity) pays a seller by transferring a claim you hold — fSIU
+  check_headroom(class)                 confirms an issuer can serve before you mint
   submit_job(job_id, artefacts)         runs the gate checks
   get_balances()  get_print(class)
 
@@ -35,7 +38,9 @@ EVERY PAYMENT MUST CARRY parent_payment_id linking it to the job it serves.
 
   it("declares its real tool grant and scoring metrics", () => {
     const skill = loadSkill("subcontract-and-settle");
-    expect(skill.allowedTools).toEqual(["request_quote", "pay", "submit_job", "get_balances", "get_print"]);
+    expect(skill.allowedTools).toEqual([
+      "request_quote", "pay", "mint_claim", "transfer_claim", "check_headroom", "submit_job", "get_balances", "get_print",
+    ]);
     expect(skill.scoring.metrics).toEqual(["jobs_passed", "cost_per_siu_delivered"]);
   });
 });

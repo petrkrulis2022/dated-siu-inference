@@ -1,4 +1,6 @@
+import { keccak256, stringToBytes, type Hex } from "viem";
 import type { Adapter, AdapterParams } from "@touchstone/harness";
+import type { QuoteBody, TouchstoneQuote } from "@touchstone/sdk";
 import type {
   GateHardeningJobInputs,
   GateHardeningResult,
@@ -17,6 +19,7 @@ import {
 import { ExperimentBudget, ExperimentCapExceededError } from "../budget/experiment-budget.js";
 import { CeilingExceededError } from "../budget/ceiling.js";
 import { gateResultsMatch } from "../gate/determinism.js";
+import { signRateAttestation } from "../chain/rate-attestation.js";
 import { Runner } from "../runner.js";
 import type { RunnerDeps } from "../deps.js";
 import type { AgentId } from "../identity/resolve.js";
@@ -24,6 +27,7 @@ import { ContextValidationError, validateAgentContext } from "../pack/validate.j
 import type { ToolName } from "../tools/index.js";
 import { RunRecorder, type RunManifest } from "../run-recorder/recorder.js";
 import { FrictionLogWriter, type FrictionLogEntry } from "../friction/log.js";
+import { QuoteBoard } from "./quote-board.js";
 import { buildTurnPrompt } from "./prompt.js";
 import { ModelResponseParseError, parseModelResponse, type FrictionReport } from "./parse-tool-call.js";
 
@@ -52,8 +56,31 @@ export interface RosterAgentConfig {
   skillPackText: string;
   availableTools: readonly ToolName[];
   privateKeyHex: string;
+  /** This agent's own address, derived from `privateKeyHex` by the caller once — needed to
+   * resolve a `transfer_claim`'s symbolic `{ agentId }` destination and to build the roster
+   * address map `buildToolArgs` uses, without re-deriving it from the key on every turn. */
+  address: string;
+  /** `erc8004:0x...` — matches `identity/resolve.ts`'s own convention. Needed to know which open
+   * quote-board requests are addressed to *this* agent (a request names a `seller_id`, not an
+   * `AgentId`). */
+  erc8004Id: string;
   rpcUrl: string;
   maxOutputTokens: number;
+}
+
+/** Real, real-key-signed context for a `mint_claim` splice (see `buildToolArgs`) — absent when a
+ * window's roster has no agent that can mint (e.g. P4's solo ORCHESTRATOR pass, which never calls
+ * `mint_claim` at all). `nanoUsdPerSiu` is the one real rate every mint in this window attests to
+ * — the model chooses *whether* and *how much* to mint, never the rate itself, matching how
+ * `submit_job`'s envelope is spliced rather than retyped. */
+export interface MintContext {
+  publisherPrivateKeyHex: Hex;
+  printId: string;
+  nanoUsdPerSiu: bigint;
+  /** How long a freshly-signed attestation stays valid — generous on purpose (this run's own
+   * compressed windows are hours, not weeks); a real production system would want this much
+   * tighter (spec's own EIP-712 replay-guard point). */
+  validitySeconds: bigint;
 }
 
 export interface JobEnvelope {
@@ -80,6 +107,16 @@ export interface FullRunWindowOptions {
   runsRoot: string;
   runId: string;
   manifest: RunManifest;
+  /** This window's own real, compressed bounds (spec 9.2's "three weekly windows" compressed to
+   * hours) — any real `mint_claim` in this window mints against these, not a fictional weekly
+   * one, so `time_to_expiry` reflects the window an agent actually faces. Defaults to a generous
+   * now-to-now+7days span when omitted (P4's solo pass never mints, so the exact bounds don't
+   * matter there). */
+  windowFrom?: bigint;
+  windowTo?: bigint;
+  /** Present only for a window whose roster can actually mint (an agent with `mint_claim` in its
+   * tool grant) — see `MintContext`'s own doc comment. */
+  mintContext?: MintContext;
   onTurn?: (agentId: AgentId, log: TurnLog) => void;
 }
 
@@ -92,6 +129,10 @@ export interface TurnLog {
   parsed: string;
   gateResult?: { passed: boolean; summary: string };
   quarantinedNonDeterministicGate?: boolean;
+  /** The quote-board text this agent's own prompt actually carried this turn, if any — real
+   * evidence of what this agent could see of the market, not just what it did (empty when the
+   * board had nothing for it, matching `buildTurnPrompt`'s own "omit when empty" convention). */
+  marketBoardText?: string;
 }
 
 export interface FullRunWindowResult {
@@ -139,6 +180,15 @@ async function holdTimeToExpiry(
 export async function runFullRunWindow(options: FullRunWindowOptions): Promise<FullRunWindowResult> {
   const recorder = new RunRecorder(options.runsRoot, options.runId, options.manifest);
   const friction = new FrictionLogWriter(options.runsRoot, options.runId);
+  const board = new QuoteBoard();
+
+  const nowSeconds = BigInt(Math.floor(Date.now() / 1000));
+  const windowFrom = options.windowFrom ?? nowSeconds;
+  const windowTo = options.windowTo ?? nowSeconds + 7n * 24n * 3600n;
+
+  const agentAddressByAgentId = Object.fromEntries(
+    options.roster.map((a) => [a.agentId, a.address]),
+  ) as Partial<Record<AgentId, string>>;
 
   const runners = new Map(
     options.roster.map((agent) => [
@@ -202,7 +252,8 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       continue;
     }
 
-    const prompt = buildTurnPrompt(context, agent.availableTools);
+    const marketBoardText = board.renderFor(agent.agentId, agent.erc8004Id);
+    const prompt = buildTurnPrompt(context, agent.availableTools, marketBoardText);
     const projectedUsd = projectedTurnCostUsd(Math.ceil(prompt.length / 4), agent.maxOutputTokens, agent.prices);
 
     try {
@@ -234,7 +285,7 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       intent = parseModelResponse(adapterResult.text);
     } catch (err) {
       const log: TurnLog = {
-        turn, promptChars: prompt.length, projectedUsd, realizedUsd,
+        turn, promptChars: prompt.length, projectedUsd, realizedUsd, marketBoardText: marketBoardText || undefined,
         latencyMs: adapterResult.latency_ms,
         parsed: err instanceof Error ? err.message : String(err),
       };
@@ -251,7 +302,7 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
 
     if ("done" in intent) {
       const log: TurnLog = {
-        turn, promptChars: prompt.length, projectedUsd, realizedUsd,
+        turn, promptChars: prompt.length, projectedUsd, realizedUsd, marketBoardText: marketBoardText || undefined,
         latencyMs: adapterResult.latency_ms, parsed: JSON.stringify(intent),
       };
       turnLogsByAgent[agent.agentId].push(log);
@@ -262,7 +313,31 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       continue;
     }
 
-    const args = buildToolArgs(intent.tool, intent.args, options.job);
+    let args: unknown;
+    try {
+      args = await buildToolArgs(intent.tool, intent.args, {
+        job: options.job,
+        board,
+        agentAddressByAgentId,
+        deployment: options.deps.deployment,
+        windowFrom,
+        windowTo,
+        mintContext: options.mintContext,
+      });
+    } catch (err) {
+      // A real, disclosed failure (an unknown requestId, a missing address) — not a crash. The
+      // model's own next turn sees this in its tool-call history exactly like any other tool
+      // error, since Runner.callTool would have surfaced the same shape for a real revert.
+      const log: TurnLog = {
+        turn, promptChars: prompt.length, projectedUsd, realizedUsd, marketBoardText: marketBoardText || undefined,
+        latencyMs: adapterResult.latency_ms,
+        parsed: `${JSON.stringify(intent)} -> args error: ${err instanceof Error ? err.message : String(err)}`,
+      };
+      turnLogsByAgent[agent.agentId].push(log);
+      options.onTurn?.(agent.agentId, log);
+      await friction.append(buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null));
+      continue;
+    }
 
     try {
       // Always the real, recorded call — allowlist-checked and ceiling-charged exactly once via
@@ -271,6 +346,16 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       // twice instead of calling for real" would skip the allowlist check for this specific tool.
       const record = await runner.callTool(intent.tool, args, { turn, jobId: options.job.jobId });
       let quarantined = false;
+
+      if (intent.tool === "request_quote") {
+        board.postRequest(agent.agentId, record.result as QuoteBody);
+      }
+      if (intent.tool === "issue_quote") {
+        const requestId = (intent.args as { requestId?: unknown } | undefined)?.requestId;
+        if (typeof requestId === "string") {
+          board.postIssuedQuote(requestId, record.result as TouchstoneQuote);
+        }
+      }
 
       if (intent.tool === "submit_job") {
         // Runner's own call above is the real, recorded first invocation — one genuinely fresh
@@ -287,7 +372,7 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
         : undefined;
 
       const log: TurnLog = {
-        turn, promptChars: prompt.length, projectedUsd, realizedUsd,
+        turn, promptChars: prompt.length, projectedUsd, realizedUsd, marketBoardText: marketBoardText || undefined,
         latencyMs: adapterResult.latency_ms, parsed: JSON.stringify(intent),
         quarantinedNonDeterministicGate: quarantined || undefined,
       };
@@ -350,16 +435,100 @@ function buildFrictionEntry(
   };
 }
 
-function buildToolArgs(tool: ToolName, rawArgs: unknown, job: JobEnvelope): unknown {
-  if (tool !== "submit_job") return rawArgs;
-  const rawSource = (rawArgs as { source?: unknown } | undefined)?.source;
-  return {
-    taskClass: job.taskClass,
-    originalGate: job.originalGate,
-    hardenedGate: { taskClass: job.taskClass, source: typeof rawSource === "string" ? rawSource : "" },
-    referenceInstance: job.referenceInstance,
-    knownGoodSubmission: job.knownGoodSubmission,
-    adversarialSubmissions: job.adversarialSubmissions,
-    heldOutInstances: job.heldOutInstances,
-  };
+export interface BuildToolArgsContext {
+  job: JobEnvelope;
+  board: QuoteBoard;
+  agentAddressByAgentId: Partial<Record<AgentId, string>>;
+  deployment: RunnerDeps["deployment"];
+  windowFrom: bigint;
+  windowTo: bigint;
+  mintContext?: MintContext;
+}
+
+/** The real class ids `WorkClaim`/`CapacityBond` already use — `keccak256(bytes(taskClass))`,
+ * matching `devnet/deploy.ts`'s own `CLASS_CODE`/`CLASS_EXTRACT` computation exactly (confirmed
+ * independently, not re-derived by guesswork) without importing a devnet-only module into a
+ * real-chain loop. */
+function classIdFor(taskClass: TaskClass): Hex {
+  return keccak256(stringToBytes(taskClass));
+}
+
+/**
+ * Splices in whatever a model cannot or should not be trusted to invent itself, exactly like
+ * `submit_job`'s own fixed envelope — never overrides an agent's real economic decision (how
+ * much to mint, whether to request a quote, whether to pay).
+ */
+export async function buildToolArgs(tool: ToolName, rawArgs: unknown, ctx: BuildToolArgsContext): Promise<unknown> {
+  if (tool === "submit_job") {
+    const rawSource = (rawArgs as { source?: unknown } | undefined)?.source;
+    return {
+      taskClass: ctx.job.taskClass,
+      originalGate: ctx.job.originalGate,
+      hardenedGate: { taskClass: ctx.job.taskClass, source: typeof rawSource === "string" ? rawSource : "" },
+      referenceInstance: ctx.job.referenceInstance,
+      knownGoodSubmission: ctx.job.knownGoodSubmission,
+      adversarialSubmissions: ctx.job.adversarialSubmissions,
+      heldOutInstances: ctx.job.heldOutInstances,
+    };
+  }
+
+  if (tool === "mint_claim") {
+    if (!ctx.mintContext) {
+      throw new Error("mint_claim: this window has no mintContext — no agent should have this tool.");
+    }
+    const quantity = (rawArgs as { quantity?: unknown } | undefined)?.quantity;
+    if (typeof quantity !== "string") {
+      throw new Error('mint_claim: expected a string "quantity" in args.');
+    }
+    const validUntil = BigInt(Math.floor(Date.now() / 1000)) + ctx.mintContext.validitySeconds;
+    const signature = await signRateAttestation(
+      { printId: ctx.mintContext.printId, nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu, validUntil },
+      ctx.deployment.network.chainId,
+      ctx.deployment.workClaim.address as Hex,
+      ctx.mintContext.publisherPrivateKeyHex,
+    );
+    return {
+      classId: classIdFor(ctx.job.taskClass),
+      quantity,
+      windowFrom: Number(ctx.windowFrom),
+      windowTo: Number(ctx.windowTo),
+      printId: ctx.mintContext.printId,
+      nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu.toString(),
+      validUntil: validUntil.toString(),
+      signature,
+    };
+  }
+
+  if (tool === "transfer_claim") {
+    const raw = rawArgs as { to?: unknown; agentId?: unknown; tokenId?: unknown; quantity?: unknown } | undefined;
+    // A model may name the destination symbolically ({ agentId: "WORKER-CODE" }) rather than
+    // risk mistyping a real hex address — resolved here against the roster's own real addresses,
+    // never guessed. A literal "to" address is still honoured unchanged if given instead.
+    let to = raw?.to;
+    if (typeof raw?.agentId === "string") {
+      const resolved = ctx.agentAddressByAgentId[raw.agentId as AgentId];
+      if (!resolved) {
+        throw new Error(`transfer_claim: no known address for agentId "${raw.agentId}".`);
+      }
+      to = resolved;
+    }
+    return { to, tokenId: raw?.tokenId, quantity: raw?.quantity };
+  }
+
+  if (tool === "issue_quote") {
+    // The seller answers a specific open request by id — the actual signed body is the board's
+    // own stored QuoteBody from that request, never whatever the model reconstructs by hand, so a
+    // seller can't accidentally (or otherwise) sign something other than what was really asked.
+    const requestId = (rawArgs as { requestId?: unknown } | undefined)?.requestId;
+    if (typeof requestId !== "string") {
+      throw new Error('issue_quote: expected a string "requestId" naming the request being answered.');
+    }
+    const request = ctx.board.requestById(requestId);
+    if (!request) {
+      throw new Error(`issue_quote: no open request "${requestId}" on the board.`);
+    }
+    return request.body;
+  }
+
+  return rawArgs;
 }

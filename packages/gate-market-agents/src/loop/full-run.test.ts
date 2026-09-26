@@ -2,6 +2,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { privateKeyToAccount } from "viem/accounts";
+import { getAddress, recoverTypedDataAddress, type Hex } from "viem";
 import type { Adapter, AdapterResult } from "@touchstone/harness";
 import type { GateHardeningResult } from "@touchstone/task-pack-gate-hardening";
 import type { Print } from "@touchstone/sdk";
@@ -11,7 +13,15 @@ import { BudgetCeiling } from "../budget/ceiling.js";
 import { ExperimentBudget } from "../budget/experiment-budget.js";
 import { CANONICAL_ASSET_DESCRIPTION } from "../skills/asset-description.js";
 import { loadSkill } from "../skills/registry.js";
-import { runFullRunWindow, type JobEnvelope, type RosterAgentConfig } from "./full-run.js";
+import { QuoteBoard } from "./quote-board.js";
+import {
+  buildToolArgs,
+  runFullRunWindow,
+  type BuildToolArgsContext,
+  type JobEnvelope,
+  type MintContext,
+  type RosterAgentConfig,
+} from "./full-run.js";
 
 const PRICES = { priceInUsdPer1M: "2", priceOutUsdPer1M: "12" };
 
@@ -94,6 +104,8 @@ function orchestratorConfig(adapter: Adapter): RosterAgentConfig {
     skillPackText: `${loadSkill("subcontract-and-settle").promptTemplate}\n\n${CANONICAL_ASSET_DESCRIPTION}`,
     availableTools: ["submit_job"] as const,
     privateKeyHex: "0xa715563de5d5c011627720140757574d96bcfc02bdf2e0ee1f68d64e171fe89a",
+    address: "0x0000000000000000000000000000000000000001",
+    erc8004Id: "erc8004:0x0000000000000000000000000000000000000001",
     rpcUrl: "http://127.0.0.1:1",
     maxOutputTokens: 3000,
   };
@@ -260,5 +272,206 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
       missing_information: null,
       decision_confidence: "medium",
     });
+  });
+});
+
+describe("buildToolArgs", () => {
+  const FAKE_DEPLOYMENT: RunnerDeps["deployment"] = {
+    network: { name: "test", chainId: 84532 },
+    usdc: { address: "0x0" },
+    capacityBond: { address: "0x0" },
+    claimRouter: { address: "0x0" },
+    workClaim: { address: getAddress(`0x${"0".repeat(36)}cafe` as Hex) },
+  };
+  const PUBLISHER_PK: Hex = "0xa715563de5d5c011627720140757574d96bcfc02bdf2e0ee1f68d64e171fe89a";
+
+  function baseCtx(overrides: Partial<BuildToolArgsContext> = {}): BuildToolArgsContext {
+    return {
+      job: JOB,
+      board: new QuoteBoard(),
+      agentAddressByAgentId: {},
+      deployment: FAKE_DEPLOYMENT,
+      windowFrom: 1_800_000_000n,
+      windowTo: 1_800_003_600n,
+      ...overrides,
+    };
+  }
+
+  it("mint_claim: splices a real EIP-712 attestation that recovers to the real publisher key", async () => {
+    const mintContext: MintContext = {
+      publisherPrivateKeyHex: PUBLISHER_PK,
+      printId: "2026-09-25",
+      nanoUsdPerSiu: 10_700_000n,
+      validitySeconds: 3600n,
+    };
+    const args = (await buildToolArgs("mint_claim", { quantity: "500" }, baseCtx({ mintContext }))) as {
+      classId: string; quantity: string; windowFrom: number; windowTo: number;
+      printId: string; nanoUsdPerSiu: string; validUntil: string; signature: Hex;
+    };
+
+    expect(args.quantity).toBe("500"); // the model's own real economic choice, untouched
+    expect(args.windowFrom).toBe(1_800_000_000);
+    expect(args.windowTo).toBe(1_800_003_600);
+    expect(args.printId).toBe("2026-09-25");
+    expect(args.nanoUsdPerSiu).toBe("10700000");
+
+    const recovered = await recoverTypedDataAddress({
+      domain: { name: "Touchstone Rate Attestation", version: "1", chainId: 84532, verifyingContract: FAKE_DEPLOYMENT.workClaim.address as Hex },
+      types: { RateAttestation: [
+        { name: "printId", type: "string" }, { name: "nanoUsdPerSiu", type: "uint256" }, { name: "validUntil", type: "uint64" },
+      ] },
+      primaryType: "RateAttestation",
+      message: { printId: args.printId, nanoUsdPerSiu: BigInt(args.nanoUsdPerSiu), validUntil: BigInt(args.validUntil) },
+      signature: args.signature,
+    });
+    expect(recovered.toLowerCase()).toBe(privateKeyToAccount(PUBLISHER_PK).address.toLowerCase());
+  });
+
+  it("mint_claim: refuses when this window has no mintContext at all", async () => {
+    await expect(buildToolArgs("mint_claim", { quantity: "500" }, baseCtx())).rejects.toThrow(
+      /no mintContext/,
+    );
+  });
+
+  it("transfer_claim: resolves a symbolic agentId to the roster's own real address", async () => {
+    const args = await buildToolArgs(
+      "transfer_claim",
+      { agentId: "WORKER-CODE", tokenId: "1", quantity: "10" },
+      baseCtx({ agentAddressByAgentId: { "WORKER-CODE": "0xabc0000000000000000000000000000000dead" } }),
+    );
+    expect(args).toEqual({ to: "0xabc0000000000000000000000000000000dead", tokenId: "1", quantity: "10" });
+  });
+
+  it("transfer_claim: honours a literal 'to' address unchanged when given instead", async () => {
+    const args = await buildToolArgs(
+      "transfer_claim",
+      { to: "0x1111111111111111111111111111111111111e", tokenId: "1", quantity: "10" },
+      baseCtx(),
+    );
+    expect(args).toEqual({ to: "0x1111111111111111111111111111111111111e", tokenId: "1", quantity: "10" });
+  });
+
+  it("transfer_claim: refuses a symbolic agentId with no known address, rather than sending nowhere", async () => {
+    await expect(
+      buildToolArgs("transfer_claim", { agentId: "HEDGER", tokenId: "1", quantity: "10" }, baseCtx()),
+    ).rejects.toThrow(/no known address/);
+  });
+
+  it("issue_quote: uses the board's own stored body for a real open request, never the model's own reconstruction", async () => {
+    const board = new QuoteBoard();
+    const realBody = {
+      schema_version: "2.0", siu: "10", pattern: "fixed" as const, model: "test",
+      rate_usd_per_siu: "0.05", amount_usd_max: "0.5", index_version: "SIU-2026a",
+      print_id: "2026-09-25", print_hash: "0xabc", seller_id: "erc8004:0xWORKERCODE",
+      expiry: "2026-09-26T00:00:00Z",
+      settlement: [{ asset: "usdc" as const, address: "0x0", amount_max: "500000" }],
+    };
+    const request = board.postRequest("ORCHESTRATOR", realBody);
+
+    const args = await buildToolArgs(
+      "issue_quote",
+      { requestId: request.requestId, siu: "999999" }, // a bogus attempt to override the real body
+      baseCtx({ board }),
+    );
+    expect(args).toEqual(realBody);
+    expect((args as { siu: string }).siu).toBe("10");
+  });
+
+  it("issue_quote: refuses an unknown requestId rather than signing something unasked", async () => {
+    await expect(
+      buildToolArgs("issue_quote", { requestId: "qr-nonexistent" }, baseCtx()),
+    ).rejects.toThrow(/no open request/);
+  });
+});
+
+describe("runFullRunWindow — the quote board makes a real two-agent negotiation possible", () => {
+  let runsRoot: string;
+  let ledgerPath: string;
+
+  beforeEach(async () => {
+    runsRoot = await mkdtemp(path.join(tmpdir(), "full-run-board-test-"));
+    ledgerPath = path.join(runsRoot, "ledger.json");
+  });
+
+  afterEach(async () => {
+    await rm(runsRoot, { recursive: true, force: true });
+  });
+
+  it("ORCHESTRATOR's request becomes visible to WORKER-CODE, and WORKER-CODE's signed quote becomes visible back", async () => {
+    // Real round-robin order for roster [ORCHESTRATOR, WORKER-CODE]: ORCHESTRATOR's own turn 1
+    // runs first and posts the request — so WORKER-CODE's very first turn already sees it, and
+    // ORCHESTRATOR's own turn 2 is the first point it could see WORKER-CODE's answer.
+    let orchestratorTurn = 0;
+    const orchestratorAdapter: Adapter = async () => {
+      orchestratorTurn++;
+      if (orchestratorTurn === 1) {
+        return {
+          text: JSON.stringify({
+            tool: "request_quote",
+            args: {
+              siu: "10", model: "claude-sonnet-5", rateUsdPerSiu: "0.05", indexVersion: "SIU-2026a",
+              printId: "2026-09-25", printHash: "0xabc", sellerId: "erc8004:0xWORKERCODE",
+              chain: "base-sepolia", expiresInSeconds: 3600, pattern: "fixed",
+            },
+          }),
+          usage: { input: 100, output: 50, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+        };
+      }
+      return {
+        text: JSON.stringify({ done: true, summary: "saw the answered quote, stopping here for this test" }),
+        usage: { input: 50, output: 10, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+      };
+    };
+    const workerAdapter: Adapter = async () => ({
+      text: JSON.stringify({ tool: "issue_quote", args: { requestId: "qr-1" } }),
+      usage: { input: 100, output: 50, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+    });
+
+    const orchestratorCfg: RosterAgentConfig = {
+      ...orchestratorConfig(orchestratorAdapter),
+      availableTools: ["request_quote"],
+    };
+    const workerCfg: RosterAgentConfig = {
+      agentId: "WORKER-CODE",
+      adapter: workerAdapter,
+      modelString: "claude-sonnet-5",
+      prices: PRICES,
+      skillPackText: `${loadSkill("quote-and-deliver").promptTemplate}\n\n${CANONICAL_ASSET_DESCRIPTION}`,
+      availableTools: ["issue_quote"],
+      privateKeyHex: "0xe39cf58360ba4b1edb7b69cd985693a0fb0976837017cd4e47099136dbbe3983",
+      address: "0x0000000000000000000000000000000000000002",
+      erc8004Id: "erc8004:0xWORKERCODE",
+      rpcUrl: "http://127.0.0.1:1",
+      maxOutputTokens: 3000,
+    };
+
+    const budgetCeiling = new BudgetCeiling({
+      "ISSUER-A": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+      "ISSUER-B": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+      ORCHESTRATOR: { maxUsdcSpend: "0", maxInferenceTurns: 5, maxInferenceUsd: "2" },
+      "WORKER-CODE": { maxUsdcSpend: "0", maxInferenceTurns: 5, maxInferenceUsd: "2" },
+      "WORKER-EXTRACT": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+      HEDGER: { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+    });
+    const budget = new ExperimentBudget({ ceiling: budgetCeiling, runCapUsd: "30", experimentCapUsd: "150", ledgerPath });
+
+    const result = await runFullRunWindow({
+      windowId: "w0",
+      roster: [orchestratorCfg, workerCfg],
+      job: JOB,
+      maxTurnsPerAgent: 2,
+      budget,
+      deps: fakeDeps(async () => PASS),
+      runsRoot, runId: "run-board", manifest: MANIFEST,
+    });
+
+    // WORKER-CODE's own first (and only) turn saw the real, posted request on its own board view.
+    expect(result.turnLogsByAgent["WORKER-CODE"][0].marketBoardText).toContain("qr-1");
+    expect(result.turnLogsByAgent["WORKER-CODE"][0].marketBoardText).toContain("ORCHESTRATOR");
+    // ORCHESTRATOR's second turn saw WORKER-CODE's real, signed answer back.
+    expect(result.turnLogsByAgent.ORCHESTRATOR[1].marketBoardText).toContain("qr-1");
+    expect(result.turnLogsByAgent.ORCHESTRATOR[1].marketBoardText).toContain("erc8004:0xWORKERCODE");
+    // ORCHESTRATOR's first turn (before anything was answered) saw no board at all.
+    expect(result.turnLogsByAgent.ORCHESTRATOR[0].marketBoardText).toBeUndefined();
   });
 });

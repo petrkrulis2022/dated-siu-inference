@@ -29,6 +29,13 @@ Omit "friction" entirely if none of this applies this turn — do not invent fri
 export function buildTurnPrompt(
   context: AgentContext,
   availableTools: readonly ToolName[],
+  /** `loop/quote-board.ts`'s own rendered text for this agent, this turn — structured quote-
+   * request/response data other agents have produced, never free text one agent wrote for
+   * another to read (spec §13.3's "no agent messages" stays true; this only completes a
+   * mechanism `request_quote`/`issue_quote` already needs to function at all). Omitted from the
+   * prompt entirely when empty, so a turn with no open market activity isn't padded with a
+   * hollow section header. */
+  marketBoardText = "",
 ): string {
   const toolList = availableTools.map((name) => TOOL_DESCRIPTIONS[name]).join("\n");
 
@@ -50,6 +57,7 @@ export function buildTurnPrompt(
     "",
     "WHAT HAS HAPPENED SO FAR:",
     history,
+    ...(marketBoardText ? ["", marketBoardText] : []),
     "",
     RESPONSE_FORMAT_INSTRUCTIONS,
   ].join("\n");
