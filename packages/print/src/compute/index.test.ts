@@ -76,8 +76,18 @@ describe("computePrint — carry-forward cap (2026-09-26 methodology fix)", () =
 });
 
 describe("computePrint — dated_siu_median_diagnostic (2026-09-26 methodology fix)", () => {
-  it("publishes the unweighted median of the qualifying set as a diagnostic only", () => {
+  it("is always computed into ComputedIndex, but never published on the body unless explicitly opted in", () => {
+    // Found live, 2026-09-26: this feature (median + carry-forward together) shipped ahead of
+    // its own retro-validation being reviewed — publishMedianDiagnostic defaults to omitted
+    // (not true) for exactly the same reason cli/publish.ts and cli/publish-unattended.ts now
+    // gate both behind one explicit, defaults-OFF flag (TOUCHSTONE_CARRY_FORWARD_ENABLED).
     const { body, computed } = computePrint(workedExampleInput());
+    expect(computed.medianDiagnostic.toString()).toBe("0.0483");
+    expect(body.dated_siu_median_diagnostic).toBeUndefined();
+  });
+
+  it("publishes the unweighted median of the qualifying set as a diagnostic only, once opted in", () => {
+    const { body, computed } = computePrint({ ...workedExampleInput(), publishMedianDiagnostic: true });
     // Qualifying set is A/B/C only (D excluded) — costs 0.07725 / 0.0483 / 0.013269.
     // Median of 3 values is the middle one once sorted: 0.0483.
     expect(computed.medianDiagnostic.toString()).toBe("0.0483");

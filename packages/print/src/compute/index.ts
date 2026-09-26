@@ -72,6 +72,15 @@ export interface PrintInput {
    * that doesn't want carry-forward (e.g. a synthetic-fixture unit test) — every model missing
    * today is then excluded exactly as before this fix existed. */
   carryForwardHistory?: CarryForwardDay[];
+  /** Publishes `dated_siu_median_diagnostic` on the body when true. Defaults to omitted (not
+   * false) — matching `methodology_url`/`series`/`floor`'s own opt-in-by-presence pattern —
+   * because this feature (rules-2026-09-26, alongside carryForwardHistory above) shipped ahead
+   * of its own retro-validation being reviewed and confirmed; every CLI caller gates this behind
+   * the same explicit, defaults-OFF flag carryForwardHistory's own loading is gated behind
+   * (TOUCHSTONE_CARRY_FORWARD_ENABLED) until that review happens. The median itself is always
+   * computed into ComputedIndex regardless — cheap, harmless, and useful to a caller inspecting
+   * `computed` directly even before this ships on the print body. */
+  publishMedianDiagnostic?: boolean;
 }
 
 /** Whole calendar days from `from` to `to` (both "YYYY-MM-DD"), computed via Date.UTC so this
@@ -251,9 +260,6 @@ export function computePrint(input: PrintInput): ComputePrintResult {
     basket_costs,
     weights: { source: base.weightSource, values: weightValues },
     dated_siu: roundDatedSiu(base.datedSiu, rounding),
-    // Diagnostic only (docs/methodology.md's Aggregation section, 2026-09-26 fix) — never the
-    // primary statistic, never used by any downstream computation in this function.
-    dated_siu_median_diagnostic: roundDatedSiu(base.medianDiagnostic, rounding),
     exchange_rate_table,
     sensitivity_block,
     rounding,
@@ -266,6 +272,13 @@ export function computePrint(input: PrintInput): ComputePrintResult {
     price_snapshot_ref: input.price_snapshot_ref,
     methodology_version: input.methodology_version,
   };
+
+  // Diagnostic only (docs/methodology.md's Aggregation section, 2026-09-26 fix) — never the
+  // primary statistic, never used by any downstream computation in this function. Opt-in via
+  // publishMedianDiagnostic (see that field's own doc comment for why this isn't unconditional).
+  if (input.publishMedianDiagnostic) {
+    body.dated_siu_median_diagnostic = roundDatedSiu(base.medianDiagnostic, rounding);
+  }
 
   if (input.methodology_url) {
     body.methodology_url = input.methodology_url;

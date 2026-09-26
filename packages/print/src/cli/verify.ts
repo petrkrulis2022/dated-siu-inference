@@ -83,6 +83,10 @@ try {
     ...(carryForwardApplies
       ? { carryForwardHistory: await loadCarryForwardHistory(printsDir(), print.date) }
       : {}),
+    // Reproduce the same opt-in this print itself declares, not a revision-date guess — direct
+    // and precise, since the published print is the ground truth for whether it carries the
+    // field at all (see PrintInput.publishMedianDiagnostic's own doc comment).
+    publishMedianDiagnostic: print.dated_siu_median_diagnostic !== undefined,
     price_snapshot_ref: print.price_snapshot_ref,
     methodology_version: print.methodology_version,
     sensitivityVariants: [

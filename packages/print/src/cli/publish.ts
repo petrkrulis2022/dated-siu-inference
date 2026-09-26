@@ -47,10 +47,18 @@ import {
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
+/** Defaults OFF: carry-forward + the median diagnostic (rules-2026-09-26) were implemented
+ * before their own retro-validation had been reviewed and confirmed — a real process miss, found
+ * 2026-09-26. Every print stays on rules-2026-09-25 (no carry-forward, no median field) until
+ * this is explicitly set to "true", which should only happen after that review. See
+ * publish-unattended.ts's identical constant for the doc comment; kept in sync manually since
+ * the two CLIs don't share a common module for this one line. */
+const CARRY_FORWARD_ENABLED = process.env.TOUCHSTONE_CARRY_FORWARD_ENABLED === "true";
+
 /** docs/methodology.md's Revision history table — see publish-unattended.ts's identical
  * constant for the doc comment; kept in sync manually since the two CLIs don't share a common
  * module for this one line. */
-const METHODOLOGY_REVISION = "rules-2026-09-26";
+const METHODOLOGY_REVISION = CARRY_FORWARD_ENABLED ? "rules-2026-09-26" : "rules-2026-09-25";
 
 const printId = process.argv[2] ?? new Date().toISOString().slice(0, 10);
 const printDate = DATE_PATTERN.test(printId) ? printId : new Date().toISOString().slice(0, 10);
@@ -163,8 +171,16 @@ const allModelIds = models.map((m) => m.model_id);
 // 2026-09-08. Reused below for the tier-series loop.
 const openWeightsById = new Map(registry.map((r) => [r.id, r.open_weights]));
 // Blended print only — see loadCarryForwardHistory's own doc comment for why the tier series
-// don't get this yet.
-const carryForwardHistory = await loadCarryForwardHistory(printsDir(), printDate);
+// don't get this yet. Gated on CARRY_FORWARD_ENABLED (see its own doc comment above) — off by
+// default until the retro-validation this feature was supposed to wait for is reviewed.
+const carryForwardHistory = CARRY_FORWARD_ENABLED
+  ? await loadCarryForwardHistory(printsDir(), printDate)
+  : undefined;
+if (CARRY_FORWARD_ENABLED) {
+  console.log(`Carry-forward ENABLED: ${carryForwardHistory!.length} prior day(s) loaded.`);
+} else {
+  console.log("Carry-forward disabled (TOUCHSTONE_CARRY_FORWARD_ENABLED is not \"true\").");
+}
 const result = await publishPrint(printsDir(), {
   version: BASKET_VERSION,
   print_id: printId,
@@ -176,6 +192,7 @@ const result = await publishPrint(printsDir(), {
   },
   models,
   carryForwardHistory,
+  publishMedianDiagnostic: CARRY_FORWARD_ENABLED,
   price_snapshot_ref: snapshotFile,
   methodology_version: "v0-draft",
   methodology_revision: METHODOLOGY_REVISION,
