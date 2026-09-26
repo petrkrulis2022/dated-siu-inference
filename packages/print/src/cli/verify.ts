@@ -60,6 +60,15 @@ try {
   const { models } = buildModelInputs(registry, snapshot, records);
   const allModelIds = models.map((m) => m.model_id);
 
+  // Carry-forward only ever applied from rules-2026-09-26 onward — gated on this print's own
+  // declared methodology_revision, not its date, because a print dated 2026-09-26 can still
+  // have been computed and signed under rules-2026-09-25 (the fix landed later the same day;
+  // see docs/methodology.md's rules-2026-09-25b entry for the same class of same-day edge
+  // case). Applying carry-forward to a print that was never computed with it would recompute a
+  // different qualifying set than the one actually signed — a false discrepancy, not a real one.
+  const revisionDate = print.methodology_revision?.match(/^rules-(\d{4}-\d{2}-\d{2})/)?.[1];
+  const carryForwardApplies = !print.series && revisionDate !== undefined && revisionDate >= "2026-09-26";
+
   input = {
     version: BASKET_VERSION,
     print_id: print.print_id,
@@ -71,10 +80,9 @@ try {
       T3: TASK_CLASSES.T3.weight,
     },
     models,
-    // Only the blend uses carry-forward (see loadCarryForwardHistory's own doc comment) — a
-    // tier print (print.series set) must recompute with none, or it would "discrepancy" on a
-    // model this tier never carries forward in the first place.
-    ...(print.series ? {} : { carryForwardHistory: await loadCarryForwardHistory(printsDir(), print.date) }),
+    ...(carryForwardApplies
+      ? { carryForwardHistory: await loadCarryForwardHistory(printsDir(), print.date) }
+      : {}),
     price_snapshot_ref: print.price_snapshot_ref,
     methodology_version: print.methodology_version,
     sensitivityVariants: [

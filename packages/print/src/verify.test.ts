@@ -89,4 +89,35 @@ describe("verifyPrint", () => {
     const result = verifyPrint(signedWorkedExample());
     expect(result.bodyHash).toMatch(/^0x[0-9a-f]{64}$/);
   });
+
+  it("never flags dated_siu_median_diagnostic's absence as a discrepancy on a print published before that field existed", () => {
+    // computePrint has computed this field unconditionally since 2026-09-26 (docs/methodology.md's
+    // Aggregation section) — so recomputing ANY older, real print now produces a value this
+    // field never had at publish time. That is the same forward-only shape every other optional
+    // field in this schema already has (methodology_url, series, floor, ...), never a real
+    // discrepancy — a naive comparison would fail every pre-2026-09-26 print, forever.
+    const { body } = computePrint(publishableWorkedExampleInput());
+    expect(body.dated_siu_median_diagnostic).toBeDefined(); // computePrint always computes it
+    const withoutMedianField = { ...body };
+    delete (withoutMedianField as Partial<typeof body>).dated_siu_median_diagnostic;
+    const print = signPrintBody(withoutMedianField, TEST_KEY);
+
+    const result = verifyPrint(print, publishableWorkedExampleInput());
+    expect(result.discrepancies.some((d) => d.field === "dated_siu_median_diagnostic")).toBe(false);
+    expect(result.ok).toBe(true);
+  });
+
+  it("still catches a genuinely wrong dated_siu_median_diagnostic on a print that does publish it", () => {
+    const { body } = computePrint(publishableWorkedExampleInput());
+    const doctored = { ...body, dated_siu_median_diagnostic: "0.0400" };
+    const print = signPrintBody(doctored, TEST_KEY);
+
+    const result = verifyPrint(print, publishableWorkedExampleInput());
+    expect(result.ok).toBe(false);
+    expect(result.discrepancies).toContainEqual({
+      field: "dated_siu_median_diagnostic",
+      published: "0.0400",
+      recomputed: body.dated_siu_median_diagnostic,
+    });
+  });
 });

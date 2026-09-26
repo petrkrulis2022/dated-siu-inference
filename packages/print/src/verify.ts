@@ -68,12 +68,19 @@ export function verifyPrint(print: Print, input?: PrintInput): VerifyResult {
   const { body } = computePrint(input);
 
   compare("dated_siu", print.dated_siu, body.dated_siu, discrepancies);
-  compare(
-    "dated_siu_median_diagnostic",
-    print.dated_siu_median_diagnostic,
-    body.dated_siu_median_diagnostic,
-    discrepancies,
-  );
+  // computePrint has computed this unconditionally since 2026-09-26 — recomputing ANY older
+  // print now produces a value this field never had at publish time. That is the expected,
+  // forward-only shape every other optional field in this schema already has (methodology_url,
+  // series, floor, ...), never a real discrepancy — so this is only ever checked when the
+  // published print actually carries the field itself.
+  if (print.dated_siu_median_diagnostic !== undefined) {
+    compare(
+      "dated_siu_median_diagnostic",
+      print.dated_siu_median_diagnostic,
+      body.dated_siu_median_diagnostic,
+      discrepancies,
+    );
+  }
   compare("weights.source", print.weights.source, body.weights.source, discrepancies);
   compare("market_spread", print.market_spread, body.market_spread, discrepancies);
 
