@@ -36,6 +36,7 @@ import {
 import {
   buildModelInputs,
   latestPriceSnapshotFile,
+  loadCarryForwardHistory,
   loadPrint,
   loadPriceSnapshot,
   loadRegistry,
@@ -49,7 +50,7 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 /** docs/methodology.md's Revision history table — see publish-unattended.ts's identical
  * constant for the doc comment; kept in sync manually since the two CLIs don't share a common
  * module for this one line. */
-const METHODOLOGY_REVISION = "rules-2026-09-25";
+const METHODOLOGY_REVISION = "rules-2026-09-26";
 
 const printId = process.argv[2] ?? new Date().toISOString().slice(0, 10);
 const printDate = DATE_PATTERN.test(printId) ? printId : new Date().toISOString().slice(0, 10);
@@ -161,6 +162,9 @@ const allModelIds = models.map((m) => m.model_id);
 // gate the blend on each tier's own qualifying count, not just the overall one — found live,
 // 2026-09-08. Reused below for the tier-series loop.
 const openWeightsById = new Map(registry.map((r) => [r.id, r.open_weights]));
+// Blended print only — see loadCarryForwardHistory's own doc comment for why the tier series
+// don't get this yet.
+const carryForwardHistory = await loadCarryForwardHistory(printsDir(), printDate);
 const result = await publishPrint(printsDir(), {
   version: BASKET_VERSION,
   print_id: printId,
@@ -171,6 +175,7 @@ const result = await publishPrint(printsDir(), {
     T3: TASK_CLASSES.T3.weight,
   },
   models,
+  carryForwardHistory,
   price_snapshot_ref: snapshotFile,
   methodology_version: "v0-draft",
   methodology_revision: METHODOLOGY_REVISION,

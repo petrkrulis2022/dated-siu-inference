@@ -1,7 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { ModelRegistryEntry, PriceSnapshot, Print, RunManifest, RunRecord } from "@touchstone/sdk";
-import type { ModelInput } from "../compute/index.js";
+import { CARRY_FORWARD_CAP_DAYS, type CarryForwardDay, type ModelInput } from "../compute/index.js";
+import { D, type DecimalValue } from "../decimal.js";
 
 /** pnpm always runs package scripts with cwd = the package directory. */
 export function repoRoot(): string {
@@ -105,6 +106,49 @@ export async function loadDeclaredRunRecords(printId: string): Promise<RunRecord
 
 export async function loadPrint(path: string): Promise<Print> {
   return JSON.parse(await readFile(path, "utf-8")) as Print;
+}
+
+/**
+ * Loads the blended Dated SIU prints from the last CARRY_FORWARD_CAP_DAYS calendar days before
+ * `beforeDate`, for computeIndex's own carry-forward step (see compute/index.ts's
+ * CarryForwardDay/findCarryForward). Only ever reads each prior day's own already-published,
+ * already-signed `cost_usd` values — never recomputes anything — so a carried-forward figure is
+ * always a real number this system already stood behind once, not a fresh estimate.
+ *
+ * Scoped to the blended print series only (filenames matching exactly "YYYY-MM-DD.json", never
+ * the "-frontier"/"-commodity" tier suffixes, "index.json", or "latest.json") — the tier series
+ * don't yet have carry-forward; see docs/methodology.md's Aggregation section for why that's a
+ * disclosed scope decision, not an oversight. computeIndex enforces the real 3-day cap itself by
+ * calendar-day arithmetic against `beforeDate`, so this deliberately casts a slightly wider net
+ * (a few extra candidate days) rather than trying to duplicate that arithmetic here — harmless,
+ * since anything outside the real window is simply never reached.
+ */
+export async function loadCarryForwardHistory(
+  dir: string,
+  beforeDate: string,
+): Promise<CarryForwardDay[]> {
+  const files = (await readdir(dir).catch(() => [] as string[])).filter((f) =>
+    /^\d{4}-\d{2}-\d{2}\.json$/.test(f),
+  );
+  const candidateDates = files
+    .map((f) => f.slice(0, "YYYY-MM-DD".length))
+    .filter((date) => date < beforeDate)
+    .sort()
+    .reverse()
+    .slice(0, CARRY_FORWARD_CAP_DAYS + 2); // a little slack; computeIndex enforces the real cap
+
+  const days: CarryForwardDay[] = [];
+  for (const date of candidateDates) {
+    const print = await loadPrint(join(dir, `${date}.json`));
+    const costs = new Map<string, DecimalValue>();
+    for (const row of print.basket_costs) {
+      if (row.cost_usd !== undefined) {
+        costs.set(row.model_id, new D(row.cost_usd));
+      }
+    }
+    days.push({ date, costs });
+  }
+  return days;
 }
 
 /**

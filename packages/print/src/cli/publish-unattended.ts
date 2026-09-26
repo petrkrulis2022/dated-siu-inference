@@ -36,6 +36,7 @@ import {
 import {
   buildModelInputs,
   latestPriceSnapshotFile,
+  loadCarryForwardHistory,
   loadPrint,
   loadPriceSnapshot,
   loadRegistry,
@@ -69,7 +70,7 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 /** docs/methodology.md's Revision history table — bump this when a future rule change alters
  * published values, and add the matching row there. Every print from this one onward states
  * which rule set produced it, forward-only; no historical print needs the field retroactively. */
-const METHODOLOGY_REVISION = "rules-2026-09-25";
+const METHODOLOGY_REVISION = "rules-2026-09-26";
 
 const printId = process.argv[2] || new Date().toISOString().slice(0, 10);
 const printDate = DATE_PATTERN.test(printId) ? printId : new Date().toISOString().slice(0, 10);
@@ -239,6 +240,9 @@ const allModelIds = models.map((m) => m.model_id);
 // 2026-09-08: Frontier SIU's standalone gate correctly declined that day while the blend
 // published anyway on the same underlying tier collapse. Reused below for the tier-series loop.
 const openWeightsById = new Map(registry.map((r) => [r.id, r.open_weights]));
+// Blended print only — see loadCarryForwardHistory's own doc comment for why the tier series
+// don't get this yet.
+const carryForwardHistory = await loadCarryForwardHistory(printsDir(), printDate);
 try {
   const result = await publishPrint(printsDir(), {
     version: BASKET_VERSION,
@@ -250,6 +254,7 @@ try {
       T3: TASK_CLASSES.T3.weight,
     },
     models,
+    carryForwardHistory,
     price_snapshot_ref: snapshotFile,
     methodology_version: "v0-draft",
     methodology_revision: METHODOLOGY_REVISION,

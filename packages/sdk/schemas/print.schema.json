@@ -45,6 +45,11 @@
           "excluded_reason": {
             "type": "string",
             "description": "Why cost_usd is absent, e.g. which class failed its quality gate."
+          },
+          "carried_forward_from": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Present when cost_usd above is a carried-forward historical value rather than one freshly measured today — the print date it was actually published on. Only ever within CARRY_FORWARD_CAP_DAYS (3) of this print's own date (docs/methodology.md's Aggregation section, the 2026-09-26 fix for a single missing constituent whipsawing the headline). Absent means cost_usd, if present, was measured today."
           }
         },
         "required": ["model_id"]
@@ -76,6 +81,10 @@
       "required": ["source", "values"]
     },
     "dated_siu": { "$ref": "#/definitions/decimalString" },
+    "dated_siu_median_diagnostic": {
+      "$ref": "#/definitions/decimalString",
+      "description": "The unweighted median of the same qualifying set dated_siu blends — a published diagnostic only, never the primary statistic (docs/methodology.md's Aggregation section, adopted 2026-09-26 after a single missing constituent moved the mean 31% in one day while the median moved 0.8%). Optional and forward-only: absent on every print published before this field existed, present from the print that introduces it onward — no historical print is touched to add it retroactively."
+    },
     "exchange_rate_table": {
       "type": "array",
       "minItems": 1,

@@ -5,6 +5,7 @@ import { cachePolicyVariant, batchDiscountVariant } from "../compute/sensitivity
 import { formatVerifyReport, verifyPrint, type Discrepancy } from "../verify.js";
 import {
   buildModelInputs,
+  loadCarryForwardHistory,
   loadDeclaredRunRecords,
   loadPriceSnapshot,
   loadPrint,
@@ -70,6 +71,10 @@ try {
       T3: TASK_CLASSES.T3.weight,
     },
     models,
+    // Only the blend uses carry-forward (see loadCarryForwardHistory's own doc comment) — a
+    // tier print (print.series set) must recompute with none, or it would "discrepancy" on a
+    // model this tier never carries forward in the first place.
+    ...(print.series ? {} : { carryForwardHistory: await loadCarryForwardHistory(printsDir(), print.date) }),
     price_snapshot_ref: print.price_snapshot_ref,
     methodology_version: print.methodology_version,
     sensitivityVariants: [

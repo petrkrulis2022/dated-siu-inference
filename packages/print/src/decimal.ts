@@ -59,3 +59,19 @@ export function mean(values: DecimalValue[]): DecimalValue {
   }
   return sum(values).dividedBy(values.length);
 }
+
+/**
+ * The middle value of the qualifying set (linear interpolation at an even count) — a published
+ * diagnostic only, never the primary statistic (docs/methodology.md's Aggregation section, the
+ * 2026-09-26 methodology fix). Unweighted: it exists to show how sensitive the mean is to a
+ * single constituent, which weighting would obscure.
+ */
+export function median(values: DecimalValue[]): DecimalValue {
+  if (values.length === 0) {
+    throw new Error("median() of an empty set is undefined — the caller must handle this case.");
+  }
+  const sorted = [...values].sort((a, b) => a.comparedTo(b));
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) return sorted[mid];
+  return sorted[mid - 1].plus(sorted[mid]).dividedBy(2);
+}

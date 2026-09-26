@@ -35,6 +35,10 @@ export interface Print {
        * Why cost_usd is absent, e.g. which class failed its quality gate.
        */
       excluded_reason?: string;
+      /**
+       * Present when cost_usd above is a carried-forward historical value rather than one freshly measured today — the print date it was actually published on. Only ever within CARRY_FORWARD_CAP_DAYS (3) of this print's own date (docs/methodology.md's Aggregation section, the 2026-09-26 fix for a single missing constituent whipsawing the headline). Absent means cost_usd, if present, was measured today.
+       */
+      carried_forward_from?: string;
     },
     ...{
       model_id: string;
@@ -46,6 +50,10 @@ export interface Print {
        * Why cost_usd is absent, e.g. which class failed its quality gate.
        */
       excluded_reason?: string;
+      /**
+       * Present when cost_usd above is a carried-forward historical value rather than one freshly measured today — the print date it was actually published on. Only ever within CARRY_FORWARD_CAP_DAYS (3) of this print's own date (docs/methodology.md's Aggregation section, the 2026-09-26 fix for a single missing constituent whipsawing the headline). Absent means cost_usd, if present, was measured today.
+       */
+      carried_forward_from?: string;
     }[]
   ];
   weights: {
@@ -68,6 +76,10 @@ export interface Print {
     ];
   };
   dated_siu: DecimalString;
+  /**
+   * A decimal number encoded as a string. Never a JSON number — no floats in money maths.
+   */
+  dated_siu_median_diagnostic?: string;
   /**
    * @minItems 1
    */

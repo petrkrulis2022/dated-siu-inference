@@ -1,5 +1,5 @@
 import type { Print, RunRecord } from "@touchstone/sdk";
-import { D, type DecimalValue } from "../decimal.js";
+import { D, median, type DecimalValue } from "../decimal.js";
 import { DEFAULT_ROUNDING, roundDatedSiu, roundDown, roundHalfUp, type RoundingRules } from "../rounding.js";
 import { computeClassCost, type ModelPrice } from "./class-cost.js";
 import { computeBasketCost, type ClassWeights, type TaskClass } from "./basket-cost.js";
@@ -16,6 +16,27 @@ export * from "./sensitivity.js";
 export * from "./cost-of-production.js";
 
 const TASK_CLASSES: TaskClass[] = ["T1", "T2", "T3"];
+
+/**
+ * The methodology fix adopted 2026-09-26, after the Google-billing-lapse incident showed a
+ * single missing constituent whipsawing the headline (mean moved 31% while the median moved
+ * 0.8% over the same day, on real published print data — see docs/methodology.md's Aggregation
+ * section). A model missing today because of a run/provider failure (never a registry removal —
+ * that's computeConstituentChanges' own, separate concern) has its own last real, published
+ * basket cost carried forward into today's blend, for up to this many days, before it is treated
+ * as genuinely excluded. Fixed at 3, not configurable per print — a rule that could be tuned
+ * print-by-print would invite exactly the kind of "redo until we like the answer" the revision
+ * policy already forbids elsewhere.
+ */
+export const CARRY_FORWARD_CAP_DAYS = 3;
+
+/** One prior day's published, qualifying basket costs — never a recomputation, only what that
+ * print actually signed. Ordered most-recent-first by the caller; see loadCarryForwardHistory
+ * (cli/load-inputs.ts) for how this is assembled from data/prints. */
+export interface CarryForwardDay {
+  date: string;
+  costs: Map<string, DecimalValue>;
+}
 
 export interface ModelInput {
   model_id: string;
@@ -44,13 +65,54 @@ export interface PrintInput {
   methodology_revision?: string;
   rounding?: RoundingRules;
   sensitivityVariants?: PolicyVariant[];
+  /** Prior days' own published, qualifying basket costs, most-recent-first — see
+   * CarryForwardDay. Enforced against `date` above by real calendar-day arithmetic
+   * (daysBetween), not array position, so a caller may safely pass more history than the cap
+   * needs and rely on this function to apply the real 3-day rule. Omit entirely for a caller
+   * that doesn't want carry-forward (e.g. a synthetic-fixture unit test) — every model missing
+   * today is then excluded exactly as before this fix existed. */
+  carryForwardHistory?: CarryForwardDay[];
+}
+
+/** Whole calendar days from `from` to `to` (both "YYYY-MM-DD"), computed via Date.UTC so this
+ * is never affected by the machine's own local timezone. */
+function daysBetween(from: string, to: string): number {
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const [fy, fm, fd] = from.split("-").map(Number);
+  const [ty, tm, td] = to.split("-").map(Number);
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / msPerDay);
+}
+
+/** The nearest prior day (within CARRY_FORWARD_CAP_DAYS real calendar days of `date`) that
+ * published a real, qualifying cost for this model — or undefined if none exists in range.
+ * `history` may safely contain days further back than the cap; those are simply never reached
+ * because daysBetween excludes them, not because the caller pre-filtered correctly. */
+function findCarryForward(
+  modelId: string,
+  date: string,
+  history: CarryForwardDay[] | undefined,
+): { fromDate: string; cost: DecimalValue } | undefined {
+  if (!history) return undefined;
+  for (const day of history) {
+    const age = daysBetween(day.date, date);
+    if (age < 1 || age > CARRY_FORWARD_CAP_DAYS) continue;
+    const cost = day.costs.get(modelId);
+    if (cost !== undefined) return { fromDate: day.date, cost };
+  }
+  return undefined;
 }
 
 /** Full-precision intermediate result, before any publication rounding. */
 export interface ComputedIndex {
   datedSiu: DecimalValue;
+  /** The unweighted median of the same qualifying set the blend uses — a diagnostic only, never
+   * the primary statistic (see decimal.ts's median doc comment). */
+  medianDiagnostic: DecimalValue;
   basketCosts: Map<string, DecimalValue | undefined>;
   exclusionReasons: Map<string, string>;
+  /** Models whose basket cost above is a carried-forward historical value, not one freshly
+   * measured today — see CarryForwardDay and findCarryForward. */
+  carriedForward: Map<string, { fromDate: string; cost: DecimalValue }>;
   weightSource: "routed-market-share" | "equal";
   weights: Map<string, DecimalValue>;
 }
@@ -59,10 +121,13 @@ function computeIndex(
   models: ModelInput[],
   classWeights: ClassWeights,
   observedShares: Map<string, string> | undefined,
+  date: string,
+  carryForwardHistory: CarryForwardDay[] | undefined,
   variant?: PolicyVariant,
 ): ComputedIndex {
   const basketCosts = new Map<string, DecimalValue | undefined>();
   const exclusionReasons = new Map<string, string>();
+  const carriedForward = new Map<string, { fromDate: string; cost: DecimalValue }>();
 
   for (const model of models) {
     const byClass = {} as Record<TaskClass, ReturnType<typeof computeClassCost>>;
@@ -73,8 +138,17 @@ function computeIndex(
     }
 
     const basket = computeBasketCost(byClass, classWeights);
-    basketCosts.set(model.model_id, basket.cost);
-    if (basket.cost === undefined) {
+    if (basket.cost !== undefined) {
+      basketCosts.set(model.model_id, basket.cost);
+      continue;
+    }
+
+    const carried = findCarryForward(model.model_id, date, carryForwardHistory);
+    if (carried) {
+      basketCosts.set(model.model_id, carried.cost);
+      carriedForward.set(model.model_id, carried);
+    } else {
+      basketCosts.set(model.model_id, undefined);
       exclusionReasons.set(model.model_id, basket.undefinedReason ?? "undefined basket cost");
     }
   }
@@ -91,8 +165,10 @@ function computeIndex(
 
   return {
     datedSiu: computeDatedSiu(qualifyingCosts, weights),
+    medianDiagnostic: median([...qualifyingCosts.values()]),
     basketCosts,
     exclusionReasons,
+    carriedForward,
     weightSource: source,
     weights,
   };
@@ -107,13 +183,25 @@ export interface ComputePrintResult {
 
 export function computePrint(input: PrintInput): ComputePrintResult {
   const rounding = input.rounding ?? DEFAULT_ROUNDING;
-  const base = computeIndex(input.models, input.classWeights, input.observedShares);
+  const base = computeIndex(
+    input.models,
+    input.classWeights,
+    input.observedShares,
+    input.date,
+    input.carryForwardHistory,
+  );
 
-  const basket_costs = [...base.basketCosts.entries()].map(([model_id, cost]) =>
-    cost === undefined
-      ? { model_id, excluded_reason: base.exclusionReasons.get(model_id) }
-      : { model_id, cost_usd: roundHalfUp(cost, rounding.basket_cost_dp) },
-  ) as Print["basket_costs"];
+  const basket_costs = [...base.basketCosts.entries()].map(([model_id, cost]) => {
+    if (cost === undefined) {
+      return { model_id, excluded_reason: base.exclusionReasons.get(model_id) };
+    }
+    const carried = base.carriedForward.get(model_id);
+    return {
+      model_id,
+      cost_usd: roundHalfUp(cost, rounding.basket_cost_dp),
+      ...(carried ? { carried_forward_from: carried.fromDate } : {}),
+    };
+  }) as Print["basket_costs"];
 
   const weightValues = [...base.weights.entries()].map(([model_id, weight]) => ({
     model_id,
@@ -140,6 +228,8 @@ export function computePrint(input: PrintInput): ComputePrintResult {
       input.models,
       input.classWeights,
       input.observedShares,
+      input.date,
+      input.carryForwardHistory,
       variant,
     );
     return {
@@ -161,6 +251,9 @@ export function computePrint(input: PrintInput): ComputePrintResult {
     basket_costs,
     weights: { source: base.weightSource, values: weightValues },
     dated_siu: roundDatedSiu(base.datedSiu, rounding),
+    // Diagnostic only (docs/methodology.md's Aggregation section, 2026-09-26 fix) — never the
+    // primary statistic, never used by any downstream computation in this function.
+    dated_siu_median_diagnostic: roundDatedSiu(base.medianDiagnostic, rounding),
     exchange_rate_table,
     sensitivity_block,
     rounding,

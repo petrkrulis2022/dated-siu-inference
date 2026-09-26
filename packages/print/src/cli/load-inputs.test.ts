@@ -1,7 +1,14 @@
-import { describe, expect, it } from "vitest";
-import type { ModelRegistryEntry, PriceSnapshot, RunRecord } from "@touchstone/sdk";
-import { buildModelInputs } from "./load-inputs.js";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import type { ModelRegistryEntry, PriceSnapshot, Print, RunRecord } from "@touchstone/sdk";
+import { buildModelInputs, loadCarryForwardHistory } from "./load-inputs.js";
 import { computePrint } from "../compute/index.js";
+
+function minimalPrint(date: string, basketCosts: Print["basket_costs"]): Partial<Print> {
+  return { date, basket_costs: basketCosts };
+}
 
 const REGISTRY: ModelRegistryEntry[] = [
   { id: "healthy-model", provider: "openrouter", endpoint: "x", model_string: "x", tier: "open-weight-hosted", open_weights: true, host: "h" },
@@ -162,5 +169,63 @@ describe("buildModelInputs", () => {
     // The healthy model still qualifies normally — this fix doesn't touch models with real data.
     const healthyRow = body.basket_costs.find((b) => b.model_id === "healthy-model");
     expect(healthyRow?.cost_usd).toBeDefined();
+  });
+});
+
+describe("loadCarryForwardHistory", () => {
+  let dir: string;
+
+  afterEach(async () => {
+    if (dir) await rm(dir, { recursive: true, force: true });
+  });
+
+  it("loads only exact blended-print filenames, most-recent-first, before the given date", async () => {
+    dir = await mkdtemp(join(tmpdir(), "carry-forward-"));
+    await writeFile(
+      join(dir, "2026-09-24.json"),
+      JSON.stringify(minimalPrint("2026-09-24", [{ model_id: "x", cost_usd: "0.01" }])),
+    );
+    await writeFile(
+      join(dir, "2026-09-25.json"),
+      JSON.stringify(minimalPrint("2026-09-25", [{ model_id: "x", cost_usd: "0.02" }])),
+    );
+    // Must never be picked up: tier series, index/latest, and a same-day-retry suffix.
+    await writeFile(join(dir, "2026-09-25-frontier.json"), JSON.stringify(minimalPrint("2026-09-25", [])));
+    await writeFile(join(dir, "2026-09-25b.json"), JSON.stringify(minimalPrint("2026-09-25", [])));
+    await writeFile(join(dir, "latest.json"), JSON.stringify(minimalPrint("2026-09-25", [])));
+    await writeFile(join(dir, "index.json"), JSON.stringify([]));
+    // On or after the target date — must never be treated as "prior".
+    await writeFile(
+      join(dir, "2026-09-26.json"),
+      JSON.stringify(minimalPrint("2026-09-26", [{ model_id: "x", cost_usd: "0.03" }])),
+    );
+
+    const history = await loadCarryForwardHistory(dir, "2026-09-26");
+    expect(history.map((d) => d.date)).toEqual(["2026-09-25", "2026-09-24"]);
+    expect(history[0].costs.get("x")?.toString()).toBe("0.02");
+    expect(history[1].costs.get("x")?.toString()).toBe("0.01");
+  });
+
+  it("only includes a model in a day's costs when that day actually published cost_usd for it", async () => {
+    dir = await mkdtemp(join(tmpdir(), "carry-forward-"));
+    await writeFile(
+      join(dir, "2026-09-25.json"),
+      JSON.stringify(
+        minimalPrint("2026-09-25", [
+          { model_id: "qualified", cost_usd: "0.05" },
+          { model_id: "excluded-that-day", excluded_reason: "no run records for this class" },
+        ]),
+      ),
+    );
+
+    const history = await loadCarryForwardHistory(dir, "2026-09-26");
+    expect(history[0].costs.has("qualified")).toBe(true);
+    expect(history[0].costs.has("excluded-that-day")).toBe(false);
+  });
+
+  it("returns an empty array rather than throwing when the directory has no prior prints", async () => {
+    dir = await mkdtemp(join(tmpdir(), "carry-forward-"));
+    const history = await loadCarryForwardHistory(dir, "2026-09-26");
+    expect(history).toEqual([]);
   });
 });

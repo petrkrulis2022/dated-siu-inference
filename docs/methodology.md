@@ -375,6 +375,68 @@ supplied by an off-chain caller. Nothing in this repository parses the `dated_si
 into minor units anywhere, on-chain or off. Recorded here so this is checked again before any
 future code does add that parsing.
 
+### Aggregation: carry-forward and the median diagnostic
+
+**Effective 2026-09-26.** Dated SIU is, and remains, an equal- or share-weighted **mean** over the
+qualifying set — the primary statistic never changes to a median or any other robust estimator.
+Two real gaps in how that qualifying set was assembled, found live the same day, are fixed here.
+
+**The problem, with real numbers.** On 2026-09-26, `gemini-3.1-pro-preview` produced zero run
+records (a lapsed Google Cloud billing account on our side — not a provider outage; see this
+print's own `correction_notes`) and was excluded from that day's blend exactly as designed: any
+model with an undefined basket cost is dropped from the qualifying set, and the mean is
+recomputed over what remains. That is the correct behaviour for a model that has genuinely
+stopped being priceable — but it is the wrong behaviour for a one-day gap in an otherwise healthy
+constituent, because dropping a constituent entirely, rather than treating that day as simply
+unmeasured for it, changes the *weights* every other constituent gets that day too. The result:
+published `dated_siu` moved from `$0.011108` (2026-09-25) to `$0.007626` (2026-09-26) — a 31%
+drop — recomputed directly from each day's own published `basket_costs`. Over the same two days,
+the **median** of the same qualifying costs moved from `$0.005347` to `$0.005303` — 0.8%. A single
+missing constituent should not be able to move the headline more than a real, broad market move
+would; the mean's sensitivity to exactly this failure mode is what a trimmed or robust aggregator
+exists to bound, and the median comparison above is the real evidence that it does.
+
+**Fix 1 — carry-forward, capped at 3 days.** A model with an undefined basket cost today, that
+published a real, qualifying `cost_usd` on one of the 3 preceding calendar days, has that last
+real value carried forward into today's blend in its place (`CARRY_FORWARD_CAP_DAYS`,
+`packages/print/src/compute/index.ts`). The carried print's own `basket_costs` row states
+`carried_forward_from: "<date>"` next to the carried `cost_usd`, so a reader never mistakes a
+carried figure for one freshly measured that day. This targets only the case a **run or provider
+failure** produces zero data for an otherwise-registered model — it has no effect at all on
+`computeConstituentChanges`' own, separate registry-membership diff (a model actually removed
+from the registry is never carried forward; it simply stops being a candidate for carry-forward
+the moment it stops being a candidate for exclusion-with-history at all). Retro-validated against
+three real prints before adoption:
+
+| Date | Actual qualifying mean | Carry-forward mean | Δ |
+| --- | --- | --- | --- |
+| 2026-09-08 | 0.004879 | 0.007248 | +48.56% — `claude-sonnet-5` and `claude-haiku-4-5` carried forward from 2026-09-07 (`0.023413`, `0.007668`). **A first pass at this retro-validation read this print's own published `basket_costs` directly and reported "no effect," reasoning the two constituents "weren't in the basket yet" — wrong, corrected before this was implemented.** This print's own `correction_notes` (still on the print, unedited) already state the real cause: a real same-day Anthropic billing failure produced zero run records for both, and a separate, already-disclosed pipeline bug (`buildModelInputs`, fixed the same day, forward-only) silently dropped both from `basket_costs` entirely — no gap row, no `excluded_reason` — rather than leaving them as a case carry-forward's own qualifying-set logic could see. Rebuilding this day's actual constituent list from the registry and 2026-09-07's own published costs (not from this print's own, incompletely-listed `basket_costs`) is what surfaces the real effect: markedly closer to 2026-09-07's own published $0.0073 than to this print's published $0.0049, which is the expected result of a print that briefly, silently lost its two most expensive constituents to a real provider outage rather than a market move — exactly what that print's own correction notes already said in prose, now confirmed numerically. |
+| 2026-09-25 | 0.011108 | 0.010769 | −3.05% — `claude-haiku-4-5` carried forward from 2026-09-24 (`0.007719`). |
+| 2026-09-26 | 0.007626 | 0.010787 | +41.45% — `gemini-3.1-pro-preview` carried forward from 2026-09-25 (`0.039236`), pulling the headline back most of the way rather than showing the full billing-lapse-driven drop. |
+
+**Fix 2 — a published median diagnostic, never the primary statistic.** Every print now also
+publishes `dated_siu_median_diagnostic`: the unweighted median of the same qualifying set (post
+carry-forward) the mean blends — see the table above for why. It exists purely so a reader can see
+how much a given day's mean is being driven by a single constituent; it is never used by any
+downstream computation (no exchange rate, no spread, no sensitivity variant is computed from it),
+and adopting a robust statistic as the *primary* number was explicitly considered and rejected —
+the basket's whole design commits to a plain, weighted mean over verified executed runs, and
+swapping the headline statistic itself would be a materially different index, not a data-quality
+fix. `packages/print/src/decimal.ts`'s `median` is a pure, unweighted function for exactly this
+reason: weighting it would let carry-forward or a share-weighting change quietly move the
+diagnostic in step with the mean it's meant to check against.
+
+**Scope.** The median diagnostic is computed identically for every print `computePrint` produces
+— the blend and both tier series alike, since it needs nothing beyond that print's own qualifying
+set. Carry-forward is narrower: it applies to the blended Dated SIU print only, not yet to the
+Frontier SIU or Commodity SIU tier series (`packages/print/src/cli/load-inputs.ts`'s
+`loadCarryForwardHistory` is only ever called for the blend) — a disclosed limitation, not an
+oversight; a tier series losing its own constituent to a real run failure still shows the full
+drop today. Carry-forward is computed from each print's own real published history only
+(`data/prints/*.json`'s own signed `cost_usd` values) — never from a fresh recomputation or an
+invented figure — consistent with this document's evidence hierarchy (§2: executed runs and their
+own signed record outrank everything else, including a later recomputation of the same day).
+
 ### Revision history
 
 `methodology_version` (published on every print) has never changed — it has read `"v0-draft"`
@@ -396,6 +458,7 @@ that actually applied, by date.
 | `rules-2026-09-13` | 2026-09-13 | `cached_input` usage priced where a published cached rate exists. **This row's own effective date was wrong — see `rules-2026-09-25b` below.** | `29d4be2` |
 | `rules-2026-09-25` | 2026-09-25 | `dated_siu` rounds to 4 significant figures, not a fixed 4 decimal places. | `d729ef4` |
 | `rules-2026-09-25b` | 2026-09-25 | Found live: `rules-2026-09-13`'s own fix never actually took effect. The cost formula, the schema field, and the snapshot sourcing all landed on 2026-09-13 — but `buildModelInputs` (`packages/print/src/cli/load-inputs.ts`), the one function every publish/verify path uses to turn a snapshot entry into the price the cost formula receives, never copied `price_cached_in_usd_per_1m` through. Every real print from 2026-09-14 through 2026-09-24 still priced cached_input at zero, silently, for every model — this row is the actual effective date. See this section's "Verification discipline for pricing fixes" note below for why this stayed undetected for twelve days. | `327d7b9` |
+| `rules-2026-09-26` | 2026-09-26 | A model missing today (run/provider failure, never a registry removal) carries its last real, published cost forward for up to 3 calendar days before being excluded; `dated_siu_median_diagnostic` published alongside `dated_siu` as a diagnostic only — see this section's own Aggregation policy above for the retro-validated evidence. | `PENDING` |
 
 A print's own `date` field, checked against this table, tells a reader which row applied even for
 a print published before `methodology_revision` existed — this table is the durable record; the

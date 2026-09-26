@@ -68,17 +68,32 @@ export function verifyPrint(print: Print, input?: PrintInput): VerifyResult {
   const { body } = computePrint(input);
 
   compare("dated_siu", print.dated_siu, body.dated_siu, discrepancies);
+  compare(
+    "dated_siu_median_diagnostic",
+    print.dated_siu_median_diagnostic,
+    body.dated_siu_median_diagnostic,
+    discrepancies,
+  );
   compare("weights.source", print.weights.source, body.weights.source, discrepancies);
   compare("market_spread", print.market_spread, body.market_spread, discrepancies);
 
   // Spread before mapping: these arrays are `minItems: 1` in the schema, so the generated
   // type is a tuple ([T, ...T[]]) and .map() on it loses the element type.
   const publishedBaskets = new Map([...print.basket_costs].map((r) => [r.model_id, r.cost_usd]));
+  const publishedCarriedFrom = new Map(
+    [...print.basket_costs].map((r) => [r.model_id, r.carried_forward_from]),
+  );
   for (const row of [...body.basket_costs]) {
     compare(
       `basket_costs[${row.model_id}]`,
       publishedBaskets.get(row.model_id),
       row.cost_usd,
+      discrepancies,
+    );
+    compare(
+      `basket_costs[${row.model_id}].carried_forward_from`,
+      publishedCarriedFrom.get(row.model_id),
+      row.carried_forward_from,
       discrepancies,
     );
   }
