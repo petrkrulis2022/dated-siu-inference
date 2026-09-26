@@ -13,7 +13,8 @@
     "gate-authoring-pass": "pnpm run build && node --env-file=../../.env dist/cli/gate-authoring-pass.js",
     "code-gate-authoring-pass": "pnpm run build && node --env-file=../../.env dist/cli/code-gate-authoring-pass.js",
     "bench-diff": "pnpm run build && node dist/cli/bench-diff.js",
-    "p4-full-run": "pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/p4-full-run.js"
+    "p4-full-run": "pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/p4-full-run.js",
+    "p5-window1-full-run": "pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/p5-window1-full-run.js"
   },
   "dependencies": {
     "@touchstone/agents": "workspace:*",
