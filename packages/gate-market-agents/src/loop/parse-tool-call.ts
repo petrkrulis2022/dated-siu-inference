@@ -41,6 +41,34 @@ export class ModelResponseParseError extends Error {
 }
 
 /**
+ * The exact span of the first `{...}` object starting at `openIndex`, respecting JSON string
+ * content (so a brace character inside a quoted string — e.g. a `submit_job` call's own `source`
+ * field, real JS code full of `{`/`}` — is never mistaken for real object structure). Returns the
+ * index of that object's own matching close brace, or null if it never closes.
+ */
+function matchingBraceIndex(text: string, openIndex: number): number | null {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = openIndex; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return null;
+}
+
+/**
  * `packages/harness`'s `Adapter` is plain text in, plain text out — no native tool-calling
  * exists anywhere in this repo (confirmed by reading `adapters/types.ts` and every real adapter
  * before this smoke pass's own plan was written). This parses the small JSON tool-call protocol
@@ -59,7 +87,22 @@ export function parseModelResponse(text: string): ToolCallIntent | DoneIntent {
   try {
     parsed = JSON.parse(text.slice(start, end + 1));
   } catch {
-    throw new ModelResponseParseError(text);
+    // Found live (WORKER-CODE/claude-sonnet-5, P5 window 1, 2026-09-26): a real, recurring
+    // misreading of this file's own "friction" instructions — the model closed its real tool-
+    // call object cleanly, then appended a stray `, "friction": {...}` *outside* it instead of
+    // merging "friction" in as a sibling key. The naive first-brace/last-brace span then spans
+    // both fragments, which is never valid JSON. Falls back to the exact matching span for the
+    // first opening brace alone — the model's real, complete, intended object — before giving up.
+    const matchEnd = matchingBraceIndex(text, start);
+    if (matchEnd !== null) {
+      try {
+        parsed = JSON.parse(text.slice(start, matchEnd + 1));
+      } catch {
+        throw new ModelResponseParseError(text);
+      }
+    } else {
+      throw new ModelResponseParseError(text);
+    }
   }
 
   if (typeof parsed !== "object" || parsed === null) {

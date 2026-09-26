@@ -73,4 +73,31 @@ describe("parseModelResponse", () => {
     const result = parseModelResponse('{"tool": "get_print", "args": {}}');
     expect(result).not.toHaveProperty("friction");
   });
+
+  it("recovers the real tool call when the model appends a stray, unmerged friction object after it", () => {
+    // Found live (WORKER-CODE/claude-sonnet-5, P5 window 1, 2026-09-26): the model closed its
+    // own real tool-call object cleanly, then appended ", \"friction\": {...}" outside it rather
+    // than merging "friction" in as a sibling key — the naive first-brace/last-brace span then
+    // isn't valid JSON at all. The real tool call is still recoverable from its own matching span.
+    const result = parseModelResponse(
+      '{"tool": "get_balances", "args": {"account": "0xabc", "tokenIds": []}}, ' +
+        '"friction": {"could_not_express": null, "forced_conversion": false, ' +
+        '"conversion_reason": null, "missing_information": "no request yet", "decision_confidence": "high"}',
+    );
+    expect(result).toEqual({
+      tool: "get_balances",
+      args: { account: "0xabc", tokenIds: [] },
+    });
+  });
+
+  it("does not miscount braces inside a submit_job source string when recovering from a stray trailing fragment", () => {
+    const result = parseModelResponse(
+      '{"tool": "submit_job", "args": {"source": "export async function gate({ a }) { return { accept: true }; }"}}, ' +
+        '"friction": {"decision_confidence": "high"}',
+    );
+    expect(result).toEqual({
+      tool: "submit_job",
+      args: { source: "export async function gate({ a }) { return { accept: true }; }" },
+    });
+  });
 });

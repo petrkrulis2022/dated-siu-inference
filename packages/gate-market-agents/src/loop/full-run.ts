@@ -259,7 +259,8 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
 
     const marketBoardText = board.renderFor(agent.agentId, agent.erc8004Id);
     const redemptionText = redemption.renderFor(agent.agentId);
-    const boardSectionText = [marketBoardText, redemptionText].filter(Boolean).join("\n\n");
+    const transferText = redemption.renderForHolder(agent.agentId);
+    const boardSectionText = [marketBoardText, redemptionText, transferText].filter(Boolean).join("\n\n");
     const prompt = buildTurnPrompt(context, agent.availableTools, boardSectionText);
     const projectedUsd = projectedTurnCostUsd(Math.ceil(prompt.length / 4), agent.maxOutputTokens, agent.prices);
 
@@ -370,6 +371,14 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
         const quantity = (args as { quantity?: unknown } | undefined)?.quantity;
         if (issuerAgentId && typeof quantity === "string") {
           redemption.recordMint(mintResult.tokenId, issuerAgentId, quantity);
+        }
+      }
+
+      if (intent.tool === "transfer_claim") {
+        const to = (args as { to?: unknown } | undefined)?.to;
+        if (typeof to === "string") {
+          const recipientAgentId = agentIdByAddress[to.toLowerCase()];
+          if (recipientAgentId) redemption.recordTransfer(recipientAgentId);
         }
       }
 

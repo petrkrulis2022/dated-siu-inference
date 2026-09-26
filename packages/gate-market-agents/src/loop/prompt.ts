@@ -7,9 +7,10 @@ const RESPONSE_FORMAT_INSTRUCTIONS = `Respond with exactly one JSON object and n
 To call a tool: {"tool": "<tool_name>", "args": {...}}
 To end your turn, once the job is delivered (or you have no further useful action): {"done": true, "summary": "<what happened>"}
 
-Optionally, on either response shape, add a "friction" field reporting anything real about
-*this* turn's decision — appended to your friction log every turn regardless (spec §8.6):
-{"friction": {
+Optionally, add a "friction" field to that SAME object — never a second, separate JSON object —
+reporting anything real about *this* turn's decision, appended to your friction log every turn
+regardless (spec §8.6). For example, on a tool call:
+{"tool": "<tool_name>", "args": {...}, "friction": {
   "could_not_express": "<something you wanted to do but had no tool for, or null>",
   "forced_conversion": <true only if you had to convert between assets/units you would not have
     chosen to, false otherwise>,

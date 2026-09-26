@@ -38,4 +38,25 @@ describe("RedemptionTracker", () => {
     expect(tracker.renderFor("ISSUER-A")).toBe("");
     expect(tracker.state().served).toBe(true);
   });
+
+  it("renderForHolder tells the real recipient of a transfer its tokenId, and only that agent", () => {
+    const tracker = new RedemptionTracker();
+    tracker.recordMint("1", "ISSUER-A", "500");
+    expect(tracker.renderForHolder("WORKER-CODE")).toBe("");
+
+    tracker.recordTransfer("WORKER-CODE");
+    expect(tracker.renderForHolder("WORKER-CODE")).toContain("tokenId 1");
+    expect(tracker.renderForHolder("WORKER-CODE")).toContain("quantity 500");
+    expect(tracker.renderForHolder("ISSUER-A")).toBe("");
+  });
+
+  it("renderForHolder stops once the holder has actually presented the claim", () => {
+    const tracker = new RedemptionTracker();
+    tracker.recordMint("1", "ISSUER-A", "500");
+    tracker.recordTransfer("WORKER-CODE");
+    expect(tracker.renderForHolder("WORKER-CODE")).not.toBe("");
+
+    tracker.recordPresented("WORKER-CODE");
+    expect(tracker.renderForHolder("WORKER-CODE")).toBe("");
+  });
 });

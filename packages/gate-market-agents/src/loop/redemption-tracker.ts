@@ -16,6 +16,13 @@ import type { AgentId } from "../identity/resolve.js";
 export interface RedemptionState {
   tokenId?: string;
   issuerAgentId?: AgentId;
+  /** Real, on-chain fact from a successful `transfer_claim` (2026-09-26, P5 window 1 live run —
+   * found live: ORCHESTRATOR minted and transferred a real claim, but WORKER-CODE had no way to
+   * discover the tokenId it now held — `get_balances(account, tokenIds)` requires already
+   * knowing which tokenIds to check, it never enumerates what an account holds). Distinct from
+   * `holder`, which means "the agent that actually called redeem_claim" — a claim can be
+   * transferred without yet being presented. */
+  transferredTo?: AgentId;
   holder?: AgentId;
   quantity?: string;
   passed?: boolean;
@@ -30,6 +37,13 @@ export class RedemptionTracker {
     this.#state.tokenId = tokenId;
     this.#state.issuerAgentId = issuerAgentId;
     this.#state.quantity = quantity;
+  }
+
+  /** Called right after a real, successful `transfer_claim` — never invented. Lets the real
+   * recipient discover the tokenId it now holds via `renderForHolder`, closing the gap
+   * `get_balances` alone can't (see `RedemptionState.transferredTo`'s own doc comment). */
+  recordTransfer(to: AgentId): void {
+    this.#state.transferredTo = to;
   }
 
   /** The full minted quantity is assumed presented — this window's one real job never splits a
@@ -64,6 +78,18 @@ export class RedemptionTracker {
       s.passed !== undefined &&
       s.receiptRef !== undefined
     );
+  }
+
+  /** Small, structured text for the real recipient of a transferred claim — empty once it has
+   * actually been presented (recordPresented), so a holder isn't told to redeem something it
+   * already redeemed. Empty for every agent that isn't the real transferredTo. */
+  renderForHolder(agentId: AgentId): string {
+    if (this.#state.transferredTo !== agentId || this.#state.holder !== undefined) return "";
+    return [
+      "A WORK CLAIM WAS TRANSFERRED TO YOU",
+      `  tokenId ${this.#state.tokenId}, quantity ${this.#state.quantity}.`,
+      "  Confirm with get_balances (pass this tokenId), then call redeem_claim once ready.",
+    ].join("\n");
   }
 
   /** Small, structured text for the routed issuer's own turn — empty for every other agent, and
