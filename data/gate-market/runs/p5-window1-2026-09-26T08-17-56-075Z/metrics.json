@@ -1,0 +1,258 @@
+{
+  "passed": false,
+  "totalRealizedUsd": "0.183672",
+  "turnsByAgent": {
+    "ORCHESTRATOR": 3,
+    "WORKER-CODE": 10,
+    "ISSUER-A": 9,
+    "ISSUER-B": 9
+  },
+  "haltedReason": {
+    "ORCHESTRATOR": "voluntary_stop",
+    "ISSUER-A": "ceiling",
+    "ISSUER-B": "ceiling",
+    "WORKER-CODE": "max_turns"
+  },
+  "turnLogsByAgent": {
+    "ORCHESTRATOR": [
+      {
+        "turn": 1,
+        "promptChars": 6651,
+        "projectedUsd": "0.03207875",
+        "realizedUsd": "0.0024125",
+        "latencyMs": 1535,
+        "parsed": "{\"tool\":\"mint_claim\",\"args\":{\"quantity\":\"10000\"}}"
+      },
+      {
+        "turn": 2,
+        "promptChars": 7247,
+        "projectedUsd": "0.032265",
+        "realizedUsd": "0.00317875",
+        "latencyMs": 1204,
+        "parsed": "{\"tool\":\"transfer_claim\",\"args\":{\"agentId\":\"WORKER-CODE\",\"tokenId\":\"19805757773150851846298545476566149556857187968850441983482736796689012326166\",\"quantity\":\"10000\"}}"
+      },
+      {
+        "turn": 3,
+        "promptChars": 7523,
+        "projectedUsd": "0.03235125",
+        "realizedUsd": "0.003795",
+        "latencyMs": 1599,
+        "parsed": "{\"done\":true,\"summary\":\"I have already minted a 10 mSIU work-claim token for this window and transferred the full 10,000 mSIU to WORKER-CODE as payment. At this point there is nothing further for me to do; WORKER-CODE now has the fSIU and is responsible for delivering the hardened gate and calling submit_job. I am waiting for that delivery; no additional tools are needed from my side until the job either passes or the window ends.\"}"
+      }
+    ],
+    "WORKER-CODE": [
+      {
+        "turn": 1,
+        "promptChars": 8369,
+        "projectedUsd": "0.049186",
+        "realizedUsd": "0.00791",
+        "latencyMs": 3415,
+        "parsed": "{\"tool\":\"get_balances\",\"args\":{\"account\":\"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"No open request from ORCHESTRATOR visible yet, and no payment or claim confirmed\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 2,
+        "promptChars": 8523,
+        "projectedUsd": "0.049262",
+        "realizedUsd": "0.008388",
+        "latencyMs": 2728,
+        "parsed": "{\"tool\":\"get_balances\",\"args\":{\"account\":\"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"No open request from ORCHESTRATOR visible yet, and no payment or claim received; nothing to act on this turn.\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 3,
+        "promptChars": 8718,
+        "projectedUsd": "0.04936",
+        "realizedUsd": "0.008554",
+        "latencyMs": 2810,
+        "parsed": "{\"tool\":\"get_balances\",\"args\":{\"account\":\"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"No open request from ORCHESTRATOR visible yet, and no payment or claim received; nothing to act on this turn.\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 4,
+        "promptChars": 8913,
+        "projectedUsd": "0.049458",
+        "realizedUsd": "0.008642",
+        "latencyMs": 2723,
+        "parsed": "{\"tool\":\"get_balances\",\"args\":{\"account\":\"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"No open request from ORCHESTRATOR visible yet, and no payment or claim received\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 5,
+        "promptChars": 9108,
+        "projectedUsd": "0.049554",
+        "realizedUsd": "0.008688",
+        "latencyMs": 2586,
+        "parsed": "{\"tool\":\"get_balances\",\"args\":{\"account\":\"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"No open request from ORCHESTRATOR yet, and no payment or claim received; nothing to act on this turn.\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 6,
+        "promptChars": 9303,
+        "projectedUsd": "0.049652",
+        "realizedUsd": "0.008936",
+        "latencyMs": 3040,
+        "parsed": "{\"tool\":\"get_balances\",\"args\":{\"account\":\"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"No open request from ORCHESTRATOR visible yet, and no payment or claim received; nothing to act on this turn.\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 7,
+        "promptChars": 9498,
+        "projectedUsd": "0.04975",
+        "realizedUsd": "0.009242",
+        "latencyMs": 2756,
+        "parsed": "{\"tool\":\"get_balances\",\"args\":{\"account\":\"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"No open request from ORCHESTRATOR yet, no payment received, no claim held\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 8,
+        "promptChars": 9693,
+        "projectedUsd": "0.049848",
+        "realizedUsd": "0.00951",
+        "latencyMs": 2671,
+        "parsed": "{\"tool\":\"get_balances\",\"args\":{\"account\":\"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"No open request visible on the market board yet, and no payment or claim received; waiting for genuine engagement from ORCHESTRATOR before doing any gate work.\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 9,
+        "promptChars": 9888,
+        "projectedUsd": "0.049944",
+        "realizedUsd": "0.009876",
+        "latencyMs": 2699,
+        "parsed": "{\"tool\":\"get_balances\",\"args\":{\"account\":\"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"No open request on the market board has been shown to me yet, and no payment or claim has arrived; I have nothing to quote or deliver against yet.\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 10,
+        "promptChars": 10083,
+        "projectedUsd": "0.050042",
+        "realizedUsd": "0.009674",
+        "latencyMs": 2096,
+        "parsed": "{\"tool\":\"get_balances\",\"args\":{\"account\":\"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"No open request visible on the market board yet, and no payment or claim received.\",\"decision_confidence\":\"high\"}}"
+      }
+    ],
+    "ISSUER-A": [
+      {
+        "turn": 1,
+        "promptChars": 4116,
+        "projectedUsd": "0.011058",
+        "realizedUsd": "0.003754",
+        "latencyMs": 11733,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":null,\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 2,
+        "promptChars": 4376,
+        "projectedUsd": "0.011188",
+        "realizedUsd": "0.00405",
+        "latencyMs": 12892,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"no PENDING REDEMPTION ROUTED TO YOU fields yet; print still provisional\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 3,
+        "promptChars": 4677,
+        "projectedUsd": "0.01134",
+        "realizedUsd": "0.004296",
+        "latencyMs": 13759,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"no PENDING REDEMPTION ROUTED TO YOU yet; print still provisional so window may still route work\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 4,
+        "promptChars": 4978,
+        "projectedUsd": "0.01149",
+        "realizedUsd": "0.0045",
+        "latencyMs": 15871,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"no PENDING REDEMPTION ROUTED TO YOU yet; print still provisional/non-final\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 5,
+        "promptChars": 5279,
+        "projectedUsd": "0.01164",
+        "realizedUsd": "0.004806",
+        "latencyMs": 9710,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":\"no tool to list pending redemptions or wait for a route without polling get_print\",\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"whether any claim has been minted against this issuer or a redemption will be routed this window\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 6,
+        "promptChars": 5580,
+        "projectedUsd": "0.01179",
+        "realizedUsd": "0.00492",
+        "latencyMs": 13974,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"no PENDING REDEMPTION ROUTED TO YOU fields this turn; print still provisional\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 7,
+        "promptChars": 5881,
+        "projectedUsd": "0.011942",
+        "realizedUsd": "0.005118",
+        "latencyMs": 14345,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"No PENDING REDEMPTION ROUTED TO YOU; print still provisional\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 8,
+        "promptChars": 6182,
+        "projectedUsd": "0.012092",
+        "realizedUsd": "0.005418",
+        "latencyMs": 9511,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"no PENDING REDEMPTION ROUTED TO YOU and print still provisional/non-final; waiting for a real redemption or a final print\",\"decision_confidence\":\"high\"}}"
+      }
+    ],
+    "ISSUER-B": [
+      {
+        "turn": 1,
+        "promptChars": 4115,
+        "projectedUsd": "0.011058",
+        "realizedUsd": "0.003826",
+        "latencyMs": 7586,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"no pending redemption routed this turn; first turn with empty history\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 2,
+        "promptChars": 4375,
+        "projectedUsd": "0.011188",
+        "realizedUsd": "0.004008",
+        "latencyMs": 17903,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"no pending redemption routed this turn; print still provisional\",\"decision_confidence\":\"medium\"}}"
+      },
+      {
+        "turn": 3,
+        "promptChars": 4676,
+        "projectedUsd": "0.011338",
+        "realizedUsd": "0.004224",
+        "latencyMs": 11609,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"no pending redemption routed this turn; print still provisional\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 4,
+        "promptChars": 4977,
+        "projectedUsd": "0.01149",
+        "realizedUsd": "0.004476",
+        "latencyMs": 10549,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"no PENDING REDEMPTION ROUTED TO YOU yet; print still provisional\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 5,
+        "promptChars": 5278,
+        "projectedUsd": "0.01164",
+        "realizedUsd": "0.004692",
+        "latencyMs": 16518,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"no PENDING REDEMPTION ROUTED TO YOU yet; print still provisional\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 6,
+        "promptChars": 5579,
+        "projectedUsd": "0.01179",
+        "realizedUsd": "0.004938",
+        "latencyMs": 12549,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"no PENDING REDEMPTION ROUTED TO YOU this turn; print still provisional/non-final\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 7,
+        "promptChars": 5880,
+        "projectedUsd": "0.01194",
+        "realizedUsd": "0.005148",
+        "latencyMs": 6424,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"no PENDING REDEMPTION ROUTED TO YOU yet; print still provisional/non-final\",\"decision_confidence\":\"medium\"}}"
+      },
+      {
+        "turn": 8,
+        "promptChars": 6181,
+        "projectedUsd": "0.012092",
+        "realizedUsd": "0.005466",
+        "latencyMs": 20091,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":\"no idle/wait tool other than repeating a harmless read until a redemption is routed\",\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"no PENDING REDEMPTION ROUTED TO YOU this turn; print still provisional/non-final\",\"decision_confidence\":\"medium\"}}"
+      }
+    ]
+  }
+}

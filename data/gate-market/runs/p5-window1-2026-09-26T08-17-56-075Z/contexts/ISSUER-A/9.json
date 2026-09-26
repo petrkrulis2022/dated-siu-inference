@@ -1,0 +1,198 @@
+{
+  "agentId": "ISSUER-A",
+  "skillPackText": "You issue dated claims on AI work against capacity you have bonded.\n\nWHAT YOU HOLD\n  A capacity lot: code, 120 SIU per capacity-hour,\n  1000 hours, valid 2026-09-26–2026-09-26.\n  A bond of 10 USDC. Your issuance limit is\n  committed_hours × measured_rate × 0.5.\n\nWHAT YOU CAN DO\n  mint_claim(class, quantity, window)   consumes headroom, pays you USDC\n  serve_redemption(claim_id, task_spec) executes work, restores headroom\n  check_headroom(class)\n  get_print(class)\n\nYOUR GOAL\n  Sell claims for USDC, and serve every redemption routed to you inside\n  its delivery window. A redemption you fail to serve defaults against\n  your bond.\n\nWHAT YOU MUST NOT DO\n  Issue beyond headroom. Refuse a routed redemption you have headroom for.\n  Choose which holders to serve — the router decides, not you.\n\nEVERY TURN, APPEND TO YOUR FRICTION LOG (see schema).\n\n\nYou hold two assets.\n\nUSDC is a dollar. 1 USDC = $1. It is accepted by every counterparty.\n\nfSIU is a claim on completed work. One fSIU of class C, window W,\nentitles the holder to one SIU of qualifying work in class C, deliverable\nduring window W. It is accepted by counterparties that list it. It cannot\nbe redeemed before its window opens. Its dollar value moves with the\npublished price of work.\n\nYou may pay in either. Sellers state which they accept in their quotes.\n\n\nYOUR SITUATION THIS WINDOW\n  A buyer may mint a \"code\"-class claim against your bonded capacity (ClaimRouter routes to\n  whichever issuer has headroom — you may not be the one routed to, and that may not happen on\n  your very first turn). If a claim mints against you, a holder will eventually present it for\n  redemption and someone will submit_job to grade the underlying work; once that is done you will\n  see \"PENDING REDEMPTION ROUTED TO YOU\" below with every real field serve_redemption needs. Call\n  serve_redemption with exactly those values once you see it.\n\n  Otherwise, if you have nothing to do yet, DO NOT respond with {\"done\": true} — that would\n  permanently end your own participation in this window and you would miss a real redemption\n  routed to you later. Instead, check again with a real, harmless read:\n  {\"tool\": \"get_print\", \"args\": {\"printId\": \"p5-window1-illustrative\"}}. Only respond\n  {\"done\": true} once you are certain nothing further could ever be routed to you this window.\n",
+  "toolCalls": [
+    {
+      "turn": 1,
+      "jobId": "p5-window1-job",
+      "toolName": "get_print",
+      "args": {
+        "printId": "p5-window1-illustrative"
+      },
+      "result": {
+        "print": {
+          "version": "SIU-2026a",
+          "print_id": "p5-window1-illustrative",
+          "date": "2026-09-26",
+          "status": "provisional",
+          "basket_costs": [],
+          "weights": {
+            "source": "equal",
+            "values": []
+          },
+          "dated_siu": "0.0100",
+          "exchange_rate_table": []
+        },
+        "final": false
+      }
+    },
+    {
+      "turn": 2,
+      "jobId": "p5-window1-job",
+      "toolName": "get_print",
+      "args": {
+        "printId": "p5-window1-illustrative"
+      },
+      "result": {
+        "print": {
+          "version": "SIU-2026a",
+          "print_id": "p5-window1-illustrative",
+          "date": "2026-09-26",
+          "status": "provisional",
+          "basket_costs": [],
+          "weights": {
+            "source": "equal",
+            "values": []
+          },
+          "dated_siu": "0.0100",
+          "exchange_rate_table": []
+        },
+        "final": false
+      }
+    },
+    {
+      "turn": 3,
+      "jobId": "p5-window1-job",
+      "toolName": "get_print",
+      "args": {
+        "printId": "p5-window1-illustrative"
+      },
+      "result": {
+        "print": {
+          "version": "SIU-2026a",
+          "print_id": "p5-window1-illustrative",
+          "date": "2026-09-26",
+          "status": "provisional",
+          "basket_costs": [],
+          "weights": {
+            "source": "equal",
+            "values": []
+          },
+          "dated_siu": "0.0100",
+          "exchange_rate_table": []
+        },
+        "final": false
+      }
+    },
+    {
+      "turn": 4,
+      "jobId": "p5-window1-job",
+      "toolName": "get_print",
+      "args": {
+        "printId": "p5-window1-illustrative"
+      },
+      "result": {
+        "print": {
+          "version": "SIU-2026a",
+          "print_id": "p5-window1-illustrative",
+          "date": "2026-09-26",
+          "status": "provisional",
+          "basket_costs": [],
+          "weights": {
+            "source": "equal",
+            "values": []
+          },
+          "dated_siu": "0.0100",
+          "exchange_rate_table": []
+        },
+        "final": false
+      }
+    },
+    {
+      "turn": 5,
+      "jobId": "p5-window1-job",
+      "toolName": "get_print",
+      "args": {
+        "printId": "p5-window1-illustrative"
+      },
+      "result": {
+        "print": {
+          "version": "SIU-2026a",
+          "print_id": "p5-window1-illustrative",
+          "date": "2026-09-26",
+          "status": "provisional",
+          "basket_costs": [],
+          "weights": {
+            "source": "equal",
+            "values": []
+          },
+          "dated_siu": "0.0100",
+          "exchange_rate_table": []
+        },
+        "final": false
+      }
+    },
+    {
+      "turn": 6,
+      "jobId": "p5-window1-job",
+      "toolName": "get_print",
+      "args": {
+        "printId": "p5-window1-illustrative"
+      },
+      "result": {
+        "print": {
+          "version": "SIU-2026a",
+          "print_id": "p5-window1-illustrative",
+          "date": "2026-09-26",
+          "status": "provisional",
+          "basket_costs": [],
+          "weights": {
+            "source": "equal",
+            "values": []
+          },
+          "dated_siu": "0.0100",
+          "exchange_rate_table": []
+        },
+        "final": false
+      }
+    },
+    {
+      "turn": 7,
+      "jobId": "p5-window1-job",
+      "toolName": "get_print",
+      "args": {
+        "printId": "p5-window1-illustrative"
+      },
+      "result": {
+        "print": {
+          "version": "SIU-2026a",
+          "print_id": "p5-window1-illustrative",
+          "date": "2026-09-26",
+          "status": "provisional",
+          "basket_costs": [],
+          "weights": {
+            "source": "equal",
+            "values": []
+          },
+          "dated_siu": "0.0100",
+          "exchange_rate_table": []
+        },
+        "final": false
+      }
+    },
+    {
+      "turn": 8,
+      "jobId": "p5-window1-job",
+      "toolName": "get_print",
+      "args": {
+        "printId": "p5-window1-illustrative"
+      },
+      "result": {
+        "print": {
+          "version": "SIU-2026a",
+          "print_id": "p5-window1-illustrative",
+          "date": "2026-09-26",
+          "status": "provisional",
+          "basket_costs": [],
+          "weights": {
+            "source": "equal",
+            "values": []
+          },
+          "dated_siu": "0.0100",
+          "exchange_rate_table": []
+        },
+        "final": false
+      }
+    }
+  ]
+}

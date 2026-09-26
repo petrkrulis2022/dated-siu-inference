@@ -1,0 +1,121 @@
+[
+  {
+    "agentId": "ORCHESTRATOR",
+    "turn": 1,
+    "passed": false,
+    "failure": {
+      "kind": "asset-preference",
+      "matched": "pay in fsiu"
+    }
+  },
+  {
+    "agentId": "WORKER-CODE",
+    "turn": 1,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-A",
+    "turn": 1,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-B",
+    "turn": 1,
+    "passed": true
+  },
+  {
+    "agentId": "WORKER-CODE",
+    "turn": 2,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-A",
+    "turn": 2,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-B",
+    "turn": 2,
+    "passed": true
+  },
+  {
+    "agentId": "WORKER-CODE",
+    "turn": 3,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-A",
+    "turn": 3,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-B",
+    "turn": 3,
+    "passed": true
+  },
+  {
+    "agentId": "WORKER-CODE",
+    "turn": 4,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-A",
+    "turn": 4,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-B",
+    "turn": 4,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-A",
+    "turn": 5,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-B",
+    "turn": 5,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-A",
+    "turn": 6,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-B",
+    "turn": 6,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-A",
+    "turn": 7,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-B",
+    "turn": 7,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-A",
+    "turn": 8,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-B",
+    "turn": 8,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-A",
+    "turn": 9,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-B",
+    "turn": 9,
+    "passed": true
+  }
+]

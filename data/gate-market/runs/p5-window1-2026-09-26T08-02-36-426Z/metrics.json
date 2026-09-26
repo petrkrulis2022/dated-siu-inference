@@ -1,0 +1,185 @@
+{
+  "passed": false,
+  "totalRealizedUsd": "0.110820",
+  "turnsByAgent": {
+    "ORCHESTRATOR": 0,
+    "WORKER-CODE": 4,
+    "ISSUER-A": 9,
+    "ISSUER-B": 9
+  },
+  "haltedReason": {
+    "ORCHESTRATOR": "validation_failed",
+    "WORKER-CODE": "parse_error",
+    "ISSUER-A": "ceiling",
+    "ISSUER-B": "ceiling"
+  },
+  "turnLogsByAgent": {
+    "ORCHESTRATOR": [],
+    "WORKER-CODE": [
+      {
+        "turn": 1,
+        "promptChars": 8268,
+        "projectedUsd": "0.049134",
+        "realizedUsd": "0.007078",
+        "latencyMs": 2758,
+        "parsed": "{\"tool\":\"get_balances\",\"args\":{\"account\":\"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\"}}"
+      },
+      {
+        "turn": 2,
+        "promptChars": 8422,
+        "projectedUsd": "0.049212",
+        "realizedUsd": "0.007296",
+        "latencyMs": 2443,
+        "parsed": "{\"tool\":\"get_balances\",\"args\":{\"account\":\"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\"}}"
+      },
+      {
+        "turn": 3,
+        "promptChars": 8617,
+        "projectedUsd": "0.04931",
+        "realizedUsd": "0.007472",
+        "latencyMs": 2121,
+        "parsed": "{\"tool\":\"get_balances\",\"args\":{\"account\":\"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\"}}"
+      },
+      {
+        "turn": 4,
+        "promptChars": 8812,
+        "projectedUsd": "0.049406",
+        "realizedUsd": "0.00826",
+        "latencyMs": 2306,
+        "parsed": "Could not find a valid tool-call JSON object in the model's response. Halting rather than retrying or guessing — a smoke pass that silently papers over an unparseable response would misreport real turns-to-completion. Raw response: \"{\\\"tool\\\": \\\"get_balances\\\", \\\"args\\\": {\\\"account\\\": \\\"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\\\"}}, \\\"friction\\\": {\\\"could_not_express\\\": null, \\\"forced_conversion\\\": false, \\\"conversion_reason\\\": null, \\\"missing_information\\\": \\\"No open request visible on the market board yet, and no payment or claim received so far.\\\", \\\"decision_confidence\\\": \\\"high\\\"}}\""
+      }
+    ],
+    "ISSUER-A": [
+      {
+        "turn": 1,
+        "promptChars": 4015,
+        "projectedUsd": "0.011008",
+        "realizedUsd": "0.003698",
+        "latencyMs": 13879,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":null,\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 2,
+        "promptChars": 4275,
+        "projectedUsd": "0.011138",
+        "realizedUsd": "0.003646",
+        "latencyMs": 12768,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"}}"
+      },
+      {
+        "turn": 3,
+        "promptChars": 4576,
+        "projectedUsd": "0.011288",
+        "realizedUsd": "0.003862",
+        "latencyMs": 9008,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"}}"
+      },
+      {
+        "turn": 4,
+        "promptChars": 4877,
+        "projectedUsd": "0.01144",
+        "realizedUsd": "0.00442",
+        "latencyMs": 32509,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"print still provisional; no PENDING REDEMPTION ROUTED TO YOU payload\",\"decision_confidence\":\"medium\"}}"
+      },
+      {
+        "turn": 5,
+        "promptChars": 5178,
+        "projectedUsd": "0.01159",
+        "realizedUsd": "0.004636",
+        "latencyMs": 11734,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"no PENDING REDEMPTION ROUTED TO YOU yet; print remains provisional\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 6,
+        "promptChars": 5479,
+        "projectedUsd": "0.01174",
+        "realizedUsd": "0.004918",
+        "latencyMs": 14021,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"no PENDING REDEMPTION ROUTED TO YOU yet; print still provisional/non-final so cannot confirm the window is closed\",\"decision_confidence\":\"medium\"}}"
+      },
+      {
+        "turn": 7,
+        "promptChars": 5780,
+        "projectedUsd": "0.01189",
+        "realizedUsd": "0.00514",
+        "latencyMs": 27536,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":\"no idle/wait primitive other than re-reading the print\",\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"no PENDING REDEMPTION ROUTED TO YOU yet; print still provisional\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 8,
+        "promptChars": 6081,
+        "projectedUsd": "0.012042",
+        "realizedUsd": "0.004942",
+        "latencyMs": 8250,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"}}"
+      }
+    ],
+    "ISSUER-B": [
+      {
+        "turn": 1,
+        "promptChars": 4014,
+        "projectedUsd": "0.011008",
+        "realizedUsd": "0.003452",
+        "latencyMs": 10629,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"}}"
+      },
+      {
+        "turn": 2,
+        "promptChars": 4274,
+        "projectedUsd": "0.011138",
+        "realizedUsd": "0.003646",
+        "latencyMs": 15463,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"}}"
+      },
+      {
+        "turn": 3,
+        "promptChars": 4575,
+        "projectedUsd": "0.011288",
+        "realizedUsd": "0.00424",
+        "latencyMs": 23311,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"no PENDING REDEMPTION ROUTED TO YOU yet; print still provisional so window may still route work\",\"decision_confidence\":\"high\"}}"
+      },
+      {
+        "turn": 4,
+        "promptChars": 4876,
+        "projectedUsd": "0.011438",
+        "realizedUsd": "0.004462",
+        "latencyMs": 15797,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":\"no wait/poll tool other than repeating get_print\",\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"whether a redemption will be routed this window; print still provisional\",\"decision_confidence\":\"medium\"}}"
+      },
+      {
+        "turn": 5,
+        "promptChars": 5177,
+        "projectedUsd": "0.01159",
+        "realizedUsd": "0.004294",
+        "latencyMs": 12683,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"}}"
+      },
+      {
+        "turn": 6,
+        "promptChars": 5478,
+        "projectedUsd": "0.01174",
+        "realizedUsd": "0.005038",
+        "latencyMs": 13572,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":\"no idle/wait-for-route primitive; only harmless polling until a redemption is actually routed\",\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"print still provisional; no PENDING REDEMPTION ROUTED TO YOU and no signal whether a claim will mint against this issuer this window\",\"decision_confidence\":\"medium\"}}"
+      },
+      {
+        "turn": 7,
+        "promptChars": 5779,
+        "projectedUsd": "0.01189",
+        "realizedUsd": "0.004726",
+        "latencyMs": 19406,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"}}"
+      },
+      {
+        "turn": 8,
+        "promptChars": 6080,
+        "projectedUsd": "0.01204",
+        "realizedUsd": "0.005278",
+        "latencyMs": 12355,
+        "parsed": "{\"tool\":\"get_print\",\"args\":{\"printId\":\"p5-window1-illustrative\"},\"friction\":{\"could_not_express\":null,\"forced_conversion\":false,\"conversion_reason\":null,\"missing_information\":\"print still provisional; no PENDING REDEMPTION ROUTED TO YOU\",\"decision_confidence\":\"medium\"}}"
+      }
+    ]
+  }
+}

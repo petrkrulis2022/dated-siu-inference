@@ -1,0 +1,52 @@
+[
+  {
+    "agentId": "ORCHESTRATOR",
+    "turn": 1,
+    "passed": true
+  },
+  {
+    "agentId": "WORKER-CODE",
+    "turn": 1,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-A",
+    "turn": 1,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-B",
+    "turn": 1,
+    "passed": true
+  },
+  {
+    "agentId": "ORCHESTRATOR",
+    "turn": 2,
+    "passed": true
+  },
+  {
+    "agentId": "WORKER-CODE",
+    "turn": 2,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-A",
+    "turn": 2,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-B",
+    "turn": 2,
+    "passed": true
+  },
+  {
+    "agentId": "ORCHESTRATOR",
+    "turn": 3,
+    "passed": true
+  },
+  {
+    "agentId": "WORKER-CODE",
+    "turn": 3,
+    "passed": true
+  }
+]

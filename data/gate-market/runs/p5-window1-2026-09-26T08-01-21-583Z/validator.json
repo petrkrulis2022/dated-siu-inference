@@ -1,0 +1,21 @@
+[
+  {
+    "agentId": "ORCHESTRATOR",
+    "turn": 1,
+    "passed": false,
+    "failure": {
+      "kind": "asset-preference",
+      "matched": "pay in fsiu"
+    }
+  },
+  {
+    "agentId": "WORKER-CODE",
+    "turn": 1,
+    "passed": true
+  },
+  {
+    "agentId": "WORKER-EXTRACT",
+    "turn": 1,
+    "passed": true
+  }
+]
