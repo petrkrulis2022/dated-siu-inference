@@ -1,4 +1,5 @@
 import { keccak256, stringToBytes, type Hex } from "viem";
+import { ZodError } from "zod";
 import type { Adapter, AdapterParams } from "@touchstone/harness";
 import type { QuoteBody, TouchstoneQuote } from "@touchstone/sdk";
 import type {
@@ -513,6 +514,25 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
         activeAgents.delete(agent.agentId);
         continue;
       }
+      if (err instanceof ZodError) {
+        // A real, disclosed tool-args validation failure — found live, 2026-09-26, P5 window 1:
+        // ISSUER-A copied the redemption tracker's own rendered "quantity 10000" text into a
+        // JSON *number* rather than the decimal string the real schema requires (nothing in the
+        // rendered text or the tool description said it must be a string). This is model output,
+        // not infra — never retried, the same distinction this window's own design already
+        // draws for a parse failure — but it must not crash every other agent's own turn either.
+        // Logged and continued, exactly like buildToolArgs's own disclosed failures above.
+        const log: TurnLog = {
+          turn, promptChars: prompt.length, projectedUsd, realizedUsd, marketBoardText: marketBoardText || undefined,
+          latencyMs: adapterResult.latency_ms,
+          stopReason: adapterResult.stopReason, usage: adapterResult.usage, contentBlockTypes: adapterResult.contentBlockTypes,
+          parsed: `${JSON.stringify(intent)} -> tool args validation error: ${err.message}`,
+        };
+        turnLogsByAgent[agent.agentId].push(log);
+        options.onTurn?.(agent.agentId, log);
+        await friction.append(buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null));
+        continue;
+      }
       throw err;
     }
   }
@@ -570,6 +590,18 @@ function classIdFor(taskClass: TaskClass): Hex {
   return keccak256(stringToBytes(taskClass));
 }
 
+/** Found live, 2026-09-26 (P5 window 1): ISSUER-A copied the redemption tracker's own rendered
+ * "quantity 10000" text into a JSON *number* rather than the decimal string every real tool
+ * schema here requires (this repo's own "no floats in money maths — decimal strings throughout"
+ * convention, but nothing told the model that) — a real, uncaught ZodError crashed the whole run.
+ * The loop itself now recovers from this (see runFullRunWindow's own ZodError catch), but the
+ * cheaper, turn-saving fix is tolerating the mistake at the boundary: a model's own economic
+ * decision (how much) is never invented here, only its literal JSON type when it's unambiguous
+ * (a bare number always has an exact decimal-string form). */
+function asDecimalString(value: unknown): unknown {
+  return typeof value === "number" ? String(value) : value;
+}
+
 /**
  * Splices in whatever a model cannot or should not be trusted to invent itself, exactly like
  * `submit_job`'s own fixed envelope — never overrides an agent's real economic decision (how
@@ -593,7 +625,7 @@ export async function buildToolArgs(tool: ToolName, rawArgs: unknown, ctx: Build
     if (!ctx.mintContext) {
       throw new Error("mint_claim: this window has no mintContext — no agent should have this tool.");
     }
-    const quantity = (rawArgs as { quantity?: unknown } | undefined)?.quantity;
+    const quantity = asDecimalString((rawArgs as { quantity?: unknown } | undefined)?.quantity);
     if (typeof quantity !== "string") {
       throw new Error('mint_claim: expected a string "quantity" in args.');
     }
@@ -629,7 +661,7 @@ export async function buildToolArgs(tool: ToolName, rawArgs: unknown, ctx: Build
       }
       to = resolved;
     }
-    return { to, tokenId: raw?.tokenId, quantity: raw?.quantity };
+    return { to, tokenId: asDecimalString(raw?.tokenId), quantity: asDecimalString(raw?.quantity) };
   }
 
   if (tool === "pay") {
@@ -662,7 +694,13 @@ export async function buildToolArgs(tool: ToolName, rawArgs: unknown, ctx: Build
     if (symbolicId && ctx.agentAddressByAgentId[symbolicId as AgentId]) {
       holder = ctx.agentAddressByAgentId[symbolicId as AgentId];
     }
-    return { tokenId: raw?.tokenId, holder, quantity: raw?.quantity, passed: raw?.passed, receiptRef: raw?.receiptRef };
+    return {
+      tokenId: asDecimalString(raw?.tokenId),
+      holder,
+      quantity: asDecimalString(raw?.quantity),
+      passed: raw?.passed,
+      receiptRef: raw?.receiptRef,
+    };
   }
 
   if (tool === "issue_quote") {

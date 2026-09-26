@@ -341,6 +341,42 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
       decision_confidence: "medium",
     });
   });
+
+  it("recovers from a real tool-args schema violation rather than crashing the whole window — found live, P5 window 1", async () => {
+    // get_print's own real schema requires printId: z.string() — a model supplying a JSON
+    // number there previously reached Runner.callTool's zod parse uncaught, crashing the whole
+    // process for every other agent too (exactly what happened live with serve_redemption's
+    // quantity). Using get_print here since, unlike quantity, nothing coerces a bad printId —
+    // this specifically exercises the loop's own catch, not the separate coercion fix.
+    let call = 0;
+    const adapter: Adapter = async () => {
+      call++;
+      if (call === 1) {
+        return {
+          text: '{"tool": "get_print", "args": {"printId": 123}}',
+          usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+        };
+      }
+      return {
+        text: JSON.stringify({ done: true, summary: "recovered" }),
+        usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+      };
+    };
+
+    const result = await runFullRunWindow({
+      windowId: "w0",
+      roster: [{ ...orchestratorConfig(adapter), availableTools: ["get_print"] }],
+      job: JOB,
+      maxTurnsPerAgent: 2,
+      budget: generousBudget(ledgerPath),
+      deps: fakeDeps(async () => PASS),
+      runsRoot, runId: "run-zod-recovery", manifest: MANIFEST,
+    });
+
+    expect(result.turnsByAgent.ORCHESTRATOR).toBe(2);
+    expect(result.haltedReason?.ORCHESTRATOR).toBe("voluntary_stop");
+    expect(result.turnLogsByAgent.ORCHESTRATOR[0].parsed).toContain("tool args validation error");
+  });
 });
 
 describe("buildToolArgs", () => {
@@ -423,6 +459,43 @@ describe("buildToolArgs", () => {
     await expect(
       buildToolArgs("transfer_claim", { agentId: "HEDGER", tokenId: "1", quantity: "10" }, baseCtx()),
     ).rejects.toThrow(/no known address/);
+  });
+
+  it("transfer_claim: tolerates a numeric quantity — found live, a model copied rendered text as a JSON number", async () => {
+    const args = await buildToolArgs(
+      "transfer_claim",
+      { to: "0x1111111111111111111111111111111111111e", tokenId: "1", quantity: 10 },
+      baseCtx(),
+    );
+    expect(args).toEqual({ to: "0x1111111111111111111111111111111111111e", tokenId: "1", quantity: "10" });
+  });
+
+  it("serve_redemption: tolerates a numeric quantity, the exact real crash found live in P5 window 1", async () => {
+    const args = await buildToolArgs(
+      "serve_redemption",
+      { tokenId: "1", holder: "0x1111111111111111111111111111111111111e", quantity: 10000, passed: true, receiptRef: "0xabc" },
+      baseCtx(),
+    );
+    expect(args).toEqual({
+      tokenId: "1",
+      holder: "0x1111111111111111111111111111111111111e",
+      quantity: "10000",
+      passed: true,
+      receiptRef: "0xabc",
+    });
+  });
+
+  it("mint_claim: tolerates a numeric quantity rather than refusing it", async () => {
+    const mintContext: MintContext = {
+      publisherPrivateKeyHex: PUBLISHER_PK,
+      printId: "2026-09-25",
+      nanoUsdPerSiu: 10_700_000n,
+      validitySeconds: 3600n,
+    };
+    const args = (await buildToolArgs("mint_claim", { quantity: 500 }, baseCtx({ mintContext }))) as {
+      quantity: string;
+    };
+    expect(args.quantity).toBe("500");
   });
 
   it("issue_quote: uses the board's own stored body for a real open request, never the model's own reconstruction", async () => {
