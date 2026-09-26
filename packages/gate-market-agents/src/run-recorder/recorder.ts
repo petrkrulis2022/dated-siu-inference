@@ -15,6 +15,10 @@ export interface RunManifest {
   packVersion: string;
   agentConfigs: Record<string, unknown>;
   seed: string;
+  /** The real, per-agent tool-description order each agent's own prompt actually used this run —
+   * see `loop/full-run.ts`'s `shuffledToolOrder`. Optional: only `runFullRunWindow` populates it;
+   * older/other loops that build a `RunManifest` directly are unaffected. */
+  toolOrderByAgent?: Record<string, readonly string[]>;
 }
 
 /** Spec §12.4: "every validator verdict... including passes." */

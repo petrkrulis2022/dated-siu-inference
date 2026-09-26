@@ -32,6 +32,7 @@ import { QuoteBoard } from "./quote-board.js";
 import {
   buildToolArgs,
   runFullRunWindow,
+  shuffledToolOrder,
   type BuildToolArgsContext,
   type JobEnvelope,
   type MintContext,
@@ -138,6 +139,34 @@ function generousBudget(ledgerPath: string): ExperimentBudget {
   return new ExperimentBudget({ ceiling, runCapUsd: "30", experimentCapUsd: "150", ledgerPath });
 }
 
+describe("shuffledToolOrder", () => {
+  const TOOLS = ["request_quote", "pay", "mint_claim", "transfer_claim", "check_headroom", "submit_job", "get_balances", "get_print"] as const;
+
+  it("is deterministic for the same seed — an audit can recompute it, not just trust the manifest", () => {
+    const a = shuffledToolOrder(TOOLS, "seed-1:ORCHESTRATOR");
+    const b = shuffledToolOrder(TOOLS, "seed-1:ORCHESTRATOR");
+    expect(a).toEqual(b);
+  });
+
+  it("returns a real permutation — same set, same length, nothing invented or dropped", () => {
+    const shuffled = shuffledToolOrder(TOOLS, "seed-1:ORCHESTRATOR");
+    expect(shuffled).toHaveLength(TOOLS.length);
+    expect([...shuffled].sort()).toEqual([...TOOLS].sort());
+  });
+
+  it("differs by agentId under the same seed — one agent's own order isn't every other agent's", () => {
+    const forOrchestrator = shuffledToolOrder(TOOLS, "seed-1:ORCHESTRATOR");
+    const forWorkerCode = shuffledToolOrder(TOOLS, "seed-1:WORKER-CODE");
+    expect(forOrchestrator).not.toEqual(forWorkerCode);
+  });
+
+  it("differs across seeds for the same agent — not always the tools.yaml literal order", () => {
+    const forSeed1 = shuffledToolOrder(TOOLS, "seed-1:ORCHESTRATOR");
+    const forSeed2 = shuffledToolOrder(TOOLS, "seed-2:ORCHESTRATOR");
+    expect(forSeed1).not.toEqual(forSeed2);
+  });
+});
+
 describe("runFullRunWindow — P4 shape: one agent, one job", () => {
   let runsRoot: string;
   let ledgerPath: string;
@@ -165,6 +194,30 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
     expect(result.passed).toBe(true);
     expect(result.passedBy).toBe("ORCHESTRATOR");
     expect(result.turnsByAgent.ORCHESTRATOR).toBe(1);
+  });
+
+  it("records the real, per-agent shuffled tool order in the manifest — the same order buildTurnPrompt actually used", async () => {
+    const fullToolGrant = ["request_quote", "pay", "mint_claim", "transfer_claim", "check_headroom", "submit_job", "get_balances", "get_print"] as const;
+    const adapter: Adapter = async () => ({
+      text: JSON.stringify({ done: true, summary: "nothing to do" }),
+      usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+    });
+
+    await runFullRunWindow({
+      windowId: "w0",
+      roster: [{ ...orchestratorConfig(adapter), availableTools: fullToolGrant }],
+      job: JOB,
+      maxTurnsPerAgent: 1,
+      budget: generousBudget(ledgerPath),
+      deps: fakeDeps(async () => PASS),
+      runsRoot, runId: "run-tool-order", manifest: MANIFEST,
+    });
+
+    const manifestText = await readFile(path.join(runsRoot, "run-tool-order", "manifest.yaml"), "utf-8");
+    const expectedOrder = shuffledToolOrder(fullToolGrant, `${MANIFEST.seed}:ORCHESTRATOR`);
+    const expectedYaml = expectedOrder.map((tool) => `    - ${tool}`).join("\n");
+    expect(manifestText).toContain("toolOrderByAgent:");
+    expect(manifestText).toContain(expectedYaml);
   });
 
   it("quarantines a non-deterministic gate rather than reporting a pass — never counts it", async () => {

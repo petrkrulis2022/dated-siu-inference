@@ -134,6 +134,15 @@ export interface TurnLog {
    * evidence of what this agent could see of the market, not just what it did (empty when the
    * board had nothing for it, matching `buildTurnPrompt`'s own "omit when empty" convention). */
   marketBoardText?: string;
+  /** The provider's own real reason the completion ended, and the real type of every content
+   * block/part it returned — `Adapter`'s own new diagnostic fields (see harness/adapters/
+   * types.ts), threaded straight through so a real turn's own raw shape survives into
+   * metrics.json rather than only ever existing in memory. Added 2026-09-26: a real call
+   * (claude-sonnet-5, P5 window 1) returned no text for a real, separately-billed $0.24 request,
+   * and nothing persisted anywhere let this be diagnosed after the fact. */
+  stopReason?: string;
+  usage?: { input: number; output: number; cached_input: number; reasoning: number };
+  contentBlockTypes?: string[];
 }
 
 export interface FullRunWindowResult {
@@ -178,8 +187,59 @@ async function holdTimeToExpiry(
   return computeTimeToExpirySeconds(now, windowTo);
 }
 
+/** A small, deterministic 32-bit hash — seeds the shuffle below from a real string (the run's
+ * own manifest seed plus the agent id), not from wall-clock time, so the same real seed always
+ * reproduces the same real order (an audit can recompute it, not just trust the manifest). */
+function hashSeed(input: string): number {
+  let h = 1779033703 ^ input.length;
+  for (let i = 0; i < input.length; i++) {
+    h = Math.imul(h ^ input.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
+function mulberry32(seed: number): () => number {
+  let a = seed;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Found live (WORKER-CODE/claude-sonnet-5, P5 window 1, 2026-09-26): LLMs show a real ordering
+ * bias — the first-listed or most prominently described tool gets picked more. Before any
+ * asset-choice result (fSIU vs USDC) is trusted, the tool list a model actually saw must not be
+ * fixed in the same order every real turn, every real run — that would make "which asset did it
+ * choose" partly an artefact of tools.yaml's own literal ordering rather than a genuine decision.
+ * Deterministic per (seed, agentId): same seed always reproduces the same real order (recorded in
+ * the manifest below), not silently unreproducible.
+ */
+export function shuffledToolOrder<T>(items: readonly T[], seedInput: string): T[] {
+  const rand = mulberry32(hashSeed(seedInput));
+  const arr = [...items];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 export async function runFullRunWindow(options: FullRunWindowOptions): Promise<FullRunWindowResult> {
-  const recorder = new RunRecorder(options.runsRoot, options.runId, options.manifest);
+  // Computed before RunRecorder is constructed so the real order used is recorded in the
+  // manifest from turn one, not added after the fact.
+  const toolOrderByAgent: Record<string, readonly ToolName[]> = {};
+  for (const agent of options.roster) {
+    toolOrderByAgent[agent.agentId] = shuffledToolOrder(
+      agent.availableTools,
+      `${options.manifest.seed}:${agent.agentId}`,
+    );
+  }
+  const manifestWithToolOrder: RunManifest = { ...options.manifest, toolOrderByAgent };
+  const recorder = new RunRecorder(options.runsRoot, options.runId, manifestWithToolOrder);
   const friction = new FrictionLogWriter(options.runsRoot, options.runId);
   const board = new QuoteBoard();
   const redemption = new RedemptionTracker();
@@ -261,7 +321,7 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
     const redemptionText = redemption.renderFor(agent.agentId);
     const transferText = redemption.renderForHolder(agent.agentId);
     const boardSectionText = [marketBoardText, redemptionText, transferText].filter(Boolean).join("\n\n");
-    const prompt = buildTurnPrompt(context, agent.availableTools, boardSectionText);
+    const prompt = buildTurnPrompt(context, toolOrderByAgent[agent.agentId], boardSectionText);
     const projectedUsd = projectedTurnCostUsd(Math.ceil(prompt.length / 4), agent.maxOutputTokens, agent.prices);
 
     try {
@@ -295,6 +355,7 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       const log: TurnLog = {
         turn, promptChars: prompt.length, projectedUsd, realizedUsd, marketBoardText: marketBoardText || undefined,
         latencyMs: adapterResult.latency_ms,
+        stopReason: adapterResult.stopReason, usage: adapterResult.usage, contentBlockTypes: adapterResult.contentBlockTypes,
         parsed: err instanceof Error ? err.message : String(err),
       };
       turnLogsByAgent[agent.agentId].push(log);
@@ -312,6 +373,7 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       const log: TurnLog = {
         turn, promptChars: prompt.length, projectedUsd, realizedUsd, marketBoardText: marketBoardText || undefined,
         latencyMs: adapterResult.latency_ms, parsed: JSON.stringify(intent),
+        stopReason: adapterResult.stopReason, usage: adapterResult.usage, contentBlockTypes: adapterResult.contentBlockTypes,
       };
       turnLogsByAgent[agent.agentId].push(log);
       options.onTurn?.(agent.agentId, log);
@@ -339,6 +401,7 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       const log: TurnLog = {
         turn, promptChars: prompt.length, projectedUsd, realizedUsd, marketBoardText: marketBoardText || undefined,
         latencyMs: adapterResult.latency_ms,
+        stopReason: adapterResult.stopReason, usage: adapterResult.usage, contentBlockTypes: adapterResult.contentBlockTypes,
         parsed: `${JSON.stringify(intent)} -> args error: ${err instanceof Error ? err.message : String(err)}`,
       };
       turnLogsByAgent[agent.agentId].push(log);
@@ -416,6 +479,7 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
         turn, promptChars: prompt.length, projectedUsd, realizedUsd, marketBoardText: marketBoardText || undefined,
         latencyMs: adapterResult.latency_ms, parsed: JSON.stringify(intent),
         quarantinedNonDeterministicGate: quarantined || undefined,
+        stopReason: adapterResult.stopReason, usage: adapterResult.usage, contentBlockTypes: adapterResult.contentBlockTypes,
       };
       if (gateResult) {
         log.gateResult = { passed: gateResult.passed, summary: summarizeGateResult(gateResult) };

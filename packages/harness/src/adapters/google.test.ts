@@ -155,4 +155,28 @@ describe("createGoogleAdapter", () => {
     const result = await adapter("gemini-test", "prompt", PARAMS);
     expect(result.text).toBe("part one part two");
   });
+
+  it("surfaces finishReason and a real type per part, including a non-text part this type doesn't model", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          candidates: [
+            {
+              content: { parts: [{ functionCall: { name: "x" } }, { text: "answer" }] },
+              finishReason: "STOP",
+            },
+          ],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 },
+        }),
+      })),
+    );
+
+    const adapter = createGoogleAdapter("test-key");
+    const result = await adapter("gemini-test", "prompt", PARAMS);
+
+    expect(result.stopReason).toBe("STOP");
+    expect(result.contentBlockTypes).toEqual(["functionCall", "text"]);
+  });
 });

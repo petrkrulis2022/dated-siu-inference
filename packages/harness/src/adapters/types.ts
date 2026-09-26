@@ -18,6 +18,19 @@ export interface AdapterResult {
   raw: unknown;
   /** Every forced deviation from the requested execution settings — build1-spec.md §3. */
   deviations: string[];
+  /** The provider's own real reason the completion ended (e.g. "end_turn"/"stop_reason" for
+   * Anthropic, "finish_reason" for OpenAI-shaped APIs, "finishReason" for Google) — never
+   * inferred. Added 2026-09-26: a real live call (claude-sonnet-5, P5 window 1) returned no text
+   * at all for a real, separately-billed $0.24 request, and there was nothing persisted anywhere
+   * to tell truncation, a non-text content block, and dropped reasoning tokens apart after the
+   * fact. Optional so every existing mocked AdapterResult literal in this repo's own tests stays
+   * valid unchanged — only the four real adapters populate it. */
+  stopReason?: string;
+  /** The real type of every content block/part the provider returned (e.g. Anthropic's own
+   * `content[].type`: "text" | "tool_use" | "thinking" | ...) — lets a caller tell "the model
+   * wrote its answer somewhere this parser doesn't read" apart from "the model wrote nothing."
+   * Same optionality/rationale as `stopReason`. */
+  contentBlockTypes?: string[];
 }
 
 export type Adapter = (

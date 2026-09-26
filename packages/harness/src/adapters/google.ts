@@ -136,6 +136,13 @@ export function createGoogleAdapter(apiKey: string): Adapter {
       latency_ms: latencyMs,
       raw: truncatedByReasoning ? { truncated: truncatedResult.response, final: response } : response,
       deviations,
+      stopReason: response.candidates[0]?.finishReason,
+      // `part.text` is the only field this file's own GoogleResponse type declares, but the real
+      // API can return other part shapes (e.g. a `functionCall` part) this type doesn't model —
+      // read the real keys off each part rather than assume every part is text-shaped.
+      contentBlockTypes: (response.candidates[0]?.content.parts ?? []).map((part) =>
+        part.text !== undefined ? "text" : Object.keys(part as Record<string, unknown>).join("+") || "empty",
+      ),
     };
     return adapterResult;
   };

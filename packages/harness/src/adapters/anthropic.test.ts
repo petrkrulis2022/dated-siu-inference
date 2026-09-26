@@ -189,4 +189,48 @@ describe("createAnthropicAdapter", () => {
     expect(result.text).toBe("56");
     expect(result.deviations).toHaveLength(2);
   });
+
+  it("surfaces stop_reason and every real content-block type — never inferred", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          content: [
+            { type: "thinking", thinking: "reasoning about it" },
+            { type: "text", text: "hello world" },
+          ],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 120, output_tokens: 40 },
+        }),
+      })),
+    );
+
+    const adapter = createAnthropicAdapter("test-key");
+    const result = await adapter("claude-test", "prompt", PARAMS);
+
+    expect(result.stopReason).toBe("end_turn");
+    expect(result.contentBlockTypes).toEqual(["thinking", "text"]);
+  });
+
+  it("real failure mode found live (P5 window 1, 2026-09-26): stop_reason max_tokens with no text content at all", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          content: [{ type: "thinking", thinking: "a very long chain of reasoning" }],
+          stop_reason: "max_tokens",
+          usage: { input_tokens: 120, output_tokens: 4500 },
+        }),
+      })),
+    );
+
+    const adapter = createAnthropicAdapter("test-key");
+    const result = await adapter("claude-test", "prompt", PARAMS);
+
+    expect(result.text).toBe("");
+    expect(result.stopReason).toBe("max_tokens");
+    expect(result.contentBlockTypes).toEqual(["thinking"]);
+  });
 });

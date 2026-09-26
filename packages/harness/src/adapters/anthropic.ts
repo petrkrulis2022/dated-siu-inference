@@ -138,6 +138,8 @@ export function createAnthropicAdapter(apiKey: string): Adapter {
       latency_ms: latencyMs,
       raw: truncatedByReasoning ? { truncated: truncatedResult.response, final: response } : response,
       deviations,
+      stopReason: response.stop_reason,
+      contentBlockTypes: response.content.map((block) => block.type),
     };
     return result_;
   };

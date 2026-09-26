@@ -1,7 +1,7 @@
 import { AdapterHttpError, type Adapter, type AdapterParams, type AdapterResult } from "./types.js";
 
 interface OpenAiCompatibleResponse {
-  choices: { message: { content: string } }[];
+  choices: { message: { content: string }; finish_reason?: string }[];
   usage: {
     prompt_tokens: number;
     completion_tokens: number;
@@ -124,6 +124,12 @@ export function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): A
       latency_ms: latencyMs,
       raw: response,
       deviations,
+      stopReason: response.choices[0]?.finish_reason,
+      contentBlockTypes: response.choices[0]
+        ? Object.entries(response.choices[0].message)
+            .filter(([, v]) => v !== null && v !== undefined && v !== "")
+            .map(([k]) => k)
+        : [],
     };
     return adapterResult;
   };

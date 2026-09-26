@@ -9,7 +9,7 @@ import {
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
 
 interface OpenAiResponse {
-  choices: { message: { content: string }; finish_reason?: string }[];
+  choices: { message: { content: string; refusal?: string | null }; finish_reason?: string }[];
   usage: {
     prompt_tokens: number;
     completion_tokens: number;
@@ -122,6 +122,15 @@ export function createOpenAiAdapter(apiKey: string): Adapter {
       latency_ms: latencyMs,
       raw: truncatedByReasoning ? { truncated: truncatedResult.response, final: response } : response,
       deviations,
+      stopReason: response.choices[0]?.finish_reason,
+      // OpenAiResponse's own type only models `content`/`refusal` — the real API can also return
+      // `tool_calls` this type doesn't declare, if a model ever emits one despite this loop never
+      // sending a `tools` schema. Read the real keys off `message` rather than assume text-only.
+      contentBlockTypes: response.choices[0]
+        ? Object.entries(response.choices[0].message)
+            .filter(([, v]) => v !== null && v !== undefined && v !== "")
+            .map(([k]) => k)
+        : [],
     };
     return adapterResult;
   };

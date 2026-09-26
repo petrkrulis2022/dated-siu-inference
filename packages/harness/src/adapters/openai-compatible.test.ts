@@ -79,4 +79,26 @@ describe("createOpenAiCompatibleAdapter", () => {
 
     expect(capturedHeaders?.["HTTP-Referer"]).toBe("https://touchstone-assay.example");
   });
+
+  it("surfaces finish_reason and the real populated fields on message", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: "hi" }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 1, completion_tokens: 1 },
+        }),
+      })),
+    );
+
+    const adapter = createOpenAiCompatibleAdapter({
+      chatCompletionsUrl: "https://example.com/v1/chat/completions",
+      apiKey: "test-key",
+    });
+    const result = await adapter("some/model", "prompt", PARAMS);
+
+    expect(result.stopReason).toBe("stop");
+    expect(result.contentBlockTypes).toEqual(["content"]);
+  });
 });

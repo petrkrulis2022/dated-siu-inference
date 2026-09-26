@@ -183,4 +183,28 @@ describe("createOpenAiAdapter", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.deviations).toEqual([]);
   });
+
+  it("surfaces finish_reason and the real populated fields on message, including one this type doesn't model", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: { content: "", tool_calls: [{ id: "1" }] },
+              finish_reason: "tool_calls",
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 5 },
+        }),
+      })),
+    );
+
+    const adapter = createOpenAiAdapter("test-key");
+    const result = await adapter("gpt-test", "prompt", PARAMS);
+
+    expect(result.stopReason).toBe("tool_calls");
+    expect(result.contentBlockTypes).toEqual(["tool_calls"]);
+  });
 });
