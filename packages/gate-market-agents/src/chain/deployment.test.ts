@@ -11,12 +11,17 @@ describe("loadGateMarketDeployment", () => {
     );
   });
 
-  it("loads the real Base Sepolia deployment — deployed and verified 2026-09-25 (WP-7)", () => {
+  it("loads the real Base Sepolia deployment — redeployed 2026-09-26 for the serveRedemption window-closed fix", () => {
+    // Addresses updated 2026-09-26: the original 2026-09-25 trio (0xC403.../0x88fb.../0x7583...,
+    // still recorded under redeployment.previousTrio in the deployment JSON — see that record's
+    // own doc comment and data/gate-market/first-real-default-2026-09-26.json for why) was
+    // retired when serveRedemption gained its window-closed guard, requiring the whole
+    // mutually-address-pinned trio to redeploy together.
     const deployment = loadGateMarketDeployment();
     expect(deployment.network).toMatchObject({ name: "Base Sepolia", chainId: 84532 });
     expect(deployment.usdc.address).toBe("0x036CbD53842c5426634e7929541eC2318f3dCF7e");
-    expect(deployment.capacityBond.address).toBe("0xC4030792e815e6D08Ae5f434B84A3DCCa2FBe999");
-    expect(deployment.claimRouter.address).toBe("0x88fbBF79727bB3c903D5C94a860033959Ba88Ec8");
-    expect(deployment.workClaim.address).toBe("0x7583BB12751F0EA622F5Aa8F69df37c1506F9061");
+    expect(deployment.capacityBond.address).toBe("0xa053bd236954C6633cBB902a1eA46a125F565060");
+    expect(deployment.claimRouter.address).toBe("0xaec219812145a4150E510b62e64F6A4f19F52D51");
+    expect(deployment.workClaim.address).toBe("0xD3cC27A711B1eF3893975927cfE86d651a35337B");
   });
 });
