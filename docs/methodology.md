@@ -1213,8 +1213,13 @@ answer to a thin tier is expanding the registry, never loosening the gate.
 **Second real exercise of the same distinction, 2026-09-26 — an availability change, not a
 registry change, and no corrected number to redo it with.** `gemini-3.1-pro-preview` — the single
 most expensive constituent the day before at $0.039236/basket — produced zero run records that
-day: a real Google API billing outage ("prepayment credits depleted"), not a quality-gate
-failure. `claude-haiku-4-5`, itself excluded the day before for the same reason (zero run
+day: this project's own Google Cloud billing account had lapsed (prepayment credits on our
+account depleted), not any outage, degradation, or failure on Google's side — Google's API was
+reachable and functioning normally throughout. An earlier version of this entry, and this print's
+own first correction note, mischaracterised this as "a real Google API billing outage"; both are
+now corrected (see `data/prints/2026-09-26.json`'s own `correction_notes` for the print-level
+correction). Not a quality-gate failure either way. `claude-haiku-4-5`, itself excluded the day
+before for the same reason (zero run
 records), returned with real, qualifying runs the same day. Both remained registered constituents
 throughout; only each one's per-print qualifying status changed, which is exactly what
 `computeConstituentChanges` is scoped to ignore (Registry inclusion policy, above) — the
@@ -1226,21 +1231,28 @@ equal-weighted average of the nine constituents that did produce real data that 
 "more correct" number to redo it with**, only a missing disclosure of why the reference set
 changed. `correction_notes` applied to `data/prints/2026-09-26.json`.
 
-**This incident exposes a real gap this project's own gates don't yet cover: availability is not
-separated from membership.** The 2026-09-08 fix stopped a lost tier from silently passing as a
-thinner measurement of the same market. It did not address the narrower case exercised here: a
-single constituent that is registered, priced, and normally qualifying, dropping out for one day
-on a provider-side failure and returning the next. Today's pipeline treats that constituent
-exactly as if it had never been registered that day — simply absent from the equal-weighted
-mean — with no link ratio bridging the day it drops out and the day it returns. The mechanical
-result: an outage is currently indistinguishable, in the published number, from an unannounced
-equal-weight rebalance. For reference only, never a replacement for the signed value above:
-recomputing 2026-09-26's mean with `gemini-3.1-pro-preview`'s last valid measured cost carried
-forward in place of its missing measurement gives $0.010787 — the gap between that and the
-published $0.007626 is the size of the artefact a single-day provider outage can currently
-introduce. A fix — separating per-print availability from registry membership, with capped
-carry-forward imputation for a short gap and a chain-linked rebalance for a longer one — is
-planned, not yet implemented.
+**This incident exposed a real gap this project's own gates didn't yet cover, since fixed:
+availability was not separated from membership.** The 2026-09-08 fix stopped a lost tier from
+silently passing as a thinner measurement of the same market. It did not address the narrower case
+exercised here: a single constituent that is registered, priced, and normally qualifying, dropping
+out for one day on a provider-side failure and returning the next. At the time, the pipeline
+treated that constituent exactly as if it had never been registered that day — simply absent from
+the equal-weighted mean — with no link ratio bridging the day it drops out and the day it returns.
+The mechanical result: an outage was indistinguishable, in the published number, from an
+unannounced equal-weight rebalance. For reference only, never a replacement for the signed value
+above: recomputing 2026-09-26's mean with `gemini-3.1-pro-preview`'s last valid measured cost
+carried forward in place of its missing measurement gives $0.010787 — the gap between that and the
+published $0.007626 is the size of the artefact a single-day provider outage could introduce before
+this fix.
+
+**Fixed 2026-09-26** (`rules-2026-09-26`, this document's own Aggregation policy section above,
+§3): a model missing today's run records now carries its last real, published cost forward for up
+to 3 calendar days before being treated as excluded, and every print also publishes an unweighted
+median alongside the mean as a diagnostic — retro-validated against this exact incident and two
+others (2026-09-08, 2026-09-25) before shipping. This print (2026-09-26) is not itself recomputed
+or reissued under the new rule — it remains signed exactly as published, under
+`methodology_revision: "rules-2026-09-25"` — the fix applies to every print from its own effective
+date forward, per this document's own never-edit-a-signed-print convention.
 
 ---
 
