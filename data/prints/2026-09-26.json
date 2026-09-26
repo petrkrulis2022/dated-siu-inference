@@ -191,7 +191,7 @@
     "siu_per_usd_dp": 1,
     "mode": "ROUND_HALF_UP",
     "siu_per_usd_mode": "ROUND_DOWN",
-    "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. dated_siu rounds to significant figures, not a fixed decimal-place count, so its precision scales with the price rather than being lost as it falls (found live, 2026-09-25 — see docs/methodology.md's Rounding section). basket_cost carries more decimal places than dated_siu needs at any price level so the published print stays reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
+    "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. dated_siu rounds to significant figures, not a fixed decimal-place count, so its precision scales with the price rather than being lost as it falls (found live, 2026-09-25 \u2014 see docs/methodology.md's Rounding section). basket_cost carries more decimal places than dated_siu needs at any price level so the published print stays reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
   },
   "cost_of_production_usd": "1.1084",
   "price_snapshot_ref": "price-snapshot-merged-2026-09-25T00-59-34.865Z.json",
@@ -200,7 +200,7 @@
   "prior_attempts": [
     {
       "attempted_at": "2026-09-26T04:32:17Z",
-      "reason": "Run failed before publish.log had a diagnostic message — see the linked run's full log.",
+      "reason": "Run failed before publish.log had a diagnostic message \u2014 see the linked run's full log.",
       "qualifying_models": 0,
       "registered_models": 0,
       "cost_usd": "0"
@@ -213,5 +213,11 @@
     "status": "anchored",
     "tx_hash": "0x93653057f5743810f7e3eff16272fa1f3d98d43bf25311c9db08eaa2c131fc67",
     "posted_at": "2026-09-26T11:12:44.000Z"
-  }
+  },
+  "correction_notes": [
+    {
+      "published_at": "2026-09-26",
+      "note": "This print is correctly computed under the current methodology and passed every gate at cut-off; it is not being revised. The drop from 2026-09-25's $0.0111 to $0.007626 reflects a change in which constituents had real run records today, not market movement: gemini-3.1-pro-preview \u2014 the single most expensive constituent yesterday at $0.039236/basket \u2014 produced zero run records today because of a real Google API billing outage (\"prepayment credits depleted\"), while claude-haiku-4-5, excluded yesterday for the same reason (zero run records), returned with real, qualifying runs. The site's \"registry changed\" marker correctly did not fire for today's print: both models remain registered constituents throughout; only their per-print qualifying status changed, which computeConstituentChanges is deliberately scoped to ignore (see methodology.md's registry inclusion policy) so a bad day is never confused with an actual registry removal. That said, this print's own event exposes a real, known methodology gap: the pipeline currently treats a constituent with no run records on a given day as simply absent from the equal-weighted mean, with no link ratio bridging the day it drops out and the day it returns \u2014 a provider outage is currently indistinguishable, in the computed number, from an unannounced rebalance. A fix (separating per-print availability from registry membership, with capped carry-forward imputation and a chain-linked rebalance) is planned, not yet implemented. For reference only, and never a replacement for the signed value above: recomputing today's equal-weighted mean with gemini-3.1-pro-preview's last valid measured cost ($0.039236, from 2026-09-25) carried forward in place of its missing measurement gives $0.010787 \u2014 closer to the trend this print's own drop otherwise misrepresents as a market move."
+    }
+  ]
 }
