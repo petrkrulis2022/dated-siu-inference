@@ -23,8 +23,9 @@
     "evmVersionRationale": "Same pin as base-sepolia.json's own TouchstoneAttestation/TouchstoneEscrow deployment — shanghai keeps Arc a deployment target rather than a rewrite; also why RateAttestationVerifier.sol hand-rolls EIP-712 instead of using OZ's MCOPY-emitting EIP712 base."
   },
   "deployedAt": {
-    "unix": 1790365534,
-    "iso": "2026-09-25T19:45:34Z"
+    "unix": 1790426592,
+    "iso": "2026-09-26T12:43:12Z",
+    "note": "This is the CURRENT (redeployed) trio's deploy timestamp, read directly from block 47329152 via cast block. See redeployment below for why a second deployment exists; deployedAt/deployer/contractsDetail/capacityLots all describe the currently-live trio, not the original 2026-09-25 one."
   },
   "deployer": "0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e",
   "usdc": {
@@ -34,67 +35,65 @@
     "source": "Same address base-sepolia.json already verified (Circle official documentation, Circle's MCP server, 2026-08-16) — reused, not re-resolved.",
     "verifiedOnChain": "symbol() == 'USDC' and decimals() == 6, already established by the prior deployment on this same chain"
   },
-  "capacityBond": { "address": "0xC4030792e815e6D08Ae5f434B84A3DCCa2FBe999" },
-  "claimRouter": { "address": "0x88fbBF79727bB3c903D5C94a860033959Ba88Ec8" },
-  "workClaim": { "address": "0x7583BB12751F0EA622F5Aa8F69df37c1506F9061" },
+  "capacityBond": { "address": "0xa053bd236954C6633cBB902a1eA46a125F565060" },
+  "claimRouter": { "address": "0xaec219812145a4150E510b62e64F6A4f19F52D51" },
+  "workClaim": { "address": "0xD3cC27A711B1eF3893975927cfE86d651a35337B" },
+  "redeployment": {
+    "date": "2026-09-26",
+    "reason": "serveRedemption had no window-closed check: a routed issuer could race settleWindowClose with a late passed=true report after the window closed and escape a genuine default. Fixed in WorkClaim.sol (WindowClosed() revert once block.timestamp >= ct.windowTo, mirroring the same guard already on presentForRedemption), covered by two new unit tests and a new invariant (invariant_noServeSucceededAfterWindowClosed, confirmed at FOUNDRY_INVARIANT_RUNS=10000 — 640000 calls, 0 reverts across all 6 invariants) before redeploying.",
+    "whyTheWholeTrioMovedNotJustWorkClaim": "CapacityBond's constructor takes WorkClaim's own address as an immutable, precomputed via vm.computeCreateAddress before WorkClaim exists (DeployGateMarket.s.sol) — the two are mutually address-pinned at construction, so WorkClaim cannot be redeployed in isolation; ClaimRouter is pinned to CapacityBond the same way. All three redeployed together as one script run.",
+    "previousTrio": {
+      "capacityBond": "0xC4030792e815e6D08Ae5f434B84A3DCCa2FBe999",
+      "claimRouter": "0x88fbBF79727bB3c903D5C94a860033959Ba88Ec8",
+      "workClaim": "0x7583BB12751F0EA622F5Aa8F69df37c1506F9061",
+      "deployedAt": { "unix": 1790365534, "iso": "2026-09-25T19:45:34Z" },
+      "retiredNote": "Left deployed, unfunded of further use — its own first real default (data/gate-market/first-real-default-2026-09-26.json) was settled against this trio before the redeploy, and that record is left describing this (now-previous) trio's own addresses, which is correct: that default genuinely happened on this trio, not the current one."
+    },
+    "postRedeploySteps": "Both issuers topped up with 15 USDC each from the deployer and re-bonded on the new CapacityBond (createLot per class, same measuredRateMilliSiuPerHour/committedCapacityHours/bondedUsdcPerClass as the original bonding) to restore identical headroom to the pre-redeployment state. ORCHESTRATOR's USDC allowance re-approved (2 USDC) against the new WorkClaim address."
+  },
   "contractsDetail": {
-    "note": "Documentary detail beyond what GateMarketDeployment's own strict interface reads (chain/deployment.ts) — the flat capacityBond/claimRouter/workClaim keys above are the ones actually parsed; this block mirrors base-sepolia.json's own richer per-contract convention for audit purposes.",
+    "note": "Documentary detail beyond what GateMarketDeployment's own strict interface reads (chain/deployment.ts) — the flat capacityBond/claimRouter/workClaim keys above are the ones actually parsed; this block mirrors base-sepolia.json's own richer per-contract convention for audit purposes. Describes the CURRENT (redeployed) trio — see redeployment.previousTrio above for the original 2026-09-25 addresses.",
     "CapacityBond": {
-      "address": "0xC4030792e815e6D08Ae5f434B84A3DCCa2FBe999",
-      "deploymentTx": "0x210dc00b99cc60a9e558eebc50d22605368de796bbcadb9d332b87a6621dec9c",
-      "blockNumber": 47298623,
+      "address": "0xa053bd236954C6633cBB902a1eA46a125F565060",
+      "deploymentTx": "0x716a62f438f990ad2030538838c867b5bd32ea8b0105a862c5a4343f11a5eb33",
+      "blockNumber": 47329152,
       "gasUsed": 683626,
       "constructorArgs": {
         "usdc_": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-        "workClaim_": "0x7583BB12751F0EA622F5Aa8F69df37c1506F9061"
+        "workClaim_": "0xD3cC27A711B1eF3893975927cfE86d651a35337B"
       },
       "constructorArgOrder": ["usdc_", "workClaim_"],
-      "constructorArgsEncoded": "0x000000000000000000000000036cbd53842c5426634e7929541ec2318f3dcf7e0000000000000000000000007583bb12751f0ea622f5aa8f69df37c1506f9061",
-      "verified": {
-        "explorer": "Basescan",
-        "status": "Pass - Verified",
-        "guid": "1afmx4cfvthgyra1ftxpwsmhhaqa7wijghbvkqsmlbzhvintjv"
-      },
-      "explorerUrl": "https://sepolia.basescan.org/address/0xC4030792e815e6D08Ae5f434B84A3DCCa2FBe999",
-      "notes": "workClaim_ is WorkClaim's own address, precomputed via vm.computeCreateAddress before WorkClaim existed — DeployGateMarket.s.sol's own require(address(workClaim) == predictedWorkClaim) held live, confirmed by the deploy succeeding at all."
+      "verified": "Not yet re-verified on Basescan (the previous trio's guids above belong to the retired contracts) — pending, does not block agent operation (chain/deployment.ts reads bytecode/state directly, not the explorer).",
+      "explorerUrl": "https://sepolia.basescan.org/address/0xa053bd236954C6633cBB902a1eA46a125F565060",
+      "notes": "workClaim_ is WorkClaim's own address, precomputed via vm.computeCreateAddress before WorkClaim existed — DeployGateMarket.s.sol's own require(address(workClaim) == predictedWorkClaim) held live, confirmed by the deploy succeeding at all. Confirmed on-chain post-deploy: CapacityBond.workClaim() == 0xD3cC27A711B1eF3893975927cfE86d651a35337B."
     },
     "ClaimRouter": {
-      "address": "0x88fbBF79727bB3c903D5C94a860033959Ba88Ec8",
-      "deploymentTx": "0xf8bb9a331480df5a80ea118dac81830b94af75966bd0da47ecded5537074f98d",
-      "blockNumber": 47298623,
+      "address": "0xaec219812145a4150E510b62e64F6A4f19F52D51",
+      "deploymentTx": "0xfda238fd137fa277550135d2ca8617ea4b2b8537126f95d69308428eb8f0f1f7",
+      "blockNumber": 47329152,
       "gasUsed": 250543,
       "constructorArgs": {
-        "bond_": "0xC4030792e815e6D08Ae5f434B84A3DCCa2FBe999"
+        "bond_": "0xa053bd236954C6633cBB902a1eA46a125F565060"
       },
       "constructorArgOrder": ["bond_"],
-      "constructorArgsEncoded": "0x000000000000000000000000c4030792e815e6d08ae5f434b84a3dcca2fbe999",
-      "verified": {
-        "explorer": "Basescan",
-        "status": "Pass - Verified",
-        "guid": "2qiv6zdyfmd28rjy1rpfgg1bcus5lqmprcuj2lc3hmj5aktayx"
-      },
-      "explorerUrl": "https://sepolia.basescan.org/address/0x88fbBF79727bB3c903D5C94a860033959Ba88Ec8"
+      "verified": "Not yet re-verified on Basescan — same note as CapacityBond above.",
+      "explorerUrl": "https://sepolia.basescan.org/address/0xaec219812145a4150E510b62e64F6A4f19F52D51"
     },
     "WorkClaim": {
-      "address": "0x7583BB12751F0EA622F5Aa8F69df37c1506F9061",
-      "deploymentTx": "0x0d07e34f481c7584360f3b4208f1edbaff64b5ddef8ffff1e39c09ef1daf7de9",
-      "blockNumber": 47298623,
-      "gasUsed": 2318279,
+      "address": "0xD3cC27A711B1eF3893975927cfE86d651a35337B",
+      "deploymentTx": "0x1a579ea522b712958ea568f370e74810591c1e0278c10463a81fda44c3626c98",
+      "blockNumber": 47329152,
+      "gasUsed": 2329578,
       "constructorArgs": {
         "usdc_": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-        "bond_": "0xC4030792e815e6D08Ae5f434B84A3DCCa2FBe999",
-        "router_": "0x88fbBF79727bB3c903D5C94a860033959Ba88Ec8",
+        "bond_": "0xa053bd236954C6633cBB902a1eA46a125F565060",
+        "router_": "0xaec219812145a4150E510b62e64F6A4f19F52D51",
         "publisher_": "0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a"
       },
       "constructorArgOrder": ["usdc_", "bond_", "router_", "publisher_"],
-      "constructorArgsEncoded": "0x000000000000000000000000036cbd53842c5426634e7929541ec2318f3dcf7e000000000000000000000000c4030792e815e6d08ae5f434b84a3dcca2fbe99900000000000000000000000088fbbf79727bb3c903d5c94a860033959ba88ec8000000000000000000000000284ff2f8605ff8afeda6959b856bb7e6d48f845a",
-      "verified": {
-        "explorer": "Basescan",
-        "status": "Pass - Verified",
-        "guid": "ixd4fkq8ib88mgsqavxrwefmytxvbsssyn7qlnxiuutrva1uek"
-      },
-      "explorerUrl": "https://sepolia.basescan.org/address/0x7583BB12751F0EA622F5Aa8F69df37c1506F9061",
-      "notes": "publisher_ is the same TOUCHSTONE_PUBLISHER_ADDRESS used by TouchstoneAttestation on this chain and by RateAttestationVerifier's own EIP-712 rate attestations (94b1e0e, 2026-09-25) — one key, two message types, domain-separated. Includes the SETTLEMENT_RATE_BAND_BPS clamp (504e059) and the real rate-attestation binding (94b1e0e) — this bytecode is current, not WP-5's pre-fix version."
+      "verified": "Not yet re-verified on Basescan — same note as CapacityBond above. On-chain state confirmed directly instead: bond()/router()/publisher()/usdc() all read back exactly matching constructorArgs above (cast call, 2026-09-26).",
+      "explorerUrl": "https://sepolia.basescan.org/address/0xD3cC27A711B1eF3893975927cfE86d651a35337B",
+      "notes": "publisher_ is the same TOUCHSTONE_PUBLISHER_ADDRESS used by TouchstoneAttestation on this chain and by RateAttestationVerifier's own EIP-712 rate attestations (94b1e0e, 2026-09-25) — one key, two message types, domain-separated. Includes the SETTLEMENT_RATE_BAND_BPS clamp (504e059), the real rate-attestation binding (94b1e0e), and now the serveRedemption window-closed guard (see redeployment above) — this bytecode is current, not WP-5's pre-fix version and not the pre-window-guard-fix version either."
     }
   },
   "capacityLots": {
