@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { Hex } from "viem";
+import { keccak256, stringToBytes, type Hex } from "viem";
 import { createAdapterFor, loadApiKeysFromEnv, withBackoff, type Adapter } from "@touchstone/harness";
 import type { Print } from "@touchstone/sdk";
 import {
@@ -32,21 +32,31 @@ import type { RunManifest } from "../run-recorder/recorder.js";
 import { RUNS_ROOT } from "./runs-root.js";
 
 /**
- * WP-7's real P5 window 1: the user's own instruction (2026-09-26) — "the question you're really
- * asking in P5 is whether agents use a work claim when they have the choice. That only has an
- * answer if the orchestrator genuinely needs to buy work." ORCHESTRATOR is reassigned to
- * mistral-small-3.2-24b-instruct (empirically verified unable to solo this job — see
- * data/gate-market/runs/orchestrator-weak-model-probe-2026-09-26T06-09-01-674Z/ and
- * data/deployments/base-sepolia-gate-market.json's own orchestratorReassignment record), so any
- * delegation this window is emergent, not scripted — the deciding-agent family separation
- * (spec §12.2a) still holds after the reassignment (re-validated below, real registry, real
- * assignment).
+ * WP-7's real P5 window 1.
  *
- * Roster: ORCHESTRATOR, WORKER-CODE, WORKER-EXTRACT, ISSUER-A, ISSUER-B — five of the six. HEDGER
- * is deliberately excluded: its own 10-job flat-price stream is a separate concern from the
- * delegation/asset-choice question this window answers, and folding it in would need its own
- * parallel job queue (real scope, not needed here) — disclosed in the run's own console output
- * and in the eventual report, not silently dropped.
+ * ORCHESTRATOR was first reassigned to mistral-small-3.2-24b-instruct (weak model, rational
+ * delegation) — the resulting real run showed it isn't just unable to solo the job, it also
+ * fails to produce parseable output at all on its second real turn, so it never survives to face
+ * a delegation/asset-choice decision (see data/deployments/base-sepolia-gate-market.json's
+ * orchestratorReassignment.history for both the switch and the switch-back). User's own
+ * correction (2026-09-26): pair a capable model (gpt-5.1, restored) with a *structural*
+ * constraint instead of a capability ceiling — information asymmetry, not a flat prohibition.
+ * ORCHESTRATOR's own job description below deliberately withholds the technical
+ * contract/reference materials (the pinned test suite, the commercial intent, the exact function
+ * contract) that only WORKER-CODE receives — ORCHESTRATOR cannot author a passing gate not
+ * because it is forbidden to, but because it genuinely does not have what authoring requires,
+ * the same reason a real orchestrator delegates to specialists. Multi-hop/delegation is therefore
+ * a required, disclosed structural property of this window, not an emergent one. F1's own
+ * question — which asset an agent pays in when it has a real, unbiased choice — was never about
+ * whether delegation happens, so nothing here steers ORCHESTRATOR's choice between USDC and
+ * fSIU; that result stays genuine and must be reported as such, not lumped in with the scripted
+ * delegation structure. The deciding-agent family separation (spec §12.2a) still holds with
+ * gpt-5.1 restored (re-validated below, real registry, real assignment).
+ *
+ * Roster: all five non-HEDGER agents. HEDGER is deliberately excluded: its own 10-job flat-price
+ * stream is a separate concern from the delegation/asset-choice question this window answers,
+ * and folding it in would need its own parallel job queue (real scope, not needed here) —
+ * disclosed in the run's own console output and in the eventual report, not silently dropped.
  *
  * One real job — the same pinned `code`-class task P4 already proved (dedupeSorted, the same
  * pinned test suite), not a fresh, unvalidated one for this first real multi-agent run.
@@ -61,6 +71,7 @@ const EXPERIMENT_CAP_USD = "150";
 // Real, current registry prices (data/registry/price-snapshot-merged-2026-09-25T00-59-34.865Z.json,
 // the latest snapshot at the time this script was written) — never invented.
 const PRICES: Record<string, ModelPrices> = {
+  "gpt-5.1": { priceInUsdPer1M: "1.25", priceOutUsdPer1M: "10" },
   "mistral-small-3.2-24b-instruct": { priceInUsdPer1M: "0.09", priceOutUsdPer1M: "0.3" },
   "claude-sonnet-5": { priceInUsdPer1M: "2", priceOutUsdPer1M: "10" },
   "gemini-3.1-pro-preview": { priceInUsdPer1M: "2", priceOutUsdPer1M: "12" },
@@ -153,6 +164,13 @@ async function main(): Promise<void> {
     heldOutInstances,
   };
 
+  // Real, deterministic — same convention already established for redeem_claim's own arg
+  // elsewhere in this package (dry-loop/redeem-scenario.ts) — never invented, and given to
+  // WORKER-CODE explicitly below rather than left for it to guess (found live, 2026-09-26: a
+  // real attempt passed the literal string "code", which reverted on-chain — WorkClaim expects a
+  // real bytes32 hash, and nothing had told it what value to use).
+  const taskSpecHash = keccak256(stringToBytes(`gate-hardening:${job.jobId}`));
+
   const workerCodeAddress = process.env.WORKER_CODE_ADDRESS ?? "";
   const workerCodeErc8004Id = erc8004IdFor(workerCodeAddress);
 
@@ -192,15 +210,22 @@ TO SUBMIT A GATE, respond with exactly:
 
   const orchestratorJobDescription = `
 YOUR JOB THIS WINDOW
-  You have been given a gate-hardening job for the "code" class (see the technical contract
-  below). You are paid only if a passing gate is delivered before your turns or budget run out.
-  You have three real, genuinely different ways to get it delivered — pick whichever you judge
-  best; nothing here tells you which to prefer:
+  There is a gate-hardening job for the "code" class. You are paid only if a passing gate is
+  delivered before your turns or budget run out.
 
-  OPTION 1 — do it yourself: author the gate directly and call submit_job (format at the bottom).
+  YOU DO NOT HAVE THE REFERENCE MATERIALS FOR THIS JOB — not the commercial intent, not the exact
+  function contract, not the pinned test suite, not any reference/known-good/adversarial task
+  data. Those exist only in WORKER-CODE's own context. This is not a restriction on what you're
+  allowed to do — you genuinely do not know what a passing gate for this job needs to check, the
+  same way a real orchestrator routing work to a specialist does not hold the specialist's own
+  inputs. Attempting to author or guess at a gate yourself would be attempting it blind.
 
-  OPTION 2 — subcontract for USDC: request a quote from WORKER-CODE (seller_id
-  "${workerCodeErc8004Id}"), then pay the real quote it issues, then wait for it to deliver.
+  Your real job is to get WORKER-CODE (seller_id "${workerCodeErc8004Id}") to deliver it, and to
+  choose how to pay for that — you have two genuinely different ways, and nothing here tells you
+  which to prefer:
+
+  OPTION A — settle in USDC: request a quote from WORKER-CODE, then pay the real quote it issues,
+  then wait for it to deliver.
     Step 1: {"tool": "request_quote", "args": {"siu": "10", "model": "${workerCodeModel}",
       "rateUsdPerSiu": "${ILLUSTRATIVE_RATE_USD_PER_SIU}", "indexVersion": "SIU-2026a",
       "printId": "${ILLUSTRATIVE_PRINT_ID}", "printHash": "0x00", "sellerId": "${workerCodeErc8004Id}",
@@ -211,19 +236,19 @@ YOUR JOB THIS WINDOW
     Step 3: wait (respond {"done": true, ...} only once you're sure nothing more is needed from
       you, or keep checking back — WORKER-CODE will call submit_job itself once paid and ready).
 
-  OPTION 3 — subcontract for fSIU (a dated work claim, not a dollar): mint a claim, then transfer
-  it to WORKER-CODE as payment.
+  OPTION B — settle in fSIU (a dated work claim, not a dollar): mint a claim, then transfer it to
+  WORKER-CODE as payment.
     Step 1: {"tool": "mint_claim", "args": {"quantity": "10000"}}
-      (quantity is in milli-SIU; 10000 = 10 SIU, matching Option 2's own quote size)
+      (quantity is in milli-SIU; 10000 = 10 SIU, matching Option A's own quote size)
     Step 2 (once mint_claim returns a tokenId):
       {"tool": "transfer_claim", "args": {"agentId": "WORKER-CODE", "tokenId": "<the tokenId
       mint_claim returned>", "quantity": "10000"}}
-    Step 3: wait, same as Option 2's step 3.
+    Step 3: wait, same as Option A's step 3.
 
   Whichever you choose, you may check get_balances()/get_print() at any time. If you genuinely
-  have nothing further to do (waiting on a subcontractor, or the job is already delivered),
-  respond with {"done": true, "summary": "<why>"} rather than repeating a call with nothing new.
-${technicalContract}`;
+  have nothing further to do (waiting on WORKER-CODE, or the job is already delivered), respond
+  with {"done": true, "summary": "<why>"} rather than repeating a call with nothing new.
+`;
 
   const workerCodeJobDescription = `
 YOUR SITUATION THIS WINDOW
@@ -234,9 +259,14 @@ YOUR SITUATION THIS WINDOW
   DO NOT author or submit_job this gate unless you have genuinely been engaged for it — meaning
   at least one of: (a) you have been paid (a quote you issued was paid against — check
   get_balances to confirm real funds actually arrived), or (b) you hold a real work claim
-  ORCHESTRATOR transferred to you (again, check get_balances). Doing the work before either of
-  these has genuinely happened would not be answering ORCHESTRATOR's request, it would be
-  bypassing it — do not do this even if you are confident you could deliver a passing gate.
+  ORCHESTRATOR transferred to you. If a claim is transferred to you, you will see "A WORK CLAIM
+  WAS TRANSFERRED TO YOU" below with its real tokenId and quantity — use that exact tokenId with
+  get_balances to confirm the balance is really there, then redeem it with exactly:
+  {"tool": "redeem_claim", "args": {"tokenId": "<the tokenId shown>",
+  "taskSpecHash": "${taskSpecHash}"}}
+  Doing the work before either of these has genuinely happened would not be answering
+  ORCHESTRATOR's request, it would be bypassing it — do not do this even if you are confident you
+  could deliver a passing gate.
 
   If you see an open request addressed to you on the market board, you may issue_quote to answer
   it (format: {"tool": "issue_quote", "args": {"requestId": "<the requestId shown>"}}) — this
@@ -304,6 +334,14 @@ YOUR SITUATION THIS WINDOW
     return `${rendered}\n\n${CANONICAL_ASSET_DESCRIPTION}\n\n${issuerJobDescription}`;
   };
 
+  // Toggle once GOOGLE_API_KEY's billing is confirmed restored (as of this run, still a real
+  // 402 "prepayment credits depleted" — reconfirmed live, not assumed fixed). WORKER-EXTRACT's
+  // own job description already discloses it has no real extract-class task this window
+  // regardless, so excluding it changes nothing structural about the delegation/asset-choice
+  // question — but the user's own framing (the code/extract builder-adversary family pairing)
+  // means it should be restored the moment billing allows, not left off by default.
+  const WORKER_EXTRACT_ENABLED = false;
+
   const roster: RosterAgentConfig[] = [
     {
       agentId: "ORCHESTRATOR",
@@ -331,17 +369,21 @@ YOUR SITUATION THIS WINDOW
       rpcUrl,
       maxOutputTokens: 4500,
     },
-    // WORKER-EXTRACT excluded from this real run (2026-09-26): the GOOGLE_API_KEY backing
-    // gemini-3.1-pro-preview returned a real 402 "prepayment credits are depleted" mid-run — an
-    // external billing constraint, not retryable (isRetryableError correctly only retries
-    // 429/5xx) and not something this script can fix. WORKER-EXTRACT had no real job this window
-    // regardless (no extract-class task exists here — see workerExtractJobDescription/its own
-    // comment above) and contributes nothing to the real question this window answers
-    // (ORCHESTRATOR's delegation/asset choice on the "code" job), so excluding it changes nothing
-    // structural about the test — same disclosed-exclusion pattern as HEDGER above, for a
-    // different real reason. void workerExtractAdapter/workerExtractJobDescription/
-    // workerExtractAddress: kept defined above (unused here) in case Google billing is restored
-    // and this run is repeated with the full roster.
+    ...(WORKER_EXTRACT_ENABLED
+      ? [{
+          agentId: "WORKER-EXTRACT" as const,
+          adapter: workerExtractAdapter,
+          modelString: workerExtractModel,
+          prices: PRICES[workerExtractModel],
+          skillPackText: `${loadSkill("quote-and-deliver").promptTemplate}\n\n${CANONICAL_ASSET_DESCRIPTION}\n\n${workerExtractJobDescription}`,
+          availableTools: ["issue_quote", "submit_job", "pay", "redeem_claim", "get_balances", "get_print"] as const,
+          privateKeyHex: toHex(process.env.WORKER_EXTRACT_PRIVATE_KEY, "WORKER_EXTRACT_PRIVATE_KEY"),
+          address: workerExtractAddress,
+          erc8004Id: erc8004IdFor(workerExtractAddress),
+          rpcUrl,
+          maxOutputTokens: 1000,
+        }]
+      : []),
     {
       agentId: "ISSUER-A",
       adapter: issuerAAdapter,
@@ -426,9 +468,14 @@ YOUR SITUATION THIS WINDOW
   };
 
   console.log("Starting WP-7 P5 window 1 — five-agent roster (HEDGER excluded, see top comment)");
-  console.log(`ORCHESTRATOR=${orchestratorModel} (empirically verified weak — see deployment record)`);
+  console.log(`ORCHESTRATOR=${orchestratorModel} — capable model, structurally withheld reference materials (information asymmetry, not a skill-level prohibition)`);
   console.log(`WORKER-CODE=${workerCodeModel}  ISSUER-A=${issuerAModel}  ISSUER-B=${issuerBModel}`);
-  console.log(`WORKER-EXTRACT (${workerExtractModel}) excluded from this real run: GOOGLE_API_KEY returned a real 402 "prepayment credits depleted" on a prior attempt — external billing constraint, not this window's roster design, and not load-bearing for the real question this window answers.`);
+  console.log(
+    WORKER_EXTRACT_ENABLED
+      ? `WORKER-EXTRACT=${workerExtractModel} (restored)`
+      : `WORKER-EXTRACT (${workerExtractModel}) still excluded: GOOGLE_API_KEY returned a real 402 "prepayment credits depleted" again on the last real attempt — external billing constraint, still unresolved as of this run, not this window's design. Not load-bearing for the delegation/asset-choice question this window answers, but restore WORKER_EXTRACT_ENABLED once billing is fixed (see this file's own comment above).`,
+  );
+  console.log("LABELING: multi-hop/delegation this window is a required, disclosed structural property (ORCHESTRATOR cannot author, not merely told not to) — NOT emergent. Asset choice (USDC vs fSIU), if ORCHESTRATOR reaches it, is genuinely free — nothing in its prompt prefers either. Report these two facts separately; do not let the scripted delegation structure contaminate how the asset-choice result (F1) is read.");
   console.log(`Experiment ledger so far: $${budget.experimentTotalUsd()}`);
   console.log(`Run recorded to: ${RUNS_ROOT}/${runId}\n`);
 
@@ -465,6 +512,16 @@ YOUR SITUATION THIS WINDOW
   console.log(`haltedReason: ${JSON.stringify(result.haltedReason)}`);
   console.log(`Experiment ledger total now: $${budget.experimentTotalUsd()}`);
   console.log(`Run cap used this run: $${budget.runTotalUsd()} of $${RUN_CAP_USD}`);
+
+  const orchestratorCalls = (result.turnLogsByAgent.ORCHESTRATOR ?? []).map((t) => t.parsed);
+  const calledPay = orchestratorCalls.some((p) => p.includes('"pay"'));
+  const calledMint = orchestratorCalls.some((p) => p.includes('"mint_claim"'));
+  const calledSubmit = orchestratorCalls.some((p) => p.includes('"submit_job"'));
+  console.log("\n=== F1 READ (asset choice) — report this separately from delegation structure ===");
+  if (calledPay) console.log("ORCHESTRATOR chose USDC (request_quote + pay).");
+  else if (calledMint) console.log("ORCHESTRATOR chose fSIU (mint_claim + transfer_claim).");
+  else if (calledSubmit) console.log("ORCHESTRATOR attempted to author the job directly (submit_job) despite lacking the reference materials — did not reach an asset choice.");
+  else console.log("ORCHESTRATOR never reached an asset-choice action this window (see haltedReason above).");
 }
 
 main().catch((err) => {
