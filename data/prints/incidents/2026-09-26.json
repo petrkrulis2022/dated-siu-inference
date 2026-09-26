@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-26",
+  "run_url": "https://github.com/petrkrulis2022/dated-siu-inference/actions/runs/36206759507",
+  "reason": "Run failed before publish.log had a diagnostic message \u2014 see the linked run's full log.",
+  "infra_failures": null,
+  "qualifying_models": null,
+  "registered_models": null,
+  "cost_usd": null,
+  "prior_attempts": null,
+  "occurred_at": "2026-09-26T00:58:44Z"
+}
