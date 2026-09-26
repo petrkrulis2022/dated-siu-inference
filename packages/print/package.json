@@ -11,6 +11,8 @@
     "test": "vitest run",
     "compute": "pnpm run build && node dist/cli/compute.js",
     "verify": "pnpm run build && node dist/cli/verify.js",
+    "verify-all": "pnpm run build && node dist/cli/verify-all.js",
+    "backfill-run-manifest": "pnpm run build && node dist/cli/backfill-run-manifest.js",
     "publish-print": "pnpm run build && node dist/cli/publish.js",
     "publish-unattended": "pnpm run build && node dist/cli/publish-unattended.js",
     "verify-onchain": "pnpm run build && node dist/cli/verify-onchain.js",

@@ -25,6 +25,17 @@ export function reconciliationsDir(): string {
   return resolve(repoRoot(), "data/reconciliations");
 }
 
+/** Deliberately its own top-level directory, sibling to data/prints/ — not a file inside
+ * data/prints/ itself, which every consumer that globs that directory (site/src/data.ts,
+ * loadCarryForwardHistory below, cli/verify-all.ts's own print listing) expects to contain only
+ * real, schema-valid Print objects. Found live, 2026-09-26: a first attempt put this file inside
+ * data/prints/ and broke the site's own build (loadAllPrints tried to sort it as a print, crashed
+ * on its missing `date` field) — moving it here means no consumer's own exclusion list ever
+ * needs to know this file exists. */
+export function verifyDataDir(): string {
+  return resolve(repoRoot(), "data/verify");
+}
+
 export async function loadRegistry(): Promise<ModelRegistryEntry[]> {
   return JSON.parse(await readFile(join(registryDir(), "models.json"), "utf-8"));
 }

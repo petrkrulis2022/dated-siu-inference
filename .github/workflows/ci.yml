@@ -101,3 +101,12 @@ jobs:
 
       - name: Contract coverage
         run: forge coverage --root packages/contracts --report summary
+
+      # build1-spec.md's public claim ("every print is independently verifiable") checked here,
+      # not just asserted — found live, 2026-09-26, that this had silently not been true for a
+      # real stretch of the print series (a verify-support bug plus several already-disclosed,
+      # forward-fixed pricing bugs). Every print either verifies clean or is on the explicit,
+      # reviewed allowlist (data/verify/known-verify-divergences.json); anything else fails this
+      # step, so a genuinely new, undisclosed discrepancy can never go silently red again.
+      - name: Verify every published print
+        run: pnpm run verify:all-prints

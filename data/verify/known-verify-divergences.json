@@ -1,0 +1,193 @@
+{
+  "$comment": "Explicit, reviewed allowlist of print_ids whose own verify recomputation is EXPECTED to diverge from their published figures, and why — read by cli/verify-all.ts. Never auto-derived from a heuristic (e.g. 'this print has some correction_notes'): every entry here is added by hand alongside the correction_notes entry that discloses and quantifies the same divergence, so this file stays a small, honest, human-reviewed record rather than a way to silence a genuinely new failure. A print's own body is never edited to fix these — see docs/methodology.md's revision policy. Found live 2026-09-26: cli/verify.ts's real recompute (once its own rounding-rule bug — passing print.rounding, not always today's default — was fixed) showed 22 published prints diverging from current-code recomputation, every one of them already fully or structurally disclosed via that print's own correction_notes; none was a previously-unknown, undisclosed error.",
+  "divergences": [
+    {
+      "print_id": "2026-08-30",
+      "reason": "Reasoning-token pricing bug (fixed forward, effective the next print onward) — this print predates the fix. Its own correction_notes[0] states the exact corrected dated_siu and gemini-3.1-pro-preview basket cost, matching verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-08-31",
+      "reason": "Same reasoning-token pricing gap as 2026-08-30 — see this print's own correction_notes[0] for the exact, quantified corrected figures, matching verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-01",
+      "reason": "Same reasoning-token pricing gap as 2026-08-30 — see this print's own correction_notes[0] for the exact, quantified corrected figures, matching verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-02",
+      "reason": "Same reasoning-token pricing gap as 2026-08-30 — see this print's own correction_notes[0] for the exact, quantified corrected figures, matching verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-03",
+      "reason": "Same reasoning-token pricing gap as 2026-08-30 — see this print's own correction_notes[0] for the exact, quantified corrected figures, matching verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-04",
+      "reason": "Same reasoning-token pricing gap as 2026-08-30 — see this print's own correction_notes[0] for the exact, quantified corrected figures, matching verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-05",
+      "reason": "Same reasoning-token pricing gap as 2026-08-30 — see this print's own correction_notes[0] for the exact, quantified corrected figures, matching verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-06",
+      "reason": "Same reasoning-token pricing gap as 2026-08-30 — see this print's own correction_notes[0] for the exact, quantified corrected figures, matching verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-07",
+      "reason": "Same reasoning-token pricing gap as 2026-08-30 — see this print's own correction_notes[0] for the exact, quantified corrected figures, matching verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-08",
+      "reason": "Same reasoning-token pricing gap as 2026-08-30 — this is the print the fix was actually found and disclosed on (correction_notes[1]); the fix applies forward from the next print onward, so this one is itself still affected. Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-14",
+      "reason": "Cached-input pricing bug (fixed forward, commit 327d7b9, 2026-09-25) — structurally disclosed in this print's own correction_notes[1] at publish time, with exact quantified figures added as a follow-up note (2026-09-26) once verify's own rounding-rule bug was fixed and could compute them. Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-15",
+      "reason": "Same cached-input pricing gap as 2026-09-14 — see this print's own correction_notes for the structural disclosure and the quantified follow-up. Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-16",
+      "reason": "Same cached-input pricing gap as 2026-09-14 — see this print's own correction_notes for the structural disclosure and the quantified follow-up. Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-17",
+      "reason": "Same cached-input pricing gap as 2026-09-14 — see this print's own correction_notes for the structural disclosure and the quantified follow-up. Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-18",
+      "reason": "Same cached-input pricing gap as 2026-09-14 — see this print's own correction_notes for the structural disclosure and the quantified follow-up. Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-19",
+      "reason": "Same cached-input pricing gap as 2026-09-14 — see this print's own correction_notes for the structural disclosure and the quantified follow-up. Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-20",
+      "reason": "Same cached-input pricing gap as 2026-09-14 — see this print's own correction_notes for the structural disclosure and the quantified follow-up. Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-21",
+      "reason": "Same cached-input pricing gap as 2026-09-14 — see this print's own correction_notes for the structural disclosure and the quantified follow-up. Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-22",
+      "reason": "Same cached-input pricing gap as 2026-09-14 — see this print's own correction_notes for the structural disclosure and the quantified follow-up. Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-23",
+      "reason": "Same cached-input pricing gap as 2026-09-14 — see this print's own correction_notes for the structural disclosure and the quantified follow-up. Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-24",
+      "reason": "Same cached-input pricing gap as 2026-09-14 — see this print's own correction_notes for the structural disclosure and the quantified follow-up. Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-25",
+      "reason": "Same cached-input pricing gap as 2026-09-14 — see this print's own correction_notes for the structural disclosure, the rounding-rule note, and the quantified follow-up. Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-02-frontier",
+      "reason": "Same reasoning-token pricing gap as the blended print for this date (2026-08-30's own entry) — this Frontier SIU print includes gemini-3.1-pro-preview too. Its own correction_notes already state the exact, quantified corrected dated_siu and gemini basket cost, matching verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-03-frontier",
+      "reason": "Same reasoning-token pricing gap as the blended print for this date (2026-08-30's own entry) — this Frontier SIU print includes gemini-3.1-pro-preview too. Its own correction_notes already state the exact, quantified corrected dated_siu and gemini basket cost, matching verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-04-frontier",
+      "reason": "Same reasoning-token pricing gap as the blended print for this date (2026-08-30's own entry) — this Frontier SIU print includes gemini-3.1-pro-preview too. Its own correction_notes already state the exact, quantified corrected dated_siu and gemini basket cost, matching verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-05-frontier",
+      "reason": "Same reasoning-token pricing gap as the blended print for this date (2026-08-30's own entry) — this Frontier SIU print includes gemini-3.1-pro-preview too. Its own correction_notes already state the exact, quantified corrected dated_siu and gemini basket cost, matching verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-06-frontier",
+      "reason": "Same reasoning-token pricing gap as the blended print for this date (2026-08-30's own entry) — this Frontier SIU print includes gemini-3.1-pro-preview too. Its own correction_notes already state the exact, quantified corrected dated_siu and gemini basket cost, matching verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-07-frontier",
+      "reason": "Same reasoning-token pricing gap as the blended print for this date (2026-08-30's own entry) — this Frontier SIU print includes gemini-3.1-pro-preview too. Its own correction_notes already state the exact, quantified corrected dated_siu and gemini basket cost, matching verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-14-frontier",
+      "reason": "Same cached-input pricing gap as the blended print for this date (2026-09-14's own entry) — this Frontier SIU print includes gemini-3.1-pro-preview and grok-4.6, both real cached-input-affected models. Structurally disclosed at publish time, with exact quantified figures added as a follow-up note (2026-09-26). Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-15-frontier",
+      "reason": "Same cached-input pricing gap as the blended print for this date (2026-09-14's own entry) — this Frontier SIU print includes gemini-3.1-pro-preview and grok-4.6, both real cached-input-affected models. Structurally disclosed at publish time, with exact quantified figures added as a follow-up note (2026-09-26). Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-16-frontier",
+      "reason": "Same cached-input pricing gap as the blended print for this date (2026-09-14's own entry) — this Frontier SIU print includes gemini-3.1-pro-preview and grok-4.6, both real cached-input-affected models. Structurally disclosed at publish time, with exact quantified figures added as a follow-up note (2026-09-26). Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-17-frontier",
+      "reason": "Same cached-input pricing gap as the blended print for this date (2026-09-14's own entry) — this Frontier SIU print includes gemini-3.1-pro-preview and grok-4.6, both real cached-input-affected models. Structurally disclosed at publish time, with exact quantified figures added as a follow-up note (2026-09-26). Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-18-frontier",
+      "reason": "Same cached-input pricing gap as the blended print for this date (2026-09-14's own entry) — this Frontier SIU print includes gemini-3.1-pro-preview and grok-4.6, both real cached-input-affected models. Structurally disclosed at publish time, with exact quantified figures added as a follow-up note (2026-09-26). Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-19-frontier",
+      "reason": "Same cached-input pricing gap as the blended print for this date (2026-09-14's own entry) — this Frontier SIU print includes gemini-3.1-pro-preview and grok-4.6, both real cached-input-affected models. Structurally disclosed at publish time, with exact quantified figures added as a follow-up note (2026-09-26). Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-20-frontier",
+      "reason": "Same cached-input pricing gap as the blended print for this date (2026-09-14's own entry) — this Frontier SIU print includes gemini-3.1-pro-preview and grok-4.6, both real cached-input-affected models. Structurally disclosed at publish time, with exact quantified figures added as a follow-up note (2026-09-26). Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-21-frontier",
+      "reason": "Same cached-input pricing gap as the blended print for this date (2026-09-14's own entry) — this Frontier SIU print includes gemini-3.1-pro-preview and grok-4.6, both real cached-input-affected models. Structurally disclosed at publish time, with exact quantified figures added as a follow-up note (2026-09-26). Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-22-frontier",
+      "reason": "Same cached-input pricing gap as the blended print for this date (2026-09-14's own entry) — this Frontier SIU print includes gemini-3.1-pro-preview and grok-4.6, both real cached-input-affected models. Structurally disclosed at publish time, with exact quantified figures added as a follow-up note (2026-09-26). Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-23-frontier",
+      "reason": "Same cached-input pricing gap as the blended print for this date (2026-09-14's own entry) — this Frontier SIU print includes gemini-3.1-pro-preview and grok-4.6, both real cached-input-affected models. Structurally disclosed at publish time, with exact quantified figures added as a follow-up note (2026-09-26). Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-24-frontier",
+      "reason": "Same cached-input pricing gap as the blended print for this date (2026-09-14's own entry) — this Frontier SIU print includes gemini-3.1-pro-preview and grok-4.6, both real cached-input-affected models. Structurally disclosed at publish time, with exact quantified figures added as a follow-up note (2026-09-26). Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-09-25-frontier",
+      "reason": "Same cached-input pricing gap as the blended print for this date (2026-09-14's own entry) — this Frontier SIU print includes gemini-3.1-pro-preview and grok-4.6, both real cached-input-affected models. Structurally disclosed at publish time, with exact quantified figures added as a follow-up note (2026-09-26). Matches verify's real recompute exactly."
+    },
+    {
+      "print_id": "2026-08-18",
+      "reason": "llama-3.3-70b-cloudflare and llama-3.3-70b-novita were both registered (and excluded, per this print's own basket_costs) at the time, but were removed from the registry entirely between 2026-08-29 and 2026-08-30 — before computeConstituentChanges existed to disclose a registry removal automatically. Recomputing today (current registry, missing both) naturally shows them as \"model absent from recomputation\" rather than \"excluded\". See 2026-08-30's own retroactive correction note for the full disclosure. A benign, real registry change, not a computation error on either side."
+    },
+    {
+      "print_id": "2026-08-22",
+      "reason": "llama-3.3-70b-cloudflare and llama-3.3-70b-novita were both registered (and excluded, per this print's own basket_costs) at the time, but were removed from the registry entirely between 2026-08-29 and 2026-08-30 — before computeConstituentChanges existed to disclose a registry removal automatically. Recomputing today (current registry, missing both) naturally shows them as \"model absent from recomputation\" rather than \"excluded\". See 2026-08-30's own retroactive correction note for the full disclosure. A benign, real registry change, not a computation error on either side."
+    },
+    {
+      "print_id": "2026-08-22b",
+      "reason": "llama-3.3-70b-cloudflare and llama-3.3-70b-novita were both registered (and excluded, per this print's own basket_costs) at the time, but were removed from the registry entirely between 2026-08-29 and 2026-08-30 — before computeConstituentChanges existed to disclose a registry removal automatically. Recomputing today (current registry, missing both) naturally shows them as \"model absent from recomputation\" rather than \"excluded\". See 2026-08-30's own retroactive correction note for the full disclosure. A benign, real registry change, not a computation error on either side."
+    },
+    {
+      "print_id": "2026-08-24",
+      "reason": "llama-3.3-70b-cloudflare and llama-3.3-70b-novita were both registered (and excluded, per this print's own basket_costs) at the time, but were removed from the registry entirely between 2026-08-29 and 2026-08-30 — before computeConstituentChanges existed to disclose a registry removal automatically. Recomputing today (current registry, missing both) naturally shows them as \"model absent from recomputation\" rather than \"excluded\". See 2026-08-30's own retroactive correction note for the full disclosure. A benign, real registry change, not a computation error on either side."
+    },
+    {
+      "print_id": "2026-08-25",
+      "reason": "llama-3.3-70b-cloudflare and llama-3.3-70b-novita were both registered (and excluded, per this print's own basket_costs) at the time, but were removed from the registry entirely between 2026-08-29 and 2026-08-30 — before computeConstituentChanges existed to disclose a registry removal automatically. Recomputing today (current registry, missing both) naturally shows them as \"model absent from recomputation\" rather than \"excluded\". See 2026-08-30's own retroactive correction note for the full disclosure. A benign, real registry change, not a computation error on either side."
+    },
+    {
+      "print_id": "2026-08-26",
+      "reason": "llama-3.3-70b-cloudflare and llama-3.3-70b-novita were both registered (and excluded, per this print's own basket_costs) at the time, but were removed from the registry entirely between 2026-08-29 and 2026-08-30 — before computeConstituentChanges existed to disclose a registry removal automatically. Recomputing today (current registry, missing both) naturally shows them as \"model absent from recomputation\" rather than \"excluded\". See 2026-08-30's own retroactive correction note for the full disclosure. A benign, real registry change, not a computation error on either side."
+    },
+    {
+      "print_id": "2026-08-29",
+      "reason": "llama-3.3-70b-cloudflare and llama-3.3-70b-novita were both registered (and excluded, per this print's own basket_costs) at the time, but were removed from the registry entirely between 2026-08-29 and 2026-08-30 — before computeConstituentChanges existed to disclose a registry removal automatically. Recomputing today (current registry, missing both) naturally shows them as \"model absent from recomputation\" rather than \"excluded\". See 2026-08-30's own retroactive correction note for the full disclosure. A benign, real registry change, not a computation error on either side."
+    }
+  ]
+}

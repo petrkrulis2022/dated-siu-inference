@@ -16,6 +16,7 @@
     "test:all": "pnpm run test && pnpm run test:contracts",
     "docs:deployments": "node scripts/generate-readme-deployments.mjs",
     "docs:deployments:check": "node scripts/generate-readme-deployments.mjs --check",
+    "verify:all-prints": "pnpm --filter @touchstone/print run verify-all",
     "measure-floor": "tsx scripts/measure-floor.ts",
     "console": "pnpm --filter @touchstone/console run dev",
     "console:index": "pnpm --filter @touchstone/console run index"
