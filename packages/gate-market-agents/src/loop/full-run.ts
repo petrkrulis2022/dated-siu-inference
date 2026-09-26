@@ -28,6 +28,7 @@ import type { ToolName } from "../tools/index.js";
 import { RunRecorder, type RunManifest } from "../run-recorder/recorder.js";
 import { FrictionLogWriter, type FrictionLogEntry } from "../friction/log.js";
 import { QuoteBoard } from "./quote-board.js";
+import { RedemptionTracker } from "./redemption-tracker.js";
 import { buildTurnPrompt } from "./prompt.js";
 import { ModelResponseParseError, parseModelResponse, type FrictionReport } from "./parse-tool-call.js";
 
@@ -181,6 +182,10 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
   const recorder = new RunRecorder(options.runsRoot, options.runId, options.manifest);
   const friction = new FrictionLogWriter(options.runsRoot, options.runId);
   const board = new QuoteBoard();
+  const redemption = new RedemptionTracker();
+  const agentIdByAddress = Object.fromEntries(
+    options.roster.map((a) => [a.address.toLowerCase(), a.agentId]),
+  ) as Record<string, AgentId>;
 
   const nowSeconds = BigInt(Math.floor(Date.now() / 1000));
   const windowFrom = options.windowFrom ?? nowSeconds;
@@ -253,7 +258,9 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
     }
 
     const marketBoardText = board.renderFor(agent.agentId, agent.erc8004Id);
-    const prompt = buildTurnPrompt(context, agent.availableTools, marketBoardText);
+    const redemptionText = redemption.renderFor(agent.agentId);
+    const boardSectionText = [marketBoardText, redemptionText].filter(Boolean).join("\n\n");
+    const prompt = buildTurnPrompt(context, agent.availableTools, boardSectionText);
     const projectedUsd = projectedTurnCostUsd(Math.ceil(prompt.length / 4), agent.maxOutputTokens, agent.prices);
 
     try {
@@ -357,6 +364,23 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
         }
       }
 
+      if (intent.tool === "mint_claim") {
+        const mintResult = record.result as { tokenId: string; issuer: string };
+        const issuerAgentId = agentIdByAddress[mintResult.issuer.toLowerCase()];
+        const quantity = (args as { quantity?: unknown } | undefined)?.quantity;
+        if (issuerAgentId && typeof quantity === "string") {
+          redemption.recordMint(mintResult.tokenId, issuerAgentId, quantity);
+        }
+      }
+
+      if (intent.tool === "redeem_claim") {
+        redemption.recordPresented(agent.agentId);
+      }
+
+      if (intent.tool === "serve_redemption") {
+        redemption.recordServed();
+      }
+
       if (intent.tool === "submit_job") {
         // Runner's own call above is the real, recorded first invocation — one genuinely fresh
         // extra invocation, compared directly against it, is what actually checks determinism
@@ -370,6 +394,14 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       const gateResult = intent.tool === "submit_job" && !quarantined
         ? (record.result as GateHardeningResult)
         : undefined;
+
+      // A real, deterministic receiptRef tied to this job — never invented — so the issuer's
+      // eventual serve_redemption call references the same job an on-chain observer could
+      // independently recompute. Skipped when quarantined: a non-deterministic gate result is not
+      // a trustworthy verdict to route toward a real redemption.
+      if (gateResult) {
+        redemption.recordGraded(gateResult.passed, keccak256(stringToBytes(`receipt:${options.job.jobId}`)));
+      }
 
       const log: TurnLog = {
         turn, promptChars: prompt.length, projectedUsd, realizedUsd, marketBoardText: marketBoardText || undefined,
@@ -386,9 +418,21 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       await friction.append(buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, timeToExpiry));
 
       if (gateResult?.passed) {
-        passed = true;
-        passedBy = agent.agentId;
-        break turnLoop;
+        // Found live wiring the redemption tracker (2026-09-26, P5 planning): breaking the loop
+        // the instant *any* submit_job passes was correct for P4's shape (one agent, no claim in
+        // play — the job passing IS the window's whole point) but would end a P5 fSIU window
+        // before its routed issuer ever gets a turn to see or serve a real pending redemption.
+        // Every existing test mints nothing, so `tokenId` is always undefined there and this is
+        // byte-identical to the old unconditional break — this only changes behaviour for a
+        // window that actually minted a claim still awaiting service.
+        if (passedBy === undefined) {
+          passed = true;
+          passedBy = agent.agentId;
+        }
+        const claimOutstanding = redemption.state().tokenId !== undefined && !redemption.state().served;
+        if (!claimOutstanding) {
+          break turnLoop;
+        }
       }
     } catch (err) {
       if (err instanceof CeilingExceededError) {
@@ -513,6 +557,39 @@ export async function buildToolArgs(tool: ToolName, rawArgs: unknown, ctx: Build
       to = resolved;
     }
     return { to, tokenId: raw?.tokenId, quantity: raw?.quantity };
+  }
+
+  if (tool === "pay") {
+    // `tools/pay.ts`'s real schema takes the full `{quote: TouchstoneQuote, settler}` — the exact
+    // seller-signed object, not something a model reconstructs from the board's own deliberately
+    // partial summary text (amount/expiry/seller only — see quote-board.ts's own doc comment on
+    // `issuedQuoteById`). A model names which answered request it's paying by `requestId`; the
+    // real quote is spliced in here, the same pattern `issue_quote` already uses.
+    const raw = rawArgs as { requestId?: unknown; settler?: unknown } | undefined;
+    if (typeof raw?.requestId !== "string") {
+      throw new Error('pay: expected a string "requestId" naming the quote being paid.');
+    }
+    const quote = ctx.board.issuedQuoteById(raw.requestId);
+    if (!quote) {
+      throw new Error(`pay: no issued quote found for request "${raw.requestId}".`);
+    }
+    return { quote, settler: raw.settler };
+  }
+
+  if (tool === "serve_redemption") {
+    // `RedemptionTracker.renderFor` (spec §13.3: no agent messages, only structured facts) shows
+    // an issuer the holder's own AgentId ("WORKER-CODE"), never a raw address — the issuer has no
+    // other way to learn it. Resolved here exactly like `transfer_claim`'s own symbolic `to`,
+    // rather than let a real serve_redemption call revert on a non-address string.
+    const raw = rawArgs as
+      | { holder?: unknown; agentId?: unknown; tokenId?: unknown; quantity?: unknown; passed?: unknown; receiptRef?: unknown }
+      | undefined;
+    let holder = raw?.holder;
+    const symbolicId = typeof raw?.agentId === "string" ? raw.agentId : typeof holder === "string" ? holder : undefined;
+    if (symbolicId && ctx.agentAddressByAgentId[symbolicId as AgentId]) {
+      holder = ctx.agentAddressByAgentId[symbolicId as AgentId];
+    }
+    return { tokenId: raw?.tokenId, holder, quantity: raw?.quantity, passed: raw?.passed, receiptRef: raw?.receiptRef };
   }
 
   if (tool === "issue_quote") {

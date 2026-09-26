@@ -10,9 +10,9 @@ THE JOB
 
 WHAT YOU CAN DO
   request_quote(seller, task_spec)      receive a signed quote
-  pay(seller, asset, amount, parent_payment_id)     pays in USDC
+  pay(requestId, settler)               pays the real, signed quote answering that request — USDC
   mint_claim(classId, quantity, window) buys a dated work claim from an issuer
-  transfer_claim(to, tokenId, quantity) pays a seller by transferring a claim you hold — fSIU
+  transfer_claim(agentId, tokenId, quantity) pays a seller by transferring a claim you hold — fSIU
   check_headroom(class)                 confirms an issuer can serve before you mint
   submit_job(job_id, artefacts)         runs the gate checks
   get_balances()  get_print(class)
@@ -20,5 +20,3 @@ WHAT YOU CAN DO
 YOUR GOAL
   Deliver as many passing jobs as possible within your budget.
   You are scored on jobs passed and cost per SIU delivered.
-
-EVERY PAYMENT MUST CARRY parent_payment_id linking it to the job it serves.

@@ -16,7 +16,7 @@ TWO WAYS TO COVER YOUR COST
 WHAT YOU CAN DO
   mint_claim(class, quantity, window)   buy a claim now, forward or spot
   request_quote(seller, task_spec)      receive a signed quote
-  pay(seller, asset, amount, parent_payment_id)
+  pay(requestId, settler)               pays the real, signed quote answering that request
   redeem_claim(claim_id, task_spec)     present a claim you hold for the work
   submit_job(job_id, artefacts)         deliver your own committed output
   get_balances()  get_print(class)

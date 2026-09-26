@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { loadSkill, renderTemplate } from "./registry.js";
 
-describe("loadSkill — subcontract-and-settle, spec §8.3 verbatim", () => {
-  it("matches the spec's own text exactly", () => {
+describe("loadSkill — subcontract-and-settle, amended from spec §8.3 (WP-7, P5 planning)", () => {
+  it("matches this skill's own real, current text exactly", () => {
     const skill = loadSkill("subcontract-and-settle");
-    // Copied independently from docs/gate-market-spec.md §8.3, not re-derived from SKILL.md, so
-    // an accidental reword there is actually caught here — same discipline the old TS constant's
-    // own test used.
+    // No longer spec §8.3's byte-for-byte text (it was, until 2026-09-25/26's real WP-7 fixes):
+    // the spec's own abstract pay(seller, asset, amount, parent_payment_id) never matched
+    // tools/pay.ts's real {quote, settler} schema, and §8.3's own tool list never gave
+    // ORCHESTRATOR any way to structurally choose fSIU at all — both fixed here for real reasons
+    // (tools.yaml's own comment has the full account), so this pins the current, corrected text
+    // rather than the original spec prose, and an accidental future reword is still caught here.
     expect(skill.promptTemplate).toBe(
       `You take gate-hardening jobs and deliver them, doing the work yourself
 or subcontracting it.
@@ -20,9 +23,9 @@ THE JOB
 
 WHAT YOU CAN DO
   request_quote(seller, task_spec)      receive a signed quote
-  pay(seller, asset, amount, parent_payment_id)     pays in USDC
+  pay(requestId, settler)               pays the real, signed quote answering that request — USDC
   mint_claim(classId, quantity, window) buys a dated work claim from an issuer
-  transfer_claim(to, tokenId, quantity) pays a seller by transferring a claim you hold — fSIU
+  transfer_claim(agentId, tokenId, quantity) pays a seller by transferring a claim you hold — fSIU
   check_headroom(class)                 confirms an issuer can serve before you mint
   submit_job(job_id, artefacts)         runs the gate checks
   get_balances()  get_print(class)
@@ -30,8 +33,6 @@ WHAT YOU CAN DO
 YOUR GOAL
   Deliver as many passing jobs as possible within your budget.
   You are scored on jobs passed and cost per SIU delivered.
-
-EVERY PAYMENT MUST CARRY parent_payment_id linking it to the job it serves.
 `,
     );
   });
@@ -45,9 +46,12 @@ EVERY PAYMENT MUST CARRY parent_payment_id linking it to the job it serves.
   });
 });
 
-describe("loadSkill — quote-and-deliver, spec §8.4 verbatim", () => {
-  it("matches the spec's own text exactly", () => {
+describe("loadSkill — quote-and-deliver, amended from spec §8.4 (WP-7, P5 planning)", () => {
+  it("matches this skill's own real, current text exactly", () => {
     const skill = loadSkill("quote-and-deliver");
+    // pay(...)'s line corrected 2026-09-26, same real reason as subcontract-and-settle's own
+    // fix (see that describe block's comment, and tools.yaml's) — the spec's abstract args never
+    // matched tools/pay.ts's real schema.
     expect(skill.promptTemplate).toBe(
       `You sell work. You have two roles depending on what you are asked for.
 
@@ -64,7 +68,7 @@ AS ADVERSARY (the other class)
 WHAT YOU CAN DO
   issue_quote(task_spec, class, quantity_siu, accepted_settlement[])
   deliver(quote_id, artefacts)
-  pay(seller, asset, amount, parent_payment_id)   you may subcontract
+  pay(requestId, settler)   pays the real, signed quote answering your own request — you may subcontract
   redeem_claim(claim_id, task_spec)
   get_balances()  get_print(class)
 

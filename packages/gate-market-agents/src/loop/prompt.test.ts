@@ -9,7 +9,7 @@ describe("buildTurnPrompt", () => {
 
     expect(prompt).toContain("you are ORCHESTRATOR");
     expect(prompt).toContain("get_print(printId)"); // the real tool-descriptions.ts entry
-    expect(prompt).toContain("mint_claim(classId, quantity");
+    expect(prompt).toContain("mint_claim(quantity)");
     expect(prompt).not.toContain("submit_job("); // not in availableTools — must not leak in
     expect(prompt).toContain('{"tool": "<tool_name>"');
     expect(prompt).toContain("no turns yet");

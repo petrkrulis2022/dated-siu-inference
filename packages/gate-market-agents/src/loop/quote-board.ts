@@ -49,6 +49,16 @@ export class QuoteBoard {
     this.#issued.push({ requestId, quote });
   }
 
+  /** The exact, real, seller-signed `TouchstoneQuote` for one request — what `pay` must actually
+   * be called with. `pay`'s own real args schema (`tools/pay.ts`) takes the full quote object,
+   * not a reconstruction; `renderFor`'s own board summary (amount/expiry/seller only) is real but
+   * deliberately partial, so a model copying it by hand could never produce a quote whose fields
+   * still match the seller's real signature. Resolved here the same way `issue_quote`'s own
+   * requestId splice already is, in `buildToolArgs`. */
+  issuedQuoteById(requestId: string): TouchstoneQuote | undefined {
+    return this.#issued.find((i) => i.requestId === requestId)?.quote;
+  }
+
   /** Open requests addressed to `sellerId` (this agent's own erc8004 id) that nothing has
    * answered yet — what a seller's own turn should see. */
   openRequestsFor(sellerId: string): QuoteBoardRequest[] {

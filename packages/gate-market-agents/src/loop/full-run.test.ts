@@ -1,11 +1,23 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { privateKeyToAccount } from "viem/accounts";
-import { getAddress, recoverTypedDataAddress, type Hex } from "viem";
+import { getAddress, keccak256, recoverTypedDataAddress, stringToBytes, type Hex } from "viem";
 import type { Adapter, AdapterResult } from "@touchstone/harness";
-import type { GateHardeningResult } from "@touchstone/task-pack-gate-hardening";
+import {
+  CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
+  CODE_ADVERSARIAL_HARDCODED,
+  CODE_ADVERSARIAL_ORIGINAL_BUG,
+  CODE_ADVERSARIAL_STUBBED,
+  CODE_GATE_1_TRIVIAL,
+  CODE_GATE_3_HARDENED,
+  CODE_HELD_OUT_INSTANCES,
+  CODE_KNOWN_GOOD,
+  CODE_REFERENCE,
+  runGateHardeningChecks,
+  type GateHardeningResult,
+} from "@touchstone/task-pack-gate-hardening";
 import type { Print } from "@touchstone/sdk";
 import type { RunnerDeps } from "../deps.js";
 import type { RunManifest } from "../run-recorder/recorder.js";
@@ -13,6 +25,9 @@ import { BudgetCeiling } from "../budget/ceiling.js";
 import { ExperimentBudget } from "../budget/experiment-budget.js";
 import { CANONICAL_ASSET_DESCRIPTION } from "../skills/asset-description.js";
 import { loadSkill } from "../skills/registry.js";
+import { setupDevnet, type DevnetHandle } from "../devnet/deploy.js";
+import { ViemChainReader } from "../chain/reader.js";
+import { AGENT_IDS, erc8004IdFor, type AgentId } from "../identity/resolve.js";
 import { QuoteBoard } from "./quote-board.js";
 import {
   buildToolArgs,
@@ -382,6 +397,39 @@ describe("buildToolArgs", () => {
       buildToolArgs("issue_quote", { requestId: "qr-nonexistent" }, baseCtx()),
     ).rejects.toThrow(/no open request/);
   });
+
+  it("pay: uses the board's own real, signed quote for an answered request, never a model reconstruction", async () => {
+    const board = new QuoteBoard();
+    const realBody = {
+      schema_version: "2.0", siu: "10", pattern: "fixed" as const, model: "test",
+      rate_usd_per_siu: "0.05", amount_usd_max: "0.5", index_version: "SIU-2026a",
+      print_id: "2026-09-25", print_hash: "0xabc", seller_id: "erc8004:0xWORKERCODE",
+      expiry: "2026-09-26T00:00:00Z",
+      settlement: [{ asset: "usdc" as const, address: "0x0", amount_max: "500000" }],
+    };
+    const request = board.postRequest("ORCHESTRATOR", realBody);
+    const realQuote = { ...realBody, sig: "0xrealsignature" };
+    board.postIssuedQuote(request.requestId, realQuote);
+
+    const args = await buildToolArgs(
+      "pay",
+      { requestId: request.requestId, settler: "0x0000000000000000000000000000000000000000" },
+      baseCtx({ board }),
+    );
+    expect(args).toEqual({ quote: realQuote, settler: "0x0000000000000000000000000000000000000000" });
+  });
+
+  it("pay: refuses an unknown requestId rather than opening escrow against nothing", async () => {
+    await expect(
+      buildToolArgs("pay", { requestId: "qr-nonexistent", settler: "0x0" }, baseCtx()),
+    ).rejects.toThrow(/no issued quote/);
+  });
+
+  it("pay: refuses when requestId is missing entirely", async () => {
+    await expect(buildToolArgs("pay", { settler: "0x0" }, baseCtx())).rejects.toThrow(
+      /expected a string "requestId"/,
+    );
+  });
 });
 
 describe("runFullRunWindow — the quote board makes a real two-agent negotiation possible", () => {
@@ -474,4 +522,209 @@ describe("runFullRunWindow — the quote board makes a real two-agent negotiatio
     // ORCHESTRATOR's first turn (before anything was answered) saw no board at all.
     expect(result.turnLogsByAgent.ORCHESTRATOR[0].marketBoardText).toBeUndefined();
   });
+});
+
+describe("runFullRunWindow — the redemption tracker makes a real fSIU claim actually redeemable", () => {
+  // Real anvil, real (unmodified) contracts, real chain writes for every mint/transfer/redeem/
+  // serve call below — the same devnet WP-5's own dry-loop scenarios use, not a mock. Startup
+  // cost is real (~seconds), matching those tests' own generous beforeAll timeout.
+  let devnet: DevnetHandle;
+  let runsRoot: string;
+  let ledgerPath: string;
+
+  beforeAll(async () => {
+    devnet = await setupDevnet();
+  }, 180_000);
+
+  afterAll(async () => {
+    await devnet.stop();
+  });
+
+  beforeEach(async () => {
+    runsRoot = await mkdtemp(path.join(tmpdir(), "full-run-redemption-test-"));
+    ledgerPath = path.join(runsRoot, "ledger.json");
+  });
+
+  afterEach(async () => {
+    await rm(runsRoot, { recursive: true, force: true });
+  });
+
+  it("ISSUER-A only ever sees a pending redemption once mint+present+grade are all real and done, then serves it for real", async () => {
+    const rosterConfig = (agentId: AgentId, adapter: Adapter, availableTools: RosterAgentConfig["availableTools"]): RosterAgentConfig => ({
+      agentId,
+      adapter,
+      modelString: "test",
+      prices: PRICES,
+      skillPackText: CANONICAL_ASSET_DESCRIPTION,
+      availableTools,
+      privateKeyHex: devnet.agents[agentId].privateKeyHex,
+      address: devnet.agents[agentId].address,
+      erc8004Id: erc8004IdFor(devnet.agents[agentId].address),
+      rpcUrl: devnet.rpcUrl,
+      maxOutputTokens: 3000,
+    });
+
+    const respond = (text: string): AdapterResult => ({
+      text, usage: { input: 100, output: 50, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+    });
+
+    let orchestratorCall = 0;
+    const orchestratorAdapter: Adapter = async (_model, prompt) => {
+      orchestratorCall++;
+      if (orchestratorCall === 1) {
+        return respond(JSON.stringify({ tool: "mint_claim", args: { quantity: "10" } }));
+      }
+      if (orchestratorCall === 2) {
+        const tokenId = prompt.match(/"tokenId":"(\d+)"/)?.[1];
+        expect(tokenId).toBeDefined(); // the real Minted tokenId, learned from turn 1's own real history
+        mintedTokenId = tokenId;
+        return respond(
+          JSON.stringify({ tool: "transfer_claim", args: { agentId: "WORKER-CODE", tokenId, quantity: "10" } }),
+        );
+      }
+      return respond(JSON.stringify({ done: true, summary: "minted and transferred" }));
+    };
+
+    // WORKER-CODE has no protocol-level way to *discover* the tokenId ORCHESTRATOR mints (there
+    // is no cross-agent transfer board, unlike quotes — a real, separate gap, out of scope for
+    // this redemption-tracker wiring test). Sharing it here is a test-only simplification of
+    // that unsolved discovery problem; what this test verifies instead is real either way — that
+    // WORKER-CODE only acts once its own real, on-chain balance for that token is genuinely
+    // nonzero, never before.
+    let mintedTokenId: string | undefined;
+    let workerCall = 0;
+    const workerAdapter: Adapter = async (_model, prompt) => {
+      workerCall++;
+      if (!mintedTokenId) {
+        return respond(
+          JSON.stringify({ tool: "get_balances", args: { account: devnet.agents["WORKER-CODE"].address, tokenIds: [] } }),
+        );
+      }
+      const balanceMatch = prompt.match(
+        new RegExp(`"tokenId":"${mintedTokenId}","balance":"(\\d+)"`),
+      );
+      const reallyHoldsClaim = balanceMatch !== null && balanceMatch[1] !== "0";
+      if (!reallyHoldsClaim) {
+        return respond(
+          JSON.stringify({
+            tool: "get_balances",
+            args: { account: devnet.agents["WORKER-CODE"].address, tokenIds: [mintedTokenId] },
+          }),
+        );
+      }
+      const alreadyRedeemed = /called redeem_claim/.test(prompt);
+      if (!alreadyRedeemed) {
+        const taskSpecHash = keccak256(stringToBytes("gate-hardening:redemption-wiring-test"));
+        return respond(
+          JSON.stringify({ tool: "redeem_claim", args: { tokenId: mintedTokenId, taskSpecHash } }),
+        );
+      }
+      const alreadySubmitted = /called submit_job/.test(prompt);
+      if (!alreadySubmitted) {
+        return respond(JSON.stringify({ tool: "submit_job", args: { source: CODE_GATE_3_HARDENED.source } }));
+      }
+      return respond(JSON.stringify({ done: true, summary: "redeemed and delivered" }));
+    };
+
+    const issuerPrompts: string[] = [];
+    const issuerAdapter: Adapter = async (_model, prompt) => {
+      issuerPrompts.push(prompt);
+      const match = prompt.match(
+        /tokenId (\S+), holder (\S+), quantity (\S+), real graded result: passed=(true|false), receiptRef (\S+)/,
+      );
+      if (!match) {
+        return respond(JSON.stringify({ tool: "get_print", args: { printId: "redemption-wiring-test-print" } }));
+      }
+      const [, tokenId, holder, quantity, passed, receiptRef] = match;
+      return respond(
+        JSON.stringify({
+          tool: "serve_redemption",
+          args: { tokenId, agentId: holder, quantity, passed: passed === "true", receiptRef },
+        }),
+      );
+    };
+
+    const job: JobEnvelope = {
+      jobId: "redemption-wiring-test",
+      taskClass: "code",
+      originalGate: CODE_GATE_1_TRIVIAL,
+      referenceInstance: CODE_REFERENCE,
+      knownGoodSubmission: CODE_KNOWN_GOOD,
+      adversarialSubmissions: [
+        CODE_ADVERSARIAL_ORIGINAL_BUG,
+        CODE_ADVERSARIAL_HARDCODED,
+        CODE_ADVERSARIAL_STUBBED,
+        CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
+      ],
+      heldOutInstances: CODE_HELD_OUT_INSTANCES,
+    };
+
+    const mintContext: MintContext = {
+      publisherPrivateKeyHex: devnet.publisherPrivateKeyHex,
+      printId: "redemption-wiring-test-print",
+      nanoUsdPerSiu: 10_000_000n,
+      validitySeconds: 3600n,
+    };
+
+    const ceiling = new BudgetCeiling(
+      Object.fromEntries(
+        AGENT_IDS.map((id) => [id, { maxUsdcSpend: "1000000", maxInferenceTurns: 100, maxInferenceUsd: "1000000" }]),
+      ) as Record<AgentId, { maxUsdcSpend: string; maxInferenceTurns: number; maxInferenceUsd: string }>,
+    );
+    const budget = new ExperimentBudget({ ceiling, runCapUsd: "1000000", experimentCapUsd: "1000000", ledgerPath });
+
+    const deps: RunnerDeps = {
+      chainReader: new ViemChainReader(devnet.deployment, devnet.rpcUrl),
+      deployment: devnet.deployment,
+      escrowAddress: "0x0000000000000000000000000000000000dead",
+      runGateHardeningChecks,
+      loadPrint: async () => ({ print_id: "redemption-wiring-test-print" }) as unknown as Print,
+      isReconciled: async () => false,
+    };
+
+    const result = await runFullRunWindow({
+      windowId: "w-redemption",
+      roster: [
+        rosterConfig("ORCHESTRATOR", orchestratorAdapter, ["mint_claim", "transfer_claim"]),
+        rosterConfig("WORKER-CODE", workerAdapter, ["get_balances", "redeem_claim", "submit_job"]),
+        rosterConfig("ISSUER-A", issuerAdapter, ["get_print", "serve_redemption"]),
+      ],
+      job,
+      maxTurnsPerAgent: 6,
+      budget,
+      deps,
+      runsRoot, runId: "run-redemption", manifest: MANIFEST,
+      mintContext,
+    });
+
+    expect(result.passed).toBe(true);
+    expect(result.passedBy).toBe("WORKER-CODE");
+
+    // ISSUER-A never saw a pending redemption until every real fact was actually in. Matched on
+    // the tracker's own real, structured line (not the bare phrase "PENDING REDEMPTION ROUTED TO
+    // YOU" — that phrase is also named, as a hint, inside serve_redemption's own real tool
+    // description shown every turn regardless of tracker state; see tool-descriptions.ts).
+    const REDEMPTION_READY_PATTERN = /tokenId (\S+), holder (\S+), quantity (\S+), real graded result: passed=(true|false), receiptRef (\S+)/;
+    const firstReadyIndex = issuerPrompts.findIndex((p) => REDEMPTION_READY_PATTERN.test(p));
+    expect(firstReadyIndex).toBeGreaterThan(-1);
+    for (const earlierPrompt of issuerPrompts.slice(0, firstReadyIndex)) {
+      expect(REDEMPTION_READY_PATTERN.test(earlierPrompt)).toBe(false);
+    }
+    expect(issuerPrompts[firstReadyIndex]).toContain("real graded result: passed=true");
+
+    // The real serve_redemption call actually happened and actually succeeded on-chain.
+    const issuerRecords = result.turnLogsByAgent["ISSUER-A"];
+    const serveTurn = issuerRecords.find((log) => log.parsed.includes("serve_redemption"));
+    expect(serveTurn).toBeDefined();
+    expect(serveTurn?.parsed).not.toContain("error");
+
+    // And the fSIU claim was genuinely burned by a real, passing serve_redemption — read straight
+    // from chain, not asserted from the loop's own bookkeeping.
+    const servedTokenId = BigInt(issuerPrompts[firstReadyIndex].match(/tokenId (\S+),/)![1]);
+    const holderBalance = await deps.chainReader.claimBalance(
+      servedTokenId,
+      devnet.agents["WORKER-CODE"].address as Hex,
+    );
+    expect(holderBalance).toBe(0n); // burned on a genuine pass, same invariant happy-path.ts checks
+  }, 90_000);
 });

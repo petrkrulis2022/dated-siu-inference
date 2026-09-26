@@ -82,4 +82,13 @@ describe("QuoteBoard", () => {
     expect(board.requestById(request.requestId)?.buyer).toBe("ORCHESTRATOR");
     expect(board.requestById("qr-999")).toBeUndefined();
   });
+
+  it("issuedQuoteById returns the exact, real signed quote for a request — never a reconstruction", () => {
+    const board = new QuoteBoard();
+    const request = board.postRequest("ORCHESTRATOR", fakeQuoteBody("erc8004:0xWORKERCODE"));
+    const quote = fakeQuote("erc8004:0xWORKERCODE");
+    board.postIssuedQuote(request.requestId, quote);
+    expect(board.issuedQuoteById(request.requestId)).toBe(quote);
+    expect(board.issuedQuoteById("qr-999")).toBeUndefined();
+  });
 });

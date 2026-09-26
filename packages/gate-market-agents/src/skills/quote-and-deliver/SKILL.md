@@ -13,7 +13,7 @@ AS ADVERSARY (the other class)
 WHAT YOU CAN DO
   issue_quote(task_spec, class, quantity_siu, accepted_settlement[])
   deliver(quote_id, artefacts)
-  pay(seller, asset, amount, parent_payment_id)   you may subcontract
+  pay(requestId, settler)   pays the real, signed quote answering your own request — you may subcontract
   redeem_claim(claim_id, task_spec)
   get_balances()  get_print(class)
 

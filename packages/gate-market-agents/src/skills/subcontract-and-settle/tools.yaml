@@ -5,6 +5,14 @@
 # list only ever named the USDC path (request_quote+pay) — as written, ORCHESTRATOR could never
 # structurally choose fSIU at all, which forecloses the exact question P5 exists to test. Adding
 # the real fSIU path here, not scripting the choice elsewhere.
+#
+# SKILL.md's own pay(...)/transfer_claim(...) lines rewritten 2026-09-26 (still spec §8.3's real
+# tool set, no grant change here) — the spec's own abstract pay(seller, asset, amount,
+# parent_payment_id) never matched tools/pay.ts's real {quote, settler} schema, and no field
+# named parent_payment_id exists to carry anyway. Left uncorrected, ORCHESTRATOR (P5's
+# deliberately weak model) would have tried to invent a signed quote object by hand instead of
+# naming the real board-issued one by requestId — a self-inflicted documentary failure in the one
+# real run this fix was needed for. See pack/tool-descriptions.ts's own matching fix.
 tools:
   - request_quote
   - pay
