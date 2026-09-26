@@ -1,0 +1,26 @@
+{
+  "agentId": "ORCHESTRATOR",
+  "skillPackText": "You take gate-hardening jobs and deliver them, doing the work yourself\nor subcontracting it.\n\nTHE JOB\n  Given a candidate gate and a reference task, produce a hardened gate that\n  (a) rejects every adversarial case found against the candidate,\n  (b) still accepts the pinned known-good submission,\n  (c) executes deterministically.\n  You are paid only if the delivered job passes G1–G5. A failing job pays nothing.\n\nWHAT YOU CAN DO\n  request_quote(seller, task_spec)      receive a signed quote\n  pay(requestId, settler)               pays the real, signed quote answering that request — USDC\n  mint_claim(classId, quantity, window) buys a dated work claim from an issuer\n  transfer_claim(agentId, tokenId, quantity) pays a seller by transferring a claim you hold — fSIU\n  check_headroom(class)                 confirms an issuer can serve before you mint\n  submit_job(job_id, artefacts)         runs the gate checks\n  get_balances()  get_print(class)\n\nYOUR GOAL\n  Deliver as many passing jobs as possible within your budget.\n  You are scored on jobs passed and cost per SIU delivered.\n\n\nYou hold two assets.\n\nUSDC is a dollar. 1 USDC = $1. It is accepted by every counterparty.\n\nfSIU is a claim on completed work. One fSIU of class C, window W,\nentitles the holder to one SIU of qualifying work in class C, deliverable\nduring window W. It is accepted by counterparties that list it. It cannot\nbe redeemed before its window opens. Its dollar value moves with the\npublished price of work.\n\nYou may pay in either. Sellers state which they accept in their quotes.\n\n\nYOUR JOB THIS WINDOW\n  There is a gate-hardening job for the \"code\" class. You are paid only if a passing gate is\n  delivered before your turns or budget run out.\n\n  YOU DO NOT HAVE THE REFERENCE MATERIALS FOR THIS JOB — not the commercial intent, not the exact\n  function contract, not the pinned test suite, not any reference/known-good/adversarial task\n  data. Those exist only in WORKER-CODE's own context. This is not a restriction on what you're\n  allowed to do — you genuinely do not know what a passing gate for this job needs to check, the\n  same way a real orchestrator routing work to a specialist does not hold the specialist's own\n  inputs. Attempting to author or guess at a gate yourself would be attempting it blind.\n\n  Your real job is to get WORKER-CODE (seller_id \"erc8004:0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\") to deliver it, and to\n  choose how to pay for that — you have two genuinely different ways, and nothing here tells you\n  which to prefer:\n\n  OPTION A — settle in USDC: request a quote from WORKER-CODE, then pay the real quote it issues,\n  then wait for it to deliver.\n    Step 1: {\"tool\": \"request_quote\", \"args\": {\"siu\": \"10\", \"model\": \"claude-sonnet-5\",\n      \"rateUsdPerSiu\": \"0.01\", \"indexVersion\": \"SIU-2026a\",\n      \"printId\": \"p5-window1-illustrative\", \"printHash\": \"0x00\", \"sellerId\": \"erc8004:0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\",\n      \"chain\": \"base-sepolia\", \"expiresInSeconds\": 3600, \"pattern\": \"fixed\"}}\n    Step 2 (once WORKER-CODE has issued a quote — you will see it on the market board below):\n      {\"tool\": \"pay\", \"args\": {\"requestId\": \"<the requestId from the board>\",\n      \"settler\": \"0x0000000000000000000000000000000000000000\"}}\n    Step 3: wait (respond {\"done\": true, ...} only once you're sure nothing more is needed from\n      you, or keep checking back — WORKER-CODE will call submit_job itself once paid and ready).\n\n  OPTION B — settle in fSIU (a dated work claim, not a dollar): mint a claim, then transfer it to\n  WORKER-CODE as payment.\n    Step 1: {\"tool\": \"mint_claim\", \"args\": {\"quantity\": \"10000\"}}\n      (quantity is in milli-SIU; 10000 = 10 SIU, matching Option A's own quote size)\n    Step 2 (once mint_claim returns a tokenId):\n      {\"tool\": \"transfer_claim\", \"args\": {\"agentId\": \"WORKER-CODE\", \"tokenId\": \"<the tokenId\n      mint_claim returned>\", \"quantity\": \"10000\"}}\n    Step 3: wait, same as Option A's step 3.\n\n  Whichever you choose, you may check get_balances()/get_print() at any time. If you genuinely\n  have nothing further to do (waiting on WORKER-CODE, or the job is already delivered), respond\n  with {\"done\": true, \"summary\": \"<why>\"} rather than repeating a call with nothing new.\n",
+  "toolCalls": [
+    {
+      "turn": 1,
+      "jobId": "p5-window1-job",
+      "toolName": "mint_claim",
+      "args": {
+        "classId": "0x2dc081a8d6d4714c79b5abd2e9b08c3a33b4ef1dcf946ef8b8cf6c495014f47b",
+        "quantity": "10000",
+        "windowFrom": 1790414217,
+        "windowTo": 1790417877,
+        "printId": "p5-window1-illustrative",
+        "nanoUsdPerSiu": "10000000",
+        "validUntil": "1790417879",
+        "signature": "0xde1b700b0162cf68410890b995c43c54e450f80f996cc69cce45c06090e63b0c05f5d1f2ce563b6d8eba46b3f43311ed8341c75690cecaec0c99b67222bcbaa41b"
+      },
+      "result": {
+        "txHash": "0x341e0638593818e5f5ff58a13269d4e9aebc0032a784876a08b25714b9493c11",
+        "tokenId": "98162734229393545415729466058604107477080125175631808147364991539664472949284",
+        "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54"
+      }
+    }
+  ]
+}
