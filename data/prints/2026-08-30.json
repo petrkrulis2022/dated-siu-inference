@@ -195,6 +195,10 @@
     {
       "published_at": "2026-09-25",
       "note": "Correction to this print's own rounding correction note above: that note's phrase \"the real value is X\" overstated what the recomputation shows. It restores rounding precision only — the precision a fixed 4-decimal-place rounding rule removed, recovered by recomputing Σ weight × basket_cost from this print's own published figures. It is not a claim that the recomputed figure is this print's true economic value. This print's own basket_costs are also affected by the reasoning-token and/or cached-input pricing correction disclosed elsewhere in these notes — usage that was under-priced before that fix landed — so the recomputed rounding figure is the unrounded version of a value already known to need that separate correction too, which this recomputation does not make. See docs/methodology.md's Rounding section for the general statement of this limit."
+    },
+    {
+      "published_at": "2026-09-26",
+      "note": "Registry composition note, added retroactively while investigating why verify (packages/print) failed against every print from 2026-08-18 through 2026-08-29: llama-3.3-70b-cloudflare and llama-3.3-70b-novita — both registered but consistently excluded (\"no run records for this class\") in every one of those seven earlier prints — are absent from this print onward, having been removed from the registry between 2026-08-29 and this print. This predates computeConstituentChanges (packages/print/src/publish.ts), the mechanism that now discloses a registry removal automatically on the next print; no such disclosure exists for this one because the mechanism did not yet exist when it happened. Not a computation error on either side: each of those seven earlier prints correctly reflects the registry as it stood at the time, and this print correctly reflects the registry as it now stands — a real, benign registry change, disclosed here only because it was never disclosed at the time."
     }
   ]
 }

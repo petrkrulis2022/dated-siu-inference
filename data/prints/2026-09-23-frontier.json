@@ -155,6 +155,10 @@
     {
       "published_at": "2026-09-25",
       "note": "This print was published under the belief that cached-input pricing (rules-2026-09-13, commit 29d4be2) was already live — docs/methodology.md stated this as fact. It was not: buildModelInputs never forwarded a price snapshot's price_cached_in_usd_per_1m to the cost formula, for any model, from any source, until this was found and fixed live 2026-09-25 (commit 327d7b9, docs/methodology.md's rules-2026-09-25b). For this print specifically, real nonzero cached_input usage on gemini-3.1-pro-preview, grok-4.6 — already present in this print's own run records — was still priced at zero in this print's own signed cost_of_production_usd and basket_costs, contrary to what the methodology this print's date falls under claimed. This print's signed body is never edited. The exact, per-model corrected dollar figure is not computed here — that quantified backfill is separate, deferred follow-up work; this note discloses the structural fact, not yet the number."
+    },
+    {
+      "published_at": "2026-09-26",
+      "note": "Quantified follow-up to this print's own cached-input-pricing correction note above (the \"separate, deferred follow-up work\" that note left open). Corrected figures, computed from this print's own real run records and price snapshot with the fix applied (commit 327d7b9), not from new data: this print's dated_siu was originally reported as $0.0171; the corrected figure is $0.0173. gemini-3.1-pro-preview's own basket cost was originally reported as $0.040273; the corrected figure is $0.041255. grok-4.6's own basket cost was originally reported as $0.016970; the corrected figure is $0.017216. This print itself is not recomputed or replaced — the original stands, per the revision policy's unconditional never-edit guarantee. These are also now the exact figures packages/print's own verify command (recomputing under this print's own historical rounding rule, and from the same run records the blended Dated SIU print for this date uses, filtered to this series' own registered models) reports."
     }
   ]
 }
