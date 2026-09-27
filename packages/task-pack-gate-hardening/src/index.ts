@@ -23,6 +23,10 @@ export type {
  * full G1-G5 pipeline" test already proves works end to end. */
 export {
   COMMERCIAL_INTENT as CODE_COMMERCIAL_INTENT,
+  // The seeded bug and its correct counterpart, exported for the P5 adversary path's own tests:
+  // a false accept is only demonstrable against a submission whose wrongness is already known.
+  BUGGY_SOURCE,
+  KNOWN_GOOD_SOURCE,
   CODE_REFERENCE,
   CODE_KNOWN_GOOD,
   CODE_GATE_1_TRIVIAL,
@@ -59,3 +63,11 @@ export {
  * (no-model) scenarios. */
 export { CODE_GATE_HARDENING_PACK, EXTRACT_GATE_HARDENING_PACK } from "./pack.js";
 export type { GateHardeningReference } from "./pack.js";
+
+/** WP-7 P5's adversary path: the independent oracle an agent-authored attack is scored against,
+ * and the gate-verdict-crossed-with-oracle-verdict scoring rule. See code-oracle.ts's own doc
+ * comment for why an attack can never be scored on the gate's verdict alone. */
+export { runCodeOracle, buildOracleTrials, referenceDedupeSorted } from "./oracle/code-oracle.js";
+export type { OracleOutcome, OracleTrial, OracleMismatch, CodeOracleOptions } from "./oracle/code-oracle.js";
+export { scoreAttack } from "./oracle/attack-scoring.js";
+export type { AttackScore, AttackClassification } from "./oracle/attack-scoring.js";

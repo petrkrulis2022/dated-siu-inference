@@ -207,6 +207,8 @@ TO SUBMIT YOUR GATE, respond with exactly:
         erc8004Id: erc8004IdFor(process.env.ORCHESTRATOR_ADDRESS ?? ""),
         rpcUrl: process.env.BASE_SEPOLIA_RPC_URL ?? "",
         maxOutputTokens: MAX_OUTPUT_TOKENS,
+        temperature: 0,
+        provider: "openai", // same literal this file already constructs its adapter with, line 77
       },
     ],
     job,

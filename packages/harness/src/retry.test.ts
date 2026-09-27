@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { AdapterHttpError } from "./adapters/types.js";
-import { classifyFailure, isRetryableError, withBackoff } from "./retry.js";
+import { classifyFailure, isPolicyRefusalStopReason, isRetryableError, withBackoff } from "./retry.js";
 
 describe("isRetryableError", () => {
   it("treats 429 and 5xx as retryable", () => {
@@ -114,5 +114,45 @@ describe("withBackoff", () => {
     });
     await expect(withBackoff(fn, fastOpts)).rejects.toThrow(/bad api key/);
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("policy refusals", () => {
+  it("classifies an OpenAI-shaped content_policy_violation as policy_refusal, not auth_or_bad_request", () => {
+    const err = new AdapterHttpError("request failed: 400", 400, {
+      error: { code: "content_policy_violation", message: "Your request was rejected." },
+    });
+    expect(classifyFailure(err)).toBe("policy_refusal");
+  });
+
+  it("classifies a Google-shaped PROHIBITED_CONTENT block as policy_refusal", () => {
+    const err = new AdapterHttpError("request failed: 400", 400, {
+      promptFeedback: { blockReason: "PROHIBITED_CONTENT" },
+    });
+    expect(classifyFailure(err)).toBe("policy_refusal");
+  });
+
+  it("never retries a refusal — the identical request is refused identically, at full cost", () => {
+    const err = new AdapterHttpError("request failed: 400", 400, {
+      error: { code: "content_policy_violation" },
+    });
+    expect(isRetryableError(err)).toBe(false);
+  });
+
+  it("leaves an ordinary bad request classified as auth_or_bad_request", () => {
+    const err = new AdapterHttpError("request failed: 400", 400, { error: "max_tokens too large" });
+    expect(classifyFailure(err)).toBe("auth_or_bad_request");
+  });
+
+  it("recognises the refusal stop reasons that arrive on a successful response", () => {
+    for (const reason of ["refusal", "content_filter", "SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST"]) {
+      expect(isPolicyRefusalStopReason(reason)).toBe(true);
+    }
+  });
+
+  it("does not mistake an ordinary stop reason for a refusal", () => {
+    for (const reason of ["end_turn", "stop", "max_tokens", "STOP", "tool_use", undefined]) {
+      expect(isPolicyRefusalStopReason(reason)).toBe(false);
+    }
   });
 });

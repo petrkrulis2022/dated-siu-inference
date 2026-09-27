@@ -68,6 +68,9 @@ AS ADVERSARY (the other class)
 WHAT YOU CAN DO
   issue_quote(task_spec, class, quantity_siu, accepted_settlement[])
   deliver(quote_id, artefacts)
+  submit_attack(submissionSource)   as adversary: test one candidate submission
+    against the delivered gate. It counts only when the gate accepts something an
+    independent oracle rejects — a correct submission scores nothing.
   pay(requestId, settler)   pays the real, signed quote answering your own request — you may subcontract
   redeem_claim(claim_id, task_spec)
   get_balances()  get_print(class)
@@ -82,7 +85,7 @@ YOUR GOAL
 
   it("declares its real tool grant (deliver mapped to submit_job — see tools.yaml's own comment)", () => {
     const skill = loadSkill("quote-and-deliver");
-    expect(skill.allowedTools).toEqual(["issue_quote", "submit_job", "pay", "redeem_claim", "get_balances", "get_print"]);
+    expect(skill.allowedTools).toEqual(["issue_quote", "submit_attack", "submit_job", "pay", "redeem_claim", "get_balances", "get_print"]);
   });
 });
 

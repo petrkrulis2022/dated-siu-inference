@@ -34,6 +34,8 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
     "serve_redemption(tokenId, agentId, quantity, passed, receiptRef) -> issuer-only: reports a redemption's real outcome once you see PENDING REDEMPTION ROUTED TO YOU (agentId names the holder; a literal holder address also works)",
   submit_job:
     "submit_job(taskClass, originalGate, hardenedGate, referenceInstance, knownGoodSubmission, adversarialSubmissions, heldOutInstances) -> runs the real G1-G6 checks",
+  submit_attack:
+    'submit_attack(submissionSource) -> runs your candidate answer.mjs against the delivered gate AND against an independent oracle, and reports which of the two accepted it. Supply only the module source as a JSON string; the gate being tested, the reference files and the oracle seed are supplied for you. A result counts for you ONLY when the gate accepts a submission the oracle rejects (classification "false_accept"). A correct submission both accept scores nothing, and breaking the oracle scores nothing.',
   get_balances:
     "get_balances(account, tokenIds?) -> real USDC balance (decimal and integer minor-unit forms) plus claim balances",
   get_print: "get_print(printId) -> the real print body plus whether it's final",

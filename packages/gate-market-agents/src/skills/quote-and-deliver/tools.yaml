@@ -3,8 +3,15 @@
 # distinct `deliver` tool exists in tools/index.ts today — delivering hardened-gate work is done
 # by submitting it for grading, so this maps to the real `submit_job` tool. Not a silent guess:
 # recorded here so a future reader can see the decision rather than infer it.
+#
+# submit_attack added 2026-09-27 (WP-7, P5): this skill has always described an adversary role in
+# prose ("produce submissions that PASS the candidate gate while violating the stated commercial
+# intent"), and §3.1 has always scored a worker on adversarial yield — but no tool existed to do
+# it, so a gate only ever faced the fixed submissions shipped in the task pack. Adding the real
+# action, not rewriting the role.
 tools:
   - issue_quote
+  - submit_attack
   - submit_job
   - pay
   - redeem_claim

@@ -442,6 +442,74 @@ describe("buildToolArgs", () => {
     expect(recovered.toLowerCase()).toBe(privateKeyToAccount(PUBLISHER_PK).address.toLowerCase());
   });
 
+  function attackCtx(versions: number, attacked: number[] = []) {
+    return {
+      gateVersions: Array.from({ length: versions }, (_, i) => ({
+        version: i + 1,
+        source: `gate source v${i + 1}`,
+        submittedBy: "WORKER-CODE" as const,
+        turn: i + 1,
+      })),
+      attackedVersions: new Set(attacked),
+      oracleSeed: 4242,
+    };
+  }
+
+  it("submit_attack: splices the newest delivered gate, the reference files and the oracle seed", async () => {
+    const args = (await buildToolArgs(
+      "submit_attack",
+      { submissionSource: "export function dedupeSorted(a) { return a; }" },
+      baseCtx({ attackContext: attackCtx(2) }),
+    )) as { targetGateSource: string; gateVersion: number; oracleSeed: number; referenceFiles: Record<string, string>; taskClass: string };
+
+    // Newest, not first: an adversary able to pick an older version would score hits the live
+    // gate no longer allows.
+    expect(args.targetGateSource).toBe("gate source v2");
+    expect(args.gateVersion).toBe(2);
+    expect(args.oracleSeed).toBe(4242);
+    expect(args.taskClass).toBe(JOB.taskClass); // follows the job, never a hardcoded class
+    expect(args.referenceFiles).toEqual(JOB.referenceInstance.files);
+  });
+
+  it("submit_attack: refuses before any gate has been delivered", async () => {
+    await expect(
+      buildToolArgs("submit_attack", { submissionSource: "x" }, baseCtx({ attackContext: attackCtx(0) })),
+    ).rejects.toThrow(/no gate has been delivered/);
+  });
+
+  it("submit_attack: refuses an empty submission rather than testing nothing", async () => {
+    await expect(
+      buildToolArgs("submit_attack", { submissionSource: "   " }, baseCtx({ attackContext: attackCtx(1) })),
+    ).rejects.toThrow(/non-empty string/);
+  });
+
+  it("submit_attack: enforces the 3-round cap on a fourth, previously-untested gate version", async () => {
+    await expect(
+      buildToolArgs(
+        "submit_attack",
+        { submissionSource: "x" },
+        baseCtx({ attackContext: attackCtx(4, [1, 2, 3]) }),
+      ),
+    ).rejects.toThrow(/3-round cap is reached/);
+  });
+
+  it("submit_attack: still allows further attacks on a version already being tested", async () => {
+    // The cap counts rounds — distinct gate versions tested — not individual submissions, so an
+    // adversary is not limited to one idea per revision.
+    const args = (await buildToolArgs(
+      "submit_attack",
+      { submissionSource: "export function dedupeSorted(a) { return a; }" },
+      baseCtx({ attackContext: attackCtx(3, [1, 2, 3]) }),
+    )) as { gateVersion: number };
+    expect(args.gateVersion).toBe(3);
+  });
+
+  it("submit_attack: refuses when the window has no attack context at all", async () => {
+    await expect(
+      buildToolArgs("submit_attack", { submissionSource: "x" }, baseCtx()),
+    ).rejects.toThrow(/no attack context/);
+  });
+
   it("mint_claim: refuses when this window has no mintContext at all", async () => {
     await expect(buildToolArgs("mint_claim", { quantity: "500" }, baseCtx())).rejects.toThrow(
       /no mintContext/,

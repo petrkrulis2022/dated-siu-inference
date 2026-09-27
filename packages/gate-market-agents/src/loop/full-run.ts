@@ -1,6 +1,6 @@
 import { keccak256, stringToBytes, type Hex } from "viem";
 import { ZodError } from "zod";
-import type { Adapter, AdapterParams } from "@touchstone/harness";
+import { classifyFailure, isPolicyRefusalStopReason, type Adapter, type AdapterParams, type FailureCategory } from "@touchstone/harness";
 import type { QuoteBody, TouchstoneQuote } from "@touchstone/sdk";
 import type {
   GateHardeningJobInputs,
@@ -26,6 +26,7 @@ import type { RunnerDeps } from "../deps.js";
 import type { AgentId } from "../identity/resolve.js";
 import { ContextValidationError, validateAgentContext } from "../pack/validate.js";
 import type { ToolName } from "../tools/index.js";
+import type { AttackToolResult } from "../tools/submit-attack.js";
 import { RunRecorder, type RunManifest } from "../run-recorder/recorder.js";
 import { FrictionLogWriter, type FrictionLogEntry } from "../friction/log.js";
 import { QuoteBoard } from "./quote-board.js";
@@ -68,6 +69,15 @@ export interface RosterAgentConfig {
   erc8004Id: string;
   rpcUrl: string;
   maxOutputTokens: number;
+  /** Deciding agents (ORCHESTRATOR, the workers, HEDGER) run at 0.7 so five F1 runs are genuinely
+   * distinct attempts rather than near-copies of one another; issuers stay at 0, where variation
+   * is noise rather than the thing being measured. Per-agent rather than per-run because those
+   * two roles want opposite things from the same loop. */
+  temperature: number;
+  /** The real provider this agent's model is served by (`data/registry/models.json`'s own
+   * `provider`) — carried here so the run can report spend per provider, which is what shows
+   * whether a run drew down an account the daily print also depends on. */
+  provider: string;
 }
 
 /** Real, real-key-signed context for a `mint_claim` splice (see `buildToolArgs`) — absent when a
@@ -127,7 +137,27 @@ export interface FullRunWindowOptions {
   /** Present only for a window whose roster can actually mint (an agent with `mint_claim` in its
    * tool grant) — see `MintContext`'s own doc comment. */
   mintContext?: MintContext;
+  /** Seed for the independent oracle's trial set (see task-pack-gate-hardening's code-oracle).
+   * Optional so existing callers are unaffected; a real run passes its own recorded per-run seed
+   * so the exact trials an attack was scored against are reproducible from the manifest. */
+  oracleSeed?: number;
   onTurn?: (agentId: AgentId, log: TurnLog) => void;
+}
+
+export interface AttackRecord {
+  attacker: AgentId;
+  turn: number;
+  gateVersion: number;
+  oracleSeed: number;
+  classification: string;
+  reason: string;
+  countsAsAdversaryYield: boolean;
+  countsAsGateOverRejection: boolean;
+  gateAccepted?: boolean;
+  oracleAccepted?: boolean;
+  /** The attacking submission itself, kept verbatim: a false-accept finding is worth nothing if
+   * the submission that produced it isn't reproducible. */
+  submissionSource: string;
 }
 
 export interface TurnLog {
@@ -152,14 +182,31 @@ export interface TurnLog {
   stopReason?: string;
   usage?: { input: number; output: number; cached_input: number; reasoning: number };
   contentBlockTypes?: string[];
+  /** Set exactly when this turn ended because the provider failed or declined the call, rather
+   * than because of anything the model produced — see the adapter-call guard in the loop. */
+  providerFailure?: { category: FailureCategory; message: string };
+  /** Set exactly on a turn that ran `submit_attack`. */
+  attack?: { gateVersion: number; classification: string; countsAsAdversaryYield: boolean };
 }
 
 export interface FullRunWindowResult {
   passed: boolean;
   passedBy?: AgentId;
   totalRealizedUsd: string;
+  /** Real inference spend this run, per provider — decimal-string USD. Lands in metrics.json via
+   * `recorder.finalizeMetrics(result)`. A single aggregate can't answer the question that
+   * matters operationally: which provider accounts this run drew on, including the ones the
+   * daily print series also runs through. */
+  spendByProvider: Record<string, string>;
+  /** Every agent-authored attack against a delivered gate, in order — the evidence behind both
+   * "adversarial yield" (spec §3.1) and the gate's own measured false-accept rate, which is the
+   * artefact §1.3 says the project keeps whether or not fSIU is ever built. */
+  attacks: AttackRecord[];
+  /** Each gate the builder delivered, in order — an attack names the version it was aimed at, so
+   * a revision that closed a hole is visible as such rather than inferred from ordering. */
+  gateVersions: { version: number; submittedBy: string; turn: number }[];
   turnsByAgent: Record<string, number>;
-  haltedReason?: Record<string, "ceiling" | "parse_error" | "max_turns" | "validation_failed" | "voluntary_stop" | "experiment_halt">;
+  haltedReason?: Record<string, "ceiling" | "parse_error" | "max_turns" | "validation_failed" | "voluntary_stop" | "experiment_halt" | "policy_refusal" | "adapter_error">;
   turnLogsByAgent: Record<string, TurnLog[]>;
 }
 
@@ -283,6 +330,13 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
   const haltedReason: FullRunWindowResult["haltedReason"] = {};
   const turnLogsByAgent: Record<string, TurnLog[]> = {};
   let totalRealizedUsd = 0;
+  const realizedUsdByProvider: Record<string, number> = {};
+  const attacks: AttackRecord[] = [];
+  const attackContext: AttackContext = {
+    gateVersions: [],
+    attackedVersions: new Set<number>(),
+    oracleSeed: options.oracleSeed ?? 1,
+  };
   let passed = false;
   let passedBy: AgentId | undefined;
 
@@ -355,10 +409,69 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
 
     turnsByAgent[agent.agentId] = turn;
 
-    const adapterParams: AdapterParams = { temperature: 0, max_tokens: agent.maxOutputTokens };
-    const adapterResult = await agent.adapter(agent.modelString, prompt, adapterParams);
+    const adapterParams: AdapterParams = {
+      temperature: agent.temperature,
+      max_tokens: agent.maxOutputTokens,
+    };
+
+    // The adapter call was previously unguarded: a provider error took down the whole run, and a
+    // refusal that came back as a successful-but-empty response fell through to the parser and was
+    // recorded as the model failing to produce valid JSON. Both misread an environmental fact as
+    // agent behaviour, which for this roster — whose prompts legitimately discuss probing a
+    // grader — is exactly the wrong attribution. Errors now halt only the agent they happened to,
+    // classified, with a policy refusal distinguished from everything else.
+    let adapterResult;
+    try {
+      adapterResult = await agent.adapter(agent.modelString, prompt, adapterParams);
+    } catch (err) {
+      const category = classifyFailure(err);
+      const message = err instanceof Error ? err.message : String(err);
+      const log: TurnLog = {
+        turn, promptChars: prompt.length, projectedUsd, realizedUsd: "0",
+        marketBoardText: marketBoardText || undefined, latencyMs: 0,
+        parsed: `${category}: ${message}`,
+        providerFailure: { category, message },
+      };
+      turnLogsByAgent[agent.agentId].push(log);
+      options.onTurn?.(agent.agentId, log);
+      haltedReason[agent.agentId] = category === "policy_refusal" ? "policy_refusal" : "adapter_error";
+      activeAgents.delete(agent.agentId);
+      await friction.append(
+        buildFrictionEntry(agent.agentId, turn, options.job.jobId, undefined, null, {
+          attempted: "model call",
+          outcome: `provider ${category}: ${message}`,
+        }),
+      );
+      continue;
+    }
+
     const realizedUsd = realizedTurnCostUsd(adapterResult.usage.input, adapterResult.usage.output, agent.prices);
     totalRealizedUsd += Number(realizedUsd);
+    realizedUsdByProvider[agent.provider] = (realizedUsdByProvider[agent.provider] ?? 0) + Number(realizedUsd);
+
+    // A refusal that arrives on a 200 — the commoner shape, reported via the provider's own stop
+    // reason. Caught before parsing, so it is never recorded as unparseable output.
+    if (isPolicyRefusalStopReason(adapterResult.stopReason)) {
+      const log: TurnLog = {
+        turn, promptChars: prompt.length, projectedUsd, realizedUsd,
+        marketBoardText: marketBoardText || undefined, latencyMs: adapterResult.latency_ms,
+        stopReason: adapterResult.stopReason, usage: adapterResult.usage,
+        contentBlockTypes: adapterResult.contentBlockTypes,
+        parsed: `policy_refusal: provider returned stop reason "${adapterResult.stopReason}"`,
+        providerFailure: { category: "policy_refusal", message: `stop reason "${adapterResult.stopReason}"` },
+      };
+      turnLogsByAgent[agent.agentId].push(log);
+      options.onTurn?.(agent.agentId, log);
+      haltedReason[agent.agentId] = "policy_refusal";
+      activeAgents.delete(agent.agentId);
+      await friction.append(
+        buildFrictionEntry(agent.agentId, turn, options.job.jobId, undefined, null, {
+          attempted: "model call",
+          outcome: `provider policy_refusal (stop reason "${adapterResult.stopReason}")`,
+        }),
+      );
+      continue;
+    }
 
     let intent;
     try {
@@ -405,6 +518,7 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
         windowFrom,
         windowTo,
         mintContext: options.mintContext,
+        attackContext,
       });
     } catch (err) {
       // A real, disclosed failure (an unknown requestId, a missing address) — not a crash. The
@@ -475,6 +589,38 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
         quarantined = !gateResultsMatch(record.result as GateHardeningResult, secondOpinion);
       }
 
+      // Every delivered gate becomes an attackable version, whether or not it passed G1-G6: a
+      // gate that passes the pack's own fixtures is exactly the one worth testing against a
+      // submission an agent actually wrote.
+      if (intent.tool === "submit_job") {
+        const submitted = (args as GateHardeningJobInputs).hardenedGate.source;
+        attackContext.gateVersions.push({
+          version: attackContext.gateVersions.length + 1,
+          source: submitted,
+          submittedBy: agent.agentId,
+          turn,
+        });
+      }
+
+      let attackOutcome: AttackToolResult | undefined;
+      if (intent.tool === "submit_attack") {
+        attackOutcome = record.result as AttackToolResult;
+        attackContext.attackedVersions.add(attackOutcome.gateVersion);
+        attacks.push({
+          attacker: agent.agentId,
+          turn,
+          gateVersion: attackOutcome.gateVersion,
+          oracleSeed: attackOutcome.oracleSeed,
+          classification: attackOutcome.classification,
+          reason: attackOutcome.reason,
+          countsAsAdversaryYield: attackOutcome.countsAsAdversaryYield,
+          countsAsGateOverRejection: attackOutcome.countsAsGateOverRejection,
+          gateAccepted: attackOutcome.gate.accept,
+          oracleAccepted: attackOutcome.oracle.accept,
+          submissionSource: (args as { submissionSource: string }).submissionSource,
+        });
+      }
+
       const gateResult = intent.tool === "submit_job" && !quarantined
         ? (record.result as GateHardeningResult)
         : undefined;
@@ -501,6 +647,13 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       };
       if (gateResult) {
         log.gateResult = { passed: gateResult.passed, summary: summarizeGateResult(gateResult) };
+      }
+      if (attackOutcome) {
+        log.attack = {
+          gateVersion: attackOutcome.gateVersion,
+          classification: attackOutcome.classification,
+          countsAsAdversaryYield: attackOutcome.countsAsAdversaryYield,
+        };
       }
       turnLogsByAgent[agent.agentId].push(log);
       options.onTurn?.(agent.agentId, log);
@@ -558,6 +711,17 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
     passed,
     passedBy,
     totalRealizedUsd: totalRealizedUsd.toFixed(6),
+    attacks,
+    gateVersions: attackContext.gateVersions.map(({ version, submittedBy, turn: t }) => ({
+      version,
+      submittedBy,
+      turn: t,
+    })),
+    spendByProvider: Object.fromEntries(
+      Object.entries(realizedUsdByProvider)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([provider, usd]) => [provider, usd.toFixed(6)]),
+    ),
     turnsByAgent,
     haltedReason,
     turnLogsByAgent,
@@ -572,14 +736,15 @@ function buildFrictionEntry(
   jobId: string,
   report: FrictionReport | undefined,
   timeToExpirySeconds: number | null,
+  overrides?: { attempted?: string; outcome?: string },
 ): FrictionLogEntry {
   const merged = { ...DEFAULT_FRICTION, ...report };
   return {
     agent: agentId,
     turn,
     job_id: jobId,
-    attempted: "turn taken",
-    outcome: "recorded",
+    attempted: overrides?.attempted ?? "turn taken",
+    outcome: overrides?.outcome ?? "recorded",
     could_not_express: merged.could_not_express,
     forced_conversion: merged.forced_conversion,
     conversion_reason: merged.conversion_reason,
@@ -597,6 +762,26 @@ export interface BuildToolArgsContext {
   windowFrom: bigint;
   windowTo: bigint;
   mintContext?: MintContext;
+  /** Live, mutated by the loop as gates are delivered and attacked — see `submit_attack`'s case
+   * below for why an adversary may choose neither its own target nor its own oracle seed. */
+  attackContext?: AttackContext;
+}
+
+/** Gate v1 -> attacks -> the builder may revise -> attacks again. Capped so an adaptive exchange
+ * cannot spend the whole run's budget on itself. */
+export const MAX_ATTACK_ROUNDS = 3;
+
+export interface DeliveredGate {
+  version: number;
+  source: string;
+  submittedBy: AgentId;
+  turn: number;
+}
+
+export interface AttackContext {
+  gateVersions: DeliveredGate[];
+  attackedVersions: Set<number>;
+  oracleSeed: number;
 }
 
 /** The real class ids `WorkClaim`/`CapacityBond` already use — `keccak256(bytes(taskClass))`,
@@ -670,6 +855,38 @@ export async function buildToolArgs(tool: ToolName, rawArgs: unknown, ctx: Build
       nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu.toString(),
       validUntil: validUntil.toString(),
       signature,
+    };
+  }
+
+  if (tool === "submit_attack") {
+    const attackCtx = ctx.attackContext;
+    if (!attackCtx) {
+      throw new Error("submit_attack: this window has no attack context — no agent should have this tool.");
+    }
+    const source = (rawArgs as { submissionSource?: unknown } | undefined)?.submissionSource;
+    if (typeof source !== "string" || source.trim() === "") {
+      throw new Error(
+        'submit_attack: expected a non-empty string "submissionSource" — the full answer.mjs module source, as a JSON string.',
+      );
+    }
+    // Always the newest delivered gate: an adversary able to pick an older, already-defeated
+    // version would score hits the live gate no longer allows.
+    const latest = attackCtx.gateVersions.at(-1);
+    if (!latest) {
+      throw new Error("submit_attack: no gate has been delivered yet — there is nothing to test yet.");
+    }
+    if (!attackCtx.attackedVersions.has(latest.version) && attackCtx.attackedVersions.size >= MAX_ATTACK_ROUNDS) {
+      throw new Error(
+        `submit_attack: the ${MAX_ATTACK_ROUNDS}-round cap is reached (versions already tested: ${[...attackCtx.attackedVersions].join(", ")}). No further rounds this window.`,
+      );
+    }
+    return {
+      submissionSource: source,
+      targetGateSource: latest.source,
+      taskClass: ctx.job.taskClass,
+      referenceFiles: ctx.job.referenceInstance.files,
+      oracleSeed: attackCtx.oracleSeed,
+      gateVersion: latest.version,
     };
   }
 

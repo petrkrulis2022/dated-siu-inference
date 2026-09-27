@@ -22,12 +22,49 @@ function isBillingExhaustionBody(status: number, body: unknown): boolean {
   return /credit balance is too low|insufficient_quota|insufficient credits/i.test(text);
 }
 
+/**
+ * Detects a provider declining a request under its own usage policy, as opposed to the request
+ * being malformed, unauthorised, or over a limit. Added 2026-09-27 for the Gate Market agents,
+ * whose prompts legitimately discuss probing and defeating a grader: a refusal there is an
+ * environmental fact about that turn, not a statement about how the agent behaves, and folding it
+ * into `auth_or_bad_request` would silently misattribute it as one.
+ *
+ * Matched on each provider's own documented marker for this condition — OpenAI's
+ * `content_policy_violation` code, Anthropic's content-filtering message, Google's
+ * `PROHIBITED_CONTENT`/`SAFETY` block reasons. None of these has yet been caught live from a real
+ * Touchstone run, so unlike the Anthropic billing substring above they are convention-based; the
+ * first real occurrence will confirm or correct them, and `policyRefusalStopReason` below covers
+ * the commoner shape where a refusal arrives as a successful response rather than an error.
+ */
+function isPolicyRefusalBody(body: unknown): boolean {
+  const text = typeof body === "string" ? body : JSON.stringify(body ?? "");
+  return /content_policy_violation|content filtering policy|PROHIBITED_CONTENT|blocked by .{0,24}safety|safety_?(?:violation|blocked)/i.test(
+    text,
+  );
+}
+
+/** Real refusal markers that arrive on an otherwise-successful response — the commoner shape by
+ * far, and the one that previously read as "the model returned nothing parseable". Anthropic
+ * reports `refusal` as a stop reason; Google reports `SAFETY`/`PROHIBITED_CONTENT`/`BLOCKLIST` as
+ * a finish reason; OpenAI-shaped APIs report `content_filter`. Callers pass
+ * `AdapterResult.stopReason`, which every real adapter already populates from the provider's own
+ * field rather than inferring it. */
+export function isPolicyRefusalStopReason(stopReason: string | undefined): boolean {
+  if (!stopReason) return false;
+  return /^(refusal|content_filter|SAFETY|PROHIBITED_CONTENT|BLOCKLIST|IMAGE_SAFETY)$/i.test(
+    stopReason.trim(),
+  );
+}
+
 /** 429 and 5xx are retryable per build1-spec.md §4; other HTTP errors (bad key, bad request) are
  * not — nor is a billing-exhaustion rejection, even one that happens to arrive on a 429: no
  * amount of retrying restores a balance that is actually zero. */
 export function isRetryableError(err: unknown): boolean {
   if (err instanceof AdapterHttpError) {
     if (isBillingExhaustionBody(err.status, err.body)) return false;
+    // A policy refusal is a decision about this request's content, not a transient condition —
+    // the identical request retried is refused identically, at full cost each time.
+    if (isPolicyRefusalBody(err.body)) return false;
     return err.status === 429 || err.status >= 500;
   }
   // A raw network failure (DNS, connection reset, timeout) — fetch() throws a plain
@@ -45,6 +82,12 @@ export function isRetryableError(err: unknown): boolean {
  * exhaustive diagnosis (the full message is kept alongside this, see InstanceOutcome.infraFailure)
  * — just enough structure to group and count without re-reading every message by eye.
  *
+ * "policy_refusal" is likewise its own category: a provider declining a request under its usage
+ * policy says something about that request's content, not about the caller's credentials or the
+ * request's shape. Folding it into auth_or_bad_request would report a refused turn as a
+ * malformed one — and for the Gate Market agents, whose prompts legitimately discuss probing a
+ * grader, would misattribute an environmental fact as the agent's own behaviour.
+ *
  * "billing_exhausted" is deliberately its own category, not folded into auth_or_bad_request or
  * rate_limit: it is neither a request-shape problem nor a transient rate condition, and grouping
  * it with either would make a print's own infra-failure summary read as "a provider rejected bad
@@ -59,11 +102,13 @@ export type FailureCategory =
   | "auth_or_bad_request"
   | "malformed_response"
   | "billing_exhausted"
+  | "policy_refusal"
   | "unknown";
 
 export function classifyFailure(err: unknown): FailureCategory {
   if (err instanceof AdapterHttpError) {
     if (isBillingExhaustionBody(err.status, err.body)) return "billing_exhausted";
+    if (isPolicyRefusalBody(err.body)) return "policy_refusal";
     if (err.status === 429) return "rate_limit";
     if (err.status >= 500) return "server_error";
     return "auth_or_bad_request"; // 4xx other than 429: bad key, bad request, not found, etc.
