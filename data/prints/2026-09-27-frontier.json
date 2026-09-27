@@ -1,25 +1,9 @@
 {
   "version": "SIU-2026a",
-  "print_id": "2026-09-27",
+  "print_id": "2026-09-27-frontier",
   "date": "2026-09-27",
   "status": "provisional",
   "basket_costs": [
-    {
-      "model_id": "deepseek-v3.2",
-      "cost_usd": "0.001835"
-    },
-    {
-      "model_id": "llama-3.3-70b-deepinfra",
-      "cost_usd": "0.000710"
-    },
-    {
-      "model_id": "mistral-small-3.2-24b-instruct",
-      "cost_usd": "0.000662"
-    },
-    {
-      "model_id": "qwen-2.5-72b-instruct",
-      "cost_usd": "0.002524"
-    },
     {
       "model_id": "claude-sonnet-5",
       "cost_usd": "0.023441"
@@ -49,120 +33,76 @@
     "source": "equal",
     "values": [
       {
-        "model_id": "deepseek-v3.2",
-        "weight": "0.100000"
-      },
-      {
-        "model_id": "llama-3.3-70b-deepinfra",
-        "weight": "0.100000"
-      },
-      {
-        "model_id": "mistral-small-3.2-24b-instruct",
-        "weight": "0.100000"
-      },
-      {
-        "model_id": "qwen-2.5-72b-instruct",
-        "weight": "0.100000"
-      },
-      {
         "model_id": "claude-sonnet-5",
-        "weight": "0.100000"
+        "weight": "0.166667"
       },
       {
         "model_id": "gpt-5.1",
-        "weight": "0.100000"
+        "weight": "0.166667"
       },
       {
         "model_id": "gemini-3.1-pro-preview",
-        "weight": "0.100000"
+        "weight": "0.166667"
       },
       {
         "model_id": "grok-4.6",
-        "weight": "0.100000"
+        "weight": "0.166667"
       },
       {
         "model_id": "claude-haiku-4-5",
-        "weight": "0.100000"
+        "weight": "0.166667"
       },
       {
         "model_id": "gpt-5.4-mini",
-        "weight": "0.100000"
+        "weight": "0.166667"
       }
     ]
   },
-  "dated_siu": "0.01100",
+  "dated_siu": "0.01738",
   "exchange_rate_table": [
-    {
-      "model_id": "deepseek-v3.2",
-      "usd_per_siu": "0.0018",
-      "spread_to_index": "-0.8331",
-      "siu_per_usd": "544.8"
-    },
-    {
-      "model_id": "llama-3.3-70b-deepinfra",
-      "usd_per_siu": "0.0007",
-      "spread_to_index": "-0.9354",
-      "siu_per_usd": "1407.8"
-    },
-    {
-      "model_id": "mistral-small-3.2-24b-instruct",
-      "usd_per_siu": "0.0007",
-      "spread_to_index": "-0.9398",
-      "siu_per_usd": "1510.7"
-    },
-    {
-      "model_id": "qwen-2.5-72b-instruct",
-      "usd_per_siu": "0.0025",
-      "spread_to_index": "-0.7705",
-      "siu_per_usd": "396.2"
-    },
     {
       "model_id": "claude-sonnet-5",
       "usd_per_siu": "0.0234",
-      "spread_to_index": "1.1312",
+      "spread_to_index": "0.3490",
       "siu_per_usd": "42.6"
     },
     {
       "model_id": "gpt-5.1",
       "usd_per_siu": "0.0091",
-      "spread_to_index": "-0.1702",
+      "spread_to_index": "-0.4748",
       "siu_per_usd": "109.5"
     },
     {
       "model_id": "gemini-3.1-pro-preview",
       "usd_per_siu": "0.0412",
-      "spread_to_index": "2.7491",
+      "spread_to_index": "1.3731",
       "siu_per_usd": "24.2"
     },
     {
       "model_id": "grok-4.6",
       "usd_per_siu": "0.0174",
-      "spread_to_index": "0.5864",
+      "spread_to_index": "0.0042",
       "siu_per_usd": "57.3"
     },
     {
       "model_id": "claude-haiku-4-5",
       "usd_per_siu": "0.0077",
-      "spread_to_index": "-0.2997",
+      "spread_to_index": "-0.5567",
       "siu_per_usd": "129.8"
     },
     {
       "model_id": "gpt-5.4-mini",
       "usd_per_siu": "0.0053",
-      "spread_to_index": "-0.5178",
+      "spread_to_index": "-0.6948",
       "siu_per_usd": "188.5"
     }
   ],
   "sensitivity_block": [
     {
       "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
-      "dated_siu": "0.007975",
-      "delta": "-0.2749",
+      "dated_siu": "0.01265",
+      "delta": "-0.2719",
       "applies_to": [
-        "deepseek-v3.2",
-        "llama-3.3-70b-deepinfra",
-        "mistral-small-3.2-24b-instruct",
-        "qwen-2.5-72b-instruct",
         "claude-sonnet-5",
         "gpt-5.1",
         "gemini-3.1-pro-preview",
@@ -173,13 +113,9 @@
     },
     {
       "policy_variant": "batch-discount: 50% off input and output",
-      "dated_siu": "0.005561",
-      "delta": "-0.4944",
+      "dated_siu": "0.008789",
+      "delta": "-0.4942",
       "applies_to": [
-        "deepseek-v3.2",
-        "llama-3.3-70b-deepinfra",
-        "mistral-small-3.2-24b-instruct",
-        "qwen-2.5-72b-instruct",
         "claude-sonnet-5",
         "gpt-5.1",
         "gemini-3.1-pro-preview",
@@ -199,16 +135,17 @@
     "siu_per_usd_mode": "ROUND_DOWN",
     "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. dated_siu rounds to significant figures, not a fixed decimal-place count, so its precision scales with the price rather than being lost as it falls (found live, 2026-09-25 — see docs/methodology.md's Rounding section). basket_cost carries more decimal places than dated_siu needs at any price level so the published print stays reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
   },
-  "cost_of_production_usd": "1.7671",
+  "cost_of_production_usd": "1.6742",
   "price_snapshot_ref": "price-snapshot-merged-2026-09-27T01-07-56.927Z.json",
   "methodology_version": "v0-draft",
   "methodology_revision": "rules-2026-09-25",
-  "signature": "0x6deb2595e6252342f936f323075e0ba7b5528608a20bb03ae1740a653bad5b1961a4f7d5941a9a04ab054fd5c2743bb5607f2261a798986205e8d3fd479cf7ca",
+  "series": "frontier",
+  "signature": "0x153ade6a46334d3330d66414bf85669bdae0637a2f9925ceee74770c175169d226b3d5b7bbdc2031a5c4d69b90e577e672dc38eb392b426f84fee0f8c74e7396",
   "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
   "anchor": {
     "chain": "base-sepolia",
     "status": "anchored",
-    "tx_hash": "0x825c4a35f8f15905a009adb011dd673929cbe9b0c9b61fede38c1701af7ba6fc",
-    "posted_at": "2026-09-27T01:11:14.000Z"
+    "tx_hash": "0xceae71275850ff5e62cf4b70fee4df663d13fbbeb178a6f3330c53b59b8675e6",
+    "posted_at": "2026-09-27T01:11:22.000Z"
   }
 }

@@ -1,0 +1,39 @@
+{
+  "id": "733bdbcc-19dc-9431-b20c-49963c474e30",
+  "object": "chat.completion",
+  "created": 1790471409,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"tracking_id\": \"SH-067CA1\",\n  \"origin_city\": \"Recife\",\n  \"destination_city\": \"Cebu\",\n  \"weight_kg\": 392,\n  \"status\": \"in_transit\",\n  \"priority\": \"express\"\n}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nI found the shipment details in the report. The record is SH-067CA1 from Recife to Cebu, weighing 392 kg with express priority and status in_transit.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1542,
+    "completion_tokens": 65,
+    "total_tokens": 1897,
+    "prompt_tokens_details": {
+      "text_tokens": 1542,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 290,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 44460000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
