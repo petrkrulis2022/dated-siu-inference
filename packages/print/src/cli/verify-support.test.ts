@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { loadPrint, loadRegistry, printsDir } from "./load-inputs.js";
 import { buildVerifyInput } from "./verify-support.js";
+import { verifyPrint } from "../verify.js";
 import { join } from "node:path";
 
 /**
@@ -54,5 +55,45 @@ describe("buildVerifyInput — tier series print", () => {
     const { input, loadErrorMessage } = await buildVerifyInput(print);
     expect(loadErrorMessage).toBeUndefined();
     expect(input!.models.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Regression test for the 2026-09-27 fix: "verify each print under its own methodology revision"
+ * extended from rounding (already correct) to the two cost-formula bugs — reasoning-token pricing
+ * and cached-input pricing — that used to require a 40-entry allowlist of known divergences.
+ * These two real, historical prints are exactly the ones that motivated the fix: 2026-09-08 is
+ * the day the reasoning-token gap was found (still itself affected, per its own correction note);
+ * 2026-09-25 is the last day still affected by the cached-input gap. Both must now recompute to
+ * an EXACT match — no discrepancies, no allowlist entry needed — using this repo's own real,
+ * checked-in data, not a synthetic fixture, because the bug was specifically about reproducing
+ * real historical prints.
+ */
+describe("buildVerifyInput — historical pricing rules (2026-09-27 fix)", () => {
+  it("2026-09-08 (reasoning-token pricing gap) verifies with an exact match", async () => {
+    const print = await loadPrint(join(printsDir(), "2026-09-08.json"));
+    const { input, loadErrorMessage } = await buildVerifyInput(print);
+    expect(loadErrorMessage).toBeUndefined();
+    const result = verifyPrint(print, input);
+    expect(result.discrepancies).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  it("2026-09-25 (cached-input pricing gap) verifies with an exact match", async () => {
+    const print = await loadPrint(join(printsDir(), "2026-09-25.json"));
+    const { input, loadErrorMessage } = await buildVerifyInput(print);
+    expect(loadErrorMessage).toBeUndefined();
+    const result = verifyPrint(print, input);
+    expect(result.discrepancies).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  it("2026-09-26 (first print with both fixes genuinely live) still verifies with an exact match", async () => {
+    const print = await loadPrint(join(printsDir(), "2026-09-26.json"));
+    const { input, loadErrorMessage } = await buildVerifyInput(print);
+    expect(loadErrorMessage).toBeUndefined();
+    const result = verifyPrint(print, input);
+    expect(result.discrepancies).toEqual([]);
+    expect(result.ok).toBe(true);
   });
 });

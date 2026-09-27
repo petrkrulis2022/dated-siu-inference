@@ -3,8 +3,9 @@ import type { Print } from "@touchstone/sdk";
 import { TASK_CLASSES, BASKET_VERSION } from "@touchstone/basket";
 import type { RoundingRules } from "../rounding.js";
 import { cachePolicyVariant, batchDiscountVariant } from "../compute/sensitivity.js";
-import type { PrintInput } from "../compute/index.js";
+import type { PrintInput, ModelInput } from "../compute/index.js";
 import type { Discrepancy } from "../verify.js";
+import { historicalPricingRulesFor } from "./historical-pricing-rules.js";
 import {
   buildModelInputs,
   loadCarryForwardHistory,
@@ -82,9 +83,27 @@ export async function buildVerifyInput(print: Print): Promise<BuiltVerifyInput> 
     // single-tier by construction, so recomputing it from the full, unfiltered registry would
     // both price models this series never included and silently change the qualifying set.
     const openWeightsById = new Map(registry.map((r) => [r.id, r.open_weights]));
-    const models = print.series
+    const tierFilteredModels = print.series
       ? allModels.filter((m) => openWeightsById.get(m.model_id) === (print.series === "commodity"))
       : allModels;
+
+    // "Verify each print under its own methodology revision" (the same rule rounding already
+    // gets), applied to the two cost-formula bugs neither `rounding` nor `methodology_revision`
+    // ever recorded explicitly: reasoning-token pricing (rules-2026-09-08/09) and cached-input
+    // pricing (rules-2026-09-25b). Reconstructing the OLD input shape — never a second cost
+    // formula — is what makes an old print recompute to an exact match instead of a
+    // known-divergence: strip the fields today's formula would otherwise price that this
+    // print's own real methodology never priced at the time.
+    const pricingRules = historicalPricingRulesFor(print.date);
+    const models: ModelInput[] = tierFilteredModels.map((m) => ({
+      ...m,
+      price: pricingRules.cachedInputPriced
+        ? m.price
+        : { price_in_usd_per_1m: m.price.price_in_usd_per_1m, price_out_usd_per_1m: m.price.price_out_usd_per_1m },
+      records: pricingRules.reasoningTokensPriced
+        ? m.records
+        : m.records.map((r) => ({ ...r, usage: { ...r.usage, reasoning: 0 } })),
+    }));
     const allModelIds = models.map((m) => m.model_id);
 
     // Carry-forward only ever applied from rules-2026-09-26 onward — gated on this print's own
