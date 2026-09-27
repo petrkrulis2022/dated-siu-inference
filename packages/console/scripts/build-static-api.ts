@@ -47,6 +47,7 @@ async function main(): Promise<void> {
   const cache = await indexNewEvents(
     {
       rpcUrl: config.rpcUrl,
+      archiveRpcUrl: config.archiveRpcUrl,
       escrowAddress: config.escrowAddress,
       escrowDeployBlock: config.escrowDeployBlock,
       attestationAddress: config.attestationAddress,

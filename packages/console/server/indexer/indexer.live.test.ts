@@ -26,18 +26,31 @@ import { emptyCache, type EventCache } from "./cache.js";
  * second test below already exercises; this suite's "full scan" now demonstrates the same
  * historical-event-decoding correctness against a small, real, permanently-fixed slice of history
  * instead of the entire chain since deployment.
+ *
+ * Found live, 2026-09-27: "will never grow no matter how much time passes" was right about the
+ * RANGE, but wrong about the ENDPOINT — the public sepolia.base.org node prunes history before
+ * ~block 46,000,000, which swallowed this fixed window whole (`eth_getBlockByNumber` for
+ * 45633365: "pruned history unavailable, earliest available 46000000"). The fix is not a new
+ * range (any fixed range eventually falls behind a pruning horizon that keeps moving forward);
+ * it's a real archive endpoint, which never prunes — see IndexerConfig.archiveRpcUrl's own doc
+ * comment. This suite is skipped, exactly like the repo's other live/credentialed suites (e.g.
+ * testnet.live.test.ts without CIRCLE_TESTNET_PRIVATE_KEY), when no archive credential is
+ * configured — never silently "fixed" by skipping a test that could otherwise run for real.
  */
 const RPC_URL = process.env.BASE_SEPOLIA_RPC_URL;
-const describeLive = RPC_URL ? describe : describe.skip;
+const ARCHIVE_RPC_URL = process.env.TOUCHSTONE_BASE_SEPOLIA_ARCHIVE_RPC;
+const describeLive = RPC_URL && ARCHIVE_RPC_URL ? describe : describe.skip;
 
 // Confirmed live (2026-09-05) via `cast logs` against exactly this range: 7 real Opened events,
-// 4 real Settled events, from base-sepolia.json's own documented smoke tests.
+// 4 real Settled events, from base-sepolia.json's own documented smoke tests. Still the right
+// window — an archive endpoint never prunes it away, unlike the public one.
 const BOUNDED_SCAN_TO_BLOCK = 45_633_600n;
 
 describeLive("indexNewEvents (live Base Sepolia)", () => {
   const deployment = loadDeployment("base-sepolia");
   const config = {
     rpcUrl: RPC_URL ?? "",
+    archiveRpcUrl: ARCHIVE_RPC_URL ?? "",
     escrowAddress: deployment.contracts.TouchstoneEscrow.address,
     escrowDeployBlock: BigInt(
       (deployment.contracts.TouchstoneEscrow as unknown as { blockNumber: number }).blockNumber,

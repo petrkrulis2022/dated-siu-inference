@@ -111,7 +111,17 @@ export const TOUCHSTONE_ATTESTATION_EVENTS_ABI = [
 ] as const;
 
 export interface IndexerConfig {
+  /** For current-state reads only (feeBps/treasury readContract, getBlockNumber) — the public
+   * endpoint is fine for these regardless of how far back this indexer's own scan reaches. */
   rpcUrl: string;
+  /** For eth_getLogs over a historical range, and getBlock by an old block number — both need a
+   * real archive node. Found live, 2026-09-27: sepolia.base.org (the public endpoint) prunes
+   * history before block ~46,000,000, which includes this project's own August 2026 deployment
+   * and escrow smoke tests — the exact range this indexer's own full scan starts from. A public
+   * RPC endpoint silently works today only because it hasn't pruned that far yet; it is not a
+   * safe long-term substitute for an archive endpoint, and never was — this indexer has scanned
+   * from a fixed historical deployment block since it was first written. */
+  archiveRpcUrl: string;
   escrowAddress: string;
   escrowDeployBlock: bigint;
   attestationAddress: string;
@@ -208,6 +218,11 @@ export async function indexNewEvents(
   cache: EventCache = emptyCache(),
 ): Promise<EventCache> {
   const client = createPublicClient({ transport: http(config.rpcUrl) }) as PublicClient;
+  // Deliberately a second client, not a shared one — see IndexerConfig.archiveRpcUrl's own doc
+  // comment for which calls need it and why. Both clients may point at the same URL in
+  // deployments where that's still true (nothing has been pruned yet), but the code never
+  // assumes that.
+  const archiveClient = createPublicClient({ transport: http(config.archiveRpcUrl) }) as PublicClient;
   const chunkSize = config.chunkSize ?? DEFAULT_CHUNK_SIZE;
   const latest = config.toBlockOverride ?? (await withRpcBackoff(() => client.getBlockNumber()));
 
@@ -246,7 +261,7 @@ export async function indexNewEvents(
   const escrowEvents =
     escrowFrom <= latest
       ? await scanRange(
-          client,
+          archiveClient,
           escrowAddress,
           TOUCHSTONE_ESCROW_EVENTS_ABI.filter((item) => item.type === "event"),
           escrowFrom,
@@ -267,7 +282,7 @@ export async function indexNewEvents(
   const attestationEvents =
     attestationFrom <= latest
       ? await scanRange(
-          client,
+          archiveClient,
           attestationAddress,
           TOUCHSTONE_ATTESTATION_EVENTS_ABI,
           attestationFrom,
@@ -284,7 +299,7 @@ export async function indexNewEvents(
     ...newSettled.map((e) => e.blockNumber),
     ...newExpired.map((e) => e.blockNumber),
   ];
-  const timestamps = await timestampsFor(client, allBlocks);
+  const timestamps = await timestampsFor(archiveClient, allBlocks);
 
   const opened: OpenedEvent[] = newOpened.map((e) => ({
     quoteHash: e.args.quoteHash as string,

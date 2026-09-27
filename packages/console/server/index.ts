@@ -24,6 +24,7 @@ async function main(): Promise<void> {
   const updated = await indexNewEvents(
     {
       rpcUrl: config.rpcUrl,
+      archiveRpcUrl: config.archiveRpcUrl,
       escrowAddress: config.escrowAddress,
       escrowDeployBlock: config.escrowDeployBlock,
       attestationAddress: config.attestationAddress,

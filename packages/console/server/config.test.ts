@@ -39,6 +39,7 @@ const FAKE_DEFAULT_CONFIG: ConsoleConfig = {
   chainName: "base-sepolia",
   chainId: 84532,
   rpcUrl: "https://default-configured-chain.example/rpc",
+  archiveRpcUrl: "https://default-configured-chain.example/archive-rpc",
   explorerBaseUrl: "https://base-sepolia.blockscout.com",
   escrowAddress: "0xEscrow",
   escrowDeployBlock: 0n,

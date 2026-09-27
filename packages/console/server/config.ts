@@ -21,6 +21,9 @@ export interface ConsoleConfig {
   chainName: string;
   chainId: number;
   rpcUrl: string;
+  /** For the indexer's own historical eth_getLogs/getBlock reads — see IndexerConfig's own doc
+   * comment (server/indexer/index.ts) for why the public rpcUrl above is not a substitute. */
+  archiveRpcUrl: string;
   explorerBaseUrl: string;
   escrowAddress: string;
   escrowDeployBlock: bigint;
@@ -47,6 +50,13 @@ export function loadConfig(): ConsoleConfig {
   const chainName = process.env.TOUCHSTONE_CHAIN_NAME ?? "base-sepolia";
   const rpcEnvVar = `${chainName.toUpperCase().replaceAll("-", "_")}_RPC_URL`;
   const rpcUrl = requireEnv(rpcEnvVar);
+  // Required, not optional-with-a-public-fallback: this indexer always scans from a fixed
+  // historical deployment block, so it always needs real archive access — a silent fallback to
+  // the public endpoint would just reproduce 2026-09-27's own incident the next time the public
+  // node's pruning horizon advances past that block. See docs/methodology.md's own disclosure
+  // of this requirement for why an independent verifier needs the same thing.
+  const archiveRpcEnvVar = `TOUCHSTONE_${chainName.toUpperCase().replaceAll("-", "_")}_ARCHIVE_RPC`;
+  const archiveRpcUrl = requireEnv(archiveRpcEnvVar);
 
   const deployment = loadDeployment(chainName);
   const escrowBlock = (deployment.contracts.TouchstoneEscrow as { blockNumber?: number })
@@ -66,6 +76,7 @@ export function loadConfig(): ConsoleConfig {
     chainName,
     chainId: deployment.network.chainId,
     rpcUrl,
+    archiveRpcUrl,
     explorerBaseUrl: deployment.network.explorer,
     escrowAddress: deployment.contracts.TouchstoneEscrow.address,
     escrowDeployBlock: BigInt(escrowBlock),
