@@ -138,8 +138,9 @@ export interface FullRunWindowOptions {
    * tool grant) — see `MintContext`'s own doc comment. */
   mintContext?: MintContext;
   /** Seed for the independent oracle's trial set (see task-pack-gate-hardening's code-oracle).
-   * Optional so existing callers are unaffected; a real run passes its own recorded per-run seed
-   * so the exact trials an attack was scored against are reproducible from the manifest. */
+   * Defaults to `F1_ORACLE_TRIAL_SEED` and should stay there for any run whose attack yield is
+   * meant to be compared with another run's — see that constant's own doc comment. Overridable
+   * only for tests that need a different draw. */
   oracleSeed?: number;
   onTurn?: (agentId: AgentId, log: TurnLog) => void;
 }
@@ -335,7 +336,7 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
   const attackContext: AttackContext = {
     gateVersions: [],
     attackedVersions: new Set<number>(),
-    oracleSeed: options.oracleSeed ?? 1,
+    oracleSeed: options.oracleSeed ?? F1_ORACLE_TRIAL_SEED,
   };
   let passed = false;
   let passedBy: AgentId | undefined;
@@ -770,6 +771,17 @@ export interface BuildToolArgsContext {
 /** Gate v1 -> attacks -> the builder may revise -> attacks again. Capped so an adaptive exchange
  * cannot spend the whole run's budget on itself. */
 export const MAX_ATTACK_ROUNDS = 3;
+
+/**
+ * The oracle's trial set is pinned to this one constant for every F1 run, and is deliberately NOT
+ * derived from a run's own seed. F1 compares runs against each other: if each run scored its
+ * attacks against a different set of generated arrays, a gate could pass in one run and fail in
+ * the next on a case the first never tried, and the yields would not be comparable — the
+ * comparison would be measuring the trial draw rather than the agents. Runs differ in agent
+ * behaviour (temperature 0.7 and a per-run label); they do not differ in what "defeated the gate"
+ * means. Changing this constant invalidates cross-run comparison with everything run before it.
+ */
+export const F1_ORACLE_TRIAL_SEED = 20260927;
 
 export interface DeliveredGate {
   version: number;

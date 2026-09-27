@@ -14,7 +14,14 @@ export interface RunManifest {
   benchVersion: string;
   packVersion: string;
   agentConfigs: Record<string, unknown>;
+  /** This run's own label — what distinguishes one F1 run from the next. Not a determinism
+   * control: the deciding agents run at temperature 0.7, and of the four providers in this
+   * roster only OpenAI honours a seed parameter, which this loop does not pass. */
   seed: string;
+  /** The oracle's trial-set seed, pinned across every F1 run so attack yields are comparable
+   * between them — recorded here so a reader can confirm two runs were scored the same way
+   * rather than having to trust it. See `loop/full-run.ts`'s `F1_ORACLE_TRIAL_SEED`. */
+  oracleTrialSeed?: number;
   /** The real, per-agent tool-description order each agent's own prompt actually used this run —
    * see `loop/full-run.ts`'s `shuffledToolOrder`. Optional: only `runFullRunWindow` populates it;
    * older/other loops that build a `RunManifest` directly are unaffected. */

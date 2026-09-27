@@ -28,7 +28,13 @@ import { erc8004IdFor } from "../identity/resolve.js";
 import type { RunnerDeps } from "../deps.js";
 import { loadGateMarketDeployment } from "../chain/deployment.js";
 import { ViemChainReader } from "../chain/reader.js";
-import { runFullRunWindow, type JobEnvelope, type MintContext, type RosterAgentConfig } from "../loop/full-run.js";
+import {
+  F1_ORACLE_TRIAL_SEED,
+  runFullRunWindow,
+  type JobEnvelope,
+  type MintContext,
+  type RosterAgentConfig,
+} from "../loop/full-run.js";
 import type { RunManifest } from "../run-recorder/recorder.js";
 import { RUNS_ROOT } from "./runs-root.js";
 
@@ -554,27 +560,29 @@ YOUR SITUATION THIS WINDOW
   };
 
   const runId = `p5-window1-${new Date().toISOString().replace(/[:.]/g, "-")}`;
-  // A real per-run seed, not a fixed literal. Two things depend on it, and only one of them is
-  // reproducibility: it selects the independent oracle's trial set (so an attack's score can be
-  // recomputed exactly from the manifest), and it labels this run so the five F1 runs are
-  // distinguishable from one another. It is NOT a determinism control for the models — the
-  // deciding agents run at temperature 0.7 and, of the four providers here, only OpenAI honours a
-  // seed parameter at all, which this loop does not pass. Same seed, same trials; same seed, a
-  // genuinely different conversation.
+  // Two seeds, deliberately separate. The run label distinguishes one F1 run from the next; the
+  // oracle's trial seed is pinned (F1_ORACLE_TRIAL_SEED) and identical across all five, so what
+  // "defeated the gate" means does not change between runs being compared. Tying the trials to
+  // the run label — as this first did — would have made a gate pass in one run and fail in the
+  // next on a case the first never drew, and F1 compares runs. Neither seed is a determinism
+  // control for the models themselves: deciding agents run at temperature 0.7, and of the four
+  // providers here only OpenAI honours a seed parameter at all, which this loop does not pass.
   const runSeed = Math.floor(Math.random() * 2_147_483_647);
   const manifest: RunManifest = {
     benchVersion: "0.0.0",
     packVersion: "gate-hardening/code@0.0.0",
     agentConfigs: modelAssignment,
     seed: `p5-window1:${runSeed}`,
+    oracleTrialSeed: F1_ORACLE_TRIAL_SEED,
   };
 
   console.log(
     `Starting WP-7 P5 window 1 — ${roster.length}-agent roster (HEDGER excluded, see top comment)`,
   );
   console.log(
-    `Run seed ${runSeed} — selects the oracle's trial set and labels this run. Deciding agents at ` +
-      `temperature 0.7; issuers at 0. The seed is not a determinism control (see manifest).`,
+    `Run label ${runSeed}; oracle trial seed ${F1_ORACLE_TRIAL_SEED} (pinned across all F1 runs, ` +
+      `so attack yields are comparable between them). Deciding agents at temperature 0.7; ` +
+      `issuers at 0. Neither seed is a determinism control — see the manifest.`,
   );
   console.log(`ORCHESTRATOR=${orchestratorModel} — capable model, structurally withheld reference materials (information asymmetry, not a skill-level prohibition)`);
   console.log(`WORKER-CODE=${workerCodeModel}  ISSUER-A=${issuerAModel}  ISSUER-B=${issuerBModel}`);
@@ -600,7 +608,7 @@ YOUR SITUATION THIS WINDOW
     windowFrom,
     windowTo,
     mintContext,
-    oracleSeed: runSeed,
+    oracleSeed: F1_ORACLE_TRIAL_SEED,
     onTurn: (agentId, turn) => {
       const gateNote = turn.gateResult
         ? ` gate=${turn.gateResult.passed ? "PASS" : "FAIL"} (${turn.gateResult.summary})`
@@ -640,7 +648,7 @@ YOUR SITUATION THIS WINDOW
   } else {
     const falseAccepts = result.attacks.filter((a) => a.countsAsAdversaryYield);
     const falseRejects = result.attacks.filter((a) => a.countsAsGateOverRejection);
-    console.log(`attacks: ${result.attacks.length}, oracle seed ${runSeed}`);
+    console.log(`attacks: ${result.attacks.length}, oracle trial seed ${F1_ORACLE_TRIAL_SEED} (pinned)`);
     console.log(
       `  false accepts (gate accepted something the oracle rejects): ${falseAccepts.length}` +
         ` — this is the adversary's real yield`,
