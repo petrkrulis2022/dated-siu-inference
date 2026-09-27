@@ -35,7 +35,7 @@ export async function runHeadroomExhaustion(
     { issuer: issuerA.address, classId: CLASS_CODE },
     { turn: 1, jobId },
   );
-  const issuerAHeadroomBefore = BigInt((headroomRecord.result as { headroom: string }).headroom);
+  const issuerAHeadroomBefore = BigInt((headroomRecord.result as { totalHeadroom: string }).totalHeadroom);
   if (issuerAHeadroomBefore <= 0n) {
     throw new Error("runHeadroomExhaustion requires ISSUER-A to start with real headroom.");
   }
@@ -62,7 +62,7 @@ export async function runHeadroomExhaustion(
     { turn: 3, jobId },
   );
   const issuerAHeadroomAfter = BigInt(
-    (headroomAfterExhaustionRecord.result as { headroom: string }).headroom,
+    (headroomAfterExhaustionRecord.result as { totalHeadroom: string }).totalHeadroom,
   );
   if (issuerAHeadroomAfter !== 0n) {
     throw new Error(

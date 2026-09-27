@@ -35,7 +35,7 @@ export async function runCrossClassUnavailability(
     { turn: 1, jobId },
   );
   const codeHeadroomBefore = BigInt(
-    (codeHeadroomBeforeRecord.result as { headroom: string }).headroom,
+    (codeHeadroomBeforeRecord.result as { totalHeadroom: string }).totalHeadroom,
   );
 
   const extractHeadroomRecord = await buyer.callTool(
@@ -44,7 +44,7 @@ export async function runCrossClassUnavailability(
     { turn: 2, jobId },
   );
   const extractHeadroomBefore = BigInt(
-    (extractHeadroomRecord.result as { headroom: string }).headroom,
+    (extractHeadroomRecord.result as { totalHeadroom: string }).totalHeadroom,
   );
   if (extractHeadroomBefore <= 0n) {
     throw new Error(
@@ -71,7 +71,7 @@ export async function runCrossClassUnavailability(
     { turn: 4, jobId },
   );
   const extractHeadroomAfter = BigInt(
-    (extractHeadroomAfterRecord.result as { headroom: string }).headroom,
+    (extractHeadroomAfterRecord.result as { totalHeadroom: string }).totalHeadroom,
   );
   if (extractHeadroomAfter !== 0n) {
     throw new Error(
@@ -85,7 +85,7 @@ export async function runCrossClassUnavailability(
     { turn: 5, jobId },
   );
   const codeHeadroomAfter = BigInt(
-    (codeHeadroomAfterRecord.result as { headroom: string }).headroom,
+    (codeHeadroomAfterRecord.result as { totalHeadroom: string }).totalHeadroom,
   );
 
   return { codeHeadroomBefore, codeHeadroomAfter };

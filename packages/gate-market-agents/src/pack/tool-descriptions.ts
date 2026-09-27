@@ -36,6 +36,10 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
     "submit_job(taskClass, originalGate, hardenedGate, referenceInstance, knownGoodSubmission, adversarialSubmissions, heldOutInstances) -> runs the real G1-G6 checks",
   submit_attack:
     'submit_attack(submissionSource) -> runs your candidate answer.mjs against the delivered gate AND against an independent oracle, and reports which of the two accepted it. Supply only the module source as a JSON string; the gate being tested, the reference files and the oracle seed are supplied for you. A result counts for you ONLY when the gate accepts a submission the oracle rejects (classification "false_accept"). A correct submission both accept scores nothing, and breaking the oracle scores nothing.',
+  pay_with_claim:
+    "pay_with_claim(to | agentId, quantity) -> pays a counterparty in fSIU in one call: mints a dated work claim against an issuer's bonded capacity and transfers it to them. quantity is in milli-SIU. The claim reserves that issuer's headroom, which is finite and shared.",
+  settle_escrow:
+    "settle_escrow(actualAmountUsd?, receiptRef) -> as the SELLER named in a quote that was paid: releases the escrowed USDC to yourself. Until you call this the money sits in escrow and never reaches your wallet. Omit actualAmountUsd to settle the full quoted amount; settling for less is allowed and is what quote accuracy is scored on.",
   get_balances:
     "get_balances(account, tokenIds?) -> real USDC balance (decimal and integer minor-unit forms) plus claim balances",
   get_print: "get_print(printId) -> the real print body plus whether it's final",

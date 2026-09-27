@@ -73,6 +73,18 @@ export class QuoteBoard {
     return this.#issued.filter((i) => myRequestIds.has(i.requestId));
   }
 
+  /** Quotes this seller itself signed — the seller's own side of `issuedQuotesFor`. Needed
+   * because an escrow is keyed by the hash of the quote it was opened against, and a seller has
+   * no way to look one up otherwise: the escrow contract exposes a mapping, not an enumeration.
+   * Added 2026-09-27, after a real run deadlocked because a paid seller could not see that it
+   * had been paid. */
+  issuedQuotesBySeller(sellerId: string): QuoteBoardIssuedQuote[] {
+    const mine = new Set(
+      this.#requests.filter((r) => r.sellerId === sellerId).map((r) => r.requestId),
+    );
+    return this.#issued.filter((i) => mine.has(i.requestId));
+  }
+
   /** Small, structured text for one agent's own turn — job/buyer/seller/amount fields only, no
    * free text one agent authored for another to read. Empty string when there's nothing to show,
    * so a turn with no open market activity doesn't carry a hollow "MARKET BOARD" header. */

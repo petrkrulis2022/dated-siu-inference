@@ -16,6 +16,8 @@ WHAT YOU CAN DO
   submit_attack(submissionSource)   as adversary: test one candidate submission
     against the delivered gate. It counts only when the gate accepts something an
     independent oracle rejects — a correct submission scores nothing.
+  settle_escrow(actualAmountUsd?)   releases USDC a buyer escrowed against your quote.
+    Until you call it the money is committed but not yours.
   pay(requestId, settler)   pays the real, signed quote answering your own request — you may subcontract
   redeem_claim(claim_id, task_spec)
   get_balances()  get_print(class)

@@ -48,6 +48,31 @@ full execution configuration can be wrong by orders of magnitude, which is exact
 `RunRecord.deviations` (§3, already implemented) exists — to record every forced configuration
 change rather than silently discarding a real data-quality signal.
 
+### The series does not yet evidence deflation
+
+Stated plainly because the claim appears elsewhere in this project's own materials and the data
+does not currently support it. Fitted log-linearly over every print published so far
+(2026-09-27):
+
+| Series | Prints | First → last | Drift per day | R² |
+| --- | --- | --- | --- | --- |
+| Commodity SIU | 26 | 0.0014 → 0.001433 | +0.034% | 0.21 |
+| Frontier SIU | 25 | 0.012 → 0.01738 | +1.69% | 0.58 |
+| Dated SIU (blended) | 35 | 0.0015 → 0.011 | +5.79% | 0.63 |
+
+**No series shows a measurable decline.** Commodity SIU — the cleanest read, since it is least
+disturbed by registry change — is flat: +0.034%/day at R² 0.21 is noise, not a trend. The two
+steeper series must not be read as price movement at all: the registry grew materially across
+that window (grok-4.6 on 2026-09-08, the Claude models, and others), and every admission changes
+the basket's composition. A composition effect is not a price effect, which is exactly why
+`constituent_changes` is disclosed on the face of each print.
+
+The consequence, recorded here rather than left implicit: "AI work gets cheaper over time" is a
+claim about the market, not an observation from this series. Anything derived from an assumed
+decline — a forward curve priced off expected cost decay in particular — would be pricing an
+assertion, not a measurement. Found live, 2026-09-27, when the Gate Market testbed needed a
+forward curve and this series could not supply one; see docs/monetary-design.md §6.4.
+
 ### Model SIU is an index. Workflow SIU and Outcome SIU are not, and never will be.
 
 Model SIU — Dated SIU itself — is reproducible because the workload is fixed and published:

@@ -267,14 +267,19 @@ YOUR JOB THIS WINDOW
     Step 3: wait (respond {"done": true, ...} only once you're sure nothing more is needed from
       you, or keep checking back — WORKER-CODE will call submit_job itself once paid and ready).
 
-  OPTION B — settle in fSIU (a dated work claim, not a dollar): mint a claim, then transfer it to
-  WORKER-CODE as payment.
-    Step 1: {"tool": "mint_claim", "args": {"quantity": "10000"}}
-      (quantity is in milli-SIU; 10000 = 10 SIU, matching Option A's own quote size)
-    Step 2 (once mint_claim returns a tokenId):
-      {"tool": "transfer_claim", "args": {"agentId": "WORKER-CODE", "tokenId": "<the tokenId
-      mint_claim returned>", "quantity": "10000"}}
-    Step 3: wait, same as Option A's step 3.
+  OPTION B — settle in fSIU (a dated work claim, not a dollar): pay the counterparty in claims.
+    Step 1: {"tool": "pay_with_claim", "args": {"agentId": "WORKER-CODE", "quantity": "10000"}}
+      (quantity is in milli-SIU; 10000 = 10 SIU, matching Option A's own quote size. This mints a
+      claim against an issuer's bonded capacity and transfers it, in one call.)
+    Step 2: wait, same as Option A's step 3.
+    mint_claim and transfer_claim remain available if you want the two steps separately.
+
+  HOW CAPACITY WORKS HERE (facts, not advice)
+  Every claim is minted against an issuer's bonded capacity for a class, and that capacity is
+  finite. It is shared: every buyer draws on the same pool. It is first-come-first-served, and
+  minting a claim consumes the issuer's headroom for that class at the moment it is minted.
+  check_headroom() shows the remaining headroom of every bonded issuer in the class, and
+  get_print() shows the current published rate. Nothing here tells you what to do with that.
 
   A SECOND PIECE OF WORK, SEPARATE FROM THE ABOVE
   A gate that nobody has tried to defeat is not worth much: what a buyer pays for is a gate that
@@ -441,7 +446,7 @@ YOUR SITUATION THIS WINDOW
       modelString: orchestratorModel,
       prices: PRICES[orchestratorModel],
       skillPackText: `${loadSkill("subcontract-and-settle").promptTemplate}\n\n${CANONICAL_ASSET_DESCRIPTION}\n\n${orchestratorJobDescription}`,
-      availableTools: ["request_quote", "pay", "mint_claim", "transfer_claim", "check_headroom", "submit_job", "get_balances", "get_print"],
+      availableTools: ["request_quote", "pay", "pay_with_claim", "mint_claim", "transfer_claim", "check_headroom", "submit_job", "get_balances", "get_print"],
       privateKeyHex: toHex(process.env.ORCHESTRATOR_PRIVATE_KEY, "ORCHESTRATOR_PRIVATE_KEY"),
       address: orchestratorAddress,
       erc8004Id: erc8004IdFor(orchestratorAddress),
@@ -456,7 +461,7 @@ YOUR SITUATION THIS WINDOW
       modelString: workerCodeModel,
       prices: PRICES[workerCodeModel],
       skillPackText: `${loadSkill("quote-and-deliver").promptTemplate}\n\n${CANONICAL_ASSET_DESCRIPTION}\n\n${workerCodeJobDescription}`,
-      availableTools: ["issue_quote", "submit_job", "pay", "redeem_claim", "get_balances", "get_print"],
+      availableTools: ["issue_quote", "settle_escrow", "submit_job", "pay", "redeem_claim", "get_balances", "get_print"],
       privateKeyHex: toHex(process.env.WORKER_CODE_PRIVATE_KEY, "WORKER_CODE_PRIVATE_KEY"),
       address: workerCodeAddressHex,
       erc8004Id: workerCodeErc8004Id,
@@ -479,7 +484,8 @@ YOUR SITUATION THIS WINDOW
           // real preference. submit_job is *not* granted: this window's role for WORKER-EXTRACT is
           // adversary only, and a holder never serves its own claim (see the 2026-09-26
           // role-confusion fix).
-          availableTools: ["submit_attack", "issue_quote", "pay", "redeem_claim", "get_balances", "get_print"] as const,
+          availableTools: ["submit_attack", "issue_quote", "settle_escrow", "pay", "redeem_claim", "get_balances", "get_print"] as const,
+          waitsFor: "gate" as const,
           privateKeyHex: toHex(process.env.WORKER_EXTRACT_PRIVATE_KEY, "WORKER_EXTRACT_PRIVATE_KEY"),
           address: workerExtractAddress,
           erc8004Id: erc8004IdFor(workerExtractAddress),
@@ -496,6 +502,7 @@ YOUR SITUATION THIS WINDOW
       prices: PRICES[issuerAModel],
       skillPackText: issuerSkillPackText("ISSUER-A"),
       availableTools: ["mint_claim", "submit_job", "serve_redemption", "check_headroom", "get_print"],
+      waitsFor: "inbox" as const,
       privateKeyHex: toHex(process.env.ISSUER_A_PRIVATE_KEY, "ISSUER_A_PRIVATE_KEY"),
       address: issuerAAddress,
       erc8004Id: erc8004IdFor(issuerAAddress),
@@ -511,6 +518,7 @@ YOUR SITUATION THIS WINDOW
       prices: PRICES[issuerBModel],
       skillPackText: issuerSkillPackText("ISSUER-B"),
       availableTools: ["mint_claim", "submit_job", "serve_redemption", "check_headroom", "get_print"],
+      waitsFor: "inbox" as const,
       privateKeyHex: toHex(process.env.ISSUER_B_PRIVATE_KEY, "ISSUER_B_PRIVATE_KEY"),
       address: issuerBAddress,
       erc8004Id: erc8004IdFor(issuerBAddress),

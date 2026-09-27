@@ -16,6 +16,7 @@
 tools:
   - request_quote
   - pay
+  - pay_with_claim
   - mint_claim
   - transfer_claim
   - check_headroom

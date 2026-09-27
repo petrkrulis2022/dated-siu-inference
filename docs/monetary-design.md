@@ -289,6 +289,16 @@ No venue, no clearing, no token, no balance sheet. Touchstone publishes the spec
 
 ### 6.4 The honest limit
 
+**Our own series does not yet evidence the decline the curve is often assumed to express.**
+Recorded 2026-09-27, measured rather than asserted: across 26 Commodity SIU prints the
+log-linear drift is +0.034%/day at R² 0.21 — noise, not a trend — and the steeper Frontier
+(+1.69%/day) and blended (+5.79%/day) series are confounded by registry growth, since each
+admission changes basket composition. So §6.2's "honest expression of the deflation thesis"
+stands only in the forward-looking sense: the curve is a structure that will exist once claims
+actually trade, and it is the market's own priced expectation when it does. It is not, and must
+not be presented as, a decline this project has observed. A forward price cannot be derived from
+this series; it has to come from what issuers quote and buyers accept.
+
 A curve with two participants is not a curve, it is a quote. Until there are several issuers and several hedgers, anything published should be labelled as indicative and sparse, with the number of contributing transactions printed beside it — the same discipline already applied to the qualifying set on a print, and the same reason the 22 August print was superseded rather than quietly published.
 
 ## 7. Issuance and collateral

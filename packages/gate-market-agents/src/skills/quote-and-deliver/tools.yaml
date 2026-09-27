@@ -12,6 +12,7 @@
 tools:
   - issue_quote
   - submit_attack
+  - settle_escrow
   - submit_job
   - pay
   - redeem_claim

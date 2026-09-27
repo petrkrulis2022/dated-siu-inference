@@ -3,8 +3,10 @@ import { issueQuoteTool } from "./issue-quote.js";
 import { payTool } from "./pay.js";
 import { mintClaimTool } from "./mint-claim.js";
 import { transferClaimTool } from "./transfer-claim.js";
+import { payWithClaimTool } from "./pay-with-claim.js";
 import { redeemClaimTool } from "./redeem-claim.js";
 import { settleWindowCloseTool } from "./settle-window-close.js";
+import { settleEscrowTool } from "./settle-escrow.js";
 import { serveRedemptionTool } from "./serve-redemption.js";
 import { submitJobTool } from "./submit-job.js";
 import { submitAttackTool } from "./submit-attack.js";
@@ -26,8 +28,10 @@ export const TOOLS = {
   pay: payTool,
   mint_claim: mintClaimTool,
   transfer_claim: transferClaimTool,
+  pay_with_claim: payWithClaimTool,
   redeem_claim: redeemClaimTool,
   settle_window_close: settleWindowCloseTool,
+  settle_escrow: settleEscrowTool,
   serve_redemption: serveRedemptionTool,
   submit_job: submitJobTool,
   submit_attack: submitAttackTool,

@@ -63,6 +63,8 @@ function buildDeps(): RunnerDeps {
       issuanceLimit: async () => 0n,
       claimWindow: async () => ({ windowFrom: 0n, windowTo: 0n }),
       currentBlockTimestamp: async () => 0n,
+      escrowState: () => Promise.reject(new Error("escrowState: this pass has no escrow")),
+      issuersForClass: () => Promise.resolve([]),
     },
     deployment: {
       network: { name: "unused", chainId: 0 },

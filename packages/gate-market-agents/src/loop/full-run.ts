@@ -1,7 +1,7 @@
 import { keccak256, stringToBytes, type Hex } from "viem";
 import { ZodError } from "zod";
 import { classifyFailure, isPolicyRefusalStopReason, type Adapter, type AdapterParams, type FailureCategory } from "@touchstone/harness";
-import type { QuoteBody, TouchstoneQuote } from "@touchstone/sdk";
+import { quoteHashHex, type QuoteBody, type TouchstoneQuote } from "@touchstone/sdk";
 import type {
   GateHardeningJobInputs,
   GateHardeningResult,
@@ -74,6 +74,20 @@ export interface RosterAgentConfig {
    * is noise rather than the thing being measured. Per-agent rather than per-run because those
    * two roles want opposite things from the same loop. */
   temperature: number;
+  /**
+   * When set, this agent's turns are skipped — no model call, no turn consumed — until it has
+   * something real to act on. Found live, 2026-09-27: WORKER-EXTRACT spent all ten of its turns
+   * submitting attacks before any gate existed, every one correctly refused, and both issuers
+   * spent eight turns each polling `get_print` with nothing routed to them. That polling was the
+   * single largest provider cost in the run and produced nothing.
+   *
+   *  - "gate":  wait until a gate has actually been delivered (the adversary has nothing to test
+   *             before that, by definition).
+   *  - "inbox": wait until this agent's own board section is non-empty — an open request
+   *             addressed to it, a claim minted or presented against it, or a redemption routed
+   *             to it.
+   */
+  waitsFor?: "gate" | "inbox";
   /** The real provider this agent's model is served by (`data/registry/models.json`'s own
    * `provider`) — carried here so the run can report spend per provider, which is what shows
    * whether a run drew down an account the daily print also depends on. */
@@ -207,7 +221,7 @@ export interface FullRunWindowResult {
    * a revision that closed a hole is visible as such rather than inferred from ordering. */
   gateVersions: { version: number; submittedBy: string; turn: number }[];
   turnsByAgent: Record<string, number>;
-  haltedReason?: Record<string, "ceiling" | "parse_error" | "max_turns" | "validation_failed" | "voluntary_stop" | "experiment_halt" | "policy_refusal" | "adapter_error">;
+  haltedReason?: Record<string, "ceiling" | "parse_error" | "max_turns" | "validation_failed" | "voluntary_stop" | "experiment_halt" | "policy_refusal" | "adapter_error" | "nothing_to_act_on">;
   turnLogsByAgent: Record<string, TurnLog[]>;
 }
 
@@ -388,6 +402,34 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
     const boardSectionText = [marketBoardText, redemptionText, transferText, deliveryOwedText]
       .filter(Boolean)
       .join("\n\n");
+
+    // Skipped before the model is called and before the turn counter moves, so waiting costs
+    // nothing. Guarded against a stall: if every remaining agent is waiting, nothing will ever
+    // arrive to wake them, so the window ends rather than spinning.
+    if (
+      (agent.waitsFor === "gate" && attackContext.gateVersions.length === 0) ||
+      (agent.waitsFor === "inbox" && boardSectionText === "")
+    ) {
+      const someoneCanAct = [...activeAgents].some((id) => {
+        const other = options.roster.find((r) => r.agentId === id);
+        if (!other?.waitsFor) return true;
+        if (other.waitsFor === "gate") return attackContext.gateVersions.length > 0;
+        return (
+          board.renderFor(other.agentId, other.erc8004Id) !== "" ||
+          redemption.renderFor(other.agentId) !== "" ||
+          redemption.renderForHolder(other.agentId) !== "" ||
+          redemption.renderForIssuerAwaitingDelivery(other.agentId) !== ""
+        );
+      });
+      if (someoneCanAct) continue;
+      for (const waiting of activeAgents) {
+        if (options.roster.find((r) => r.agentId === waiting)?.waitsFor) {
+          haltedReason[waiting] = "nothing_to_act_on";
+        }
+      }
+      break turnLoop;
+    }
+
     const prompt = buildTurnPrompt(context, toolOrderByAgent[agent.agentId], boardSectionText);
     const projectedUsd = projectedTurnCostUsd(Math.ceil(prompt.length / 4), agent.maxOutputTokens, agent.prices);
 
@@ -520,6 +562,7 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
         windowTo,
         mintContext: options.mintContext,
         attackContext,
+        caller: { agentId: agent.agentId, erc8004Id: agent.erc8004Id },
       });
     } catch (err) {
       // A real, disclosed failure (an unknown requestId, a missing address) — not a crash. The
@@ -565,6 +608,19 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       }
 
       if (intent.tool === "transfer_claim") {
+        const to = (args as { to?: unknown } | undefined)?.to;
+        if (typeof to === "string") {
+          const recipientAgentId = agentIdByAddress[to.toLowerCase()];
+          if (recipientAgentId) redemption.recordTransfer(recipientAgentId);
+        }
+      }
+
+      // One call, but the same two real events mint_claim + transfer_claim would have produced —
+      // so the redemption tracker sees an fSIU payment identically whichever tool made it.
+      if (intent.tool === "pay_with_claim") {
+        const paid = record.result as { tokenId: string; issuer: string; quantity: string };
+        const issuerAgentId = agentIdByAddress[paid.issuer.toLowerCase()];
+        if (issuerAgentId) redemption.recordMint(paid.tokenId, issuerAgentId, paid.quantity);
         const to = (args as { to?: unknown } | undefined)?.to;
         if (typeof to === "string") {
           const recipientAgentId = agentIdByAddress[to.toLowerCase()];
@@ -762,6 +818,10 @@ export interface BuildToolArgsContext {
   deployment: RunnerDeps["deployment"];
   windowFrom: bigint;
   windowTo: bigint;
+  /** Who is taking this turn. Needed to resolve "my own escrows" and "the quote I signed" from
+   * the board without the model naming them — the same splice discipline `pay` already uses for
+   * the quote object itself. */
+  caller?: { agentId: AgentId; erc8004Id: string };
   mintContext?: MintContext;
   /** Live, mutated by the loop as gates are delivered and attacked — see `submit_attack`'s case
    * below for why an adversary may choose neither its own target nor its own oracle seed. */
@@ -870,6 +930,49 @@ export async function buildToolArgs(tool: ToolName, rawArgs: unknown, ctx: Build
     };
   }
 
+  if (tool === "get_balances") {
+    const raw = (rawArgs ?? {}) as { account?: unknown; tokenIds?: unknown };
+    // Every escrow this agent is party to, resolved from the board rather than asked of the
+    // model: the escrow contract has no enumeration, so an agent that wasn't handed these hashes
+    // cannot discover that it has been paid. Found live, 2026-09-27 — see settle-escrow.ts.
+    const erc8004Id = ctx.caller?.erc8004Id;
+    const mine = erc8004Id
+      ? [
+          ...ctx.board.issuedQuotesBySeller(erc8004Id),
+          ...(ctx.caller ? ctx.board.issuedQuotesFor(ctx.caller.agentId) : []),
+        ]
+      : [];
+    const escrowQuoteHashes = [...new Set(mine.map((i) => quoteHashHex(i.quote)))];
+    return {
+      account: typeof raw.account === "string" ? raw.account : (ctx.caller && ctx.agentAddressByAgentId[ctx.caller.agentId]) ?? "",
+      tokenIds: Array.isArray(raw.tokenIds) ? raw.tokenIds.map((t) => asDecimalString(t)) : [],
+      escrowQuoteHashes,
+    };
+  }
+
+  if (tool === "settle_escrow") {
+    const erc8004Id = ctx.caller?.erc8004Id;
+    if (!erc8004Id) {
+      throw new Error("settle_escrow: no caller identity on this turn.");
+    }
+    // The seller's own signed quote, newest first — never reconstructed by the model, for the
+    // same reason `pay` takes the real object: a hand-copied quote hashes to a different, and
+    // nonexistent, escrow.
+    const mine = ctx.board.issuedQuotesBySeller(erc8004Id);
+    const latest = mine.at(-1);
+    if (!latest) {
+      throw new Error(
+        "settle_escrow: you have not issued any quote this window, so there is no escrow to settle.",
+      );
+    }
+    const raw = (rawArgs ?? {}) as { actualAmountUsd?: unknown };
+    return {
+      quote: latest.quote,
+      ...(typeof raw.actualAmountUsd === "string" ? { actualAmountUsd: raw.actualAmountUsd } : {}),
+      receiptRef: keccak256(stringToBytes(`receipt:${ctx.job.jobId}`)),
+    };
+  }
+
   if (tool === "submit_attack") {
     const attackCtx = ctx.attackContext;
     if (!attackCtx) {
@@ -899,6 +1002,52 @@ export async function buildToolArgs(tool: ToolName, rawArgs: unknown, ctx: Build
       referenceFiles: ctx.job.referenceInstance.files,
       oracleSeed: attackCtx.oracleSeed,
       gateVersion: latest.version,
+    };
+  }
+
+  if (tool === "pay_with_claim") {
+    if (!ctx.mintContext) {
+      throw new Error("pay_with_claim: this window has no mintContext — no agent should have this tool.");
+    }
+    const raw = (rawArgs as { to?: unknown; agentId?: unknown; quantity?: unknown } | undefined) ?? {};
+    let to = raw.to;
+    if (typeof raw.agentId === "string") {
+      const resolved = ctx.agentAddressByAgentId[raw.agentId as AgentId];
+      if (!resolved) throw new Error(`pay_with_claim: no known address for agentId "${raw.agentId}".`);
+      to = resolved;
+    }
+    if (typeof to !== "string") {
+      throw new Error('pay_with_claim: name the recipient as {"agentId": "WORKER-CODE"} or a literal "to" address.');
+    }
+    const quantity = asDecimalString(raw.quantity);
+    if (typeof quantity !== "string") {
+      throw new Error('pay_with_claim: expected a string "quantity" in milli-SIU.');
+    }
+    const validUntil = BigInt(Math.floor(Date.now() / 1000)) + ctx.mintContext.validitySeconds;
+    const signature = await signRateAttestation(
+      {
+        printId: ctx.mintContext.printId,
+        series: ctx.mintContext.series,
+        printDate: ctx.mintContext.printDate,
+        nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu,
+        validUntil,
+      },
+      ctx.deployment.network.chainId,
+      ctx.deployment.workClaim.address as Hex,
+      ctx.mintContext.publisherPrivateKeyHex,
+    );
+    return {
+      to,
+      quantity,
+      classId: classIdFor(ctx.job.taskClass),
+      series: ctx.mintContext.series,
+      windowFrom: Number(ctx.windowFrom),
+      windowTo: Number(ctx.windowTo),
+      printId: ctx.mintContext.printId,
+      printDate: ctx.mintContext.printDate.toString(),
+      nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu.toString(),
+      validUntil: validUntil.toString(),
+      signature,
     };
   }
 

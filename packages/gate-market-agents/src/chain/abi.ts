@@ -28,6 +28,13 @@ export const CAPACITY_BOND_ABI = parseAbi([
   "function issuersForClass(bytes32 classId) external view returns (address[] memory)",
 ]);
 
+/** `TouchstoneEscrow`'s public `escrows` mapping getter — read-only, so a seller can see an
+ * escrow standing in its favour. Added 2026-09-27: without it `get_balances` showed a paid
+ * seller an unchanged wallet and no escrow at all, and it correctly refused to deliver. */
+export const ESCROW_READ_ABI = parseAbi([
+  "function escrows(bytes32 quoteHash) external view returns (address buyer, uint64 expiry, uint8 status, address seller, address settler, uint256 maxAmount)",
+]);
+
 export const USDC_BALANCE_ABI = parseAbi([
   "function balanceOf(address account) external view returns (uint256)",
 ]);

@@ -1,5 +1,5 @@
 import { createPublicClient, http, type Hex, type PublicClient } from "viem";
-import { CAPACITY_BOND_ABI, USDC_BALANCE_ABI, WORK_CLAIM_ABI } from "./abi.js";
+import { CAPACITY_BOND_ABI, ESCROW_READ_ABI, USDC_BALANCE_ABI, WORK_CLAIM_ABI } from "./abi.js";
 import type { GateMarketDeployment } from "./deployment.js";
 
 /**
@@ -26,7 +26,28 @@ export interface ChainReader {
    * real wall time, so anything computing "time until this window closes" must read the same
    * clock the contract itself checks. */
   currentBlockTimestamp(): Promise<bigint>;
+  /** One escrow's real on-chain state, by the hash of the quote it was opened against. The
+   * contract exposes a mapping rather than an enumeration, so the caller must already know which
+   * quote to ask about — the quote board supplies that. */
+  escrowState(escrowAddress: Hex, quoteHash: Hex): Promise<EscrowState>;
+  /** Every issuer bonded in a class, in registration order — the same order `ClaimRouter.route`
+   * walks when it picks one. Lets a buyer see the whole shared pool rather than one issuer it
+   * already knew the address of. */
+  issuersForClass(classId: Hex): Promise<readonly Hex[]>;
 }
+
+export type EscrowStatus = "none" | "open" | "settled" | "expired";
+
+export interface EscrowState {
+  status: EscrowStatus;
+  buyer: Hex;
+  seller: Hex;
+  maxAmountMinorUnits: bigint;
+  expiryUnix: bigint;
+}
+
+/** Index order matches `TouchstoneEscrow.Status` exactly (None, Open, Settled, Expired). */
+const ESCROW_STATUS: readonly EscrowStatus[] = ["none", "open", "settled", "expired"];
 
 export class ViemChainReader implements ChainReader {
   private readonly client: PublicClient;
@@ -82,6 +103,31 @@ export class ViemChainReader implements ChainReader {
       args: [tokenId],
     });
     return { windowFrom, windowTo };
+  }
+
+  async issuersForClass(classId: Hex): Promise<readonly Hex[]> {
+    return this.client.readContract({
+      address: this.deployment.capacityBond.address as Hex,
+      abi: CAPACITY_BOND_ABI,
+      functionName: "issuersForClass",
+      args: [classId],
+    });
+  }
+
+  async escrowState(escrowAddress: Hex, quoteHash: Hex): Promise<EscrowState> {
+    const [buyer, expiry, status, seller, , maxAmount] = await this.client.readContract({
+      address: escrowAddress,
+      abi: ESCROW_READ_ABI,
+      functionName: "escrows",
+      args: [quoteHash],
+    });
+    return {
+      status: ESCROW_STATUS[status] ?? "none",
+      buyer,
+      seller,
+      maxAmountMinorUnits: maxAmount,
+      expiryUnix: expiry,
+    };
   }
 
   async currentBlockTimestamp(): Promise<bigint> {

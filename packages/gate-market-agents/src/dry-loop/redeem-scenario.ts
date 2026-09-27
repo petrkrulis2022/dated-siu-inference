@@ -87,7 +87,7 @@ export async function runRedeemScenario(
     { turn: 0, jobId },
   );
   const headroomBeforeMint = BigInt(
-    (headroomBeforeMintRecord.result as { headroom: string }).headroom,
+    (headroomBeforeMintRecord.result as { totalHeadroom: string }).totalHeadroom,
   );
 
   const rateAttestation = await signDryLoopRateAttestation(devnet, windowTo);
@@ -118,7 +118,7 @@ export async function runRedeemScenario(
     { turn: 1, jobId },
   );
   const headroomAfterMint = BigInt(
-    (headroomAfterMintRecord.result as { headroom: string }).headroom,
+    (headroomAfterMintRecord.result as { totalHeadroom: string }).totalHeadroom,
   );
 
   await buyer.callTool(
@@ -174,7 +174,7 @@ export async function runRedeemScenario(
     { turn: 6, jobId },
   );
   const headroomAfterServe = BigInt(
-    (headroomAfterServeRecord.result as { headroom: string }).headroom,
+    (headroomAfterServeRecord.result as { totalHeadroom: string }).totalHeadroom,
   );
 
   const balancesRecord = await holder.callTool(

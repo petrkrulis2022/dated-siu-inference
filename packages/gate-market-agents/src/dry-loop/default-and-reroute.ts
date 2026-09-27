@@ -55,7 +55,7 @@ export async function runDefaultAndReroute(
     { turn: 1, jobId },
   );
   const headroomBeforeMint = BigInt(
-    (headroomBeforeMintRecord.result as { headroom: string }).headroom,
+    (headroomBeforeMintRecord.result as { totalHeadroom: string }).totalHeadroom,
   );
 
   const mintRecord = await buyer.callTool(
@@ -140,7 +140,7 @@ export async function runDefaultAndReroute(
     { turn: 9, jobId },
   );
   const headroomAfterSettle = BigInt(
-    (headroomAfterSettleRecord.result as { headroom: string }).headroom,
+    (headroomAfterSettleRecord.result as { totalHeadroom: string }).totalHeadroom,
   );
 
   // A later mint, same class — headroom is genuinely available again, so this must succeed.

@@ -1,0 +1,62 @@
+import { z } from "zod";
+import { settle } from "@touchstone/agents";
+import { quoteHashHex, usdToMinorUnits, type TouchstoneQuote } from "@touchstone/sdk";
+import type { ToolDefinition } from "./types.js";
+
+/**
+ * `settle_escrow` — the seller's own step, and the leg the USDC path was missing.
+ *
+ * Found live, 2026-09-27, in the first real P5 window: `pay` opens and funds an escrow against
+ * the quote hash (`openAndFund`), and releasing those funds to the seller needs
+ * `TouchstoneEscrow.settle`. That function existed on the contract and in
+ * `@touchstone/agents`' escrow client, but was never exposed as a tool — so a buyer could pay,
+ * the money would leave its wallet, and no agent in the roster had any way to move it onward.
+ * The seller, seeing no balance change, correctly refused to deliver and the window deadlocked
+ * with $0.0143 stranded in escrow. The fSIU path was complete end to end while the USDC path
+ * could take money and never deliver it, which is a confound in any comparison between the two.
+ *
+ * `settler == address(0)` on every escrow this roster opens, which is the seller-only settlement
+ * path — so this must be called by the seller named in the quote, and the contract enforces that
+ * rather than this tool trusting it.
+ *
+ * `actualAmount` is genuinely the seller's own call, not spliced: §3.1 scores a worker on quote
+ * accuracy (quoted versus actual), which is only a real measurement if the seller can settle for
+ * less than it quoted. It is bounded by the escrow's own `maxAmount` on-chain, so the choice is
+ * real but cannot exceed what the buyer committed.
+ */
+const argsSchema = z.object({
+  /** The seller-signed quote this escrow was opened against — spliced by the loop from the board,
+   * never reconstructed by the model, for the same reason `pay` takes the real object: a
+   * hand-copied quote hashes differently and would address a different (nonexistent) escrow. */
+  quote: z.custom<TouchstoneQuote>(),
+  /** Decimal USD, the repo's money-string convention. Omitted settles the full quoted amount. */
+  actualAmountUsd: z.string().optional(),
+  receiptRef: z.string(),
+});
+
+type Args = z.infer<typeof argsSchema>;
+
+export const settleEscrowTool: ToolDefinition<Args, { txHash: string; settledMinorUnits: string }> = {
+  name: "settle_escrow",
+  argsSchema,
+  async handler(ctx, args) {
+    const maxMinorUnits = BigInt(args.quote.settlement[0].amount_max);
+    const requested =
+      args.actualAmountUsd === undefined
+        ? maxMinorUnits
+        : BigInt(usdToMinorUnits(args.actualAmountUsd));
+    if (requested > maxMinorUnits) {
+      throw new Error(
+        `settle_escrow: actualAmountUsd ${args.actualAmountUsd} exceeds the escrow's own maxAmount ` +
+          `(${maxMinorUnits} minor units). Settle for the quoted amount or less.`,
+      );
+    }
+
+    const txHash = await settle(ctx.clients, ctx.deps.escrowAddress, {
+      quoteHash: quoteHashHex(args.quote),
+      actualAmount: requested,
+      receiptRef: args.receiptRef,
+    });
+    return { txHash, settledMinorUnits: requested.toString() };
+  },
+};

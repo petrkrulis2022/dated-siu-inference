@@ -24,6 +24,7 @@ THE JOB
 WHAT YOU CAN DO
   request_quote(seller, task_spec)      receive a signed quote
   pay(requestId, settler)               pays the real, signed quote answering that request — USDC
+  pay_with_claim(agentId, quantity)     pays that counterparty in fSIU instead, in one call
   mint_claim(classId, quantity, window) buys a dated work claim from an issuer
   transfer_claim(agentId, tokenId, quantity) pays a seller by transferring a claim you hold — fSIU
   check_headroom(class)                 confirms an issuer can serve before you mint
@@ -40,7 +41,7 @@ YOUR GOAL
   it("declares its real tool grant and scoring metrics", () => {
     const skill = loadSkill("subcontract-and-settle");
     expect(skill.allowedTools).toEqual([
-      "request_quote", "pay", "mint_claim", "transfer_claim", "check_headroom", "submit_job", "get_balances", "get_print",
+      "request_quote", "pay", "pay_with_claim", "mint_claim", "transfer_claim", "check_headroom", "submit_job", "get_balances", "get_print",
     ]);
     expect(skill.scoring.metrics).toEqual(["jobs_passed", "cost_per_siu_delivered"]);
   });
@@ -71,6 +72,8 @@ WHAT YOU CAN DO
   submit_attack(submissionSource)   as adversary: test one candidate submission
     against the delivered gate. It counts only when the gate accepts something an
     independent oracle rejects — a correct submission scores nothing.
+  settle_escrow(actualAmountUsd?)   releases USDC a buyer escrowed against your quote.
+    Until you call it the money is committed but not yours.
   pay(requestId, settler)   pays the real, signed quote answering your own request — you may subcontract
   redeem_claim(claim_id, task_spec)
   get_balances()  get_print(class)
@@ -85,7 +88,7 @@ YOUR GOAL
 
   it("declares its real tool grant (deliver mapped to submit_job — see tools.yaml's own comment)", () => {
     const skill = loadSkill("quote-and-deliver");
-    expect(skill.allowedTools).toEqual(["issue_quote", "submit_attack", "submit_job", "pay", "redeem_claim", "get_balances", "get_print"]);
+    expect(skill.allowedTools).toEqual(["issue_quote", "submit_attack", "settle_escrow", "submit_job", "pay", "redeem_claim", "get_balances", "get_print"]);
   });
 });
 
