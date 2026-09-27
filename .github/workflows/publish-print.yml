@@ -108,6 +108,14 @@ jobs:
           # variables → Actions) — this line alone doesn't create it.
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           PUBLISH_SPEND_CEILING_USD: ${{ vars.PUBLISH_SPEND_CEILING_USD }}
+          # Gates carry-forward + the median diagnostic (rules-2026-09-26) — see
+          # cli/publish-unattended.ts's own CARRY_FORWARD_ENABLED doc comment. Was never wired
+          # into this workflow at all before 2026-09-27 (the flag existed in code, defaulting to
+          # unset/false, with nothing here to ever set it true) — found while actually flipping it
+          # after its own retro-validation was reviewed and confirmed (docs/methodology.md's
+          # Aggregation section). A repo Variable, not a Secret: the value ("true"/unset) carries
+          # no sensitive information.
+          TOUCHSTONE_CARRY_FORWARD_ENABLED: ${{ vars.TOUCHSTONE_CARRY_FORWARD_ENABLED }}
           PRINT_ID: ${{ steps.resolve.outputs.print_id }}
         run: |
           set -o pipefail

@@ -398,21 +398,32 @@ exists to bound, and the median comparison above is the real evidence that it do
 
 **Fix 1 — carry-forward, capped at 3 days.** A model with an undefined basket cost today, that
 published a real, qualifying `cost_usd` on one of the 3 preceding calendar days, has that last
-real value carried forward into today's blend in its place (`CARRY_FORWARD_CAP_DAYS`,
+real **measured usage** carried forward and repriced at today's own price snapshot — never the
+source day's already-computed `cost_usd` reused verbatim, so a provider price change (or a
+pricing-rule change, see the 2026-09-26 retro-validation row below) between the two days is still
+reflected in the imputed row (`CARRY_FORWARD_CAP_DAYS`, `findCarryForward`,
 `packages/print/src/compute/index.ts`). The carried print's own `basket_costs` row states
 `carried_forward_from: "<date>"` next to the carried `cost_usd`, so a reader never mistakes a
 carried figure for one freshly measured that day. This targets only the case a **run or provider
 failure** produces zero data for an otherwise-registered model — it has no effect at all on
 `computeConstituentChanges`' own, separate registry-membership diff (a model actually removed
 from the registry is never carried forward; it simply stops being a candidate for carry-forward
-the moment it stops being a candidate for exclusion-with-history at all). Retro-validated against
+the moment it stops being a candidate for exclusion-with-history at all).
+
+An imputed row contributes its real, repriced cost to the blend and its weight like any other
+constituent, but **never counts toward `MINIMUM_QUALIFYING_MODELS` or a tier's own equivalent
+gate** (`packages/print/src/publish.ts`'s `qualifyingIds`, filtered on `carried_forward_from ===
+undefined`) — a day where most of a tier's constituents are imputed states honestly how much of
+the market was genuinely measured that day, and is refused rather than published if that
+genuinely-measured count falls below the minimum, exactly as a day with too few *real* models
+would be. Retro-validated against
 three real prints before adoption:
 
 | Date | Actual qualifying mean | Carry-forward mean | Δ |
 | --- | --- | --- | --- |
 | 2026-09-08 | 0.004879 | 0.007248 | +48.56% — `claude-sonnet-5` and `claude-haiku-4-5` carried forward from 2026-09-07 (`0.023413`, `0.007668`). **A first pass at this retro-validation read this print's own published `basket_costs` directly and reported "no effect," reasoning the two constituents "weren't in the basket yet" — wrong, corrected before this was implemented.** This print's own `correction_notes` (still on the print, unedited) already state the real cause: a real same-day Anthropic billing failure produced zero run records for both, and a separate, already-disclosed pipeline bug (`buildModelInputs`, fixed the same day, forward-only) silently dropped both from `basket_costs` entirely — no gap row, no `excluded_reason` — rather than leaving them as a case carry-forward's own qualifying-set logic could see. Rebuilding this day's actual constituent list from the registry and 2026-09-07's own published costs (not from this print's own, incompletely-listed `basket_costs`) is what surfaces the real effect: markedly closer to 2026-09-07's own published $0.0073 than to this print's published $0.0049, which is the expected result of a print that briefly, silently lost its two most expensive constituents to a real provider outage rather than a market move — exactly what that print's own correction notes already said in prose, now confirmed numerically. |
 | 2026-09-25 | 0.011108 | 0.010769 | −3.05% — `claude-haiku-4-5` carried forward from 2026-09-24 (`0.007719`). |
-| 2026-09-26 | 0.007626 | 0.010787 | +41.45% — `gemini-3.1-pro-preview` carried forward from 2026-09-25 (`0.039236`), pulling the headline back most of the way rather than showing the full billing-lapse-driven drop. |
+| 2026-09-26 | 0.007626 | 0.010885 | +42.74% — `gemini-3.1-pro-preview` carried forward from 2026-09-25, repriced at **`$0.040218`**, not 2026-09-25's own raw published `$0.039236`. **Re-run 2026-09-27, after the two required fixes below (usage-based repricing; imputed rows excluded from the qualifying-set gate) were actually implemented, using the real production code path (`buildVerifyInput` + `computePrint`) rather than a hand-rolled script: this print's own real 2026-09-25 cached-input usage, repriced at 2026-09-26's own snapshot AND under 2026-09-26's own rules, correctly picks up cached-input pricing — `CACHED_INPUT_PRICING_EFFECTIVE_DATE` (`cli/historical-pricing-rules.ts`) is 2026-09-26 itself, one day after the carry-forward source. Reusing the source day's raw published cost verbatim (the number this row originally stated) is exactly the cost-based behaviour Fix 1 replaces; a genuinely usage-based reprice is expected to differ from it whenever a pricing rule's effective date falls between the two days, as it does here. The 2026-09-08 and 2026-09-25 rows above were independently re-verified the same way and reproduce their original figures exactly (prices were unchanged between each pair of days involved), confirming this is the pricing-rule boundary at work, not a regression.** |
 
 **Fix 2 — a published median diagnostic, never the primary statistic.** Every print now also
 publishes `dated_siu_median_diagnostic`: the unweighted median of the same qualifying set (post
