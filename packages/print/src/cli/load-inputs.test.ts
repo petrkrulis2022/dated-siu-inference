@@ -1,14 +1,10 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ModelRegistryEntry, PriceSnapshot, Print, RunRecord } from "@touchstone/sdk";
+import type { ModelRegistryEntry, PriceSnapshot, RunRecord } from "@touchstone/sdk";
 import { buildModelInputs, loadCarryForwardHistory, printsDir } from "./load-inputs.js";
 import { computePrint } from "../compute/index.js";
-
-function minimalPrint(date: string, basketCosts: Print["basket_costs"]): Partial<Print> {
-  return { date, basket_costs: basketCosts };
-}
 
 const REGISTRY: ModelRegistryEntry[] = [
   { id: "healthy-model", provider: "openrouter", endpoint: "x", model_string: "x", tier: "open-weight-hosted", open_weights: true, host: "h" },
