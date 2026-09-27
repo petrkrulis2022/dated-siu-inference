@@ -126,9 +126,13 @@ export interface IndexerConfig {
   escrowDeployBlock: bigint;
   attestationAddress: string;
   attestationDeployBlock: bigint;
-  /** eth_getLogs block-range chunk size — kept conservative since public RPC endpoints commonly
-   * cap the range per call; verified empirically against the configured RPC during real indexing
-   * rather than assumed. */
+  /** eth_getLogs block-range chunk size — kept conservative since RPC endpoints commonly cap the
+   * range per call; verified empirically against the configured RPC during real indexing rather
+   * than assumed. Found live, 2026-09-27: Alchemy's free tier caps eth_getLogs at a 10-block
+   * range per call (confirmed from its own real error message, not guessed) — far below the old
+   * default, which was tuned against the public sepolia.base.org endpoint instead. The archive
+   * endpoint is a different provider with a different real limit, so this needs its own value;
+   * see DEFAULT_CHUNK_SIZE's own doc comment for the current one. */
   chunkSize?: bigint;
   /** Overrides "scan up to the real current chain tip" with a fixed block instead — for tests
    * that need a bounded, permanently-small range rather than one that grows every day the real
@@ -137,7 +141,13 @@ export interface IndexerConfig {
   toBlockOverride?: bigint;
 }
 
-const DEFAULT_CHUNK_SIZE = 2000n;
+/** Safe on Alchemy's free tier (confirmed live, 2026-09-27: it caps eth_getLogs at 10 blocks per
+ * call) — a real, current constraint of the specific archive provider this project uses, not a
+ * guess. Deliberately the default for every real caller too, not just tests: a paid tier would
+ * only make a smaller chunk size slower (more round trips), never wrong, so there is no reason to
+ * risk breaking on the free tier for callers who haven't upgraded. Override via
+ * IndexerConfig.chunkSize once a real deployment's own plan supports more. */
+const DEFAULT_CHUNK_SIZE = 9n;
 
 interface DecodedLog {
   eventName: string;
