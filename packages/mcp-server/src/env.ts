@@ -55,10 +55,16 @@ export function loadSettlementReaderFromEnv(
       `${rpcEnvVar} is not set — cannot read on-chain settlements for chain "${chainName}".`,
     );
   }
+  // Optional — see OnChainSettlementReaderOptions.archiveRpcUrl's own doc comment. Absent means
+  // verify_receipt falls back to rpcUrl, which is fine for a recent settlement and will start
+  // failing only for one old enough that the public endpoint has pruned its block.
+  const archiveRpcEnvVar = `TOUCHSTONE_${chainName.toUpperCase().replaceAll("-", "_")}_ARCHIVE_RPC`;
+  const archiveRpcUrl = env[archiveRpcEnvVar];
   const deployment: DeploymentRecord = loadDeployment(chainName);
   return new OnChainSettlementReader({
     chainName,
     rpcUrl,
+    ...(archiveRpcUrl ? { archiveRpcUrl } : {}),
     escrowAddress: deployment.contracts.TouchstoneEscrow.address,
   });
 }

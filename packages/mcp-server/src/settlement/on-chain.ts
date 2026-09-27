@@ -49,6 +49,16 @@ export interface OnChainSettlementReaderOptions {
    * argument so a caller can never be served a different network's data by mistake. */
   chainName: string;
   rpcUrl: string;
+  /** Used for getTransactionReceipt specifically. Found live, 2026-09-27: a public RPC endpoint
+   * can prune history old enough that it can no longer serve a transaction receipt for it either
+   * (confirmed against sepolia.base.org, which now refuses eth_getBlockByNumber for anything
+   * before block ~46,000,000) — the same fault class as the console indexer's own historical
+   * eth_getLogs scan, just triggered by an old tx_hash instead of an old block range. Optional,
+   * falling back to `rpcUrl`: verifying a RECENT settlement works fine on the public endpoint
+   * either way, and most real verify_receipt calls are for one that just happened — only a
+   * genuinely old settlement needs this set. See docs/methodology.md's own disclosure of this
+   * for independent verifiers checking an old receipt. */
+  archiveRpcUrl?: string;
   escrowAddress: string;
 }
 
@@ -60,11 +70,13 @@ export interface OnChainSettlementReaderOptions {
 export class OnChainSettlementReader implements SettlementReader {
   private readonly chainName: string;
   private readonly rpcUrl: string;
+  private readonly archiveRpcUrl: string;
   private readonly escrowAddress: Hex;
 
   constructor(options: OnChainSettlementReaderOptions) {
     this.chainName = options.chainName;
     this.rpcUrl = options.rpcUrl;
+    this.archiveRpcUrl = options.archiveRpcUrl ?? options.rpcUrl;
     this.escrowAddress = options.escrowAddress as Hex;
   }
 
@@ -81,8 +93,13 @@ export class OnChainSettlementReader implements SettlementReader {
 
     const expectedHash = quoteHashHex(quote);
     const publicClient = createPublicClient({ transport: http(this.rpcUrl) });
+    // A separate client, possibly pointed at the same URL when no archive endpoint is
+    // configured — see OnChainSettlementReaderOptions.archiveRpcUrl's own doc comment for why
+    // this specific read needs one for an old enough settlement, while the readContract call
+    // below (current escrow state) never does.
+    const archiveClient = createPublicClient({ transport: http(this.archiveRpcUrl) });
 
-    const receipt = await publicClient.getTransactionReceipt({ hash: txHash as Hex });
+    const receipt = await archiveClient.getTransactionReceipt({ hash: txHash as Hex });
     // A receipt exists for reverted transactions too (P13 lesson): mined is not succeeded.
     if (receipt.status !== "success") {
       throw new Error(
