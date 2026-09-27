@@ -52,7 +52,7 @@ export async function runCrossClassUnavailability(
     );
   }
 
-  const rateAttestation = await signDryLoopRateAttestation(devnet);
+  const rateAttestation = await signDryLoopRateAttestation(devnet, windowTo);
   await buyer.callTool(
     "mint_claim",
     {

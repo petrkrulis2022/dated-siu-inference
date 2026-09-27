@@ -259,11 +259,11 @@ contract WorkClaimHandlerCoverageTest is Test {
         (WorkClaim claim, WorkClaimHandler handler) =
             _deployHandler(issuers, holders, attacker, classA, 0xA11CE);
 
-        handler.mint(0, 0, 100, 1);
+        handler.mint(0, 0, 100, 1, 0);
         assertEq(handler.ghostMints(), 1, "handler can mint");
 
         uint256 tokenId = handler.knownTokenIds(0);
-        (,, uint64 windowFrom,,,) = claim.claimTypes(tokenId);
+        (,,, uint64 windowFrom,,,) = claim.claimTypes(tokenId);
         vm.warp(windowFrom); // exactly the real window this mint used, not a guessed offset
         handler.present(0, 0, 1);
         assertEq(handler.ghostPresents(), 1, "handler can present");

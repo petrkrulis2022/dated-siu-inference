@@ -238,6 +238,7 @@ Headroom is tracked **by the contract, never self-reported**. Minting consumes i
 {
   "claim_id": "…",
   "class": "code",
+  "grade": "commodity",
   "quantity_siu": 500,
   "quality_gate_id": "gate_code_v3",
   "delivery_window": { "from": "…", "to": "…" },
@@ -250,27 +251,49 @@ Headroom is tracked **by the contract, never self-reported**. Minting consumes i
 }
 ```
 
-**Fungible within class and delivery window.** `code/2026-W40` from ISSUER-A and from ISSUER-B are the same instrument. `code/2026-W41` is a different one. That is tenor standardisation (monetary design §6.1), and with weekly windows a three-week run produces three points — enough to see whether a term structure appears at all.
+**Fungible within issuer, class, grade and delivery window — never across issuers.** Corrected
+2026-09-27: an earlier draft of this section said `code/2026-W40` from ISSUER-A and from ISSUER-B
+were "the same instrument." They are not, and were never built that way — see `ClaimRouter.sol`'s
+own doc comment for the real scoping decision. Each WorkClaim token id is
+`(issuer, class, grade, window)`; two issuers' claims for the same class/grade/window are
+different, non-fungible tokens. This is the deliberate **bilateral** stage of the design: each
+issuer's bond backs only that issuer's own claims, with no mutualised risk and no clearing
+function needed. **Pooled** cross-issuer fungibility — one instrument regardless of issuer — is a
+later stage, and needs Touchstone Markets to operate a real default fund (a shared pool's
+liability has to be attributed back to individual issuers when it only partially defaults, which
+is genuinely unresolved even in §7.4's own open questions) — not something to introduce by
+accident in a spec paragraph. `code/2026-W41` is a different claim from `code/2026-W40` regardless
+of issuer or grade. That is tenor standardisation (monetary design §6.1), and with weekly windows
+a three-week run produces three points — enough to see whether a term structure appears at all.
+
+Grade matters economically, not just as an identity field: one issuer's claims can trade at a
+different price from another's once pooling exists, because credit risk reappears in the claim
+price per issuer — a real consequence of the bilateral stage, not a defect in it.
 
 **Not on demand.** No redemption before the window opens. This is the change that removes the queue, the run and the demand liability.
 
 ### 4.4 The four operations
 
 ```
-MINT      agent sends USDC → issuer's bond headroom is checked →
-          claim minted at the current per-class print → USDC to issuer
+MINT      agent sends USDC → the router picks an issuer with headroom in
+          that class, for that grade → claim minted at the current print
+          for that grade → USDC to issuer. The issuer is fixed at mint,
+          baked into the claim's own token id — never re-routed later.
 
-TRANSFER  claim moves agent→agent, free, no print read, no issuer involvement
+TRANSFER  claim moves agent→agent, free, no print read, no re-check —
+          the issuer and grade were already fixed at mint, carried by the
+          token id itself, not re-verified on every transfer
 
-REDEEM    holder presents claim + task spec inside the window →
-          router picks an issuer with headroom in that class →
-          harness executes → G1–G6 run → pass: claim retired,
-          headroom restored, receipt emitted; fail: claim NOT retired,
-          holder may re-present within the window
+REDEEM    holder presents claim + task spec inside the window, to the
+          same issuer this claim was routed to at mint (fixed, not
+          re-routed at redemption) → issuer serves the work off-chain →
+          pass: claim retired, headroom restored, receipt emitted;
+          fail: claim NOT retired, holder may re-present within the window
 
-DEFAULT   window closes with the claim unserved →
-          re-route to the other issuer if it has headroom;
-          otherwise bond pays cash at the print on the default date
+DEFAULT   window closes with the claim unserved → the issuing bond alone
+          pays cash, at that claim's own grade's print, dated the day the
+          window closed — never a re-route to another issuer; a claim's
+          default liability is that one issuer's alone
 ```
 
 The **fail path is the one to instrument carefully.** "Fail the gate and the claim is not retired" is the mechanical expression of *failed work counts zero*, and it is the single behaviour that distinguishes this from every token that pays for effort.
@@ -283,7 +306,7 @@ A run where nothing goes wrong tests almost nothing. Three states must be reacha
 | --- | --- | --- |
 | **Headroom exhaustion in one class** | Size ISSUER-B's `code` lot small | Does routing find the other issuer? Does the holder notice? |
 | **Cross-class unavailability** | Exhaust `extract` while `code` headroom remains | Confirms per-class claims are correct and unified ones overstate headroom |
-| **Default** | Disable ISSUER-B's harness path for one window | Does re-routing work? Does the bond pay at the right print? |
+| **Default** | Disable an issuer's harness path for one window | Does that issuer's own bond pay the holder, at that claim's own grade's print? (No re-route to the other issuer — see §4.4's corrected DEFAULT row.) |
 
 ## 5. Identity, wallets and chain
 
@@ -382,6 +405,11 @@ Extends `touchstone-quote` (v4 §5) with the fields a claim-settled trade needs.
 ```
 
 `spread_to_index_pct` is first-class per v4 §5 — *"0.14 SIU, +102% above index" is actionable; "0.14 SIU" alone is not.* It is also the field that makes Work TCA computable directly from the quote stream.
+
+**Note added 2026-09-27:** `"fsiu:extract/2026-W40"` reads as if class and window were the whole
+identity — the real on-chain token id also carries issuer and grade (§4.3's correction above).
+This string is a display convenience in these examples, not the wire format; it isn't rewritten
+here to avoid touching the quote/receipt schema for a documentation-only fix.
 
 ### 6.2 Receipt
 

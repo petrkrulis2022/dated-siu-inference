@@ -40,7 +40,7 @@ export async function runHeadroomExhaustion(
     throw new Error("runHeadroomExhaustion requires ISSUER-A to start with real headroom.");
   }
 
-  const rateAttestation = await signDryLoopRateAttestation(devnet);
+  const rateAttestation = await signDryLoopRateAttestation(devnet, windowTo);
 
   // One mint sized to exactly ISSUER-A's current headroom — fully exhausts it in a single call
   // rather than looping thousands of small mints.

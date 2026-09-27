@@ -4,7 +4,7 @@ import { clientsFor } from "@touchstone/agents";
 import { setupDevnet, CLASS_CODE, type DevnetHandle } from "./deploy.js";
 import { WORK_CLAIM_ABI } from "../chain/abi.js";
 import { writeAndConfirm } from "../chain/write.js";
-import { signRateAttestation } from "../chain/rate-attestation.js";
+import { printDateToUnixDay, signRateAttestation, SERIES_COMMODITY } from "../chain/rate-attestation.js";
 
 /**
  * The property the user asked to see proven, not just asserted: `RateAttestationVerifier.sol`
@@ -40,14 +40,16 @@ describe("rate attestation — viem signs off-chain, real Solidity verifies on-c
   const quantity = 500n;
   const nanoUsdPerSiu = 10_700_000n; // arbitrary, real-scale rate — see WorkClaim.t.sol's own note
   const validUntil = 9_999_999_999n; // far future — expiry isn't what this suite is testing
+  const printDate = printDateToUnixDay("2026-09-25");
 
   function mintArgs(signature: Hex) {
     return [
       CLASS_CODE,
+      SERIES_COMMODITY,
       quantity,
       windowFrom,
       windowTo,
-      { printId: "2026-09-25", nanoUsdPerSiu, validUntil },
+      { printId: "2026-09-25", series: SERIES_COMMODITY, printDate, nanoUsdPerSiu, validUntil },
       signature,
     ] as const;
   }
@@ -56,7 +58,7 @@ describe("rate attestation — viem signs off-chain, real Solidity verifies on-c
     const buyer = clientsFor(devnet.agents.ORCHESTRATOR.privateKeyHex, devnet.rpcUrl);
 
     const signature = await signRateAttestation(
-      { printId: "2026-09-25", nanoUsdPerSiu, validUntil },
+      { printId: "2026-09-25", series: SERIES_COMMODITY, printDate, nanoUsdPerSiu, validUntil },
       devnet.deployment.network.chainId,
       devnet.deployment.workClaim.address as Hex,
       devnet.publisherPrivateKeyHex,
@@ -78,7 +80,7 @@ describe("rate attestation — viem signs off-chain, real Solidity verifies on-c
     // genuine Base Sepolia (84532) attestation would look like if replayed against this Arc-style
     // devnet. Computed independently by viem, not by flipping Foundry's vm.chainId cheatcode.
     const wrongChainSignature = await signRateAttestation(
-      { printId: "2026-09-25", nanoUsdPerSiu, validUntil },
+      { printId: "2026-09-25", series: SERIES_COMMODITY, printDate, nanoUsdPerSiu, validUntil },
       devnet.deployment.network.chainId + 1,
       devnet.deployment.workClaim.address as Hex,
       devnet.publisherPrivateKeyHex,
@@ -98,7 +100,7 @@ describe("rate attestation — viem signs off-chain, real Solidity verifies on-c
     const buyer = clientsFor(devnet.agents.ORCHESTRATOR.privateKeyHex, devnet.rpcUrl);
 
     const wrongContractSignature = await signRateAttestation(
-      { printId: "2026-09-25", nanoUsdPerSiu, validUntil },
+      { printId: "2026-09-25", series: SERIES_COMMODITY, printDate, nanoUsdPerSiu, validUntil },
       devnet.deployment.network.chainId,
       devnet.deployment.capacityBond.address as Hex, // a real, deployed, but wrong contract
       devnet.publisherPrivateKeyHex,

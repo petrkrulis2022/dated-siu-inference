@@ -1,8 +1,9 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { keccak256, stringToBytes, type Hex } from "viem";
 import { createAdapterFor, loadApiKeysFromEnv, withBackoff, type Adapter } from "@touchstone/harness";
 import type { Print } from "@touchstone/sdk";
+import { printDateToUnixDay, seriesForPrint, usdPerSiuToNanoUsdPerSiu } from "../chain/rate-attestation.js";
 import {
   CODE_GATE_1_TRIVIAL,
   CODE_REFERENCE,
@@ -78,14 +79,26 @@ const PRICES: Record<string, ModelPrices> = {
   "grok-4.6": { priceInUsdPer1M: "2", priceOutUsdPer1M: "6" },
 };
 
-// The one illustrative rate this window's real mint_claim/get_print calls attest to and read —
-// $0.01/SIU, the same illustrative figure the dry loop's own DRY_LOOP_NANO_USD_PER_SIU already
-// established (packages/gate-market-agents/src/dry-loop/context.ts) — not derived from any real
-// Dated SIU print (the Gate Market fSIU testbed is explicitly outside the real print pipeline,
-// per CLAUDE.md's own sanctioned exception).
-const ILLUSTRATIVE_NANO_USD_PER_SIU = 10_000_000n;
-const ILLUSTRATIVE_RATE_USD_PER_SIU = "0.01";
-const ILLUSTRATIVE_PRINT_ID = "p5-window1-illustrative";
+/**
+ * The real rate this window's mint_claim/get_print calls attest to and read — replaced
+ * 2026-09-27 (design review: both testbed issuers' capacity models are commodity, but every mint
+ * used to attest a flat, hardcoded $0.01/SIU, roughly 7x real Commodity SIU at the time,
+ * distorting any economic reading of the run). Loads the most recently published real
+ * `<date>-commodity.json` print under data/prints/ directly — not via `@touchstone/print`'s own
+ * CLI loaders (`cli/load-inputs.ts`'s `repoRoot()` assumes `process.cwd()` is `packages/print`
+ * itself, an assumption this script must not borrow from a different package's cwd).
+ */
+function loadLatestCommodityPrint(): Print {
+  const printsDir = join(REPO_ROOT, "data/prints");
+  const files = readdirSync(printsDir)
+    .filter((f) => f.endsWith("-commodity.json"))
+    .sort();
+  const latest = files.at(-1);
+  if (!latest) {
+    throw new Error(`loadLatestCommodityPrint: no "<date>-commodity.json" print found under ${printsDir}.`);
+  }
+  return JSON.parse(readFileSync(join(printsDir, latest), "utf-8")) as Print;
+}
 
 function withPinnedTestSuite(instance: ReferenceTaskInstance): ReferenceTaskInstance {
   return { ...instance, files: { ...instance.files, "pinned-test-cases.txt": PINNED_TEST_SUITE } };
@@ -124,6 +137,17 @@ async function main(): Promise<void> {
 
   const deployment = loadGateMarketDeployment();
   const apiKeys = loadApiKeysFromEnv();
+
+  // Real Commodity SIU print — both testbed issuers back commodity-class capacity, so this is
+  // the correct grade's rate for every mint/quote in this window (see loadLatestCommodityPrint's
+  // own doc comment).
+  const commodityPrint = loadLatestCommodityPrint();
+  const commodityRateUsdPerSiu = commodityPrint.dated_siu;
+  const commodityPrintId = commodityPrint.print_id;
+  console.log(
+    `Using real Commodity SIU print ${commodityPrintId}: $${commodityRateUsdPerSiu}/SIU ` +
+      `(both testbed issuers' capacity models are commodity-class).`,
+  );
 
   const registryEntry = (id: string): { provider: string; host: string } => {
     const entry = registry.find((r: { id: string }) => r.id === id);
@@ -227,8 +251,8 @@ YOUR JOB THIS WINDOW
   OPTION A — settle in USDC: request a quote from WORKER-CODE, then pay the real quote it issues,
   then wait for it to deliver.
     Step 1: {"tool": "request_quote", "args": {"siu": "10", "model": "${workerCodeModel}",
-      "rateUsdPerSiu": "${ILLUSTRATIVE_RATE_USD_PER_SIU}", "indexVersion": "SIU-2026a",
-      "printId": "${ILLUSTRATIVE_PRINT_ID}", "printHash": "0x00", "sellerId": "${workerCodeErc8004Id}",
+      "rateUsdPerSiu": "${commodityRateUsdPerSiu}", "indexVersion": "SIU-2026a",
+      "printId": "${commodityPrintId}", "printHash": "0x00", "sellerId": "${workerCodeErc8004Id}",
       "chain": "base-sepolia", "expiresInSeconds": 3600, "pattern": "fixed"}}
     Step 2 (once WORKER-CODE has issued a quote — you will see it on the market board below):
       {"tool": "pay", "args": {"requestId": "<the requestId from the board>",
@@ -322,7 +346,7 @@ YOUR SITUATION THIS WINDOW
   Otherwise, if you have nothing to do yet, DO NOT respond with {"done": true} — that would
   permanently end your own participation in this window and you would miss a real redemption
   routed to you later. Instead, check again with a real, harmless read:
-  {"tool": "get_print", "args": {"printId": "${ILLUSTRATIVE_PRINT_ID}"}}. Only respond
+  {"tool": "get_print", "args": {"printId": "${commodityPrintId}"}}. Only respond
   {"done": true} once you are certain nothing further could ever be routed to you this window.
 `;
 
@@ -450,30 +474,21 @@ YOUR SITUATION THIS WINDOW
     ledgerPath: LEDGER_PATH,
   });
 
-  const illustrativePrint: Print = {
-    version: "SIU-2026a",
-    print_id: ILLUSTRATIVE_PRINT_ID,
-    date: new Date().toISOString().slice(0, 10),
-    status: "provisional",
-    basket_costs: [],
-    weights: { source: "equal", values: [] },
-    dated_siu: "0.0100",
-    exchange_rate_table: [],
-  } as unknown as Print;
-
   const deps: RunnerDeps = {
     chainReader: new ViemChainReader(deployment, rpcUrl),
     deployment,
     escrowAddress: process.env.TOUCHSTONE_ESCROW_ADDRESS ?? "0x0",
     runGateHardeningChecks,
-    loadPrint: async () => illustrativePrint,
+    loadPrint: async () => commodityPrint,
     isReconciled: async () => false,
   };
 
   const mintContext: MintContext = {
     publisherPrivateKeyHex: toHex(process.env.TOUCHSTONE_PUBLISHER_KEY, "TOUCHSTONE_PUBLISHER_KEY"),
-    printId: ILLUSTRATIVE_PRINT_ID,
-    nanoUsdPerSiu: ILLUSTRATIVE_NANO_USD_PER_SIU,
+    printId: commodityPrintId,
+    series: seriesForPrint(commodityPrint.series),
+    printDate: printDateToUnixDay(commodityPrint.date),
+    nanoUsdPerSiu: usdPerSiuToNanoUsdPerSiu(commodityRateUsdPerSiu),
     validitySeconds: 3600n,
   };
 

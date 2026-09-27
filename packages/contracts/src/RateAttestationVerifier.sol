@@ -78,9 +78,22 @@ abstract contract RateAttestationVerifier {
 
     struct RateAttestation {
         /// @dev The real, published print id this rate was attested for, e.g. "2026-09-25" or
-        ///      "2026-09-25-commodity" — opaque to this contract, see this file's own top-level
-        ///      doc comment for what "opaque" does and doesn't guarantee.
+        ///      "2026-09-25-commodity" — kept for off-chain tracing/audit; the two fields below
+        ///      (`series`, `printDate`) are what this contract actually checks against a claim now
+        ///      — see this file's own top-level doc comment for what "opaque" originally meant and
+        ///      why `printId` alone was never enough.
         string printId;
+        /// @dev Which grade this rate was attested for — `keccak256("frontier")` or
+        ///      `keccak256("commodity")` (see WorkClaim.sol's own doc comment for the exact
+        ///      constants). Added 2026-09-27: previously nothing tied an attestation to a grade at
+        ///      all, so a frontier claim could default-settle against a blended or commodity rate.
+        bytes32 series;
+        /// @dev Unix timestamp of 00:00:00 UTC on the print's own calendar `date` — added
+        ///      2026-09-27 alongside `series`. `settleWindowClose` requires this to equal the
+        ///      claim's own default date (its window's own close day), closing a real gap: within
+        ///      the ±50% settlement band, a caller could otherwise settle against a genuine,
+        ///      validly-signed rate from a stale, more favourable day.
+        uint64 printDate;
         /// @dev USD per SIU, scaled by 1e9 (nano-USD per SIU) — see this file's top-level doc
         ///      comment for why this scale, not the old 1e6 one.
         uint256 nanoUsdPerSiu;
@@ -89,8 +102,9 @@ abstract contract RateAttestationVerifier {
         uint64 validUntil;
     }
 
-    bytes32 private constant RATE_ATTESTATION_TYPEHASH =
-        keccak256("RateAttestation(string printId,uint256 nanoUsdPerSiu,uint64 validUntil)");
+    bytes32 private constant RATE_ATTESTATION_TYPEHASH = keccak256(
+        "RateAttestation(string printId,bytes32 series,uint64 printDate,uint256 nanoUsdPerSiu,uint64 validUntil)"
+    );
 
     error PublisherZero();
     error RateAttestationExpired(uint64 validUntil, uint64 currentTimestamp);
@@ -124,12 +138,14 @@ abstract contract RateAttestationVerifier {
     }
 
     /// @dev Reverts on an expired attestation or a signature that doesn't recover to `publisher`.
-    ///      Returns the verified rate only — never the whole struct — so a call site can't
-    ///      accidentally use an unverified field from `att` after calling this.
+    ///      Returns every field a call site needs to check — `nanoUsdPerSiu`, `series` and
+    ///      `printDate` — rather than just the rate: all three are equally covered by the same
+    ///      signature check, so there is no "unverified field" risk in returning them (the
+    ///      original narrower return, rate-only, predates `series`/`printDate` existing at all).
     function _verifyRateAttestation(RateAttestation calldata att, bytes calldata signature)
         internal
         view
-        returns (uint256 nanoUsdPerSiu)
+        returns (uint256 nanoUsdPerSiu, bytes32 series, uint64 printDate)
     {
         if (block.timestamp > att.validUntil) {
             revert RateAttestationExpired(att.validUntil, uint64(block.timestamp));
@@ -139,6 +155,8 @@ abstract contract RateAttestationVerifier {
             abi.encode(
                 RATE_ATTESTATION_TYPEHASH,
                 keccak256(bytes(att.printId)),
+                att.series,
+                att.printDate,
                 att.nanoUsdPerSiu,
                 att.validUntil
             )
@@ -146,6 +164,6 @@ abstract contract RateAttestationVerifier {
         address recovered = ECDSA.recoverCalldata(_hashTypedData(structHash), signature);
         if (recovered != publisher) revert InvalidRateAttestation(recovered, publisher);
 
-        return att.nanoUsdPerSiu;
+        return (att.nanoUsdPerSiu, att.series, att.printDate);
     }
 }

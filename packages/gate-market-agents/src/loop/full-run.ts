@@ -78,6 +78,14 @@ export interface RosterAgentConfig {
 export interface MintContext {
   publisherPrivateKeyHex: Hex;
   printId: string;
+  /** Which Touchstone Assay grade every mint in this window attests to and mints as — added
+   * 2026-09-27 alongside `printDate` (see `RateAttestation`'s own doc comment): a real, real-key
+   * signed rate for one blended print previously carried no grade at all, so nothing stopped a
+   * frontier-priced mint from claiming to be a commodity one or vice versa. */
+  series: Hex;
+  /** Unix timestamp of 00:00:00 UTC on `printId`'s own calendar date — see
+   * `chain/rate-attestation.ts`'s `printDateToUnixDay`. */
+  printDate: bigint;
   nanoUsdPerSiu: bigint;
   /** How long a freshly-signed attestation stays valid — generous on purpose (this run's own
    * compressed windows are hours, not weeks); a real production system would want this much
@@ -640,17 +648,25 @@ export async function buildToolArgs(tool: ToolName, rawArgs: unknown, ctx: Build
     }
     const validUntil = BigInt(Math.floor(Date.now() / 1000)) + ctx.mintContext.validitySeconds;
     const signature = await signRateAttestation(
-      { printId: ctx.mintContext.printId, nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu, validUntil },
+      {
+        printId: ctx.mintContext.printId,
+        series: ctx.mintContext.series,
+        printDate: ctx.mintContext.printDate,
+        nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu,
+        validUntil,
+      },
       ctx.deployment.network.chainId,
       ctx.deployment.workClaim.address as Hex,
       ctx.mintContext.publisherPrivateKeyHex,
     );
     return {
       classId: classIdFor(ctx.job.taskClass),
+      series: ctx.mintContext.series,
       quantity,
       windowFrom: Number(ctx.windowFrom),
       windowTo: Number(ctx.windowTo),
       printId: ctx.mintContext.printId,
+      printDate: ctx.mintContext.printDate.toString(),
       nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu.toString(),
       validUntil: validUntil.toString(),
       signature,

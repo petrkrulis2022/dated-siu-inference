@@ -4,7 +4,7 @@ import { runGateHardeningChecks } from "@touchstone/task-pack-gate-hardening";
 import { Runner } from "../runner.js";
 import { BudgetCeiling } from "../budget/ceiling.js";
 import { ViemChainReader } from "../chain/reader.js";
-import { signRateAttestation } from "../chain/rate-attestation.js";
+import { signRateAttestation, SERIES_COMMODITY, unixDayStart } from "../chain/rate-attestation.js";
 import type { RunnerDeps } from "../deps.js";
 import { AGENT_IDS, type AgentId } from "../identity/resolve.js";
 import type { DevnetHandle } from "../devnet/deploy.js";
@@ -27,10 +27,14 @@ const DRY_LOOP_PRINT: Print = {
 } as unknown as Print;
 
 /** The tool-call args shape mint_claim/settle_window_close now need — see
- * RateAttestationVerifier.sol's own doc comment for what's verified. `nanoUsdPerSiu`/`validUntil`
- * are decimal strings, matching every other tool's own money-string convention. */
+ * RateAttestationVerifier.sol's own doc comment for what's verified. `nanoUsdPerSiu`/`validUntil`/
+ * `printDate` are decimal strings, matching every other tool's own money-string convention.
+ * `series` fixed to commodity — the same illustrative grade every dry-loop scenario's claims use,
+ * added 2026-09-27 alongside `printDate` (see `RateAttestation`'s own doc comment for why). */
 export interface DryLoopRateAttestationArgs {
   printId: string;
+  series: Hex;
+  printDate: string;
   nanoUsdPerSiu: string;
   validUntil: string;
   signature: Hex;
@@ -42,19 +46,36 @@ export interface DryLoopRateAttestationArgs {
  * from the moment of signing) since a dry-loop run completes in seconds, not because expiry
  * itself is untested — `runner.test.ts`/a dedicated Foundry test covers that edge directly.
  * Callers sign once per scenario run and reuse the same attestation across every mint/settle
- * call in it, exactly like a real caller would reuse one day's real signed rate. */
+ * call in it, exactly like a real caller would reuse one day's real signed rate.
+ *
+ * `claimWindowTo` — the specific claim's own real window-close Unix timestamp (each scenario
+ * computes its own, relative to wall-clock `now`, never `DRY_LOOP_PRINT`'s own fixed illustrative
+ * `date`) — added 2026-09-27 alongside `series`/`printDate`: `settleWindowClose` requires
+ * `printDate` to equal the *specific claim's own* default date, not a fixed historical one, so a
+ * scenario that settles a real default needs this to genuinely match the claim it mints.
+ */
 export async function signDryLoopRateAttestation(
   devnet: DevnetHandle,
+  claimWindowTo: number,
 ): Promise<DryLoopRateAttestationArgs> {
   const validUntil = BigInt(Math.floor(Date.now() / 1000) + 24 * 60 * 60);
+  const printDate = unixDayStart(BigInt(claimWindowTo));
   const signature = await signRateAttestation(
-    { printId: DRY_LOOP_PRINT.print_id, nanoUsdPerSiu: DRY_LOOP_NANO_USD_PER_SIU, validUntil },
+    {
+      printId: DRY_LOOP_PRINT.print_id,
+      series: SERIES_COMMODITY,
+      printDate,
+      nanoUsdPerSiu: DRY_LOOP_NANO_USD_PER_SIU,
+      validUntil,
+    },
     devnet.deployment.network.chainId,
     devnet.deployment.workClaim.address as Hex,
     devnet.publisherPrivateKeyHex,
   );
   return {
     printId: DRY_LOOP_PRINT.print_id,
+    series: SERIES_COMMODITY,
+    printDate: printDate.toString(),
     nanoUsdPerSiu: DRY_LOOP_NANO_USD_PER_SIU.toString(),
     validUntil: validUntil.toString(),
     signature,

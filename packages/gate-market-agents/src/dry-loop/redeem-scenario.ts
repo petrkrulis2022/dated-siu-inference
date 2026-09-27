@@ -90,7 +90,7 @@ export async function runRedeemScenario(
     (headroomBeforeMintRecord.result as { headroom: string }).headroom,
   );
 
-  const rateAttestation = await signDryLoopRateAttestation(devnet);
+  const rateAttestation = await signDryLoopRateAttestation(devnet, windowTo);
   const mintRecord = await buyer.callTool(
     "mint_claim",
     {

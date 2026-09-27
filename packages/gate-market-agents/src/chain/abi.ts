@@ -7,17 +7,19 @@ import { parseAbi } from "viem";
  * lives only in `packages/contracts/out/`, outside the pnpm workspace.
  */
 export const WORK_CLAIM_ABI = parseAbi([
-  "function mint(bytes32 classId, uint256 quantity, uint64 windowFrom, uint64 windowTo, (string printId, uint256 nanoUsdPerSiu, uint64 validUntil) att, bytes signature) external returns (uint256 tokenId)",
+  "function mint(bytes32 classId, bytes32 series, uint256 quantity, uint64 windowFrom, uint64 windowTo, (string printId, bytes32 series, uint64 printDate, uint256 nanoUsdPerSiu, uint64 validUntil) att, bytes signature) external returns (uint256 tokenId)",
   "function presentForRedemption(uint256 tokenId, bytes32 taskSpecHash) external",
   "function serveRedemption(uint256 tokenId, address holder, uint256 quantity, bool passed, bytes32 receiptRef) external",
-  "function settleWindowClose(uint256 tokenId, address holder, (string printId, uint256 nanoUsdPerSiu, uint64 validUntil) att, bytes signature) external",
-  "function tokenIdFor(address issuer, bytes32 classId, uint64 windowFrom, uint64 windowTo) external pure returns (uint256)",
+  "function settleWindowClose(uint256 tokenId, address holder, (string printId, bytes32 series, uint64 printDate, uint256 nanoUsdPerSiu, uint64 validUntil) att, bytes signature) external",
+  "function tokenIdFor(address issuer, bytes32 classId, bytes32 series, uint64 windowFrom, uint64 windowTo) external pure returns (uint256)",
   "function balanceOf(address account, uint256 id) external view returns (uint256)",
   "function everPresented(uint256 tokenId, address holder) external view returns (bool)",
   "function settled(uint256 tokenId, address holder) external view returns (bool)",
   "function safeTransferFrom(address from, address to, uint256 id, uint256 value, bytes data) external",
-  "function claimTypes(uint256 tokenId) external view returns (address issuer, bytes32 classId, uint64 windowFrom, uint64 windowTo, bool exists, uint256 referenceNanoUsdPerSiu)",
-  "event Minted(uint256 indexed tokenId, address indexed issuer, address indexed buyer, bytes32 classId, uint256 quantity, uint64 windowFrom, uint64 windowTo)",
+  "function claimTypes(uint256 tokenId) external view returns (address issuer, bytes32 classId, bytes32 series, uint64 windowFrom, uint64 windowTo, bool exists, uint256 referenceNanoUsdPerSiu)",
+  "function SERIES_FRONTIER() external view returns (bytes32)",
+  "function SERIES_COMMODITY() external view returns (bytes32)",
+  "event Minted(uint256 indexed tokenId, address indexed issuer, address indexed buyer, bytes32 classId, bytes32 series, uint256 quantity, uint64 windowFrom, uint64 windowTo)",
 ]);
 
 export const CAPACITY_BOND_ABI = parseAbi([

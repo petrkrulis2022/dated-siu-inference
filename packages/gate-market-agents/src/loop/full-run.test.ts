@@ -28,6 +28,7 @@ import { loadSkill } from "../skills/registry.js";
 import { setupDevnet, type DevnetHandle } from "../devnet/deploy.js";
 import { ViemChainReader } from "../chain/reader.js";
 import { AGENT_IDS, erc8004IdFor, type AgentId } from "../identity/resolve.js";
+import { printDateToUnixDay, SERIES_COMMODITY } from "../chain/rate-attestation.js";
 import { QuoteBoard } from "./quote-board.js";
 import {
   buildToolArgs,
@@ -405,27 +406,37 @@ describe("buildToolArgs", () => {
     const mintContext: MintContext = {
       publisherPrivateKeyHex: PUBLISHER_PK,
       printId: "2026-09-25",
+      series: SERIES_COMMODITY,
+      printDate: printDateToUnixDay("2026-09-25"),
       nanoUsdPerSiu: 10_700_000n,
       validitySeconds: 3600n,
     };
     const args = (await buildToolArgs("mint_claim", { quantity: "500" }, baseCtx({ mintContext }))) as {
-      classId: string; quantity: string; windowFrom: number; windowTo: number;
-      printId: string; nanoUsdPerSiu: string; validUntil: string; signature: Hex;
+      classId: string; series: string; quantity: string; windowFrom: number; windowTo: number;
+      printId: string; printDate: string; nanoUsdPerSiu: string; validUntil: string; signature: Hex;
     };
 
     expect(args.quantity).toBe("500"); // the model's own real economic choice, untouched
     expect(args.windowFrom).toBe(1_800_000_000);
     expect(args.windowTo).toBe(1_800_003_600);
     expect(args.printId).toBe("2026-09-25");
+    expect(args.series).toBe(SERIES_COMMODITY);
     expect(args.nanoUsdPerSiu).toBe("10700000");
 
     const recovered = await recoverTypedDataAddress({
       domain: { name: "Touchstone Rate Attestation", version: "1", chainId: 84532, verifyingContract: FAKE_DEPLOYMENT.workClaim.address as Hex },
       types: { RateAttestation: [
-        { name: "printId", type: "string" }, { name: "nanoUsdPerSiu", type: "uint256" }, { name: "validUntil", type: "uint64" },
+        { name: "printId", type: "string" }, { name: "series", type: "bytes32" }, { name: "printDate", type: "uint64" },
+        { name: "nanoUsdPerSiu", type: "uint256" }, { name: "validUntil", type: "uint64" },
       ] },
       primaryType: "RateAttestation",
-      message: { printId: args.printId, nanoUsdPerSiu: BigInt(args.nanoUsdPerSiu), validUntil: BigInt(args.validUntil) },
+      message: {
+        printId: args.printId,
+        series: args.series as Hex,
+        printDate: BigInt(args.printDate),
+        nanoUsdPerSiu: BigInt(args.nanoUsdPerSiu),
+        validUntil: BigInt(args.validUntil),
+      },
       signature: args.signature,
     });
     expect(recovered.toLowerCase()).toBe(privateKeyToAccount(PUBLISHER_PK).address.toLowerCase());
@@ -489,6 +500,8 @@ describe("buildToolArgs", () => {
     const mintContext: MintContext = {
       publisherPrivateKeyHex: PUBLISHER_PK,
       printId: "2026-09-25",
+      series: SERIES_COMMODITY,
+      printDate: printDateToUnixDay("2026-09-25"),
       nanoUsdPerSiu: 10_700_000n,
       validitySeconds: 3600n,
     };
@@ -794,6 +807,8 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
     const mintContext: MintContext = {
       publisherPrivateKeyHex: devnet.publisherPrivateKeyHex,
       printId: "redemption-wiring-test-print",
+      series: SERIES_COMMODITY,
+      printDate: printDateToUnixDay("2026-09-25"),
       nanoUsdPerSiu: 10_000_000n,
       validitySeconds: 3600n,
     };
@@ -929,6 +944,8 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
     const mintContext: MintContext = {
       publisherPrivateKeyHex: devnet.publisherPrivateKeyHex,
       printId: "regression-test-print",
+      series: SERIES_COMMODITY,
+      printDate: printDateToUnixDay("2026-09-25"),
       nanoUsdPerSiu: 10_000_000n,
       validitySeconds: 3600n,
     };

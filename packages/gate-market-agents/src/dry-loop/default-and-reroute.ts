@@ -47,7 +47,7 @@ export async function runDefaultAndReroute(
   // actually closes the window — see the explicit advanceTime call below.
   const windowTo = now + 600;
 
-  const rateAttestation = await signDryLoopRateAttestation(devnet);
+  const rateAttestation = await signDryLoopRateAttestation(devnet, windowTo);
 
   const headroomBeforeMintRecord = await buyer.callTool(
     "check_headroom",

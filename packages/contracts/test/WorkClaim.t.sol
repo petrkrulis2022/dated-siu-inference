@@ -40,6 +40,15 @@ contract WorkClaimTest is Test {
 
     string internal constant PRINT_ID = "2026-09-22";
 
+    /// Cached once in setUp(), never queried inline again — found live, 2026-09-27: calling
+    /// `claim.SERIES_COMMODITY()` (an external staticcall) as an argument expression between
+    /// `vm.prank(buyer)` and the pranked `claim.mint(...)` call consumes the prank itself (`vm.prank`
+    /// arms only the very next external call frame, and Solidity evaluates call arguments, including
+    /// this one, before making the outer call), so `mint`/`settleWindowClose` silently executed as
+    /// the test contract instead of `buyer`. Caching the value as a plain state read removes the
+    /// external call entirely, wherever `_series()` is used.
+    bytes32 internal fixtureSeries;
+
     function setUp() public {
         usdc = new MockUSDC();
 
@@ -59,6 +68,7 @@ contract WorkClaimTest is Test {
 
         claim = new WorkClaim(IERC20(address(usdc)), bond, router, publisher);
         assertEq(address(claim), predictedClaimAddr, "sanity: WorkClaim address prediction");
+        fixtureSeries = claim.SERIES_COMMODITY();
 
         usdc.mint(issuer, 1_000_000_000);
         vm.prank(issuer);
@@ -74,31 +84,57 @@ contract WorkClaimTest is Test {
         windowTo = uint64(block.timestamp + 8 days);
     }
 
+    /// Both real testbed issuers back commodity-class capacity — see the design review this
+    /// contract's own SERIES_FRONTIER/SERIES_COMMODITY doc comment references. Returns the value
+    /// cached from the deployed contract's own public constant in setUp() (see `fixtureSeries`'s
+    /// own doc comment for why this must never itself make an external call).
+    function _series() internal view returns (bytes32) {
+        return fixtureSeries;
+    }
+
+    /// The calendar day a rate attestation must be dated for, to settle a claim whose window
+    /// closes at `windowTo` — mirrors WorkClaim.sol's own private `_dayStart`, duplicated here
+    /// (not exposed on the contract) rather than special-cased per test.
+    function _dayStartOf(uint64 timestamp) internal pure returns (uint64) {
+        return timestamp - (timestamp % 1 days);
+    }
+
     /// Signs a real RateAttestation with PUBLISHER_PK, against WorkClaim's own real domain
     /// separator (`claim.rateAttestationDomainSeparator()` — never recomputed by hand here, so
     /// this test can't silently drift from what the contract actually verifies).
-    function _signRate(uint256 nanoUsdPerSiu, string memory printId, uint64 validUntil)
-        internal
-        view
-        returns (RateAttestationVerifier.RateAttestation memory att, bytes memory signature)
-    {
-        return _signRateAs(PUBLISHER_PK, nanoUsdPerSiu, printId, validUntil);
+    function _signRate(
+        uint256 nanoUsdPerSiu,
+        string memory printId,
+        bytes32 series,
+        uint64 printDate,
+        uint64 validUntil
+    ) internal view returns (RateAttestationVerifier.RateAttestation memory att, bytes memory signature) {
+        return _signRateAs(PUBLISHER_PK, nanoUsdPerSiu, printId, series, printDate, validUntil);
     }
 
-    function _signRateAs(uint256 signerPk, uint256 nanoUsdPerSiu, string memory printId, uint64 validUntil)
-        internal
-        view
-        returns (RateAttestationVerifier.RateAttestation memory att, bytes memory signature)
-    {
+    function _signRateAs(
+        uint256 signerPk,
+        uint256 nanoUsdPerSiu,
+        string memory printId,
+        bytes32 series,
+        uint64 printDate,
+        uint64 validUntil
+    ) internal view returns (RateAttestationVerifier.RateAttestation memory att, bytes memory signature) {
         att = RateAttestationVerifier.RateAttestation({
             printId: printId,
+            series: series,
+            printDate: printDate,
             nanoUsdPerSiu: nanoUsdPerSiu,
             validUntil: validUntil
         });
         bytes32 structHash = keccak256(
             abi.encode(
-                keccak256("RateAttestation(string printId,uint256 nanoUsdPerSiu,uint64 validUntil)"),
+                keccak256(
+                    "RateAttestation(string printId,bytes32 series,uint64 printDate,uint256 nanoUsdPerSiu,uint64 validUntil)"
+                ),
                 keccak256(bytes(att.printId)),
+                att.series,
+                att.printDate,
                 att.nanoUsdPerSiu,
                 att.validUntil
             )
@@ -111,13 +147,15 @@ contract WorkClaimTest is Test {
     }
 
     function _realRate() internal view returns (RateAttestationVerifier.RateAttestation memory att, bytes memory signature) {
-        return _signRate(PRICE_NANO_USD_PER_SIU, PRINT_ID, uint64(block.timestamp + 365 days));
+        return _signRate(
+            PRICE_NANO_USD_PER_SIU, PRINT_ID, _series(), _dayStartOf(windowTo), uint64(block.timestamp + 365 days)
+        );
     }
 
     function _mint(uint256 quantity) internal returns (uint256 tokenId) {
         (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _realRate();
         vm.prank(buyer);
-        tokenId = claim.mint(CLASS_CODE, quantity, windowFrom, windowTo, att, sig);
+        tokenId = claim.mint(CLASS_CODE, _series(), quantity, windowFrom, windowTo, att, sig);
     }
 
     function _settle(uint256 tokenId, address holder) internal {
@@ -153,7 +191,7 @@ contract WorkClaimTest is Test {
         uint256 issuerBalBefore = usdc.balanceOf(issuer);
         (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _realRate();
         vm.prank(buyer);
-        claim.mint(CLASS_CODE, 333, windowFrom, windowTo, att, sig);
+        claim.mint(CLASS_CODE, _series(), 333, windowFrom, windowTo, att, sig);
 
         // Exact value: 0.333 SIU * $0.0107/SIU = $0.0035631 = 3563.1 USDC minor units. The
         // contract truncates the fractional minor unit (Solidity has no fractional minor units),
@@ -377,7 +415,7 @@ contract WorkClaimTest is Test {
 
         vm.prank(buyer);
         vm.expectRevert(); // InvalidRateAttestation(recovered, publisher) — recovered != publisher
-        claim.mint(CLASS_CODE, 500, windowFrom, windowTo, att, sig);
+        claim.mint(CLASS_CODE, _series(), 500, windowFrom, windowTo, att, sig);
     }
 
     /// A well-formed attestation signed by any key other than the registered publisher must be
@@ -391,8 +429,9 @@ contract WorkClaimTest is Test {
         vm.warp(windowTo);
 
         uint256 attackerPk = 0xBAD;
-        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
-            _signRateAs(attackerPk, PRICE_NANO_USD_PER_SIU, PRINT_ID, uint64(block.timestamp + 1 days));
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _signRateAs(
+            attackerPk, PRICE_NANO_USD_PER_SIU, PRINT_ID, _series(), _dayStartOf(windowTo), uint64(block.timestamp + 1 days)
+        );
 
         vm.expectRevert(); // InvalidRateAttestation(recovered, publisher) — recovered == vm.addr(attackerPk)
         claim.settleWindowClose(tokenId, buyer, att, sig);
@@ -403,12 +442,12 @@ contract WorkClaimTest is Test {
     /// it a single real attestation would stay usable forever.
     function test_mint_revertsOnExpiredAttestation() public {
         (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
-            _signRate(PRICE_NANO_USD_PER_SIU, PRINT_ID, uint64(block.timestamp));
+            _signRate(PRICE_NANO_USD_PER_SIU, PRINT_ID, _series(), _dayStartOf(windowTo), uint64(block.timestamp));
         vm.warp(block.timestamp + 1);
 
         vm.prank(buyer);
         vm.expectRevert(); // RateAttestationExpired(validUntil, currentTimestamp)
-        claim.mint(CLASS_CODE, 500, windowFrom, windowTo, att, sig);
+        claim.mint(CLASS_CODE, _series(), 500, windowFrom, windowTo, att, sig);
     }
 
     /// `printId` is accepted opaquely — RateAttestationVerifier.sol's own doc comment states
@@ -417,12 +456,79 @@ contract WorkClaimTest is Test {
     /// Confirmed here for real, not just asserted in prose: a genuine attestation for a printId
     /// that obviously doesn't match this claim's own class/window still succeeds.
     function test_mint_acceptsGenuineAttestationForAnyPrintId_printIdIsNotEnforcedOnChain() public {
-        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
-            _signRate(PRICE_NANO_USD_PER_SIU, "2099-01-01-not-the-real-print", uint64(block.timestamp + 1 days));
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _signRate(
+            PRICE_NANO_USD_PER_SIU, "2099-01-01-not-the-real-print", _series(), _dayStartOf(windowTo), uint64(block.timestamp + 1 days)
+        );
 
         vm.prank(buyer);
-        uint256 tokenId = claim.mint(CLASS_CODE, 500, windowFrom, windowTo, att, sig);
+        uint256 tokenId = claim.mint(CLASS_CODE, _series(), 500, windowFrom, windowTo, att, sig);
         assertEq(claim.balanceOf(buyer, tokenId), 500);
+    }
+
+    // ------------------------------------------------------------------ grade (series)
+    // Added 2026-09-27: a claim previously carried no grade at all, so nothing stopped a
+    // frontier claim from default-settling against a blended or commodity rate (a real
+    // underpayment risk, not a naming gap — see the design review this fix responds to).
+
+    /// Unlike printId (accepted opaquely, see the test above this section), `series` IS enforced
+    /// on-chain at mint: a genuine, unexpired, correctly-signed attestation for the wrong grade
+    /// must still revert.
+    function test_mint_revertsOnSeriesMismatch() public {
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _signRate(
+            PRICE_NANO_USD_PER_SIU, PRINT_ID, claim.SERIES_FRONTIER(), _dayStartOf(windowTo), uint64(block.timestamp + 1 days)
+        );
+
+        vm.prank(buyer);
+        vm.expectRevert(
+            abi.encodeWithSelector(WorkClaim.SeriesMismatch.selector, claim.SERIES_FRONTIER(), _series())
+        );
+        claim.mint(CLASS_CODE, _series(), 500, windowFrom, windowTo, att, sig);
+    }
+
+    /// The Defaulted branch only (Expired never checks the attestation at all, unchanged): a
+    /// genuine, unexpired, correctly-signed, in-band attestation for the wrong grade must still
+    /// revert rather than pay out at a different grade's rate.
+    function test_settleWindowClose_revertsOnSeriesMismatch() public {
+        uint256 tokenId = _mint(500);
+        _presentAndCloseWindow(tokenId);
+
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _signRate(
+            PRICE_NANO_USD_PER_SIU, PRINT_ID, claim.SERIES_FRONTIER(), _dayStartOf(windowTo), uint64(block.timestamp + 1 days)
+        );
+
+        vm.expectRevert(
+            abi.encodeWithSelector(WorkClaim.SeriesMismatch.selector, claim.SERIES_FRONTIER(), _series())
+        );
+        claim.settleWindowClose(tokenId, buyer, att, sig);
+    }
+
+    /// The Defaulted branch only: a genuine, unexpired, correctly-signed, in-band, correct-grade
+    /// attestation for a *different calendar day* than the one this claim's window actually
+    /// closed on must still revert — closes a real gap where, within the ±50% settlement band, a
+    /// caller could otherwise settle against a stale, more favourable print.
+    function test_settleWindowClose_revertsOnStalePrintDate() public {
+        uint256 tokenId = _mint(500);
+        _presentAndCloseWindow(tokenId);
+
+        uint64 wrongDay = _dayStartOf(windowTo) - 1 days;
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
+            _signRate(PRICE_NANO_USD_PER_SIU, PRINT_ID, _series(), wrongDay, uint64(block.timestamp + 1 days));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(WorkClaim.StalePrintDate.selector, wrongDay, _dayStartOf(windowTo))
+        );
+        claim.settleWindowClose(tokenId, buyer, att, sig);
+    }
+
+    /// Direct assertion, not just an implication of the hash change: two claims identical in
+    /// every other dimension but grade must never collide onto the same token id — the whole
+    /// point of adding `series` to `tokenIdFor`.
+    function test_tokenIdFor_differsAcrossSeriesOnly() public view {
+        uint256 commodityId =
+            claim.tokenIdFor(issuer, CLASS_CODE, claim.SERIES_COMMODITY(), windowFrom, windowTo);
+        uint256 frontierId =
+            claim.tokenIdFor(issuer, CLASS_CODE, claim.SERIES_FRONTIER(), windowFrom, windowTo);
+        assertTrue(commodityId != frontierId, "claims of different grades must never share a token id");
     }
 
     /// `RateAttestationVerifier._verifyRateAttestation` calls `ECDSA.recoverCalldata`, not raw
@@ -448,7 +554,7 @@ contract WorkClaimTest is Test {
 
         vm.prank(buyer);
         vm.expectRevert(abi.encodeWithSelector(ECDSA.ECDSAInvalidSignatureS.selector, highS));
-        claim.mint(CLASS_CODE, 500, windowFrom, windowTo, att, malleableSig);
+        claim.mint(CLASS_CODE, _series(), 500, windowFrom, windowTo, att, malleableSig);
     }
 
     /// Confirms, explicitly, that `ecrecover` returning `address(0)` (a malformed-but-65-byte
@@ -462,7 +568,7 @@ contract WorkClaimTest is Test {
 
         vm.prank(buyer);
         vm.expectRevert(ECDSA.ECDSAInvalidSignature.selector);
-        claim.mint(CLASS_CODE, 500, windowFrom, windowTo, att, degenerateSig);
+        claim.mint(CLASS_CODE, _series(), 500, windowFrom, windowTo, att, degenerateSig);
     }
 
     // ------------------------------------------------------------------ settlement-rate band
@@ -487,7 +593,7 @@ contract WorkClaimTest is Test {
 
         uint256 withinBandRate = (PRICE_NANO_USD_PER_SIU * 149) / 100; // +49%, inside ±50%
         (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
-            _signRate(withinBandRate, PRINT_ID, uint64(block.timestamp + 1 days));
+            _signRate(withinBandRate, PRINT_ID, _series(), _dayStartOf(windowTo), uint64(block.timestamp + 1 days));
 
         uint256 buyerUsdcBefore = usdc.balanceOf(buyer);
         claim.settleWindowClose(tokenId, buyer, att, sig);
@@ -504,7 +610,7 @@ contract WorkClaimTest is Test {
         uint256 aboveBandRate = (PRICE_NANO_USD_PER_SIU * 151) / 100; // +51%, outside ±50%
         uint256 upperBound = (PRICE_NANO_USD_PER_SIU * 150) / 100; // the band's own +50% edge
         (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
-            _signRate(aboveBandRate, PRINT_ID, uint64(block.timestamp + 1 days));
+            _signRate(aboveBandRate, PRINT_ID, _series(), _dayStartOf(windowTo), uint64(block.timestamp + 1 days));
 
         vm.expectEmit(true, false, false, true, address(claim));
         emit WorkClaim.SettlementRateClamped(tokenId, aboveBandRate, upperBound, PRICE_NANO_USD_PER_SIU);
@@ -527,7 +633,7 @@ contract WorkClaimTest is Test {
         uint256 belowBandRate = (PRICE_NANO_USD_PER_SIU * 49) / 100; // -51%, outside ±50%
         uint256 lowerBound = (PRICE_NANO_USD_PER_SIU * 50) / 100; // the band's own -50% edge
         (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
-            _signRate(belowBandRate, PRINT_ID, uint64(block.timestamp + 1 days));
+            _signRate(belowBandRate, PRINT_ID, _series(), _dayStartOf(windowTo), uint64(block.timestamp + 1 days));
 
         vm.expectEmit(true, false, false, true, address(claim));
         emit WorkClaim.SettlementRateClamped(tokenId, belowBandRate, lowerBound, PRICE_NANO_USD_PER_SIU);
@@ -562,16 +668,16 @@ contract WorkClaimTest is Test {
         deltaBps = bound(deltaBps, -9999, 100_000);
 
         (RateAttestationVerifier.RateAttestation memory mintAtt, bytes memory mintSig) =
-            _signRate(mintRate, PRINT_ID, uint64(block.timestamp + 1 days));
+            _signRate(mintRate, PRINT_ID, _series(), _dayStartOf(windowTo), uint64(block.timestamp + 1 days));
         vm.prank(buyer);
-        uint256 tokenId = claim.mint(CLASS_CODE, 500, windowFrom, windowTo, mintAtt, mintSig);
+        uint256 tokenId = claim.mint(CLASS_CODE, _series(), 500, windowFrom, windowTo, mintAtt, mintSig);
         _presentAndCloseWindow(tokenId);
 
         uint256 settlementRate = deltaBps >= 0
             ? mintRate + (mintRate * uint256(deltaBps)) / 10_000
             : mintRate - (mintRate * uint256(-deltaBps)) / 10_000;
         (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
-            _signRate(settlementRate, PRINT_ID, uint64(block.timestamp + 1 days));
+            _signRate(settlementRate, PRINT_ID, _series(), _dayStartOf(windowTo), uint64(block.timestamp + 1 days));
 
         uint16 bandBps = claim.SETTLEMENT_RATE_BAND_BPS();
         uint256 lowerBound = (mintRate * (10_000 - bandBps)) / 10_000;

@@ -14,10 +14,14 @@ import {RateAttestationVerifier} from "./RateAttestationVerifier.sol";
  * @notice Dated work claims, ERC-1155 — Gate Market testbed WP-2
  *         (docs/gate-market-spec.md §4.3-4.4, §5.3; monetary-design.md §5).
  *
- * One token id per (issuer, class, window) — see ClaimRouter.sol's doc comment for why issuer is
- * part of the id, diverging from the spec's fully cross-issuer-fungible pool. Within one token id,
- * units are genuinely fungible: free ERC-1155 transfer, no print read, no issuer involvement,
- * exactly as spec §4.4 describes.
+ * One token id per (issuer, class, grade, window) — see ClaimRouter.sol's doc comment for why
+ * issuer is part of the id, diverging from the spec's fully cross-issuer-fungible pool (corrected
+ * 2026-09-27, docs/gate-market-spec.md §4.3). Within one token id — i.e. among units already
+ * sharing the same issuer, class, grade and window — transfer is free: no print read, no further
+ * issuer check needed, since issuer and grade are already fixed by the token id itself, not
+ * re-verified on every move. This is narrower than "no issuer involvement" might suggest: it does
+ * not mean a transfer crosses issuers, only that moving units of one already-issued lot needs no
+ * additional per-transfer check.
  *
  * ## The three terminal states, and why headroom restoration is the invariant that matters most
  *
@@ -88,9 +92,20 @@ import {RateAttestationVerifier} from "./RateAttestationVerifier.sol";
 contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
     using SafeERC20 for IERC20;
 
+    /// @notice Which Touchstone Assay grade a claim settles against — `keccak256("frontier")` or
+    ///         `keccak256("commodity")`, matching `Print.series` on the real print pipeline
+    ///         (packages/sdk/schemas/print.schema.json). Added 2026-09-27: a claim previously had
+    ///         no grade at all, so nothing stopped a frontier claim from default-settling against
+    ///         a blended or commodity rate — a real underpayment risk, not just a naming gap.
+    bytes32 public constant SERIES_FRONTIER = keccak256("frontier");
+    bytes32 public constant SERIES_COMMODITY = keccak256("commodity");
+
     struct ClaimType {
         address issuer;
         bytes32 classId;
+        /// @dev SERIES_FRONTIER or SERIES_COMMODITY — orthogonal to classId (task class); see
+        ///      this contract's own SERIES_FRONTIER/SERIES_COMMODITY doc comment.
+        bytes32 series;
         uint64 windowFrom;
         uint64 windowTo;
         bool exists;
@@ -158,6 +173,7 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
         address indexed issuer,
         address indexed buyer,
         bytes32 classId,
+        bytes32 series,
         uint256 quantity,
         uint64 windowFrom,
         uint64 windowTo
@@ -188,6 +204,13 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
     error NothingToSettle();
     error AlreadySettled();
     error InsufficientRedemption(uint256 requested, uint256 balance);
+    /// @notice The rate attestation's own `series` doesn't match the claim's — added 2026-09-27,
+    ///         see SERIES_FRONTIER/SERIES_COMMODITY's own doc comment.
+    error SeriesMismatch(bytes32 attested, bytes32 expected);
+    /// @notice On settleWindowClose's Defaulted branch only: the attestation's `printDate` isn't
+    ///         the same calendar day this claim's window actually closed on — added 2026-09-27 to
+    ///         stop a caller settling within the ±50% band against a stale, more favourable day.
+    error StalePrintDate(uint64 attested, uint64 expected);
 
     constructor(IERC20 usdc_, CapacityBond bond_, ClaimRouter router_, address publisher_)
         MinimalERC1155("")
@@ -201,25 +224,30 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
         router = router_;
     }
 
-    function tokenIdFor(address issuer, bytes32 classId, uint64 windowFrom, uint64 windowTo)
-        public
-        pure
-        returns (uint256)
-    {
-        return uint256(keccak256(abi.encode(issuer, classId, windowFrom, windowTo)));
+    function tokenIdFor(
+        address issuer,
+        bytes32 classId,
+        bytes32 series,
+        uint64 windowFrom,
+        uint64 windowTo
+    ) public pure returns (uint256) {
+        return uint256(keccak256(abi.encode(issuer, classId, series, windowFrom, windowTo)));
     }
 
     /**
-     * @notice Mints `quantity` mSIU of a claim in `classId` for the delivery window
+     * @notice Mints `quantity` mSIU of a claim in `classId`/`series` for the delivery window
      *         [`windowFrom`, `windowTo`), routed to an issuer with headroom — the buyer never
      *         picks (ClaimRouter.sol). Pulls the USDC value of `quantity` at the rate `att`
      *         attests, from the caller.
      * @dev `att`/`signature` must be a genuine, unexpired attestation from `publisher` — see
      *      RateAttestationVerifier.sol. Caller-controlled before this fix (see this contract's
      *      "Settlement-rate binding" note); now cryptographically bound to the real publisher.
+     *      `att.series` must equal `series` (added 2026-09-27) — a caller cannot mint a claim of
+     *      one grade while attesting a rate for another.
      */
     function mint(
         bytes32 classId,
+        bytes32 series,
         uint256 quantity,
         uint64 windowFrom,
         uint64 windowTo,
@@ -228,17 +256,18 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
     ) external nonReentrant returns (uint256 tokenId) {
         if (quantity == 0) revert ZeroAmount();
         if (windowTo <= windowFrom) revert BadWindow();
-        uint256 nanoUsdPerSiu = _verifyRateAttestation(att, signature);
+        uint256 nanoUsdPerSiu = _verifyRateAttestationForSeries(att, signature, series);
         if (nanoUsdPerSiu == 0) revert ZeroAmount();
 
         address issuer = router.route(classId, quantity);
-        tokenId = tokenIdFor(issuer, classId, windowFrom, windowTo);
+        tokenId = tokenIdFor(issuer, classId, series, windowFrom, windowTo);
 
         ClaimType storage ct = claimTypes[tokenId];
         if (!ct.exists) {
             claimTypes[tokenId] = ClaimType({
                 issuer: issuer,
                 classId: classId,
+                series: series,
                 windowFrom: windowFrom,
                 windowTo: windowTo,
                 exists: true,
@@ -248,7 +277,7 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
 
         bond.consumeHeadroom(issuer, classId, quantity);
 
-        emit Minted(tokenId, issuer, msg.sender, classId, quantity, windowFrom, windowTo);
+        emit Minted(tokenId, issuer, msg.sender, classId, series, quantity, windowFrom, windowTo);
 
         _mint(msg.sender, tokenId, quantity, "");
 
@@ -268,6 +297,29 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
         returns (uint256)
     {
         return (quantityMilliSiu * nanoUsdPerSiu) / 1_000_000;
+    }
+
+    /// @dev Wraps `_verifyRateAttestation` for `mint`'s own series check, extracted into its own
+    ///      function purely to keep `mint`'s own stack frame within the EVM's 16-slot limit —
+    ///      found live, 2026-09-27, the first time `series` was added: `mint` already had enough
+    ///      live locals that checking `attestedSeries` inline caused a real "stack too deep"
+    ///      compile failure, not a style preference.
+    function _verifyRateAttestationForSeries(
+        RateAttestation calldata att,
+        bytes calldata signature,
+        bytes32 series
+    ) private view returns (uint256 nanoUsdPerSiu) {
+        bytes32 attestedSeries;
+        (nanoUsdPerSiu, attestedSeries,) = _verifyRateAttestation(att, signature);
+        if (attestedSeries != series) revert SeriesMismatch(attestedSeries, series);
+    }
+
+    /// @dev Truncates a Unix timestamp down to 00:00:00 UTC of its own calendar day — used to
+    ///      compare a claim's own default date (its window's close time, which can fall at any
+    ///      point in a day) against a rate attestation's `printDate` (always a print's own
+    ///      whole-day date) at the same, day-level granularity. Added 2026-09-27.
+    function _dayStart(uint64 timestamp) internal pure returns (uint64) {
+        return timestamp - (timestamp % 1 days);
     }
 
     /// @dev Returns `rate` unchanged if within ±SETTLEMENT_RATE_BAND_BPS of `referenceRate`,
@@ -387,7 +439,13 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
         bond.restoreHeadroom(ct.issuer, ct.classId, quantity);
 
         if (everPresented[tokenId][holder]) {
-            uint256 nanoUsdPerSiu = _verifyRateAttestation(att, signature);
+            (uint256 nanoUsdPerSiu, bytes32 attestedSeries, uint64 attestedPrintDate) =
+                _verifyRateAttestation(att, signature);
+            if (attestedSeries != ct.series) revert SeriesMismatch(attestedSeries, ct.series);
+            uint64 expectedPrintDate = _dayStart(ct.windowTo);
+            if (attestedPrintDate != expectedPrintDate) {
+                revert StalePrintDate(attestedPrintDate, expectedPrintDate);
+            }
             uint256 clampedNanoUsdPerSiu =
                 _clampToSettlementBand(nanoUsdPerSiu, ct.referenceNanoUsdPerSiu);
             if (clampedNanoUsdPerSiu != nanoUsdPerSiu) {

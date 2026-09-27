@@ -10,8 +10,12 @@ const argsSchema = z.object({
   /** A pre-signed rate attestation — only actually checked on-chain when this settlement turns
    * out to be a Default (WorkClaim.sol's own doc comment: never verified on the Expire path).
    * An Expire-only caller may pass empty/zero placeholders here; see chain/rate-attestation.ts
-   * for the real signer a Default-expecting caller must use instead. */
+   * for the real signer a Default-expecting caller must use instead. `series` must equal the
+   * claim's own grade and `printDate` the calendar day its window actually closed on, or a real
+   * Default reverts with `SeriesMismatch`/`StalePrintDate` (added 2026-09-27). */
   printId: z.string(),
+  series: z.string(),
+  printDate: z.string(),
   nanoUsdPerSiu: z.string(),
   validUntil: z.string(),
   signature: z.string(),
@@ -39,6 +43,8 @@ export const settleWindowCloseTool: ToolDefinition<Args, { txHash: string }> = {
         args.holder as Hex,
         {
           printId: args.printId,
+          series: args.series as Hex,
+          printDate: BigInt(args.printDate),
           nanoUsdPerSiu: BigInt(args.nanoUsdPerSiu),
           validUntil: BigInt(args.validUntil),
         },

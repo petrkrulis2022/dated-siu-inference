@@ -90,20 +90,29 @@ contract WorkClaimHandler is Test {
     /// A generously-valid (1 year), fixed-rate attestation — the fuzz depth here targets the
     /// conservation/access-control properties WorkClaim.invariant.t.sol's own doc comment names,
     /// not rate-attestation edge cases (those are WorkClaim.t.sol's own, explicit, unit tests).
-    function _rate()
+    /// Takes `windowTo`/`series` rather than fixing them, since a real caller must attest a
+    /// printDate matching the specific claim being settled and a series matching the specific
+    /// claim being minted or settled — both vary per call, unlike the rate itself.
+    function _rate(uint64 windowTo, bytes32 series)
         internal
         view
         returns (RateAttestationVerifier.RateAttestation memory att, bytes memory sig)
     {
         att = RateAttestationVerifier.RateAttestation({
             printId: "handler-fixed-rate",
+            series: series,
+            printDate: _dayStart(windowTo),
             nanoUsdPerSiu: 1_000_000,
             validUntil: uint64(block.timestamp + 365 days)
         });
         bytes32 structHash = keccak256(
             abi.encode(
-                keccak256("RateAttestation(string printId,uint256 nanoUsdPerSiu,uint64 validUntil)"),
+                keccak256(
+                    "RateAttestation(string printId,bytes32 series,uint64 printDate,uint256 nanoUsdPerSiu,uint64 validUntil)"
+                ),
                 keccak256(bytes(att.printId)),
+                att.series,
+                att.printDate,
                 att.nanoUsdPerSiu,
                 att.validUntil
             )
@@ -113,6 +122,18 @@ contract WorkClaimHandler is Test {
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(publisherPk, digest);
         sig = abi.encodePacked(r, s, v);
+    }
+
+    /// @dev Mirrors WorkClaim.sol's own private `_dayStart` — not exposed on the contract.
+    function _dayStart(uint64 timestamp) internal pure returns (uint64) {
+        return timestamp - (timestamp % 1 days);
+    }
+
+    /// @dev `series` for a given `claimTypes` fuzz seed — genuinely exercises both grades, not
+    ///      just whichever one a fixed default would pick. Added 2026-09-27 alongside `series`
+    ///      itself.
+    function _seriesFor(uint256 seed) internal view returns (bytes32) {
+        return seed % 2 == 0 ? claim.SERIES_FRONTIER() : claim.SERIES_COMMODITY();
     }
 
     function knownTokenIdCount() external view returns (uint256) {
@@ -140,11 +161,16 @@ contract WorkClaimHandler is Test {
     uint64 internal constant WINDOW_OPEN_DELAY = 1 hours;
     uint64 internal constant WINDOW_DURATION = 3 days;
 
-    function mint(uint256 buyerSeed, uint256 classSeed, uint256 quantitySeed, uint256 windowSeed)
-        external
-    {
+    function mint(
+        uint256 buyerSeed,
+        uint256 classSeed,
+        uint256 quantitySeed,
+        uint256 windowSeed,
+        uint256 seriesSeed
+    ) external {
         address buyer = holders[bound(buyerSeed, 0, holders.length - 1)];
         bytes32 classId = classes[classSeed % 2];
+        bytes32 series = _seriesFor(seriesSeed);
         uint256 quantity = bound(quantitySeed, 1, 2000);
         windowSeed; // no longer used for timing — see WINDOW_OPEN_DELAY's doc comment
         uint64 windowFrom = uint64(block.timestamp + WINDOW_OPEN_DELAY);
@@ -152,9 +178,9 @@ contract WorkClaimHandler is Test {
 
         if (usdc.balanceOf(buyer) < quantity * 1000) usdc.mint(buyer, quantity * 1000 * 10);
 
-        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _rate();
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _rate(windowTo, series);
         vm.prank(buyer);
-        try claim.mint(classId, quantity, windowFrom, windowTo, att, sig) returns (uint256 tokenId) {
+        try claim.mint(classId, series, quantity, windowFrom, windowTo, att, sig) returns (uint256 tokenId) {
             _addKnownTokenId(tokenId);
             ghostMints++;
         } catch {}
@@ -195,7 +221,7 @@ contract WorkClaimHandler is Test {
     // ------------------------------------------------------------------ serve (pass) and serve (fail, self-checked)
 
     function _issuerOf(uint256 tokenId) internal view returns (address issuer, bool exists) {
-        (address i,,,, bool e,) = claim.claimTypes(tokenId);
+        (address i,,,,, bool e,) = claim.claimTypes(tokenId);
         return (i, e);
     }
 
@@ -217,7 +243,7 @@ contract WorkClaimHandler is Test {
     }
 
     function _windowClosed(uint256 tokenId) internal view returns (bool) {
-        (,,, uint64 windowTo,,) = claim.claimTypes(tokenId);
+        (,,,, uint64 windowTo,,) = claim.claimTypes(tokenId);
         return block.timestamp >= windowTo;
     }
 
@@ -233,7 +259,7 @@ contract WorkClaimHandler is Test {
         if (bal == 0) return;
         uint256 quantity = bound(quantitySeed, 1, bal);
 
-        (, bytes32 classId,,,,) = claim.claimTypes(tokenId);
+        (, bytes32 classId,,,,,) = claim.claimTypes(tokenId);
         uint256 headroomBefore = bond.headroom(issuer, classId);
         bool windowAlreadyClosed = _windowClosed(tokenId);
 
@@ -259,7 +285,7 @@ contract WorkClaimHandler is Test {
     function settleWindowClose(uint256 tokenIdSeed, uint256 holderSeed) external {
         if (knownTokenIds.length == 0) return;
         uint256 tokenId = knownTokenIds[bound(tokenIdSeed, 0, knownTokenIds.length - 1)];
-        (,,, uint64 windowTo, bool exists,) = claim.claimTypes(tokenId);
+        (,, bytes32 series, , uint64 windowTo, bool exists,) = claim.claimTypes(tokenId);
         if (!exists) return;
         address holder = holders[bound(holderSeed, 0, holders.length - 1)];
         bool wasPresented = claim.everPresented(tokenId, holder);
@@ -267,7 +293,7 @@ contract WorkClaimHandler is Test {
 
         vm.warp(block.timestamp >= windowTo ? block.timestamp : windowTo);
 
-        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _rate();
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _rate(windowTo, series);
         try claim.settleWindowClose(tokenId, holder, att, sig) {
             if (wasPresented) ghostDefaults++;
             else ghostExpires++;
@@ -332,7 +358,7 @@ contract WorkClaimHandler is Test {
     function attackerDoubleSettle(uint256 tokenIdSeed, uint256 holderSeed) external {
         if (knownTokenIds.length == 0) return;
         uint256 tokenId = knownTokenIds[bound(tokenIdSeed, 0, knownTokenIds.length - 1)];
-        (,, uint64 windowFrom, uint64 windowTo, bool exists,) = claim.claimTypes(tokenId);
+        (,, bytes32 series, uint64 windowFrom, uint64 windowTo, bool exists,) = claim.claimTypes(tokenId);
         windowFrom; // silence unused-var warning; window bounds read for clarity only
         if (!exists) return;
         (address holder,) = _holderWithBalance(tokenId, holderSeed);
@@ -341,14 +367,15 @@ contract WorkClaimHandler is Test {
         if (!claim.settled(tokenId, holder)) {
             // Get it into the settled state first — success or failure (e.g. zero balance) here
             // isn't what's under test, only what happens on the *second* attempt below.
-            (RateAttestationVerifier.RateAttestation memory firstAtt, bytes memory firstSig) = _rate();
+            (RateAttestationVerifier.RateAttestation memory firstAtt, bytes memory firstSig) =
+                _rate(windowTo, series);
             try claim.settleWindowClose(tokenId, holder, firstAtt, firstSig) {} catch {}
         }
         if (!claim.settled(tokenId, holder)) return; // nothing reached a terminal state to replay against
 
         uint256 bondedBefore = _bondedAmountFor(tokenId);
 
-        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _rate();
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _rate(windowTo, series);
         try claim.settleWindowClose(tokenId, holder, att, sig) {
             ghostDoubleServeOnRetiredSucceeded++;
         } catch {
@@ -362,7 +389,7 @@ contract WorkClaimHandler is Test {
     }
 
     function _bondedAmountFor(uint256 tokenId) internal view returns (uint256 bondedUsdc) {
-        (address issuer, bytes32 classId,,,,) = claim.claimTypes(tokenId);
+        (address issuer, bytes32 classId,,,,,) = claim.claimTypes(tokenId);
         (,, bondedUsdc,,) = bond.lots(issuer, classId);
     }
 
@@ -381,7 +408,7 @@ contract WorkClaimHandler is Test {
     function sumLiveClaims(address issuer, bytes32 classId) external view returns (uint256 total) {
         for (uint256 i = 0; i < knownTokenIds.length; i++) {
             uint256 tokenId = knownTokenIds[i];
-            (address tIssuer, bytes32 tClass,,, bool exists,) = claim.claimTypes(tokenId);
+            (address tIssuer, bytes32 tClass,,,, bool exists,) = claim.claimTypes(tokenId);
             if (!exists || tIssuer != issuer || tClass != classId) continue;
             for (uint256 h = 0; h < holders.length; h++) {
                 total += claim.balanceOf(holders[h], tokenId);

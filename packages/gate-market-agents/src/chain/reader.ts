@@ -75,7 +75,7 @@ export class ViemChainReader implements ChainReader {
   }
 
   async claimWindow(tokenId: bigint): Promise<ClaimWindow> {
-    const [, , windowFrom, windowTo] = await this.client.readContract({
+    const [, , , windowFrom, windowTo] = await this.client.readContract({
       address: this.deployment.workClaim.address as Hex,
       abi: WORK_CLAIM_ABI,
       functionName: "claimTypes",

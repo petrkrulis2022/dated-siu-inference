@@ -7,15 +7,21 @@ import type { ToolDefinition } from "./types.js";
 
 const argsSchema = z.object({
   classId: z.string(),
+  /** Which Touchstone Assay grade this claim settles against — must equal the attestation's own
+   * `series` (the attestation is pre-signed for one series; this is that same value, used for
+   * both the claim's own grade and the on-chain `SeriesMismatch` check in one field, since a real
+   * caller always controls both together). Same `bytes32` hex encoding `classId` already uses. */
+  series: z.string(),
   quantity: z.string(),
   windowFrom: z.number().int(),
   windowTo: z.number().int(),
   /** A pre-signed RateAttestationVerifier.RateAttestation (packages/contracts/src/
    * RateAttestationVerifier.sol) plus its signature — never produced by this tool itself, which
-   * has no access to the publisher key. `nanoUsdPerSiu`/`validUntil` are decimal strings (repo
-   * convention: no floats in money maths), parsed to bigint in the handler. See
+   * has no access to the publisher key. `nanoUsdPerSiu`/`validUntil`/`printDate` are decimal
+   * strings (repo convention: no floats in money maths), parsed to bigint in the handler. See
    * chain/rate-attestation.ts for the real signer this attestation must come from. */
   printId: z.string(),
+  printDate: z.string(),
   nanoUsdPerSiu: z.string(),
   validUntil: z.string(),
   signature: z.string(),
@@ -45,11 +51,14 @@ export const mintClaimTool: ToolDefinition<
       functionName: "mint",
       args: [
         args.classId as Hex,
+        args.series as Hex,
         BigInt(args.quantity),
         BigInt(args.windowFrom),
         BigInt(args.windowTo),
         {
           printId: args.printId,
+          series: args.series as Hex,
+          printDate: BigInt(args.printDate),
           nanoUsdPerSiu: BigInt(args.nanoUsdPerSiu),
           validUntil: BigInt(args.validUntil),
         },
