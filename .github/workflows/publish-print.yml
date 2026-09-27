@@ -194,13 +194,34 @@ jobs:
           PRINT_ID: ${{ steps.resolve.outputs.print_id }}
         run: pnpm --filter @touchstone/print exec node dist/cli/tweet.js "$PRINT_ID"
 
+      # Real, greppable disclosure: our own prepaid provider credit ran out for at least one
+      # constituent today (packages/harness/src/retry.ts's billing_exhausted category — see
+      # docs/methodology.md's billing-exhaustion disclosure). Deliberately placed after every step
+      # that publishes, verifies, commits, pushes and tweets the print — not before, and not by
+      # making publish-unattended.ts itself exit non-zero — so the print is already safely
+      # committed on whatever qualifying set remained by the time this can fail the job. Only this
+      # run's own final status needs to read as failed, so a real credit exhaustion actually gets
+      # noticed rather than looking like any other quiet, routine exclusion.
+      - name: Fail loudly on billing exhaustion
+        if: steps.publish.outputs.status == 'published'
+        run: |
+          if grep -q "^BILLING_EXHAUSTED_SUMMARY " publish.log; then
+            echo "::error::Publisher's own prepaid provider credit ran out for at least one constituent today — the print above still published on whatever qualifying set remained, but this run is marked failed so it gets noticed. Top up the affected provider(s); see the summary line below and this print's own correction_notes."
+            grep "^BILLING_EXHAUSTED_SUMMARY " publish.log | sed 's/^BILLING_EXHAUSTED_SUMMARY //'
+            exit 1
+          fi
+
       # A missed day is disclosed on the public site (site/src/data.ts's loadIncidents), not
       # silently absent — the same "the record must tell the truth" principle the supersession
       # and superseded-print disclosures already follow. Deliberately narrow: this only ever
       # writes data/prints/incidents/<print_id>.json, never data/prints/<print_id>.json or
       # data/runs/ — the append-only guard on the print itself is completely untouched by this.
+      # Gated also on steps.publish.outputs.status != 'published': a billing-exhaustion failure
+      # (the step above) fails the job *after* a real print already published, and that is not a
+      # missed day — writing an incident record here would falsely claim no print exists for a
+      # print_id that plainly does.
       - name: Record a failed run
-        if: always() && job.status == 'failure'
+        if: always() && job.status == 'failure' && steps.publish.outputs.status != 'published'
         env:
           PRINT_ID: ${{ steps.resolve.outputs.print_id }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -275,6 +296,8 @@ jobs:
               echo "Already published for this print id — no action taken."
             elif [ "$JOB_STATUS" = "success" ]; then
               echo "Published, verified, and pushed. See publish.log below for the run's own summary."
+            elif [ "$PUBLISH_STATUS" = "published" ]; then
+              echo "Published, verified, committed and pushed — **but this run is marked failed** because at least one constituent hit billing_exhausted (our own prepaid provider credit ran out). The print itself is real and already on \`main\`; see the \"Fail loudly on billing exhaustion\" step above for which model(s), then top up the affected provider before the next scheduled run."
             else
               echo "**Aborted — nothing was committed.** Check the failed step above for which guard fired (already-published no-op excepted, every other early exit is a real failure: insufficient publisher balance, no RPC configured, price fetch failure, below the minimum qualifying-set size, over the spend ceiling, or a failed anchor)."
             fi

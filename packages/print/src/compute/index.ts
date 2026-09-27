@@ -14,6 +14,7 @@ export * from "./weights.js";
 export * from "./exchange-rate.js";
 export * from "./sensitivity.js";
 export * from "./cost-of-production.js";
+export * from "./spend-by-provider.js";
 
 const TASK_CLASSES: TaskClass[] = ["T1", "T2", "T3"];
 

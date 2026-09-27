@@ -1,4 +1,4 @@
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createPublicClient, http, parseEther, type Hex } from "viem";
 import { loadDeployment } from "@touchstone/sdk";
@@ -33,6 +33,7 @@ import {
   QualifyingSetError,
   type PriorAttempt,
 } from "../publish.js";
+import { computeSpendByProvider } from "../compute/index.js";
 import {
   buildModelInputs,
   latestPriceSnapshotFile,
@@ -200,6 +201,25 @@ if (infraFailureSummary) {
   console.warn(infraFailureSummary);
 }
 
+// Distinct, greppable line the workflow's own "Fail loudly on billing exhaustion" step (see
+// .github/workflows/publish-print.yml) looks for — same ATTEMPT_SUMMARY-style pattern already
+// used for the qualifying-set failure disclosure. Deliberately doesn't throw or exit here: the
+// print itself must still publish on whatever qualifying set remains (build1-spec.md's own
+// exclusion handling), only the workflow's own final exit status is supposed to reflect this.
+const billingExhaustedOutcomes = outcomes.filter((o) => o.infraFailureCategory === "billing_exhausted");
+if (billingExhaustedOutcomes.length > 0) {
+  const byModel = new Map<string, number>();
+  for (const o of billingExhaustedOutcomes) {
+    byModel.set(o.registryEntry.id, (byModel.get(o.registryEntry.id) ?? 0) + 1);
+  }
+  console.log(
+    `BILLING_EXHAUSTED_SUMMARY ${JSON.stringify({
+      total: billingExhaustedOutcomes.length,
+      by_model: Object.fromEntries(byModel),
+    })}`,
+  );
+}
+
 // 5. Compute -> sign -> anchor -> write. publishPrint enforces the qualifying-set gate, the
 // spend ceiling, the anchor-must-succeed gate, and the append-only write — see publish.ts.
 const records = await loadRunRecords(printId);
@@ -297,6 +317,20 @@ try {
   console.log(`Dated SIU ${result.print.dated_siu} (${result.print.status})`);
   console.log(`Cost of production: $${result.print.cost_of_production_usd}`);
   console.log(`Anchor: ${result.anchor.status} (${result.anchor.chain})`);
+
+  // Per-provider daily spend summary, sibling to the run manifest — never part of the signed
+  // print body. Written from the same `records`/prices already loaded for this run, so a real
+  // top-up's remaining runway can be estimated from a day's real per-provider spend (the pattern
+  // the correction notes above this print series now disclose was predictable nine days out).
+  const priceByModelId = new Map(models.map((m) => [m.model_id, m.price]));
+  const spendByProvider = computeSpendByProvider(records, registry, priceByModelId);
+  const spendPath = join(runsDirFor(printId), "spend-by-provider.json");
+  await writeFile(
+    spendPath,
+    `${JSON.stringify({ print_id: printId, date: printDate, spend_usd_by_provider: spendByProvider }, null, 2)}\n`,
+    "utf-8",
+  );
+  console.log(`Per-provider spend summary: ${JSON.stringify(spendByProvider)} (${spendPath})`);
 
   // Tier segmentation — design-doc §4a "grades, not refineries": Frontier SIU and Commodity
   // SIU, computed from the exact same run records as Dated SIU above, at no additional

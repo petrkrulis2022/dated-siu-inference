@@ -1,8 +1,33 @@
 import { AdapterHttpError } from "./adapters/types.js";
 
-/** 429 and 5xx are retryable per build1-spec.md §4; other HTTP errors (bad key, bad request) are not. */
+/**
+ * Detects a provider rejecting a call because *our own* prepaid balance ran out — distinct from
+ * every other 4xx/429 (bad key, bad request, genuine rate limit) because retrying never helps
+ * and the fix is a top-up, not a backoff. Confirmed live, 2026-09-17/09-18/09-25: Anthropic
+ * returns a genuine HTTP 400 with body `{"error":{"type":"invalid_request_error","message":
+ * "Your credit balance is too low to access the Anthropic API. ..."}}` — cross-referenced against
+ * this project's own real Anthropic invoice history, not assumed. The 402 and "insufficient_quota"
+ * checks below are the *documented, standard* conventions for this same condition (HTTP 402
+ * Payment Required is the standard code for it; OpenRouter's own API docs specify 402 for
+ * "Insufficient credits"; OpenAI's own error taxonomy names this exact condition
+ * "insufficient_quota") but have not yet been caught live from a real Touchstone run the way
+ * Anthropic's has — so, unlike the Anthropic substring, they are convention-based, not yet
+ * incident-confirmed. AdapterResult.raw already persists every real response body going forward
+ * (see InstanceOutcome.infraFailureBody), so the first live recurrence for any of these providers
+ * will confirm or correct this pattern from real evidence, same as Anthropic's was.
+ */
+function isBillingExhaustionBody(status: number, body: unknown): boolean {
+  if (status === 402) return true; // Standard "Payment Required"; OpenRouter's own documented convention.
+  const text = typeof body === "string" ? body : JSON.stringify(body ?? "");
+  return /credit balance is too low|insufficient_quota|insufficient credits/i.test(text);
+}
+
+/** 429 and 5xx are retryable per build1-spec.md §4; other HTTP errors (bad key, bad request) are
+ * not — nor is a billing-exhaustion rejection, even one that happens to arrive on a 429: no
+ * amount of retrying restores a balance that is actually zero. */
 export function isRetryableError(err: unknown): boolean {
   if (err instanceof AdapterHttpError) {
+    if (isBillingExhaustionBody(err.status, err.body)) return false;
     return err.status === 429 || err.status >= 500;
   }
   // A raw network failure (DNS, connection reset, timeout) — fetch() throws a plain
@@ -19,6 +44,12 @@ export function isRetryableError(err: unknown): boolean {
  * a genuine outage, a network blip, or something the response shape itself couldn't handle. Not
  * exhaustive diagnosis (the full message is kept alongside this, see InstanceOutcome.infraFailure)
  * — just enough structure to group and count without re-reading every message by eye.
+ *
+ * "billing_exhausted" is deliberately its own category, not folded into auth_or_bad_request or
+ * rate_limit: it is neither a request-shape problem nor a transient rate condition, and grouping
+ * it with either would make a print's own infra-failure summary read as "a provider rejected bad
+ * requests" or "a provider was rate-limiting us" when the real, actionable fact is "we ran out of
+ * our own prepaid credit" — see docs/methodology.md's billing-exhaustion disclosure.
  */
 export type FailureCategory =
   | "rate_limit"
@@ -27,10 +58,12 @@ export type FailureCategory =
   | "network"
   | "auth_or_bad_request"
   | "malformed_response"
+  | "billing_exhausted"
   | "unknown";
 
 export function classifyFailure(err: unknown): FailureCategory {
   if (err instanceof AdapterHttpError) {
+    if (isBillingExhaustionBody(err.status, err.body)) return "billing_exhausted";
     if (err.status === 429) return "rate_limit";
     if (err.status >= 500) return "server_error";
     return "auth_or_bad_request"; // 4xx other than 429: bad key, bad request, not found, etc.

@@ -216,6 +216,10 @@
     {
       "published_at": "2026-09-26",
       "note": "Quantified follow-up to this print's own cached-input-pricing correction note above (the \"separate, deferred follow-up work\" that note left open). Corrected figures, computed from this print's own real run records and price snapshot with the fix applied (commit 327d7b9), not from new data: this print's dated_siu was originally reported as $0.0111; the corrected figure is $0.0112. gemini-3.1-pro-preview's own basket cost was originally reported as $0.039236; the corrected figure is $0.040218. grok-4.6's own basket cost was originally reported as $0.017048; the corrected figure is $0.017289. deepseek-v3.2 and mistral-small-3.2-24b-instruct also had real, nonzero cached_input usage this day (per the original note), but it did not move either model's own basket cost at the published 6-decimal-place precision. This print itself is not recomputed or replaced — the original stands, per the revision policy's unconditional never-edit guarantee. These are also now the exact figures packages/print's own verify command (recomputing under this print's own historical rounding rule) reports."
+    },
+    {
+      "published_at": "2026-09-27",
+      "note": "claude-haiku-4-5 produced zero run records this print (excluded_reason: no run records for T1/T2/T3): all 15 real calls failed with a genuine HTTP 400, \"Your credit balance is too low to access the Anthropic API\" — a real rejection, not a transient provider failure. Same cause and mechanism as the equivalent note on 2026-09-17: claude-sonnet-5 runs first in registry order, its own 15 calls succeeded (real cost /bin/bash.023499, this print's own basket_costs) and consumed the last of a low prepaid balance; every one of haiku's own calls then hit a genuinely empty balance. Not a provider outage, not a harness bug — confirmed against this project's own real Anthropic invoice history, cross-referenced with the real run log. See docs/methodology.md's billing-exhaustion disclosure."
     }
   ]
 }

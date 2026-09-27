@@ -1,6 +1,7 @@
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { join } from "node:path";
+import { writeFile } from "node:fs/promises";
 import { loadDeployment } from "@touchstone/sdk";
 import {
   BASKET_VERSION,
@@ -33,6 +34,7 @@ import {
   publishPrint,
   QualifyingSetError,
 } from "../publish.js";
+import { computeSpendByProvider } from "../compute/index.js";
 import {
   buildModelInputs,
   latestPriceSnapshotFile,
@@ -135,6 +137,23 @@ if (infraFailureSummary) {
   console.warn(infraFailureSummary);
 }
 
+// Same greppable marker publish-unattended.ts emits — see that file's own doc comment. An
+// interactive run has a human watching stdout already, so this is disclosure, not a workflow
+// signal, but keeping the two CLIs' output shape identical is worth more than the one line saved.
+const billingExhaustedOutcomes = outcomes.filter((o) => o.infraFailureCategory === "billing_exhausted");
+if (billingExhaustedOutcomes.length > 0) {
+  const byModel = new Map<string, number>();
+  for (const o of billingExhaustedOutcomes) {
+    byModel.set(o.registryEntry.id, (byModel.get(o.registryEntry.id) ?? 0) + 1);
+  }
+  console.log(
+    `BILLING_EXHAUSTED_SUMMARY ${JSON.stringify({
+      total: billingExhaustedOutcomes.length,
+      by_model: Object.fromEntries(byModel),
+    })}`,
+  );
+}
+
 // 4. Compute -> sign -> write -> anchor. publishPrint refuses if any loaded record fails
 // schema validation, and always publishes provisional.
 const records = await loadRunRecords(printId);
@@ -216,6 +235,18 @@ console.log(`\nPublished ${result.write.path}`);
 console.log(`Dated SIU ${result.print.dated_siu} (${result.print.status})`);
 console.log(`Cost of production: $${result.print.cost_of_production_usd}`);
 console.log(`Anchor: ${result.anchor.status} (${result.anchor.chain})`);
+
+// Per-provider daily spend summary — see cli/publish-unattended.ts's identical block / the
+// compute function's own doc comment for why this differs from cost_of_production_usd.
+const priceByModelId = new Map(models.map((m) => [m.model_id, m.price]));
+const spendByProvider = computeSpendByProvider(records, registry, priceByModelId);
+const spendPath = join(runsDirFor(printId), "spend-by-provider.json");
+await writeFile(
+  spendPath,
+  `${JSON.stringify({ print_id: printId, date: printDate, spend_usd_by_provider: spendByProvider }, null, 2)}\n`,
+  "utf-8",
+);
+console.log(`Per-provider spend summary: ${JSON.stringify(spendByProvider)} (${spendPath})`);
 
 // Tier segmentation — design-doc §4a "grades, not refineries": Frontier SIU and Commodity SIU,
 // computed from the exact same run records as Dated SIU above, at no additional measurement

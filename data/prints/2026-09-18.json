@@ -210,6 +210,10 @@
     {
       "published_at": "2026-09-26",
       "note": "Quantified follow-up to this print's own cached-input-pricing correction note above (the \"separate, deferred follow-up work\" that note left open). Corrected figures, computed from this print's own real run records and price snapshot with the fix applied (commit 327d7b9), not from new data: this print's dated_siu was originally reported as $0.0094; the corrected figure is $0.0096. gemini-3.1-pro-preview's own basket cost was originally reported as $0.038420; the corrected figure is $0.039402. grok-4.6's own basket cost was originally reported as $0.017049; the corrected figure is $0.017289. deepseek-v3.2 and mistral-small-3.2-24b-instruct also had real, nonzero cached_input usage this day (per the original note), but it did not move either model's own basket cost at the published 6-decimal-place precision. This print itself is not recomputed or replaced — the original stands, per the revision policy's unconditional never-edit guarantee. These are also now the exact figures packages/print's own verify command (recomputing under this print's own historical rounding rule) reports."
+    },
+    {
+      "published_at": "2026-09-27",
+      "note": "Both claude-sonnet-5 and claude-haiku-4-5 produced zero run records this print: every call to both models (5 instances × T1/T2/T3 each, 30 total) failed with a genuine HTTP 400, \"Your credit balance is too low to access the Anthropic API.\" Same root cause as the equivalent notes on 2026-09-17 and 2026-09-25: our own prepaid Anthropic credit balance was exhausted, and unlike those two dates, it was already at zero going into this run (the prior top-up had already been fully spent the day before), so this time even sonnet's own first call failed rather than consuming the last of it. Not a provider outage, not a harness bug — confirmed a genuine rejection body, not a transient 429/5xx, and confirmed against this project's own real Anthropic invoice history. See docs/methodology.md's billing-exhaustion disclosure."
     }
   ]
 }

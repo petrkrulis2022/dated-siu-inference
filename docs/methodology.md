@@ -1056,7 +1056,7 @@ failed run" step): the reason, a link to the actual failed run, real qualifying/
 model counts, real spend incurred on that attempt, and — when the failure was widespread
 instance-level infrastructure trouble rather than the qualifying-set gate alone — a
 per-model/task-class breakdown of what actually failed (harness's `classifyFailure`:
-rate_limit/timeout/network/server_error/auth_or_bad_request/malformed_response). Rendered
+rate_limit/timeout/network/server_error/auth_or_bad_request/malformed_response/billing_exhausted). Rendered
 inline on the public Prints list, sorted by date alongside real prints, linking straight to the
 failed run for full detail — never backdated, never presented as though nothing happened that
 day.
@@ -1084,7 +1084,7 @@ stated, not just correct in the underlying JSON. A print with no `prior_attempts
 succeeded cleanly on its first, on-schedule attempt.
 
 Retry eligibility is not yet conditioned on the failure's classification (harness's
-`classifyFailure` — rate_limit/timeout/network/server_error/auth_or_bad_request/
+`classifyFailure` — rate_limit/timeout/network/server_error/auth_or_bad_request/billing_exhausted/
 malformed_response): every failure gets the one retry today. Once enough real incidents exist
 to show which categories a retry actually helps with, this may become conditional — noted here
 as a deliberate deferral, not an oversight.
@@ -1094,6 +1094,45 @@ unavailable for that print (distinct from failing a quality gate, and distinct f
 removal — it may well be reachable again next print) and its weight is redistributed across the
 remaining qualifying set for that print only. This is disclosed on the face of the print, not
 silently absorbed into the other models' weights.
+
+**Billing exhaustion — our own prepaid credit running out, not a provider failure.** Found
+live: `claude-haiku-4-5` was excluded from the 2026-09-17 and 2026-09-25 prints, and both
+`claude-sonnet-5` and `claude-haiku-4-5` from 2026-09-18, in every case with a genuine HTTP 400
+("Your credit balance is too low to access the Anthropic API"), not a 429 or 5xx. This is not a
+provider outage and not a harness bug — it is Touchstone's own prepaid Anthropic balance running
+out mid-run, confirmed against the project's own real Anthropic invoice history: a $5 credit
+grant lasts roughly eight to nine days at the project's real spend, and the registry runs
+`claude-sonnet-5` before `claude-haiku-4-5`, so on a day the balance runs out mid-run, sonnet's own
+calls consume what's left and every one of haiku's calls is then rejected against a genuinely
+empty balance (both models are rejected identically when the balance is already at zero going
+into the run, as it was on 2026-09-18). The three affected prints' `correction_notes` state this
+per print.
+
+Detected explicitly, not just diagnosed after the fact: `classifyFailure`
+(`packages/harness/src/retry.ts`) gives this its own `billing_exhausted` category, distinct from
+`auth_or_bad_request` — matched on Anthropic's own confirmed message text, on HTTP 402 (the
+standard "Payment Required" status, and OpenRouter's own documented convention for the same
+condition), and on `insufficient_quota` (OpenAI's own documented error type for it). Anthropic's
+pattern is empirically confirmed against a real captured error body; the 402/`insufficient_quota`
+patterns are convention-based and not yet independently confirmed against a real captured incident
+for Google, OpenAI, xAI or OpenRouter specifically — every real provider error body is now
+persisted (`InstanceOutcome.infraFailureBody`), so the first live recurrence for any of them will
+confirm or correct this the same way Anthropic's was. A billing-exhausted instance is never
+retried (retrying a call that failed because the balance is genuinely zero only wastes time, it
+never succeeds) and is reported distinctly in a print's own infra-failure summary, never folded
+into "the provider rejected our request" or "the provider was rate-limiting us." The unattended
+publishing workflow (`.github/workflows/publish-print.yml`) still publishes the print on whatever
+qualifying set remains when this happens, but its own final run status is deliberately marked
+failed once the print is safely committed, specifically so a real credit exhaustion is noticed
+rather than passing as a routine, silent exclusion.
+
+Each print's own run log additionally carries a per-provider real spend summary
+(`data/runs/<print_id>/spend-by-provider.json`, `computeSpendByProvider` —
+`packages/print/src/compute/spend-by-provider.ts`): every real dollar actually billed that day,
+grouped by provider, across every attempt — not the same figure as `cost_of_production_usd`,
+which averages cost across passing instances only. This lets remaining runway be estimated from a
+top-up's size; the Anthropic pattern above was predictable roughly nine days in advance from
+exactly this kind of per-provider spend history.
 
 **Revision policy.** Every print starts, and remains, `status: "provisional"` on its own signed
 body forever — reconciliation never edits it (§7). A print IS final exactly when a separate,
