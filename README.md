@@ -104,3 +104,32 @@ non-zero (verified live against Base Sepolia with an unrelated key: neither reco
 candidate matched `publisher()`, and `postedAt` read 0).
 
 <!-- END GENERATED: deployments -->
+
+## Historical event data needs an archive RPC
+
+Public RPC endpoints prune old history. Confirmed live, 2026-09-27: `sepolia.base.org` now
+refuses `eth_getBlockByNumber`/`eth_getLogs` for anything before block ~46,000,000 — which
+includes this project's own August 2026 escrow deployment and smoke tests. Two different kinds
+of read are affected very differently:
+
+- **Current on-chain state is unaffected.** `verifyPrintOnChain` above (`postedAt(bodyHash)`,
+  `publisher()`) reads `TouchstoneAttestation`'s own current storage, not historical logs — it
+  works regardless of how old the anchored print is, and always will, on any node.
+- **A historical event-log scan needs a real archive endpoint.** The console's own event indexer
+  (`packages/console`) always scans from each contract's fixed deployment block, so it always
+  needs one — set `TOUCHSTONE_<CHAIN>_ARCHIVE_RPC` (e.g. `TOUCHSTONE_BASE_SEPOLIA_ARCHIVE_RPC`)
+  to a real archive-capable RPC URL (we use [Alchemy](https://www.alchemy.com/); its Base Sepolia
+  endpoints serve full history on every tier — Infura is an equally standard alternative). The
+  public endpoint is kept for current-state reads (`feeBps`/`treasury`/current block number)
+  only.
+- **`verify_receipt`'s own transaction-receipt lookup was checked, not assumed, against this same
+  pruning event: it still succeeds for a real settlement from August 2026** — `getTransactionReceipt`
+  by hash appears to survive on this provider's public endpoint longer than open-ended block/log
+  range queries do. That is not a guarantee it always will, on this or any provider, so
+  `OnChainSettlementReader`/`verify_receipt` also accept the same `TOUCHSTONE_<CHAIN>_ARCHIVE_RPC`
+  as an optional override for verifying an old settlement, falling back to the public endpoint
+  when unset.
+
+**If you are independently verifying an old print or receipt and a historical read comes back
+empty, this is almost certainly why** — the public endpoint's pruning horizon, not a real gap in
+what was actually recorded. Configure an archive RPC before concluding otherwise.

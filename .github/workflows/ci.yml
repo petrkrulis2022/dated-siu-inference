@@ -94,9 +94,19 @@ jobs:
       # CIRCLE_TESTNET_PRIVATE_KEY/TOUCHSTONE_PUBLISHER_KEY below, which stay unset in CI and leave
       # testnet.live.test.ts skipped) so packages/mcp-server/src/settlement/on-chain.test.ts's
       # read-only live-Base-Sepolia assertions actually run here rather than only locally.
+      #
+      # TOUCHSTONE_BASE_SEPOLIA_ARCHIVE_RPC is a real secret (an Alchemy/Infura API key embedded
+      # in the URL) — found live, 2026-09-27: the public endpoint above prunes history before
+      # block ~46,000,000, which broke packages/console/server/indexer/indexer.live.test.ts's own
+      # fixed historical scan window (docs/methodology.md's "Historical event data needs an
+      # archive RPC" has the full incident). Until this secret exists in this repo's Actions
+      # secrets, that one suite is skipped here exactly like testnet.live.test.ts already is
+      # without CIRCLE_TESTNET_PRIVATE_KEY — a real, disclosed gap in CI coverage, never a test
+      # quietly marked skip to paper over a failure that could otherwise run for real.
       - name: Test (TypeScript + Solidity)
         env:
           BASE_SEPOLIA_RPC_URL: https://sepolia.base.org
+          TOUCHSTONE_BASE_SEPOLIA_ARCHIVE_RPC: ${{ secrets.TOUCHSTONE_BASE_SEPOLIA_ARCHIVE_RPC }}
         run: pnpm run test:all
 
       - name: Contract coverage

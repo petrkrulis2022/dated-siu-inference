@@ -1307,6 +1307,44 @@ production key** — see below.
   listed explicitly in `data/deployments/base-sepolia.json`'s `mainnetRequirements` and repeated
   here so it cannot be missed by only reading one of the two documents.
 
+### Historical event data needs an archive RPC — not the public endpoint
+
+Found live, 2026-09-27: `sepolia.base.org` (the public Base Sepolia RPC) prunes history — it now
+refuses `eth_getBlockByNumber`/`eth_getLogs` for anything before block ~46,000,000, which includes
+this project's own August 2026 escrow deployment and smoke tests. This is a real, structural fact
+about public RPC nodes generally, not specific to this one — anyone independently verifying an old
+print or receipt through a public endpoint will hit the same wall, and a naive reading of "the
+data isn't there" is wrong: it is there, on-chain, permanently; the public node serving the query
+simply no longer carries it locally.
+
+Two genuinely different kinds of read are affected differently — conflating them is the mistake
+to avoid:
+
+- **Current on-chain state is never affected**, at any age. `verifyPrintOnChain` (above) reads
+  `TouchstoneAttestation`'s own current storage (`postedAt(bodyHash)`, `publisher()`) — a state
+  read, not a historical log — and works identically whether the print was anchored yesterday or
+  a year ago, on any node, public or archive.
+- **A historical event-log range scan needs a real archive endpoint, unconditionally.** The
+  console's own event indexer (`packages/console/server/indexer/index.ts`) always scans from each
+  contract's fixed deployment block forward, so it always needs archive access to reconstruct
+  anything from before a public node's own pruning horizon — configured via
+  `TOUCHSTONE_<CHAIN>_ARCHIVE_RPC` (e.g. `TOUCHSTONE_BASE_SEPOLIA_ARCHIVE_RPC`), kept separate
+  from the public `<CHAIN>_RPC_URL` used for current-state reads. We use
+  [Alchemy](https://www.alchemy.com/) — its Base Sepolia endpoints serve full history on every
+  tier, including the free one; Infura is an equally standard alternative. Anyone reconstructing
+  this project's own historical event record independently needs the same thing.
+- **`verify_receipt`'s transaction-receipt lookup (`OnChainSettlementReader`) was checked against
+  this exact pruning event, not assumed safe: it still succeeds reading a real settlement from
+  August 2026.** `getTransactionReceipt` by hash appears to survive on this provider's public
+  endpoint longer than open-ended block/log range queries do — a real, empirically observed
+  difference, not a documented guarantee from the provider. Because it isn't guaranteed,
+  `OnChainSettlementReader` also accepts the same `TOUCHSTONE_<CHAIN>_ARCHIVE_RPC` as an optional
+  override, falling back to the public endpoint when unset (which is what every real deployment
+  has done so far, without incident).
+- **The gate-market testbed's own receipt-graph reconstruction (`packages/gate-market-agents/src/receipt/graph.ts`)
+  was checked and confirmed unaffected**: it rebuilds a payment chain purely from already-emitted
+  receipt records, and never queries the chain at all.
+
 ---
 
 ## Governance intention
