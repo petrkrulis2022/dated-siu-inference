@@ -210,5 +210,11 @@
     "status": "anchored",
     "tx_hash": "0x825c4a35f8f15905a009adb011dd673929cbe9b0c9b61fede38c1701af7ba6fc",
     "posted_at": "2026-09-27T01:11:14.000Z"
-  }
+  },
+  "correction_notes": [
+    {
+      "published_at": "2026-09-27",
+      "note": "dated_siu jumped from 2026-09-26's /bin/bash.007626 to today's /bin/bash.0110 (+44.24%) — this is the 2026-09-26 artefact reversing, not a market move. gemini-3.1-pro-preview returned with real, qualifying run records today (cost_usd /bin/bash.041237/basket), after producing zero run records on 2026-09-26 because of a lapsed Google Cloud billing account on our own side (see that print's own correction_notes, and the follow-up note added there today correcting its own carried-forward figure). Today's dated_siu sits within about 1% of 2026-09-25's own last fully-measured level (/bin/bash.011108, before rounding) — consistent with a single constituent's mechanical dropout-and-return, exactly as 2026-09-26's own correction notes and docs/methodology.md's Aggregation section already described and predicted, not with any real change in the underlying cost of inference. This print was computed under rules-2026-09-25 (TOUCHSTONE_CARRY_FORWARD_ENABLED was flipped on only after today's 00:17 UTC cut-off); carry-forward first applies from tomorrow's print onward."
+    }
+  ]
 }
