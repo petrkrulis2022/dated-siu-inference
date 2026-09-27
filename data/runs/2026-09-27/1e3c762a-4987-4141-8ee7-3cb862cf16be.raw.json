@@ -1,0 +1,39 @@
+{
+  "id": "769ca2c1-c2b6-9a37-8a23-849984f2965b",
+  "object": "chat.completion",
+  "created": 1790471423,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```javascript\nexport function filterAboveThreshold(nums, threshold) {\n  return nums.filter((n) => n > threshold);\n}\n```",
+        "reasoning_content": "I need to write a JavaScript function that filters an array of numbers, keeping only values strictly greater than the threshold while preserving their original order.\n\nThe implementation uses `nums.filter(n => n > threshold)` and exports it directly.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 746,
+    "completion_tokens": 28,
+    "total_tokens": 986,
+    "prompt_tokens_details": {
+      "text_tokens": 746,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 212,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 21640000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
