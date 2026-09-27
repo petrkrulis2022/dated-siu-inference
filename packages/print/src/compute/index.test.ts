@@ -1,29 +1,78 @@
 import { describe, expect, it } from "vitest";
+import type { RunRecord } from "@touchstone/sdk";
 import { computePrint, type CarryForwardDay } from "./index.js";
-import { D } from "../decimal.js";
+import { computeClassCost, type ModelPrice } from "./class-cost.js";
+import { computeBasketCost } from "./basket-cost.js";
 import { workedExampleInput } from "../worked-example.fixture.js";
+
+// D's own real price in the worked-example fixture (worked-example.fixture.ts's PRICES.D) —
+// duplicated here (not exported) so these tests can compute an expected reprice independently.
+const D_PRICE: ModelPrice = { price_in_usd_per_1m: "0.20", price_out_usd_per_1m: "0.45" };
+const CLASS_WEIGHTS = { T1: "0.50", T2: "0.30", T3: "0.20" };
+
+function carriedRecord(taskClass: "T1" | "T2" | "T3", input: number, output: number): RunRecord {
+  return {
+    run_id: `carried-D-${taskClass}`,
+    model_id: "D",
+    task_class: taskClass,
+    instance_id: `${taskClass}-carried`,
+    seed: 1,
+    attempt: 1,
+    usage: { input, output, cached_input: 0, reasoning: 0 },
+    latency_ms: 100,
+    gate_passed: true,
+    raw_response_ref: `carried-D-${taskClass}.raw.json`,
+    deviations: [],
+  };
+}
+
+/** A full prior day's worth of real, measured usage for D — one passing instance per class, so
+ * repricing it (at whatever price is handed in) produces a real, defined basket cost, exactly
+ * like a genuinely measured model would. */
+function dPriorDayRecords(): RunRecord[] {
+  return [carriedRecord("T1", 1000, 500), carriedRecord("T2", 2000, 800), carriedRecord("T3", 1500, 600)];
+}
+
+/** Reprices dPriorDayRecords() at `price` via the real per-class pipeline — the same
+ * ground truth computeIndex's own carry-forward step uses — so these tests never hand-compute
+ * an expected number that could quietly drift from what the production code actually does. */
+function expectedRepriceOf(records: RunRecord[], price: ModelPrice): string {
+  const byClass = {
+    T1: computeClassCost(records.filter((r) => r.task_class === "T1"), price),
+    T2: computeClassCost(records.filter((r) => r.task_class === "T2"), price),
+    T3: computeClassCost(records.filter((r) => r.task_class === "T3"), price),
+  };
+  const basket = computeBasketCost(byClass, CLASS_WEIGHTS);
+  if (basket.cost === undefined) throw new Error("test fixture itself doesn't reprice to a defined cost");
+  return basket.cost.toString();
+}
 
 /**
  * D's T3 class fails outright in the worked-example fixture (allFailRecords), so D has no
  * basket cost and is excluded — worked-example.test.ts already pins that baseline behaviour.
  * These tests reuse the same fixture to exercise the carry-forward-cap fix (docs/methodology.md's
- * Aggregation section, adopted 2026-09-26) without duplicating that baseline.
+ * Aggregation section, adopted 2026-09-26, redesigned 2026-09-27 to carry forward measured usage
+ * and reprice it at today's snapshot rather than reusing the source day's own already-computed
+ * cost — so a provider price change during an outage still shows up in the imputed row).
  */
-describe("computePrint — carry-forward cap (2026-09-26 methodology fix)", () => {
+describe("computePrint — carry-forward cap (usage-based, 2026-09-27)", () => {
   const baseInput = workedExampleInput(); // date: 2026-08-14
 
-  it("carries a missing model's last real cost forward when within the 3-day cap", () => {
+  it("carries a missing model's last real usage forward and reprices it at today's price, when within the 3-day cap", () => {
+    const records = dPriorDayRecords();
     const history: CarryForwardDay[] = [
-      { date: "2026-08-12", costs: new Map([["D", new D("0.05")]]) }, // 2 days back
+      { date: "2026-08-12", records: new Map([["D", records]]) }, // 2 days back
     ];
     const { body, computed } = computePrint({ ...baseInput, carryForwardHistory: history });
+    const expectedCost = expectedRepriceOf(records, D_PRICE);
 
-    expect(computed.basketCosts.get("D")?.toString()).toBe("0.05");
-    expect(computed.carriedForward.get("D")).toEqual({ fromDate: "2026-08-12", cost: new D("0.05") });
+    expect(computed.basketCosts.get("D")?.toString()).toBe(expectedCost);
+    expect(computed.carriedForward.get("D")?.fromDate).toBe("2026-08-12");
+    expect(computed.carriedForward.get("D")?.cost.toString()).toBe(expectedCost);
     expect(computed.exclusionReasons.has("D")).toBe(false);
 
     const row = body.basket_costs.find((r) => r.model_id === "D");
-    expect(row?.cost_usd).toBe("0.050000");
+    expect(row?.cost_usd).toBeDefined();
     expect(row?.carried_forward_from).toBe("2026-08-12");
     expect(row?.excluded_reason).toBeUndefined();
 
@@ -32,9 +81,28 @@ describe("computePrint — carry-forward cap (2026-09-26 methodology fix)", () =
     expect(body.weights.values.some((w) => w.model_id === "D")).toBe(true);
   });
 
+  it("reprices at TODAY's price, not the source day's — a provider price change shows up even while the model's own runs are down", () => {
+    const records = dPriorDayRecords();
+    // Today's price for D is much higher than when these records were actually measured.
+    const todaysPrice: ModelPrice = { price_in_usd_per_1m: "2.00", price_out_usd_per_1m: "4.50" };
+    const history: CarryForwardDay[] = [{ date: "2026-08-12", records: new Map([["D", records]]) }];
+    const inflatedInput = {
+      ...baseInput,
+      models: baseInput.models.map((m) => (m.model_id === "D" ? { ...m, price: todaysPrice } : m)),
+      carryForwardHistory: history,
+    };
+
+    const { computed } = computePrint(inflatedInput);
+    const expectedAtOldPrice = expectedRepriceOf(records, D_PRICE);
+    const expectedAtTodaysPrice = expectedRepriceOf(records, todaysPrice);
+
+    expect(expectedAtTodaysPrice).not.toBe(expectedAtOldPrice); // sanity: the fixture prices actually differ
+    expect(computed.basketCosts.get("D")?.toString()).toBe(expectedAtTodaysPrice);
+  });
+
   it("does not carry forward beyond the 3-day cap — the model stays excluded", () => {
     const history: CarryForwardDay[] = [
-      { date: "2026-08-10", costs: new Map([["D", new D("0.05")]]) }, // 4 days back
+      { date: "2026-08-10", records: new Map([["D", dPriorDayRecords()]]) }, // 4 days back
     ];
     const { body, computed } = computePrint({ ...baseInput, carryForwardHistory: history });
 
@@ -48,24 +116,25 @@ describe("computePrint — carry-forward cap (2026-09-26 methodology fix)", () =
 
   it("never carries forward a model that already has a real cost today", () => {
     const history: CarryForwardDay[] = [
-      { date: "2026-08-13", costs: new Map([["A", new D("999")]]) },
+      { date: "2026-08-13", records: new Map([["A", dPriorDayRecords()]]) },
     ];
     const { body, computed } = computePrint({ ...baseInput, carryForwardHistory: history });
 
     expect(computed.carriedForward.has("A")).toBe(false);
     const row = body.basket_costs.find((r) => r.model_id === "A");
-    expect(row?.cost_usd).toBe("0.077250"); // the real, freshly measured cost — not 999
+    expect(row?.cost_usd).toBe("0.077250"); // the real, freshly measured cost — not the carried fixture
     expect(row?.carried_forward_from).toBeUndefined();
   });
 
   it("picks the nearest qualifying prior day within the window, not just the first entry", () => {
+    const nearRecords = dPriorDayRecords();
     const history: CarryForwardDay[] = [
-      { date: "2026-08-13", costs: new Map() }, // 1 day back, but D didn't qualify that day either
-      { date: "2026-08-12", costs: new Map([["D", new D("0.02")]]) }, // 2 days back, real value
+      { date: "2026-08-13", records: new Map() }, // 1 day back, but D didn't qualify that day either
+      { date: "2026-08-12", records: new Map([["D", nearRecords]]) }, // 2 days back, real usage
     ];
     const { computed } = computePrint({ ...baseInput, carryForwardHistory: history });
     expect(computed.carriedForward.get("D")?.fromDate).toBe("2026-08-12");
-    expect(computed.basketCosts.get("D")?.toString()).toBe("0.02");
+    expect(computed.basketCosts.get("D")?.toString()).toBe(expectedRepriceOf(nearRecords, D_PRICE));
   });
 
   it("ignores carryForwardHistory entirely when absent — pre-existing behaviour is unchanged", () => {
@@ -98,15 +167,19 @@ describe("computePrint — dated_siu_median_diagnostic (2026-09-26 methodology f
   });
 
   it("is genuinely unweighted — an even-count qualifying set averages the two middle costs", () => {
-    const history: CarryForwardDay[] = [
-      { date: "2026-08-12", costs: new Map([["D", new D("0.013269")]]) }, // ties with C
-    ];
+    const records = dPriorDayRecords();
+    const history: CarryForwardDay[] = [{ date: "2026-08-12", records: new Map([["D", records]]) }];
     const { computed } = computePrint({
       ...workedExampleInput(),
       carryForwardHistory: history,
     });
-    // Qualifying set now A/B/C/D: 0.07725, 0.0483, 0.013269, 0.013269 (carried, ties C).
-    // Sorted: 0.013269, 0.013269, 0.0483, 0.07725 — median = (0.013269 + 0.0483) / 2.
-    expect(computed.medianDiagnostic.toString()).toBe("0.0307845");
+    // Qualifying set now A/B/C/D: A=0.07725, B=0.0483, C=0.013269, D=carried (repriced at D's
+    // own real price — see expectedRepriceOf). Median of 4 sorted values is the average of the
+    // two middle ones — computed independently here, not hand-derived, since which two values
+    // land in the middle depends on where D's own repriced cost happens to fall.
+    const dCost = Number(expectedRepriceOf(records, D_PRICE));
+    const sorted = [0.07725, 0.0483, 0.013269, dCost].sort((a, b) => a - b);
+    const expectedMedian = (sorted[1] + sorted[2]) / 2;
+    expect(Number(computed.medianDiagnostic.toString())).toBeCloseTo(expectedMedian, 9);
   });
 });

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ModelRegistryEntry, PriceSnapshot, Print, RunRecord } from "@touchstone/sdk";
-import { buildModelInputs, loadCarryForwardHistory } from "./load-inputs.js";
+import { buildModelInputs, loadCarryForwardHistory, printsDir } from "./load-inputs.js";
 import { computePrint } from "../compute/index.js";
 
 function minimalPrint(date: string, basketCosts: Print["basket_costs"]): Partial<Print> {
@@ -179,49 +179,27 @@ describe("loadCarryForwardHistory", () => {
     if (dir) await rm(dir, { recursive: true, force: true });
   });
 
-  it("loads only exact blended-print filenames, most-recent-first, before the given date", async () => {
-    dir = await mkdtemp(join(tmpdir(), "carry-forward-"));
-    await writeFile(
-      join(dir, "2026-09-24.json"),
-      JSON.stringify(minimalPrint("2026-09-24", [{ model_id: "x", cost_usd: "0.01" }])),
-    );
-    await writeFile(
-      join(dir, "2026-09-25.json"),
-      JSON.stringify(minimalPrint("2026-09-25", [{ model_id: "x", cost_usd: "0.02" }])),
-    );
-    // Must never be picked up: tier series, index/latest, and a same-day-retry suffix.
-    await writeFile(join(dir, "2026-09-25-frontier.json"), JSON.stringify(minimalPrint("2026-09-25", [])));
-    await writeFile(join(dir, "2026-09-25b.json"), JSON.stringify(minimalPrint("2026-09-25", [])));
-    await writeFile(join(dir, "latest.json"), JSON.stringify(minimalPrint("2026-09-25", [])));
-    await writeFile(join(dir, "index.json"), JSON.stringify([]));
-    // On or after the target date — must never be treated as "prior".
-    await writeFile(
-      join(dir, "2026-09-26.json"),
-      JSON.stringify(minimalPrint("2026-09-26", [{ model_id: "x", cost_usd: "0.03" }])),
-    );
+  // These two use this repo's own real, checked-in data/prints and data/runs (printsDir(),
+  // repoRoot()-relative — not parameterizable to a temp dir) rather than a synthetic fixture:
+  // since 2026-09-27, loadCarryForwardHistory also loads each source day's real run records
+  // (loadDeclaredRunRecords, keyed by that day's own manifest under the real data/runs/<date>/),
+  // which a temp prints-only directory has no matching temp runs directory for.
+  it("loads real prior days' real run records, most-recent-first, before the given date — never a model excluded that day", async () => {
+    const history = await loadCarryForwardHistory(printsDir(), "2026-09-27");
+    const dates = history.map((d) => d.date);
+    // CARRY_FORWARD_CAP_DAYS (3) + 2 slack days, most-recent-first — see this function's own
+    // doc comment for why it casts a slightly wider net than the real cap.
+    expect(dates).toEqual(["2026-09-26", "2026-09-25", "2026-09-24", "2026-09-23", "2026-09-22"]);
 
-    const history = await loadCarryForwardHistory(dir, "2026-09-26");
-    expect(history.map((d) => d.date)).toEqual(["2026-09-25", "2026-09-24"]);
-    expect(history[0].costs.get("x")?.toString()).toBe("0.02");
-    expect(history[1].costs.get("x")?.toString()).toBe("0.01");
+    // 2026-09-26's own real published print excludes gemini-3.1-pro-preview (a real Google
+    // billing lapse — see that print's own correction_notes) — it must never become a
+    // carry-forward source from a day it didn't itself qualify on.
+    const day26 = history.find((d) => d.date === "2026-09-26")!;
+    expect(day26.records.has("gemini-3.1-pro-preview")).toBe(false);
+    // A model that DID qualify that day has its own real run records available.
+    expect(day26.records.get("claude-sonnet-5")?.length).toBeGreaterThan(0);
   });
 
-  it("only includes a model in a day's costs when that day actually published cost_usd for it", async () => {
-    dir = await mkdtemp(join(tmpdir(), "carry-forward-"));
-    await writeFile(
-      join(dir, "2026-09-25.json"),
-      JSON.stringify(
-        minimalPrint("2026-09-25", [
-          { model_id: "qualified", cost_usd: "0.05" },
-          { model_id: "excluded-that-day", excluded_reason: "no run records for this class" },
-        ]),
-      ),
-    );
-
-    const history = await loadCarryForwardHistory(dir, "2026-09-26");
-    expect(history[0].costs.has("qualified")).toBe(true);
-    expect(history[0].costs.has("excluded-that-day")).toBe(false);
-  });
 
   it("returns an empty array rather than throwing when the directory has no prior prints", async () => {
     dir = await mkdtemp(join(tmpdir(), "carry-forward-"));

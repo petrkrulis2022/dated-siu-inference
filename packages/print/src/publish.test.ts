@@ -266,6 +266,64 @@ describe("publishPrint", () => {
       const result = await publishPrint(dir, publishInput());
       expect(result.print.dated_siu).toBeTruthy();
     });
+
+    it("a frontier tier that's genuinely collapsed still refuses even once its one constituent is imputed — imputed rows never rescue a tier collapse", async () => {
+      // Decided live, 2026-09-27: an imputed row still gets a real cost_usd (it contributes to
+      // the blend), so without this fix the per-tier gate below would see D as "qualifying" and
+      // wrongly consider frontier saved. D's own prior-day usage (A's real records, relabelled)
+      // makes D's row carried-forward rather than genuinely measured.
+      const input = collapsedFrontierInput();
+      const priorA = input.models.find((m) => m.model_id === "A")!;
+      input.carryForwardHistory = [
+        {
+          date: "2026-08-12",
+          records: new Map([["D", priorA.records.map((r) => ({ ...r, model_id: "D" }))]]),
+        },
+      ];
+      const err = await publishPrint(dir, input).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(TierCollapseError);
+      const tcErr = err as TierCollapseError;
+      expect(tcErr.tier).toBe("frontier");
+      expect(tcErr.qualifying).toBe(0); // D is imputed, not genuinely measured
+      expect(tcErr.registered).toBe(1);
+    });
+  });
+
+  describe("the overall qualifying-set gate excludes imputed (carried-forward) rows", () => {
+    it("an imputed model still contributes to the blend, but does not count toward the minimum", async () => {
+      const input = publishInput(); // A, B, C, E genuinely measured (4); D fails today
+      const priorA = input.models.find((m) => m.model_id === "A")!;
+      input.carryForwardHistory = [
+        {
+          date: "2026-08-12",
+          records: new Map([["D", priorA.records.map((r) => ({ ...r, model_id: "D" }))]]),
+        },
+      ];
+      const result = await publishPrint(dir, input);
+      const dRow = result.print.basket_costs.find((r) => r.model_id === "D");
+      expect(dRow?.carried_forward_from).toBe("2026-08-12");
+      expect(dRow?.cost_usd).toBeDefined(); // still contributes to the blend
+    });
+
+    it("refuses to publish when imputed rows are the only thing keeping the count at the minimum", async () => {
+      const input = publishInput();
+      const priorA = input.models.find((m) => m.model_id === "A")!;
+      // Strip C's own today records too, so only A, B, E are genuinely measured today (3) —
+      // C and D both become imputed rather than excluded.
+      input.models = input.models.map((m) => (m.model_id === "C" ? { ...m, records: [] } : m));
+      input.carryForwardHistory = [
+        {
+          date: "2026-08-12",
+          records: new Map([
+            ["D", priorA.records.map((r) => ({ ...r, model_id: "D" }))],
+            ["C", priorA.records.map((r) => ({ ...r, model_id: "C" }))],
+          ]),
+        },
+      ];
+      const err = await publishPrint(dir, input).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(QualifyingSetError);
+      expect((err as QualifyingSetError).qualifying).toBe(3); // A, B, E — genuinely measured only
+    });
   });
 
   it("refuses to publish when the anchor transaction fails, writing nothing", async () => {

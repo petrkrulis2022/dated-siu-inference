@@ -2,7 +2,6 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { ModelRegistryEntry, PriceSnapshot, Print, RunManifest, RunRecord } from "@touchstone/sdk";
 import { CARRY_FORWARD_CAP_DAYS, type CarryForwardDay, type ModelInput } from "../compute/index.js";
-import { D, type DecimalValue } from "../decimal.js";
 
 /** pnpm always runs package scripts with cwd = the package directory. */
 export function repoRoot(): string {
@@ -120,11 +119,19 @@ export async function loadPrint(path: string): Promise<Print> {
 }
 
 /**
- * Loads the blended Dated SIU prints from the last CARRY_FORWARD_CAP_DAYS calendar days before
+ * Loads the last CARRY_FORWARD_CAP_DAYS calendar days of prior real, measured run records before
  * `beforeDate`, for computeIndex's own carry-forward step (see compute/index.ts's
- * CarryForwardDay/findCarryForward). Only ever reads each prior day's own already-published,
- * already-signed `cost_usd` values — never recomputes anything — so a carried-forward figure is
- * always a real number this system already stood behind once, not a fresh estimate.
+ * CarryForwardDay/findCarryForward). Carries the MEASURED USAGE forward, not an already-computed
+ * cost (decided live, 2026-09-27) — computeIndex reprices it at today's price snapshot, so a
+ * provider's price change during an outage still shows up in the imputed row.
+ *
+ * Only a model that genuinely qualified on that prior day — a real `cost_usd`, per that day's own
+ * published print — ever becomes a carry-forward source, and only from its own real run records
+ * (loadDeclaredRunRecords, the same declared-manifest source every other reader uses, never a
+ * bare directory listing). A model that was ITSELF carried-forward that day
+ * (`carried_forward_from` set on its own row) is excluded from becoming a source in turn — imputed
+ * usage staying within the 3-day cap of the day it was genuinely measured, not compounding past it
+ * by imputing from an already-imputed day.
  *
  * Scoped to the blended print series only (filenames matching exactly "YYYY-MM-DD.json", never
  * the "-frontier"/"-commodity" tier suffixes, "index.json", or "latest.json") — the tier series
@@ -151,13 +158,22 @@ export async function loadCarryForwardHistory(
   const days: CarryForwardDay[] = [];
   for (const date of candidateDates) {
     const print = await loadPrint(join(dir, `${date}.json`));
-    const costs = new Map<string, DecimalValue>();
-    for (const row of print.basket_costs) {
-      if (row.cost_usd !== undefined) {
-        costs.set(row.model_id, new D(row.cost_usd));
-      }
+    const genuinelyMeasuredIds = new Set(
+      print.basket_costs
+        .filter((row) => row.cost_usd !== undefined && row.carried_forward_from === undefined)
+        .map((row) => row.model_id),
+    );
+    if (genuinelyMeasuredIds.size === 0) continue;
+
+    const allRecords = await loadDeclaredRunRecords(date).catch(() => [] as RunRecord[]);
+    const recordsByModel = new Map<string, RunRecord[]>();
+    for (const record of allRecords) {
+      if (!genuinelyMeasuredIds.has(record.model_id)) continue;
+      const list = recordsByModel.get(record.model_id) ?? [];
+      list.push(record);
+      recordsByModel.set(record.model_id, list);
     }
-    days.push({ date, costs });
+    days.push({ date, records: recordsByModel });
   }
   return days;
 }

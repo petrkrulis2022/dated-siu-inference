@@ -30,12 +30,16 @@ const TASK_CLASSES: TaskClass[] = ["T1", "T2", "T3"];
  */
 export const CARRY_FORWARD_CAP_DAYS = 3;
 
-/** One prior day's published, qualifying basket costs — never a recomputation, only what that
- * print actually signed. Ordered most-recent-first by the caller; see loadCarryForwardHistory
- * (cli/load-inputs.ts) for how this is assembled from data/prints. */
+/** One prior day's own real, genuinely measured run records, for models that produced a real
+ * qualifying basket cost that day — never a print's own already-computed cost. Decided live,
+ * 2026-09-27: carrying forward a COST embeds that day's own prices, so a provider's price change
+ * during an outage would never show up until the outage ends; carrying forward the MEASURED
+ * USAGE and repricing it at today's snapshot means a price change is still reflected in the
+ * imputed row, only the usage itself is stale. Ordered most-recent-first by the caller; see
+ * loadCarryForwardHistory (cli/load-inputs.ts) for how this is assembled from data/runs. */
 export interface CarryForwardDay {
   date: string;
-  costs: Map<string, DecimalValue>;
+  records: Map<string, RunRecord[]>;
 }
 
 export interface ModelInput {
@@ -92,21 +96,21 @@ function daysBetween(from: string, to: string): number {
   return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / msPerDay);
 }
 
-/** The nearest prior day (within CARRY_FORWARD_CAP_DAYS real calendar days of `date`) that
- * published a real, qualifying cost for this model — or undefined if none exists in range.
- * `history` may safely contain days further back than the cap; those are simply never reached
- * because daysBetween excludes them, not because the caller pre-filtered correctly. */
+/** The nearest prior day (within CARRY_FORWARD_CAP_DAYS real calendar days of `date`) that has
+ * this model's own real, measured run records — or undefined if none exists in range. `history`
+ * may safely contain days further back than the cap; those are simply never reached because
+ * daysBetween excludes them, not because the caller pre-filtered correctly. */
 function findCarryForward(
   modelId: string,
   date: string,
   history: CarryForwardDay[] | undefined,
-): { fromDate: string; cost: DecimalValue } | undefined {
+): { fromDate: string; records: RunRecord[] } | undefined {
   if (!history) return undefined;
   for (const day of history) {
     const age = daysBetween(day.date, date);
     if (age < 1 || age > CARRY_FORWARD_CAP_DAYS) continue;
-    const cost = day.costs.get(modelId);
-    if (cost !== undefined) return { fromDate: day.date, cost };
+    const records = day.records.get(modelId);
+    if (records !== undefined) return { fromDate: day.date, records };
   }
   return undefined;
 }
@@ -119,8 +123,9 @@ export interface ComputedIndex {
   medianDiagnostic: DecimalValue;
   basketCosts: Map<string, DecimalValue | undefined>;
   exclusionReasons: Map<string, string>;
-  /** Models whose basket cost above is a carried-forward historical value, not one freshly
-   * measured today — see CarryForwardDay and findCarryForward. */
+  /** Models whose basket cost above comes from carried-forward historical usage repriced at
+   * today's snapshot, not from a measurement taken today — see CarryForwardDay and
+   * findCarryForward. */
   carriedForward: Map<string, { fromDate: string; cost: DecimalValue }>;
   weightSource: "routed-market-share" | "equal";
   weights: Map<string, DecimalValue>;
@@ -154,8 +159,31 @@ function computeIndex(
 
     const carried = findCarryForward(model.model_id, date, carryForwardHistory);
     if (carried) {
-      basketCosts.set(model.model_id, carried.cost);
-      carriedForward.set(model.model_id, carried);
+      // Reprice the carried USAGE at today's price snapshot (model.price is already today's,
+      // from buildModelInputs) — never reuse the source day's own already-computed cost, so a
+      // provider's price change during the outage still shows up in the imputed row; only the
+      // measured usage itself is stale. Same per-class pipeline a real measurement goes through.
+      const carriedByClass = {} as Record<TaskClass, ReturnType<typeof computeClassCost>>;
+      for (const cls of TASK_CLASSES) {
+        const classRecords = carried.records.filter((r) => r.task_class === cls);
+        const price = applyAdjustment(model.price, variant?.adjust(model.model_id, cls));
+        carriedByClass[cls] = computeClassCost(classRecords, price);
+      }
+      const carriedBasket = computeBasketCost(carriedByClass, classWeights);
+      if (carriedBasket.cost !== undefined) {
+        basketCosts.set(model.model_id, carriedBasket.cost);
+        carriedForward.set(model.model_id, { fromDate: carried.fromDate, cost: carriedBasket.cost });
+      } else {
+        // Defensive, not expected in practice: loadCarryForwardHistory only ever stores a day's
+        // records for a model that genuinely qualified that day, so repricing them at a
+        // different day's prices should still qualify. If it somehow doesn't, exclude honestly
+        // rather than publish a partial reprice.
+        basketCosts.set(model.model_id, undefined);
+        exclusionReasons.set(
+          model.model_id,
+          carriedBasket.undefinedReason ?? "carried-forward usage did not reprice to a defined cost",
+        );
+      }
     } else {
       basketCosts.set(model.model_id, undefined);
       exclusionReasons.set(model.model_id, basket.undefinedReason ?? "undefined basket cost");

@@ -27,6 +27,12 @@ export interface InvalidRecordReport {
  * the registry is meant to represent, not just a worse measurement of the same thing. Found
  * live: a run against a congested/unfunded provider key qualified only 2 of 6 registered
  * models and still published — this constant exists so that can't happen silently again.
+ *
+ * Since the carry-forward fix (2026-09-27): counts only models genuinely measured today, never
+ * a carried-forward (imputed) row. Carry-forward exists to smooth a single-constituent gap into
+ * the blend, not to relax how much of the market must actually be observed before a print
+ * publishes at all — a multi-provider outage papered over by imputation across most of a tier
+ * would be exactly the "thinner, misrepresented reference set" this gate exists to refuse.
  */
 export const MINIMUM_QUALIFYING_MODELS = 4;
 
@@ -254,8 +260,16 @@ export async function publishPrint(printsDir: string, input: PublishInput): Prom
 
   // Refuse before signing or anchoring — a print below the floor should never spend anchor gas
   // or produce a signed artifact in the first place, not just fail some later review.
+  //
+  // Genuinely measured today, excluding carried-forward (imputed) rows — decided live,
+  // 2026-09-27: an imputed constituent still contributes to the actual blend (it's a real,
+  // repriced measurement from a recent day, just not today's), but must never count toward
+  // "enough of the market was actually measured today" — otherwise a multi-provider outage
+  // could publish a print that's mostly imputed data and still clear the gate. The gate is
+  // about how much of TODAY's market was actually observed; carry-forward smooths the blend,
+  // it doesn't relax what counts as having observed it.
   const qualifyingIds = [...body.basket_costs]
-    .filter((m) => m.cost_usd !== undefined)
+    .filter((m) => m.cost_usd !== undefined && m.carried_forward_from === undefined)
     .map((m) => m.model_id);
   if (qualifyingIds.length < MINIMUM_QUALIFYING_MODELS) {
     throw new QualifyingSetError(
