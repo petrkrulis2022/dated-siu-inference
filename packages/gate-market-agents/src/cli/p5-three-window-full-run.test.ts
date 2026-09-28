@@ -120,10 +120,174 @@ describe("p5 three-window roster", () => {
   it("keeps the external-buyer schedule fixed in source, not derived at run time", () => {
     // If this ever becomes a function of anything observed during a run, the depletion stops
     // being disclosable in advance and the whole scarcity reading is contaminated.
-    expect(EXTERNAL_DEPLETION_MILLI_SIU).toEqual({ 1: 14_000, 2: 14_000 });
-    // Sized against the live pool: 40,000 - 28,000 leaves 12,000 mSIU across two issuers.
+    expect(EXTERNAL_DEPLETION_MILLI_SIU).toEqual({ 1: 16_000, 2: 14_000 });
+    // Sized so the reserve-ahead decision is consequential rather than free. Never reserving:
+    // 16,000 takes ISSUER-A 24,000 -> 8,000; the next 14,000 cannot fit there so it takes
+    // ISSUER-B 16,000 -> 2,000; window 3 opens with no issuer able to serve a 10,000 mSIU job.
     const total = Object.values(EXTERNAL_DEPLETION_MILLI_SIU).reduce((a, b) => a + b, 0);
-    expect(total).toBe(28_000);
+    expect(total).toBe(30_000);
+    // And the decision is not foreclosed either: ISSUER-A's 24,000 in window 1 covers both that
+    // window's own job and a 10,000 mSIU claim dated for window 3.
+    expect(24_000 - 10_000).toBeGreaterThanOrEqual(10_000);
     expect(Object.keys(EXTERNAL_DEPLETION_MILLI_SIU).map(Number)).not.toContain(WINDOW_COUNT);
+  });
+});
+
+// ---------------------------------------------------------------- outcome classification
+
+import { classifyFinalWindow, type WindowOutcome } from "./p5-three-window-full-run.js";
+import type { CapacityEvent, FullRunWindowResult } from "../loop/full-run.js";
+
+function windowResult(overrides: Partial<FullRunWindowResult> = {}): FullRunWindowResult {
+  return {
+    passed: false,
+    totalRealizedUsd: "0",
+    spendByProvider: {},
+    attacks: [],
+    gateVersions: [],
+    forwardQuotes: [],
+    forwardInvitations: [],
+    capacityEvents: [],
+    turnsByAgent: {},
+    turnLogsByAgent: {},
+    ...overrides,
+  };
+}
+
+function outcome(
+  windowIndex: number,
+  headroom: string[],
+  result: FullRunWindowResult,
+): WindowOutcome {
+  const rows = headroom.map((h, i) => ({ issuer: `0x${String(i)}`, headroom: h }));
+  return { windowIndex, result, headroomBefore: rows, headroomAfter: rows };
+}
+
+const mintEvent: CapacityEvent = {
+  agentId: "ORCHESTRATOR",
+  turn: 1,
+  kind: "pay_with_claim",
+  quantityMilliSiu: "10000",
+};
+
+describe("window-3 outcome classification", () => {
+  it("calls it scarcity only when capacity was genuinely gone AND nothing was secured ahead", () => {
+    const verdict = classifyFinalWindow([
+      outcome(1, ["24000", "16000"], windowResult({ passed: true })),
+      outcome(2, ["14000", "6000"], windowResult({ passed: true })),
+      outcome(3, ["4000", "2000"], windowResult({ passed: false })),
+    ]);
+    expect(verdict.verdict).toBe("scarcity");
+    expect(verdict.detail).toContain("scarcity finding");
+  });
+
+  it("refuses to call it scarcity when the orchestrator had secured capacity ahead", () => {
+    // Same empty pool, opposite cause: this is a defect to investigate, not the finding.
+    const verdict = classifyFinalWindow([
+      outcome(1, ["24000", "16000"], windowResult({ passed: true, capacityEvents: [mintEvent] })),
+      outcome(2, ["14000", "6000"], windowResult({ passed: true })),
+      outcome(3, ["4000", "2000"], windowResult({ passed: false })),
+    ]);
+    expect(verdict.verdict).toBe("failed_with_capacity");
+    expect(verdict.detail).toContain("not as the scarcity result");
+  });
+
+  it("refuses to call it scarcity when an issuer still had enough for the job", () => {
+    const verdict = classifyFinalWindow([
+      outcome(1, ["24000", "16000"], windowResult({ passed: true })),
+      outcome(2, ["24000", "16000"], windowResult({ passed: true })),
+      outcome(3, ["12000", "2000"], windowResult({ passed: false })),
+    ]);
+    expect(verdict.verdict).toBe("failed_with_capacity");
+  });
+
+  it("judges capacity per issuer, never by the total, because a claim routes to one issuer", () => {
+    // 6,000 + 6,000 = 12,000 in total but nothing that can serve a 10,000 mSIU claim.
+    const verdict = classifyFinalWindow([
+      outcome(1, ["24000", "16000"], windowResult({ passed: true })),
+      outcome(2, ["12000", "8000"], windowResult({ passed: true })),
+      outcome(3, ["6000", "6000"], windowResult({ passed: false })),
+    ]);
+    expect(verdict.verdict).toBe("scarcity");
+  });
+
+  it("separates a completed window that used pre-secured capacity from one that got lucky", () => {
+    const secured = classifyFinalWindow([
+      outcome(1, ["24000", "16000"], windowResult({ passed: true, capacityEvents: [mintEvent] })),
+      outcome(2, ["14000", "6000"], windowResult({ passed: true })),
+      outcome(3, ["4000", "2000"], windowResult({ passed: true })),
+    ]);
+    expect(secured.verdict).toBe("completed");
+    expect(secured.detail).toContain("the instrument working as intended");
+
+    const lucky = classifyFinalWindow([
+      outcome(1, ["24000", "16000"], windowResult({ passed: true })),
+      outcome(2, ["24000", "16000"], windowResult({ passed: true })),
+      outcome(3, ["24000", "16000"], windowResult({ passed: true })),
+    ]);
+    expect(lucky.verdict).toBe("completed");
+    expect(lucky.detail).toContain("not evidence about the instrument");
+  });
+});
+
+// ---------------------------------------------------------------- depletion sizing
+
+/**
+ * `ClaimRouter.route` in miniature: the first issuer in registration order holding enough by
+ * itself. Duplicated here rather than imported because the point is to check the *schedule*
+ * against the router's real rule, and a test that imported the thing it is checking would only
+ * confirm it agrees with itself.
+ */
+function route(pool: Record<string, number>, quantity: number): string | null {
+  for (const issuer of ["A", "B"]) {
+    if (pool[issuer] >= quantity) return issuer;
+  }
+  return null;
+}
+
+/** Plays the run out under one buyer policy and reports whether window 3 got its job done. */
+function simulate(reserveAhead: boolean): { window3Delivered: boolean; finalPool: Record<string, number> } {
+  const pool: Record<string, number> = { A: 24_000, B: 16_000 }; // the live lots
+  const job = 10_000; // the size the briefs quote
+  let heldForWindow3: string | null = null;
+
+  for (const w of [1, 2, 3]) {
+    if (w === 1 && reserveAhead) {
+      const issuer = route(pool, job);
+      if (issuer) {
+        pool[issuer] -= job;
+        heldForWindow3 = issuer;
+      }
+    }
+    if (w === 3 && heldForWindow3) {
+      pool[heldForWindow3] += job; // presented and delivered against the claim already held
+      return { window3Delivered: true, finalPool: pool };
+    }
+    const issuer = route(pool, job);
+    if (!issuer) return { window3Delivered: false, finalPool: pool };
+    pool[issuer] -= job;
+    pool[issuer] += job; // minted, delivered inside its own window, capacity returned
+    const depletion = EXTERNAL_DEPLETION_MILLI_SIU[w];
+    if (depletion !== undefined) {
+      const taker = route(pool, depletion);
+      if (taker) pool[taker] -= depletion;
+    }
+  }
+  return { window3Delivered: true, finalPool: pool };
+}
+
+describe("external depletion schedule", () => {
+  it("makes the reserve-ahead decision consequential: declining it loses window 3", () => {
+    // Outcome (a). If this ever passes, the schedule has stopped producing the scarcity finding
+    // and the run measures nothing about the instrument.
+    const { window3Delivered, finalPool } = simulate(false);
+    expect(window3Delivered).toBe(false);
+    expect(Math.max(...Object.values(finalPool))).toBeLessThan(10_000);
+  });
+
+  it("does not force it either: reserving ahead in window 1 still leaves that window its own job", () => {
+    // Outcome (c). Both branches have to be reachable, or the "choice" is not one.
+    const { window3Delivered } = simulate(true);
+    expect(window3Delivered).toBe(true);
   });
 });

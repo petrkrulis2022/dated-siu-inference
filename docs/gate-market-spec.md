@@ -365,11 +365,31 @@ changes them and the depletion cannot have been tuned to the result.
 what price; whether a buyer takes them, ignores them, or front-runs the depletion by buying early;
 and whether window 3 gets its work done.
 
+**Windows are fixed, pre-computed spans, and the runner waits for each to open.** Twenty real
+minutes each, computed from the chain clock before the first turn of the run. This is not a
+scheduling detail: a claim minted for a later window has to name *that window's* real bounds at the
+moment it is minted, and a span that depends on when the previous window's agents happen to finish
+is not knowable in advance. Until 2026-09-28 the loop always minted against the current window's
+bounds, so reserving capacity for a future delivery window — the one property fSIU is defined by —
+was not merely untested but impossible, and an all-USDC result would have read as a preference when
+the alternative it was compared against did not exist. `mint_claim`/`pay_with_claim` now take
+`forWindow`; a claim dated for a later window consumes its issuer's headroom immediately and can
+only be presented once that window opens.
+
 **Window 3 is allowed to fail.** If the pool is exhausted when it starts, the job does not get
 done and the run reports that as its result. Nothing tops the pool back up, re-sizes a lot, or
 routes around the shortage: a scarcity experiment whose scarcity is relieved the moment it binds
 measures nothing. This is stated here, in the runner's own doc comment, and in the run's output
 before the first window starts, so the outcome cannot be reinterpreted after the fact.
+
+**The three outcomes of the last window are reported separately, because they otherwise read
+alike.** (a) nothing was reserved ahead, no single issuer held enough for the job, and the work
+could not be bought — the scarcity finding; (b) capacity was reserved ahead or was still available,
+and the window failed anyway — a defect to investigate, not a finding; (c) capacity was reserved
+ahead and the window was delivered against it — the instrument working. The external-buyer schedule
+is sized so that (a) and (c) are both genuinely reachable from window 1: never reserving leaves no
+issuer able to serve the job by window 3, while reserving is affordable in window 1 without
+starving that window's own work.
 
 One further real property, disclosed to the agents as well as here: `ClaimRouter` routes a claim to
 a **single** issuer with enough headroom by itself. Two issuers holding 5,000 mSIU each cannot

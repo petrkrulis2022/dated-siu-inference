@@ -6,11 +6,11 @@
     "note": "Testnet only, per WP-7's own standing instruction. No mainnet address, no real funds, no live API key in any agent-reachable code path."
   },
   "source": {
-    "gitCommit": "709fc9e2d8ee79014817e43dd6ea07332a7c81b8",
-    "gitCommitShort": "709fc9e",
+    "gitCommit": "0e9d63648fa1bfb01e062f7fb58a858157f15d1d",
+    "gitCommitShort": "0e9d636",
     "treeCleanAtDeploy": false,
     "path": "packages/contracts",
-    "treeCleanAtDeployNote": "Deployed with the reserveForWork/releaseReservation change uncommitted in the working tree — gitCommit above is the last commit that landed before this deploy, not the commit containing the deployed WorkClaim.sol. Recorded honestly rather than claiming a clean-tree deploy that did not happen; the same disclosure base-sepolia.json already carries for its own mid-rename deploy. The full suite (152 contracts tests, 229 gate-market-agents tests) was green on this exact tree before the deploy."
+    "treeCleanAtDeployNote": "The deploy ran before the commit, not after: gitCommit above is the commit that CONTAINS the deployed source, made immediately afterwards (the prior commit, 709fc9e, does not). Recorded this way rather than pointing at 709fc9e and disclosing a gap, because a deployment record whose commit does not contain the deployed source is not a record. Verified rather than asserted: the runtime bytecode read back from this chain (cast code 0xe0D9B879F9841ef6Be5Af9001ed8F015030324A4) is byte-identical to `forge inspect src/WorkClaim.sol:WorkClaim deployedBytecode` at this commit apart from the immutable placeholders, which the local build leaves zeroed — 0 differing nibbles outside them. The full suite (152 contracts, 248 gate-market-agents) is green at this commit."
   },
   "compiler": {
     "solc": "0.8.24+commit.e11b9ed9",

@@ -639,6 +639,94 @@ describe("buildToolArgs", () => {
     );
   });
 
+  // ----- dated claims: minting for a later window
+
+  const WINDOW_BOUNDS = {
+    1: { from: 1_800_000_000n, to: 1_800_001_200n },
+    2: { from: 1_800_001_200n, to: 1_800_002_400n },
+    3: { from: 1_800_002_400n, to: 1_800_003_600n },
+  };
+
+  function datedCtx(windowIndex: number): BuildToolArgsContext {
+    return baseCtx({
+      mintContext: {
+        publisherPrivateKeyHex: PUBLISHER_PK,
+        printId: "2026-09-27-commodity",
+        series: SERIES_COMMODITY,
+        printDate: printDateToUnixDay("2026-09-27"),
+        nanoUsdPerSiu: 1_433_000n,
+        validitySeconds: 3600n,
+      },
+      windowIndex,
+      windowCount: 3,
+      windowBoundsByIndex: WINDOW_BOUNDS,
+      windowFrom: WINDOW_BOUNDS[windowIndex as 1 | 2 | 3].from,
+      windowTo: WINDOW_BOUNDS[windowIndex as 1 | 2 | 3].to,
+      agentAddressByAgentId: { "WORKER-CODE": "0x00000000000000000000000000000000000000cd" },
+    });
+  }
+
+  it("mint_claim: defaults to the window the buyer is standing in", async () => {
+    const args = (await buildToolArgs("mint_claim", { quantity: "500" }, datedCtx(1))) as {
+      windowFrom: number; windowTo: number;
+    };
+    expect(args.windowFrom).toBe(Number(WINDOW_BOUNDS[1].from));
+    expect(args.windowTo).toBe(Number(WINDOW_BOUNDS[1].to));
+  });
+
+  it("mint_claim: a claim dated for a later window gets that window's own real bounds", async () => {
+    // The property fSIU is defined by — reserving capacity for a FUTURE delivery window. Without
+    // this, a claim is only a slower way to pay for work about to be consumed.
+    const args = (await buildToolArgs("mint_claim", { quantity: "500", forWindow: 3 }, datedCtx(1))) as {
+      windowFrom: number; windowTo: number;
+    };
+    expect(args.windowFrom).toBe(Number(WINDOW_BOUNDS[3].from));
+    expect(args.windowTo).toBe(Number(WINDOW_BOUNDS[3].to));
+  });
+
+  it("pay_with_claim: carries the same dating, so paying a counterparty forward is possible too", async () => {
+    const args = (await buildToolArgs(
+      "pay_with_claim",
+      { agentId: "WORKER-CODE", quantity: "500", forWindow: 2 },
+      datedCtx(1),
+    )) as { windowFrom: number; windowTo: number };
+    expect(args.windowFrom).toBe(Number(WINDOW_BOUNDS[2].from));
+    expect(args.windowTo).toBe(Number(WINDOW_BOUNDS[2].to));
+  });
+
+  it("mint_claim: refuses a window that does not exist, rather than clamping to one that does", async () => {
+    // Clamping would silently retarget a buyer's stated intent; minting against bounds nobody will
+    // ever stand in produces a claim that can never be presented. Both are worse than refusing.
+    await expect(
+      buildToolArgs("mint_claim", { quantity: "500", forWindow: 4 }, datedCtx(1)),
+    ).rejects.toThrow(/no window 4/);
+  });
+
+  it("mint_claim: refuses a window that has already closed", async () => {
+    await expect(
+      buildToolArgs("mint_claim", { quantity: "500", forWindow: 1 }, datedCtx(3)),
+    ).rejects.toThrow(/already closed/);
+  });
+
+  it("mint_claim: in a single-window run, naming another window is refused, not silently ignored", async () => {
+    await expect(
+      buildToolArgs(
+        "mint_claim",
+        { quantity: "500", forWindow: 2 },
+        baseCtx({
+          mintContext: {
+            publisherPrivateKeyHex: PUBLISHER_PK,
+            printId: "p",
+            series: SERIES_COMMODITY,
+            printDate: printDateToUnixDay("2026-09-27"),
+            nanoUsdPerSiu: 1_433_000n,
+            validitySeconds: 3600n,
+          },
+        }),
+      ),
+    ).rejects.toThrow(/no window 2/);
+  });
+
   // ----- forward terms
 
   function forwardCtx(windowIndex: number, book = new ForwardQuoteBook()): BuildToolArgsContext {

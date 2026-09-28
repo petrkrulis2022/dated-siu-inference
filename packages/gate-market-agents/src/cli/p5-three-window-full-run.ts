@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createWalletClient, createPublicClient, http, keccak256, stringToBytes, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -38,6 +38,7 @@ import {
   classIdFor,
   runFullRunWindow,
   type FullRunWindowResult,
+  type CapacityEvent,
   type JobEnvelope,
   type MintContext,
   type RosterAgentConfig,
@@ -80,6 +81,16 @@ import {
  *     at what price; whether a buyer takes them, ignores them, or front-runs the depletion by
  *     buying early; whether window 3 gets its work done.
  *
+ * One limitation of this run, disclosed rather than discovered afterwards: no agent holds
+ * `settle_window_close`, so a claim that is never delivered simply stays outstanding — its holder
+ * gets no bond payout and its capacity never returns to the pool. That is deliberate (defaults are
+ * not what these three windows measure) and it makes scarcity tighter rather than looser, so it
+ * cannot manufacture a false negative. It is also currently unavoidable: `settleWindowClose`
+ * requires the attested `printDate` to equal the claim's own window-close day, and the latest real
+ * commodity print is dated the day before this run's windows close. Settling a default here would
+ * need a print dated the same day, and inventing one to make the mechanism reachable is not a
+ * trade this project makes.
+ *
  * Window 3 is allowed to fail. If the pool is exhausted when window 3 starts, the job does not get
  * done and the run reports that as its result. Nothing here tops the pool back up, re-sizes a lot,
  * or quietly routes around the shortage — a scarcity experiment whose scarcity is relieved the
@@ -88,12 +99,24 @@ import {
  * afterwards.
  */
 
-const RUN_CAP_USD = "40";
+/** The same $30 run cap the single-window runner uses. Three windows of the observed size come
+ * to roughly $1.50 in total (the first real P5 window cost $0.42), so this binds long before
+ * any wallet balance does — which is the intended order. */
+const RUN_CAP_USD = "30";
 const EXPERIMENT_CAP_USD = "150";
 export const WINDOW_COUNT = 3;
-/** Each window is one real, compressed hour — spec §9.2's "three weekly windows", shortened so a
- * run completes in an afternoon rather than three weeks. */
-const WINDOW_SECONDS = 3600n;
+/**
+ * Each window is a real, fixed 20-minute span — spec §9.2's "three weekly windows", compressed.
+ *
+ * Fixed and pre-computed, not "however long the agents take", because a claim minted for a later
+ * window has to name that window's real bounds at the moment of minting, and a span that depends
+ * on when the previous window's agents happen to finish is not knowable in advance. The runner
+ * therefore waits for each window to open. Twenty minutes, not ten: a real window's agents took
+ * ~9 minutes in the first P5 run, and a window whose nominal span expired while its own agents
+ * were still working would break redemption for its own claims — a far more expensive failure
+ * than idling. No inference is spent while waiting.
+ */
+export const WINDOW_SECONDS = 1200n;
 
 /**
  * The simulated external buyer's schedule, in mSIU of `code`-class capacity taken between
@@ -101,18 +124,39 @@ const WINDOW_SECONDS = 3600n;
  * printed before window 1, and written into the manifest, so no agent's behaviour changes them
  * and nobody can claim afterwards that the depletion was tuned to the result.
  *
- * Sized against the live pool (24,000 mSIU ISSUER-A + 16,000 ISSUER-B = 40,000): 14,000 after
- * window 1 and 14,000 after window 2 leave 12,000 mSIU, split 10,000/2,000 across the two
- * issuers. That last detail matters and is disclosed to the agents too — `ClaimRouter` routes a
- * mint to a *single* issuer with enough headroom, so 12,000 mSIU spread over two issuers cannot
- * serve one 12,000 mSIU claim. A fragmented pool is a real property of this design, not a bug.
+ * Resized 2026-09-28, once minting for a later window became possible, because the previous
+ * 14,000/14,000 no longer left the decision consequential. Worked through against the live pool
+ * (ISSUER-A 24,000 + ISSUER-B 16,000 = 40,000) and a 10,000 mSIU job, with `ClaimRouter` taking
+ * from a single issuer that has enough headroom by itself:
+ *
+ *   If the buyer never reserves ahead — each window's claim is minted and redeemed inside its own
+ *   window, so its capacity returns. 16,000 takes ISSUER-A to 8,000; the second 14,000 cannot fit
+ *   there, so it takes ISSUER-B to 2,000. Window 3 opens with 8,000/2,000 and NO issuer can serve
+ *   a 10,000 mSIU claim. The job does not get done. That is outcome (a), the scarcity finding.
+ *
+ *   If the buyer does reserve ahead — a 10,000 mSIU claim minted in window 1 for window 3 holds
+ *   ISSUER-A's headroom for the whole run. The depletions then land differently (the first cannot
+ *   fit at A and goes to B), the pool ends empty, and window 3 is nevertheless delivered against
+ *   the claim already held. That is outcome (c), the instrument working.
+ *
+ * So the schedule leaves the decision genuinely open in window 1 and makes it genuinely matter by
+ * window 3 — it neither forces reserving (the buyer can decline and simply lose window 3) nor
+ * forecloses it (ISSUER-A holds 24,000 in window 1, enough for both that window's job and a
+ * window-3 claim). The previous sizing left 10,000 intact at ISSUER-A in the never-reserve branch,
+ * which meant window 3 succeeded either way and the choice cost nothing.
  *
  * The external buyer is the deployer wallet, which is not an agent, makes no decisions and has no
  * model. It is labelled as such everywhere it appears.
  */
-export const EXTERNAL_DEPLETION_MILLI_SIU: Record<number, number> = { 1: 14_000, 2: 14_000 };
+export const EXTERNAL_DEPLETION_MILLI_SIU: Record<number, number> = { 1: 16_000, 2: 14_000 };
 
-interface WindowOutcome {
+/** The job size the briefs quote (10 SIU), in mSIU. Used only to classify window 3's outcome: a
+ * window that failed with no single issuer holding this much is a different finding from one that
+ * failed with capacity available, and the test needs some figure to mean "enough for the job". It
+ * is the same number the briefs put in front of the agents, not one chosen afterwards. */
+const NOMINAL_JOB_MILLI_SIU = 10_000n;
+
+export interface WindowOutcome {
   windowIndex: number;
   result: FullRunWindowResult;
   headroomBefore: { issuer: string; headroom: string }[];
@@ -225,6 +269,18 @@ async function main(): Promise<void> {
   const totalOf = (rows: { headroom: string }[]): bigint =>
     rows.reduce((sum, r) => sum + BigInt(r.headroom), 0n);
 
+  // Every window's real bounds, fixed before anything starts. A claim minted in window 1 for
+  // window 3 names window 3's own span, so the span cannot be "whenever window 2's agents happen
+  // to finish" — it has to exist before the first turn is taken.
+  const runStart = await chainReader.currentBlockTimestamp();
+  const windowBoundsByIndex: Record<number, { from: bigint; to: bigint }> = {};
+  for (let i = 1; i <= WINDOW_COUNT; i++) {
+    windowBoundsByIndex[i] = {
+      from: runStart + BigInt(i - 1) * WINDOW_SECONDS,
+      to: runStart + BigInt(i) * WINDOW_SECONDS,
+    };
+  }
+
   const startingHeadroom = await headroomRows();
   console.log("=== WP-7 P5 — THREE WINDOWS, ONE POOL ===");
   console.log(`Run ${runId} (label ${runSeed}); oracle trial seed ${F1_ORACLE_TRIAL_SEED} (pinned).`);
@@ -248,6 +304,19 @@ async function main(): Promise<void> {
       "starts, the job does not get done and that is the result. Nothing in this script tops the " +
       "pool back up, resizes a lot, or routes around the shortage.",
   );
+  console.log(
+    "AND: no agent can settle a window close in this run, so an undelivered claim stays outstanding " +
+      "— no bond payout, capacity never returned. Deliberate (defaults are not what this measures) " +
+      "and it can only make scarcity tighter, never looser. See this file's own doc comment for why " +
+      "it is also currently unavoidable.",
+  );
+  console.log(
+    `Window spans, fixed before the first turn (chain clock): ` +
+      Object.entries(windowBoundsByIndex)
+        .map(([i, b]) => `w${i} ${new Date(Number(b.from) * 1000).toISOString()}..${new Date(Number(b.to) * 1000).toISOString()}`)
+        .join("; ") +
+      `. The runner waits for each to open; no inference is spent waiting.`,
+  );
   console.log(ONE_POOL_DISCLOSURE);
 
   const manifest: RunManifest = {
@@ -258,14 +327,16 @@ async function main(): Promise<void> {
     oracleTrialSeed: F1_ORACLE_TRIAL_SEED,
     externalDepletionMilliSiu: EXTERNAL_DEPLETION_MILLI_SIU,
     windowCount: WINDOW_COUNT,
+    windowBounds: Object.fromEntries(
+      Object.entries(windowBoundsByIndex).map(([i, b]) => [i, { from: Number(b.from), to: Number(b.to) }]),
+    ),
   };
 
   const outcomes: WindowOutcome[] = [];
 
   for (let windowIndex = 1; windowIndex <= WINDOW_COUNT; windowIndex++) {
-    const nowSeconds = await chainReader.currentBlockTimestamp();
-    const windowFrom = nowSeconds - 60n;
-    const windowTo = nowSeconds + WINDOW_SECONDS;
+    const { from: windowFrom, to: windowTo } = windowBoundsByIndex[windowIndex];
+    await waitForWindowToOpen(chainReader, windowIndex, windowFrom);
     const job: JobEnvelope = {
       jobId: `p5-3w-window${windowIndex}-job`,
       taskClass: "code",
@@ -332,6 +403,7 @@ async function main(): Promise<void> {
       windowTo,
       windowIndex,
       windowCount: WINDOW_COUNT,
+      windowBoundsByIndex,
       forwardBook,
       mintContext,
       oracleSeed: F1_ORACLE_TRIAL_SEED,
@@ -370,6 +442,77 @@ async function main(): Promise<void> {
   }
 
   printRunSummary(outcomes, forwardBook, totalOf, budget);
+
+  // Written as well as printed: a report that exists only in terminal scrollback is not a record,
+  // and this run is expensive enough that losing it to a closed window would be a real loss.
+  const reportPath = join(RUNS_ROOT, `${runId}-report.json`);
+  writeFileSync(
+    reportPath,
+    `${JSON.stringify(
+      {
+        runId,
+        runSeed,
+        oracleTrialSeed: F1_ORACLE_TRIAL_SEED,
+        printId,
+        rateUsdPerSiu,
+        windowCount: WINDOW_COUNT,
+        externalDepletionMilliSiu: EXTERNAL_DEPLETION_MILLI_SIU,
+        nominalJobMilliSiu: NOMINAL_JOB_MILLI_SIU.toString(),
+        startingHeadroom,
+        finalWindowVerdict: classifyFinalWindow(outcomes),
+        forwardQuotes: forwardBook.all(),
+        windows: outcomes.map((o) => ({
+          windowIndex: o.windowIndex,
+          passed: o.result.passed,
+          passedBy: o.result.passedBy,
+          haltedReason: o.result.haltedReason,
+          headroomBefore: o.headroomBefore,
+          headroomAfter: o.headroomAfter,
+          externalDepletion: o.externalDepletion,
+          assetChoice: describeAssetChoice(o.result),
+          capacityEvents: o.result.capacityEvents,
+          forwardInvitations: o.result.forwardInvitations,
+          attacks: o.result.attacks,
+          gateVersions: o.result.gateVersions,
+          spendByProvider: o.result.spendByProvider,
+          turnsByAgent: o.result.turnsByAgent,
+          totalRealizedUsd: o.result.totalRealizedUsd,
+        })),
+        runTotalUsd: budget.runTotalUsd(),
+        runCapUsd: RUN_CAP_USD,
+        experimentTotalUsd: budget.experimentTotalUsd(),
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  console.log(`\nMachine-readable report written to ${reportPath}`);
+}
+
+/**
+ * Blocks until the chain's own clock has reached this window's fixed start.
+ *
+ * Against the chain clock, never `Date.now()`: `presentForRedemption` compares `block.timestamp`
+ * against the claim's `windowFrom`, so a window that wall-clock says has opened but the chain
+ * disagrees about is a window whose claims still revert `WindowNotOpenYet`. Costs nothing but
+ * wall-clock time — no model is called while waiting.
+ */
+async function waitForWindowToOpen(
+  chainReader: ViemChainReader,
+  windowIndex: number,
+  windowFrom: bigint,
+): Promise<void> {
+  let now = await chainReader.currentBlockTimestamp();
+  if (now >= windowFrom) return;
+  console.log(
+    `\nWaiting ${windowFrom - now}s for window ${windowIndex} to open (chain clock). ` +
+      "No inference is spent while waiting.",
+  );
+  while (now < windowFrom) {
+    const remaining = Number(windowFrom - now);
+    await new Promise((resolve) => setTimeout(resolve, Math.min(remaining, 30) * 1000));
+    now = await chainReader.currentBlockTimestamp();
+  }
 }
 
 export interface RosterInput {
@@ -423,6 +566,8 @@ CAPACITY RIGHT NOW (real, read from chain at the start of this window)
   Total across all issuers: ${totalHeadroom} mSIU.
   A claim is routed to a SINGLE issuer that has enough headroom by itself. Two issuers holding
   5,000 mSIU each cannot between them serve one 10,000 mSIU claim.
+  Capacity a claim consumes is returned to its issuer when that claim is delivered, and stays
+  consumed until then.
   Other buyers exist and are not in this run. Capacity they take is gone before you see it.
 ${ONE_POOL_DISCLOSURE}`;
 
@@ -460,6 +605,14 @@ YOUR JOB THIS WINDOW
       (quantity is in milli-SIU; 10000 = 10 SIU, matching Option A's own quote size.)
     Step 2: wait, same as Option A's step 3.
     mint_claim and transfer_claim remain available if you want the two steps separately.
+
+  A FACT ABOUT CLAIMS, STATED AS A FACT
+  A claim names the delivery window it is for. By default that is the window you are in. Both
+  mint_claim and pay_with_claim also take "forWindow", naming any window of this run that has not
+  yet closed — for example {"tool": "mint_claim", "args": {"quantity": "10000", "forWindow": 3}}.
+  A claim for a later window consumes that issuer's headroom at the moment you mint it, not when
+  that window arrives, and it can only be presented once that window opens. A dollar payment has no
+  equivalent: it buys work now. Nothing here says whether to use this, or when.
 ${runShapeFacts}
   check_headroom() shows the remaining headroom of every bonded issuer in the class, and
   get_print() shows the current published rate. Nothing here tells you what to do with either.
@@ -787,22 +940,16 @@ function printWindowSummary(
       `(${headroomAfter.map((r) => `${r.issuer} ${r.headroom}`).join(", ")})`,
   );
 
-  const orchestratorCalls = (result.turnLogsByAgent.ORCHESTRATOR ?? []).map((t) => t.parsed);
-  const paid = orchestratorCalls.some((p) => p.includes('"pay"'));
-  const claimed =
-    orchestratorCalls.some((p) => p.includes('"pay_with_claim"')) ||
-    orchestratorCalls.some((p) => p.includes('"mint_claim"'));
-  console.log(
-    `F1 read: ${
-      paid && claimed
-        ? "ORCHESTRATOR used BOTH routes this window"
-        : paid
-          ? "ORCHESTRATOR chose USDC"
-          : claimed
-            ? "ORCHESTRATOR chose fSIU"
-            : "ORCHESTRATOR reached no asset-choice action this window"
-    }`,
-  );
+  console.log(`asset choice: ${describeAssetChoice(result)}`);
+
+  if (result.capacityEvents.length === 0) {
+    console.log("capacity events: none — nothing moved on-chain this window.");
+  } else {
+    console.log("capacity events (real, from the tools' own results):");
+    for (const e of result.capacityEvents) {
+      console.log(`  turn ${e.turn} ${e.agentId} ${e.kind}${describeCapacityEvent(e)}`);
+    }
+  }
 
   if (result.attacks.length === 0) {
     console.log("attacks: none this window.");
@@ -812,6 +959,102 @@ function printWindowSummary(
       `attacks: ${result.attacks.length}, of which ${yields} false accepts (the adversary's real yield).`,
     );
   }
+}
+
+/**
+ * Which route a purchase actually went down, per purchase rather than per window — an orchestrator
+ * that bought the gate in dollars and the adversarial testing in claims made two different
+ * choices, and collapsing them to one label per window would lose exactly the comparison F1 asks
+ * for. Read from the real capacity events and the real tool calls, never from a model's own
+ * account of what it did.
+ */
+function describeAssetChoice(result: FullRunWindowResult): string {
+  const calls = (result.turnLogsByAgent.ORCHESTRATOR ?? []).map((t) => t.parsed);
+  const usdcPurchases = calls.filter((p) => p.includes('"pay"')).length;
+  const claimPurchases = result.capacityEvents.filter(
+    (e) => e.agentId === "ORCHESTRATOR" && (e.kind === "pay_with_claim" || e.kind === "mint_claim"),
+  ).length;
+  if (usdcPurchases === 0 && claimPurchases === 0) {
+    return "ORCHESTRATOR reached no asset-choice action this window";
+  }
+  return `${usdcPurchases} purchase(s) settled in USDC, ${claimPurchases} in fSIU`;
+}
+
+function describeCapacityEvent(e: CapacityEvent): string {
+  const parts: string[] = [];
+  if (e.quantityMilliSiu) parts.push(`${e.quantityMilliSiu} mSIU`);
+  if (e.issuer) parts.push(`issuer ${e.issuer}`);
+  if (e.tokenId) parts.push(`tokenId ${e.tokenId}`);
+  if (e.quoteHash) parts.push(`quote ${e.quoteHash}`);
+  if (e.counterparty) parts.push(`to ${e.counterparty}`);
+  if (e.forwardQuoteId) parts.push(`offer ${e.forwardQuoteId}`);
+  if (e.timeToExpirySeconds !== undefined) parts.push(`time_to_expiry ${e.timeToExpirySeconds}s`);
+  parts.push(e.txHash ? `tx ${e.txHash}` : "no tx (nothing moves on-chain for this action)");
+  return parts.length > 0 ? ` — ${parts.join(", ")}` : "";
+}
+
+/**
+ * Window 3's outcome, separated into the three cases that otherwise read alike. A run that reports
+ * only "window 3 failed" cannot distinguish the finding the experiment exists to produce from a
+ * defect in it.
+ */
+export function classifyFinalWindow(
+  outcomes: WindowOutcome[],
+): { verdict: "scarcity" | "failed_with_capacity" | "completed" | "no_final_window"; detail: string } {
+  const last = outcomes.find((o) => o.windowIndex === WINDOW_COUNT);
+  if (!last) return { verdict: "no_final_window", detail: "The run did not reach its last window." };
+
+  // "Enough capacity" means enough at ONE issuer, because a claim routes to a single issuer with
+  // enough headroom by itself — the total is not what a buyer faces.
+  const largestIssuer = last.headroomBefore.reduce(
+    (max, r) => (BigInt(r.headroom) > max ? BigInt(r.headroom) : max),
+    0n,
+  );
+  const hadCapacity = largestIssuer >= NOMINAL_JOB_MILLI_SIU;
+  // Capacity secured before this window began: a claim minted or taken in an earlier window, or a
+  // forward offer taken. This is what "the orchestrator reserved" means across windows.
+  const securedAhead = outcomes
+    .filter((o) => o.windowIndex < WINDOW_COUNT)
+    .flatMap((o) => o.result.capacityEvents)
+    .filter(
+      (e) =>
+        e.agentId === "ORCHESTRATOR" &&
+        (e.kind === "mint_claim" || e.kind === "pay_with_claim" || e.kind === "take_forward"),
+    );
+
+  if (last.result.passed) {
+    return {
+      verdict: "completed",
+      detail:
+        `Window ${WINDOW_COUNT} delivered its job. Capacity at the largest single issuer when it ` +
+        `started: ${largestIssuer} mSIU against a ${NOMINAL_JOB_MILLI_SIU} mSIU job. ` +
+        (securedAhead.length > 0
+          ? `ORCHESTRATOR had secured capacity in an earlier window (${securedAhead.length} action(s)) — ` +
+            "the instrument working as intended, not merely a pool that happened to hold out."
+          : "ORCHESTRATOR secured nothing ahead; the pool simply still had room, which is not evidence about the instrument."),
+    };
+  }
+
+  if (!hadCapacity && securedAhead.length === 0) {
+    return {
+      verdict: "scarcity",
+      detail:
+        `Window ${WINDOW_COUNT} failed, no single issuer held the ${NOMINAL_JOB_MILLI_SIU} mSIU the ` +
+        `job needs (largest: ${largestIssuer} mSIU), and ORCHESTRATOR had secured nothing ahead. ` +
+        "This is the scarcity finding: the capacity was gone and nothing had been reserved against it.",
+    };
+  }
+
+  return {
+    verdict: "failed_with_capacity",
+    detail:
+      `Window ${WINDOW_COUNT} failed, but NOT for want of capacity — ` +
+      (hadCapacity
+        ? `the largest single issuer held ${largestIssuer} mSIU against a ${NOMINAL_JOB_MILLI_SIU} mSIU job`
+        : `ORCHESTRATOR had secured ${securedAhead.length} capacity action(s) in earlier windows`) +
+      ". Treat this as a defect to investigate, not as the scarcity result. Halted reasons: " +
+      JSON.stringify(last.result.haltedReason),
+  };
 }
 
 function printRunSummary(
@@ -834,19 +1077,111 @@ function printRunSummary(
       `  window ${o.windowIndex}: passed=${o.result.passed}${o.result.passedBy ? ` by ${o.result.passedBy}` : ""}, ` +
         `headroom ${totalOf(o.headroomBefore)} -> ${totalOf(o.headroomAfter)} mSIU${depletion}`,
     );
+    console.log(`    asset choice: ${describeAssetChoice(o.result)}`);
+  }
+
+  console.log("\n=== SUBCONTRACTING AND ASSET CHOICE, PER PURCHASE ===");
+  for (const o of outcomes) {
+    const calls = (o.result.turnLogsByAgent.ORCHESTRATOR ?? []);
+    const purchases = calls.filter((t) => t.parsed.includes('"pay"') || t.parsed.includes('"pay_with_claim"') || t.parsed.includes('"mint_claim"'));
+    if (purchases.length === 0) {
+      console.log(`  window ${o.windowIndex}: no purchase.`);
+      continue;
+    }
+    for (const t of purchases) {
+      const route = t.parsed.includes('"pay"') ? "USDC" : "fSIU";
+      console.log(`  window ${o.windowIndex} turn ${t.turn}: ${route} — ${t.parsed.slice(0, 160)}`);
+    }
+  }
+
+  console.log("\n=== CAPACITY EVENTS (claims and reservations, with tx hashes) ===");
+  let anyEvent = false;
+  for (const o of outcomes) {
+    for (const e of o.result.capacityEvents) {
+      anyEvent = true;
+      console.log(`  w${o.windowIndex} turn ${e.turn} ${e.agentId} ${e.kind}${describeCapacityEvent(e)}`);
+    }
+    if (o.externalDepletion?.txHash) {
+      console.log(
+        `  w${o.windowIndex} [EXTERNAL BUYER, not an agent] mint ${o.externalDepletion.requestedMilliSiu} mSIU — tx ${o.externalDepletion.txHash}`,
+      );
+      anyEvent = true;
+    }
+  }
+  if (!anyEvent) console.log("  none.");
+
+  console.log("\n=== ADVERSARY ===");
+  for (const o of outcomes) {
+    console.log(
+      `  window ${o.windowIndex}: gate versions delivered ${o.result.gateVersions.length}` +
+        (o.result.gateVersions.length > 0
+          ? ` (${o.result.gateVersions.map((g) => `v${g.version} by ${g.submittedBy} on turn ${g.turn}`).join("; ")})`
+          : ""),
+    );
+    if (o.result.attacks.length === 0) {
+      console.log("    attacks: none.");
+      continue;
+    }
+    for (const a of o.result.attacks) {
+      console.log(
+        `    turn ${a.turn} by ${a.attacker} vs gate v${a.gateVersion}: ${a.classification} ` +
+          `(gate accepted=${a.gateAccepted}, oracle accepted=${a.oracleAccepted}) — ${a.reason}`,
+      );
+    }
+    // Whether a revision actually closed a hole, rather than merely following one: a false accept
+    // against version N that no longer reproduces against version N+1 is the only evidence that
+    // the revision did anything.
+    const yieldsByVersion = new Map<number, number>();
+    for (const a of o.result.attacks) {
+      if (a.countsAsAdversaryYield) {
+        yieldsByVersion.set(a.gateVersion, (yieldsByVersion.get(a.gateVersion) ?? 0) + 1);
+      }
+    }
+    for (const [version, count] of [...yieldsByVersion].sort(([a], [b]) => a - b)) {
+      const later = o.result.attacks.filter((a) => a.gateVersion > version);
+      const laterYields = later.filter((a) => a.countsAsAdversaryYield).length;
+      console.log(
+        `    v${version}: ${count} false accept(s). ` +
+          (later.length === 0
+            ? "No later version was tested, so whether a revision would have closed them is unknown — not that it did."
+            : `A later version was tested ${later.length} time(s) with ${laterYields} false accept(s).`),
+      );
+    }
   }
 
   console.log("\n=== FORWARD TERMS (stated prices, not contracts — nothing enforces one) ===");
   const quotes = forwardBook.all();
+  // The negative has to be attributable: "prompted and declined" and "never asked" are different
+  // findings, and a report that says only "nobody quoted" cannot tell them apart.
+  const invitationsByAgent = new Map<string, number>();
+  for (const o of outcomes) {
+    for (const inv of o.result.forwardInvitations) {
+      invitationsByAgent.set(inv.agentId, (invitationsByAgent.get(inv.agentId) ?? 0) + 1);
+    }
+  }
+  if (invitationsByAgent.size === 0) {
+    console.log(
+      "  No agent was ever shown the invitation to state forward terms. NOBODY WAS ASKED — this is " +
+        "not evidence that issuers decline to quote. Check the tool grants and the wait-gate before " +
+        "reading anything into it.",
+    );
+  } else {
+    for (const [agentId, count] of [...invitationsByAgent].sort()) {
+      const stated = quotes.filter((q) => q.issuer === agentId).length;
+      console.log(
+        `  ${agentId}: shown the invitation on ${count} turn(s), stated ${stated} offer(s)` +
+          (stated === 0 ? " — PROMPTED AND DECLINED, not un-asked." : ""),
+      );
+    }
+  }
   if (quotes.length === 0) {
-    console.log("  No issuer stated forward terms in any window. That is a result, not a gap: the");
-    console.log("  tool was available to both issuers in windows 1 and 2 and neither used it.");
+    console.log("  No forward terms were stated in any window.");
   } else {
     for (const q of quotes) {
       console.log(
         `  ${q.quoteId}: ${q.issuer} stated in window ${q.statedInWindow} for window ${q.forWindow} — ` +
           `${q.rateUsdPerSiu} USD/SIU, up to ${q.maxQuantityMilliSiu} mSIU ` +
-          `(their headroom then: ${q.issuerHeadroomAtQuote} mSIU) — ` +
+          `(their real headroom then: ${q.issuerHeadroomAtQuote} mSIU) — ` +
           (q.takenInWindow === null ? "NOT taken" : `taken by ${q.takenBy} in window ${q.takenInWindow}`),
       );
     }
@@ -854,25 +1189,32 @@ function printRunSummary(
     console.log(`  ${taken} of ${quotes.length} offers were taken.`);
   }
 
-  console.log("\n=== SCARCITY ===");
+  console.log("\n=== SCARCITY, AND WHAT THE LAST WINDOW'S OUTCOME ACTUALLY MEANS ===");
   const last = outcomes.at(-1);
   if (last) {
-    const remaining = totalOf(last.headroomAfter);
-    console.log(`  code-class headroom remaining at the end of the run: ${remaining} mSIU`);
-    console.log(
-      `  per issuer: ${last.headroomAfter.map((r) => `${r.issuer} ${r.headroom}`).join(", ")}`,
-    );
+    console.log(`  code-class headroom remaining at the end: ${totalOf(last.headroomAfter)} mSIU`);
+    console.log(`  per issuer: ${last.headroomAfter.map((r) => `${r.issuer} ${r.headroom}`).join(", ")}`);
     console.log(
       "  A claim routes to a single issuer with enough headroom by itself, so the per-issuer split " +
-        "above, not the total, is what a late buyer actually faces.",
+        "above, not the total, is what a late buyer faces.",
     );
   }
-  const failedWindows = outcomes.filter((o) => !o.result.passed).map((o) => o.windowIndex);
+  const verdict = classifyFinalWindow(outcomes);
+  console.log(`  VERDICT: ${verdict.verdict}`);
+  console.log(`  ${verdict.detail}`);
+
+  console.log("\n=== HALTS, REFUSALS AND FRICTION ===");
+  for (const o of outcomes) {
+    const halts = Object.entries(o.result.haltedReason ?? {});
+    const refusals = halts.filter(([, reason]) => reason === "policy_refusal");
+    console.log(
+      `  window ${o.windowIndex}: ${halts.length === 0 ? "no halts" : halts.map(([a, r]) => `${a}=${r}`).join(", ")}` +
+        (refusals.length > 0 ? `  <-- POLICY REFUSALS: ${refusals.map(([a]) => a).join(", ")}` : ""),
+    );
+  }
   console.log(
-    failedWindows.length === 0
-      ? "  Every window's job was delivered."
-      : `  Windows that did not get their job delivered: ${failedWindows.join(", ")}. This was ` +
-          "disclosed as an allowed outcome before the run started; nothing topped the pool back up.",
+    `  Friction logs (self-reported, per turn, including time_to_expiry_seconds) are at ` +
+      `${RUNS_ROOT}/<runId>-w<N>/friction/friction-log.jsonl — every turn, not only the ones that acted.`,
   );
 
   console.log("\n=== SPEND ===");
@@ -885,7 +1227,7 @@ function printRunSummary(
   for (const [provider, usd] of Object.entries(byProvider).sort(([a], [b]) => a.localeCompare(b))) {
     console.log(`  ${provider}: $${usd.toFixed(6)}`);
   }
-  console.log(`  run total: $${budget.runTotalUsd()} of $${RUN_CAP_USD}`);
+  console.log(`  run total: $${budget.runTotalUsd()} of the $${RUN_CAP_USD} cap`);
   console.log(`  experiment ledger total now: $${budget.experimentTotalUsd()}`);
 }
 

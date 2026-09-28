@@ -157,6 +157,12 @@ export interface FullRunWindowOptions {
    * "later window" meaningful, so `quote_forward` is only usable where they are set. */
   windowIndex?: number;
   windowCount?: number;
+  /** Every window's real bounds in a multi-window run, keyed by 1-based index and computed from
+   * the chain clock before the first window opens. This is what makes a claim genuinely *dated*:
+   * without it a buyer can only ever mint for the window it is standing in, which makes a claim a
+   * slower way to pay for work about to be consumed rather than a reservation of future capacity —
+   * the instrument's whole claimed property. Absent for a single-window run. */
+  windowBoundsByIndex?: Record<number, { from: bigint; to: bigint }>;
   /** The forward-terms book. Supplied by a multi-window runner so it survives from one window to
    * the next — an offer stated in window 1 for window 3 has to still be there in window 3, and a
    * book created per window could never hold one. A fresh one is made when omitted. */
@@ -167,6 +173,37 @@ export interface FullRunWindowOptions {
    * only for tests that need a different draw. */
   oracleSeed?: number;
   onTurn?: (agentId: AgentId, log: TurnLog) => void;
+}
+
+/** One real capacity- or instrument-moving action. `kind` names the tool that caused it; the
+ * remaining fields are whichever of them that tool genuinely produces — a mint has a tokenId and
+ * no quoteHash, a reservation the reverse, and a taken forward offer has neither because nothing
+ * moves on-chain at all. */
+export interface CapacityEvent {
+  agentId: AgentId;
+  turn: number;
+  kind:
+    | "mint_claim"
+    | "pay_with_claim"
+    | "transfer_claim"
+    | "reserve_for_work"
+    | "release_on_settle"
+    | "redeem_claim"
+    | "serve_redemption"
+    | "settle_window_close"
+    | "take_forward";
+  quantityMilliSiu?: string;
+  issuer?: string;
+  tokenId?: string;
+  quoteHash?: string;
+  counterparty?: string;
+  txHash?: string;
+  /** Seconds until the claim's own window closes at the moment of the decision — §7.1(a)'s own
+   * requirement that every hold and redeem decision carries it, so "they redeemed immediately"
+   * can be told apart from "they redeemed under expiry pressure". */
+  timeToExpirySeconds?: number;
+  /** For take_forward only: the offer taken, since nothing on-chain records it. */
+  forwardQuoteId?: string;
 }
 
 export interface AttackRecord {
@@ -234,6 +271,19 @@ export interface FullRunWindowResult {
    * window's slice, since a multi-window runner shares one book and the interesting reading is
    * across windows. */
   forwardQuotes: readonly ForwardQuote[];
+  /** Every turn on which an agent was actually shown the invitation to state forward terms.
+   *
+   * Exists so that a run with no forward quotes is attributable rather than merely empty:
+   * "issuers were prompted and chose not to quote" and "issuers never reached a turn where they
+   * could" are different findings, and without this record they look identical in the output. An
+   * entry here means the agent genuinely saw the invitation in its own prompt — not that the tool
+   * was in its grant. */
+  forwardInvitations: { agentId: AgentId; turn: number }[];
+  /** Every real, confirmed action that moved capacity or an instrument, with its transaction
+   * hash where one exists. Assembled from the tool results themselves rather than from the
+   * models' own accounts of what they did, so the report can state what happened on-chain
+   * without re-deriving it from prose in the turn logs. */
+  capacityEvents: CapacityEvent[];
   turnsByAgent: Record<string, number>;
   haltedReason?: Record<string, "ceiling" | "parse_error" | "max_turns" | "validation_failed" | "voluntary_stop" | "experiment_halt" | "policy_refusal" | "adapter_error" | "nothing_to_act_on">;
   turnLogsByAgent: Record<string, TurnLog[]>;
@@ -370,6 +420,8 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
   let totalRealizedUsd = 0;
   const realizedUsdByProvider: Record<string, number> = {};
   const attacks: AttackRecord[] = [];
+  const forwardInvitations: { agentId: AgentId; turn: number }[] = [];
+  const capacityEvents: CapacityEvent[] = [];
   const attackContext: AttackContext = {
     gateVersions: [],
     attackedVersions: new Set<number>(),
@@ -470,6 +522,11 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       }
       break turnLoop;
     }
+
+    // Recorded here, not where the invitation text is built: an agent that is gated out before
+    // its adapter is called never actually saw it, and counting that as "prompted" is exactly the
+    // conflation this record exists to prevent.
+    if (forwardInvitation !== "") forwardInvitations.push({ agentId: agent.agentId, turn });
 
     const prompt = buildTurnPrompt(
       context,
@@ -610,6 +667,7 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
         forwardBook,
         windowIndex,
         windowCount,
+        windowBoundsByIndex: options.windowBoundsByIndex,
         caller: { agentId: agent.agentId, erc8004Id: agent.erc8004Id },
       });
     } catch (err) {
@@ -636,6 +694,32 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       const record = await runner.callTool(intent.tool, args, { turn, jobId: options.job.jobId });
       let quarantined = false;
 
+      // Read from the tool's own real result, never from the model's account of what it did. The
+      // seconds-to-expiry is the same chain-clock figure §7.1(a) requires on every hold and redeem
+      // decision, so a "they redeemed immediately" reading can be separated from expiry pressure.
+      const recordCapacityEvent = async (
+        kind: CapacityEvent["kind"],
+        fields: Omit<CapacityEvent, "agentId" | "turn" | "kind">,
+      ): Promise<void> => {
+        let timeToExpirySeconds: number | undefined;
+        if (fields.tokenId !== undefined) {
+          try {
+            timeToExpirySeconds =
+              (await holdTimeToExpiry(options.deps, BigInt(fields.tokenId))) ?? undefined;
+          } catch {
+            // A claim whose window cannot be read is still a real event; recording it without the
+            // figure beats dropping the event or inventing one.
+          }
+        }
+        capacityEvents.push({
+          agentId: agent.agentId,
+          turn,
+          kind,
+          ...(timeToExpirySeconds === undefined ? {} : { timeToExpirySeconds }),
+          ...fields,
+        });
+      };
+
       if (intent.tool === "request_quote") {
         board.postRequest(agent.agentId, record.result as QuoteBody);
       }
@@ -647,12 +731,18 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       }
 
       if (intent.tool === "mint_claim") {
-        const mintResult = record.result as { tokenId: string; issuer: string };
+        const mintResult = record.result as { tokenId: string; issuer: string; txHash?: string };
         const issuerAgentId = agentIdByAddress[mintResult.issuer.toLowerCase()];
         const quantity = (args as { quantity?: unknown } | undefined)?.quantity;
         if (issuerAgentId && typeof quantity === "string") {
           redemption.recordMint(mintResult.tokenId, issuerAgentId, quantity);
         }
+        await recordCapacityEvent("mint_claim", {
+          tokenId: mintResult.tokenId,
+          issuer: mintResult.issuer,
+          ...(typeof quantity === "string" ? { quantityMilliSiu: quantity } : {}),
+          ...(mintResult.txHash ? { txHash: mintResult.txHash } : {}),
+        });
       }
 
       if (intent.tool === "transfer_claim") {
@@ -661,12 +751,23 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
           const recipientAgentId = agentIdByAddress[to.toLowerCase()];
           if (recipientAgentId) redemption.recordTransfer(recipientAgentId);
         }
+        const transferred = record.result as { txHash?: string };
+        const tokenId = (args as { tokenId?: unknown } | undefined)?.tokenId;
+        const quantity = (args as { quantity?: unknown } | undefined)?.quantity;
+        await recordCapacityEvent("transfer_claim", {
+          ...(typeof tokenId === "string" ? { tokenId } : {}),
+          ...(typeof quantity === "string" ? { quantityMilliSiu: quantity } : {}),
+          ...(typeof to === "string" ? { counterparty: to } : {}),
+          ...(transferred.txHash ? { txHash: transferred.txHash } : {}),
+        });
       }
 
       // One call, but the same two real events mint_claim + transfer_claim would have produced —
       // so the redemption tracker sees an fSIU payment identically whichever tool made it.
       if (intent.tool === "pay_with_claim") {
-        const paid = record.result as { tokenId: string; issuer: string; quantity: string };
+        const paid = record.result as {
+          tokenId: string; issuer: string; quantity: string; mintTxHash?: string; transferTxHash?: string;
+        };
         const issuerAgentId = agentIdByAddress[paid.issuer.toLowerCase()];
         if (issuerAgentId) redemption.recordMint(paid.tokenId, issuerAgentId, paid.quantity);
         const to = (args as { to?: unknown } | undefined)?.to;
@@ -674,6 +775,57 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
           const recipientAgentId = agentIdByAddress[to.toLowerCase()];
           if (recipientAgentId) redemption.recordTransfer(recipientAgentId);
         }
+        // One tool call, two real transactions — both hashes kept, since a run record must never
+        // show a payment that half-occurred as if it had completed.
+        await recordCapacityEvent("pay_with_claim", {
+          tokenId: paid.tokenId,
+          issuer: paid.issuer,
+          quantityMilliSiu: paid.quantity,
+          ...(typeof to === "string" ? { counterparty: to } : {}),
+          ...(paid.mintTxHash ? { txHash: `${paid.mintTxHash} (mint) / ${paid.transferTxHash ?? "?"} (transfer)` } : {}),
+        });
+      }
+
+      if (intent.tool === "reserve_for_work") {
+        const reserved = record.result as {
+          txHash: string; quoteHash: string; issuer: string; quantity: string; deadline: string;
+        };
+        await recordCapacityEvent("reserve_for_work", {
+          quoteHash: reserved.quoteHash,
+          issuer: reserved.issuer,
+          quantityMilliSiu: reserved.quantity,
+          txHash: reserved.txHash,
+        });
+      }
+
+      if (intent.tool === "settle_escrow") {
+        const settled = record.result as { txHash: string; releaseTxHash?: string };
+        if (settled.releaseTxHash) {
+          await recordCapacityEvent("release_on_settle", { txHash: settled.releaseTxHash });
+        }
+      }
+
+      if (intent.tool === "serve_redemption") {
+        const served = record.result as { txHash?: string };
+        const tokenId = (args as { tokenId?: unknown } | undefined)?.tokenId;
+        const quantity = (args as { quantity?: unknown } | undefined)?.quantity;
+        const passed = (args as { passed?: unknown } | undefined)?.passed;
+        if (passed === true) {
+          await recordCapacityEvent("serve_redemption", {
+            ...(typeof tokenId === "string" ? { tokenId } : {}),
+            ...(typeof quantity === "string" ? { quantityMilliSiu: quantity } : {}),
+            ...(served.txHash ? { txHash: served.txHash } : {}),
+          });
+        }
+      }
+
+      if (intent.tool === "settle_window_close") {
+        const settled = record.result as { txHash?: string };
+        const tokenId = (args as { tokenId?: unknown } | undefined)?.tokenId;
+        await recordCapacityEvent("settle_window_close", {
+          ...(typeof tokenId === "string" ? { tokenId } : {}),
+          ...(settled.txHash ? { txHash: settled.txHash } : {}),
+        });
       }
 
       if (intent.tool === "quote_forward") {
@@ -703,10 +855,29 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
             `take_forward: ${taken.quoteId} could not be marked taken — it was open when this turn began.`,
           );
         }
+        const offer = forwardBook.byId(taken.quoteId);
+        // No txHash, deliberately: nothing moves on-chain. Recorded all the same, because
+        // "took an offer" and "ignored every offer" are the two findings this arm exists to tell
+        // apart, and an event with no hash states that honestly.
+        await recordCapacityEvent("take_forward", {
+          forwardQuoteId: taken.quoteId,
+          ...(offer ? { issuer: offer.issuer, quantityMilliSiu: offer.maxQuantityMilliSiu } : {}),
+        });
       }
 
       if (intent.tool === "redeem_claim") {
         redemption.recordPresented(agent.agentId);
+        const presented = record.result as { txHash?: string; timeToExpirySeconds?: number };
+        const tokenId = (args as { tokenId?: unknown } | undefined)?.tokenId;
+        await recordCapacityEvent("redeem_claim", {
+          ...(typeof tokenId === "string" ? { tokenId } : {}),
+          // `redeem_claim` already measures this at the instant of the decision, against the same
+          // chain clock — preferred over re-reading it a moment later.
+          ...(typeof presented.timeToExpirySeconds === "number"
+            ? { timeToExpirySeconds: presented.timeToExpirySeconds }
+            : {}),
+          ...(presented.txHash ? { txHash: presented.txHash } : {}),
+        });
       }
 
       if (intent.tool === "serve_redemption") {
@@ -857,6 +1028,8 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
         .map(([provider, usd]) => [provider, usd.toFixed(6)]),
     ),
     forwardQuotes: forwardBook.all(),
+    forwardInvitations,
+    capacityEvents,
     turnsByAgent,
     haltedReason,
     turnLogsByAgent,
@@ -909,6 +1082,8 @@ export interface BuildToolArgsContext {
   forwardBook?: ForwardQuoteBook;
   windowIndex?: number;
   windowCount?: number;
+  /** See `FullRunWindowOptions.windowBoundsByIndex`. */
+  windowBoundsByIndex?: Record<number, { from: bigint; to: bigint }>;
 }
 
 /** Gate v1 -> attacks -> the builder may revise -> attacks again. Capped so an adaptive exchange
@@ -978,6 +1153,52 @@ export async function buildToolArgs(tool: ToolName, rawArgs: unknown, ctx: Build
     };
   }
 
+/**
+ * Which delivery window a mint is for. Defaults to the window the buyer is standing in; naming a
+ * later one resolves to that window's own real, pre-computed bounds.
+ *
+ * This is what makes a claim a claim. Until 2026-09-28 the bounds were always the current
+ * window's, so a buyer could never reserve capacity for a *future* delivery window — which is the
+ * one property the instrument is defined by. With that unavailable, an all-USDC result would have
+ * read as a preference when the alternative it was being compared against did not exist.
+ *
+ * A window outside the run is refused rather than clamped: minting against bounds nobody will ever
+ * be standing in produces a claim that can never be presented, and silently retargeting a buyer's
+ * stated intent is worse than telling it the window does not exist.
+ */
+function resolveTargetWindow(
+  tool: "mint_claim" | "pay_with_claim",
+  rawArgs: unknown,
+  ctx: BuildToolArgsContext,
+): { windowFrom: bigint; windowTo: bigint; forWindow: number } {
+  const raw = (rawArgs ?? {}) as { forWindow?: unknown };
+  const currentIndex = ctx.windowIndex ?? 1;
+  if (raw.forWindow === undefined) {
+    return { windowFrom: ctx.windowFrom, windowTo: ctx.windowTo, forWindow: currentIndex };
+  }
+  const forWindow =
+    typeof raw.forWindow === "number" ? raw.forWindow : Number(asDecimalString(raw.forWindow));
+  if (!Number.isInteger(forWindow) || forWindow < 1) {
+    throw new Error(`${tool}: "forWindow" must be a whole window number, got ${JSON.stringify(raw.forWindow)}.`);
+  }
+  if (forWindow === currentIndex) {
+    return { windowFrom: ctx.windowFrom, windowTo: ctx.windowTo, forWindow };
+  }
+  const bounds = ctx.windowBoundsByIndex?.[forWindow];
+  if (!bounds) {
+    const known = Object.keys(ctx.windowBoundsByIndex ?? {}).join(", ");
+    throw new Error(
+      `${tool}: this run has no window ${forWindow}${known ? ` (it has ${known})` : " beyond the one you are in"}.`,
+    );
+  }
+  if (forWindow < currentIndex) {
+    throw new Error(
+      `${tool}: window ${forWindow} has already closed — a claim minted for it could never be presented.`,
+    );
+  }
+  return { windowFrom: bounds.from, windowTo: bounds.to, forWindow };
+}
+
   if (tool === "mint_claim") {
     if (!ctx.mintContext) {
       throw new Error("mint_claim: this window has no mintContext — no agent should have this tool.");
@@ -999,12 +1220,13 @@ export async function buildToolArgs(tool: ToolName, rawArgs: unknown, ctx: Build
       ctx.deployment.workClaim.address as Hex,
       ctx.mintContext.publisherPrivateKeyHex,
     );
+    const target = resolveTargetWindow("mint_claim", rawArgs, ctx);
     return {
       classId: classIdFor(ctx.job.taskClass),
       series: ctx.mintContext.series,
       quantity,
-      windowFrom: Number(ctx.windowFrom),
-      windowTo: Number(ctx.windowTo),
+      windowFrom: Number(target.windowFrom),
+      windowTo: Number(target.windowTo),
       printId: ctx.mintContext.printId,
       printDate: ctx.mintContext.printDate.toString(),
       nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu.toString(),
@@ -1211,13 +1433,14 @@ export async function buildToolArgs(tool: ToolName, rawArgs: unknown, ctx: Build
       ctx.deployment.workClaim.address as Hex,
       ctx.mintContext.publisherPrivateKeyHex,
     );
+    const target = resolveTargetWindow("pay_with_claim", rawArgs, ctx);
     return {
       to,
       quantity,
       classId: classIdFor(ctx.job.taskClass),
       series: ctx.mintContext.series,
-      windowFrom: Number(ctx.windowFrom),
-      windowTo: Number(ctx.windowTo),
+      windowFrom: Number(target.windowFrom),
+      windowTo: Number(target.windowTo),
       printId: ctx.mintContext.printId,
       printDate: ctx.mintContext.printDate.toString(),
       nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu.toString(),

@@ -32,6 +32,10 @@ export interface RunManifest {
    * the result can confirm the depletion was not tuned to it. */
   windowCount?: number;
   externalDepletionMilliSiu?: Record<number, number>;
+  /** Every window's real, fixed span (Unix seconds), computed from the chain clock before the
+   * first turn of the run. Recorded because a claim minted for a later window names that window's
+   * bounds, so the bounds are part of what the run means, not an implementation detail. */
+  windowBounds?: Record<number, { from: number; to: number }>;
 }
 
 /** Spec §12.4: "every validator verdict... including passes." */

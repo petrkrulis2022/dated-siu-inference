@@ -23,7 +23,7 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
     "issue_quote(requestId) -> answers one open request from the market board with a real signed touchstone-quote (the board's own stored body, not anything you reconstruct)",
   pay: "pay(requestId, settler) -> pays the real signed quote that answered your own request (settler is usually the zero address, matching this repo's own demo convention); opens and funds escrow, returns a tx hash",
   mint_claim:
-    "mint_claim(quantity) -> mints a dated work claim for this window's job/class at this window's real rate (the class id, window bounds and rate attestation are all supplied for you); routed to an issuer with headroom, returns tokenId + the routed issuer",
+    "mint_claim(quantity, forWindow?) -> mints a dated work claim for the job/class at the published rate (the class id, window bounds and rate attestation are all supplied for you); routed to an issuer with headroom, returns tokenId + the routed issuer. forWindow names which delivery window the claim is for, and defaults to the one you are in; a claim for a later window consumes that issuer's headroom now and can only be presented once that window opens.",
   transfer_claim:
     "transfer_claim(agentId, tokenId, quantity) -> free ERC-1155 transfer to a named roster agent (or transfer_claim(to, tokenId, quantity) with a literal address)",
   redeem_claim:
@@ -37,7 +37,7 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   submit_attack:
     'submit_attack(submissionSource) -> runs your candidate answer.mjs against the delivered gate AND against an independent oracle, and reports which of the two accepted it. Supply only the module source as a JSON string; the gate being tested, the reference files and the oracle seed are supplied for you. A result counts for you ONLY when the gate accepts a submission the oracle rejects (classification "false_accept"). A correct submission both accept scores nothing, and breaking the oracle scores nothing.',
   pay_with_claim:
-    "pay_with_claim(to | agentId, quantity) -> pays a counterparty in fSIU in one call: mints a dated work claim against an issuer's bonded capacity and transfers it to them. quantity is in milli-SIU. The claim reserves that issuer's headroom, which is finite and shared.",
+    "pay_with_claim(to | agentId, quantity, forWindow?) -> pays a counterparty in fSIU in one call: mints a dated work claim against an issuer's bonded capacity and transfers it to them. quantity is in milli-SIU. The claim reserves that issuer's headroom, which is finite and shared. forWindow names which delivery window the claim is for, and defaults to the one you are in.",
   settle_escrow:
     "settle_escrow(actualAmountUsd?, receiptRef) -> as the SELLER named in a quote that was paid: releases the escrowed USDC to yourself. Until you call this the money sits in escrow and never reaches your wallet. Omit actualAmountUsd to settle the full quoted amount; settling for less is allowed and is what quote accuracy is scored on. Any capacity you reserved against this quote is returned to its issuer automatically here.",
   reserve_for_work:
