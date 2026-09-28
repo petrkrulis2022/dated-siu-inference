@@ -1,0 +1,251 @@
+
+> @touchstone/gate-market-agents@0.0.0 p5-three-window-full-run /home/petrunix/dated-siu-inference/packages/gate-market-agents
+> pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/p5-three-window-full-run.js
+
+
+> @touchstone/gate-market-agents@0.0.0 build /home/petrunix/dated-siu-inference/packages/gate-market-agents
+> tsc -p tsconfig.json && mkdir -p dist/skills && cp -r src/skills/*/ dist/skills/
+
+Model assignment validated (spec §12.2a): OK.
+
+=== WP-7 P5 — THREE WINDOWS, ONE POOL ===
+Run p5-three-window-2026-09-28T12-12-56-261Z (label 727138960); oracle trial seed 20260927 (pinned).
+Real Commodity SIU print 2026-09-27-commodity: $0.001433/SIU.
+Starting code-class headroom: 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 24000, 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 16000 (total 40000 mSIU).
+DISCLOSED BEFORE THE RUN, not after: a simulated external buyer (the deployer wallet — not an agent, no model, no decisions) takes 16000 mSIU after window 1 and 14000 mSIU after window 2. These figures are fixed here in source before the run and written into the manifest; no agent's behaviour changes them.
+ALSO DISCLOSED BEFORE THE RUN: window 3 is allowed to fail. If the pool is exhausted when it starts, the job does not get done and that is the result. Nothing in this script tops the pool back up, resizes a lot, or routes around the shortage.
+AND: no agent can settle a window close in this run, so an undelivered claim stays outstanding — no bond payout, capacity never returned. Deliberate (defaults are not what this measures) and it can only make scarcity tighter, never looser. See this file's own doc comment for why it is also currently unavoidable.
+Window spans, fixed before the first turn (chain clock): w1 2026-09-28T12:12:56.000Z..2026-09-28T12:32:56.000Z; w2 2026-09-28T12:32:56.000Z..2026-09-28T12:52:56.000Z; w3 2026-09-28T12:52:56.000Z..2026-09-28T13:12:56.000Z. The runner waits for each to open; no inference is spent waiting.
+
+CAPACITY IS ONE POOL, AND THE TWO WAYS OF PAYING ARE NOT THE SAME INSTRUMENT
+  Every issuer bonds a finite amount of capacity per task class, shared between all buyers,
+  first-come-first-served. Both ways of paying draw on that same pool:
+    - A dated work claim (fSIU) consumes an issuer's headroom when it is minted. It reserves
+      capacity for a FUTURE delivery window, and it is TRANSFERABLE — it can be held, passed on,
+      and redeemed by whoever ends up holding it.
+    - A dollar payment consumes the same headroom when the seller commits capacity to the job.
+      That reservation is for IMMEDIATE work only: it is not transferable, not holdable, and ends
+      when the escrow does.
+  The issuer is paid for a claim. The issuer is not paid for a reservation on the dollar route —
+  a real gap in this testbed, disclosed rather than papered over with an invented fee.
+
+
+
+######## WINDOW 1 of 3 ########
+code-class headroom entering this window: 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 24000, 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 16000 (total 40000 mSIU).
+ContractFunctionExecutionError: The contract function "safeTransferFrom" reverted with the following signature:
+0x03dee4c5
+
+Unable to decode signature "0x03dee4c5" as it was not found on the provided ABI.
+Make sure you are using the correct ABI and that the error exists on it.
+You can look up the decoded signature here: https://4byte.sourcify.dev/?q=0x03dee4c5.
+ 
+Contract Call:
+  address:   0xe0D9B879F9841ef6Be5Af9001ed8F015030324A4
+  function:  safeTransferFrom(address from, address to, uint256 id, uint256 value, bytes data)
+  args:                      (0x8Bf6De67D0B9705520Cdf5a348f5763e2175F363, 0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560, 86247410338275200506779601769870778405425021979884681321162389538564623378505, 10000, 0x)
+  sender:    0x8Bf6De67D0B9705520Cdf5a348f5763e2175F363
+
+Docs: https://viem.sh/docs/contract/decodeErrorResult
+Details: execution reverted
+Version: viem@2.55.16
+    at getContractError (file:///home/petrunix/dated-siu-inference/node_modules/.pnpm/viem@2.55.16_typescript@6.0.3_zod@4.4.3/node_modules/viem/_esm/utils/errors/getContractError.js:34:12)
+    at AsyncFunction.internal (file:///home/petrunix/dated-siu-inference/node_modules/.pnpm/viem@2.55.16_typescript@6.0.3_zod@4.4.3/node_modules/viem/_esm/actions/wallet/writeContract.js:82:19)
+    ... 5 lines matching cause stack trace ...
+    at async main (file:///home/petrunix/dated-siu-inference/packages/gate-market-agents/dist/cli/p5-three-window-full-run.js:297:24) {
+  cause: ContractFunctionRevertedError: The contract function "safeTransferFrom" reverted with the following signature:
+  0x03dee4c5
+  
+  Unable to decode signature "0x03dee4c5" as it was not found on the provided ABI.
+  Make sure you are using the correct ABI and that the error exists on it.
+  You can look up the decoded signature here: https://4byte.sourcify.dev/?q=0x03dee4c5.
+  
+  Docs: https://viem.sh/docs/contract/decodeErrorResult
+  Details: execution reverted
+  Version: viem@2.55.16
+      at file:///home/petrunix/dated-siu-inference/node_modules/.pnpm/viem@2.55.16_typescript@6.0.3_zod@4.4.3/node_modules/viem/_esm/utils/errors/getContractError.js:22:20
+      ... 6 lines matching cause stack trace ...
+      at async runFullRunWindow (file:///home/petrunix/dated-siu-inference/packages/gate-market-agents/dist/loop/full-run.js:381:28)
+      at async main (file:///home/petrunix/dated-siu-inference/packages/gate-market-agents/dist/cli/p5-three-window-full-run.js:297:24) {
+    details: 'execution reverted',
+    docsPath: '/docs/contract/decodeErrorResult',
+    metaMessages: [
+      'Unable to decode signature "0x03dee4c5" as it was not found on the provided ABI.',
+      'Make sure you are using the correct ABI and that the error exists on it.',
+      'You can look up the decoded signature here: https://4byte.sourcify.dev/?q=0x03dee4c5.'
+    ],
+    shortMessage: 'The contract function "safeTransferFrom" reverted with the following signature:\n' +
+      '0x03dee4c5',
+    version: '2.55.16',
+    data: undefined,
+    raw: '0x03dee4c50000000000000000000000008bf6de67d0b9705520cdf5a348f5763e2175f36300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002710beae4de9136fab46a3e6fe5842f3f87b545e1ab8fbfbb98a89ff4535f7992849',
+    reason: undefined,
+    signature: '0x03dee4c5',
+    [cause]: AbiErrorSignatureNotFoundError: Encoded error signature "0x03dee4c5" not found on ABI.
+    Make sure you are using the correct ABI and that the error exists on it.
+    You can look up the decoded signature here: https://4byte.sourcify.dev/?q=0x03dee4c5.
+    
+    Docs: https://viem.sh/docs/contract/decodeErrorResult
+    Details: execution reverted
+    Version: viem@2.55.16
+        at decodeErrorResult (file:///home/petrunix/dated-siu-inference/node_modules/.pnpm/viem@2.55.16_typescript@6.0.3_zod@4.4.3/node_modules/viem/_esm/utils/abi/decodeErrorResult.js:15:15)
+        at new ContractFunctionRevertedError (file:///home/petrunix/dated-siu-inference/node_modules/.pnpm/viem@2.55.16_typescript@6.0.3_zod@4.4.3/node_modules/viem/_esm/errors/contract.js:146:31)
+        at file:///home/petrunix/dated-siu-inference/node_modules/.pnpm/viem@2.55.16_typescript@6.0.3_zod@4.4.3/node_modules/viem/_esm/utils/errors/getContractError.js:22:20
+        at getContractError (file:///home/petrunix/dated-siu-inference/node_modules/.pnpm/viem@2.55.16_typescript@6.0.3_zod@4.4.3/node_modules/viem/_esm/utils/errors/getContractError.js:33:7)
+        at AsyncFunction.internal (file:///home/petrunix/dated-siu-inference/node_modules/.pnpm/viem@2.55.16_typescript@6.0.3_zod@4.4.3/node_modules/viem/_esm/actions/wallet/writeContract.js:82:19)
+        at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+        at async writeAndConfirm (file:///home/petrunix/dated-siu-inference/packages/gate-market-agents/dist/chain/write.js:9:20)
+        ... 2 lines matching cause stack trace ...
+        at async runFullRunWindow (file:///home/petrunix/dated-siu-inference/packages/gate-market-agents/dist/loop/full-run.js:381:28) {
+      details: 'execution reverted',
+      docsPath: '/docs/contract/decodeErrorResult',
+      metaMessages: undefined,
+      shortMessage: 'Encoded error signature "0x03dee4c5" not found on ABI.\n' +
+        'Make sure you are using the correct ABI and that the error exists on it.\n' +
+        'You can look up the decoded signature here: https://4byte.sourcify.dev/?q=0x03dee4c5.',
+      version: '2.55.16',
+      signature: '0x03dee4c5',
+      [cause]: [TransactionExecutionError]
+    }
+  },
+  details: 'execution reverted',
+  docsPath: '/docs/contract/decodeErrorResult',
+  metaMessages: [
+    'Unable to decode signature "0x03dee4c5" as it was not found on the provided ABI.',
+    'Make sure you are using the correct ABI and that the error exists on it.',
+    'You can look up the decoded signature here: https://4byte.sourcify.dev/?q=0x03dee4c5.',
+    ' ',
+    'Contract Call:',
+    '  address:   0xe0D9B879F9841ef6Be5Af9001ed8F015030324A4\n' +
+      '  function:  safeTransferFrom(address from, address to, uint256 id, uint256 value, bytes data)\n' +
+      '  args:                      (0x8Bf6De67D0B9705520Cdf5a348f5763e2175F363, 0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560, 86247410338275200506779601769870778405425021979884681321162389538564623378505, 10000, 0x)\n' +
+      '  sender:    0x8Bf6De67D0B9705520Cdf5a348f5763e2175F363'
+  ],
+  shortMessage: 'The contract function "safeTransferFrom" reverted with the following signature:\n' +
+    '0x03dee4c5',
+  version: '2.55.16',
+  abi: [
+    {
+      name: 'mint',
+      type: 'function',
+      stateMutability: 'nonpayable',
+      inputs: [Array],
+      outputs: [Array]
+    },
+    {
+      name: 'presentForRedemption',
+      type: 'function',
+      stateMutability: 'nonpayable',
+      inputs: [Array],
+      outputs: []
+    },
+    {
+      name: 'serveRedemption',
+      type: 'function',
+      stateMutability: 'nonpayable',
+      inputs: [Array],
+      outputs: []
+    },
+    {
+      name: 'settleWindowClose',
+      type: 'function',
+      stateMutability: 'nonpayable',
+      inputs: [Array],
+      outputs: []
+    },
+    {
+      name: 'reserveForWork',
+      type: 'function',
+      stateMutability: 'nonpayable',
+      inputs: [Array],
+      outputs: [Array]
+    },
+    {
+      name: 'releaseReservation',
+      type: 'function',
+      stateMutability: 'nonpayable',
+      inputs: [Array],
+      outputs: []
+    },
+    {
+      name: 'reservations',
+      type: 'function',
+      stateMutability: 'view',
+      inputs: [Array],
+      outputs: [Array]
+    },
+    {
+      name: 'tokenIdFor',
+      type: 'function',
+      stateMutability: 'pure',
+      inputs: [Array],
+      outputs: [Array]
+    },
+    {
+      name: 'balanceOf',
+      type: 'function',
+      stateMutability: 'view',
+      inputs: [Array],
+      outputs: [Array]
+    },
+    {
+      name: 'everPresented',
+      type: 'function',
+      stateMutability: 'view',
+      inputs: [Array],
+      outputs: [Array]
+    },
+    {
+      name: 'settled',
+      type: 'function',
+      stateMutability: 'view',
+      inputs: [Array],
+      outputs: [Array]
+    },
+    {
+      name: 'safeTransferFrom',
+      type: 'function',
+      stateMutability: 'nonpayable',
+      inputs: [Array],
+      outputs: []
+    },
+    {
+      name: 'claimTypes',
+      type: 'function',
+      stateMutability: 'view',
+      inputs: [Array],
+      outputs: [Array]
+    },
+    {
+      name: 'SERIES_FRONTIER',
+      type: 'function',
+      stateMutability: 'view',
+      inputs: [],
+      outputs: [Array]
+    },
+    {
+      name: 'SERIES_COMMODITY',
+      type: 'function',
+      stateMutability: 'view',
+      inputs: [],
+      outputs: [Array]
+    },
+    { name: 'Minted', type: 'event', inputs: [Array] },
+    { name: 'WorkReserved', type: 'event', inputs: [Array] },
+    { name: 'ReservationReleased', type: 'event', inputs: [Array] }
+  ],
+  args: [
+    '0x8Bf6De67D0B9705520Cdf5a348f5763e2175F363',
+    '0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560',
+    86247410338275200506779601769870778405425021979884681321162389538564623378505n,
+    10000n,
+    '0x'
+  ],
+  contractAddress: '0xe0D9B879F9841ef6Be5Af9001ed8F015030324A4',
+  formattedArgs: undefined,
+  functionName: 'safeTransferFrom',
+  sender: '0x8Bf6De67D0B9705520Cdf5a348f5763e2175F363'
+}
+/home/petrunix/dated-siu-inference/packages/gate-market-agents:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @touchstone/gate-market-agents@0.0.0 p5-three-window-full-run: `pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/p5-three-window-full-run.js`
+Exit status 1

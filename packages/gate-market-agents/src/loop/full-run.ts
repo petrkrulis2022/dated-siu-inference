@@ -1008,7 +1008,32 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
         await friction.append(buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null));
         continue;
       }
-      throw err;
+      // Everything else — a real on-chain revert (ContractFunctionExecutionError), a
+      // ToolNotAllowedError, a tool's own thrown Error (e.g. pay_with_claim's "found no Minted
+      // event") — is a real, disclosed tool-call failure, not a crash. Found live, 2026-09-28,
+      // first real three-window run: ORCHESTRATOR's very first pay_with_claim call reverted on
+      // `safeTransferFrom` with ERC1155InsufficientBalance even though the preceding mint had
+      // genuinely confirmed (re-querying moments later showed the correct minted balance) — the
+      // exact RPC-lag family `@touchstone/sdk`'s `retryUntilConclusive` doc comment already
+      // names three instances of, hit here as a fourth. Before this fix, ANY such failure — RPC
+      // lag, a genuine revert, a model naming a tool outside its own grant — terminated the
+      // entire process, discarding every other agent's turns and this run's whole real spend.
+      // Every other error category above already treats its own failures as disclosed rather
+      // than fatal; this makes that the rule rather than the exception. `main()`'s own top-level
+      // `.catch` remains the backstop for a genuinely unrecoverable launch-time failure (a
+      // missing env var, an unreachable RPC endpoint) — those throw before this loop ever runs.
+      {
+        const log: TurnLog = {
+          turn, promptChars: prompt.length, projectedUsd, realizedUsd, marketBoardText: marketBoardText || undefined,
+          latencyMs: adapterResult.latency_ms,
+          stopReason: adapterResult.stopReason, usage: adapterResult.usage, contentBlockTypes: adapterResult.contentBlockTypes,
+          parsed: `${JSON.stringify(intent)} -> tool call error: ${err instanceof Error ? err.message : String(err)}`,
+        };
+        turnLogsByAgent[agent.agentId].push(log);
+        options.onTurn?.(agent.agentId, log);
+        await friction.append(buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null));
+        continue;
+      }
     }
   }
 

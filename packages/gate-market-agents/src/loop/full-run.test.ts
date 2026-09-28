@@ -379,6 +379,83 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
     expect(result.haltedReason?.ORCHESTRATOR).toBe("voluntary_stop");
     expect(result.turnLogsByAgent.ORCHESTRATOR[0].parsed).toContain("tool args validation error");
   });
+
+  it("recovers from a real tool-call failure (an on-chain revert, RPC lag, anything else) rather than crashing the whole run — found live, 2026-09-28, first real three-window run", async () => {
+    // A real tool handler threw (standing in for a genuine on-chain revert — deps here are
+    // synchronous fakes, so this can't itself be RPC lag, but the failure shape reaching the
+    // loop's catch is identical: an Error neither ZodError nor CeilingExceededError). Before this
+    // fix, this uncaught `throw err` at the bottom of the catch terminated the ENTIRE process —
+    // discarding every other agent's turns and the run's whole real spend — on the very first
+    // such failure. ORCHESTRATOR's very first pay_with_claim call hit exactly this live, on real
+    // Base Sepolia, when a confirmed mint's own balance read stale on a lagging RPC node.
+    let call = 0;
+    const adapter: Adapter = async () => {
+      call++;
+      if (call === 1) {
+        return {
+          text: '{"tool": "get_print", "args": {"printId": "2026-09-25"}}',
+          usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+        };
+      }
+      return {
+        text: JSON.stringify({ done: true, summary: "recovered" }),
+        usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+      };
+    };
+
+    const deps = fakeDeps(async () => PASS);
+    deps.loadPrint = async () => {
+      throw new Error("simulated on-chain revert: ContractFunctionExecutionError");
+    };
+
+    const result = await runFullRunWindow({
+      windowId: "w0",
+      roster: [{ ...orchestratorConfig(adapter), availableTools: ["get_print"] }],
+      job: JOB,
+      maxTurnsPerAgent: 2,
+      budget: generousBudget(ledgerPath),
+      deps,
+      runsRoot, runId: "run-tool-error-recovery", manifest: MANIFEST,
+    });
+
+    // The run itself must survive and complete, not throw out of runFullRunWindow.
+    expect(result.turnsByAgent.ORCHESTRATOR).toBe(2);
+    expect(result.haltedReason?.ORCHESTRATOR).toBe("voluntary_stop");
+    expect(result.turnLogsByAgent.ORCHESTRATOR[0].parsed).toContain("tool call error");
+    expect(result.turnLogsByAgent.ORCHESTRATOR[0].parsed).toContain("simulated on-chain revert");
+  });
+
+  it("a ToolNotAllowedError (a model naming a tool outside its own grant) is logged and recovered from too, not just ZodError/CeilingExceededError", async () => {
+    let call = 0;
+    const adapter: Adapter = async () => {
+      call++;
+      if (call === 1) {
+        // submit_job is a real tool but not in this agent's own availableTools below.
+        return {
+          text: '{"tool": "submit_job", "args": {"source": "x"}}',
+          usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+        };
+      }
+      return {
+        text: JSON.stringify({ done: true, summary: "recovered" }),
+        usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+      };
+    };
+
+    const result = await runFullRunWindow({
+      windowId: "w0",
+      roster: [{ ...orchestratorConfig(adapter), availableTools: ["get_print"] }],
+      job: JOB,
+      maxTurnsPerAgent: 2,
+      budget: generousBudget(ledgerPath),
+      deps: fakeDeps(async () => PASS),
+      runsRoot, runId: "run-not-allowed-recovery", manifest: MANIFEST,
+    });
+
+    expect(result.turnsByAgent.ORCHESTRATOR).toBe(2);
+    expect(result.turnLogsByAgent.ORCHESTRATOR[0].parsed).toContain("tool call error");
+    expect(result.turnLogsByAgent.ORCHESTRATOR[0].parsed).toContain("not permitted to call");
+  });
 });
 
 describe("buildToolArgs", () => {

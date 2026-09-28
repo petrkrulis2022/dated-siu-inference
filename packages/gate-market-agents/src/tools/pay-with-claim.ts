@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { decodeEventLog, type Hex } from "viem";
-import { minorUnitsToUsd } from "@touchstone/sdk";
+import { minorUnitsToUsd, retryUntilConclusive } from "@touchstone/sdk";
 import { WORK_CLAIM_ABI } from "../chain/abi.js";
 import { writeAndConfirm } from "../chain/write.js";
 import type { ToolDefinition } from "./types.js";
@@ -21,6 +21,16 @@ import type { ToolDefinition } from "./types.js";
  * transfer fails, the claim stays with the caller, who still holds it and can move it with
  * `transfer_claim`; the result below reports exactly which of the two happened, so a run record
  * never shows a payment that half-occurred as if it had completed.
+ *
+ * Between the two writes, this reads the caller's own real balance of the freshly-minted token
+ * until it is conclusive (`@touchstone/sdk`'s `retryUntilConclusive`) rather than submitting the
+ * transfer the instant the mint receipt confirms. Found live, 2026-09-28, the first real
+ * three-window run: the mint had genuinely confirmed (re-querying moments later showed the
+ * correct balance) but the transfer's own pre-flight gas-estimation eth_call hit a different,
+ * lagging node in Base Sepolia's load-balanced RPC pool and reverted `ERC1155InsufficientBalance`
+ * against a caller who, by every other measure, already held the tokens — the same failure mode
+ * `escrow-client.ts`'s `openAndFund` already names three prior instances of, hit here as a
+ * fourth. Only a conclusive read is a fact; an inconclusive one is retried, never trusted.
  */
 const argsSchema = z.object({
   /** Recipient address — the loop resolves a symbolic `{ agentId }` to this, same as
@@ -103,6 +113,17 @@ export const payWithClaimTool: ToolDefinition<Args, PayWithClaimResult> = {
         `pay_with_claim: minted in ${mintReceipt.transactionHash} but found no Minted event — the claim exists and is held by you; move it with transfer_claim.`,
       );
     }
+
+    await retryUntilConclusive(
+      () =>
+        ctx.clients.publicClient.readContract({
+          address: workClaim,
+          abi: WORK_CLAIM_ABI,
+          functionName: "balanceOf",
+          args: [ctx.clients.account.address, BigInt(tokenId!)],
+        }),
+      (seen) => seen >= BigInt(args.quantity),
+    );
 
     const transferReceipt = await writeAndConfirm(ctx.clients, {
       address: workClaim,

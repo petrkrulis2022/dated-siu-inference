@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { settle } from "@touchstone/agents";
-import { quoteHashHex, usdToMinorUnits, type TouchstoneQuote } from "@touchstone/sdk";
+import { quoteHashHex, retryUntilConclusive, usdToMinorUnits, type TouchstoneQuote } from "@touchstone/sdk";
 import type { Hex } from "viem";
 import { WORK_CLAIM_ABI } from "../chain/abi.js";
 import { writeAndConfirm } from "../chain/write.js";
@@ -33,6 +33,14 @@ import type { ToolDefinition } from "./types.js";
  * nothing to measure. And leaving it to the seller's judgment would mean a seller that simply
  * forgot left an issuer's capacity locked until the escrow's expiry, which would show up in the
  * run as scarcity that never actually existed.
+ *
+ * Between `settle` and `releaseReservation`, this reads the escrow's own status until it is
+ * conclusively `settled` (`@touchstone/sdk`'s `retryUntilConclusive`) rather than trusting the
+ * very next read — `releaseReservation`'s own pre-flight simulation reads that same escrow
+ * status, and a public RPC's load-balanced nodes are not always mutually caught up (the same
+ * family of bug `openAndFund`'s allowance re-check and `pay_with_claim`'s balance re-check both
+ * already guard against): a lagging node could still see `Open` and revert
+ * `ReservationNotReleasable` against an escrow that has, by every other measure, already settled.
  */
 const argsSchema = z.object({
   /** The seller-signed quote this escrow was opened against — spliced by the loop from the board,
@@ -73,6 +81,10 @@ export const settleEscrowTool: ToolDefinition<
     });
 
     const workClaim = ctx.deps.deployment.workClaim.address as Hex;
+    await retryUntilConclusive(
+      () => ctx.deps.chainReader.escrowState(ctx.deps.escrowAddress as Hex, quoteHash),
+      (state) => state.status === "settled",
+    );
     const reservation = await ctx.deps.chainReader.reservation(workClaim, quoteHash);
     let releaseTxHash: string | undefined;
     if (reservation.exists && !reservation.released) {
