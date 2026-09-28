@@ -16,6 +16,20 @@ export function runsDirFor(printId: string): string {
   return resolve(repoRoot(), "data/runs", printId);
 }
 
+/**
+ * Every file that lives in a run directory (`data/runs/<print_id>/`) alongside the real run
+ * records, and is never itself one — the same purpose `publication.ts`'s own `NON_PRINT_FILES`
+ * serves for `data/prints/`. Both `loadRunRecords` below and `verify-support.ts`'s own on-disk
+ * discrepancy scan must agree on this set, or a legitimate sibling artifact reads as an
+ * undeclared run record in one of the two and not the other — found live, 2026-09-28, the first
+ * carry-forward print: `spend-by-provider.json` (written by `publish-unattended.ts`, sibling to
+ * the manifest, never part of it) was added here without being added there, so `verify` failed
+ * every single scheduled print run from that day on, reporting a real-looking discrepancy that
+ * was actually just this file. `.raw.json` files are excluded by a suffix check instead (there
+ * being no fixed number of them), not by this set.
+ */
+export const NON_RUN_RECORD_FILES = new Set(["index.json", "reconciliation.json", "spend-by-provider.json"]);
+
 export function printsDir(): string {
   return resolve(repoRoot(), "data/prints");
 }
@@ -72,7 +86,7 @@ export async function loadRunRecords(printId: string): Promise<RunRecord[]> {
     await readdir(dir).catch(() => {
       throw new Error(`No run records directory at ${dir}.`);
     })
-  ).filter((f) => f.endsWith(".json") && !f.endsWith(".raw.json") && f !== "reconciliation.json");
+  ).filter((f) => f.endsWith(".json") && !f.endsWith(".raw.json") && !NON_RUN_RECORD_FILES.has(f));
 
   return Promise.all(
     files.map(async (f) => JSON.parse(await readFile(join(dir, f), "utf-8")) as RunRecord),

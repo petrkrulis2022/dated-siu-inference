@@ -1,9 +1,9 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ModelRegistryEntry, PriceSnapshot, RunRecord } from "@touchstone/sdk";
-import { buildModelInputs, loadCarryForwardHistory, printsDir } from "./load-inputs.js";
+import { buildModelInputs, loadCarryForwardHistory, loadRunRecords, printsDir, repoRoot } from "./load-inputs.js";
 import { computePrint } from "../compute/index.js";
 
 const REGISTRY: ModelRegistryEntry[] = [
@@ -165,6 +165,40 @@ describe("buildModelInputs", () => {
     // The healthy model still qualifies normally — this fix doesn't touch models with real data.
     const healthyRow = body.basket_costs.find((b) => b.model_id === "healthy-model");
     expect(healthyRow?.cost_usd).toBeDefined();
+  });
+});
+
+describe("loadRunRecords", () => {
+  const RUNS_DIR = resolve(repoRoot(), "data/runs/2026-09-26");
+  const SPEND_FILE = join(RUNS_DIR, "spend-by-provider.json");
+
+  afterEach(async () => {
+    await rm(SPEND_FILE, { force: true });
+  });
+
+  it("never reads a sibling artifact (spend-by-provider.json) as if it were a run record — the real bug found live, 2026-09-28, the first carry-forward print", async () => {
+    // A real sibling file, written exactly as publish-unattended.ts writes one: same shape, same
+    // path, right next to the real run records already checked in for this date.
+    await writeFile(
+      SPEND_FILE,
+      JSON.stringify({ print_id: "2026-09-26", date: "2026-09-26", spend_usd_by_provider: {} }),
+      "utf-8",
+    );
+
+    const before = await loadRunRecords("2026-09-26");
+    // Confirm the fixture is actually in place before asserting on its absence from the result —
+    // a test that can't fail this way proves nothing.
+    const { readdir } = await import("node:fs/promises");
+    expect(await readdir(RUNS_DIR)).toContain("spend-by-provider.json");
+
+    for (const record of before) {
+      expect(record).not.toMatchObject({ print_id: "2026-09-26", spend_usd_by_provider: expect.anything() });
+    }
+    // Every real record still has the shape a RunRecord actually has — the spend file, if it had
+    // leaked in, would have parsed but had none of these fields.
+    for (const record of before) {
+      expect(record.run_id).toBeTruthy();
+    }
   });
 });
 

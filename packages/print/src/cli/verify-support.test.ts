@@ -3,6 +3,9 @@ import { loadPrint, loadRegistry, printsDir } from "./load-inputs.js";
 import { buildVerifyInput } from "./verify-support.js";
 import { verifyPrint } from "../verify.js";
 import { join } from "node:path";
+import { rm, writeFile } from "node:fs/promises";
+import { afterEach } from "vitest";
+import { runsDirFor } from "./load-inputs.js";
 
 /**
  * Regression test for the real bug found live 2026-09-26: every tier-series print (print.series
@@ -69,6 +72,32 @@ describe("buildVerifyInput — tier series print", () => {
  * checked-in data, not a synthetic fixture, because the bug was specifically about reproducing
  * real historical prints.
  */
+describe("buildVerifyInput — a sibling artifact in the run directory (2026-09-28 fix)", () => {
+  const SPEND_FILE = join(runsDirFor("2026-09-26"), "spend-by-provider.json");
+
+  afterEach(async () => {
+    await rm(SPEND_FILE, { force: true });
+  });
+
+  it("does not flag spend-by-provider.json as an undeclared run record — the real bug that failed verify on the first carry-forward print, 2026-09-28", async () => {
+    // The exact file publish-unattended.ts writes, sibling to the manifest, right after
+    // publishPrint returns — never part of the declared run_records list, and never should be.
+    await writeFile(
+      SPEND_FILE,
+      JSON.stringify({ print_id: "2026-09-26", date: "2026-09-26", spend_usd_by_provider: {} }),
+      "utf-8",
+    );
+
+    const print = await loadPrint(join(printsDir(), "2026-09-26.json"));
+    const { input, manifestDiscrepancy, loadErrorMessage } = await buildVerifyInput(print);
+    expect(loadErrorMessage).toBeUndefined();
+    expect(manifestDiscrepancy).toBeUndefined();
+    const result = verifyPrint(print, input);
+    expect(result.discrepancies).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+});
+
 describe("buildVerifyInput — historical pricing rules (2026-09-27 fix)", () => {
   it("2026-09-08 (reasoning-token pricing gap) verifies with an exact match", async () => {
     const print = await loadPrint(join(printsDir(), "2026-09-08.json"));

@@ -13,6 +13,7 @@ import {
   loadPriceSnapshot,
   loadRegistry,
   loadRunManifest,
+  NON_RUN_RECORD_FILES,
   printsDir,
   runsDirFor,
 } from "./load-inputs.js";
@@ -61,7 +62,7 @@ export async function buildVerifyInput(print: Print): Promise<BuiltVerifyInput> 
     try {
       const manifest = await loadRunManifest(baseRunsPrintId);
       const onDisk = (await readdir(runsDirFor(baseRunsPrintId))).filter(
-        (f) => f.endsWith(".json") && !f.endsWith(".raw.json") && f !== "index.json",
+        (f) => f.endsWith(".json") && !f.endsWith(".raw.json") && !NON_RUN_RECORD_FILES.has(f),
       );
       const declared = [...manifest.run_records].sort();
       const actual = [...onDisk].sort();
