@@ -8,8 +8,14 @@ import type { Print } from "@touchstone/sdk";
 function generousCeiling(): BudgetCeiling {
   return new BudgetCeiling(
     Object.fromEntries(
-      AGENT_IDS.map((id) => [id, { maxUsdcSpend: "1000", maxInferenceTurns: 100, maxInferenceUsd: "1000" }]),
-    ) as Record<AgentId, { maxUsdcSpend: string; maxInferenceTurns: number; maxInferenceUsd: string }>,
+      AGENT_IDS.map((id) => [
+        id,
+        { maxUsdcSpend: "1000", maxInferenceTurns: 100, maxInferenceUsd: "1000" },
+      ]),
+    ) as Record<
+      AgentId,
+      { maxUsdcSpend: string; maxInferenceTurns: number; maxInferenceUsd: string }
+    >,
   );
 }
 
@@ -22,17 +28,25 @@ function deps(): RunnerDeps {
       issuanceLimit: async () => 0n,
       claimWindow: async () => ({ windowFrom: 0n, windowTo: 0n }),
       currentBlockTimestamp: async () => 0n,
-      escrowState: async () => { throw new Error("unused"); },
-      reservation: async () => { throw new Error("unused"); },
+      escrowState: async () => {
+        throw new Error("unused");
+      },
+      reservation: async () => {
+        throw new Error("unused");
+      },
       issuersForClass: async () => [],
     },
     deployment: {
       network: { name: "test", chainId: 0 },
-      usdc: { address: "0x0" }, capacityBond: { address: "0x0" },
-      claimRouter: { address: "0x0" }, workClaim: { address: "0x0" },
+      usdc: { address: "0x0" },
+      capacityBond: { address: "0x0" },
+      claimRouter: { address: "0x0" },
+      workClaim: { address: "0x0" },
     },
     escrowAddress: "0x0",
-    runGateHardeningChecks: async () => { throw new Error("must not be reached"); },
+    runGateHardeningChecks: async () => {
+      throw new Error("must not be reached");
+    },
     loadPrint: async () => ({ print_id: "p" }) as unknown as Print,
     isReconciled: async () => false,
   };
@@ -58,14 +72,18 @@ describe("Runner toolGuard — enforcing at the boundary, not in a brief", () =>
     // The rule WORKER-CODE's brief stated in capitals and broke three times out of three on
     // 2026-09-28, after already breaking it on 2026-09-26: a claim holder does not author the
     // work its own issuer owes.
-    const runner = runnerWithGuard((t) => (t === "submit_job" ? "you hold a claim for this job" : null));
+    const runner = runnerWithGuard((t) =>
+      t === "submit_job" ? "you hold a claim for this job" : null,
+    );
     await expect(
       runner.callTool("submit_job", { source: "x" }, { turn: 1, jobId: "j" }),
     ).rejects.toThrow(ToolRefusedError);
   });
 
   it("records the refusal rather than silently dropping it", async () => {
-    const runner = runnerWithGuard((t) => (t === "submit_job" ? "you hold a claim for this job" : null));
+    const runner = runnerWithGuard((t) =>
+      t === "submit_job" ? "you hold a claim for this job" : null,
+    );
     await runner.callTool("submit_job", { source: "x" }, { turn: 1, jobId: "j" }).catch(() => {});
     expect(runner.deniedToolCalls()).toEqual([{ turn: 1, jobId: "j", toolName: "submit_job" }]);
   });
@@ -87,9 +105,13 @@ describe("Runner toolGuard — enforcing at the boundary, not in a brief", () =>
 
   it("permits everything when the guard returns null, and when no guard is set at all", async () => {
     const guarded = runnerWithGuard(() => null);
-    await expect(guarded.callTool("get_print", { printId: "p" }, { turn: 1, jobId: "j" })).resolves.toBeDefined();
+    await expect(
+      guarded.callTool("get_print", { printId: "p" }, { turn: 1, jobId: "j" }),
+    ).resolves.toBeDefined();
 
     const unguarded = runnerWithGuard(undefined);
-    await expect(unguarded.callTool("get_print", { printId: "p" }, { turn: 1, jobId: "j" })).resolves.toBeDefined();
+    await expect(
+      unguarded.callTool("get_print", { printId: "p" }, { turn: 1, jobId: "j" }),
+    ).resolves.toBeDefined();
   });
 });

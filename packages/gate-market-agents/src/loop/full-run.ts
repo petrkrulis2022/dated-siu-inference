@@ -1,6 +1,12 @@
 import { keccak256, stringToBytes, type Hex } from "viem";
 import { ZodError } from "zod";
-import { classifyFailure, isPolicyRefusalStopReason, type Adapter, type AdapterParams, type FailureCategory } from "@touchstone/harness";
+import {
+  classifyFailure,
+  isPolicyRefusalStopReason,
+  type Adapter,
+  type AdapterParams,
+  type FailureCategory,
+} from "@touchstone/harness";
 import { quoteHashHex, type QuoteBody, type TouchstoneQuote } from "@touchstone/sdk";
 import type {
   GateHardeningJobInputs,
@@ -34,7 +40,11 @@ import { ForwardQuoteBook, type ForwardQuote } from "./forward-book.js";
 import { classIdFor } from "../tools/class-id.js";
 import { RedemptionTracker } from "./redemption-tracker.js";
 import { buildTurnPrompt } from "./prompt.js";
-import { ModelResponseParseError, parseModelResponse, type FrictionReport } from "./parse-tool-call.js";
+import {
+  ModelResponseParseError,
+  parseModelResponse,
+  type FrictionReport,
+} from "./parse-tool-call.js";
 
 /**
  * WP-7's own general loop — P4 (one agent, one job) and P5 (six agents, several windows) are both
@@ -136,7 +146,7 @@ export interface FullRunWindowOptions {
    * passes, a maxTurnsPerAgent ceiling is hit for everyone active, or the budget halts the run.
    * P5's real "6-10 jobs per window, alternating class" needs a queue of these, cycled through as
    * each is delivered or abandoned — not built here; see this file's own top comment. */
-   job: JobEnvelope;
+  job: JobEnvelope;
   maxTurnsPerAgent: number;
   budget: ExperimentBudget;
   deps: RunnerDeps;
@@ -317,17 +327,35 @@ export interface FullRunWindowResult {
    * without re-deriving it from prose in the turn logs. */
   capacityEvents: CapacityEvent[];
   turnsByAgent: Record<string, number>;
-  haltedReason?: Record<string, "ceiling" | "parse_error" | "max_turns" | "validation_failed" | "voluntary_stop" | "experiment_halt" | "policy_refusal" | "adapter_error" | "nothing_to_act_on">;
+  haltedReason?: Record<
+    string,
+    | "ceiling"
+    | "parse_error"
+    | "max_turns"
+    | "validation_failed"
+    | "voluntary_stop"
+    | "experiment_halt"
+    | "policy_refusal"
+    | "adapter_error"
+    | "nothing_to_act_on"
+  >;
   turnLogsByAgent: Record<string, TurnLog[]>;
 }
 
 function summarizeGateResult(result: GateHardeningResult): string {
   if (result.passed) return "G1-G6 all passed";
   const checks = [
-    ["G1", result.g1], ["G2", result.g2], ["G3", result.g3],
-    ["G4", result.g4], ["G5", result.g5], ["G6", result.g6],
+    ["G1", result.g1],
+    ["G2", result.g2],
+    ["G3", result.g3],
+    ["G4", result.g4],
+    ["G5", result.g5],
+    ["G6", result.g6],
   ] as const;
-  return checks.filter(([, c]) => !c.passed).map(([n, c]) => `${n} failed: ${c.reason}`).join("; ");
+  return checks
+    .filter(([, c]) => !c.passed)
+    .map(([n, c]) => `${n} failed: ${c.reason}`)
+    .join("; ");
 }
 
 const DEFAULT_FRICTION: Required<FrictionReport> = {
@@ -395,7 +423,9 @@ export function shuffledToolOrder<T>(items: readonly T[], seedInput: string): T[
   return arr;
 }
 
-export async function runFullRunWindow(options: FullRunWindowOptions): Promise<FullRunWindowResult> {
+export async function runFullRunWindow(
+  options: FullRunWindowOptions,
+): Promise<FullRunWindowResult> {
   // Computed before RunRecorder is constructed so the real order used is recorded in the
   // manifest from turn one, not added after the fact.
   const toolOrderByAgent: Record<string, readonly ToolName[]> = {};
@@ -457,8 +487,7 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
           if (toolName !== "submit_job") return null;
           const state = redemption.state();
           if (state.served) return null;
-          const holdsIt =
-            state.transferredTo === agent.agentId || state.holder === agent.agentId;
+          const holdsIt = state.transferredTo === agent.agentId || state.holder === agent.agentId;
           if (!holdsIt) return null;
           if (state.issuerAgentId === agent.agentId) return null;
           return (
@@ -523,7 +552,8 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       validateAgentContext(context);
       recorder.recordValidatorVerdict(agent.agentId, turn, null);
     } catch (err) {
-      if (err instanceof ContextValidationError) recorder.recordValidatorVerdict(agent.agentId, turn, err);
+      if (err instanceof ContextValidationError)
+        recorder.recordValidatorVerdict(agent.agentId, turn, err);
       haltedReason[agent.agentId] = "validation_failed";
       activeAgents.delete(agent.agentId);
       continue;
@@ -544,7 +574,8 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
     // this line disappears and the ordinary wait-gate applies again, so the wake is worth at most
     // one turn per window rather than every turn.
     const mayStillQuoteForward =
-      canQuoteForward && forwardBook.quotesBy(agent.agentId).every((q) => q.statedInWindow !== windowIndex);
+      canQuoteForward &&
+      forwardBook.quotesBy(agent.agentId).every((q) => q.statedInWindow !== windowIndex);
     // An unsettled claim from an earlier window is a real inbox item for whoever can settle it —
     // and unlike the forward invitation it genuinely is an arrival, so it belongs in the
     // wait-gate's own definition of "something to act on". Shown only to agents that actually
@@ -622,7 +653,11 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       toolOrderByAgent[agent.agentId],
       [boardSectionText, forwardText].filter(Boolean).join("\n\n"),
     );
-    const projectedUsd = projectedTurnCostUsd(Math.ceil(prompt.length / 4), agent.maxOutputTokens, agent.prices);
+    const projectedUsd = projectedTurnCostUsd(
+      Math.ceil(prompt.length / 4),
+      agent.maxOutputTokens,
+      agent.prices,
+    );
 
     try {
       options.budget.recordInferenceSpend(agent.agentId, options.windowId, projectedUsd);
@@ -661,14 +696,19 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       const category = classifyFailure(err);
       const message = err instanceof Error ? err.message : String(err);
       const log: TurnLog = {
-        turn, promptChars: prompt.length, projectedUsd, realizedUsd: "0",
-        marketBoardText: marketBoardText || undefined, latencyMs: 0,
+        turn,
+        promptChars: prompt.length,
+        projectedUsd,
+        realizedUsd: "0",
+        marketBoardText: marketBoardText || undefined,
+        latencyMs: 0,
         parsed: `${category}: ${message}`,
         providerFailure: { category, message },
       };
       turnLogsByAgent[agent.agentId].push(log);
       options.onTurn?.(agent.agentId, log);
-      haltedReason[agent.agentId] = category === "policy_refusal" ? "policy_refusal" : "adapter_error";
+      haltedReason[agent.agentId] =
+        category === "policy_refusal" ? "policy_refusal" : "adapter_error";
       activeAgents.delete(agent.agentId);
       await friction.append(
         buildFrictionEntry(agent.agentId, turn, options.job.jobId, undefined, null, {
@@ -679,20 +719,33 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       continue;
     }
 
-    const realizedUsd = realizedTurnCostUsd(adapterResult.usage.input, adapterResult.usage.output, agent.prices);
+    const realizedUsd = realizedTurnCostUsd(
+      adapterResult.usage.input,
+      adapterResult.usage.output,
+      agent.prices,
+    );
     totalRealizedUsd += Number(realizedUsd);
-    realizedUsdByProvider[agent.provider] = (realizedUsdByProvider[agent.provider] ?? 0) + Number(realizedUsd);
+    realizedUsdByProvider[agent.provider] =
+      (realizedUsdByProvider[agent.provider] ?? 0) + Number(realizedUsd);
 
     // A refusal that arrives on a 200 — the commoner shape, reported via the provider's own stop
     // reason. Caught before parsing, so it is never recorded as unparseable output.
     if (isPolicyRefusalStopReason(adapterResult.stopReason)) {
       const log: TurnLog = {
-        turn, promptChars: prompt.length, projectedUsd, realizedUsd,
-        marketBoardText: marketBoardText || undefined, latencyMs: adapterResult.latency_ms,
-        stopReason: adapterResult.stopReason, usage: adapterResult.usage,
+        turn,
+        promptChars: prompt.length,
+        projectedUsd,
+        realizedUsd,
+        marketBoardText: marketBoardText || undefined,
+        latencyMs: adapterResult.latency_ms,
+        stopReason: adapterResult.stopReason,
+        usage: adapterResult.usage,
         contentBlockTypes: adapterResult.contentBlockTypes,
         parsed: `policy_refusal: provider returned stop reason "${adapterResult.stopReason}"`,
-        providerFailure: { category: "policy_refusal", message: `stop reason "${adapterResult.stopReason}"` },
+        providerFailure: {
+          category: "policy_refusal",
+          message: `stop reason "${adapterResult.stopReason}"`,
+        },
       };
       turnLogsByAgent[agent.agentId].push(log);
       options.onTurn?.(agent.agentId, log);
@@ -712,9 +765,15 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       intent = parseModelResponse(adapterResult.text);
     } catch (err) {
       const log: TurnLog = {
-        turn, promptChars: prompt.length, projectedUsd, realizedUsd, marketBoardText: marketBoardText || undefined,
+        turn,
+        promptChars: prompt.length,
+        projectedUsd,
+        realizedUsd,
+        marketBoardText: marketBoardText || undefined,
         latencyMs: adapterResult.latency_ms,
-        stopReason: adapterResult.stopReason, usage: adapterResult.usage, contentBlockTypes: adapterResult.contentBlockTypes,
+        stopReason: adapterResult.stopReason,
+        usage: adapterResult.usage,
+        contentBlockTypes: adapterResult.contentBlockTypes,
         parsed: err instanceof Error ? err.message : String(err),
       };
       turnLogsByAgent[agent.agentId].push(log);
@@ -722,7 +781,9 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       if (err instanceof ModelResponseParseError) {
         haltedReason[agent.agentId] = "parse_error";
         activeAgents.delete(agent.agentId);
-        await friction.append(buildFrictionEntry(agent.agentId, turn, options.job.jobId, undefined, null));
+        await friction.append(
+          buildFrictionEntry(agent.agentId, turn, options.job.jobId, undefined, null),
+        );
         continue;
       }
       throw err;
@@ -730,15 +791,24 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
 
     if ("done" in intent) {
       const log: TurnLog = {
-        turn, promptChars: prompt.length, projectedUsd, realizedUsd, marketBoardText: marketBoardText || undefined,
-        latencyMs: adapterResult.latency_ms, parsed: JSON.stringify(intent),
-        stopReason: adapterResult.stopReason, usage: adapterResult.usage, contentBlockTypes: adapterResult.contentBlockTypes,
+        turn,
+        promptChars: prompt.length,
+        projectedUsd,
+        realizedUsd,
+        marketBoardText: marketBoardText || undefined,
+        latencyMs: adapterResult.latency_ms,
+        parsed: JSON.stringify(intent),
+        stopReason: adapterResult.stopReason,
+        usage: adapterResult.usage,
+        contentBlockTypes: adapterResult.contentBlockTypes,
       };
       turnLogsByAgent[agent.agentId].push(log);
       options.onTurn?.(agent.agentId, log);
       haltedReason[agent.agentId] = "voluntary_stop";
       activeAgents.delete(agent.agentId);
-      await friction.append(buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null));
+      await friction.append(
+        buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null),
+      );
       continue;
     }
 
@@ -765,14 +835,22 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       // model's own next turn sees this in its tool-call history exactly like any other tool
       // error, since Runner.callTool would have surfaced the same shape for a real revert.
       const log: TurnLog = {
-        turn, promptChars: prompt.length, projectedUsd, realizedUsd, marketBoardText: marketBoardText || undefined,
+        turn,
+        promptChars: prompt.length,
+        projectedUsd,
+        realizedUsd,
+        marketBoardText: marketBoardText || undefined,
         latencyMs: adapterResult.latency_ms,
-        stopReason: adapterResult.stopReason, usage: adapterResult.usage, contentBlockTypes: adapterResult.contentBlockTypes,
+        stopReason: adapterResult.stopReason,
+        usage: adapterResult.usage,
+        contentBlockTypes: adapterResult.contentBlockTypes,
         parsed: `${JSON.stringify(intent)} -> args error: ${err instanceof Error ? err.message : String(err)}`,
       };
       turnLogsByAgent[agent.agentId].push(log);
       options.onTurn?.(agent.agentId, log);
-      await friction.append(buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null));
+      await friction.append(
+        buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null),
+      );
       continue;
     }
 
@@ -857,7 +935,11 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       // so the redemption tracker sees an fSIU payment identically whichever tool made it.
       if (intent.tool === "pay_with_claim") {
         const paid = record.result as {
-          tokenId: string; issuer: string; quantity: string; mintTxHash?: string; transferTxHash?: string;
+          tokenId: string;
+          issuer: string;
+          quantity: string;
+          mintTxHash?: string;
+          transferTxHash?: string;
         };
         const issuerAgentId = agentIdByAddress[paid.issuer.toLowerCase()];
         if (issuerAgentId) redemption.recordMint(paid.tokenId, issuerAgentId, paid.quantity);
@@ -874,13 +956,19 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
           quantityMilliSiu: paid.quantity,
           forwardDated: isForwardDated(args, windowTo),
           ...(typeof to === "string" ? { counterparty: to } : {}),
-          ...(paid.mintTxHash ? { txHash: `${paid.mintTxHash} (mint) / ${paid.transferTxHash ?? "?"} (transfer)` } : {}),
+          ...(paid.mintTxHash
+            ? { txHash: `${paid.mintTxHash} (mint) / ${paid.transferTxHash ?? "?"} (transfer)` }
+            : {}),
         });
       }
 
       if (intent.tool === "reserve_for_work") {
         const reserved = record.result as {
-          txHash: string; quoteHash: string; issuer: string; quantity: string; deadline: string;
+          txHash: string;
+          quoteHash: string;
+          issuer: string;
+          quantity: string;
+          deadline: string;
         };
         await recordCapacityEvent("reserve_for_work", {
           quoteHash: reserved.quoteHash,
@@ -1018,9 +1106,10 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
         });
       }
 
-      const gateResult = intent.tool === "submit_job" && !quarantined
-        ? (record.result as GateHardeningResult)
-        : undefined;
+      const gateResult =
+        intent.tool === "submit_job" && !quarantined
+          ? (record.result as GateHardeningResult)
+          : undefined;
 
       // A real, deterministic receiptRef tied to this job — never invented — so the issuer's
       // eventual serve_redemption call references the same job an on-chain observer could
@@ -1033,14 +1122,24 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       // (WorkClaim.sol's own top doc comment). A submit_job call from any agent OTHER than the
       // routed issuer for this claim must never reach the tracker, whatever its own verdict.
       if (gateResult && agent.agentId === redemption.state().issuerAgentId) {
-        redemption.recordGraded(gateResult.passed, keccak256(stringToBytes(`receipt:${options.job.jobId}`)));
+        redemption.recordGraded(
+          gateResult.passed,
+          keccak256(stringToBytes(`receipt:${options.job.jobId}`)),
+        );
       }
 
       const log: TurnLog = {
-        turn, promptChars: prompt.length, projectedUsd, realizedUsd, marketBoardText: marketBoardText || undefined,
-        latencyMs: adapterResult.latency_ms, parsed: JSON.stringify(intent),
+        turn,
+        promptChars: prompt.length,
+        projectedUsd,
+        realizedUsd,
+        marketBoardText: marketBoardText || undefined,
+        latencyMs: adapterResult.latency_ms,
+        parsed: JSON.stringify(intent),
         quarantinedNonDeterministicGate: quarantined || undefined,
-        stopReason: adapterResult.stopReason, usage: adapterResult.usage, contentBlockTypes: adapterResult.contentBlockTypes,
+        stopReason: adapterResult.stopReason,
+        usage: adapterResult.usage,
+        contentBlockTypes: adapterResult.contentBlockTypes,
       };
       if (gateResult) {
         log.gateResult = { passed: gateResult.passed, summary: summarizeGateResult(gateResult) };
@@ -1056,7 +1155,9 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       options.onTurn?.(agent.agentId, log);
 
       const timeToExpiry = await holdTimeToExpiry(options.deps, null);
-      await friction.append(buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, timeToExpiry));
+      await friction.append(
+        buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, timeToExpiry),
+      );
 
       if (gateResult?.passed) {
         // Found live wiring the redemption tracker (2026-09-26, P5 planning): breaking the loop
@@ -1070,7 +1171,8 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
           passed = true;
           passedBy = agent.agentId;
         }
-        const claimOutstanding = redemption.state().tokenId !== undefined && !redemption.state().served;
+        const claimOutstanding =
+          redemption.state().tokenId !== undefined && !redemption.state().served;
         if (!claimOutstanding) {
           break turnLoop;
         }
@@ -1090,14 +1192,22 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
         // draws for a parse failure — but it must not crash every other agent's own turn either.
         // Logged and continued, exactly like buildToolArgs's own disclosed failures above.
         const log: TurnLog = {
-          turn, promptChars: prompt.length, projectedUsd, realizedUsd, marketBoardText: marketBoardText || undefined,
+          turn,
+          promptChars: prompt.length,
+          projectedUsd,
+          realizedUsd,
+          marketBoardText: marketBoardText || undefined,
           latencyMs: adapterResult.latency_ms,
-          stopReason: adapterResult.stopReason, usage: adapterResult.usage, contentBlockTypes: adapterResult.contentBlockTypes,
+          stopReason: adapterResult.stopReason,
+          usage: adapterResult.usage,
+          contentBlockTypes: adapterResult.contentBlockTypes,
           parsed: `${JSON.stringify(intent)} -> tool args validation error: ${err.message}`,
         };
         turnLogsByAgent[agent.agentId].push(log);
         options.onTurn?.(agent.agentId, log);
-        await friction.append(buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null));
+        await friction.append(
+          buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null),
+        );
         continue;
       }
       // Everything else — a real on-chain revert (ContractFunctionExecutionError), a
@@ -1116,14 +1226,22 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       // missing env var, an unreachable RPC endpoint) — those throw before this loop ever runs.
       {
         const log: TurnLog = {
-          turn, promptChars: prompt.length, projectedUsd, realizedUsd, marketBoardText: marketBoardText || undefined,
+          turn,
+          promptChars: prompt.length,
+          projectedUsd,
+          realizedUsd,
+          marketBoardText: marketBoardText || undefined,
           latencyMs: adapterResult.latency_ms,
-          stopReason: adapterResult.stopReason, usage: adapterResult.usage, contentBlockTypes: adapterResult.contentBlockTypes,
+          stopReason: adapterResult.stopReason,
+          usage: adapterResult.usage,
+          contentBlockTypes: adapterResult.contentBlockTypes,
           parsed: `${JSON.stringify(intent)} -> tool call error: ${err instanceof Error ? err.message : String(err)}`,
         };
         turnLogsByAgent[agent.agentId].push(log);
         options.onTurn?.(agent.agentId, log);
-        await friction.append(buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null));
+        await friction.append(
+          buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null),
+        );
         continue;
       }
     }
@@ -1266,13 +1384,20 @@ function asDecimalString(value: unknown): unknown {
  * `submit_job`'s own fixed envelope — never overrides an agent's real economic decision (how
  * much to mint, whether to request a quote, whether to pay).
  */
-export async function buildToolArgs(tool: ToolName, rawArgs: unknown, ctx: BuildToolArgsContext): Promise<unknown> {
+export async function buildToolArgs(
+  tool: ToolName,
+  rawArgs: unknown,
+  ctx: BuildToolArgsContext,
+): Promise<unknown> {
   if (tool === "submit_job") {
     const rawSource = (rawArgs as { source?: unknown } | undefined)?.source;
     return {
       taskClass: ctx.job.taskClass,
       originalGate: ctx.job.originalGate,
-      hardenedGate: { taskClass: ctx.job.taskClass, source: typeof rawSource === "string" ? rawSource : "" },
+      hardenedGate: {
+        taskClass: ctx.job.taskClass,
+        source: typeof rawSource === "string" ? rawSource : "",
+      },
       referenceInstance: ctx.job.referenceInstance,
       knownGoodSubmission: ctx.job.knownGoodSubmission,
       adversarialSubmissions: ctx.job.adversarialSubmissions,
@@ -1280,55 +1405,59 @@ export async function buildToolArgs(tool: ToolName, rawArgs: unknown, ctx: Build
     };
   }
 
-/**
- * Which delivery window a mint is for. Defaults to the window the buyer is standing in; naming a
- * later one resolves to that window's own real, pre-computed bounds.
- *
- * This is what makes a claim a claim. Until 2026-09-28 the bounds were always the current
- * window's, so a buyer could never reserve capacity for a *future* delivery window — which is the
- * one property the instrument is defined by. With that unavailable, an all-USDC result would have
- * read as a preference when the alternative it was being compared against did not exist.
- *
- * A window outside the run is refused rather than clamped: minting against bounds nobody will ever
- * be standing in produces a claim that can never be presented, and silently retargeting a buyer's
- * stated intent is worse than telling it the window does not exist.
- */
-function resolveTargetWindow(
-  tool: "mint_claim" | "pay_with_claim",
-  rawArgs: unknown,
-  ctx: BuildToolArgsContext,
-): { windowFrom: bigint; windowTo: bigint; forWindow: number } {
-  const raw = (rawArgs ?? {}) as { forWindow?: unknown };
-  const currentIndex = ctx.windowIndex ?? 1;
-  if (raw.forWindow === undefined) {
-    return { windowFrom: ctx.windowFrom, windowTo: ctx.windowTo, forWindow: currentIndex };
+  /**
+   * Which delivery window a mint is for. Defaults to the window the buyer is standing in; naming a
+   * later one resolves to that window's own real, pre-computed bounds.
+   *
+   * This is what makes a claim a claim. Until 2026-09-28 the bounds were always the current
+   * window's, so a buyer could never reserve capacity for a *future* delivery window — which is the
+   * one property the instrument is defined by. With that unavailable, an all-USDC result would have
+   * read as a preference when the alternative it was being compared against did not exist.
+   *
+   * A window outside the run is refused rather than clamped: minting against bounds nobody will ever
+   * be standing in produces a claim that can never be presented, and silently retargeting a buyer's
+   * stated intent is worse than telling it the window does not exist.
+   */
+  function resolveTargetWindow(
+    tool: "mint_claim" | "pay_with_claim",
+    rawArgs: unknown,
+    ctx: BuildToolArgsContext,
+  ): { windowFrom: bigint; windowTo: bigint; forWindow: number } {
+    const raw = (rawArgs ?? {}) as { forWindow?: unknown };
+    const currentIndex = ctx.windowIndex ?? 1;
+    if (raw.forWindow === undefined) {
+      return { windowFrom: ctx.windowFrom, windowTo: ctx.windowTo, forWindow: currentIndex };
+    }
+    const forWindow =
+      typeof raw.forWindow === "number" ? raw.forWindow : Number(asDecimalString(raw.forWindow));
+    if (!Number.isInteger(forWindow) || forWindow < 1) {
+      throw new Error(
+        `${tool}: "forWindow" must be a whole window number, got ${JSON.stringify(raw.forWindow)}.`,
+      );
+    }
+    if (forWindow === currentIndex) {
+      return { windowFrom: ctx.windowFrom, windowTo: ctx.windowTo, forWindow };
+    }
+    const bounds = ctx.windowBoundsByIndex?.[forWindow];
+    if (!bounds) {
+      const known = Object.keys(ctx.windowBoundsByIndex ?? {}).join(", ");
+      throw new Error(
+        `${tool}: this run has no window ${forWindow}${known ? ` (it has ${known})` : " beyond the one you are in"}.`,
+      );
+    }
+    if (forWindow < currentIndex) {
+      throw new Error(
+        `${tool}: window ${forWindow} has already closed — a claim minted for it could never be presented.`,
+      );
+    }
+    return { windowFrom: bounds.from, windowTo: bounds.to, forWindow };
   }
-  const forWindow =
-    typeof raw.forWindow === "number" ? raw.forWindow : Number(asDecimalString(raw.forWindow));
-  if (!Number.isInteger(forWindow) || forWindow < 1) {
-    throw new Error(`${tool}: "forWindow" must be a whole window number, got ${JSON.stringify(raw.forWindow)}.`);
-  }
-  if (forWindow === currentIndex) {
-    return { windowFrom: ctx.windowFrom, windowTo: ctx.windowTo, forWindow };
-  }
-  const bounds = ctx.windowBoundsByIndex?.[forWindow];
-  if (!bounds) {
-    const known = Object.keys(ctx.windowBoundsByIndex ?? {}).join(", ");
-    throw new Error(
-      `${tool}: this run has no window ${forWindow}${known ? ` (it has ${known})` : " beyond the one you are in"}.`,
-    );
-  }
-  if (forWindow < currentIndex) {
-    throw new Error(
-      `${tool}: window ${forWindow} has already closed — a claim minted for it could never be presented.`,
-    );
-  }
-  return { windowFrom: bounds.from, windowTo: bounds.to, forWindow };
-}
 
   if (tool === "mint_claim") {
     if (!ctx.mintContext) {
-      throw new Error("mint_claim: this window has no mintContext — no agent should have this tool.");
+      throw new Error(
+        "mint_claim: this window has no mintContext — no agent should have this tool.",
+      );
     }
     const quantity = asDecimalString((rawArgs as { quantity?: unknown } | undefined)?.quantity);
     if (typeof quantity !== "string") {
@@ -1376,7 +1505,10 @@ function resolveTargetWindow(
       : [];
     const escrowQuoteHashes = [...new Set(mine.map((i) => quoteHashHex(i.quote)))];
     return {
-      account: typeof raw.account === "string" ? raw.account : (ctx.caller && ctx.agentAddressByAgentId[ctx.caller.agentId]) ?? "",
+      account:
+        typeof raw.account === "string"
+          ? raw.account
+          : ((ctx.caller && ctx.agentAddressByAgentId[ctx.caller.agentId]) ?? ""),
       tokenIds: Array.isArray(raw.tokenIds) ? raw.tokenIds.map((t) => asDecimalString(t)) : [],
       escrowQuoteHashes,
     };
@@ -1407,7 +1539,9 @@ function resolveTargetWindow(
 
   if (tool === "settle_window_close") {
     if (!ctx.mintContext) {
-      throw new Error("settle_window_close: this window has no mintContext, so no attestation can be signed.");
+      throw new Error(
+        "settle_window_close: this window has no mintContext, so no attestation can be signed.",
+      );
     }
     const raw = (rawArgs ?? {}) as { tokenId?: unknown };
     const outstanding = ctx.outstandingClaims ?? [];
@@ -1482,8 +1616,13 @@ function resolveTargetWindow(
     if (!erc8004Id || !issuerAddress) {
       throw new Error("quote_forward: no caller identity on this turn.");
     }
-    const raw = (rawArgs ?? {}) as { forWindow?: unknown; rateUsdPerSiu?: unknown; maxQuantityMilliSiu?: unknown };
-    const forWindow = typeof raw.forWindow === "number" ? raw.forWindow : Number(asDecimalString(raw.forWindow));
+    const raw = (rawArgs ?? {}) as {
+      forWindow?: unknown;
+      rateUsdPerSiu?: unknown;
+      maxQuantityMilliSiu?: unknown;
+    };
+    const forWindow =
+      typeof raw.forWindow === "number" ? raw.forWindow : Number(asDecimalString(raw.forWindow));
     if (!Number.isInteger(forWindow) || forWindow <= windowIndex || forWindow > windowCount) {
       throw new Error(
         `quote_forward: forWindow must be a later window in this run — an integer above ${windowIndex} and at most ${windowCount}.`,
@@ -1563,7 +1702,9 @@ function resolveTargetWindow(
   if (tool === "submit_attack") {
     const attackCtx = ctx.attackContext;
     if (!attackCtx) {
-      throw new Error("submit_attack: this window has no attack context — no agent should have this tool.");
+      throw new Error(
+        "submit_attack: this window has no attack context — no agent should have this tool.",
+      );
     }
     const source = (rawArgs as { submissionSource?: unknown } | undefined)?.submissionSource;
     if (typeof source !== "string" || source.trim() === "") {
@@ -1575,9 +1716,14 @@ function resolveTargetWindow(
     // version would score hits the live gate no longer allows.
     const latest = attackCtx.gateVersions.at(-1);
     if (!latest) {
-      throw new Error("submit_attack: no gate has been delivered yet — there is nothing to test yet.");
+      throw new Error(
+        "submit_attack: no gate has been delivered yet — there is nothing to test yet.",
+      );
     }
-    if (!attackCtx.attackedVersions.has(latest.version) && attackCtx.attackedVersions.size >= MAX_ATTACK_ROUNDS) {
+    if (
+      !attackCtx.attackedVersions.has(latest.version) &&
+      attackCtx.attackedVersions.size >= MAX_ATTACK_ROUNDS
+    ) {
       throw new Error(
         `submit_attack: the ${MAX_ATTACK_ROUNDS}-round cap is reached (versions already tested: ${[...attackCtx.attackedVersions].join(", ")}). No further rounds this window.`,
       );
@@ -1594,17 +1740,23 @@ function resolveTargetWindow(
 
   if (tool === "pay_with_claim") {
     if (!ctx.mintContext) {
-      throw new Error("pay_with_claim: this window has no mintContext — no agent should have this tool.");
+      throw new Error(
+        "pay_with_claim: this window has no mintContext — no agent should have this tool.",
+      );
     }
-    const raw = (rawArgs as { to?: unknown; agentId?: unknown; quantity?: unknown } | undefined) ?? {};
+    const raw =
+      (rawArgs as { to?: unknown; agentId?: unknown; quantity?: unknown } | undefined) ?? {};
     let to = raw.to;
     if (typeof raw.agentId === "string") {
       const resolved = ctx.agentAddressByAgentId[raw.agentId as AgentId];
-      if (!resolved) throw new Error(`pay_with_claim: no known address for agentId "${raw.agentId}".`);
+      if (!resolved)
+        throw new Error(`pay_with_claim: no known address for agentId "${raw.agentId}".`);
       to = resolved;
     }
     if (typeof to !== "string") {
-      throw new Error('pay_with_claim: name the recipient as {"agentId": "WORKER-CODE"} or a literal "to" address.');
+      throw new Error(
+        'pay_with_claim: name the recipient as {"agentId": "WORKER-CODE"} or a literal "to" address.',
+      );
     }
     const quantity = asDecimalString(raw.quantity);
     if (typeof quantity !== "string") {
@@ -1640,7 +1792,8 @@ function resolveTargetWindow(
   }
 
   if (tool === "transfer_claim") {
-    const raw = rawArgs as { to?: unknown; agentId?: unknown; tokenId?: unknown; quantity?: unknown } | undefined;
+    const raw = rawArgs as
+      { to?: unknown; agentId?: unknown; tokenId?: unknown; quantity?: unknown } | undefined;
     // A model may name the destination symbolically ({ agentId: "WORKER-CODE" }) rather than
     // risk mistyping a real hex address — resolved here against the roster's own real addresses,
     // never guessed. A literal "to" address is still honoured unchanged if given instead.
@@ -1678,10 +1831,22 @@ function resolveTargetWindow(
     // other way to learn it. Resolved here exactly like `transfer_claim`'s own symbolic `to`,
     // rather than let a real serve_redemption call revert on a non-address string.
     const raw = rawArgs as
-      | { holder?: unknown; agentId?: unknown; tokenId?: unknown; quantity?: unknown; passed?: unknown; receiptRef?: unknown }
+      | {
+          holder?: unknown;
+          agentId?: unknown;
+          tokenId?: unknown;
+          quantity?: unknown;
+          passed?: unknown;
+          receiptRef?: unknown;
+        }
       | undefined;
     let holder = raw?.holder;
-    const symbolicId = typeof raw?.agentId === "string" ? raw.agentId : typeof holder === "string" ? holder : undefined;
+    const symbolicId =
+      typeof raw?.agentId === "string"
+        ? raw.agentId
+        : typeof holder === "string"
+          ? holder
+          : undefined;
     if (symbolicId && ctx.agentAddressByAgentId[symbolicId as AgentId]) {
       holder = ctx.agentAddressByAgentId[symbolicId as AgentId];
     }
@@ -1700,7 +1865,9 @@ function resolveTargetWindow(
     // seller can't accidentally (or otherwise) sign something other than what was really asked.
     const requestId = (rawArgs as { requestId?: unknown } | undefined)?.requestId;
     if (typeof requestId !== "string") {
-      throw new Error('issue_quote: expected a string "requestId" naming the request being answered.');
+      throw new Error(
+        'issue_quote: expected a string "requestId" naming the request being answered.',
+      );
     }
     const request = ctx.board.requestById(requestId);
     if (!request) {

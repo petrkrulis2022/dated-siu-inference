@@ -1,6 +1,13 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createWalletClient, createPublicClient, http, keccak256, stringToBytes, type Hex } from "viem";
+import {
+  createWalletClient,
+  createPublicClient,
+  http,
+  keccak256,
+  stringToBytes,
+  type Hex,
+} from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
 import { createAdapterFor, loadApiKeysFromEnv } from "@touchstone/harness";
@@ -284,7 +291,9 @@ async function main(): Promise<void> {
 
   const startingHeadroom = await headroomRows();
   console.log("=== WP-7 P5 — THREE WINDOWS, ONE POOL ===");
-  console.log(`Run ${runId} (label ${runSeed}); oracle trial seed ${F1_ORACLE_TRIAL_SEED} (pinned).`);
+  console.log(
+    `Run ${runId} (label ${runSeed}); oracle trial seed ${F1_ORACLE_TRIAL_SEED} (pinned).`,
+  );
   console.log(`Real Commodity SIU print ${printId}: $${rateUsdPerSiu}/SIU.`);
   console.log(
     `Starting code-class headroom: ${startingHeadroom
@@ -314,7 +323,10 @@ async function main(): Promise<void> {
   console.log(
     `Window spans, fixed before the first turn (chain clock): ` +
       Object.entries(windowBoundsByIndex)
-        .map(([i, b]) => `w${i} ${new Date(Number(b.from) * 1000).toISOString()}..${new Date(Number(b.to) * 1000).toISOString()}`)
+        .map(
+          ([i, b]) =>
+            `w${i} ${new Date(Number(b.from) * 1000).toISOString()}..${new Date(Number(b.to) * 1000).toISOString()}`,
+        )
         .join("; ") +
       `. The runner waits for each to open; no inference is spent waiting.`,
   );
@@ -329,7 +341,10 @@ async function main(): Promise<void> {
     externalDepletionMilliSiu: EXTERNAL_DEPLETION_MILLI_SIU,
     windowCount: WINDOW_COUNT,
     windowBounds: Object.fromEntries(
-      Object.entries(windowBoundsByIndex).map(([i, b]) => [i, { from: Number(b.from), to: Number(b.to) }]),
+      Object.entries(windowBoundsByIndex).map(([i, b]) => [
+        i,
+        { from: Number(b.from), to: Number(b.to) },
+      ]),
     ),
   };
 
@@ -385,7 +400,10 @@ async function main(): Promise<void> {
     });
 
     const mintContext: MintContext = {
-      publisherPrivateKeyHex: toHex(process.env.TOUCHSTONE_PUBLISHER_KEY, "TOUCHSTONE_PUBLISHER_KEY"),
+      publisherPrivateKeyHex: toHex(
+        process.env.TOUCHSTONE_PUBLISHER_KEY,
+        "TOUCHSTONE_PUBLISHER_KEY",
+      ),
       printId,
       series: seriesForPrint(commodityPrint.series),
       printDate: printDateToUnixDay(commodityPrint.date),
@@ -448,7 +466,12 @@ async function main(): Promise<void> {
         tokenId: e.tokenId,
         holder: e.counterparty ?? addresses.ORCHESTRATOR,
         holderAgentId: e.counterparty === addresses["WORKER-CODE"] ? "WORKER-CODE" : undefined,
-        issuerAgentId: e.issuer === addresses["ISSUER-A"] ? "ISSUER-A" : e.issuer === addresses["ISSUER-B"] ? "ISSUER-B" : undefined,
+        issuerAgentId:
+          e.issuer === addresses["ISSUER-A"]
+            ? "ISSUER-A"
+            : e.issuer === addresses["ISSUER-B"]
+              ? "ISSUER-B"
+              : undefined,
         quantityMilliSiu: e.quantityMilliSiu,
         mintedInWindow: windowIndex,
       });
@@ -560,7 +583,14 @@ export interface RosterInput {
   registryEntry: (id: string) => { provider: string; host: string };
   workerCodeErc8004Id: string;
   workerExtractErc8004Id: string;
-  capacityLots: Record<string, { measuredRateMilliSiuPerHour: number; committedCapacityHours: number; bondedUsdcPerClass: number }>;
+  capacityLots: Record<
+    string,
+    {
+      measuredRateMilliSiuPerHour: number;
+      committedCapacityHours: number;
+      bondedUsdcPerClass: number;
+    }
+  >;
   windowFrom: bigint;
   windowTo: bigint;
 }
@@ -575,15 +605,26 @@ export interface RosterInput {
  */
 export function buildRoster(input: RosterInput): RosterAgentConfig[] {
   const {
-    windowIndex, headroomBefore, taskSpecHash, rateUsdPerSiu, printId, models, adapters,
-    addresses, keys, rpcUrl, registryEntry, workerCodeErc8004Id, workerExtractErc8004Id,
-    capacityLots, windowFrom, windowTo,
+    windowIndex,
+    headroomBefore,
+    taskSpecHash,
+    rateUsdPerSiu,
+    printId,
+    models,
+    adapters,
+    addresses,
+    keys,
+    rpcUrl,
+    registryEntry,
+    workerCodeErc8004Id,
+    workerExtractErc8004Id,
+    capacityLots,
+    windowFrom,
+    windowTo,
   } = input;
 
   const isLastWindow = windowIndex === WINDOW_COUNT;
-  const poolText = headroomBefore
-    .map((r) => `${r.issuer}: ${r.headroom} mSIU`)
-    .join("; ");
+  const poolText = headroomBefore.map((r) => `${r.issuer}: ${r.headroom} mSIU`).join("; ");
   const totalHeadroom = headroomBefore.reduce((sum, r) => sum + BigInt(r.headroom), 0n);
 
   const runShapeFacts = `
@@ -804,8 +845,25 @@ ${runShapeFacts}`;
   };
 
   const issuerTools: RosterAgentConfig["availableTools"] = isLastWindow
-    ? ["whoami", "mint_claim", "submit_job", "serve_redemption", "check_headroom", "get_print", "settle_window_close"]
-    : ["whoami", "mint_claim", "submit_job", "serve_redemption", "check_headroom", "get_print", "settle_window_close", "quote_forward"];
+    ? [
+        "whoami",
+        "mint_claim",
+        "submit_job",
+        "serve_redemption",
+        "check_headroom",
+        "get_print",
+        "settle_window_close",
+      ]
+    : [
+        "whoami",
+        "mint_claim",
+        "submit_job",
+        "serve_redemption",
+        "check_headroom",
+        "get_print",
+        "settle_window_close",
+        "quote_forward",
+      ];
 
   return [
     {
@@ -815,8 +873,16 @@ ${runShapeFacts}`;
       prices: PRICES[models.ORCHESTRATOR],
       skillPackText: `${loadSkill("subcontract-and-settle").promptTemplate}\n\n${CANONICAL_ASSET_DESCRIPTION}\n\n${orchestratorBrief}`,
       availableTools: [
-        "request_quote", "pay", "pay_with_claim", "mint_claim", "transfer_claim",
-        "check_headroom", "take_forward", "submit_job", "get_balances", "get_print",
+        "request_quote",
+        "pay",
+        "pay_with_claim",
+        "mint_claim",
+        "transfer_claim",
+        "check_headroom",
+        "take_forward",
+        "submit_job",
+        "get_balances",
+        "get_print",
       ],
       privateKeyHex: keys.ORCHESTRATOR,
       address: addresses.ORCHESTRATOR,
@@ -833,8 +899,14 @@ ${runShapeFacts}`;
       prices: PRICES[models["WORKER-CODE"]],
       skillPackText: `${loadSkill("quote-and-deliver").promptTemplate}\n\n${CANONICAL_ASSET_DESCRIPTION}\n\n${workerCodeBrief}`,
       availableTools: [
-        "issue_quote", "reserve_for_work", "settle_escrow", "submit_job", "pay",
-        "redeem_claim", "get_balances", "get_print",
+        "issue_quote",
+        "reserve_for_work",
+        "settle_escrow",
+        "submit_job",
+        "pay",
+        "redeem_claim",
+        "get_balances",
+        "get_print",
       ],
       privateKeyHex: keys["WORKER-CODE"],
       address: addresses["WORKER-CODE"],
@@ -850,7 +922,13 @@ ${runShapeFacts}`;
       modelString: models["WORKER-EXTRACT"],
       prices: PRICES[models["WORKER-EXTRACT"]],
       skillPackText: `${loadSkill("quote-and-deliver").promptTemplate}\n\n${CANONICAL_ASSET_DESCRIPTION}\n\n${workerExtractBrief}`,
-      availableTools: ["issue_quote", "settle_escrow", "submit_attack", "get_balances", "get_print"],
+      availableTools: [
+        "issue_quote",
+        "settle_escrow",
+        "submit_attack",
+        "get_balances",
+        "get_print",
+      ],
       waitsFor: "gate" as const,
       privateKeyHex: keys["WORKER-EXTRACT"],
       address: addresses["WORKER-EXTRACT"],
@@ -917,8 +995,14 @@ async function depleteExternally(input: {
 }): Promise<{ requestedMilliSiu: number; txHash?: string; failedBecause?: string }> {
   const requested = Number(input.quantityMilliSiu);
   try {
-    const account = privateKeyToAccount(toHex(process.env.DEPLOYER_PRIVATE_KEY, "DEPLOYER_PRIVATE_KEY"));
-    const walletClient = createWalletClient({ account, chain: baseSepolia, transport: http(input.rpcUrl) });
+    const account = privateKeyToAccount(
+      toHex(process.env.DEPLOYER_PRIVATE_KEY, "DEPLOYER_PRIVATE_KEY"),
+    );
+    const walletClient = createWalletClient({
+      account,
+      chain: baseSepolia,
+      transport: http(input.rpcUrl),
+    });
     const publicClient = createPublicClient({ chain: baseSepolia, transport: http(input.rpcUrl) });
 
     const now = await input.chainReader.currentBlockTimestamp();
@@ -1050,11 +1134,13 @@ function describeCapacityEvent(e: CapacityEvent): string {
  * only "window 3 failed" cannot distinguish the finding the experiment exists to produce from a
  * defect in it.
  */
-export function classifyFinalWindow(
-  outcomes: WindowOutcome[],
-): { verdict: "scarcity" | "failed_with_capacity" | "completed" | "no_final_window"; detail: string } {
+export function classifyFinalWindow(outcomes: WindowOutcome[]): {
+  verdict: "scarcity" | "failed_with_capacity" | "completed" | "no_final_window";
+  detail: string;
+} {
   const last = outcomes.find((o) => o.windowIndex === WINDOW_COUNT);
-  if (!last) return { verdict: "no_final_window", detail: "The run did not reach its last window." };
+  if (!last)
+    return { verdict: "no_final_window", detail: "The run did not reach its last window." };
 
   // "Enough capacity" means enough at ONE issuer, because a claim routes to a single issuer with
   // enough headroom by itself — the total is not what a buyer faces.
@@ -1085,7 +1171,10 @@ export function classifyFinalWindow(
   // ORCHESTRATOR's four purchase attempts reverted `NoIssuerWithHeadroom` and WORKER-CODE then
   // authored the gate anyway, unpaid.
   const purchaseAttempts = (last.result.turnLogsByAgent.ORCHESTRATOR ?? []).filter(
-    (t) => t.parsed.includes('"pay"') || t.parsed.includes('"pay_with_claim"') || t.parsed.includes('"mint_claim"'),
+    (t) =>
+      t.parsed.includes('"pay"') ||
+      t.parsed.includes('"pay_with_claim"') ||
+      t.parsed.includes('"mint_claim"'),
   );
   const purchaseSucceeded = last.result.capacityEvents.some(
     (e) => e.agentId === "ORCHESTRATOR" && (e.kind === "mint_claim" || e.kind === "pay_with_claim"),
@@ -1169,8 +1258,13 @@ function printRunSummary(
 
   console.log("\n=== SUBCONTRACTING AND ASSET CHOICE, PER PURCHASE ===");
   for (const o of outcomes) {
-    const calls = (o.result.turnLogsByAgent.ORCHESTRATOR ?? []);
-    const purchases = calls.filter((t) => t.parsed.includes('"pay"') || t.parsed.includes('"pay_with_claim"') || t.parsed.includes('"mint_claim"'));
+    const calls = o.result.turnLogsByAgent.ORCHESTRATOR ?? [];
+    const purchases = calls.filter(
+      (t) =>
+        t.parsed.includes('"pay"') ||
+        t.parsed.includes('"pay_with_claim"') ||
+        t.parsed.includes('"mint_claim"'),
+    );
     if (purchases.length === 0) {
       console.log(`  window ${o.windowIndex}: no purchase.`);
       continue;
@@ -1186,7 +1280,9 @@ function printRunSummary(
   for (const o of outcomes) {
     for (const e of o.result.capacityEvents) {
       anyEvent = true;
-      console.log(`  w${o.windowIndex} turn ${e.turn} ${e.agentId} ${e.kind}${describeCapacityEvent(e)}`);
+      console.log(
+        `  w${o.windowIndex} turn ${e.turn} ${e.agentId} ${e.kind}${describeCapacityEvent(e)}`,
+      );
     }
     if (o.externalDepletion?.txHash) {
       console.log(
@@ -1269,7 +1365,9 @@ function printRunSummary(
         `  ${q.quoteId}: ${q.issuer} stated in window ${q.statedInWindow} for window ${q.forWindow} — ` +
           `${q.rateUsdPerSiu} USD/SIU, up to ${q.maxQuantityMilliSiu} mSIU ` +
           `(their real headroom then: ${q.issuerHeadroomAtQuote} mSIU) — ` +
-          (q.takenInWindow === null ? "NOT taken" : `taken by ${q.takenBy} in window ${q.takenInWindow}`),
+          (q.takenInWindow === null
+            ? "NOT taken"
+            : `taken by ${q.takenBy} in window ${q.takenInWindow}`),
       );
     }
     const taken = quotes.filter((q) => q.takenInWindow !== null).length;
@@ -1280,7 +1378,9 @@ function printRunSummary(
   const last = outcomes.at(-1);
   if (last) {
     console.log(`  code-class headroom remaining at the end: ${totalOf(last.headroomAfter)} mSIU`);
-    console.log(`  per issuer: ${last.headroomAfter.map((r) => `${r.issuer} ${r.headroom}`).join(", ")}`);
+    console.log(
+      `  per issuer: ${last.headroomAfter.map((r) => `${r.issuer} ${r.headroom}`).join(", ")}`,
+    );
     console.log(
       "  A claim routes to a single issuer with enough headroom by itself, so the per-issuer split " +
         "above, not the total, is what a late buyer faces.",
@@ -1296,7 +1396,9 @@ function printRunSummary(
     const refusals = halts.filter(([, reason]) => reason === "policy_refusal");
     console.log(
       `  window ${o.windowIndex}: ${halts.length === 0 ? "no halts" : halts.map(([a, r]) => `${a}=${r}`).join(", ")}` +
-        (refusals.length > 0 ? `  <-- POLICY REFUSALS: ${refusals.map(([a]) => a).join(", ")}` : ""),
+        (refusals.length > 0
+          ? `  <-- POLICY REFUSALS: ${refusals.map(([a]) => a).join(", ")}`
+          : ""),
     );
   }
   console.log(

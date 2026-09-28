@@ -257,7 +257,10 @@ type CorrectionNoteType = "precision" | "pricing" | "attribution" | "other";
  */
 export function classifyCorrectionNote(note: string): CorrectionNoteType {
   const lower = note.toLowerCase();
-  if (lower.includes("dated_siu previously rounded") || lower.includes("restores rounding precision")) {
+  if (
+    lower.includes("dated_siu previously rounded") ||
+    lower.includes("restores rounding precision")
+  ) {
     return "precision";
   }
   if (lower.includes("reasoning") || lower.includes("cached_input") || lower.includes("cache")) {
@@ -269,14 +272,21 @@ export function classifyCorrectionNote(note: string): CorrectionNoteType {
   // enough to that saga not to also match an unrelated outage disclosure.
   if (
     lower.includes("gemini") &&
-    (lower.includes("cloud billing") || lower.includes("shared project") || lower.includes("isolat"))
+    (lower.includes("cloud billing") ||
+      lower.includes("shared project") ||
+      lower.includes("isolat"))
   ) {
     return "attribution";
   }
   return "other";
 }
 
-const CORRECTION_TYPE_ORDER: CorrectionNoteType[] = ["precision", "pricing", "attribution", "other"];
+const CORRECTION_TYPE_ORDER: CorrectionNoteType[] = [
+  "precision",
+  "pricing",
+  "attribution",
+  "other",
+];
 
 /** "4 corrections: 2 pricing, 1 precision, 1 attribution" — only categories actually present are
  * listed, in a fixed order so the same category always reads in the same place across prints. */

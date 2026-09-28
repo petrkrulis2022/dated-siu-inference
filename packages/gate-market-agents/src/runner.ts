@@ -61,7 +61,9 @@ export class ToolNotAllowedError extends Error {
     public readonly agentId: AgentId,
     public readonly toolName: ToolName,
   ) {
-    super(`${agentId} is not permitted to call "${toolName}" — not declared in its skill's tools.yaml.`);
+    super(
+      `${agentId} is not permitted to call "${toolName}" — not declared in its skill's tools.yaml.`,
+    );
     this.name = "ToolNotAllowedError";
   }
 }
