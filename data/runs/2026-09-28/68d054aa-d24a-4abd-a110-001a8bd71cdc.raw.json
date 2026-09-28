@@ -1,0 +1,39 @@
+{
+  "id": "28186dbe-4e2f-9c21-8f61-0808175d7491",
+  "object": "chat.completion",
+  "created": 1790599814,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```javascript\nexport function dedupeStable(nums) {\n  const seen = new Set();\n  return nums.filter((n) => {\n    if (seen.has(n)) return false;\n    seen.add(n);\n    return true;\n  });\n}\n```",
+        "reasoning_content": "I need to write a JavaScript function `dedupeStable` that removes duplicate numbers while preserving the first occurrence and original order.\n\nThe implementation will use a Set to track seen values and build the result array by keeping only the first occurrence of each number.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 734,
+    "completion_tokens": 55,
+    "total_tokens": 1111,
+    "prompt_tokens_details": {
+      "text_tokens": 734,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 322,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 29620000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

@@ -1,0 +1,39 @@
+{
+  "id": "723702a8-24cc-96bd-a8e1-edf1c7520e0f",
+  "object": "chat.completion",
+  "created": 1790599798,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"tracking_id\": \"SH-04E2BA\",\n  \"origin_city\": \"Nairobi\",\n  \"destination_city\": \"Lisbon\",\n  \"weight_kg\": 417,\n  \"status\": \"pending\",\n  \"priority\": \"standard\"\n}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nThe shipment record is SH-04E2BA from Nairobi to Lisbon. It weighs 417 kilograms with standard priority and pending status.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1625,
+    "completion_tokens": 63,
+    "total_tokens": 1964,
+    "prompt_tokens_details": {
+      "text_tokens": 1625,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 276,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 45160000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

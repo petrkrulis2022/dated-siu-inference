@@ -1,0 +1,39 @@
+{
+  "id": "188c9fb9-c2e1-96e4-b1f4-4e2360fce23f",
+  "object": "chat.completion",
+  "created": 1790599802,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "AAB19D\nACF969\nF7B73C\nC40A4A",
+        "reasoning_content": "I will scan the archive log for access codes and list them in order.\n\nI found four access codes in the document. They are AAB19D, ACF969, F7B73C, and C40A4A.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21615,
+    "completion_tokens": 20,
+    "total_tokens": 22003,
+    "prompt_tokens_details": {
+      "text_tokens": 21615,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 368,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 447900000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
