@@ -1,0 +1,209 @@
+{
+  "passed": true,
+  "passedBy": "WORKER-CODE",
+  "totalRealizedUsd": "0.299205",
+  "attacks": [],
+  "gateVersions": [
+    {
+      "version": 1,
+      "submittedBy": "WORKER-CODE",
+      "turn": 4
+    }
+  ],
+  "spendByProvider": {
+    "anthropic": "0.283630",
+    "openai": "0.015575"
+  },
+  "forwardQuotes": [
+    {
+      "issuer": "ISSUER-B",
+      "forWindow": 3,
+      "statedInWindow": 2,
+      "rateUsdPerSiu": "0.001433",
+      "maxQuantityMilliSiu": "14000",
+      "issuerHeadroomAtQuote": "0",
+      "quoteId": "fwd-1",
+      "takenInWindow": null,
+      "takenBy": null
+    }
+  ],
+  "forwardInvitations": [],
+  "capacityEvents": [],
+  "turnsByAgent": {
+    "ORCHESTRATOR": 4,
+    "WORKER-CODE": 4,
+    "WORKER-EXTRACT": 0,
+    "ISSUER-A": 0,
+    "ISSUER-B": 0
+  },
+  "haltedReason": {},
+  "turnLogsByAgent": {
+    "ORCHESTRATOR": [
+      {
+        "turn": 1,
+        "promptChars": 10967,
+        "projectedUsd": "0.0334275",
+        "realizedUsd": "0.00389375",
+        "latencyMs": 1532,
+        "stopReason": "stop",
+        "usage": {
+          "input": 2819,
+          "output": 37,
+          "cached_input": 0,
+          "reasoning": 0
+        },
+        "contentBlockTypes": [
+          "role",
+          "content",
+          "annotations"
+        ],
+        "parsed": "{\"tool\":\"pay_with_claim\",\"args\":{\"agentId\":\"WORKER-CODE\",\"quantity\":\"10000\"}} -> tool call error: The contract function \"mint\" reverted with the following signature:\n0x00183965\n\nUnable to decode signature \"0x00183965\" as it was not found on the provided ABI.\nMake sure you are using the correct ABI and that the error exists on it.\nYou can look up the decoded signature here: https://4byte.sourcify.dev/?q=0x00183965.\n \nContract Call:\n  address:   0xe0D9B879F9841ef6Be5Af9001ed8F015030324A4\n  function:  mint(bytes32 classId, bytes32 series, uint256 quantity, uint64 windowFrom, uint64 windowTo, (string printId, bytes32 series, uint64 printDate, uint256 nanoUsdPerSiu, uint64 validUntil), bytes signature)\n  args:          (0x2dc081a8d6d4714c79b5abd2e9b08c3a33b4ef1dcf946ef8b8cf6c495014f47b, 0x28b9bd511509601dd60a2359acd77ace0051da8b8fd3a5d60e5ce73794ae0f82, 10000, 1790601774, 1790602974, {\"printId\":\"2026-09-27-commodity\",\"series\":\"0x28b9bd511509601dd60a2359acd77ace0051da8b8fd3a5d60e5ce73794ae0f82\",\"printDate\":\"1790467200\",\"nanoUsdPerSiu\":\"1433000\",\"validUntil\":\"1790605377\"}, 0xe89832c7ef4eb65ec4430a75e9786cd98e72ffc42d8ce66d4b402ff3618ce3c06b752e15dd947e0a5613684d7fc569ba807a33134d5b07f5c2493bbc266342691b)\n  sender:    0x8Bf6De67D0B9705520Cdf5a348f5763e2175F363\n\nDocs: https://viem.sh/docs/contract/decodeErrorResult\nDetails: execution reverted\nVersion: viem@2.55.16"
+      },
+      {
+        "turn": 2,
+        "promptChars": 10967,
+        "projectedUsd": "0.0334275",
+        "realizedUsd": "0.00389375",
+        "latencyMs": 1907,
+        "stopReason": "stop",
+        "usage": {
+          "input": 2819,
+          "output": 37,
+          "cached_input": 2688,
+          "reasoning": 0
+        },
+        "contentBlockTypes": [
+          "role",
+          "content",
+          "annotations"
+        ],
+        "parsed": "{\"tool\":\"pay_with_claim\",\"args\":{\"agentId\":\"WORKER-CODE\",\"quantity\":\"10000\"}} -> tool call error: The contract function \"mint\" reverted with the following signature:\n0x00183965\n\nUnable to decode signature \"0x00183965\" as it was not found on the provided ABI.\nMake sure you are using the correct ABI and that the error exists on it.\nYou can look up the decoded signature here: https://4byte.sourcify.dev/?q=0x00183965.\n \nContract Call:\n  address:   0xe0D9B879F9841ef6Be5Af9001ed8F015030324A4\n  function:  mint(bytes32 classId, bytes32 series, uint256 quantity, uint64 windowFrom, uint64 windowTo, (string printId, bytes32 series, uint64 printDate, uint256 nanoUsdPerSiu, uint64 validUntil), bytes signature)\n  args:          (0x2dc081a8d6d4714c79b5abd2e9b08c3a33b4ef1dcf946ef8b8cf6c495014f47b, 0x28b9bd511509601dd60a2359acd77ace0051da8b8fd3a5d60e5ce73794ae0f82, 10000, 1790601774, 1790602974, {\"printId\":\"2026-09-27-commodity\",\"series\":\"0x28b9bd511509601dd60a2359acd77ace0051da8b8fd3a5d60e5ce73794ae0f82\",\"printDate\":\"1790467200\",\"nanoUsdPerSiu\":\"1433000\",\"validUntil\":\"1790605386\"}, 0x3f73973f24b7f261f99509b7c777cf918588cf1986514082c2e07368068694255041bae6074088d9cdb21019295428dc6c2f92949132f434e7ab11b63b1d93ef1c)\n  sender:    0x8Bf6De67D0B9705520Cdf5a348f5763e2175F363\n\nDocs: https://viem.sh/docs/contract/decodeErrorResult\nDetails: execution reverted\nVersion: viem@2.55.16"
+      },
+      {
+        "turn": 3,
+        "promptChars": 10967,
+        "projectedUsd": "0.0334275",
+        "realizedUsd": "0.00389375",
+        "latencyMs": 1288,
+        "stopReason": "stop",
+        "usage": {
+          "input": 2819,
+          "output": 37,
+          "cached_input": 2688,
+          "reasoning": 0
+        },
+        "contentBlockTypes": [
+          "role",
+          "content",
+          "annotations"
+        ],
+        "parsed": "{\"tool\":\"pay_with_claim\",\"args\":{\"agentId\":\"WORKER-CODE\",\"quantity\":\"10000\"}} -> tool call error: The contract function \"mint\" reverted with the following signature:\n0x00183965\n\nUnable to decode signature \"0x00183965\" as it was not found on the provided ABI.\nMake sure you are using the correct ABI and that the error exists on it.\nYou can look up the decoded signature here: https://4byte.sourcify.dev/?q=0x00183965.\n \nContract Call:\n  address:   0xe0D9B879F9841ef6Be5Af9001ed8F015030324A4\n  function:  mint(bytes32 classId, bytes32 series, uint256 quantity, uint64 windowFrom, uint64 windowTo, (string printId, bytes32 series, uint64 printDate, uint256 nanoUsdPerSiu, uint64 validUntil), bytes signature)\n  args:          (0x2dc081a8d6d4714c79b5abd2e9b08c3a33b4ef1dcf946ef8b8cf6c495014f47b, 0x28b9bd511509601dd60a2359acd77ace0051da8b8fd3a5d60e5ce73794ae0f82, 10000, 1790601774, 1790602974, {\"printId\":\"2026-09-27-commodity\",\"series\":\"0x28b9bd511509601dd60a2359acd77ace0051da8b8fd3a5d60e5ce73794ae0f82\",\"printDate\":\"1790467200\",\"nanoUsdPerSiu\":\"1433000\",\"validUntil\":\"1790605392\"}, 0xc30da8fd6e350d011dfb541bc6f1fd7c5b0b356b9c35f6242487dd1f556629dd4bbb0795b626096888e907779f4355e6352ce8500a8ff32a93577e0825a60aa11b)\n  sender:    0x8Bf6De67D0B9705520Cdf5a348f5763e2175F363\n\nDocs: https://viem.sh/docs/contract/decodeErrorResult\nDetails: execution reverted\nVersion: viem@2.55.16"
+      },
+      {
+        "turn": 4,
+        "promptChars": 10967,
+        "projectedUsd": "0.0334275",
+        "realizedUsd": "0.00389375",
+        "latencyMs": 1341,
+        "stopReason": "stop",
+        "usage": {
+          "input": 2819,
+          "output": 37,
+          "cached_input": 2688,
+          "reasoning": 0
+        },
+        "contentBlockTypes": [
+          "role",
+          "content",
+          "annotations"
+        ],
+        "parsed": "{\"tool\":\"pay_with_claim\",\"args\":{\"agentId\":\"WORKER-CODE\",\"quantity\":\"10000\"}} -> tool call error: The contract function \"mint\" reverted with the following signature:\n0x00183965\n\nUnable to decode signature \"0x00183965\" as it was not found on the provided ABI.\nMake sure you are using the correct ABI and that the error exists on it.\nYou can look up the decoded signature here: https://4byte.sourcify.dev/?q=0x00183965.\n \nContract Call:\n  address:   0xe0D9B879F9841ef6Be5Af9001ed8F015030324A4\n  function:  mint(bytes32 classId, bytes32 series, uint256 quantity, uint64 windowFrom, uint64 windowTo, (string printId, bytes32 series, uint64 printDate, uint256 nanoUsdPerSiu, uint64 validUntil), bytes signature)\n  args:          (0x2dc081a8d6d4714c79b5abd2e9b08c3a33b4ef1dcf946ef8b8cf6c495014f47b, 0x28b9bd511509601dd60a2359acd77ace0051da8b8fd3a5d60e5ce73794ae0f82, 10000, 1790601774, 1790602974, {\"printId\":\"2026-09-27-commodity\",\"series\":\"0x28b9bd511509601dd60a2359acd77ace0051da8b8fd3a5d60e5ce73794ae0f82\",\"printDate\":\"1790467200\",\"nanoUsdPerSiu\":\"1433000\",\"validUntil\":\"1790605447\"}, 0xc61385ea3e5d43e43f2a42fdcfb388f671f618f95f17e0d76329e6045d85f3ee561f8675016a06784eb732ff1394f76e09c76b0b8966d5c6326b26b0ca6769d31c)\n  sender:    0x8Bf6De67D0B9705520Cdf5a348f5763e2175F363\n\nDocs: https://viem.sh/docs/contract/decodeErrorResult\nDetails: execution reverted\nVersion: viem@2.55.16"
+      }
+    ],
+    "WORKER-CODE": [
+      {
+        "turn": 1,
+        "promptChars": 12134,
+        "projectedUsd": "0.051068",
+        "realizedUsd": "0.010166",
+        "latencyMs": 5312,
+        "parsed": "{\"tool\":\"get_balances\",\"args\":{\"account\":\"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\"}}",
+        "stopReason": "end_turn",
+        "usage": {
+          "input": 4733,
+          "output": 70,
+          "cached_input": 0,
+          "reasoning": 14
+        },
+        "contentBlockTypes": [
+          "thinking",
+          "text"
+        ]
+      },
+      {
+        "turn": 2,
+        "promptChars": 12329,
+        "projectedUsd": "0.051166",
+        "realizedUsd": "0.011568",
+        "latencyMs": 3290,
+        "parsed": "{\"tool\":\"get_balances\",\"args\":{\"account\":\"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\"}}",
+        "stopReason": "end_turn",
+        "usage": {
+          "input": 4854,
+          "output": 186,
+          "cached_input": 0,
+          "reasoning": 130
+        },
+        "contentBlockTypes": [
+          "thinking",
+          "text"
+        ]
+      },
+      {
+        "turn": 3,
+        "promptChars": 12565,
+        "projectedUsd": "0.051284",
+        "realizedUsd": "0.066646",
+        "latencyMs": 3250,
+        "parsed": "{\"tool\":\"get_balances\",\"args\":{\"account\":\"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\"}}",
+        "stopReason": "end_turn",
+        "usage": {
+          "input": 9978,
+          "output": 4669,
+          "cached_input": 0,
+          "reasoning": 4611
+        },
+        "contentBlockTypes": [
+          "thinking",
+          "text"
+        ]
+      },
+      {
+        "turn": 4,
+        "promptChars": 12801,
+        "projectedUsd": "0.051402",
+        "realizedUsd": "0.19525",
+        "latencyMs": 109129,
+        "parsed": "{\"tool\":\"submit_job\",\"args\":{\"source\":\"import { readFileSync, writeFileSync } from 'node:fs';\\nimport { spawnSync } from 'node:child_process';\\nimport { join } from 'node:path';\\n\\nexport async function gate({ referenceDir, submissionDir }) {\\n  const submissionPath = join(submissionDir, 'answer.mjs');\\n\\n  let pinnedBody;\\n  try {\\n    pinnedBody = readFileSync(join(referenceDir, 'pinned-test-cases.txt'), 'utf8');\\n  } catch (e) {\\n    return { accept: false, reason: 'Could not read pinned test cases: ' + e.message };\\n  }\\n\\n  const submissionImportPath = submissionPath.replace(/\\\\\\\\/g, '/');\\n\\n  const heldOutBody = [\\n    'test(\\\"large all-same array\\\", () => { assert.deepStrictEqual(dedupeSorted(new Array(50).fill(7)), [7]); });',\\n    'test(\\\"two elements equal\\\", () => { assert.deepStrictEqual(dedupeSorted([2, 2]), [2]); });',\\n    'test(\\\"two elements distinct\\\", () => { assert.deepStrictEqual(dedupeSorted([2, 3]), [2, 3]); });',\\n    'test(\\\"does not mutate input\\\", () => { const input = [1, 1, 2, 2, 3]; const copy = [...input]; dedupeSorted(input); assert.deepStrictEqual(input, copy); });',\\n    'test(\\\"returns an array\\\", () => { assert.ok(Array.isArray(dedupeSorted([1, 1]))); });',\\n    'test(\\\"negative and zero adjacency\\\", () => { assert.deepStrictEqual(dedupeSorted([-1, -1, 0, 0, 1]), [-1, 0, 1]); });',\\n    'test(\\\"long run of duplicates mid array\\\", () => { assert.deepStrictEqual(dedupeSorted([1, 2, 2, 2, 2, 2, 3]), [1, 2, 3]); });',\\n    'test(\\\"floats with duplicates\\\", () => { assert.deepStrictEqual(dedupeSorted([1.5, 1.5, 2.5]), [1.5, 2.5]); });',\\n    'test(\\\"larger randomized property check against reference oracle\\\", () => {',\\n    '  function ref(arr) {',\\n    '    const out = [];',\\n    '    for (const x of arr) {',\\n    '      if (out.length === 0 || out[out.length - 1] !== x) out.push(x);',\\n    '    }',\\n    '    return out;',\\n    '  }',\\n    '  for (let trial = 0; trial < 200; trial++) {',\\n    '    const len = Math.floor(Math.random() * 20);',\\n    '    const arr = Array.from({ length: len }, () => Math.floor(Math.random() * 9) - 4).sort((a, b) => a - b);',\\n    '    assert.deepStrictEqual(dedupeSorted(arr), ref(arr));',\\n    '  }',\\n    '});',\\n    'test(\\\"does not require reference-identity tricks\\\", () => {',\\n    '  const arr = [0, 0, 0];',\\n    '  const result = dedupeSorted(arr);',\\n    '  assert.deepStrictEqual(result, [0]);',\\n    '  assert.notStrictEqual(result, undefined);',\\n    '});',\\n  ].join('\\\\n');\\n\\n  const testFileSource = [\\n    \\\"import { test } from 'node:test';\\\",\\n    \\\"import assert from 'node:assert/strict';\\\",\\n    \\\"import { dedupeSorted } from \\\" + JSON.stringify(submissionImportPath) + \\\";\\\",\\n    '',\\n    pinnedBody,\\n    '',\\n    heldOutBody,\\n    '',\\n  ].join('\\\\n');\\n\\n  const testFilePath = join(referenceDir, 'gate-test-run.mjs');\\n  try {\\n    writeFileSync(testFilePath, testFileSource, 'utf8');\\n  } catch (e) {\\n    return { accept: false, reason: 'Could not write test runner file: ' + e.message };\\n  }\\n\\n  const result = spawnSync(process.execPath, ['--test', testFilePath], {\\n    encoding: 'utf8',\\n    timeout: 15000,\\n  });\\n\\n  if (result.error) {\\n    return { accept: false, reason: 'Failed to execute test runner: ' + result.error.message };\\n  }\\n\\n  const stdout = result.stdout || '';\\n  const stderr = result.stderr || '';\\n\\n  const testCountMatch = stdout.match(/# tests (\\\\d+)/);\\n  const passCountMatch = stdout.match(/# pass (\\\\d+)/);\\n  const failCountMatch = stdout.match(/# fail (\\\\d+)/);\\n\\n  const expectedTotal = 18;\\n\\n  if (!testCountMatch || !passCountMatch || !failCountMatch) {\\n    return {\\n      accept: false,\\n      reason: 'Could not parse test summary from runner output; rejecting. stdout=' + stdout.slice(-3000) + ' stderr=' + stderr.slice(-1000),\\n    };\\n  }\\n\\n  const testsRun = parseInt(testCountMatch[1], 10);\\n  const passed = parseInt(passCountMatch[1], 10);\\n  const failed = parseInt(failCountMatch[1], 10);\\n\\n  if (result.status !== 0 || failed > 0 || testsRun < expectedTotal || passed < expectedTotal) {\\n    return {\\n      accept: false,\\n      reason: 'Gate check failed: exit=' + result.status + ' tests=' + testsRun + ' pass=' + passed + ' fail=' + failed + ' expectedTotal=' + expectedTotal + ' stdout=' + stdout.slice(-3000),\\n    };\\n  }\\n\\n  return {\\n    accept: true,\\n    reason: 'All pinned test cases and held-out edge/property checks executed and passed (' + passed + '/' + expectedTotal + ' total).',\\n  };\\n}\\n\"}}",
+        "stopReason": "end_turn",
+        "usage": {
+          "input": 10250,
+          "output": 17475,
+          "cached_input": 0,
+          "reasoning": 15353
+        },
+        "contentBlockTypes": [
+          "thinking",
+          "text"
+        ],
+        "gateResult": {
+          "passed": true,
+          "summary": "G1-G6 all passed"
+        }
+      }
+    ],
+    "WORKER-EXTRACT": [],
+    "ISSUER-A": [],
+    "ISSUER-B": []
+  }
+}

@@ -163,11 +163,27 @@ function outcome(
   return { windowIndex, result, headroomBefore: rows, headroomAfter: rows };
 }
 
+/** An ordinary same-window payment — NOT cover for a later window. */
 const mintEvent: CapacityEvent = {
   agentId: "ORCHESTRATOR",
   turn: 1,
   kind: "pay_with_claim",
   quantityMilliSiu: "10000",
+  forwardDated: false,
+};
+
+/** A claim genuinely dated for a later window — the only thing that counts as securing ahead. */
+const forwardDatedMint: CapacityEvent = { ...mintEvent, forwardDated: true };
+
+/** One failed purchase attempt, as the turn log records it. */
+const failedPurchaseTurn = {
+  turn: 1,
+  promptChars: 0,
+  projectedUsd: "0",
+  realizedUsd: "0",
+  latencyMs: 0,
+  parsed:
+    '{"tool":"pay_with_claim","args":{"quantity":"10000"}} -> tool call error: mint reverted NoIssuerWithHeadroom',
 };
 
 describe("window-3 outcome classification", () => {
@@ -184,12 +200,53 @@ describe("window-3 outcome classification", () => {
   it("refuses to call it scarcity when the orchestrator had secured capacity ahead", () => {
     // Same empty pool, opposite cause: this is a defect to investigate, not the finding.
     const verdict = classifyFinalWindow([
-      outcome(1, ["24000", "16000"], windowResult({ passed: true, capacityEvents: [mintEvent] })),
+      outcome(1, ["24000", "16000"], windowResult({ passed: true, capacityEvents: [forwardDatedMint] })),
       outcome(2, ["14000", "6000"], windowResult({ passed: true })),
       outcome(3, ["4000", "2000"], windowResult({ passed: false })),
     ]);
     expect(verdict.verdict).toBe("failed_with_capacity");
     expect(verdict.detail).toContain("not as the scarcity result");
+  });
+
+  it("does NOT treat an ordinary same-window payment as capacity secured ahead — the real misreading from the first three-window run", () => {
+    // Two same-window payments in windows 1 and 2, then a shut-out buyer in window 3. The first
+    // run's own classifier counted those two as "secured ahead" and reported the scarcity outcome
+    // as "the instrument working as intended", which inverted the result entirely.
+    const verdict = classifyFinalWindow([
+      outcome(1, ["24000", "16000"], windowResult({ passed: true, capacityEvents: [mintEvent] })),
+      outcome(2, ["14000", "0"], windowResult({ passed: true, capacityEvents: [mintEvent] })),
+      outcome(
+        3,
+        ["4000", "0"],
+        windowResult({
+          passed: true,
+          passedBy: "WORKER-CODE",
+          turnLogsByAgent: { ORCHESTRATOR: [failedPurchaseTurn] },
+        }),
+      ),
+    ]);
+    expect(verdict.verdict).toBe("scarcity");
+  });
+
+  it("calls it scarcity when the buyer was shut out, even if an unpaid worker delivered anyway", () => {
+    // passed=true says a gate exists, not that the work was bought. Conflating the two is exactly
+    // how a scarcity result gets reported as the instrument succeeding.
+    const verdict = classifyFinalWindow([
+      outcome(1, ["24000", "16000"], windowResult({ passed: true })),
+      outcome(2, ["14000", "0"], windowResult({ passed: true })),
+      outcome(
+        3,
+        ["4000", "0"],
+        windowResult({
+          passed: true,
+          passedBy: "WORKER-CODE",
+          turnLogsByAgent: { ORCHESTRATOR: [failedPurchaseTurn] },
+        }),
+      ),
+    ]);
+    expect(verdict.verdict).toBe("scarcity");
+    expect(verdict.detail).toContain("could not buy");
+    expect(verdict.detail).toContain("must not be read as it working");
   });
 
   it("refuses to call it scarcity when an issuer still had enough for the job", () => {
@@ -213,7 +270,7 @@ describe("window-3 outcome classification", () => {
 
   it("separates a completed window that used pre-secured capacity from one that got lucky", () => {
     const secured = classifyFinalWindow([
-      outcome(1, ["24000", "16000"], windowResult({ passed: true, capacityEvents: [mintEvent] })),
+      outcome(1, ["24000", "16000"], windowResult({ passed: true, capacityEvents: [forwardDatedMint] })),
       outcome(2, ["14000", "6000"], windowResult({ passed: true })),
       outcome(3, ["4000", "2000"], windowResult({ passed: true })),
     ]);

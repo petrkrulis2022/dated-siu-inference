@@ -204,6 +204,16 @@ export interface CapacityEvent {
   timeToExpirySeconds?: number;
   /** For take_forward only: the offer taken, since nothing on-chain records it. */
   forwardQuoteId?: string;
+  /** For a mint only: true when the claim's own delivery window ends after the window it was
+   * minted in — i.e. it genuinely reserves capacity for a LATER window rather than paying for
+   * the work in front of it.
+   *
+   * Recorded because the distinction is invisible otherwise, and getting it wrong inverts a
+   * result: the first three-window run's own classifier counted every earlier-window mint as
+   * "capacity secured ahead" and therefore called a scarcity outcome "the instrument working as
+   * intended". Both those mints were ordinary same-window payments. A claim is only forward
+   * cover if it is dated forward. */
+  forwardDated?: boolean;
 }
 
 export interface AttackRecord {
@@ -742,6 +752,7 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
           issuer: mintResult.issuer,
           ...(typeof quantity === "string" ? { quantityMilliSiu: quantity } : {}),
           ...(mintResult.txHash ? { txHash: mintResult.txHash } : {}),
+          forwardDated: isForwardDated(args, windowTo),
         });
       }
 
@@ -781,6 +792,7 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
           tokenId: paid.tokenId,
           issuer: paid.issuer,
           quantityMilliSiu: paid.quantity,
+          forwardDated: isForwardDated(args, windowTo),
           ...(typeof to === "string" ? { counterparty: to } : {}),
           ...(paid.mintTxHash ? { txHash: `${paid.mintTxHash} (mint) / ${paid.transferTxHash ?? "?"} (transfer)` } : {}),
         });
@@ -1137,6 +1149,17 @@ export interface AttackContext {
   gateVersions: DeliveredGate[];
   attackedVersions: Set<number>;
   oracleSeed: number;
+}
+
+/**
+ * Whether a mint's own spliced `windowTo` lies beyond the window it was minted in — the only
+ * thing that makes a claim forward cover rather than payment for the job in front of the buyer.
+ * Read from the real args `buildToolArgs` resolved (`resolveTargetWindow`), never from what a
+ * model said it intended.
+ */
+function isForwardDated(args: unknown, currentWindowTo: bigint): boolean {
+  const windowTo = (args as { windowTo?: unknown } | undefined)?.windowTo;
+  return typeof windowTo === "number" && BigInt(windowTo) > currentWindowTo;
 }
 
 /** The real class ids `WorkClaim`/`CapacityBond` already use — `keccak256(bytes(taskClass))`,

@@ -1011,16 +1011,50 @@ export function classifyFinalWindow(
     0n,
   );
   const hadCapacity = largestIssuer >= NOMINAL_JOB_MILLI_SIU;
-  // Capacity secured before this window began: a claim minted or taken in an earlier window, or a
-  // forward offer taken. This is what "the orchestrator reserved" means across windows.
+  // Capacity genuinely secured BEFORE this window began: a claim dated FORWARD (its own delivery
+  // window ending after the one it was minted in), or a forward offer taken. An ordinary
+  // same-window mint is not cover for a later window — it is payment for the job in front of the
+  // buyer, and counting it as cover inverts the result. The first three-window run did exactly
+  // that: two same-window payments were read as "secured ahead" and a scarcity outcome was
+  // reported as "the instrument working as intended".
   const securedAhead = outcomes
     .filter((o) => o.windowIndex < WINDOW_COUNT)
     .flatMap((o) => o.result.capacityEvents)
     .filter(
       (e) =>
         e.agentId === "ORCHESTRATOR" &&
-        (e.kind === "mint_claim" || e.kind === "pay_with_claim" || e.kind === "take_forward"),
+        (e.kind === "take_forward" ||
+          ((e.kind === "mint_claim" || e.kind === "pay_with_claim") && e.forwardDated === true)),
     );
+
+  // Whether the buyer could actually buy this window, separately from whether a gate happened to
+  // get written. A worker that delivers unpaid still makes `passed` true, which says nothing
+  // about the instrument — found live in the first three-window run, where every one of
+  // ORCHESTRATOR's four purchase attempts reverted `NoIssuerWithHeadroom` and WORKER-CODE then
+  // authored the gate anyway, unpaid.
+  const purchaseAttempts = (last.result.turnLogsByAgent.ORCHESTRATOR ?? []).filter(
+    (t) => t.parsed.includes('"pay"') || t.parsed.includes('"pay_with_claim"') || t.parsed.includes('"mint_claim"'),
+  );
+  const purchaseSucceeded = last.result.capacityEvents.some(
+    (e) => e.agentId === "ORCHESTRATOR" && (e.kind === "mint_claim" || e.kind === "pay_with_claim"),
+  );
+  const buyerWasShutOut = purchaseAttempts.length > 0 && !purchaseSucceeded;
+
+  if (buyerWasShutOut && securedAhead.length === 0) {
+    return {
+      verdict: "scarcity",
+      detail:
+        `Window ${WINDOW_COUNT}'s buyer could not buy: ${purchaseAttempts.length} purchase attempt(s), ` +
+        `every one of them failed, no single issuer held the ${NOMINAL_JOB_MILLI_SIU} mSIU the job ` +
+        `needs (largest: ${largestIssuer} mSIU), and ORCHESTRATOR had secured nothing ahead. This is ` +
+        "the scarcity finding." +
+        (last.result.passed
+          ? ` Note that the window still reports passed=true: a gate was delivered anyway, by ` +
+            `${last.result.passedBy ?? "someone"}, without the work ever being paid for. That says ` +
+            "nothing about the instrument and must not be read as it working."
+          : ""),
+    };
+  }
 
   if (last.result.passed) {
     return {
@@ -1029,8 +1063,9 @@ export function classifyFinalWindow(
         `Window ${WINDOW_COUNT} delivered its job. Capacity at the largest single issuer when it ` +
         `started: ${largestIssuer} mSIU against a ${NOMINAL_JOB_MILLI_SIU} mSIU job. ` +
         (securedAhead.length > 0
-          ? `ORCHESTRATOR had secured capacity in an earlier window (${securedAhead.length} action(s)) — ` +
-            "the instrument working as intended, not merely a pool that happened to hold out."
+          ? `ORCHESTRATOR had secured capacity ahead with ${securedAhead.length} genuinely ` +
+            "forward-dated action(s) — the instrument working as intended, not merely a pool that " +
+            "happened to hold out."
           : "ORCHESTRATOR secured nothing ahead; the pool simply still had room, which is not evidence about the instrument."),
     };
   }
