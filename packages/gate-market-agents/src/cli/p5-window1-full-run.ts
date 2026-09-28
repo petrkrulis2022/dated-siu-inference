@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { keccak256, stringToBytes, type Hex } from "viem";
+import { keccak256, stringToBytes } from "viem";
 import { createAdapterFor, loadApiKeysFromEnv } from "@touchstone/harness";
 import { printDateToUnixDay, seriesForPrint, usdPerSiuToNanoUsdPerSiu } from "../chain/rate-attestation.js";
 import {
@@ -12,7 +12,6 @@ import {
   CODE_ADVERSARIAL_STUBBED,
   CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
   CODE_HELD_OUT_INSTANCES,
-  PINNED_TEST_SUITE,
   runGateHardeningChecks,
 } from "@touchstone/task-pack-gate-hardening";
 import type { HeldOutInstance } from "@touchstone/task-pack-gate-hardening";

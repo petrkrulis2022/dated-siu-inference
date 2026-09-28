@@ -397,6 +397,70 @@ between them serve one 10,000 mSIU claim. A pool can therefore be large in total
 to serve a buyer — fragmentation is a genuine feature of the bilateral design (§4.3), not a bug in
 the routing.
 
+### 4.6a Rules are enforced where the call is made, not asserted in a brief
+
+**A prompt-level prohibition failed three times out of three, after already failing once.**
+`WORKER-CODE`'s own brief stated, in capitals, that a claim holder must never call `submit_job`
+for the work its claim covers — the holder does not owe that delivery, the routed issuer does, and
+redemption grades the issuer's own work. That rule was written *because* the same thing happened on
+2026-09-26. It was then broken in all three windows of the 2026-09-28 run, and every one of those
+windows reported `passed: true` off work nobody had bought — which is how a scarcity result came to
+be printed as the instrument succeeding.
+
+The general principle, recorded here because it is not specific to this rule: **any rule that
+matters is enforced at the tool boundary, and a rule that only lives in a prompt is a hope, not a
+rule.** `Runner` now takes a `toolGuard` consulted on every call after the static `allowedTools`
+list — the list cannot express this, since the tool is legitimately in the holder's grant and it is
+the *claim it currently holds* that makes this particular call illegitimate, which is live state.
+A refused call is recorded as a denial exactly like an allowlist violation, and its reason is
+returned to the model so it can act on it rather than seeing an opaque failure.
+
+The corollary is worth stating too: where an agent got something wrong because nothing told it the
+answer, that is an affordance to add, not a rule to enforce. Both appear in the same run — see
+§4.6b.
+
+### 4.6b Affordances an agent should never have had to infer
+
+Three of the five agents in the 2026-09-28 run were effectively non-functional, and none of the
+three causes was the model's judgment:
+
+- **ISSUER-B never once read its own headroom.** All nine `check_headroom` calls failed with
+  `Size of bytes "code" (bytes4) does not match expected size (bytes32)`. It passed the plain class
+  name — the class is called `code` in its own brief and in every rendered line it saw — and
+  nothing said a 32-byte hash was wanted or what that hash was. **Fixed at the boundary:** every
+  tool taking a `classId` now accepts either form and hashes the name itself.
+- **Neither issuer could establish its own identity.** ISSUER-B's friction log, verbatim: *"no tool
+  to read my own issuer address; inferred 0xD4Be… from issuance-limit math (400h × 0.08 SIU/h × 0.5
+  = 16000 mSIU)."* It derived its own address from arithmetic, correctly, because nothing would
+  simply tell it. **Fixed:** `whoami` returns the caller's own address, whether it is a bonded
+  issuer, and each of its lots with real current headroom — all spliced, never model-supplied.
+- **ISSUER-A never completed a turn, and it was our own configuration.** Both of its real delivery
+  attempts ended `stopReason: "length"` at exactly its 1500-token output cap, mid-JSON, having
+  emitted a valid `{"tool":"submit_job","args":{…}` that was then truncated. An issuer authors
+  gates — that is what redemption grades — on a third of the budget the worker gets for the
+  identical task. **Fixed:** issuers get the same 4500 as workers. It was not a model that cannot
+  emit the tool-call format, which is exactly what it looked like from the parse failure alone.
+
+### 4.6c The default path, and why it had never run
+
+A claim cannot default inside its own window: `settleWindowClose` reverts `WindowNotClosedYet`
+until the window has closed, and agents only act while their window is open. So the default path is
+only reachable **across** windows — and a window that does not know what the previous one left
+outstanding can never reach it at all. Combined with the fact that no agent held
+`settle_window_close`, and that the tool needs a real publisher-signed rate attestation that no
+model can produce, the enforcement the whole bond design rests on had never once run in an agent
+context.
+
+The 2026-09-28 run is what made that concrete: ISSUER-A was paid for two claims, served neither,
+and nobody could trigger the default that exists for exactly that. **Without enforcement, an issuer
+can take payment and simply not deliver** — which is the finding, not a flaw in it.
+
+Now wired: unserved claims are carried forward between windows and shown to every agent holding
+`settle_window_close`, with the exact call; the loop splices the claim's own identity and signs the
+attestation. The attestation carries the print's **own real date**, never one bent to match the
+claim — if the print this run prices against is not dated the day the claim's window closed, the
+contract refuses the default with `StalePrintDate`, and that refusal is correct.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make

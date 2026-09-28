@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Hex } from "viem";
 import type { ToolDefinition } from "./types.js";
+import { resolveClassId } from "./class-id.js";
 
 /**
  * `quote_forward` — an issuer states its own terms for a window that has not started yet.
@@ -61,7 +62,7 @@ export const quoteForwardTool: ToolDefinition<Args, QuoteForwardResult> = {
 
     const headroom = await ctx.deps.chainReader.headroom(
       args.issuerAddress as Hex,
-      args.classId as Hex,
+      resolveClassId(args.classId),
     );
 
     return {

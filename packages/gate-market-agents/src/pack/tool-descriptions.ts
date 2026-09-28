@@ -46,6 +46,8 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
     "quote_forward(forWindow, rateUsdPerSiu, maxQuantityMilliSiu) -> as an ISSUER: states your own terms for a LATER window of this run — your price per SIU and how much capacity you will make available at it. This is the only tool here that lets you name your own number. It is recorded whether or not anyone takes it, together with your real headroom at the moment you quoted. It is NOT binding: nothing on-chain holds you to it, and a claim minted later still prices at the published print rate.",
   take_forward:
     "take_forward(quoteId) -> records that you are acting on an issuer's stated forward terms. Nothing is paid, minted or reserved — you still buy the work separately, at the published print rate. It exists so that taking an offer and ignoring one are distinguishable.",
+  whoami:
+    "whoami() -> your own address, whether you are a bonded issuer, and every class you hold capacity in with its real current headroom and issuance limit. Takes no arguments — nothing about you is model-supplied.",
   get_balances:
     "get_balances(account, tokenIds?) -> real USDC balance (decimal and integer minor-unit forms) plus claim balances",
   get_print: "get_print(printId) -> the real print body plus whether it's final",

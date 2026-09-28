@@ -37,6 +37,7 @@ import {
   F1_ORACLE_TRIAL_SEED,
   classIdFor,
   runFullRunWindow,
+  type OutstandingClaim,
   type FullRunWindowResult,
   type CapacityEvent,
   type JobEnvelope,
@@ -333,6 +334,9 @@ async function main(): Promise<void> {
   };
 
   const outcomes: WindowOutcome[] = [];
+  // Claims minted in a window whose issuer never served them. Carried into later windows so the
+  // default path is reachable at all — see runFullRunWindow's own `outstandingClaims` comment.
+  const outstandingClaims: OutstandingClaim[] = [];
 
   for (let windowIndex = 1; windowIndex <= WINDOW_COUNT; windowIndex++) {
     const { from: windowFrom, to: windowTo } = windowBoundsByIndex[windowIndex];
@@ -404,6 +408,7 @@ async function main(): Promise<void> {
       windowIndex,
       windowCount: WINDOW_COUNT,
       windowBoundsByIndex,
+      outstandingClaims: [...outstandingClaims],
       forwardBook,
       mintContext,
       oracleSeed: F1_ORACLE_TRIAL_SEED,
@@ -422,6 +427,32 @@ async function main(): Promise<void> {
 
     const headroomAfter = await headroomRows();
     const outcome: WindowOutcome = { windowIndex, result, headroomBefore, headroomAfter };
+
+    // What this window minted and nobody served. Read from the real capacity events rather than
+    // from any agent's account of what it did: a mint with no matching serve_redemption is an
+    // unserved claim, whatever anyone says about it. A claim settled this window drops off the
+    // list for every later one.
+    const servedThisWindow = new Set(
+      result.capacityEvents.filter((e) => e.kind === "serve_redemption").map((e) => e.tokenId),
+    );
+    const settledThisWindow = new Set(
+      result.capacityEvents.filter((e) => e.kind === "settle_window_close").map((e) => e.tokenId),
+    );
+    for (let i = outstandingClaims.length - 1; i >= 0; i--) {
+      if (settledThisWindow.has(outstandingClaims[i].tokenId)) outstandingClaims.splice(i, 1);
+    }
+    for (const e of result.capacityEvents) {
+      if (e.kind !== "mint_claim" && e.kind !== "pay_with_claim") continue;
+      if (!e.tokenId || servedThisWindow.has(e.tokenId)) continue;
+      outstandingClaims.push({
+        tokenId: e.tokenId,
+        holder: e.counterparty ?? addresses.ORCHESTRATOR,
+        holderAgentId: e.counterparty === addresses["WORKER-CODE"] ? "WORKER-CODE" : undefined,
+        issuerAgentId: e.issuer === addresses["ISSUER-A"] ? "ISSUER-A" : e.issuer === addresses["ISSUER-B"] ? "ISSUER-B" : undefined,
+        quantityMilliSiu: e.quantityMilliSiu,
+        mintedInWindow: windowIndex,
+      });
+    }
 
     const depletion = EXTERNAL_DEPLETION_MILLI_SIU[windowIndex];
     if (depletion !== undefined) {
@@ -745,11 +776,24 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${WINDOW_COUNT})
   whichever issuer has headroom — it may not be you, and it may not happen on your first turn).
   Work paid for in dollars now draws on the same bonded capacity of yours that a claim does.
 
+  WHO YOU ARE
+  {"tool": "whoami", "args": {}} returns your own address, whether you are a bonded issuer, and
+  every class you hold capacity in with its real headroom and issuance limit. You never need to
+  infer any of that. Wherever a tool takes a classId you may pass the plain class name — "code" —
+  and it is hashed for you; a real 0x… id works too.
+
   Once a claim mints against you and its holder presents it, YOU owe the real delivery — never the
   holder. Once you see "A CLAIM WAS PRESENTED AGAINST YOU" with its real tokenId/holder/quantity,
   do the work yourself with submit_job until it genuinely passes, then call serve_redemption to
   report ONLY the pass. Never report a fail: an undelivered claim defaults against your own bond
   automatically once the window closes.
+
+  WHEN A CLAIM WAS NEVER SERVED
+  A claim whose delivery window has closed without being served is in default, and the defaulting
+  issuer's own bond pays the holder. That settlement is permissionless — anyone may trigger it,
+  including you, including against your own bond. If any are outstanding you will see them listed
+  above with the exact call. Triggering it is not an admission of anything; it is how the bond
+  does the job it exists for. Nothing here says whether to.
 
 ${forwardSection}
 
@@ -760,8 +804,8 @@ ${runShapeFacts}`;
   };
 
   const issuerTools: RosterAgentConfig["availableTools"] = isLastWindow
-    ? ["mint_claim", "submit_job", "serve_redemption", "check_headroom", "get_print"]
-    : ["mint_claim", "submit_job", "serve_redemption", "check_headroom", "get_print", "quote_forward"];
+    ? ["whoami", "mint_claim", "submit_job", "serve_redemption", "check_headroom", "get_print", "settle_window_close"]
+    : ["whoami", "mint_claim", "submit_job", "serve_redemption", "check_headroom", "get_print", "settle_window_close", "quote_forward"];
 
   return [
     {
@@ -832,7 +876,15 @@ ${runShapeFacts}`;
       address: addresses[issuer],
       erc8004Id: erc8004IdFor(addresses[issuer]),
       rpcUrl,
-      maxOutputTokens: 1500,
+      // 4500, matching the workers, not the 1500 an issuer used to get. An issuer owes the
+      // delivery on every claim minted against it — redemption grades the issuer's own work —
+      // so it authors gates exactly as a worker does, and a gate module does not fit in 1500
+      // output tokens. Found live, 2026-09-28: ISSUER-A's only two real attempts to deliver
+      // both ended `stopReason: "length"` at exactly 1500 output tokens, mid-JSON, having
+      // emitted a perfectly valid `{"tool":"submit_job","args":{...}` that was then truncated.
+      // It was doing the right thing and being cut off — not a model that cannot emit the
+      // format, which is what it looked like from the parse failure alone.
+      maxOutputTokens: 4500,
       temperature: 0,
       provider: registryEntry(models[issuer]).provider,
     })),

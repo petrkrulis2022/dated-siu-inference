@@ -31,6 +31,7 @@ import { RunRecorder, type RunManifest } from "../run-recorder/recorder.js";
 import { FrictionLogWriter, type FrictionLogEntry } from "../friction/log.js";
 import { QuoteBoard } from "./quote-board.js";
 import { ForwardQuoteBook, type ForwardQuote } from "./forward-book.js";
+import { classIdFor } from "../tools/class-id.js";
 import { RedemptionTracker } from "./redemption-tracker.js";
 import { buildTurnPrompt } from "./prompt.js";
 import { ModelResponseParseError, parseModelResponse, type FrictionReport } from "./parse-tool-call.js";
@@ -163,6 +164,16 @@ export interface FullRunWindowOptions {
    * slower way to pay for work about to be consumed rather than a reservation of future capacity —
    * the instrument's whole claimed property. Absent for a single-window run. */
   windowBoundsByIndex?: Record<number, { from: bigint; to: bigint }>;
+  /** Claims minted in an EARLIER window that their issuer never served, carried forward so this
+   * window's issuers can settle them.
+   *
+   * A claim cannot default inside its own window — `settleWindowClose` reverts
+   * `WindowNotClosedYet` until the window it was minted for has actually closed, and agents only
+   * act while their own window is open. So the default path is only ever reachable across
+   * windows, and a window that does not know what the previous one left outstanding can never
+   * reach it at all. That is exactly why it had never run in an agent context before 2026-09-28
+   * despite being the enforcement the whole bond design rests on. */
+  outstandingClaims?: readonly OutstandingClaim[];
   /** The forward-terms book. Supplied by a multi-window runner so it survives from one window to
    * the next — an offer stated in window 1 for window 3 has to still be there in window 3, and a
    * book created per window could never hold one. A fresh one is made when omitted. */
@@ -214,6 +225,17 @@ export interface CapacityEvent {
    * intended". Both those mints were ordinary same-window payments. A claim is only forward
    * cover if it is dated forward. */
   forwardDated?: boolean;
+}
+
+/** A claim an earlier window minted and nobody ever served. */
+export interface OutstandingClaim {
+  tokenId: string;
+  /** The agent that held it when its window closed — whose balance the settlement pays out. */
+  holder: string;
+  holderAgentId?: AgentId;
+  issuerAgentId?: AgentId;
+  quantityMilliSiu?: string;
+  mintedInWindow: number;
 }
 
 export interface AttackRecord {
@@ -420,6 +442,33 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
         deps: options.deps,
         ceiling: options.budget,
         allowedTools: agent.availableTools,
+        // Structural enforcement of the one rule a brief alone could not hold. A holder does not
+        // owe its claim's delivery — the routed issuer does, and redemption grades that issuer's
+        // own work (WorkClaim.sol's own top doc comment). WORKER-CODE's brief said exactly this,
+        // in capitals, and it authored the gate anyway in all three windows of the 2026-09-28
+        // run, after the same thing had already happened on 2026-09-26. Every one of those
+        // windows then reported passed: true off work nobody had bought, which is how a scarcity
+        // result came to be printed as the instrument succeeding.
+        //
+        // Deliberately keyed on holding rather than on identity: an agent that holds no claim
+        // may author freely, and the routed issuer may always author — it is the one being
+        // graded. Refused only for the agent currently standing on a live claim for this job.
+        toolGuard: (toolName) => {
+          if (toolName !== "submit_job") return null;
+          const state = redemption.state();
+          if (state.served) return null;
+          const holdsIt =
+            state.transferredTo === agent.agentId || state.holder === agent.agentId;
+          if (!holdsIt) return null;
+          if (state.issuerAgentId === agent.agentId) return null;
+          return (
+            `you hold a work claim (tokenId ${state.tokenId ?? "unknown"}) for this job, so its ` +
+            `routed issuer ${state.issuerAgentId ?? "(unknown)"} owes the delivery, not you. ` +
+            "Redemption grades that issuer's own work; authoring it yourself would be doing the " +
+            "issuer's job with no way for anyone to attribute it correctly. Present the claim " +
+            "and wait, or transfer it on."
+          );
+        },
       }),
     ]),
   );
@@ -496,11 +545,41 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
     // one turn per window rather than every turn.
     const mayStillQuoteForward =
       canQuoteForward && forwardBook.quotesBy(agent.agentId).every((q) => q.statedInWindow !== windowIndex);
+    // An unsettled claim from an earlier window is a real inbox item for whoever can settle it —
+    // and unlike the forward invitation it genuinely is an arrival, so it belongs in the
+    // wait-gate's own definition of "something to act on". Shown only to agents that actually
+    // hold the tool.
+    const outstandingClaims = options.outstandingClaims ?? [];
+    const settleableText =
+      outstandingClaims.length > 0 && agent.availableTools.includes("settle_window_close")
+        ? `CLAIMS LEFT UNSETTLED BY AN EARLIER WINDOW\n` +
+          `  Their delivery windows have closed. A claim that was never served defaults against\n` +
+          `  its own issuer's bond, paying the holder — that is what the bond is for, and it is\n` +
+          `  permissionless: anyone may trigger it, including you.\n` +
+          outstandingClaims
+            .map(
+              (c) =>
+                `  tokenId ${c.tokenId} — minted in window ${c.mintedInWindow}` +
+                (c.quantityMilliSiu ? `, ${c.quantityMilliSiu} mSIU` : "") +
+                (c.issuerAgentId ? `, issued by ${c.issuerAgentId}` : "") +
+                (c.holderAgentId ? `, held by ${c.holderAgentId}` : "") +
+                `\n    settle it with {"tool": "settle_window_close", "args": {"tokenId": "${c.tokenId}"}}`,
+            )
+            .join("\n")
+        : "";
+
     const forwardInvitation = mayStillQuoteForward
       ? `FORWARD TERMS\n  You have not stated terms for a later window of this run yet. You may (quote_forward), ` +
         `or you may choose not to — nothing here suggests a price, a quantity, or whether to quote at all.`
       : "";
-    const boardSectionText = [marketBoardText, redemptionText, transferText, deliveryOwedText, forwardInvitation]
+    const boardSectionText = [
+      marketBoardText,
+      redemptionText,
+      transferText,
+      deliveryOwedText,
+      settleableText,
+      forwardInvitation,
+    ]
       .filter(Boolean)
       .join("\n\n");
 
@@ -678,6 +757,7 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
         windowIndex,
         windowCount,
         windowBoundsByIndex: options.windowBoundsByIndex,
+        outstandingClaims: options.outstandingClaims,
         caller: { agentId: agent.agentId, erc8004Id: agent.erc8004Id },
       });
     } catch (err) {
@@ -1121,6 +1201,8 @@ export interface BuildToolArgsContext {
   windowCount?: number;
   /** See `FullRunWindowOptions.windowBoundsByIndex`. */
   windowBoundsByIndex?: Record<number, { from: bigint; to: bigint }>;
+  /** See `FullRunWindowOptions.outstandingClaims`. */
+  outstandingClaims?: readonly OutstandingClaim[];
 }
 
 /** Gate v1 -> attacks -> the builder may revise -> attacks again. Capped so an adaptive exchange
@@ -1162,13 +1244,10 @@ function isForwardDated(args: unknown, currentWindowTo: bigint): boolean {
   return typeof windowTo === "number" && BigInt(windowTo) > currentWindowTo;
 }
 
-/** The real class ids `WorkClaim`/`CapacityBond` already use — `keccak256(bytes(taskClass))`,
- * matching `devnet/deploy.ts`'s own `CLASS_CODE`/`CLASS_EXTRACT` computation exactly (confirmed
- * independently, not re-derived by guesswork) without importing a devnet-only module into a
- * real-chain loop. */
-export function classIdFor(taskClass: TaskClass): Hex {
-  return keccak256(stringToBytes(taskClass));
-}
+/** Re-exported from `tools/class-id.ts`, which is now the single definition — the same module
+ * the tool boundary itself hashes with, so a class id the loop splices and one an agent names by
+ * plain string can never resolve differently. */
+export { classIdFor };
 
 /** Found live, 2026-09-26 (P5 window 1): ISSUER-A copied the redemption tracker's own rendered
  * "quantity 10000" text into a JSON *number* rather than the decimal string every real tool
@@ -1324,6 +1403,69 @@ function resolveTargetWindow(
       ...(typeof raw.actualAmountUsd === "string" ? { actualAmountUsd: raw.actualAmountUsd } : {}),
       receiptRef: keccak256(stringToBytes(`receipt:${ctx.job.jobId}`)),
     };
+  }
+
+  if (tool === "settle_window_close") {
+    if (!ctx.mintContext) {
+      throw new Error("settle_window_close: this window has no mintContext, so no attestation can be signed.");
+    }
+    const raw = (rawArgs ?? {}) as { tokenId?: unknown };
+    const outstanding = ctx.outstandingClaims ?? [];
+    // A model names which claim by its tokenId, exactly as it appears in the outstanding list it
+    // was shown; everything else — the holder whose balance pays out, and the whole rate
+    // attestation — is resolved or signed here. A model cannot produce a real publisher
+    // signature, which is precisely why this tool was unreachable before.
+    const named = typeof raw.tokenId === "string" ? raw.tokenId : undefined;
+    const claim = named
+      ? outstanding.find((c) => c.tokenId === named)
+      : outstanding.length === 1
+        ? outstanding[0]
+        : undefined;
+    if (!claim) {
+      throw new Error(
+        outstanding.length === 0
+          ? "settle_window_close: no claim from an earlier window is outstanding — there is nothing to settle."
+          : `settle_window_close: name which claim to settle with {"tokenId": "..."} — outstanding: ${outstanding.map((c) => c.tokenId).join(", ")}.`,
+      );
+    }
+
+    const validUntil = BigInt(Math.floor(Date.now() / 1000)) + ctx.mintContext.validitySeconds;
+    // The print's own real date, never bent to match the claim. If the print this run prices
+    // against is not dated the day the claim's window closed, the contract refuses the Default
+    // with `StalePrintDate` and that refusal is correct — attesting a date a print does not have
+    // to make a settlement go through would be falsifying the thing being settled against.
+    const signature = await signRateAttestation(
+      {
+        printId: ctx.mintContext.printId,
+        series: ctx.mintContext.series,
+        printDate: ctx.mintContext.printDate,
+        nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu,
+        validUntil,
+      },
+      ctx.deployment.network.chainId,
+      ctx.deployment.workClaim.address as Hex,
+      ctx.mintContext.publisherPrivateKeyHex,
+    );
+    return {
+      tokenId: claim.tokenId,
+      holder: claim.holder,
+      printId: ctx.mintContext.printId,
+      series: ctx.mintContext.series,
+      printDate: ctx.mintContext.printDate.toString(),
+      nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu.toString(),
+      validUntil: validUntil.toString(),
+      signature,
+    };
+  }
+
+  if (tool === "whoami") {
+    const address = ctx.caller ? ctx.agentAddressByAgentId[ctx.caller.agentId] : undefined;
+    if (!address) {
+      throw new Error("whoami: no caller identity on this turn.");
+    }
+    // The whole point of the tool is that an agent should not have to know, guess, or derive
+    // this — so it is spliced from the roster, never read from what the model supplied.
+    return { address };
   }
 
   if (tool === "quote_forward") {

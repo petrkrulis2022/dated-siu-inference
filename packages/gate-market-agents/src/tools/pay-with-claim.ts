@@ -4,6 +4,7 @@ import { minorUnitsToUsd, retryUntilConclusive } from "@touchstone/sdk";
 import { WORK_CLAIM_ABI } from "../chain/abi.js";
 import { writeAndConfirm } from "../chain/write.js";
 import type { ToolDefinition } from "./types.js";
+import { resolveClassId } from "./class-id.js";
 
 /**
  * `pay_with_claim` — paying a counterparty in fSIU in a single tool call.
@@ -77,7 +78,7 @@ export const payWithClaimTool: ToolDefinition<Args, PayWithClaimResult> = {
       abi: WORK_CLAIM_ABI,
       functionName: "mint",
       args: [
-        args.classId as Hex,
+        resolveClassId(args.classId),
         args.series as Hex,
         BigInt(args.quantity),
         BigInt(args.windowFrom),

@@ -10,6 +10,7 @@ import { settleEscrowTool } from "./settle-escrow.js";
 import { reserveForWorkTool } from "./reserve-for-work.js";
 import { quoteForwardTool } from "./quote-forward.js";
 import { takeForwardTool } from "./take-forward.js";
+import { whoamiTool } from "./whoami.js";
 import { serveRedemptionTool } from "./serve-redemption.js";
 import { submitJobTool } from "./submit-job.js";
 import { submitAttackTool } from "./submit-attack.js";
@@ -42,6 +43,7 @@ export const TOOLS = {
   reserve_for_work: reserveForWorkTool,
   quote_forward: quoteForwardTool,
   take_forward: takeForwardTool,
+  whoami: whoamiTool,
   serve_redemption: serveRedemptionTool,
   submit_job: submitJobTool,
   submit_attack: submitAttackTool,

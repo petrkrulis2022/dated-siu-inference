@@ -131,6 +131,14 @@ function renderSensitivityBlock(print: Print): string {
 }
 
 function renderMethodologyAndSigning(print: Print, runsUrl: string, chain: ChainInfo): string {
+  // The rule set this print was computed under, as distinct from `methodology_version` (which has
+  // read "v0-draft" on every print ever published and so distinguishes nothing). A replicator
+  // recomputing an old print needs to know which revision's rules applied on the day — it is what
+  // cli/verify-support.ts itself keys historical reconstruction off. Omitted rather than shown
+  // blank on prints published before the field existed.
+  const revisionRow = print.methodology_revision
+    ? `<dt>Methodology revision</dt><dd>${esc(print.methodology_revision)}</dd>`
+    : "";
   const methodologyLine = print.methodology_url
     ? `<a href="${esc(print.methodology_url)}">${esc(print.methodology_version)}</a>`
     : esc(print.methodology_version);
@@ -145,6 +153,7 @@ function renderMethodologyAndSigning(print: Print, runsUrl: string, chain: Chain
     <h2>Methodology, signature &amp; anchor</h2>
     <dl class="kv">
       <dt>Methodology</dt><dd>${methodologyLine}</dd>
+      ${revisionRow}
       <dt>Cost of production</dt><dd>${esc(usd(print.cost_of_production_usd))}</dd>
       <dt>Signature</dt><dd title="${esc(print.signature)}">${esc(truncateHex(print.signature))}</dd>
       <dt>Public key</dt><dd title="${esc(print.public_key)}">${esc(truncateHex(print.public_key))}</dd>

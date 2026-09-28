@@ -20,6 +20,38 @@ export interface RunnerOptions {
    * scripted tests drive tools directly, with no skill in the loop, and must keep working
    * unchanged. A real run (WP-7) should always pass this. */
   allowedTools?: readonly ToolName[];
+  /**
+   * A dynamic, per-call refusal check, consulted after the static `allowedTools` list. Returns a
+   * reason to refuse, or null to permit.
+   *
+   * Exists because a rule that only lives in a prompt is not a rule. WORKER-CODE's own brief
+   * forbade a claim holder from calling `submit_job` for work it holds a claim on — the holder
+   * does not owe that delivery, its issuer does — and it did it anyway in all three windows of
+   * the 2026-09-28 three-window run, after the identical thing had already happened on
+   * 2026-09-26. Every one of those windows then reported `passed: true` off work nobody had
+   * bought. `allowedTools` cannot express this: the tool is legitimately in the holder's grant,
+   * it is the *claim it currently holds* that makes this particular call illegitimate, which is
+   * live state rather than a static list.
+   *
+   * General principle, recorded in docs/gate-market-spec.md alongside this: any rule that
+   * actually matters is enforced where the call is made, not asserted in a brief and hoped for.
+   */
+  toolGuard?: (toolName: ToolName) => string | null;
+}
+
+/** A call the runtime refused on live state rather than on the static allowlist — see
+ * `RunnerOptions.toolGuard`. Recorded as a denial exactly like `ToolNotAllowedError`, and
+ * surfaced to the calling model as a real, disclosed tool failure so it can act on the reason
+ * rather than silently having the call swallowed. */
+export class ToolRefusedError extends Error {
+  constructor(
+    public readonly agentId: AgentId,
+    public readonly toolName: ToolName,
+    public readonly reason: string,
+  ) {
+    super(`${agentId} may not call "${toolName}" right now: ${reason}`);
+    this.name = "ToolRefusedError";
+  }
 }
 
 /** Spec §12.3: "the runtime denies any call outside that list and records the denial." Thrown
@@ -62,6 +94,7 @@ export class Runner {
   #deps: RunnerDeps;
   #ceiling: SpendCeiling;
   #allowedTools?: readonly ToolName[];
+  #toolGuard?: (toolName: ToolName) => string | null;
   #dualRenderer = new DualRenderer();
   #records: ToolCallRecord[] = [];
   #deniedCalls: DeniedToolCall[] = [];
@@ -76,6 +109,7 @@ export class Runner {
     this.#deps = options.deps;
     this.#ceiling = options.ceiling;
     this.#allowedTools = options.allowedTools;
+    this.#toolGuard = options.toolGuard;
   }
 
   /**
@@ -112,6 +146,15 @@ export class Runner {
     if (this.#allowedTools && !this.#allowedTools.includes(toolName)) {
       this.#deniedCalls.push({ turn: meta.turn, jobId: meta.jobId, toolName });
       throw new ToolNotAllowedError(this.agentId, toolName);
+    }
+
+    // After the static allowlist, before any argument parsing or signing: a call this agent is
+    // generally permitted to make but must not make *now*, given live state. Recorded as a
+    // denial exactly like an allowlist violation.
+    const refusal = this.#toolGuard?.(toolName);
+    if (refusal) {
+      this.#deniedCalls.push({ turn: meta.turn, jobId: meta.jobId, toolName });
+      throw new ToolRefusedError(this.agentId, toolName, refusal);
     }
 
     // See tools/index.ts's own doc comment on why TOOLS carries no shared supertype annotation —

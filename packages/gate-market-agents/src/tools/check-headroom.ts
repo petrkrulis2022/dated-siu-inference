@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Hex } from "viem";
 import type { ToolDefinition } from "./types.js";
+import { resolveClassId } from "./class-id.js";
 
 const argsSchema = z.object({
   /** Omit to see every issuer bonded in this class. Naming one narrows the answer to it. */
@@ -38,7 +39,9 @@ export const checkHeadroomTool: ToolDefinition<Args, HeadroomResult> = {
   name: "check_headroom",
   argsSchema,
   async handler(ctx, args) {
-    const classId = args.classId as Hex;
+    // Accepts "code" or a real 0x… id — see resolveClassId for the nine consecutive failed
+    // calls that made this a boundary concern rather than a caller's problem.
+    const classId = resolveClassId(args.classId);
     const issuers = args.issuer
       ? [args.issuer as Hex]
       : await ctx.deps.chainReader.issuersForClass(classId);

@@ -41,11 +41,11 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
@@ -156,7 +156,7 @@ jobs:
           }
           EOF
 
-      # This push uses the default GITHUB_TOKEN actions/checkout@v4 wires up — and GitHub
+      # This push uses the default GITHUB_TOKEN actions/checkout@v5 wires up — and GitHub
       # deliberately does not let a GITHUB_TOKEN-authored push trigger other push-triggered
       # workflows (infinite-loop prevention), so ci.yml does NOT run against this commit. Known
       # and accepted, not an oversight: this workflow already runs build, compute, sign, anchor

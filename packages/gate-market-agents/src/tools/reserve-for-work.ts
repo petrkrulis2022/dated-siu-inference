@@ -4,6 +4,7 @@ import { quoteHashHex, usdToMinorUnits, type TouchstoneQuote } from "@touchstone
 import { WORK_CLAIM_ABI } from "../chain/abi.js";
 import { writeAndConfirm } from "../chain/write.js";
 import type { ToolDefinition } from "./types.js";
+import { resolveClassId } from "./class-id.js";
 
 /**
  * `reserve_for_work` — the seller's commitment of real bonded capacity to a dollar-paid job.
@@ -82,7 +83,7 @@ export const reserveForWorkTool: ToolDefinition<Args, ReserveForWorkResult> = {
       address: ctx.deps.deployment.workClaim.address as Hex,
       abi: WORK_CLAIM_ABI,
       functionName: "reserveForWork",
-      args: [quoteHash, args.classId as Hex, quantity],
+      args: [quoteHash, resolveClassId(args.classId), quantity],
     });
 
     for (const log of receipt.logs) {
