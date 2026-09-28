@@ -7,6 +7,9 @@ import { payWithClaimTool } from "./pay-with-claim.js";
 import { redeemClaimTool } from "./redeem-claim.js";
 import { settleWindowCloseTool } from "./settle-window-close.js";
 import { settleEscrowTool } from "./settle-escrow.js";
+import { reserveForWorkTool } from "./reserve-for-work.js";
+import { quoteForwardTool } from "./quote-forward.js";
+import { takeForwardTool } from "./take-forward.js";
 import { serveRedemptionTool } from "./serve-redemption.js";
 import { submitJobTool } from "./submit-job.js";
 import { submitAttackTool } from "./submit-attack.js";
@@ -17,7 +20,11 @@ export type { ToolDefinition } from "./types.js";
 
 /** Spec §10's WP-4 tool list, dispatched by name — plus `submit_attack` (2026-09-27), the
  * adversary's own action, which §10 never enumerated because the adversary role in §3 had no
- * mechanism behind it until then. Deliberately no
+ * mechanism behind it until then — and `reserve_for_work` (2026-09-28), the seller's commitment
+ * of bonded capacity to a dollar-paid job, which §10 never enumerated either because until then
+ * the USDC route consumed no capacity at all — and `quote_forward`/`take_forward`
+ * (2026-09-28), the only way in this roster for a seller to name its own price and for a buyer to
+ * record acting on it, which §10 never enumerated because until then no window followed another. Deliberately no
  * `Record<string, ToolDefinition>` annotation here — each tool keeps its own precise
  * `ToolDefinition<Args, Result>` type; widening to a shared supertype would hit TypeScript's
  * contravariant parameter checking on `handler` for no benefit, since `Runner.callTool` below
@@ -32,6 +39,9 @@ export const TOOLS = {
   redeem_claim: redeemClaimTool,
   settle_window_close: settleWindowCloseTool,
   settle_escrow: settleEscrowTool,
+  reserve_for_work: reserveForWorkTool,
+  quote_forward: quoteForwardTool,
+  take_forward: takeForwardTool,
   serve_redemption: serveRedemptionTool,
   submit_job: submitJobTool,
   submit_attack: submitAttackTool,

@@ -38,6 +38,7 @@ async function runForgeBuild(): Promise<void> {
 
 interface RawDeployment {
   mockUsdc: Hex;
+  escrow: Hex;
   capacityBond: Hex;
   claimRouter: Hex;
   workClaim: Hex;
@@ -77,6 +78,7 @@ async function runForgeScriptDeploy(rpcUrl: string, publisherAddress: Hex): Prom
 
   return {
     mockUsdc: addressFor("MockUSDC"),
+    escrow: addressFor("TouchstoneEscrow"),
     capacityBond: addressFor("CapacityBond"),
     claimRouter: addressFor("ClaimRouter"),
     workClaim: addressFor("WorkClaim"),
@@ -117,6 +119,11 @@ const LOT_HOURS: Record<AgentId, { code: bigint; extract: bigint } | null> = {
 export interface DevnetHandle {
   rpcUrl: string;
   deployment: GateMarketDeployment;
+  /** The `TouchstoneEscrow` this devnet's `WorkClaim` reads reservations against — deployed by
+   * the same script, since an ephemeral chain has no prior deployment to point at, and
+   * `reserveForWork` reads real escrow state rather than trusting its caller. This is what a
+   * scenario passes as `deps.escrowAddress`. */
+  escrowAddress: Hex;
   agents: Record<AgentId, ProvisionedAgent>;
   /** The private key `WorkClaim`'s immutable `publisher` was deployed with on this devnet —
    * freshly generated per run, same as every agent's own key. A dry-loop scenario signs a real
@@ -258,5 +265,12 @@ async function provisionDevnet(devnet: LocalDevnet): Promise<DevnetHandle> {
     workClaim: { address: raw.workClaim },
   };
 
-  return { rpcUrl: devnet.rpcUrl, deployment, agents, publisherPrivateKeyHex, stop: devnet.stop };
+  return {
+    rpcUrl: devnet.rpcUrl,
+    deployment,
+    escrowAddress: raw.escrow,
+    agents,
+    publisherPrivateKeyHex,
+    stop: devnet.stop,
+  };
 }

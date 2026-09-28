@@ -89,6 +89,25 @@ import {RateAttestationVerifier} from "./RateAttestationVerifier.sol";
  * gives, independent of the divisor's own size (see git history for the two earlier, coarser
  * scales this same bound was stated against: `usdPerMilliSiu`, then `microUsdPerSiu`).
  */
+/**
+ * The slice of `TouchstoneEscrow` this contract reads. A reservation may only exist against a
+ * real, funded escrow — without that tie, `reserveForWork` would let anyone consume an issuer's
+ * entire bonded headroom for free, which is the one way a shared pool can be griefed.
+ */
+interface ITouchstoneEscrow {
+    function escrows(bytes32 quoteHash)
+        external
+        view
+        returns (
+            address buyer,
+            uint64 expiry,
+            uint8 status,
+            address seller,
+            address settler,
+            uint256 maxAmount
+        );
+}
+
 contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
     using SafeERC20 for IERC20;
 
@@ -157,6 +176,39 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
     IERC20 public immutable usdc;
     CapacityBond public immutable bond;
     ClaimRouter public immutable router;
+    ITouchstoneEscrow public immutable escrow;
+
+    /// @dev `TouchstoneEscrow.Status` as the ABI reports it: None, Open, Settled, Expired.
+    uint8 private constant ESCROW_OPEN = 1;
+    uint8 private constant ESCROW_SETTLED = 2;
+
+    /**
+     * Capacity consumed for work paid for in dollars, rather than sold forward as a claim.
+     *
+     * Added 2026-09-27, as a correctness fix rather than a feature: headroom exists because an
+     * issuer's bonded capacity is finite, and that constraint cannot depend on how the buyer
+     * happened to pay. Before this, a USDC-settled job consumed no headroom at all, so an issuer
+     * could promise unlimited work against a fixed bond — proven live in P5 window 1, where a
+     * real USDC purchase completed with ISSUER-A's headroom untouched.
+     *
+     * A reservation is deliberately not an ERC-1155 token. That is the real distinction between
+     * the two routes, and it is the thing that must be disclosed alongside any F1 result: a claim
+     * reserves capacity for a *future* window and can be held or transferred; a reservation
+     * consumes capacity for *immediate* work and cannot be moved or deferred.
+     */
+    struct WorkReservation {
+        address issuer;
+        bytes32 classId;
+        uint256 quantity;
+        /// @dev The escrow's own expiry, deliberately — capacity stays committed exactly as long
+        ///      as the payment commitment the buyer and seller already agreed to, and no longer.
+        ///      Choosing any other number would invent a second deadline nobody agreed to.
+        uint64 deadline;
+        bool released;
+        bool exists;
+    }
+
+    mapping(bytes32 quoteHash => WorkReservation) public reservations;
 
     mapping(uint256 tokenId => ClaimType) public claimTypes;
     /// @dev Monotonic latch: true the moment a holder ever presents, for that token id, and
@@ -190,7 +242,29 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
         uint256 indexed tokenId, address indexed holder, uint256 quantity, uint256 amountUsdc
     );
     event Expired(uint256 indexed tokenId, address indexed holder, uint256 quantity);
+    event WorkReserved(
+        bytes32 indexed quoteHash,
+        address indexed issuer,
+        address indexed seller,
+        bytes32 classId,
+        uint256 quantity,
+        uint64 deadline
+    );
+    /// @param settled true when the work completed and the escrow paid; false when the
+    ///        reservation was released because its deadline passed with the escrow unsettled.
+    event ReservationReleased(
+        bytes32 indexed quoteHash, address indexed issuer, bytes32 classId, uint256 quantity, bool settled
+    );
 
+    error EscrowZero();
+    error EscrowNotOpen();
+    error NotTheEscrowSeller();
+    error ReservationExists();
+    error NoReservation();
+    /// @notice The dangerous direction of double-spend: releasing twice would restore headroom
+    ///         against a bond that never grew, letting the issuer promise more than it backs.
+    error ReservationAlreadyReleased();
+    error ReservationNotReleasable();
     error UsdcZero();
     error BondZero();
     error RouterZero();
@@ -212,16 +286,24 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
     ///         stop a caller settling within the ±50% band against a stale, more favourable day.
     error StalePrintDate(uint64 attested, uint64 expected);
 
-    constructor(IERC20 usdc_, CapacityBond bond_, ClaimRouter router_, address publisher_)
+    constructor(
+        IERC20 usdc_,
+        CapacityBond bond_,
+        ClaimRouter router_,
+        address publisher_,
+        ITouchstoneEscrow escrow_
+    )
         MinimalERC1155("")
         RateAttestationVerifier(publisher_, "Touchstone Rate Attestation", "1")
     {
         if (address(usdc_) == address(0)) revert UsdcZero();
         if (address(bond_) == address(0)) revert BondZero();
         if (address(router_) == address(0)) revert RouterZero();
+        if (address(escrow_) == address(0)) revert EscrowZero();
         usdc = usdc_;
         bond = bond_;
         router = router_;
+        escrow = escrow_;
     }
 
     function tokenIdFor(
@@ -399,6 +481,88 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
             _burn(holder, tokenId, quantity);
             bond.restoreHeadroom(ct.issuer, ct.classId, quantity);
         }
+    }
+
+    /**
+     * @notice Commits an issuer's bonded capacity to work that is being paid for in dollars, so a
+     *         USDC-settled job draws on exactly the same finite pool a minted claim does.
+     * @dev Callable only by the seller named in a real, currently-Open escrow for `quoteHash` —
+     *      the tie that makes this ungriefable, since consuming headroom costs the caller nothing
+     *      directly. Routing reuses `ClaimRouter`, so a class with no remaining headroom reverts
+     *      with `NoIssuerWithHeadroom` at the moment of acceptance rather than silently
+     *      overselling. Reserving twice against one `quoteHash` reverts.
+     */
+    function reserveForWork(bytes32 quoteHash, bytes32 classId, uint256 quantity)
+        external
+        nonReentrant
+        returns (address issuer)
+    {
+        if (quantity == 0) revert ZeroAmount();
+        if (reservations[quoteHash].exists) revert ReservationExists();
+
+        (uint8 status, address seller, uint64 expiry) = _escrowFor(quoteHash);
+        if (status != ESCROW_OPEN) revert EscrowNotOpen();
+        if (msg.sender != seller) revert NotTheEscrowSeller();
+
+        issuer = router.route(classId, quantity);
+        reservations[quoteHash] = WorkReservation({
+            issuer: issuer,
+            classId: classId,
+            quantity: quantity,
+            deadline: expiry,
+            released: false,
+            exists: true
+        });
+
+        emit WorkReserved(quoteHash, issuer, seller, classId, quantity, expiry);
+        bond.consumeHeadroom(issuer, classId, quantity);
+    }
+
+    /**
+     * @notice Returns reserved capacity to the issuer's pool — on completion, or once the
+     *         reservation's deadline has passed with the escrow still unsettled.
+     * @dev Permissionless in both cases, exactly like `settleWindowClose`: the effect is fixed by
+     *      state (this reservation's own issuer, class and quantity), so any caller adds liveness
+     *      without adding authority. That matters most for the abandoned case — an escrow opened,
+     *      reserved against and then left alone must not lock an issuer's capacity indefinitely
+     *      just because nobody with a stake bothers to call. Releasing twice reverts: it would
+     *      restore headroom against a bond that never grew.
+     *
+     *      The deadline is the escrow's own expiry, because past that instant the escrow can no
+     *      longer settle (`TouchstoneEscrow.settle` reverts `PastExpiry` once
+     *      `block.timestamp > expiry`) and the work this reservation was made for can never be
+     *      paid for. The check here is `>=`, not `>`, so at exactly `expiry` both settling and
+     *      releasing are momentarily possible — a one-second overlap, stated rather than papered
+     *      over. It is harmless: `released` is a one-way flag, so an escrow that settles in that
+     *      same second simply finds the reservation already released and restores nothing twice.
+     */
+    function releaseReservation(bytes32 quoteHash) external nonReentrant {
+        WorkReservation storage reservation = reservations[quoteHash];
+        if (!reservation.exists) revert NoReservation();
+        if (reservation.released) revert ReservationAlreadyReleased();
+
+        (uint8 status,,) = _escrowFor(quoteHash);
+        bool escrowSettled = status == ESCROW_SETTLED;
+        if (!escrowSettled && block.timestamp < reservation.deadline) {
+            revert ReservationNotReleasable();
+        }
+
+        reservation.released = true;
+        emit ReservationReleased(
+            quoteHash, reservation.issuer, reservation.classId, reservation.quantity, escrowSettled
+        );
+        bond.restoreHeadroom(reservation.issuer, reservation.classId, reservation.quantity);
+    }
+
+    /// @dev Pulled out so the callers above stay within the EVM's stack limit — the escrow getter
+    ///      returns six values and only three are ever needed here.
+    function _escrowFor(bytes32 quoteHash)
+        private
+        view
+        returns (uint8 status, address seller, uint64 expiry)
+    {
+        (, uint64 escrowExpiry, uint8 escrowStatus, address escrowSeller,,) = escrow.escrows(quoteHash);
+        return (escrowStatus, escrowSeller, escrowExpiry);
     }
 
     /**

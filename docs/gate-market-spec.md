@@ -296,6 +296,38 @@ DEFAULT   window closes with the claim unserved → the issuing bond alone
           default liability is that one issuer's alone
 ```
 
+```
+RESERVE   a job paid for in USDC: the seller, named in a real open escrow,
+          commits an issuer's bonded capacity to that job → the router
+          picks an issuer with headroom in that class, exactly as MINT
+          does → headroom consumed for the life of the escrow
+
+RELEASE   the escrow settles (the work was paid for), or its expiry passes
+          with the escrow unsettled → the capacity returns to that issuer's
+          pool. Permissionless in both cases, so an abandoned escrow cannot
+          lock an issuer's capacity indefinitely
+```
+
+**One pool, two instruments — and they are not the same instrument.** RESERVE and MINT draw on
+the same finite `CapacityBond` headroom. This was not true before 2026-09-28: minting consumed
+capacity and paying in dollars consumed nothing at all, which was verified live in the first real
+P5 window (ISSUER-A's headroom sat untouched across an entire USDC purchase). Scarcity that binds
+only one route is not a choice between two assets, it is a choice between accepting a constraint
+and not, and §7.1's F1 measurement taken against it would have measured the asymmetry rather than
+the preference.
+
+What remains genuinely different, and must appear in the spec and in every run output rather than
+be smoothed over:
+
+- **A claim reserves capacity for a future delivery window, and is transferable.** It can be held,
+  passed on, and redeemed by whoever ends up holding it.
+- **A dollar payment consumes capacity for immediate work only.** The reservation is not an
+  instrument: it cannot be transferred, held, or redeemed by anyone, and it ends when the escrow
+  does.
+- **The issuer is paid on the MINT route and is not paid for a RESERVE.** No compensation was
+  invented for the dollar route — the gap is left open and disclosed rather than papered over with
+  a fee this testbed has no basis to set.
+
 The **fail path is the one to instrument carefully.** "Fail the gate and the claim is not retired" is the mechanical expression of *failed work counts zero*, and it is the single behaviour that distinguishes this from every token that pays for effort.
 
 ### 4.5 Forcing the interesting states
@@ -306,6 +338,63 @@ A run where nothing goes wrong tests almost nothing. Three states must be reacha
 | --- | --- | --- |
 | **Headroom exhaustion in one class** | Size ISSUER-B's `code` lot small | Does routing find the other issuer? Does the holder notice? |
 | **Cross-class unavailability** | Exhaust `extract` while `code` headroom remains | Confirms per-class claims are correct and unified ones overstate headroom |
+| **Headroom exhausted for a dollar-paid job** | Reserve against an open escrow in a class with no headroom left | `reserveForWork` reverts `NoIssuerWithHeadroom` at the moment of acceptance, not after the work is done — the same failure a mint gets, on the other route |
+| **A later window shut out entirely** | Run three windows in sequence against one pool, with a simulated external buyer taking capacity on a fixed, disclosed schedule between them | Whether being shut out is reachable at all, and what agents do about it in the windows before |
+
+### 4.6 Three windows, one pool, and the outcome that is allowed to be a failure
+
+Scarcity is the instrument's only rationale in this build. The project's own price series does not
+evidence the deflation a forward curve would need — Commodity SIU drifted **+0.034%/day at
+R²=0.21** over the measured window (`docs/methodology.md`, "The series does not yet evidence
+deflation"), so nothing about a falling price makes a dated claim worth holding. What can make one
+worth holding is that capacity for a later window is finite and someone else may take it first.
+
+That is not observable in a single window: there is no "later" to be shut out of. So the real run
+(`packages/gate-market-agents/src/cli/p5-three-window-full-run.ts`) is three windows in sequence
+against one chain, one set of balances and one bonded pool. A claim minted in window 1 is still
+outstanding in window 2, and the capacity it consumed is genuinely gone from window 3.
+
+**Scripted, and disclosed as scripted:** that delegation happens at all (§8.3's information
+asymmetry); that there are three windows and the agents are told so; and that a **simulated
+external buyer** — the deployer wallet, not an agent, no model, no decisions — takes a fixed
+quantity of capacity between windows. Those quantities are set in the runner's own source before
+the run starts, printed before window 1, and written into the run manifest, so no agent's behaviour
+changes them and the depletion cannot have been tuned to the result.
+
+**Not scripted:** which asset anyone pays in; whether an issuer states forward terms at all and at
+what price; whether a buyer takes them, ignores them, or front-runs the depletion by buying early;
+and whether window 3 gets its work done.
+
+**Window 3 is allowed to fail.** If the pool is exhausted when it starts, the job does not get
+done and the run reports that as its result. Nothing tops the pool back up, re-sizes a lot, or
+routes around the shortage: a scarcity experiment whose scarcity is relieved the moment it binds
+measures nothing. This is stated here, in the runner's own doc comment, and in the run's output
+before the first window starts, so the outcome cannot be reinterpreted after the fact.
+
+One further real property, disclosed to the agents as well as here: `ClaimRouter` routes a claim to
+a **single** issuer with enough headroom by itself. Two issuers holding 5,000 mSIU each cannot
+between them serve one 10,000 mSIU claim. A pool can therefore be large in total and still unable
+to serve a buyer — fragmentation is a genuine feature of the bilateral design (§4.3), not a bug in
+the routing.
+
+### 4.7 Forward terms: a stated price, not an instrument
+
+Issuers may state terms for a later window — a price per SIU and a quantity they say they will make
+available (`quote_forward`), and a buyer may record that it is acting on one (`take_forward`).
+Every offer is recorded whether or not anyone takes it: a book that kept only accepted terms would
+show a market that always clears, and a rejected offer at a stated price is as much a datum as an
+accepted one. Each offer is recorded alongside the issuer's **real headroom at the moment it
+quoted**, so an offer of 20,000 mSIU from an issuer holding 200 is distinguishable from the same
+number backed by real capacity.
+
+**Nothing enforces a forward term, and every surface that shows one says so.** `WorkClaim.mint`
+charges the attested print rate, the attestation is signed by the publisher rather than by the
+issuer, and no contract in this build could bind an issuer to a price it named in advance. Building
+one would be a new instrument, which build 1 does not have and this testbed's sanctioned exception
+does not cover. What is measured is what an issuer offers and what a buyer does about it — which is
+genuinely interesting, and genuinely not a forward market. `take_forward` pays, mints and reserves
+nothing; it exists only so that *taking* an offer and *ignoring* one are distinguishable outcomes
+rather than the same silence.
 | **Default** | Disable an issuer's harness path for one window | Does that issuer's own bond pay the holder, at that claim's own grade's print? (No re-route to the other issuer — see §4.4's corrected DEFAULT row.) |
 
 ## 5. Identity, wallets and chain
@@ -477,6 +566,14 @@ The `?` is the finding. Each agent chooses USDC or fSIU per hop, and nothing tel
 | Median hops before redemption | > 1 |
 | Time-to-redeem after receipt | Not immediate — held across at least one job |
 | Quote denomination when the seller is free to choose | SIU rather than dollars |
+
+**(d) Scarcity that binds only one route would produce a false result in either direction.** Found
+live in the first real P5 window and fixed on 2026-09-28: capacity was consumed by minting a claim
+and by nothing else, so an agent weighing the two routes was really weighing "accept a constraint"
+against "don't". Both routes now draw on the same bonded pool (§4.4's RESERVE/RELEASE rows). The
+remaining differences between them are real properties of the two instruments, not artefacts of
+the plumbing, and are stated there and in every run output: a claim reserves capacity for a future
+window and is transferable; a dollar payment consumes it for immediate work only.
 
 **The protocol is fragile in one specific way.** A single sentence anywhere in an agent's context saying "pay in fSIU" invalidates the finding permanently. Review every prompt for this before the run and keep the diff under version control.
 

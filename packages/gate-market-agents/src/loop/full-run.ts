@@ -30,6 +30,7 @@ import type { AttackToolResult } from "../tools/submit-attack.js";
 import { RunRecorder, type RunManifest } from "../run-recorder/recorder.js";
 import { FrictionLogWriter, type FrictionLogEntry } from "../friction/log.js";
 import { QuoteBoard } from "./quote-board.js";
+import { ForwardQuoteBook, type ForwardQuote } from "./forward-book.js";
 import { RedemptionTracker } from "./redemption-tracker.js";
 import { buildTurnPrompt } from "./prompt.js";
 import { ModelResponseParseError, parseModelResponse, type FrictionReport } from "./parse-tool-call.js";
@@ -151,6 +152,15 @@ export interface FullRunWindowOptions {
   /** Present only for a window whose roster can actually mint (an agent with `mint_claim` in its
    * tool grant) — see `MintContext`'s own doc comment. */
   mintContext?: MintContext;
+  /** 1-based index of this window within a multi-window run, and how many there are in all.
+   * Both default to 1, which is what a single-window run is. Only these two numbers make a
+   * "later window" meaningful, so `quote_forward` is only usable where they are set. */
+  windowIndex?: number;
+  windowCount?: number;
+  /** The forward-terms book. Supplied by a multi-window runner so it survives from one window to
+   * the next — an offer stated in window 1 for window 3 has to still be there in window 3, and a
+   * book created per window could never hold one. A fresh one is made when omitted. */
+  forwardBook?: ForwardQuoteBook;
   /** Seed for the independent oracle's trial set (see task-pack-gate-hardening's code-oracle).
    * Defaults to `F1_ORACLE_TRIAL_SEED` and should stay there for any run whose attack yield is
    * meant to be compared with another run's — see that constant's own doc comment. Overridable
@@ -220,6 +230,10 @@ export interface FullRunWindowResult {
   /** Each gate the builder delivered, in order — an attack names the version it was aimed at, so
    * a revision that closed a hole is visible as such rather than inferred from ordering. */
   gateVersions: { version: number; submittedBy: string; turn: number }[];
+  /** Every forward offer stated in this run so far, taken or not — the whole book, not this
+   * window's slice, since a multi-window runner shares one book and the interesting reading is
+   * across windows. */
+  forwardQuotes: readonly ForwardQuote[];
   turnsByAgent: Record<string, number>;
   haltedReason?: Record<string, "ceiling" | "parse_error" | "max_turns" | "validation_failed" | "voluntary_stop" | "experiment_halt" | "policy_refusal" | "adapter_error" | "nothing_to_act_on">;
   turnLogsByAgent: Record<string, TurnLog[]>;
@@ -313,12 +327,21 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
   const recorder = new RunRecorder(options.runsRoot, options.runId, manifestWithToolOrder);
   const friction = new FrictionLogWriter(options.runsRoot, options.runId);
   const board = new QuoteBoard();
+  const forwardBook = options.forwardBook ?? new ForwardQuoteBook();
+  const windowIndex = options.windowIndex ?? 1;
+  const windowCount = options.windowCount ?? 1;
   const redemption = new RedemptionTracker();
   const agentIdByAddress = Object.fromEntries(
     options.roster.map((a) => [a.address.toLowerCase(), a.agentId]),
   ) as Record<string, AgentId>;
 
-  const nowSeconds = BigInt(Math.floor(Date.now() / 1000));
+  // The chain's own clock, never `Date.now()` — the same rule `devnet/anvil.ts`'s `advanceTime`
+  // already states for `time_to_expiry`, applied to the window bounds themselves. `mint` writes
+  // `windowFrom` into the claim and `presentForRedemption` compares it against `block.timestamp`,
+  // so a window opened against wall time is a window whose opening instant the contract may not
+  // agree has arrived: on a devnet whose clock runs behind wall time the very next call reverts
+  // `WindowNotOpenYet`, and on one running ahead the window silently opens early.
+  const nowSeconds = await options.deps.chainReader.currentBlockTimestamp();
   const windowFrom = options.windowFrom ?? nowSeconds;
   const windowTo = options.windowTo ?? nowSeconds + 7n * 24n * 3600n;
 
@@ -399,7 +422,23 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
     const redemptionText = redemption.renderFor(agent.agentId);
     const transferText = redemption.renderForHolder(agent.agentId);
     const deliveryOwedText = redemption.renderForIssuerAwaitingDelivery(agent.agentId);
-    const boardSectionText = [marketBoardText, redemptionText, transferText, deliveryOwedText]
+    const canQuoteForward = agent.availableTools.includes("quote_forward");
+    // An issuer's own standing offers are NOT an inbox item: they are not an arrival, and an
+    // issuer whose only reason to wake is its own earlier quote would spin turns re-reading it.
+    const forwardText = forwardBook.renderFor(agent.agentId, windowIndex, canQuoteForward);
+    // The one exception, and the reason it is separate: an issuer that has not yet stated terms
+    // for a later window genuinely does have something to do before anything is routed to it —
+    // and gating that on an inbox would mean it could only ever quote *after* being minted
+    // against, which is exactly when a forward offer stops being forward. Once it has quoted,
+    // this line disappears and the ordinary wait-gate applies again, so the wake is worth at most
+    // one turn per window rather than every turn.
+    const mayStillQuoteForward =
+      canQuoteForward && forwardBook.quotesBy(agent.agentId).every((q) => q.statedInWindow !== windowIndex);
+    const forwardInvitation = mayStillQuoteForward
+      ? `FORWARD TERMS\n  You have not stated terms for a later window of this run yet. You may (quote_forward), ` +
+        `or you may choose not to — nothing here suggests a price, a quantity, or whether to quote at all.`
+      : "";
+    const boardSectionText = [marketBoardText, redemptionText, transferText, deliveryOwedText, forwardInvitation]
       .filter(Boolean)
       .join("\n\n");
 
@@ -418,7 +457,9 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
           board.renderFor(other.agentId, other.erc8004Id) !== "" ||
           redemption.renderFor(other.agentId) !== "" ||
           redemption.renderForHolder(other.agentId) !== "" ||
-          redemption.renderForIssuerAwaitingDelivery(other.agentId) !== ""
+          redemption.renderForIssuerAwaitingDelivery(other.agentId) !== "" ||
+          (other.availableTools.includes("quote_forward") &&
+            forwardBook.quotesBy(other.agentId).every((q) => q.statedInWindow !== windowIndex))
         );
       });
       if (someoneCanAct) continue;
@@ -430,7 +471,11 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
       break turnLoop;
     }
 
-    const prompt = buildTurnPrompt(context, toolOrderByAgent[agent.agentId], boardSectionText);
+    const prompt = buildTurnPrompt(
+      context,
+      toolOrderByAgent[agent.agentId],
+      [boardSectionText, forwardText].filter(Boolean).join("\n\n"),
+    );
     const projectedUsd = projectedTurnCostUsd(Math.ceil(prompt.length / 4), agent.maxOutputTokens, agent.prices);
 
     try {
@@ -562,6 +607,9 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
         windowTo,
         mintContext: options.mintContext,
         attackContext,
+        forwardBook,
+        windowIndex,
+        windowCount,
         caller: { agentId: agent.agentId, erc8004Id: agent.erc8004Id },
       });
     } catch (err) {
@@ -625,6 +673,35 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
         if (typeof to === "string") {
           const recipientAgentId = agentIdByAddress[to.toLowerCase()];
           if (recipientAgentId) redemption.recordTransfer(recipientAgentId);
+        }
+      }
+
+      if (intent.tool === "quote_forward") {
+        const quoted = record.result as {
+          forWindow: number;
+          rateUsdPerSiu: string;
+          maxQuantityMilliSiu: string;
+          issuerHeadroomAtQuote: string;
+        };
+        forwardBook.record({
+          issuer: agent.agentId,
+          forWindow: quoted.forWindow,
+          statedInWindow: windowIndex,
+          rateUsdPerSiu: quoted.rateUsdPerSiu,
+          maxQuantityMilliSiu: quoted.maxQuantityMilliSiu,
+          issuerHeadroomAtQuote: quoted.issuerHeadroomAtQuote,
+        });
+      }
+
+      if (intent.tool === "take_forward") {
+        const taken = record.result as { quoteId: string };
+        // Already validated as open in buildToolArgs, immediately before this call — a false
+        // here would mean the book changed underneath a single-threaded loop, so it is recorded
+        // as a real anomaly rather than ignored.
+        if (!forwardBook.markTaken(taken.quoteId, agent.agentId, windowIndex)) {
+          throw new Error(
+            `take_forward: ${taken.quoteId} could not be marked taken — it was open when this turn began.`,
+          );
         }
       }
 
@@ -779,6 +856,7 @@ export async function runFullRunWindow(options: FullRunWindowOptions): Promise<F
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([provider, usd]) => [provider, usd.toFixed(6)]),
     ),
+    forwardQuotes: forwardBook.all(),
     turnsByAgent,
     haltedReason,
     turnLogsByAgent,
@@ -826,6 +904,11 @@ export interface BuildToolArgsContext {
   /** Live, mutated by the loop as gates are delivered and attacked — see `submit_attack`'s case
    * below for why an adversary may choose neither its own target nor its own oracle seed. */
   attackContext?: AttackContext;
+  /** The forward-terms book and where this window sits in the run — both needed to tell a
+   * "later window" from an impossible one, and to resolve a take against a real open offer. */
+  forwardBook?: ForwardQuoteBook;
+  windowIndex?: number;
+  windowCount?: number;
 }
 
 /** Gate v1 -> attacks -> the builder may revise -> attacks again. Capped so an adaptive exchange
@@ -860,7 +943,7 @@ export interface AttackContext {
  * matching `devnet/deploy.ts`'s own `CLASS_CODE`/`CLASS_EXTRACT` computation exactly (confirmed
  * independently, not re-derived by guesswork) without importing a devnet-only module into a
  * real-chain loop. */
-function classIdFor(taskClass: TaskClass): Hex {
+export function classIdFor(taskClass: TaskClass): Hex {
   return keccak256(stringToBytes(taskClass));
 }
 
@@ -970,6 +1053,98 @@ export async function buildToolArgs(tool: ToolName, rawArgs: unknown, ctx: Build
       quote: latest.quote,
       ...(typeof raw.actualAmountUsd === "string" ? { actualAmountUsd: raw.actualAmountUsd } : {}),
       receiptRef: keccak256(stringToBytes(`receipt:${ctx.job.jobId}`)),
+    };
+  }
+
+  if (tool === "quote_forward") {
+    const book = ctx.forwardBook;
+    const windowIndex = ctx.windowIndex ?? 1;
+    const windowCount = ctx.windowCount ?? 1;
+    if (!book || windowCount < 2) {
+      throw new Error(
+        "quote_forward: this run has only one window, so there is no later window to quote for.",
+      );
+    }
+    const erc8004Id = ctx.caller?.erc8004Id;
+    const issuerAddress = ctx.caller ? ctx.agentAddressByAgentId[ctx.caller.agentId] : undefined;
+    if (!erc8004Id || !issuerAddress) {
+      throw new Error("quote_forward: no caller identity on this turn.");
+    }
+    const raw = (rawArgs ?? {}) as { forWindow?: unknown; rateUsdPerSiu?: unknown; maxQuantityMilliSiu?: unknown };
+    const forWindow = typeof raw.forWindow === "number" ? raw.forWindow : Number(asDecimalString(raw.forWindow));
+    if (!Number.isInteger(forWindow) || forWindow <= windowIndex || forWindow > windowCount) {
+      throw new Error(
+        `quote_forward: forWindow must be a later window in this run — an integer above ${windowIndex} and at most ${windowCount}.`,
+      );
+    }
+    const rateUsdPerSiu = asDecimalString(raw.rateUsdPerSiu);
+    const maxQuantityMilliSiu = asDecimalString(raw.maxQuantityMilliSiu);
+    if (typeof rateUsdPerSiu !== "string" || typeof maxQuantityMilliSiu !== "string") {
+      throw new Error(
+        'quote_forward: expected string "rateUsdPerSiu" (decimal USD per SIU) and "maxQuantityMilliSiu" (whole mSIU).',
+      );
+    }
+    // The class and the issuer's own address are spliced, never named by the model: the headroom
+    // recorded beside an offer has to be genuinely that issuer's own in the class the work is in,
+    // or the record cannot distinguish a backed offer from an empty one.
+    return {
+      forWindow,
+      rateUsdPerSiu,
+      maxQuantityMilliSiu,
+      classId: classIdFor(ctx.job.taskClass),
+      issuerAddress,
+    };
+  }
+
+  if (tool === "take_forward") {
+    const book = ctx.forwardBook;
+    if (!book) {
+      throw new Error("take_forward: this run keeps no forward-terms book.");
+    }
+    const quoteId = (rawArgs as { quoteId?: unknown } | undefined)?.quoteId;
+    if (typeof quoteId !== "string") {
+      throw new Error('take_forward: expected a string "quoteId" naming the offer you are taking.');
+    }
+    const offer = book.byId(quoteId);
+    if (!offer) {
+      throw new Error(`take_forward: no forward offer "${quoteId}" exists.`);
+    }
+    if (offer.takenInWindow !== null) {
+      throw new Error(
+        `take_forward: ${quoteId} was already taken by ${offer.takenBy} in window ${offer.takenInWindow}.`,
+      );
+    }
+    // Echoed from the book rather than from the model, so the tool history records the terms
+    // that were actually on offer and not a restatement of them.
+    return {
+      quoteId,
+      issuer: offer.issuer,
+      rateUsdPerSiu: offer.rateUsdPerSiu,
+      maxQuantityMilliSiu: offer.maxQuantityMilliSiu,
+      forWindow: offer.forWindow,
+    };
+  }
+
+  if (tool === "reserve_for_work") {
+    const erc8004Id = ctx.caller?.erc8004Id;
+    if (!erc8004Id) {
+      throw new Error("reserve_for_work: no caller identity on this turn.");
+    }
+    // The seller's own signed quote, exactly as `settle_escrow` resolves it — the quote hash is
+    // what ties the reservation to a real, funded escrow, and a reconstructed quote would hash
+    // to a different and nonexistent one.
+    const latest = ctx.board.issuedQuotesBySeller(erc8004Id).at(-1);
+    if (!latest) {
+      throw new Error(
+        "reserve_for_work: you have not issued any quote this window, so there is no paid job to reserve capacity against.",
+      );
+    }
+    const raw = (rawArgs ?? {}) as { classId?: unknown };
+    // The job's own class by default: this window has exactly one, and a model naming a class the
+    // job isn't in would reserve capacity from a pool the work will never draw on.
+    return {
+      quote: latest.quote,
+      classId: typeof raw.classId === "string" ? raw.classId : classIdFor(ctx.job.taskClass),
     };
   }
 

@@ -1,0 +1,11 @@
+[
+  {
+    "agentId": "WORKER-EXTRACT",
+    "turn": 1,
+    "passed": false,
+    "failure": {
+      "kind": "asset-description-drift",
+      "matched": "(canonical asset description not found verbatim)"
+    }
+  }
+]

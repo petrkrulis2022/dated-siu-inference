@@ -1,0 +1,6 @@
+benchVersion: 0.0.0
+packVersion: gate-hardening/code@0.0.0
+agentConfigs:
+  WORKER-CODE:
+    reasoningModel: claude-sonnet-5
+seed: code-gate-authoring-pass — no seeded randomness in this loop

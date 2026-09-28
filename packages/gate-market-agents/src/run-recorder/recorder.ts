@@ -26,6 +26,12 @@ export interface RunManifest {
    * see `loop/full-run.ts`'s `shuffledToolOrder`. Optional: only `runFullRunWindow` populates it;
    * older/other loops that build a `RunManifest` directly are unaffected. */
   toolOrderByAgent?: Record<string, readonly string[]>;
+  /** Multi-window runs only. How many windows the run has, and how much capacity a simulated
+   * external buyer is scheduled to take after each one, keyed by the window it follows. Both are
+   * fixed in the runner's own source before the run starts and recorded here so that a reading of
+   * the result can confirm the depletion was not tuned to it. */
+  windowCount?: number;
+  externalDepletionMilliSiu?: Record<number, number>;
 }
 
 /** Spec §12.4: "every validator verdict... including passes." */

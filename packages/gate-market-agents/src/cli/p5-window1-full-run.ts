@@ -1,8 +1,7 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { keccak256, stringToBytes, type Hex } from "viem";
-import { createAdapterFor, loadApiKeysFromEnv, withBackoff, type Adapter } from "@touchstone/harness";
-import type { Print } from "@touchstone/sdk";
+import { createAdapterFor, loadApiKeysFromEnv } from "@touchstone/harness";
 import { printDateToUnixDay, seriesForPrint, usdPerSiuToNanoUsdPerSiu } from "../chain/rate-attestation.js";
 import {
   CODE_GATE_1_TRIVIAL,
@@ -12,15 +11,13 @@ import {
   CODE_ADVERSARIAL_HARDCODED,
   CODE_ADVERSARIAL_STUBBED,
   CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
-  CODE_COMMERCIAL_INTENT,
   CODE_HELD_OUT_INSTANCES,
   PINNED_TEST_SUITE,
   runGateHardeningChecks,
 } from "@touchstone/task-pack-gate-hardening";
-import type { HeldOutInstance, ReferenceTaskInstance } from "@touchstone/task-pack-gate-hardening";
+import type { HeldOutInstance } from "@touchstone/task-pack-gate-hardening";
 import { loadSkill, renderTemplate } from "../skills/registry.js";
 import { CANONICAL_ASSET_DESCRIPTION } from "../skills/asset-description.js";
-import type { ModelPrices } from "../budget/inference-cost.js";
 import { BudgetCeiling } from "../budget/ceiling.js";
 import { ExperimentBudget } from "../budget/experiment-budget.js";
 import { validateModelAssignment, type ModelAssignments } from "../pack/model-assignment.js";
@@ -37,6 +34,17 @@ import {
 } from "../loop/full-run.js";
 import type { RunManifest } from "../run-recorder/recorder.js";
 import { RUNS_ROOT } from "./runs-root.js";
+import {
+  LEDGER_PATH,
+  PRICES,
+  REPO_ROOT,
+  TECHNICAL_CONTRACT,
+  loadLatestCommodityPrint,
+  toHex,
+  withPinnedTestSuite,
+  withPinnedTestSuiteHeldOut,
+  withRetry,
+} from "./p5-shared.js";
 
 /**
  * WP-7's real P5 window 1.
@@ -69,65 +77,14 @@ import { RUNS_ROOT } from "./runs-root.js";
  * pinned test suite), not a fresh, unvalidated one for this first real multi-agent run.
  */
 
-const REPO_ROOT = resolve(import.meta.dirname, "../../../..");
-const LEDGER_PATH = join(REPO_ROOT, "data/gate-market/experiment-ledger.json");
 
 const RUN_CAP_USD = "30";
 const EXPERIMENT_CAP_USD = "150";
 
-// Real, current registry prices (data/registry/price-snapshot-merged-2026-09-25T00-59-34.865Z.json,
-// the latest snapshot at the time this script was written) — never invented.
-const PRICES: Record<string, ModelPrices> = {
-  "gpt-5.1": { priceInUsdPer1M: "1.25", priceOutUsdPer1M: "10" },
-  "mistral-small-3.2-24b-instruct": { priceInUsdPer1M: "0.09", priceOutUsdPer1M: "0.3" },
-  "claude-sonnet-5": { priceInUsdPer1M: "2", priceOutUsdPer1M: "10" },
-  "gemini-3.1-pro-preview": { priceInUsdPer1M: "2", priceOutUsdPer1M: "12" },
-  "grok-4.6": { priceInUsdPer1M: "2", priceOutUsdPer1M: "6" },
-};
 
-/**
- * The real rate this window's mint_claim/get_print calls attest to and read — replaced
- * 2026-09-27 (design review: both testbed issuers' capacity models are commodity, but every mint
- * used to attest a flat, hardcoded $0.01/SIU, roughly 7x real Commodity SIU at the time,
- * distorting any economic reading of the run). Loads the most recently published real
- * `<date>-commodity.json` print under data/prints/ directly — not via `@touchstone/print`'s own
- * CLI loaders (`cli/load-inputs.ts`'s `repoRoot()` assumes `process.cwd()` is `packages/print`
- * itself, an assumption this script must not borrow from a different package's cwd).
- */
-function loadLatestCommodityPrint(): Print {
-  const printsDir = join(REPO_ROOT, "data/prints");
-  const files = readdirSync(printsDir)
-    .filter((f) => f.endsWith("-commodity.json"))
-    .sort();
-  const latest = files.at(-1);
-  if (!latest) {
-    throw new Error(`loadLatestCommodityPrint: no "<date>-commodity.json" print found under ${printsDir}.`);
-  }
-  return JSON.parse(readFileSync(join(printsDir, latest), "utf-8")) as Print;
-}
 
-function withPinnedTestSuite(instance: ReferenceTaskInstance): ReferenceTaskInstance {
-  return { ...instance, files: { ...instance.files, "pinned-test-cases.txt": PINNED_TEST_SUITE } };
-}
-function withPinnedTestSuiteHeldOut(held: HeldOutInstance): HeldOutInstance {
-  return { ...held, referenceInstance: withPinnedTestSuite(held.referenceInstance) };
-}
 
-function toHex(raw: string | undefined, name: string): Hex {
-  if (!raw) throw new Error(`${name} is not set.`);
-  return (raw.startsWith("0x") ? raw : `0x${raw}`) as Hex;
-}
 
-/** `runFullRunWindow` calls each agent's adapter directly, unwrapped — fine for a single request,
- * but this is a real, multi-turn, multi-provider live run, and OpenRouter's shared free-tier
- * provider pools are confirmed (packages/agents/src/cli/demo.ts's own comment, hit live) to 429
- * intermittently under load with no other change; hit live here too, on this run's very first
- * real ORCHESTRATOR call. `withBackoff` (@touchstone/harness) already exists for exactly this —
- * `seller.ts` already wraps its own adapter call with it — just applied here at construction so
- * every agent's calls this window get the same real retry behaviour. */
-function withRetry(adapter: Adapter): Adapter {
-  return (model, prompt, params) => withBackoff(() => adapter(model, prompt, params));
-}
 
 async function main(): Promise<void> {
   const registry = JSON.parse(readFileSync(join(REPO_ROOT, "data/registry/models.json"), "utf-8"));
@@ -205,39 +162,6 @@ async function main(): Promise<void> {
   const workerCodeErc8004Id = erc8004IdFor(workerCodeAddress);
   const workerExtractErc8004Id = erc8004IdFor(process.env.WORKER_EXTRACT_ADDRESS ?? "");
 
-  const technicalContract = `
-THE FUNCTION UNDER TEST: a submission provides a named export \`dedupeSorted(arr)\` from a file
-  called answer.mjs. It must remove consecutive duplicate values from a sorted array of numbers,
-  preserving order.
-
-COMMERCIAL INTENT:
-  ${CODE_COMMERCIAL_INTENT}
-
-THE PINNED TEST SUITE (the real, operator-authored test cases your gate must run — reproduced
-here exactly, and also available to your gate at runtime as data):
----
-${PINNED_TEST_SUITE}---
-  Each line above is a real node:test case body. It assumes \`test\` (from "node:test"), \`assert\`
-  (from "node:assert/strict") and \`dedupeSorted\` (the submission's own export) are already
-  imported and in scope wherever it runs.
-
-HOW A GATE IS AUTHORED (technical contract, not a solution):
-  Your gate's source is a JavaScript ES module. It must export:
-    export async function gate({ referenceDir, submissionDir }) {
-      // referenceDir + "/pinned-test-cases.txt" holds the exact test-case bodies shown above.
-      // submissionDir + "/answer.mjs" is the submission being graded.
-      // Genuinely execute the pinned cases against THIS submission's own dedupeSorted every time.
-      // Return { accept: <boolean>, reason: <string> }.
-    }
-  It runs inside a sandbox with node:fs and node:child_process available (spawning the node
-  binary itself, at process.execPath, is allowed) — no network, no other imports beyond node
-  builtins. Any file your gate needs to write must be written under referenceDir.
-
-TO SUBMIT A GATE, respond with exactly:
-  {"tool": "submit_job", "args": {"source": "<your full gate module source as a JSON string>"}}
-  If it does not pass every check, you will see exactly which check failed and why on your next
-  turn — revise and resubmit within your turn budget.
-`;
 
   const orchestratorJobDescription = `
 YOUR JOB THIS WINDOW
@@ -339,7 +263,7 @@ YOUR SITUATION THIS WINDOW
   "${workerCodeAddress}"}} (that is your own real address). Only respond {"done": true} once the
   job has genuinely already been delivered and settled and there is truly nothing further anyone
   could need from you.
-${technicalContract}`;
+${TECHNICAL_CONTRACT}`;
 
   const workerExtractJobDescription = `
 YOUR SITUATION THIS WINDOW

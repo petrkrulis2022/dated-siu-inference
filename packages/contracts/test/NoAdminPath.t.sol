@@ -8,7 +8,7 @@ import {TouchstoneEscrow} from "../src/TouchstoneEscrow.sol";
 import {TouchstoneAttestation} from "../src/TouchstoneAttestation.sol";
 import {CapacityBond} from "../src/CapacityBond.sol";
 import {ClaimRouter} from "../src/ClaimRouter.sol";
-import {WorkClaim} from "../src/WorkClaim.sol";
+import {WorkClaim, ITouchstoneEscrow} from "../src/WorkClaim.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
 
 /**
@@ -35,6 +35,9 @@ contract NoAdminPathTest is Test {
     TouchstoneEscrow internal escrow;
     TouchstoneAttestation internal attestation;
     MockUSDC internal usdc;
+    /// Real, not mocked: `WorkClaim.reserveForWork` reads this escrow's own state to decide
+    /// whether a reservation may exist at all, so a stub would test nothing.
+    TouchstoneEscrow internal escrowForClaims;
     CapacityBond internal bond;
     ClaimRouter internal router;
     WorkClaim internal workClaim;
@@ -47,11 +50,13 @@ contract NoAdminPathTest is Test {
         escrow = new TouchstoneEscrow(IERC20(address(usdc)), treasury, 50);
         attestation = new TouchstoneAttestation(publisher);
 
+        escrowForClaims = new TouchstoneEscrow(IERC20(address(usdc)), makeAddr("escrowTreasury"), 50);
+
         uint64 nonce = vm.getNonce(address(this));
         address predictedWorkClaimAddr = vm.computeCreateAddress(address(this), nonce + 2);
         bond = new CapacityBond(IERC20(address(usdc)), predictedWorkClaimAddr);
         router = new ClaimRouter(bond);
-        workClaim = new WorkClaim(IERC20(address(usdc)), bond, router, publisher);
+        workClaim = new WorkClaim(IERC20(address(usdc)), bond, router, publisher, ITouchstoneEscrow(address(escrowForClaims)));
         require(address(workClaim) == predictedWorkClaimAddr, "sanity: address prediction");
     }
 
@@ -317,17 +322,27 @@ contract NoAdminPathTest is Test {
 
     // ------------------------------------------------------------------ WorkClaim
 
-    /// Seven, not three: mint/presentForRedemption/serveRedemption/settleWindowClose are this
-    /// contract's own, plus safeTransferFrom/safeBatchTransferFrom/setApprovalForAll from the
-    /// ERC-1155 standard itself (MinimalERC1155.sol) — expected, not a gap; a token that can't be
-    /// transferred isn't the fungible-within-tenor instrument the spec calls for.
-    function test_workClaim_hasExactlySevenStateMutatingFunctions() public view {
+    /// Nine, not three: mint/presentForRedemption/serveRedemption/settleWindowClose plus
+    /// reserveForWork/releaseReservation are this contract's own, and
+    /// safeTransferFrom/safeBatchTransferFrom/setApprovalForAll come from the ERC-1155 standard
+    /// itself (MinimalERC1155.sol) — expected, not a gap; a token that can't be transferred isn't
+    /// the fungible-within-tenor instrument the spec calls for.
+    ///
+    /// reserveForWork/releaseReservation were added when USDC-paid work was made to draw on the
+    /// same bonded pool as minted claims. Neither touches user money: reserveForWork moves no
+    /// tokens at all (it consumes headroom and stores a record), releaseReservation only restores
+    /// headroom, and the escrowed dollars stay entirely inside TouchstoneEscrow, which has never
+    /// heard of this contract. They are counted here rather than exempted precisely so that
+    /// growing this surface stays a deliberate, reviewed act.
+    function test_workClaim_hasExactlyNineStateMutatingFunctions() public view {
         string[] memory names = _mutatingFunctions("out/WorkClaim.sol/WorkClaim.json");
-        assertEq(names.length, 7, "WorkClaim gained or lost a state-mutating function");
+        assertEq(names.length, 9, "WorkClaim gained or lost a state-mutating function");
         assertTrue(_contains(names, "mint"));
         assertTrue(_contains(names, "presentForRedemption"));
         assertTrue(_contains(names, "serveRedemption"));
         assertTrue(_contains(names, "settleWindowClose"));
+        assertTrue(_contains(names, "reserveForWork"));
+        assertTrue(_contains(names, "releaseReservation"));
         assertTrue(_contains(names, "safeTransferFrom"));
         assertTrue(_contains(names, "safeBatchTransferFrom"));
         assertTrue(_contains(names, "setApprovalForAll"));
@@ -374,8 +389,9 @@ contract NoAdminPathTest is Test {
         assertEq(address(workClaim.usdc()), address(usdc));
         assertEq(address(workClaim.bond()), address(bond));
         assertEq(address(workClaim.router()), address(router));
+        assertEq(address(workClaim.escrow()), address(escrowForClaims));
         string[] memory names = _mutatingFunctions("out/WorkClaim.sol/WorkClaim.json");
-        assertEq(names.length, 7);
+        assertEq(names.length, 9);
     }
 
     // ------------------------------------------------------------------ ClaimRouter

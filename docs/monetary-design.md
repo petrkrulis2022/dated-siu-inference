@@ -301,6 +301,24 @@ this series; it has to come from what issuers quote and buyers accept.
 
 A curve with two participants is not a curve, it is a quote. Until there are several issuers and several hedgers, anything published should be labelled as indicative and sparse, with the number of contributing transactions printed beside it — the same discipline already applied to the qualifying set on a print, and the same reason the 22 August print was superseded rather than quietly published.
 
+**What the Gate Market testbed does about this, as of 2026-09-28.** Since the price cannot supply
+the forward, the testbed asks the issuers for it directly: an issuer may state its own terms for a
+later window — a price per SIU and a quantity — and a buyer may record that it is acting on one.
+Every offer is kept whether or not it is taken, alongside the issuer's real headroom at the moment
+it quoted, so an offer backed by capacity is distinguishable from one that is not. Nothing enforces
+any of it: a claim still mints at the attested print rate, the attestation is publisher-signed, and
+no contract in this build could bind an issuer to a price it named in advance. That is a deliberate
+stopping point, not an oversight — making the terms binding means a new instrument, which build 1
+does not have. What the testbed can therefore report is what issuers offered and what buyers did
+about it, which is the raw material a curve would eventually be built from and is not itself a
+curve.
+
+**And what makes a later window worth paying for at all, absent a decline.** Scarcity, not
+deflation: capacity for a later window is finite, shared, and someone else may take it first. That
+is only observable across windows, so the real run is three in sequence against one pool, with a
+simulated external buyer taking capacity between them on a fixed, disclosed schedule — and the last
+window is allowed to fail if the pool is gone. See `docs/gate-market-spec.md` §4.6-4.7.
+
 ## 7. Issuance and collateral
 
 ### 7.1 One collateral base, two products
@@ -364,6 +382,18 @@ Mutualisation works against **idiosyncratic** risk and does nothing against **sy
 ### 7.5 Headroom
 
 Unchanged from v4 §8.5 and correct: **capacity-denominated, tracked by the bond contract, never self-reported.** Issuing consumes headroom; delivery restores it. The staleness argument holds — a provider doubling efficiency after bonding in work units stays capped; bonded in capacity, the same bond supports twice the issuance.
+
+**Corrected 2026-09-28: a dollar payment consumes headroom too.** Until then, only minting a claim
+did, and work paid for in USDC consumed nothing at all — found live in the first real multi-agent
+window, where an issuer's headroom sat untouched across an entire USDC purchase. That is wrong on
+its own terms (the capacity is genuinely committed either way, and an issuer overselling it is the
+exact failure the bond exists to prevent) and it also invalidates any comparison between the two
+ways of paying, since scarcity that binds one route makes the choice a choice about accepting a
+constraint. Both now draw on the same pool. What stays different is a property of the two
+instruments and is disclosed rather than smoothed over: a claim reserves capacity for a *future*
+window and is transferable, a dollar payment consumes it for immediate work only; and the issuer is
+paid for the claim but not for the reservation. No compensation was invented for the dollar route —
+this testbed has no basis on which to set one.
 
 ## 8. Who issues
 

@@ -105,7 +105,11 @@ export function buildRunners(devnet: DevnetHandle): Record<AgentId, Runner> {
   const deps: RunnerDeps = {
     chainReader: new ViemChainReader(devnet.deployment, devnet.rpcUrl),
     deployment: devnet.deployment,
-    escrowAddress: "0x0000000000000000000000000000000000dead",
+    // The devnet's own real TouchstoneEscrow, deployed by DeployGateMarketLocal.s.sol alongside
+    // the rest. It used to be a dead placeholder, which was harmless while no dry-loop scenario
+    // touched the USDC route — it stopped being harmless once `reserveForWork` began reading real
+    // escrow state to decide whether a reservation may exist at all.
+    escrowAddress: devnet.escrowAddress,
     runGateHardeningChecks,
     loadPrint: async () => DRY_LOOP_PRINT,
     isReconciled: async () => false,

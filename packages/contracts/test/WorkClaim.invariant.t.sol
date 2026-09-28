@@ -6,6 +6,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {CapacityBond} from "../src/CapacityBond.sol";
 import {ClaimRouter} from "../src/ClaimRouter.sol";
 import {WorkClaim} from "../src/WorkClaim.sol";
+import {TouchstoneEscrow} from "../src/TouchstoneEscrow.sol";
+import {ITouchstoneEscrow} from "../src/WorkClaim.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
 import {WorkClaimHandler} from "./handlers/WorkClaimHandler.sol";
 
@@ -26,6 +28,9 @@ import {WorkClaimHandler} from "./handlers/WorkClaimHandler.sol";
  */
 contract WorkClaimInvariantTest is Test {
     MockUSDC internal usdc;
+    /// Real, not mocked: `WorkClaim.reserveForWork` reads this escrow's own state to decide
+    /// whether a reservation may exist at all, so a stub would test nothing.
+    TouchstoneEscrow internal escrowForClaims;
     CapacityBond internal bond;
     ClaimRouter internal router;
     WorkClaim internal claim;
@@ -34,6 +39,9 @@ contract WorkClaimInvariantTest is Test {
     address[2] internal issuers;
     address[3] internal holders;
     address internal attacker;
+    /// Named, not inlined into the constructor call, because the USDC-conservation invariant has
+    /// to be able to count what the escrow's fees have paid it.
+    address internal escrowTreasury;
 
     /// Same test-only publisher key/signature discipline as WorkClaim.t.sol — real secp256k1,
     /// not a stub. The handler holds the key itself (constructor below) since it's the one
@@ -50,14 +58,17 @@ contract WorkClaimInvariantTest is Test {
         issuers = [makeAddr("issuerA"), makeAddr("issuerB")];
         holders = [makeAddr("holder1"), makeAddr("holder2"), makeAddr("holder3")];
         attacker = makeAddr("attacker");
+        escrowTreasury = makeAddr("escrowTreasury");
 
         usdc = new MockUSDC();
+
+        escrowForClaims = new TouchstoneEscrow(IERC20(address(usdc)), escrowTreasury, 50);
 
         uint64 nonce = vm.getNonce(address(this));
         address predictedClaimAddr = vm.computeCreateAddress(address(this), nonce + 2);
         bond = new CapacityBond(IERC20(address(usdc)), predictedClaimAddr);
         router = new ClaimRouter(bond);
-        claim = new WorkClaim(IERC20(address(usdc)), bond, router, publisher);
+        claim = new WorkClaim(IERC20(address(usdc)), bond, router, publisher, ITouchstoneEscrow(address(escrowForClaims)));
         require(address(claim) == predictedClaimAddr, "sanity: address prediction");
 
         // Both issuers bond into both classes — real cross-issuer routing pressure, matching the
@@ -79,8 +90,9 @@ contract WorkClaimInvariantTest is Test {
             usdc.approve(address(claim), type(uint256).max);
         }
 
-        handler =
-            new WorkClaimHandler(usdc, bond, router, claim, issuers, holders, attacker, PUBLISHER_PK);
+        handler = new WorkClaimHandler(
+            usdc, bond, router, claim, escrowForClaims, issuers, holders, attacker, PUBLISHER_PK
+        );
         // The handler itself mints more USDC to holders/issuers as needed mid-run — tracked via
         // the handler's own balance-based conservation check below rather than a fixed ghost
         // total, since MockUSDC.mint is permissionless and the handler uses it freely.
@@ -88,11 +100,17 @@ contract WorkClaimInvariantTest is Test {
     }
 
     /// The strongest single check: outstanding headroom consumption for every (issuer, class)
-    /// pair must equal the real, live sum of every known holder's ERC-1155 balance backed by
-    /// that pair — computed from actual on-chain balances, not a ghost total. Breaks if any
-    /// terminal path (redeem, default, expire) fails to restore headroom, or if headroom is ever
-    /// restored without a real burn.
-    function invariant_outstandingEqualsSumOfLiveClaims() public view {
+    /// pair must equal the real, live sum of what is standing on it — every known holder's
+    /// ERC-1155 balance backed by that pair, plus every unreleased reservation against it —
+    /// computed from actual on-chain state, not a ghost total. Breaks if any terminal path
+    /// (redeem, default, expire, settle, deadline release) fails to restore headroom, or if
+    /// headroom is ever restored without a real burn or a real release.
+    ///
+    /// The reservation term is what makes this a one-pool property rather than two parallel
+    /// ledgers: claims and dollar-paid work draw on one `outstanding`, and the fuzzer interleaves
+    /// both freely, so any double-count in either direction shows up here rather than only in the
+    /// unit test that happened to anticipate it.
+    function invariant_outstandingEqualsLiveClaimsPlusReservations() public view {
         address[2] memory allIssuers = [issuers[0], issuers[1]];
         bytes32[2] memory allClasses = [CLASS_A, CLASS_B];
         for (uint256 i = 0; i < allIssuers.length; i++) {
@@ -100,8 +118,9 @@ contract WorkClaimInvariantTest is Test {
                 (,,, uint256 outstanding,) = bond.lots(allIssuers[i], allClasses[c]);
                 assertEq(
                     outstanding,
-                    handler.sumLiveClaims(allIssuers[i], allClasses[c]),
-                    "outstanding diverged from the real sum of live claim balances"
+                    handler.sumLiveClaims(allIssuers[i], allClasses[c])
+                        + handler.sumLiveReservations(allIssuers[i], allClasses[c]),
+                    "outstanding diverged from live claim balances plus live reservations"
                 );
             }
         }
@@ -146,6 +165,28 @@ contract WorkClaimInvariantTest is Test {
         );
     }
 
+    /// Both directions of the reservation double-spend, which are exactly as severe as the claim
+    /// ones above: reserving twice on one quoteHash consumes the pool twice for one job, and
+    /// releasing twice returns capacity to a bond that never grew. Neither is caught by the
+    /// conservation invariant alone — a double reserve is internally consistent until the second
+    /// release, and a double release would be caught only if some reservation happened to still
+    /// be live — so both are checked directly.
+    function invariant_noDoubleReservationEverSucceeded() public view {
+        assertEq(
+            handler.ghostDoubleReserveSucceeded(),
+            0,
+            "one quoteHash reserved capacity twice"
+        );
+    }
+
+    function invariant_noDoubleReleaseEverSucceeded() public view {
+        assertEq(
+            handler.ghostDoubleReleaseSucceeded(),
+            0,
+            "a reservation returned its capacity to the pool twice"
+        );
+    }
+
     /// Property 3: draining the bond. A second settlement of an already-terminal claim must
     /// never succeed.
     function invariant_noDoubleSettlementEverSucceeded() public view {
@@ -160,7 +201,11 @@ contract WorkClaimInvariantTest is Test {
     /// shape as TouchstoneEscrow.invariant.t.sol, adapted for this system's actors (issuers and
     /// the bond hold funds too, not just a single escrow).
     function invariant_noUsdcEscapesTheKnownActorSet() public view {
-        uint256 total = usdc.balanceOf(address(bond)) + usdc.balanceOf(address(claim));
+        // The escrow and its fee treasury join the set now that the handler opens and settles
+        // real escrows to drive reservations — funds genuinely sit in both, and omitting them
+        // would turn ordinary escrow behaviour into a false conservation failure.
+        uint256 total = usdc.balanceOf(address(bond)) + usdc.balanceOf(address(claim))
+            + usdc.balanceOf(address(escrowForClaims)) + usdc.balanceOf(escrowTreasury);
         for (uint256 i = 0; i < issuers.length; i++) {
             total += usdc.balanceOf(issuers[i]);
         }
@@ -199,6 +244,7 @@ contract WorkClaimHandlerCoverageTest is Test {
     /// one, because even the single-helper version still tripped the same limit.
     struct DeployedContracts {
         MockUSDC usdc;
+        TouchstoneEscrow escrow;
         CapacityBond bond;
         ClaimRouter router;
         WorkClaim claim;
@@ -206,11 +252,16 @@ contract WorkClaimHandlerCoverageTest is Test {
 
     function _deployContracts(address publisher) internal returns (DeployedContracts memory d) {
         d.usdc = new MockUSDC();
+        // Before the nonce read, deliberately: the bond/router/claim offsets below are relative to
+        // whatever the nonce is at that point, so anything deployed afterwards would shift them.
+        d.escrow = new TouchstoneEscrow(IERC20(address(d.usdc)), makeAddr("coverageTreasury"), 50);
         uint64 nonce = vm.getNonce(address(this));
         address predictedClaimAddr = vm.computeCreateAddress(address(this), nonce + 2);
         d.bond = new CapacityBond(IERC20(address(d.usdc)), predictedClaimAddr);
         d.router = new ClaimRouter(d.bond);
-        d.claim = new WorkClaim(IERC20(address(d.usdc)), d.bond, d.router, publisher);
+        d.claim = new WorkClaim(
+            IERC20(address(d.usdc)), d.bond, d.router, publisher, ITouchstoneEscrow(address(d.escrow))
+        );
         require(address(d.claim) == predictedClaimAddr);
     }
 
@@ -234,7 +285,7 @@ contract WorkClaimHandlerCoverageTest is Test {
         }
 
         handler = new WorkClaimHandler(
-            d.usdc, d.bond, d.router, d.claim, issuers, holders, attacker, publisherPk
+            d.usdc, d.bond, d.router, d.claim, d.escrow, issuers, holders, attacker, publisherPk
         );
     }
 
@@ -292,6 +343,44 @@ contract WorkClaimHandlerCoverageTest is Test {
         assertGt(handler.ghostRejectedDoubleServesOnRetired(), 0, "double settlement is rejected");
         assertEq(
             handler.ghostDoubleServeOnRetiredSucceeded(), 0, "double settlement must never succeed"
+        );
+    }
+
+    /// The dollar-paid route's own reachability proof, kept separate from the lifecycle one above
+    /// because it needs its own escrow timing rather than the claim window's. Same reasoning as
+    /// that test's: these paths are asserted reachable deterministically, since this suite cannot
+    /// use an afterInvariant coverage guard at the run counts it fuzzes at (see the long note on
+    /// WorkClaimInvariantTest above).
+    function test_handlerReachesEveryReservationPath() public {
+        address[2] memory issuers = [makeAddr("i1"), makeAddr("i2")];
+        address[3] memory holders = [makeAddr("h1"), makeAddr("h2"), makeAddr("h3")];
+        address attacker = makeAddr("attacker");
+        bytes32 classA = keccak256("classA");
+
+        (, WorkClaimHandler handler) = _deployHandler(issuers, holders, attacker, classA, 0xA11CE);
+
+        // classSeed 0 selects CLASS_A, the one funded above; sellerSeed 0 selects issuers[0].
+        handler.reserveWork(0, 0, 0, 100, 1);
+        assertEq(handler.ghostReservations(), 1, "handler can reserve against a real escrow");
+
+        handler.attackerReserveTwice(0, 0);
+        assertEq(handler.ghostRejectedDoubleReserves(), 1, "a second reservation is rejected");
+        assertEq(handler.ghostDoubleReserveSucceeded(), 0, "a second reservation must never succeed");
+
+        handler.settleAndRelease(0);
+        assertEq(handler.ghostReleasesOnSettlement(), 1, "handler can release a settled escrow");
+
+        handler.attackerReleaseTwice(0);
+        assertEq(handler.ghostRejectedDoubleReleases(), 1, "a second release is rejected");
+        assertEq(handler.ghostDoubleReleaseSucceeded(), 0, "a second release must never succeed");
+
+        // A second, independent reservation left to rot: nobody settles it, the deadline passes,
+        // and the abandoned-release path reclaims the capacity.
+        handler.reserveWork(1, 0, 0, 100, 2);
+        assertEq(handler.ghostReservations(), 2, "handler can reserve a second time, new escrow");
+        handler.releaseAtDeadline(1);
+        assertEq(
+            handler.ghostReleasesAtDeadline(), 1, "handler can release an abandoned reservation"
         );
     }
 }

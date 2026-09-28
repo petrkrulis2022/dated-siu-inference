@@ -1,0 +1,19 @@
+{
+  "turnsUsed": 1,
+  "totalRealizedUsd": "0.005912",
+  "passed": true,
+  "turnLogs": [
+    {
+      "turn": 1,
+      "promptChars": 4066,
+      "projectedUsd": "0.038034",
+      "realizedUsd": "0.005912",
+      "latencyMs": 19207,
+      "parsed": "{\"tool\":\"submit_job\",\"args\":{\"source\":\"import fs from 'node:fs';\\nimport path from 'node:path';\\n\\nexport async function gate({ submissionDir }) {\\n  try {\\n    const answerPath = path.join(submissionDir, 'answer.json');\\n    const content = fs.readFileSync(answerPath, 'utf8');\\n    const data = JSON.parse(content);\\n\\n    if (data.invoice_number !== 'INV-4471') return { accept: false, reason: 'bad invoice_number' };\\n    if (data.vendor !== 'Acme Bolts Ltd') return { accept: false, reason: 'bad vendor' };\\n    if (String(data.total_amount) !== '128.50' && String(data.total_amount) !== '128.5') return { accept: false, reason: 'bad total_amount' };\\n    if (data.currency !== 'USD') return { accept: false, reason: 'bad currency' };\\n    if (data.due_date !== '2026-10-01') return { accept: false, reason: 'bad due_date' };\\n\\n    return { accept: true, reason: 'pass' };\\n  } catch (e) {\\n    return { accept: false, reason: e.message };\\n  }\\n}\"}}",
+      "gateResult": {
+        "passed": true,
+        "summary": "G1-G5 all passed"
+      }
+    }
+  ]
+}

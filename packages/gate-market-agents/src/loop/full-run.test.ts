@@ -30,6 +30,7 @@ import { ViemChainReader } from "../chain/reader.js";
 import { AGENT_IDS, erc8004IdFor, type AgentId } from "../identity/resolve.js";
 import { printDateToUnixDay, SERIES_COMMODITY } from "../chain/rate-attestation.js";
 import { QuoteBoard } from "./quote-board.js";
+import { ForwardQuoteBook } from "./forward-book.js";
 import {
   buildToolArgs,
   runFullRunWindow,
@@ -635,6 +636,91 @@ describe("buildToolArgs", () => {
   it("pay: refuses when requestId is missing entirely", async () => {
     await expect(buildToolArgs("pay", { settler: "0x0" }, baseCtx())).rejects.toThrow(
       /expected a string "requestId"/,
+    );
+  });
+
+  // ----- forward terms
+
+  function forwardCtx(windowIndex: number, book = new ForwardQuoteBook()): BuildToolArgsContext {
+    return baseCtx({
+      forwardBook: book,
+      windowIndex,
+      windowCount: 3,
+      agentAddressByAgentId: { "ISSUER-A": "0x00000000000000000000000000000000000000a1" },
+      caller: { agentId: "ISSUER-A", erc8004Id: "erc8004:0x00000000000000000000000000000000000000a1" },
+    });
+  }
+
+  it("quote_forward: splices the issuer's own address and the job's class, never the model's", async () => {
+    const args = (await buildToolArgs(
+      "quote_forward",
+      { forWindow: 3, rateUsdPerSiu: "0.0020", maxQuantityMilliSiu: "5000", issuerAddress: "0xdead", classId: "0xbeef" },
+      forwardCtx(1),
+    )) as { classId: string; issuerAddress: string; forWindow: number };
+    // The headroom recorded beside an offer has to be genuinely that issuer's, in the class the
+    // work is actually in — so neither field is taken from the model even when it supplies one.
+    expect(args.issuerAddress).toBe("0x00000000000000000000000000000000000000a1");
+    expect(args.classId).toBe(keccak256(stringToBytes(JOB.taskClass)));
+    expect(args.forWindow).toBe(3);
+  });
+
+  it("quote_forward: refuses a window that is not later than this one", async () => {
+    await expect(
+      buildToolArgs("quote_forward", { forWindow: 1, rateUsdPerSiu: "0.002", maxQuantityMilliSiu: "1" }, forwardCtx(1)),
+    ).rejects.toThrow(/must be a later window/);
+    await expect(
+      buildToolArgs("quote_forward", { forWindow: 4, rateUsdPerSiu: "0.002", maxQuantityMilliSiu: "1" }, forwardCtx(1)),
+    ).rejects.toThrow(/must be a later window/);
+  });
+
+  it("quote_forward: refuses entirely in a single-window run, where there is no later window", async () => {
+    await expect(
+      buildToolArgs(
+        "quote_forward",
+        { forWindow: 2, rateUsdPerSiu: "0.002", maxQuantityMilliSiu: "1" },
+        baseCtx({ forwardBook: new ForwardQuoteBook(), windowIndex: 1, windowCount: 1 }),
+      ),
+    ).rejects.toThrow(/only one window/);
+  });
+
+  it("take_forward: echoes the real terms from the book rather than the model's restatement", async () => {
+    const book = new ForwardQuoteBook();
+    const quote = book.record({
+      issuer: "ISSUER-A",
+      forWindow: 2,
+      statedInWindow: 1,
+      rateUsdPerSiu: "0.0020",
+      maxQuantityMilliSiu: "5000",
+      issuerHeadroomAtQuote: "24000",
+    });
+    const args = (await buildToolArgs("take_forward", { quoteId: quote.quoteId }, forwardCtx(2, book))) as {
+      issuer: string; rateUsdPerSiu: string; maxQuantityMilliSiu: string; forWindow: number;
+    };
+    expect(args).toEqual({
+      quoteId: quote.quoteId,
+      issuer: "ISSUER-A",
+      rateUsdPerSiu: "0.0020",
+      maxQuantityMilliSiu: "5000",
+      forWindow: 2,
+    });
+  });
+
+  it("take_forward: refuses an unknown offer, and one already taken", async () => {
+    const book = new ForwardQuoteBook();
+    await expect(buildToolArgs("take_forward", { quoteId: "fwd-404" }, forwardCtx(2, book))).rejects.toThrow(
+      /no forward offer/,
+    );
+    const quote = book.record({
+      issuer: "ISSUER-B",
+      forWindow: 2,
+      statedInWindow: 1,
+      rateUsdPerSiu: "0.0030",
+      maxQuantityMilliSiu: "1000",
+      issuerHeadroomAtQuote: "16000",
+    });
+    book.markTaken(quote.quoteId, "ORCHESTRATOR", 2);
+    await expect(buildToolArgs("take_forward", { quoteId: quote.quoteId }, forwardCtx(2, book))).rejects.toThrow(
+      /already taken by ORCHESTRATOR/,
     );
   });
 });

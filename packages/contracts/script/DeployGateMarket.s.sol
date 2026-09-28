@@ -5,7 +5,7 @@ import {Script, console} from "forge-std/Script.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {CapacityBond} from "../src/CapacityBond.sol";
 import {ClaimRouter} from "../src/ClaimRouter.sol";
-import {WorkClaim} from "../src/WorkClaim.sol";
+import {WorkClaim, ITouchstoneEscrow} from "../src/WorkClaim.sol";
 
 /**
  * Base Sepolia deployment for the Gate Market testbed's contracts — docs/gate-market-spec.md
@@ -25,6 +25,13 @@ import {WorkClaim} from "../src/WorkClaim.sol";
  *
  * Required env:
  *   TOUCHSTONE_GATE_MARKET_USDC   optional override; defaults to Base Sepolia USDC below
+ *   TOUCHSTONE_ESCROW_ADDRESS     the already-deployed TouchstoneEscrow this WorkClaim reads
+ *                                 when reserving capacity for USDC-paid work (defaults to the
+ *                                 Base Sepolia instance recorded in
+ *                                 data/deployments/base-sepolia.json — the same one
+ *                                 packages/gate-market-agents already pays through). WorkClaim
+ *                                 only ever *reads* it (`escrows(bytes32)`); the escrow itself is
+ *                                 unaware of WorkClaim, so no matching redeploy is needed there.
  *   TOUCHSTONE_PUBLISHER_ADDRESS  the address permitted to sign settlement rate attestations —
  *                                 same env var Deploy.s.sol already reads for
  *                                 TouchstoneAttestation's own publisher, and the same real key
@@ -38,6 +45,10 @@ contract DeployGateMarket is Script {
     /// Same address Deploy.s.sol uses — Base Sepolia USDC, from Circle's own documentation.
     address internal constant BASE_SEPOLIA_USDC = 0x036CbD53842c5426634e7929541eC2318f3dCF7e;
 
+    /// The live TouchstoneEscrow on Base Sepolia — data/deployments/base-sepolia.json's own
+    /// `contracts.TouchstoneEscrow.address`, deployed 2026-08-18 and unchanged since.
+    address public constant BASE_SEPOLIA_ESCROW = 0x3eC06FFe8d5250d5Edf8Fff26b163aaaD65c8a00;
+
     function run() external {
         require(
             block.chainid == BASE_SEPOLIA_CHAIN_ID,
@@ -46,6 +57,8 @@ contract DeployGateMarket is Script {
 
         address usdc = vm.envOr("TOUCHSTONE_GATE_MARKET_USDC", BASE_SEPOLIA_USDC);
         address publisher = vm.envAddress("TOUCHSTONE_PUBLISHER_ADDRESS");
+        address escrow = vm.envOr("TOUCHSTONE_ESCROW_ADDRESS", BASE_SEPOLIA_ESCROW);
+        require(escrow.code.length > 0, "TOUCHSTONE_ESCROW_ADDRESS has no code on this chain");
 
         vm.startBroadcast();
         (, address deployer,) = vm.readCallers();
@@ -54,7 +67,8 @@ contract DeployGateMarket is Script {
 
         CapacityBond bond = new CapacityBond(IERC20(usdc), predictedWorkClaim);
         ClaimRouter router = new ClaimRouter(bond);
-        WorkClaim workClaim = new WorkClaim(IERC20(usdc), bond, router, publisher);
+        WorkClaim workClaim =
+            new WorkClaim(IERC20(usdc), bond, router, publisher, ITouchstoneEscrow(escrow));
         vm.stopBroadcast();
 
         require(address(workClaim) == predictedWorkClaim, "WorkClaim address prediction mismatch");
@@ -69,5 +83,6 @@ contract DeployGateMarket is Script {
         console.log("  bond:            ", address(bond));
         console.log("  router:          ", address(router));
         console.log("  publisher:       ", publisher);
+        console.log("  escrow:          ", escrow);
     }
 }

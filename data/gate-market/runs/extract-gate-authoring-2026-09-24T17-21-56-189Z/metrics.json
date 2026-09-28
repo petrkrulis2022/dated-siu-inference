@@ -1,0 +1,19 @@
+{
+  "turnsUsed": 1,
+  "totalRealizedUsd": "0.012952",
+  "passed": true,
+  "turnLogs": [
+    {
+      "turn": 1,
+      "promptChars": 5620,
+      "projectedUsd": "0.03881",
+      "realizedUsd": "0.012952",
+      "latencyMs": 24807,
+      "parsed": "{\"tool\":\"submit_job\",\"args\":{\"source\":\"import fs from 'node:fs';\\nimport path from 'node:path';\\n\\nexport async function gate({ referenceDir, submissionDir }) {\\n  try {\\n    const expectedRaw = fs.readFileSync(path.join(referenceDir, 'expected.json'), 'utf8');\\n    const expected = JSON.parse(expectedRaw);\\n    \\n    const answerRaw = fs.readFileSync(path.join(submissionDir, 'answer.json'), 'utf8');\\n    const answer = JSON.parse(answerRaw);\\n    \\n    if (!answer || typeof answer !== 'object') {\\n      return { accept: false, reason: 'Answer is not an object' };\\n    }\\n    \\n    const requiredFields = ['invoice_number', 'vendor', 'total_amount', 'currency', 'due_date'];\\n    \\n    for (const field of requiredFields) {\\n      if (answer[field] === undefined) {\\n        return { accept: false, reason: `Missing required field: ${field}` };\\n      }\\n      \\n      let expVal = expected[field];\\n      let ansVal = answer[field];\\n      \\n      if (typeof expVal === 'string') expVal = expVal.trim();\\n      if (typeof ansVal === 'string') ansVal = ansVal.trim();\\n      \\n      if (field === 'total_amount') {\\n        const expNum = Number(expVal);\\n        const ansNum = Number(ansVal);\\n        if (!isNaN(expNum) && !isNaN(ansNum)) {\\n          if (expNum !== ansNum) {\\n            return { accept: false, reason: `Mismatch in ${field}` };\\n          }\\n          continue;\\n        }\\n      }\\n      \\n      if (String(expVal) !== String(ansVal)) {\\n        return { accept: false, reason: `Mismatch in ${field}` };\\n      }\\n    }\\n    \\n    return { accept: true, reason: 'Success' };\\n  } catch (e) {\\n    return { accept: false, reason: e.message };\\n  }\\n}\"}}",
+      "gateResult": {
+        "passed": true,
+        "summary": "G1-G6 all passed"
+      }
+    }
+  ]
+}

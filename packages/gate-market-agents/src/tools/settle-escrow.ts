@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { settle } from "@touchstone/agents";
 import { quoteHashHex, usdToMinorUnits, type TouchstoneQuote } from "@touchstone/sdk";
+import type { Hex } from "viem";
+import { WORK_CLAIM_ABI } from "../chain/abi.js";
+import { writeAndConfirm } from "../chain/write.js";
 import type { ToolDefinition } from "./types.js";
 
 /**
@@ -23,6 +26,13 @@ import type { ToolDefinition } from "./types.js";
  * accuracy (quoted versus actual), which is only a real measurement if the seller can settle for
  * less than it quoted. It is bounded by the escrow's own `maxAmount` on-chain, so the choice is
  * real but cannot exceed what the buyer committed.
+ *
+ * Releasing any capacity reserved against this quote happens here too, automatically, rather than
+ * as its own tool. Two reasons. It is not a decision — once the job is paid for, returning the
+ * issuer's headroom is right in every case, and a tool call that has only one correct answer adds
+ * nothing to measure. And leaving it to the seller's judgment would mean a seller that simply
+ * forgot left an issuer's capacity locked until the escrow's expiry, which would show up in the
+ * run as scarcity that never actually existed.
  */
 const argsSchema = z.object({
   /** The seller-signed quote this escrow was opened against — spliced by the loop from the board,
@@ -36,7 +46,10 @@ const argsSchema = z.object({
 
 type Args = z.infer<typeof argsSchema>;
 
-export const settleEscrowTool: ToolDefinition<Args, { txHash: string; settledMinorUnits: string }> = {
+export const settleEscrowTool: ToolDefinition<
+  Args,
+  { txHash: string; settledMinorUnits: string; releaseTxHash?: string }
+> = {
   name: "settle_escrow",
   argsSchema,
   async handler(ctx, args) {
@@ -52,11 +65,26 @@ export const settleEscrowTool: ToolDefinition<Args, { txHash: string; settledMin
       );
     }
 
+    const quoteHash = quoteHashHex(args.quote) as Hex;
     const txHash = await settle(ctx.clients, ctx.deps.escrowAddress, {
-      quoteHash: quoteHashHex(args.quote),
+      quoteHash,
       actualAmount: requested,
       receiptRef: args.receiptRef,
     });
-    return { txHash, settledMinorUnits: requested.toString() };
+
+    const workClaim = ctx.deps.deployment.workClaim.address as Hex;
+    const reservation = await ctx.deps.chainReader.reservation(workClaim, quoteHash);
+    let releaseTxHash: string | undefined;
+    if (reservation.exists && !reservation.released) {
+      const receipt = await writeAndConfirm(ctx.clients, {
+        address: workClaim,
+        abi: WORK_CLAIM_ABI,
+        functionName: "releaseReservation",
+        args: [quoteHash],
+      });
+      releaseTxHash = receipt.transactionHash;
+    }
+
+    return { txHash, settledMinorUnits: requested.toString(), releaseTxHash };
   },
 };

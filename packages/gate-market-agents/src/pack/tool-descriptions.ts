@@ -39,7 +39,13 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   pay_with_claim:
     "pay_with_claim(to | agentId, quantity) -> pays a counterparty in fSIU in one call: mints a dated work claim against an issuer's bonded capacity and transfers it to them. quantity is in milli-SIU. The claim reserves that issuer's headroom, which is finite and shared.",
   settle_escrow:
-    "settle_escrow(actualAmountUsd?, receiptRef) -> as the SELLER named in a quote that was paid: releases the escrowed USDC to yourself. Until you call this the money sits in escrow and never reaches your wallet. Omit actualAmountUsd to settle the full quoted amount; settling for less is allowed and is what quote accuracy is scored on.",
+    "settle_escrow(actualAmountUsd?, receiptRef) -> as the SELLER named in a quote that was paid: releases the escrowed USDC to yourself. Until you call this the money sits in escrow and never reaches your wallet. Omit actualAmountUsd to settle the full quoted amount; settling for less is allowed and is what quote accuracy is scored on. Any capacity you reserved against this quote is returned to its issuer automatically here.",
+  reserve_for_work:
+    "reserve_for_work(classId) -> as the SELLER named in a quote that was paid in USDC: commits an issuer's bonded capacity to that job before you do the work. Draws on exactly the same finite pool a dated work claim does, sized to the quote's own worst-case SIU. Call it once the escrow is open and before you deliver; settle_escrow releases it again.",
+  quote_forward:
+    "quote_forward(forWindow, rateUsdPerSiu, maxQuantityMilliSiu) -> as an ISSUER: states your own terms for a LATER window of this run — your price per SIU and how much capacity you will make available at it. This is the only tool here that lets you name your own number. It is recorded whether or not anyone takes it, together with your real headroom at the moment you quoted. It is NOT binding: nothing on-chain holds you to it, and a claim minted later still prices at the published print rate.",
+  take_forward:
+    "take_forward(quoteId) -> records that you are acting on an issuer's stated forward terms. Nothing is paid, minted or reserved — you still buy the work separately, at the published print rate. It exists so that taking an offer and ignoring one are distinguishable.",
   get_balances:
     "get_balances(account, tokenIds?) -> real USDC balance (decimal and integer minor-unit forms) plus claim balances",
   get_print: "get_print(printId) -> the real print body plus whether it's final",

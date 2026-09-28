@@ -12,17 +12,20 @@ describe("loadGateMarketDeployment", () => {
   });
 
   it("loads the real Base Sepolia deployment — redeployed 2026-09-27 for the series (grade) discriminant", () => {
-    // Addresses updated 2026-09-27: the second trio (0xa053.../0xaec2.../0xD3cC..., still
-    // recorded under redeployment.previousTrio in the deployment JSON — the first trio,
-    // 0xC403.../0x88fb.../0x7583..., is recorded one level deeper under
-    // redeployment.priorRedeployment.previousTrio) was retired when `series` was added as a
-    // discriminant across ClaimType/tokenIdFor/RateAttestation, requiring the whole
-    // mutually-address-pinned trio to redeploy together.
+    // Addresses updated 2026-09-28: the third trio (0x8582.../0x1A1D.../0x0dF1..., now recorded
+    // under redeployment.previousTrio in the deployment JSON; the two older trios are recorded
+    // one and two levels deeper under redeployment.priorRedeployment) was retired when
+    // `reserveForWork`/`releaseReservation` were added, so that USDC-paid work draws on the same
+    // bonded headroom a minted claim does. The whole mutually-address-pinned trio has to
+    // redeploy together — `CapacityBond` takes WorkClaim's address as an immutable. The same
+    // deploy resized both issuers' lots (60,000/40,000 -> 24,000/16,000 mSIU per class), which
+    // would have required a redeploy on its own: `createLot` reverts `LotExists`, so a lot is
+    // immutable once made.
     const deployment = loadGateMarketDeployment();
     expect(deployment.network).toMatchObject({ name: "Base Sepolia", chainId: 84532 });
     expect(deployment.usdc.address).toBe("0x036CbD53842c5426634e7929541eC2318f3dCF7e");
-    expect(deployment.capacityBond.address).toBe("0x8582a738A810666f6CA5c4877710bbc55dF94434");
-    expect(deployment.claimRouter.address).toBe("0x1A1DC8061617d78f2a037Ed3f3AFB2F0fd07123f");
-    expect(deployment.workClaim.address).toBe("0x0dF15076d534896D375D80b87E0243b4C83131Fc");
+    expect(deployment.capacityBond.address).toBe("0xa76967016ae221Ab22d58471f7CB9c6Dae57634e");
+    expect(deployment.claimRouter.address).toBe("0x277b67694aba7bd0988d85dE888fBf7053295AE1");
+    expect(deployment.workClaim.address).toBe("0xe0D9B879F9841ef6Be5Af9001ed8F015030324A4");
   });
 });

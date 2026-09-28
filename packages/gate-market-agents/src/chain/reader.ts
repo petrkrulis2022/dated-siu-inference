@@ -30,10 +30,23 @@ export interface ChainReader {
    * contract exposes a mapping rather than an enumeration, so the caller must already know which
    * quote to ask about — the quote board supplies that. */
   escrowState(escrowAddress: Hex, quoteHash: Hex): Promise<EscrowState>;
+  /** One quote's capacity reservation, as `WorkClaim` records it. `exists` is false for a
+   * quote nobody reserved against — an ordinary state, not an error, since the fSIU route never
+   * reserves at all. */
+  reservation(workClaimAddress: Hex, quoteHash: Hex): Promise<WorkReservation>;
   /** Every issuer bonded in a class, in registration order — the same order `ClaimRouter.route`
    * walks when it picks one. Lets a buyer see the whole shared pool rather than one issuer it
    * already knew the address of. */
   issuersForClass(classId: Hex): Promise<readonly Hex[]>;
+}
+
+export interface WorkReservation {
+  exists: boolean;
+  released: boolean;
+  issuer: Hex;
+  classId: Hex;
+  quantityMilliSiu: bigint;
+  deadlineUnix: bigint;
 }
 
 export type EscrowStatus = "none" | "open" | "settled" | "expired";
@@ -112,6 +125,23 @@ export class ViemChainReader implements ChainReader {
       functionName: "issuersForClass",
       args: [classId],
     });
+  }
+
+  async reservation(workClaimAddress: Hex, quoteHash: Hex): Promise<WorkReservation> {
+    const [issuer, classId, quantity, deadline, released, exists] = await this.client.readContract({
+      address: workClaimAddress,
+      abi: WORK_CLAIM_ABI,
+      functionName: "reservations",
+      args: [quoteHash],
+    });
+    return {
+      exists,
+      released,
+      issuer,
+      classId,
+      quantityMilliSiu: quantity,
+      deadlineUnix: deadline,
+    };
   }
 
   async escrowState(escrowAddress: Hex, quoteHash: Hex): Promise<EscrowState> {

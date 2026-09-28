@@ -1,0 +1,19 @@
+{
+  "turnsUsed": 1,
+  "totalRealizedUsd": "0.014900",
+  "passed": true,
+  "turnLogs": [
+    {
+      "turn": 1,
+      "promptChars": 4922,
+      "projectedUsd": "0.038462",
+      "realizedUsd": "0.0149",
+      "latencyMs": 42336,
+      "parsed": "{\"tool\":\"submit_job\",\"args\":{\"source\":\"import fs from 'node:fs';\\nimport path from 'node:path';\\n\\nexport async function gate({ referenceDir, submissionDir }) {\\n  try {\\n    const sourcePath = path.join(referenceDir, 'source-document.txt');\\n    const submissionPath = path.join(submissionDir, 'answer.json');\\n    \\n    const sourceText = fs.readFileSync(sourcePath, 'utf8');\\n    const submissionText = fs.readFileSync(submissionPath, 'utf8');\\n    \\n    let submission;\\n    try {\\n      submission = JSON.parse(submissionText);\\n    } catch (e) {\\n      return { accept: false, reason: 'Submission is not valid JSON' };\\n    }\\n    \\n    const expected = {};\\n    const lines = sourceText.split(/\\\\r?\\\\n/);\\n    for (const line of lines) {\\n      const matchInvoice = line.match(/^Invoice number:\\\\s*(.+)$/i);\\n      if (matchInvoice) expected.invoice_number = matchInvoice[1].trim();\\n      \\n      const matchVendor = line.match(/^Vendor:\\\\s*(.+)$/i);\\n      if (matchVendor) expected.vendor = matchVendor[1].trim();\\n      \\n      const matchAmount = line.match(/^Total amount:\\\\s*(.+)$/i);\\n      if (matchAmount) expected.total_amount = matchAmount[1].trim();\\n      \\n      const matchCurrency = line.match(/^Currency:\\\\s*(.+)$/i);\\n      if (matchCurrency) expected.currency = matchCurrency[1].trim();\\n      \\n      const matchDate = line.match(/^Due date:\\\\s*(.+)$/i);\\n      if (matchDate) expected.due_date = matchDate[1].trim();\\n    }\\n    \\n    const requiredFields = ['invoice_number', 'vendor', 'total_amount', 'currency', 'due_date'];\\n    for (const field of requiredFields) {\\n      if (!expected[field]) {\\n        return { accept: false, reason: `Could not parse expected ${field} from source document` };\\n      }\\n      if (submission[field] === undefined) {\\n        return { accept: false, reason: `Submission missing required field: ${field}` };\\n      }\\n      \\n      const expVal = String(expected[field]);\\n      const subVal = String(submission[field]);\\n      \\n      if (expVal !== subVal) {\\n        if (field === 'total_amount' && !isNaN(Number(expVal)) && Number(expVal) === Number(subVal)) {\\n          continue;\\n        }\\n        return { accept: false, reason: `Mismatch in ${field}: expected ${expVal}, got ${subVal}` };\\n      }\\n    }\\n    \\n    return { accept: true, reason: 'All fields match exactly' };\\n  } catch (e) {\\n    return { accept: false, reason: `Error during validation: ${e.message}` };\\n  }\\n}\"}}",
+      "gateResult": {
+        "passed": true,
+        "summary": "G1-G6 all passed"
+      }
+    }
+  ]
+}

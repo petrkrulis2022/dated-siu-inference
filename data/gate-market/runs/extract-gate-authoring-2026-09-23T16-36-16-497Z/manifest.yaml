@@ -1,0 +1,6 @@
+benchVersion: 0.0.0
+packVersion: gate-hardening/extract@0.0.0
+agentConfigs:
+  WORKER-EXTRACT:
+    reasoningModel: gemini-3.1-pro-preview
+seed: extract-gate-authoring-pass — no seeded randomness in this loop

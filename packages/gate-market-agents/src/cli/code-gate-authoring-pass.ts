@@ -64,6 +64,7 @@ function buildDeps(): RunnerDeps {
       claimWindow: async () => ({ windowFrom: 0n, windowTo: 0n }),
       currentBlockTimestamp: async () => 0n,
       escrowState: () => Promise.reject(new Error("escrowState: this pass has no escrow")),
+      reservation: () => Promise.reject(new Error("reservation: this pass has no reservations")),
       issuersForClass: () => Promise.resolve([]),
     },
     deployment: {

@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {CapacityBond} from "../../src/CapacityBond.sol";
 import {ClaimRouter} from "../../src/ClaimRouter.sol";
 import {WorkClaim} from "../../src/WorkClaim.sol";
+import {TouchstoneEscrow} from "../../src/TouchstoneEscrow.sol";
 import {RateAttestationVerifier} from "../../src/RateAttestationVerifier.sol";
 import {MockUSDC} from "../mocks/MockUSDC.sol";
 
@@ -26,6 +27,10 @@ contract WorkClaimHandler is Test {
     CapacityBond public immutable bond;
     ClaimRouter public immutable router;
     WorkClaim public immutable claim;
+    /// The real escrow `WorkClaim.reserveForWork` reads. Concrete, not the `ITouchstoneEscrow`
+    /// view WorkClaim holds, because the handler must also *open* and *settle* escrows to drive
+    /// the reservation lifecycle — it is a counterparty here, not just a source of reads.
+    TouchstoneEscrow public immutable escrow;
 
     bytes32 public constant CLASS_A = keccak256("classA");
     bytes32 public constant CLASS_B = keccak256("classB");
@@ -62,6 +67,19 @@ contract WorkClaimHandler is Test {
     /// claim's own window has already closed still succeeds — must stay zero now that
     /// serveRedemption reverts on a closed window (WorkClaim.sol).
     uint256 public ghostServeSucceededAfterWindowClosed;
+    /// The dollar-side consumers of the very same bonded pool — added when USDC-paid work was
+    /// made to draw on it too, so that "outstanding == live claims" became "outstanding == live
+    /// claims + live reservations" and had to be re-proven with both moving at once.
+    uint256 public ghostReservations;
+    uint256 public ghostReleasesOnSettlement;
+    uint256 public ghostReleasesAtDeadline;
+    uint256 public ghostRejectedDoubleReserves;
+    uint256 public ghostRejectedDoubleReleases;
+    /// Both must stay zero: each is one direction of the same double-spend. A second reservation
+    /// on one quoteHash would consume the pool twice for one job; a second release would return
+    /// capacity to a bond that never grew.
+    uint256 public ghostDoubleReserveSucceeded;
+    uint256 public ghostDoubleReleaseSucceeded;
 
     /// Same test-only publisher key WorkClaim was deployed to trust — the handler signs every
     /// rate attestation it uses itself, real secp256k1 via vm.sign, not a stub.
@@ -72,6 +90,7 @@ contract WorkClaimHandler is Test {
         CapacityBond bond_,
         ClaimRouter router_,
         WorkClaim claim_,
+        TouchstoneEscrow escrow_,
         address[2] memory issuers_,
         address[3] memory holders_,
         address attacker_,
@@ -81,6 +100,7 @@ contract WorkClaimHandler is Test {
         bond = bond_;
         router = router_;
         claim = claim_;
+        escrow = escrow_;
         issuers = issuers_;
         holders = holders_;
         attacker = attacker_;
@@ -391,6 +411,165 @@ contract WorkClaimHandler is Test {
     function _bondedAmountFor(uint256 tokenId) internal view returns (uint256 bondedUsdc) {
         (address issuer, bytes32 classId,,,,,) = claim.claimTypes(tokenId);
         (,, bondedUsdc,,) = bond.lots(issuer, classId);
+    }
+
+    // ------------------------------------------------------------------ reservations (the USDC-paid route)
+
+    /// Every quoteHash this handler has ever reserved against, so the conservation invariant can
+    /// total live reservations the same way `sumLiveClaims` totals live balances — from real
+    /// contract state, never from a ghost running total.
+    bytes32[] public knownQuoteHashes;
+    mapping(bytes32 => bool) public knownQuoteHash;
+
+    function knownQuoteHashCount() external view returns (uint256) {
+        return knownQuoteHashes.length;
+    }
+
+    uint64 internal constant ESCROW_DURATION = 2 days;
+
+    /// Opens a real escrow and reserves against it in one action. The two are inseparable in
+    /// practice — `reserveForWork` will only accept a caller that is already an Open escrow's
+    /// named seller — so splitting them into two fuzzed actions would mean the reserve half
+    /// almost never found a matching escrow to act on, the same coverage failure
+    /// WINDOW_OPEN_DELAY's own doc comment records.
+    function reserveWork(
+        uint256 buyerSeed,
+        uint256 sellerSeed,
+        uint256 classSeed,
+        uint256 quantitySeed,
+        uint256 quoteSeed
+    ) external {
+        address buyer = holders[bound(buyerSeed, 0, holders.length - 1)];
+        address seller = issuers[bound(sellerSeed, 0, issuers.length - 1)];
+        bytes32 classId = classes[classSeed % 2];
+        uint256 quantity = bound(quantitySeed, 1, 2000);
+        bytes32 quoteHash = keccak256(abi.encode("quote", quoteSeed, block.timestamp));
+        (,, TouchstoneEscrow.Status existing,,,) = escrow.escrows(quoteHash);
+        if (quoteHash == bytes32(0) || existing != TouchstoneEscrow.Status.None) return;
+
+        uint256 maxAmount = 10_000;
+        if (usdc.balanceOf(buyer) < maxAmount) usdc.mint(buyer, maxAmount * 10);
+        vm.prank(buyer);
+        usdc.approve(address(escrow), maxAmount);
+        vm.prank(buyer);
+        try escrow.openAndFund(
+            quoteHash, seller, address(0), maxAmount, uint64(block.timestamp + ESCROW_DURATION)
+        ) {} catch {
+            return;
+        }
+
+        vm.prank(seller);
+        try claim.reserveForWork(quoteHash, classId, quantity) returns (address) {
+            ghostReservations++;
+            if (!knownQuoteHash[quoteHash]) {
+                knownQuoteHash[quoteHash] = true;
+                knownQuoteHashes.push(quoteHash);
+            }
+        } catch {}
+    }
+
+    /// Settles the escrow (the work got paid for) and then releases — the ordinary completion
+    /// path. Called by a stranger deliberately: release is permissionless by design.
+    function settleAndRelease(uint256 quoteSeed) external {
+        if (knownQuoteHashes.length == 0) return;
+        bytes32 quoteHash = knownQuoteHashes[bound(quoteSeed, 0, knownQuoteHashes.length - 1)];
+        (, uint64 expiry, TouchstoneEscrow.Status status, address seller,, uint256 maxAmount) =
+            escrow.escrows(quoteHash);
+
+        if (status == TouchstoneEscrow.Status.Open && block.timestamp <= expiry) {
+            vm.prank(seller);
+            try escrow.settle(quoteHash, maxAmount, keccak256("receipt")) {} catch {
+                return;
+            }
+        }
+
+        vm.prank(attacker);
+        try claim.releaseReservation(quoteHash) {
+            ghostReleasesOnSettlement++;
+        } catch {}
+    }
+
+    /// The abandoned case: nobody settled, the deadline passed, and a stranger reclaims the
+    /// issuer's capacity. Without this path an unsettled escrow would hold bonded capacity
+    /// forever.
+    function releaseAtDeadline(uint256 quoteSeed) external {
+        if (knownQuoteHashes.length == 0) return;
+        bytes32 quoteHash = knownQuoteHashes[bound(quoteSeed, 0, knownQuoteHashes.length - 1)];
+        (,, uint64 deadline, bool released, bool exists) = _reservation(quoteHash);
+        if (!exists || released) return;
+
+        if (block.timestamp < deadline) vm.warp(deadline);
+        vm.prank(attacker);
+        try claim.releaseReservation(quoteHash) {
+            ghostReleasesAtDeadline++;
+        } catch {}
+    }
+
+    // ------------------------------------------------------------------ adversarial: reservation double-spend
+
+    /// Direction one: reserve twice against one quoteHash, which would consume the pool twice for
+    /// a single job.
+    function attackerReserveTwice(uint256 quoteSeed, uint256 quantitySeed) external {
+        if (knownQuoteHashes.length == 0) return;
+        bytes32 quoteHash = knownQuoteHashes[bound(quoteSeed, 0, knownQuoteHashes.length - 1)];
+        (, uint64 expiry, TouchstoneEscrow.Status status, address seller,,) = escrow.escrows(quoteHash);
+        if (status != TouchstoneEscrow.Status.Open || block.timestamp > expiry) return;
+        bytes32 classId = classes[quantitySeed % 2];
+
+        vm.prank(seller);
+        try claim.reserveForWork(quoteHash, classId, bound(quantitySeed, 1, 2000)) returns (address) {
+            ghostDoubleReserveSucceeded++;
+        } catch {
+            ghostRejectedDoubleReserves++;
+        }
+    }
+
+    /// Direction two: release twice, which would restore headroom against a bond that never grew
+    /// — the mirror image of attackerDoubleSettle, on the dollar-paid route.
+    function attackerReleaseTwice(uint256 quoteSeed) external {
+        if (knownQuoteHashes.length == 0) return;
+        bytes32 quoteHash = knownQuoteHashes[bound(quoteSeed, 0, knownQuoteHashes.length - 1)];
+        (address issuer, bytes32 classId,, bool released, bool exists) = _reservation(quoteHash);
+        if (!exists || !released) return;
+
+        uint256 headroomBefore = bond.headroom(issuer, classId);
+        vm.prank(attacker);
+        try claim.releaseReservation(quoteHash) {
+            ghostDoubleReleaseSucceeded++;
+        } catch {
+            ghostRejectedDoubleReleases++;
+            assertEq(
+                bond.headroom(issuer, classId),
+                headroomBefore,
+                "a rejected second release still moved headroom"
+            );
+        }
+    }
+
+    function _reservation(bytes32 quoteHash)
+        internal
+        view
+        returns (address issuer, bytes32 classId, uint64 deadline, bool released, bool exists)
+    {
+        uint256 quantity;
+        (issuer, classId, quantity, deadline, released, exists) = claim.reservations(quoteHash);
+        quantity;
+    }
+
+    /// Sum of capacity currently held by unreleased reservations for (issuer, classId) — the
+    /// second claimant on the same pool. Read from the contract's own reservation records, in the
+    /// same spirit as `sumLiveClaims` reading real balances.
+    function sumLiveReservations(address issuer, bytes32 classId)
+        external
+        view
+        returns (uint256 total)
+    {
+        for (uint256 i = 0; i < knownQuoteHashes.length; i++) {
+            (address rIssuer, bytes32 rClass, uint256 quantity,, bool released, bool exists) =
+                claim.reservations(knownQuoteHashes[i]);
+            if (!exists || released || rIssuer != issuer || rClass != classId) continue;
+            total += quantity;
+        }
     }
 
     /// @dev Small steps (30 min-1 day), not the 10-day jumps an earlier version used — same

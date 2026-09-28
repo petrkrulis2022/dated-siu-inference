@@ -6,6 +6,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {CapacityBond} from "../src/CapacityBond.sol";
 import {ClaimRouter} from "../src/ClaimRouter.sol";
 import {WorkClaim} from "../src/WorkClaim.sol";
+import {TouchstoneEscrow} from "../src/TouchstoneEscrow.sol";
+import {ITouchstoneEscrow} from "../src/WorkClaim.sol";
 import {RateAttestationVerifier} from "../src/RateAttestationVerifier.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MockUSDC} from "./mocks/MockUSDC.sol";
@@ -14,6 +16,9 @@ import {MockUSDC} from "./mocks/MockUSDC.sol";
 /// expire — before the invariant suite fuzzes arbitrary sequences of the same operations.
 contract WorkClaimTest is Test {
     MockUSDC internal usdc;
+    /// Real, not mocked: `WorkClaim.reserveForWork` reads this escrow's own state to decide
+    /// whether a reservation may exist at all, so a stub would test nothing.
+    TouchstoneEscrow internal escrowForClaims;
     CapacityBond internal bond;
     ClaimRouter internal router;
     WorkClaim internal claim;
@@ -55,6 +60,8 @@ contract WorkClaimTest is Test {
         // Precompute WorkClaim's future address (deployer's next-but-one nonce) so CapacityBond
         // can take it as an immutable constructor parameter — see WorkClaim's own deployment
         // note. This test contract is the deployer for all three.
+        escrowForClaims = new TouchstoneEscrow(IERC20(address(usdc)), makeAddr("escrowTreasury"), 50);
+
         uint64 nonce = vm.getNonce(address(this));
         address predictedBondAddr = vm.computeCreateAddress(address(this), nonce);
         address predictedRouterAddr = vm.computeCreateAddress(address(this), nonce + 1);
@@ -66,7 +73,7 @@ contract WorkClaimTest is Test {
         router = new ClaimRouter(bond);
         assertEq(address(router), predictedRouterAddr, "sanity: ClaimRouter address prediction");
 
-        claim = new WorkClaim(IERC20(address(usdc)), bond, router, publisher);
+        claim = new WorkClaim(IERC20(address(usdc)), bond, router, publisher, ITouchstoneEscrow(address(escrowForClaims)));
         assertEq(address(claim), predictedClaimAddr, "sanity: WorkClaim address prediction");
         fixtureSeries = claim.SERIES_COMMODITY();
 
@@ -705,6 +712,241 @@ contract WorkClaimTest is Test {
             actualAmountUsdc,
             (500 * upperBound) / 1_000_000,
             "clamped payout never exceeds the band-edge amount, however far out of band the real rate was"
+        );
+    }
+
+    // -------------------------------------------------------------- reserveForWork / release
+    //
+    // The one-pool property, in tests. Before this existed, a dollar-paid job consumed nothing:
+    // scarcity bound the fSIU route alone, so an agent offered "pay in claims or pay in dollars"
+    // was really being offered "accept a constraint or don't" — which is not the choice F1 asks
+    // about. These reserve against the same `CapacityBond` headroom `mint` draws from.
+    //
+    // Disclosed asymmetry, deliberately not papered over: a reservation is not a claim. A claim
+    // reserves capacity for a *future* window and is transferable; a dollar payment reserves it
+    // for immediate work and is not. The two consume one pool, they are not the same instrument.
+
+    address internal seller = makeAddr("seller");
+    bytes32 internal constant QUOTE_HASH = keccak256("quote-1");
+
+    /// Opens a real, funded escrow — not a mocked read. `reserveForWork` believes the escrow about
+    /// who the seller is and when the deadline falls, so a stub would only test the stub.
+    function _openEscrow(bytes32 quoteHash, uint64 expiry) internal returns (uint64) {
+        vm.prank(buyer);
+        usdc.approve(address(escrowForClaims), 10_000);
+        vm.prank(buyer);
+        escrowForClaims.openAndFund(quoteHash, seller, address(0), 10_000, expiry);
+        return expiry;
+    }
+
+    function _openDefaultEscrow() internal returns (uint64 expiry) {
+        expiry = uint64(block.timestamp + 3 days);
+        _openEscrow(QUOTE_HASH, expiry);
+    }
+
+    function test_reserveForWork_consumesTheSamePoolAsMint() public {
+        uint256 headroomBefore = bond.headroom(issuer, CLASS_CODE);
+        uint64 expiry = _openDefaultEscrow();
+
+        vm.prank(seller);
+        address routed = claim.reserveForWork(QUOTE_HASH, CLASS_CODE, 400);
+
+        assertEq(routed, issuer, "routed through the same ClaimRouter mint uses");
+        assertEq(
+            bond.headroom(issuer, CLASS_CODE),
+            headroomBefore - 400,
+            "a dollar-paid job must draw on the same finite pool a minted claim does"
+        );
+
+        (address resIssuer, bytes32 resClass, uint256 resQty, uint64 deadline, bool released, bool exists) =
+            claim.reservations(QUOTE_HASH);
+        assertEq(resIssuer, issuer);
+        assertEq(resClass, CLASS_CODE);
+        assertEq(resQty, 400);
+        // The escrow's own expiry, not an independently chosen timeout — see the release test.
+        assertEq(deadline, expiry);
+        assertFalse(released);
+        assertTrue(exists);
+    }
+
+    function test_reserveForWork_revertsForAnyoneButTheEscrowSeller() public {
+        _openDefaultEscrow();
+        vm.prank(buyer);
+        vm.expectRevert(WorkClaim.NotTheEscrowSeller.selector);
+        claim.reserveForWork(QUOTE_HASH, CLASS_CODE, 400);
+    }
+
+    function test_reserveForWork_revertsWithNoEscrowAtAll() public {
+        vm.prank(seller);
+        vm.expectRevert(WorkClaim.EscrowNotOpen.selector);
+        claim.reserveForWork(keccak256("never-opened"), CLASS_CODE, 400);
+    }
+
+    function test_reserveForWork_revertsOnceTheEscrowHasSettled() public {
+        _openDefaultEscrow();
+        vm.prank(seller);
+        escrowForClaims.settle(QUOTE_HASH, 10_000, bytes32("receipt"));
+
+        vm.prank(seller);
+        vm.expectRevert(WorkClaim.EscrowNotOpen.selector);
+        claim.reserveForWork(QUOTE_HASH, CLASS_CODE, 400);
+    }
+
+    function test_reserveForWork_revertsOnZeroQuantity() public {
+        _openDefaultEscrow();
+        vm.prank(seller);
+        vm.expectRevert(WorkClaim.ZeroAmount.selector);
+        claim.reserveForWork(QUOTE_HASH, CLASS_CODE, 0);
+    }
+
+    /// The pool is finite for this route too — the same `NoIssuerWithHeadroom` a mint gets, at the
+    /// moment of acceptance rather than after the work is done.
+    function test_reserveForWork_revertsWhenTheClassIsExhausted() public {
+        _openDefaultEscrow();
+        vm.prank(seller);
+        vm.expectRevert(
+            abi.encodeWithSelector(ClaimRouter.NoIssuerWithHeadroom.selector, CLASS_CODE, 60_001)
+        );
+        claim.reserveForWork(QUOTE_HASH, CLASS_CODE, 60_001);
+    }
+
+    // ----- double-spend, both directions
+
+    function test_reserveForWork_cannotReserveTwiceAgainstOneQuoteHash() public {
+        _openDefaultEscrow();
+        vm.prank(seller);
+        claim.reserveForWork(QUOTE_HASH, CLASS_CODE, 400);
+
+        uint256 headroomAfterFirst = bond.headroom(issuer, CLASS_CODE);
+        vm.prank(seller);
+        vm.expectRevert(WorkClaim.ReservationExists.selector);
+        claim.reserveForWork(QUOTE_HASH, CLASS_CODE, 400);
+        assertEq(
+            bond.headroom(issuer, CLASS_CODE),
+            headroomAfterFirst,
+            "a rejected second reservation must not have moved the pool"
+        );
+    }
+
+    function test_releaseReservation_cannotReleaseTwice() public {
+        _openDefaultEscrow();
+        vm.prank(seller);
+        claim.reserveForWork(QUOTE_HASH, CLASS_CODE, 400);
+        vm.prank(seller);
+        escrowForClaims.settle(QUOTE_HASH, 10_000, bytes32("receipt"));
+
+        claim.releaseReservation(QUOTE_HASH);
+        uint256 headroomAfterRelease = bond.headroom(issuer, CLASS_CODE);
+
+        vm.expectRevert(WorkClaim.ReservationAlreadyReleased.selector);
+        claim.releaseReservation(QUOTE_HASH);
+        assertEq(
+            bond.headroom(issuer, CLASS_CODE),
+            headroomAfterRelease,
+            "releasing twice would mint headroom against a bond that never grew"
+        );
+    }
+
+    function test_releaseReservation_revertsWithNoReservation() public {
+        vm.expectRevert(WorkClaim.NoReservation.selector);
+        claim.releaseReservation(keccak256("never-reserved"));
+    }
+
+    // ----- release paths
+
+    function test_releaseReservation_onSettlementRestoresHeadroomExactly() public {
+        uint256 headroomBefore = bond.headroom(issuer, CLASS_CODE);
+        _openDefaultEscrow();
+        vm.prank(seller);
+        claim.reserveForWork(QUOTE_HASH, CLASS_CODE, 400);
+        vm.prank(seller);
+        escrowForClaims.settle(QUOTE_HASH, 10_000, bytes32("receipt"));
+
+        vm.expectEmit(true, true, false, true, address(claim));
+        emit WorkClaim.ReservationReleased(QUOTE_HASH, issuer, CLASS_CODE, 400, true);
+        claim.releaseReservation(QUOTE_HASH);
+
+        assertEq(bond.headroom(issuer, CLASS_CODE), headroomBefore);
+    }
+
+    /// The deadline is the escrow's own expiry, chosen rather than an independent timeout for one
+    /// reason: past that instant the escrow can no longer settle (`TouchstoneEscrow.settle` reverts
+    /// `PastExpiry` once `block.timestamp > expiry`), so the work this reservation was made for can
+    /// never be paid for. Any later deadline would hold an issuer's capacity against a job that has
+    /// become impossible; any earlier one would free capacity while the job was still live and
+    /// payable. There is exactly one correct instant and the escrow already states it.
+    function test_releaseReservation_isBlockedWhileTheEscrowCanStillSettle() public {
+        uint64 expiry = _openDefaultEscrow();
+        vm.prank(seller);
+        claim.reserveForWork(QUOTE_HASH, CLASS_CODE, 400);
+
+        vm.warp(expiry - 1);
+        vm.expectRevert(WorkClaim.ReservationNotReleasable.selector);
+        claim.releaseReservation(QUOTE_HASH);
+    }
+
+    /// Permissionless, and that is the point: an escrow opened, reserved against and then
+    /// abandoned must not lock an issuer's capacity forever merely because nobody with a stake in
+    /// it bothers to call. The caller here is a stranger — neither buyer, seller, nor issuer.
+    function test_releaseReservation_anyoneMayReleaseAnAbandonedReservationAtTheDeadline() public {
+        uint256 headroomBefore = bond.headroom(issuer, CLASS_CODE);
+        uint64 expiry = _openDefaultEscrow();
+        vm.prank(seller);
+        claim.reserveForWork(QUOTE_HASH, CLASS_CODE, 400);
+
+        vm.warp(expiry);
+        address stranger = makeAddr("stranger");
+        vm.prank(stranger);
+        claim.releaseReservation(QUOTE_HASH);
+
+        assertEq(
+            bond.headroom(issuer, CLASS_CODE),
+            headroomBefore,
+            "abandoned reservations must return capacity to the issuer, called by anyone"
+        );
+        (,,,, bool released,) = claim.reservations(QUOTE_HASH);
+        assertTrue(released);
+    }
+
+    // ----- minted claims are senior to reservations
+
+    /// Invariant 7 of this contract's own set, from the reservation side: headroom a claim already
+    /// consumed is not available to reserve, and a claim already minted still redeems after
+    /// reservations have taken everything else. A reservation can starve a *future* mint; it can
+    /// never reach back into capacity a live claim is already standing on.
+    function test_reservationsCannotConsumeHeadroomAMintedClaimAlreadyHolds() public {
+        uint256 tokenId = _mint(500);
+        uint256 headroomAfterMint = bond.headroom(issuer, CLASS_CODE);
+        assertEq(headroomAfterMint, 60_000 - 500);
+
+        // One more than what remains — rejected, because the claim's 500 is not on offer.
+        _openEscrow(keccak256("too-big"), uint64(block.timestamp + 3 days));
+        vm.prank(seller);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ClaimRouter.NoIssuerWithHeadroom.selector, CLASS_CODE, headroomAfterMint + 1
+            )
+        );
+        claim.reserveForWork(keccak256("too-big"), CLASS_CODE, headroomAfterMint + 1);
+
+        // Exactly what remains — accepted, and now the pool is empty.
+        _openEscrow(QUOTE_HASH, uint64(block.timestamp + 3 days));
+        vm.prank(seller);
+        claim.reserveForWork(QUOTE_HASH, CLASS_CODE, headroomAfterMint);
+        assertEq(bond.headroom(issuer, CLASS_CODE), 0, "reservations exhausted the pool");
+
+        // The already-minted claim redeems anyway — its capacity was never in the pool to take.
+        vm.warp(windowFrom + 1);
+        vm.prank(buyer);
+        claim.presentForRedemption(tokenId, keccak256("task-spec"));
+        vm.prank(issuer);
+        claim.serveRedemption(tokenId, buyer, 500, true, bytes32("receipt"));
+
+        assertEq(claim.balanceOf(buyer, tokenId), 0, "a minted claim still redeems on an empty pool");
+        assertEq(
+            bond.headroom(issuer, CLASS_CODE),
+            500,
+            "and returns its own 500 to the pool on redemption, not the reserved capacity"
         );
     }
 }
