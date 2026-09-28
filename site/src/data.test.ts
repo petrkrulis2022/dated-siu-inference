@@ -64,6 +64,23 @@ describe("loadRunRecordsFor", () => {
     expect(records).toHaveLength(1);
     expect(records[0]!.model_id).toBe("test-model");
   });
+
+  it("ignores spend-by-provider.json — the exact same crash as index.json's, one sibling file " +
+    "later: it broke this renderer live on 2026-09-28, the first print whose run directory ever " +
+    "actually had one, because this file's own exclusion list was a private copy that never " +
+    "learned about it", async () => {
+    const dir = join(runsDir, "2026-09-28");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "run-1.json"), JSON.stringify(record()));
+    await writeFile(
+      join(dir, "spend-by-provider.json"),
+      JSON.stringify({ print_id: "2026-09-28", date: "2026-09-28", spend_usd_by_provider: {} }),
+    );
+
+    const records = await loadRunRecordsFor(runsDir, "2026-09-28");
+    expect(records).toHaveLength(1);
+    expect(records[0]!.model_id).toBe("test-model");
+  });
 });
 
 describe("recomputeDatedSiu", () => {

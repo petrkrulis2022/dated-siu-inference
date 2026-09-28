@@ -1,7 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Print, RunRecord } from "@touchstone/sdk";
-import { D, roundSignificantFigures, sum } from "@touchstone/print";
+import { D, NON_RUN_RECORD_FILES, roundSignificantFigures, sum } from "@touchstone/print";
 
 const NON_PRINT_FILES = new Set(["latest.json", "index.json"]);
 
@@ -80,13 +80,14 @@ export async function loadRunRecordsFor(runsDir: string, printId: string): Promi
     (f) =>
       f.endsWith(".json") &&
       !f.endsWith(".raw.json") &&
-      f !== "reconciliation.json" &&
-      // The declared run-record manifest (@touchstone/print's writeRunManifest) — present
-      // alongside real run records from the first real publish after that feature shipped
-      // onward. Found live: loaded as if it were a RunRecord (it passes every other filter
-      // here), its undefined model_id/task_class/gate_passed then crashed the Models page
-      // renderer on the first print that actually had one.
-      f !== "index.json",
+      // Shared with @touchstone/print's own loadRunRecords/verify-support.ts — a third private
+      // copy of this exclusion list is exactly how this broke *again*: index.json was excluded
+      // here by hand after crashing this exact renderer once already (see the git history this
+      // comment used to sit in), but nothing propagated that fix when spend-by-provider.json was
+      // added as a second sibling file, so this site build crashed on the first print that ever
+      // actually had one (2026-09-28, the first carry-forward print) — the identical failure,
+      // one file later, because there were two lists to remember instead of one to import.
+      !NON_RUN_RECORD_FILES.has(f),
   );
   return Promise.all(
     files.map(async (f) => JSON.parse(await readFile(join(dir, f), "utf-8")) as RunRecord),
