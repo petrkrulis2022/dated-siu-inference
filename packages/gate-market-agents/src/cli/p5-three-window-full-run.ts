@@ -246,14 +246,35 @@ export async function assertProvidersReachable(
   const checked: { provider: string; model: string; viaAgent: string }[] = [];
   const failures: string[] = [];
   for (const [provider, { model, agentId }] of byProvider) {
-    try {
-      await adaptersByAgent[agentId]!(model, "Reply with the single word: ok", {
-        temperature: 0,
-        max_tokens: 5,
-      });
-      checked.push({ provider, model, viaAgent: agentId });
-    } catch (err) {
-      failures.push(`${provider} (${model}): ${err instanceof Error ? err.message : String(err)}`);
+    let lastError: unknown;
+    // Twice before declaring a provider down. Found live on this check's own first run
+    // (2026-09-29): Anthropic answered 503 once and was fine immediately after, and a check that
+    // refuses a whole run over one transient 5xx is worse than no check at all. A real outage is
+    // deterministic — the xAI 403 that prompted this fails both attempts identically — so the
+    // retry costs a second of wall clock and distinguishes "briefly busy" from "unpaid".
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        // Budgeted for a reasoning model, not for the one word actually wanted. Also found on the
+        // first run: gpt-5.1 returns HTTP 400 "could not finish the message because max_tokens or
+        // model output limit was reached" at 5 tokens, because reasoning consumes the budget
+        // before any text exists. That is the probe being wrong about the model, not the provider
+        // being down, and it refused a run that would have worked.
+        await adaptersByAgent[agentId]!(model, "Reply with the single word: ok", {
+          temperature: 0,
+          max_tokens: 64,
+        });
+        checked.push({ provider, model, viaAgent: agentId });
+        lastError = undefined;
+        break;
+      } catch (err) {
+        lastError = err;
+        if (attempt === 1) await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+    if (lastError !== undefined) {
+      failures.push(
+        `${provider} (${model}): ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+      );
     }
   }
 
@@ -455,11 +476,19 @@ async function main(): Promise<void> {
       "starts, the job does not get done and that is the result. Nothing in this script tops the " +
       "pool back up, resizes a lot, or routes around the shortage.",
   );
+  // Corrected 2026-09-29. This line used to assert the opposite — "no agent can settle a window
+  // close in this run, so an undelivered claim stays outstanding, no bond payout" — which stopped
+  // being true when settle_window_close was granted to the holder and both issuers, and was still
+  // being printed a run after three real settlements had happened (2026-09-29 run 3: ISSUER-B
+  // settled a rival's default, ISSUER-A settled its own, WORKER-CODE attempted both). A
+  // pre-flight disclosure that states the reverse of the truth is worse than none: its whole
+  // purpose is that a reader can trust it without checking.
   console.log(
-    "AND: no agent can settle a window close in this run, so an undelivered claim stays outstanding " +
-      "— no bond payout, capacity never returned. Deliberate (defaults are not what this measures) " +
-      "and it can only make scarcity tighter, never looser. See this file's own doc comment for why " +
-      "it is also currently unavoidable.",
+    "AND: an undelivered claim CAN be settled in this run. settle_window_close is permissionless " +
+      "on-chain and is granted to the claim's holder and to both issuers — including against an " +
+      "issuer's own bond. Whether anyone actually notices a non-delivery and triggers it is a " +
+      "result of the run, not a property of it; capacity is returned and the bond pays only if " +
+      "someone does.",
   );
   console.log(
     `Window spans, fixed before the first turn (chain clock): ` +
