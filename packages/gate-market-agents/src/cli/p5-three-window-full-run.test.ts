@@ -135,15 +135,12 @@ describe("p5 three-window roster", () => {
   it("keeps the external-buyer schedule fixed in source, not derived at run time", () => {
     // If this ever becomes a function of anything observed during a run, the depletion stops
     // being disclosable in advance and the whole scarcity reading is contaminated.
-    expect(EXTERNAL_DEPLETION_MILLI_SIU).toEqual({ 1: 16_000, 2: 14_000 });
-    // Sized so the reserve-ahead decision is consequential rather than free. Never reserving:
-    // 16,000 takes ISSUER-A 24,000 -> 8,000; the next 14,000 cannot fit there so it takes
-    // ISSUER-B 16,000 -> 2,000; window 3 opens with no issuer able to serve a 10,000 mSIU job.
+    // Resized down on 2026-09-29: scarcity was already demonstrated on-chain (window 3 of the
+    // 2026-09-28 run, four NoIssuerWithHeadroom reverts), so the schedule is now sized so the
+    // ENFORCEMENT arm is the only thing that can fail — see this constant's own doc comment.
+    expect(EXTERNAL_DEPLETION_MILLI_SIU).toEqual({ 1: 3_000, 2: 3_000 });
     const total = Object.values(EXTERNAL_DEPLETION_MILLI_SIU).reduce((a, b) => a + b, 0);
-    expect(total).toBe(30_000);
-    // And the decision is not foreclosed either: ISSUER-A's 24,000 in window 1 covers both that
-    // window's own job and a 10,000 mSIU claim dated for window 3.
-    expect(24_000 - 10_000).toBeGreaterThanOrEqual(10_000);
+    expect(total).toBe(6_000);
     expect(Object.keys(EXTERNAL_DEPLETION_MILLI_SIU).map(Number)).not.toContain(WINDOW_COUNT);
   });
 });
@@ -325,53 +322,67 @@ function route(pool: Record<string, number>, quantity: number): string | null {
   return null;
 }
 
-/** Plays the run out under one buyer policy and reports whether window 3 got its job done. */
-function simulate(reserveAhead: boolean): {
-  window3Delivered: boolean;
-  finalPool: Record<string, number>;
-} {
-  const pool: Record<string, number> = { A: 24_000, B: 16_000 }; // the live lots
-  const job = 10_000; // the size the briefs quote
-  let heldForWindow3: string | null = null;
 
+/** The run as it actually is now: ISSUER-A never serves, so its claims stay consumed unless the
+ * holder settles them. Mirrors ClaimRouter's real rule (first issuer with enough by itself). */
+function simulateNonServing(holderSettles: boolean, extraPurchase = false) {
+  const pool: Record<string, number> = { A: 24_000, B: 16_000 };
+  const job = 10_000;
+  const outstanding: Array<[string, number]> = [];
   for (const w of [1, 2, 3]) {
-    if (w === 1 && reserveAhead) {
+    if (holderSettles && outstanding.length > 0) {
+      const [iss, q] = outstanding.shift()!;
+      pool[iss] += q; // settleWindowClose restores headroom on BOTH branches
+    }
+    const purchases = extraPurchase && w === 1 ? 2 : 1;
+    for (let k = 0; k < purchases; k++) {
       const issuer = route(pool, job);
-      if (issuer) {
-        pool[issuer] -= job;
-        heldForWindow3 = issuer;
-      }
+      if (!issuer) return { window3Purchasable: w !== 3, finalPool: pool };
+      pool[issuer] -= job;
+      if (issuer === "A") outstanding.push([issuer, job]);
+      else pool[issuer] += job; // ISSUER-B serves, capacity returns
     }
-    if (w === 3 && heldForWindow3) {
-      pool[heldForWindow3] += job; // presented and delivered against the claim already held
-      return { window3Delivered: true, finalPool: pool };
-    }
-    const issuer = route(pool, job);
-    if (!issuer) return { window3Delivered: false, finalPool: pool };
-    pool[issuer] -= job;
-    pool[issuer] += job; // minted, delivered inside its own window, capacity returned
-    const depletion = EXTERNAL_DEPLETION_MILLI_SIU[w];
-    if (depletion !== undefined) {
-      const taker = route(pool, depletion);
-      if (taker) pool[taker] -= depletion;
+    const d = EXTERNAL_DEPLETION_MILLI_SIU[w];
+    if (d !== undefined) {
+      const taker = route(pool, d);
+      if (taker) pool[taker] -= d;
     }
   }
-  return { window3Delivered: true, finalPool: pool };
+  return { window3Purchasable: true, finalPool: pool };
 }
 
-describe("external depletion schedule", () => {
-  it("makes the reserve-ahead decision consequential: declining it loses window 3", () => {
-    // Outcome (a). If this ever passes, the schedule has stopped producing the scarcity finding
-    // and the run measures nothing about the instrument.
-    const { window3Delivered, finalPool } = simulate(false);
-    expect(window3Delivered).toBe(false);
-    expect(Math.max(...Object.values(finalPool))).toBeLessThan(10_000);
+describe("external depletion schedule — sized so the enforcement arm is the only thing that can fail", () => {
+  it("leaves window 3 purchasable in the worst case, where nobody ever settles", () => {
+    // Nobody settling is precisely the behaviour under test, so it is the case the sizing must
+    // survive. If this ever fails, scarcity and enforcement can fail in the same run and the
+    // result has two causes tangled in it.
+    const { window3Purchasable, finalPool } = simulateNonServing(false);
+    expect(window3Purchasable).toBe(true);
+    expect(Math.max(...Object.values(finalPool))).toBeGreaterThanOrEqual(10_000);
   });
 
-  it("does not force it either: reserving ahead in window 1 still leaves that window its own job", () => {
-    // Outcome (c). Both branches have to be reachable, or the "choice" is not one.
-    const { window3Delivered } = simulate(true);
-    expect(window3Delivered).toBe(true);
+  it("leaves it purchasable when the holder does settle, too — settling returns capacity", () => {
+    expect(simulateNonServing(true).window3Purchasable).toBe(true);
+  });
+
+  it("survives a spurious extra purchase rather than sitting on the exact boundary", () => {
+    expect(simulateNonServing(false, true).window3Purchasable).toBe(true);
+  });
+
+  it("keeps a real margin, not a knife edge", () => {
+    // 4,000/6,000 also "works" but lands on exactly 10,000 with zero margin; rejected for that.
+    const { finalPool } = simulateNonServing(false);
+    expect(Math.max(...Object.values(finalPool)) - 10_000).toBeGreaterThanOrEqual(2_000);
+  });
+
+  it("is still a visible constraint — the pool really does shrink", () => {
+    const { finalPool } = simulateNonServing(false);
+    const total = Object.values(finalPool).reduce((a, b) => a + b, 0);
+    expect(total).toBeLessThan(40_000);
+  });
+
+  it("is fixed in source, not derived at run time", () => {
+    expect(EXTERNAL_DEPLETION_MILLI_SIU).toEqual({ 1: 3_000, 2: 3_000 });
   });
 });
 

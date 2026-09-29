@@ -132,31 +132,32 @@ export const WINDOW_SECONDS = 1200n;
  * printed before window 1, and written into the manifest, so no agent's behaviour changes them
  * and nobody can claim afterwards that the depletion was tuned to the result.
  *
- * Resized 2026-09-28, once minting for a later window became possible, because the previous
- * 14,000/14,000 no longer left the decision consequential. Worked through against the live pool
- * (ISSUER-A 24,000 + ISSUER-B 16,000 = 40,000) and a 10,000 mSIU job, with `ClaimRouter` taking
- * from a single issuer that has enough headroom by itself:
+ * Resized DOWN to 3,000/3,000 on 2026-09-29, from 16,000/14,000, and sized for a different
+ * purpose than before. Scarcity has already been demonstrated on-chain — window 3 of the
+ * 2026-09-28 run reverted four times with `NoIssuerWithHeadroom` — so it is not worth re-running
+ * that finding at the cost of the one this run exists for. **These figures are sized so the
+ * enforcement arm is the only thing that can fail.**
  *
- *   If the buyer never reserves ahead — each window's claim is minted and redeemed inside its own
- *   window, so its capacity returns. 16,000 takes ISSUER-A to 8,000; the second 14,000 cannot fit
- *   there, so it takes ISSUER-B to 2,000. Window 3 opens with 8,000/2,000 and NO issuer can serve
- *   a 10,000 mSIU claim. The job does not get done. That is outcome (a), the scarcity finding.
+ * The arithmetic, against the live pool (ISSUER-A 24,000 + ISSUER-B 16,000 = 40,000), a 10,000
+ * mSIU job, `ClaimRouter` drawing from a single issuer with enough headroom by itself, and
+ * `NON_SERVING_ISSUER` never serving:
  *
- *   If the buyer does reserve ahead — a 10,000 mSIU claim minted in window 1 for window 3 holds
- *   ISSUER-A's headroom for the whole run. The depletions then land differently (the first cannot
- *   fit at A and goes to B), the pool ends empty, and window 3 is nevertheless delivered against
- *   the claim already held. That is outcome (c), the instrument working.
+ *   Two windows of claims mint against ISSUER-A and are never served, so 20,000 of the 40,000
+ *   disappears with no external buyer involved at all. Worst case — nobody ever settles, which is
+ *   precisely the behaviour under test — window 1's mint takes A to 14,000, D1 takes A to 11,000,
+ *   window 2's mint takes A to 1,000, D2 cannot fit at A so it takes B to 13,000. Window 3 opens
+ *   with 1,000/13,000: purchasable from B, with 3,000 mSIU of margin.
  *
- * So the schedule leaves the decision genuinely open in window 1 and makes it genuinely matter by
- * window 3 — it neither forces reserving (the buyer can decline and simply lose window 3) nor
- * forecloses it (ISSUER-A holds 24,000 in window 1, enough for both that window's job and a
- * window-3 claim). The previous sizing left 10,000 intact at ISSUER-A in the never-reserve branch,
- * which meant window 3 succeeded either way and the choice cost nothing.
+ *   If the holder does settle each default, capacity returns to A and there is more room, not
+ *   less. Both branches, and a spurious extra purchase, were simulated before choosing.
+ *
+ * The pool still visibly shrinks (40,000 to 13,000 usable at one issuer), so scarcity remains a
+ * real secondary observation — it just cannot block the run and confound the enforcement result.
  *
  * The external buyer is the deployer wallet, which is not an agent, makes no decisions and has no
  * model. It is labelled as such everywhere it appears.
  */
-export const EXTERNAL_DEPLETION_MILLI_SIU: Record<number, number> = { 1: 16_000, 2: 14_000 };
+export const EXTERNAL_DEPLETION_MILLI_SIU: Record<number, number> = { 1: 3_000, 2: 3_000 };
 
 /**
  * An issuer that will not serve, on purpose — the same treatment as the external depletion: fixed

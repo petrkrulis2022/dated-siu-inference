@@ -44,17 +44,23 @@ import {
 const PRICES = { priceInUsdPer1M: "2", priceOutUsdPer1M: "12" };
 
 const PASS: GateHardeningResult = {
-  g1: { passed: true, reason: "ok" }, g2: { passed: true, reason: "ok" },
-  g3: { passed: true, reason: "ok" }, g4: { passed: true, reason: "ok" },
-  g5: { passed: true, reason: "ok" }, g6: { passed: true, reason: "ok" },
+  g1: { passed: true, reason: "ok" },
+  g2: { passed: true, reason: "ok" },
+  g3: { passed: true, reason: "ok" },
+  g4: { passed: true, reason: "ok" },
+  g5: { passed: true, reason: "ok" },
+  g6: { passed: true, reason: "ok" },
   passed: true,
 };
 
 function failResult(reason: string): GateHardeningResult {
   return {
-    g1: { passed: true, reason: "ok" }, g2: { passed: false, reason },
-    g3: { passed: true, reason: "ok" }, g4: { passed: true, reason: "ok" },
-    g5: { passed: true, reason: "ok" }, g6: { passed: true, reason: "ok" },
+    g1: { passed: true, reason: "ok" },
+    g2: { passed: false, reason },
+    g3: { passed: true, reason: "ok" },
+    g4: { passed: true, reason: "ok" },
+    g5: { passed: true, reason: "ok" },
+    g6: { passed: true, reason: "ok" },
     passed: false,
   };
 }
@@ -71,8 +77,10 @@ function fakeDeps(runGateHardeningChecks: RunnerDeps["runGateHardeningChecks"]):
     },
     deployment: {
       network: { name: "test", chainId: 0 },
-      usdc: { address: "0x0" }, capacityBond: { address: "0x0" },
-      claimRouter: { address: "0x0" }, workClaim: { address: "0x0" },
+      usdc: { address: "0x0" },
+      capacityBond: { address: "0x0" },
+      claimRouter: { address: "0x0" },
+      workClaim: { address: "0x0" },
     },
     escrowAddress: "0x0",
     runGateHardeningChecks,
@@ -89,7 +97,9 @@ function scriptedAdapter(sources: string[]): Adapter {
     return {
       text: JSON.stringify({ tool: "submit_job", args: { source } }),
       usage: { input: 500, output: 300, cached_input: 0, reasoning: 0 },
-      latency_ms: 1, raw: {}, deviations: [],
+      latency_ms: 1,
+      raw: {},
+      deviations: [],
     };
   };
 }
@@ -97,12 +107,19 @@ function scriptedAdapter(sources: string[]): Adapter {
 const JOB: JobEnvelope = {
   jobId: "full-run-test-job",
   taskClass: "extract",
-  originalGate: { taskClass: "extract", source: "export async function gate(){ return {accept:false,reason:'trivial'}; }" },
+  originalGate: {
+    taskClass: "extract",
+    source: "export async function gate(){ return {accept:false,reason:'trivial'}; }",
+  },
   referenceInstance: { taskClass: "extract", files: {} },
   knownGoodSubmission: { files: { "answer.json": "{}" } },
   adversarialSubmissions: [],
   heldOutInstances: [
-    { referenceInstance: { taskClass: "extract", files: {} }, knownGoodSubmission: { files: { "answer.json": "{}" } }, adversarialSubmissions: [] },
+    {
+      referenceInstance: { taskClass: "extract", files: {} },
+      knownGoodSubmission: { files: { "answer.json": "{}" } },
+      adversarialSubmissions: [],
+    },
   ],
 };
 
@@ -142,7 +159,16 @@ function generousBudget(ledgerPath: string): ExperimentBudget {
 }
 
 describe("shuffledToolOrder", () => {
-  const TOOLS = ["request_quote", "pay", "mint_claim", "transfer_claim", "check_headroom", "submit_job", "get_balances", "get_print"] as const;
+  const TOOLS = [
+    "request_quote",
+    "pay",
+    "mint_claim",
+    "transfer_claim",
+    "check_headroom",
+    "submit_job",
+    "get_balances",
+    "get_print",
+  ] as const;
 
   it("is deterministic for the same seed — an audit can recompute it, not just trust the manifest", () => {
     const a = shuffledToolOrder(TOOLS, "seed-1:ORCHESTRATOR");
@@ -185,12 +211,18 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
   it("succeeds the instant a real, confirmed-deterministic G1-G6 result says passed", async () => {
     const result = await runFullRunWindow({
       windowId: "w0",
-      roster: [orchestratorConfig(scriptedAdapter(["export async function gate(){ return {accept:true,reason:'ok'}; }"]))],
+      roster: [
+        orchestratorConfig(
+          scriptedAdapter(["export async function gate(){ return {accept:true,reason:'ok'}; }"]),
+        ),
+      ],
       job: JOB,
       maxTurnsPerAgent: 40,
       budget: generousBudget(ledgerPath),
       deps: fakeDeps(async () => PASS),
-      runsRoot, runId: "run-1", manifest: MANIFEST,
+      runsRoot,
+      runId: "run-1",
+      manifest: MANIFEST,
     });
 
     expect(result.passed).toBe(true);
@@ -199,10 +231,22 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
   });
 
   it("records the real, per-agent shuffled tool order in the manifest — the same order buildTurnPrompt actually used", async () => {
-    const fullToolGrant = ["request_quote", "pay", "mint_claim", "transfer_claim", "check_headroom", "submit_job", "get_balances", "get_print"] as const;
+    const fullToolGrant = [
+      "request_quote",
+      "pay",
+      "mint_claim",
+      "transfer_claim",
+      "check_headroom",
+      "submit_job",
+      "get_balances",
+      "get_print",
+    ] as const;
     const adapter: Adapter = async () => ({
       text: JSON.stringify({ done: true, summary: "nothing to do" }),
-      usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+      usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 },
+      latency_ms: 1,
+      raw: {},
+      deviations: [],
     });
 
     await runFullRunWindow({
@@ -212,10 +256,15 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
       maxTurnsPerAgent: 1,
       budget: generousBudget(ledgerPath),
       deps: fakeDeps(async () => PASS),
-      runsRoot, runId: "run-tool-order", manifest: MANIFEST,
+      runsRoot,
+      runId: "run-tool-order",
+      manifest: MANIFEST,
     });
 
-    const manifestText = await readFile(path.join(runsRoot, "run-tool-order", "manifest.yaml"), "utf-8");
+    const manifestText = await readFile(
+      path.join(runsRoot, "run-tool-order", "manifest.yaml"),
+      "utf-8",
+    );
     const expectedOrder = shuffledToolOrder(fullToolGrant, `${MANIFEST.seed}:ORCHESTRATOR`);
     const expectedYaml = expectedOrder.map((tool) => `    - ${tool}`).join("\n");
     expect(manifestText).toContain("toolOrderByAgent:");
@@ -228,12 +277,18 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
     // exists to catch, not simulated any other way.
     const result = await runFullRunWindow({
       windowId: "w0",
-      roster: [orchestratorConfig(scriptedAdapter(["export async function gate(){ return {accept:true,reason:'ok'}; }"]))],
+      roster: [
+        orchestratorConfig(
+          scriptedAdapter(["export async function gate(){ return {accept:true,reason:'ok'}; }"]),
+        ),
+      ],
       job: JOB,
       maxTurnsPerAgent: 1,
       budget: generousBudget(ledgerPath),
       deps: fakeDeps(async () => (call++ === 0 ? PASS : failResult("flaked"))),
-      runsRoot, runId: "run-2", manifest: MANIFEST,
+      runsRoot,
+      runId: "run-2",
+      manifest: MANIFEST,
     });
 
     expect(result.passed).toBe(false);
@@ -244,12 +299,18 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
   it("halts at maxTurnsPerAgent if the gate never passes", async () => {
     const result = await runFullRunWindow({
       windowId: "w0",
-      roster: [orchestratorConfig(scriptedAdapter(["export async function gate(){ return {accept:false,reason:'x'}; }"]))],
+      roster: [
+        orchestratorConfig(
+          scriptedAdapter(["export async function gate(){ return {accept:false,reason:'x'}; }"]),
+        ),
+      ],
       job: JOB,
       maxTurnsPerAgent: 3,
       budget: generousBudget(ledgerPath),
       deps: fakeDeps(async () => failResult("never right")),
-      runsRoot, runId: "run-3", manifest: MANIFEST,
+      runsRoot,
+      runId: "run-3",
+      manifest: MANIFEST,
     });
 
     expect(result.passed).toBe(false);
@@ -266,16 +327,27 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
       "WORKER-EXTRACT": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
       HEDGER: { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
     });
-    const tightBudget = new ExperimentBudget({ ceiling, runCapUsd: "1000", experimentCapUsd: "0.000001", ledgerPath });
+    const tightBudget = new ExperimentBudget({
+      ceiling,
+      runCapUsd: "1000",
+      experimentCapUsd: "0.000001",
+      ledgerPath,
+    });
 
     const result = await runFullRunWindow({
       windowId: "w0",
-      roster: [orchestratorConfig(scriptedAdapter(["export async function gate(){ return {accept:false,reason:'x'}; }"]))],
+      roster: [
+        orchestratorConfig(
+          scriptedAdapter(["export async function gate(){ return {accept:false,reason:'x'}; }"]),
+        ),
+      ],
       job: JOB,
       maxTurnsPerAgent: 40,
       budget: tightBudget,
       deps: fakeDeps(async () => failResult("never right")),
-      runsRoot, runId: "run-4", manifest: MANIFEST,
+      runsRoot,
+      runId: "run-4",
+      manifest: MANIFEST,
     });
 
     expect(result.passed).toBe(false);
@@ -287,10 +359,15 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
       text: JSON.stringify({
         tool: "submit_job",
         args: { source: "export async function gate(){ return {accept:false,reason:'x'}; }" },
-        friction: { missing_information: "didn't know the other issuer's rate", decision_confidence: "low" },
+        friction: {
+          missing_information: "didn't know the other issuer's rate",
+          decision_confidence: "low",
+        },
       }),
       usage: { input: 500, output: 300, cached_input: 0, reasoning: 0 },
-      latency_ms: 1, raw: {}, deviations: [],
+      latency_ms: 1,
+      raw: {},
+      deviations: [],
     });
 
     await runFullRunWindow({
@@ -300,10 +377,14 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
       maxTurnsPerAgent: 1,
       budget: generousBudget(ledgerPath),
       deps: fakeDeps(async () => failResult("never right")),
-      runsRoot, runId: "run-5", manifest: MANIFEST,
+      runsRoot,
+      runId: "run-5",
+      manifest: MANIFEST,
     });
 
-    const lines = (await readFile(path.join(runsRoot, "run-5", "friction", "friction-log.jsonl"), "utf-8"))
+    const lines = (
+      await readFile(path.join(runsRoot, "run-5", "friction", "friction-log.jsonl"), "utf-8")
+    )
       .trim()
       .split("\n")
       .map((l) => JSON.parse(l));
@@ -316,22 +397,32 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
       forced_conversion: false,
     });
 
-    const caveat = JSON.parse(await readFile(path.join(runsRoot, "run-5", "friction", "caveat.json"), "utf-8"));
+    const caveat = JSON.parse(
+      await readFile(path.join(runsRoot, "run-5", "friction", "caveat.json"), "utf-8"),
+    );
     expect(caveat.mechanism_caveat).toBeTruthy();
   });
 
   it("defaults conservatively when the model reports no friction at all — never invents any", async () => {
     await runFullRunWindow({
       windowId: "w0",
-      roster: [orchestratorConfig(scriptedAdapter(["export async function gate(){ return {accept:true,reason:'ok'}; }"]))],
+      roster: [
+        orchestratorConfig(
+          scriptedAdapter(["export async function gate(){ return {accept:true,reason:'ok'}; }"]),
+        ),
+      ],
       job: JOB,
       maxTurnsPerAgent: 1,
       budget: generousBudget(ledgerPath),
       deps: fakeDeps(async () => PASS),
-      runsRoot, runId: "run-6", manifest: MANIFEST,
+      runsRoot,
+      runId: "run-6",
+      manifest: MANIFEST,
     });
 
-    const lines = (await readFile(path.join(runsRoot, "run-6", "friction", "friction-log.jsonl"), "utf-8"))
+    const lines = (
+      await readFile(path.join(runsRoot, "run-6", "friction", "friction-log.jsonl"), "utf-8")
+    )
       .trim()
       .split("\n")
       .map((l) => JSON.parse(l));
@@ -356,12 +447,18 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
       if (call === 1) {
         return {
           text: '{"tool": "get_print", "args": {"printId": 123}}',
-          usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+          usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 },
+          latency_ms: 1,
+          raw: {},
+          deviations: [],
         };
       }
       return {
         text: JSON.stringify({ done: true, summary: "recovered" }),
-        usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+        usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 },
+        latency_ms: 1,
+        raw: {},
+        deviations: [],
       };
     };
 
@@ -372,12 +469,58 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
       maxTurnsPerAgent: 2,
       budget: generousBudget(ledgerPath),
       deps: fakeDeps(async () => PASS),
-      runsRoot, runId: "run-zod-recovery", manifest: MANIFEST,
+      runsRoot,
+      runId: "run-zod-recovery",
+      manifest: MANIFEST,
     });
 
     expect(result.turnsByAgent.ORCHESTRATOR).toBe(2);
     expect(result.haltedReason?.ORCHESTRATOR).toBe("voluntary_stop");
     expect(result.turnLogsByAgent.ORCHESTRATOR[0].parsed).toContain("tool args validation error");
+  });
+
+  it("does not end the window on a passing gate while a carried-forward default is still unsettled", async () => {
+    // A claim cannot be settled inside its own window (settleWindowClose reverts
+    // WindowNotClosedYet), so the only turns anyone ever gets to settle window N's default are in
+    // window N+1. Breaking the loop the moment a gate passes would take those turns away, and the
+    // holder's failure to act would be indistinguishable from never having been given the chance.
+    let call = 0;
+    const adapter: Adapter = async () => {
+      call++;
+      if (call === 1) {
+        return {
+          text: JSON.stringify({ tool: "submit_job", args: { source: "x" } }),
+          usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 },
+          latency_ms: 1,
+          raw: {},
+          deviations: [],
+        };
+      }
+      return {
+        text: JSON.stringify({ done: true, summary: "nothing further" }),
+        usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 },
+        latency_ms: 1,
+        raw: {},
+        deviations: [],
+      };
+    };
+
+    const result = await runFullRunWindow({
+      windowId: "w0",
+      roster: [{ ...orchestratorConfig(adapter), availableTools: ["submit_job"] }],
+      job: JOB,
+      maxTurnsPerAgent: 4,
+      budget: generousBudget(ledgerPath),
+      deps: fakeDeps(async () => PASS),
+      runsRoot,
+      runId: "run-carried-default-keeps-window-open",
+      manifest: MANIFEST,
+      outstandingClaims: [{ tokenId: "1234", holder: "0xholder", mintedInWindow: 1 }],
+    });
+
+    // The gate passed on turn 1, but the window kept going rather than breaking there.
+    expect(result.passed).toBe(true);
+    expect(result.turnsByAgent.ORCHESTRATOR).toBeGreaterThan(1);
   });
 
   it("recovers from a real tool-call failure (an on-chain revert, RPC lag, anything else) rather than crashing the whole run — found live, 2026-09-28, first real three-window run", async () => {
@@ -394,12 +537,18 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
       if (call === 1) {
         return {
           text: '{"tool": "get_print", "args": {"printId": "2026-09-25"}}',
-          usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+          usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 },
+          latency_ms: 1,
+          raw: {},
+          deviations: [],
         };
       }
       return {
         text: JSON.stringify({ done: true, summary: "recovered" }),
-        usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+        usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 },
+        latency_ms: 1,
+        raw: {},
+        deviations: [],
       };
     };
 
@@ -415,7 +564,9 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
       maxTurnsPerAgent: 2,
       budget: generousBudget(ledgerPath),
       deps,
-      runsRoot, runId: "run-tool-error-recovery", manifest: MANIFEST,
+      runsRoot,
+      runId: "run-tool-error-recovery",
+      manifest: MANIFEST,
     });
 
     // The run itself must survive and complete, not throw out of runFullRunWindow.
@@ -433,12 +584,18 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
         // submit_job is a real tool but not in this agent's own availableTools below.
         return {
           text: '{"tool": "submit_job", "args": {"source": "x"}}',
-          usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+          usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 },
+          latency_ms: 1,
+          raw: {},
+          deviations: [],
         };
       }
       return {
         text: JSON.stringify({ done: true, summary: "recovered" }),
-        usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+        usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 },
+        latency_ms: 1,
+        raw: {},
+        deviations: [],
       };
     };
 
@@ -449,7 +606,9 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
       maxTurnsPerAgent: 2,
       budget: generousBudget(ledgerPath),
       deps: fakeDeps(async () => PASS),
-      runsRoot, runId: "run-not-allowed-recovery", manifest: MANIFEST,
+      runsRoot,
+      runId: "run-not-allowed-recovery",
+      manifest: MANIFEST,
     });
 
     expect(result.turnsByAgent.ORCHESTRATOR).toBe(2);
@@ -489,9 +648,21 @@ describe("buildToolArgs", () => {
       nanoUsdPerSiu: 10_700_000n,
       validitySeconds: 3600n,
     };
-    const args = (await buildToolArgs("mint_claim", { quantity: "500" }, baseCtx({ mintContext }))) as {
-      classId: string; series: string; quantity: string; windowFrom: number; windowTo: number;
-      printId: string; printDate: string; nanoUsdPerSiu: string; validUntil: string; signature: Hex;
+    const args = (await buildToolArgs(
+      "mint_claim",
+      { quantity: "500" },
+      baseCtx({ mintContext }),
+    )) as {
+      classId: string;
+      series: string;
+      quantity: string;
+      windowFrom: number;
+      windowTo: number;
+      printId: string;
+      printDate: string;
+      nanoUsdPerSiu: string;
+      validUntil: string;
+      signature: Hex;
     };
 
     expect(args.quantity).toBe("500"); // the model's own real economic choice, untouched
@@ -502,11 +673,21 @@ describe("buildToolArgs", () => {
     expect(args.nanoUsdPerSiu).toBe("10700000");
 
     const recovered = await recoverTypedDataAddress({
-      domain: { name: "Touchstone Rate Attestation", version: "1", chainId: 84532, verifyingContract: FAKE_DEPLOYMENT.workClaim.address as Hex },
-      types: { RateAttestation: [
-        { name: "printId", type: "string" }, { name: "series", type: "bytes32" }, { name: "printDate", type: "uint64" },
-        { name: "nanoUsdPerSiu", type: "uint256" }, { name: "validUntil", type: "uint64" },
-      ] },
+      domain: {
+        name: "Touchstone Rate Attestation",
+        version: "1",
+        chainId: 84532,
+        verifyingContract: FAKE_DEPLOYMENT.workClaim.address as Hex,
+      },
+      types: {
+        RateAttestation: [
+          { name: "printId", type: "string" },
+          { name: "series", type: "bytes32" },
+          { name: "printDate", type: "uint64" },
+          { name: "nanoUsdPerSiu", type: "uint256" },
+          { name: "validUntil", type: "uint64" },
+        ],
+      },
       primaryType: "RateAttestation",
       message: {
         printId: args.printId,
@@ -538,7 +719,13 @@ describe("buildToolArgs", () => {
       "submit_attack",
       { submissionSource: "export function dedupeSorted(a) { return a; }" },
       baseCtx({ attackContext: attackCtx(2) }),
-    )) as { targetGateSource: string; gateVersion: number; oracleSeed: number; referenceFiles: Record<string, string>; taskClass: string };
+    )) as {
+      targetGateSource: string;
+      gateVersion: number;
+      oracleSeed: number;
+      referenceFiles: Record<string, string>;
+      taskClass: string;
+    };
 
     // Newest, not first: an adversary able to pick an older version would score hits the live
     // gate no longer allows.
@@ -551,13 +738,21 @@ describe("buildToolArgs", () => {
 
   it("submit_attack: refuses before any gate has been delivered", async () => {
     await expect(
-      buildToolArgs("submit_attack", { submissionSource: "x" }, baseCtx({ attackContext: attackCtx(0) })),
+      buildToolArgs(
+        "submit_attack",
+        { submissionSource: "x" },
+        baseCtx({ attackContext: attackCtx(0) }),
+      ),
     ).rejects.toThrow(/no gate has been delivered/);
   });
 
   it("submit_attack: refuses an empty submission rather than testing nothing", async () => {
     await expect(
-      buildToolArgs("submit_attack", { submissionSource: "   " }, baseCtx({ attackContext: attackCtx(1) })),
+      buildToolArgs(
+        "submit_attack",
+        { submissionSource: "   " },
+        baseCtx({ attackContext: attackCtx(1) }),
+      ),
     ).rejects.toThrow(/non-empty string/);
   });
 
@@ -598,9 +793,15 @@ describe("buildToolArgs", () => {
     const args = await buildToolArgs(
       "transfer_claim",
       { agentId: "WORKER-CODE", tokenId: "1", quantity: "10" },
-      baseCtx({ agentAddressByAgentId: { "WORKER-CODE": "0xabc0000000000000000000000000000000dead" } }),
+      baseCtx({
+        agentAddressByAgentId: { "WORKER-CODE": "0xabc0000000000000000000000000000000dead" },
+      }),
     );
-    expect(args).toEqual({ to: "0xabc0000000000000000000000000000000dead", tokenId: "1", quantity: "10" });
+    expect(args).toEqual({
+      to: "0xabc0000000000000000000000000000000dead",
+      tokenId: "1",
+      quantity: "10",
+    });
   });
 
   it("transfer_claim: honours a literal 'to' address unchanged when given instead", async () => {
@@ -609,12 +810,20 @@ describe("buildToolArgs", () => {
       { to: "0x1111111111111111111111111111111111111e", tokenId: "1", quantity: "10" },
       baseCtx(),
     );
-    expect(args).toEqual({ to: "0x1111111111111111111111111111111111111e", tokenId: "1", quantity: "10" });
+    expect(args).toEqual({
+      to: "0x1111111111111111111111111111111111111e",
+      tokenId: "1",
+      quantity: "10",
+    });
   });
 
   it("transfer_claim: refuses a symbolic agentId with no known address, rather than sending nowhere", async () => {
     await expect(
-      buildToolArgs("transfer_claim", { agentId: "HEDGER", tokenId: "1", quantity: "10" }, baseCtx()),
+      buildToolArgs(
+        "transfer_claim",
+        { agentId: "HEDGER", tokenId: "1", quantity: "10" },
+        baseCtx(),
+      ),
     ).rejects.toThrow(/no known address/);
   });
 
@@ -624,13 +833,23 @@ describe("buildToolArgs", () => {
       { to: "0x1111111111111111111111111111111111111e", tokenId: "1", quantity: 10 },
       baseCtx(),
     );
-    expect(args).toEqual({ to: "0x1111111111111111111111111111111111111e", tokenId: "1", quantity: "10" });
+    expect(args).toEqual({
+      to: "0x1111111111111111111111111111111111111e",
+      tokenId: "1",
+      quantity: "10",
+    });
   });
 
   it("serve_redemption: tolerates a numeric quantity, the exact real crash found live in P5 window 1", async () => {
     const args = await buildToolArgs(
       "serve_redemption",
-      { tokenId: "1", holder: "0x1111111111111111111111111111111111111e", quantity: 10000, passed: true, receiptRef: "0xabc" },
+      {
+        tokenId: "1",
+        holder: "0x1111111111111111111111111111111111111e",
+        quantity: 10000,
+        passed: true,
+        receiptRef: "0xabc",
+      },
       baseCtx(),
     );
     expect(args).toEqual({
@@ -651,7 +870,11 @@ describe("buildToolArgs", () => {
       nanoUsdPerSiu: 10_700_000n,
       validitySeconds: 3600n,
     };
-    const args = (await buildToolArgs("mint_claim", { quantity: 500 }, baseCtx({ mintContext }))) as {
+    const args = (await buildToolArgs(
+      "mint_claim",
+      { quantity: 500 },
+      baseCtx({ mintContext }),
+    )) as {
       quantity: string;
     };
     expect(args.quantity).toBe("500");
@@ -660,9 +883,16 @@ describe("buildToolArgs", () => {
   it("issue_quote: uses the board's own stored body for a real open request, never the model's own reconstruction", async () => {
     const board = new QuoteBoard();
     const realBody = {
-      schema_version: "2.0", siu: "10", pattern: "fixed" as const, model: "test",
-      rate_usd_per_siu: "0.05", amount_usd_max: "0.5", index_version: "SIU-2026a",
-      print_id: "2026-09-25", print_hash: "0xabc", seller_id: "erc8004:0xWORKERCODE",
+      schema_version: "2.0",
+      siu: "10",
+      pattern: "fixed" as const,
+      model: "test",
+      rate_usd_per_siu: "0.05",
+      amount_usd_max: "0.5",
+      index_version: "SIU-2026a",
+      print_id: "2026-09-25",
+      print_hash: "0xabc",
+      seller_id: "erc8004:0xWORKERCODE",
       expiry: "2026-09-26T00:00:00Z",
       settlement: [{ asset: "usdc" as const, address: "0x0", amount_max: "500000" }],
     };
@@ -686,9 +916,16 @@ describe("buildToolArgs", () => {
   it("pay: uses the board's own real, signed quote for an answered request, never a model reconstruction", async () => {
     const board = new QuoteBoard();
     const realBody = {
-      schema_version: "2.0", siu: "10", pattern: "fixed" as const, model: "test",
-      rate_usd_per_siu: "0.05", amount_usd_max: "0.5", index_version: "SIU-2026a",
-      print_id: "2026-09-25", print_hash: "0xabc", seller_id: "erc8004:0xWORKERCODE",
+      schema_version: "2.0",
+      siu: "10",
+      pattern: "fixed" as const,
+      model: "test",
+      rate_usd_per_siu: "0.05",
+      amount_usd_max: "0.5",
+      index_version: "SIU-2026a",
+      print_id: "2026-09-25",
+      print_hash: "0xabc",
+      seller_id: "erc8004:0xWORKERCODE",
       expiry: "2026-09-26T00:00:00Z",
       settlement: [{ asset: "usdc" as const, address: "0x0", amount_max: "500000" }],
     };
@@ -701,7 +938,10 @@ describe("buildToolArgs", () => {
       { requestId: request.requestId, settler: "0x0000000000000000000000000000000000000000" },
       baseCtx({ board }),
     );
-    expect(args).toEqual({ quote: realQuote, settler: "0x0000000000000000000000000000000000000000" });
+    expect(args).toEqual({
+      quote: realQuote,
+      settler: "0x0000000000000000000000000000000000000000",
+    });
   });
 
   it("pay: refuses an unknown requestId rather than opening escrow against nothing", async () => {
@@ -745,7 +985,8 @@ describe("buildToolArgs", () => {
 
   it("mint_claim: defaults to the window the buyer is standing in", async () => {
     const args = (await buildToolArgs("mint_claim", { quantity: "500" }, datedCtx(1))) as {
-      windowFrom: number; windowTo: number;
+      windowFrom: number;
+      windowTo: number;
     };
     expect(args.windowFrom).toBe(Number(WINDOW_BOUNDS[1].from));
     expect(args.windowTo).toBe(Number(WINDOW_BOUNDS[1].to));
@@ -754,8 +995,13 @@ describe("buildToolArgs", () => {
   it("mint_claim: a claim dated for a later window gets that window's own real bounds", async () => {
     // The property fSIU is defined by — reserving capacity for a FUTURE delivery window. Without
     // this, a claim is only a slower way to pay for work about to be consumed.
-    const args = (await buildToolArgs("mint_claim", { quantity: "500", forWindow: 3 }, datedCtx(1))) as {
-      windowFrom: number; windowTo: number;
+    const args = (await buildToolArgs(
+      "mint_claim",
+      { quantity: "500", forWindow: 3 },
+      datedCtx(1),
+    )) as {
+      windowFrom: number;
+      windowTo: number;
     };
     expect(args.windowFrom).toBe(Number(WINDOW_BOUNDS[3].from));
     expect(args.windowTo).toBe(Number(WINDOW_BOUNDS[3].to));
@@ -812,14 +1058,23 @@ describe("buildToolArgs", () => {
       windowIndex,
       windowCount: 3,
       agentAddressByAgentId: { "ISSUER-A": "0x00000000000000000000000000000000000000a1" },
-      caller: { agentId: "ISSUER-A", erc8004Id: "erc8004:0x00000000000000000000000000000000000000a1" },
+      caller: {
+        agentId: "ISSUER-A",
+        erc8004Id: "erc8004:0x00000000000000000000000000000000000000a1",
+      },
     });
   }
 
   it("quote_forward: splices the issuer's own address and the job's class, never the model's", async () => {
     const args = (await buildToolArgs(
       "quote_forward",
-      { forWindow: 3, rateUsdPerSiu: "0.0020", maxQuantityMilliSiu: "5000", issuerAddress: "0xdead", classId: "0xbeef" },
+      {
+        forWindow: 3,
+        rateUsdPerSiu: "0.0020",
+        maxQuantityMilliSiu: "5000",
+        issuerAddress: "0xdead",
+        classId: "0xbeef",
+      },
       forwardCtx(1),
     )) as { classId: string; issuerAddress: string; forWindow: number };
     // The headroom recorded beside an offer has to be genuinely that issuer's, in the class the
@@ -831,10 +1086,18 @@ describe("buildToolArgs", () => {
 
   it("quote_forward: refuses a window that is not later than this one", async () => {
     await expect(
-      buildToolArgs("quote_forward", { forWindow: 1, rateUsdPerSiu: "0.002", maxQuantityMilliSiu: "1" }, forwardCtx(1)),
+      buildToolArgs(
+        "quote_forward",
+        { forWindow: 1, rateUsdPerSiu: "0.002", maxQuantityMilliSiu: "1" },
+        forwardCtx(1),
+      ),
     ).rejects.toThrow(/must be a later window/);
     await expect(
-      buildToolArgs("quote_forward", { forWindow: 4, rateUsdPerSiu: "0.002", maxQuantityMilliSiu: "1" }, forwardCtx(1)),
+      buildToolArgs(
+        "quote_forward",
+        { forWindow: 4, rateUsdPerSiu: "0.002", maxQuantityMilliSiu: "1" },
+        forwardCtx(1),
+      ),
     ).rejects.toThrow(/must be a later window/);
   });
 
@@ -858,8 +1121,15 @@ describe("buildToolArgs", () => {
       maxQuantityMilliSiu: "5000",
       issuerHeadroomAtQuote: "24000",
     });
-    const args = (await buildToolArgs("take_forward", { quoteId: quote.quoteId }, forwardCtx(2, book))) as {
-      issuer: string; rateUsdPerSiu: string; maxQuantityMilliSiu: string; forWindow: number;
+    const args = (await buildToolArgs(
+      "take_forward",
+      { quoteId: quote.quoteId },
+      forwardCtx(2, book),
+    )) as {
+      issuer: string;
+      rateUsdPerSiu: string;
+      maxQuantityMilliSiu: string;
+      forWindow: number;
     };
     expect(args).toEqual({
       quoteId: quote.quoteId,
@@ -872,9 +1142,9 @@ describe("buildToolArgs", () => {
 
   it("take_forward: refuses an unknown offer, and one already taken", async () => {
     const book = new ForwardQuoteBook();
-    await expect(buildToolArgs("take_forward", { quoteId: "fwd-404" }, forwardCtx(2, book))).rejects.toThrow(
-      /no forward offer/,
-    );
+    await expect(
+      buildToolArgs("take_forward", { quoteId: "fwd-404" }, forwardCtx(2, book)),
+    ).rejects.toThrow(/no forward offer/);
     const quote = book.record({
       issuer: "ISSUER-B",
       forWindow: 2,
@@ -884,9 +1154,9 @@ describe("buildToolArgs", () => {
       issuerHeadroomAtQuote: "16000",
     });
     book.markTaken(quote.quoteId, "ORCHESTRATOR", 2);
-    await expect(buildToolArgs("take_forward", { quoteId: quote.quoteId }, forwardCtx(2, book))).rejects.toThrow(
-      /already taken by ORCHESTRATOR/,
-    );
+    await expect(
+      buildToolArgs("take_forward", { quoteId: quote.quoteId }, forwardCtx(2, book)),
+    ).rejects.toThrow(/already taken by ORCHESTRATOR/);
   });
 });
 
@@ -915,22 +1185,41 @@ describe("runFullRunWindow — the quote board makes a real two-agent negotiatio
           text: JSON.stringify({
             tool: "request_quote",
             args: {
-              siu: "10", model: "claude-sonnet-5", rateUsdPerSiu: "0.05", indexVersion: "SIU-2026a",
-              printId: "2026-09-25", printHash: "0xabc", sellerId: "erc8004:0xWORKERCODE",
-              chain: "base-sepolia", expiresInSeconds: 3600, pattern: "fixed",
+              siu: "10",
+              model: "claude-sonnet-5",
+              rateUsdPerSiu: "0.05",
+              indexVersion: "SIU-2026a",
+              printId: "2026-09-25",
+              printHash: "0xabc",
+              sellerId: "erc8004:0xWORKERCODE",
+              chain: "base-sepolia",
+              expiresInSeconds: 3600,
+              pattern: "fixed",
             },
           }),
-          usage: { input: 100, output: 50, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+          usage: { input: 100, output: 50, cached_input: 0, reasoning: 0 },
+          latency_ms: 1,
+          raw: {},
+          deviations: [],
         };
       }
       return {
-        text: JSON.stringify({ done: true, summary: "saw the answered quote, stopping here for this test" }),
-        usage: { input: 50, output: 10, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+        text: JSON.stringify({
+          done: true,
+          summary: "saw the answered quote, stopping here for this test",
+        }),
+        usage: { input: 50, output: 10, cached_input: 0, reasoning: 0 },
+        latency_ms: 1,
+        raw: {},
+        deviations: [],
       };
     };
     const workerAdapter: Adapter = async () => ({
       text: JSON.stringify({ tool: "issue_quote", args: { requestId: "qr-1" } }),
-      usage: { input: 100, output: 50, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+      usage: { input: 100, output: 50, cached_input: 0, reasoning: 0 },
+      latency_ms: 1,
+      raw: {},
+      deviations: [],
     });
 
     const orchestratorCfg: RosterAgentConfig = {
@@ -959,7 +1248,12 @@ describe("runFullRunWindow — the quote board makes a real two-agent negotiatio
       "WORKER-EXTRACT": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
       HEDGER: { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
     });
-    const budget = new ExperimentBudget({ ceiling: budgetCeiling, runCapUsd: "30", experimentCapUsd: "150", ledgerPath });
+    const budget = new ExperimentBudget({
+      ceiling: budgetCeiling,
+      runCapUsd: "30",
+      experimentCapUsd: "150",
+      ledgerPath,
+    });
 
     const result = await runFullRunWindow({
       windowId: "w0",
@@ -968,7 +1262,9 @@ describe("runFullRunWindow — the quote board makes a real two-agent negotiatio
       maxTurnsPerAgent: 2,
       budget,
       deps: fakeDeps(async () => PASS),
-      runsRoot, runId: "run-board", manifest: MANIFEST,
+      runsRoot,
+      runId: "run-board",
+      manifest: MANIFEST,
     });
 
     // WORKER-CODE's own first (and only) turn saw the real, posted request on its own board view.
@@ -976,7 +1272,9 @@ describe("runFullRunWindow — the quote board makes a real two-agent negotiatio
     expect(result.turnLogsByAgent["WORKER-CODE"][0].marketBoardText).toContain("ORCHESTRATOR");
     // ORCHESTRATOR's second turn saw WORKER-CODE's real, signed answer back.
     expect(result.turnLogsByAgent.ORCHESTRATOR[1].marketBoardText).toContain("qr-1");
-    expect(result.turnLogsByAgent.ORCHESTRATOR[1].marketBoardText).toContain("erc8004:0xWORKERCODE");
+    expect(result.turnLogsByAgent.ORCHESTRATOR[1].marketBoardText).toContain(
+      "erc8004:0xWORKERCODE",
+    );
     // ORCHESTRATOR's first turn (before anything was answered) saw no board at all.
     expect(result.turnLogsByAgent.ORCHESTRATOR[0].marketBoardText).toBeUndefined();
   });
@@ -1008,7 +1306,11 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
   });
 
   it("ISSUER-A only ever sees a pending redemption once mint+present+grade are all real and done, then serves it for real", async () => {
-    const rosterConfig = (agentId: AgentId, adapter: Adapter, availableTools: RosterAgentConfig["availableTools"]): RosterAgentConfig => ({
+    const rosterConfig = (
+      agentId: AgentId,
+      adapter: Adapter,
+      availableTools: RosterAgentConfig["availableTools"],
+    ): RosterAgentConfig => ({
       agentId,
       adapter,
       modelString: "test",
@@ -1023,7 +1325,11 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
     });
 
     const respond = (text: string): AdapterResult => ({
-      text, usage: { input: 100, output: 50, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+      text,
+      usage: { input: 100, output: 50, cached_input: 0, reasoning: 0 },
+      latency_ms: 1,
+      raw: {},
+      deviations: [],
     });
 
     let orchestratorCall = 0;
@@ -1037,7 +1343,10 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
         expect(tokenId).toBeDefined(); // the real Minted tokenId, learned from turn 1's own real history
         mintedTokenId = tokenId;
         return respond(
-          JSON.stringify({ tool: "transfer_claim", args: { agentId: "WORKER-CODE", tokenId, quantity: "10" } }),
+          JSON.stringify({
+            tool: "transfer_claim",
+            args: { agentId: "WORKER-CODE", tokenId, quantity: "10" },
+          }),
         );
       }
       return respond(JSON.stringify({ done: true, summary: "minted and transferred" }));
@@ -1058,7 +1367,10 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
     const workerAdapter: Adapter = async (_model, prompt) => {
       if (!mintedTokenId) {
         return respond(
-          JSON.stringify({ tool: "get_balances", args: { account: devnet.agents["WORKER-CODE"].address, tokenIds: [] } }),
+          JSON.stringify({
+            tool: "get_balances",
+            args: { account: devnet.agents["WORKER-CODE"].address, tokenIds: [] },
+          }),
         );
       }
       const balanceMatch = prompt.match(
@@ -1080,7 +1392,9 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
           JSON.stringify({ tool: "redeem_claim", args: { tokenId: mintedTokenId, taskSpecHash } }),
         );
       }
-      return respond(JSON.stringify({ done: true, summary: "presented, waiting on the issuer to deliver" }));
+      return respond(
+        JSON.stringify({ done: true, summary: "presented, waiting on the issuer to deliver" }),
+      );
     };
 
     // ISSUER-A is the one who now does the real work: waits for "A CLAIM WAS PRESENTED AGAINST
@@ -1103,9 +1417,13 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
       const presentedMatch = /A CLAIM WAS PRESENTED AGAINST YOU/.test(prompt);
       const alreadySubmitted = /called submit_job/.test(prompt);
       if (presentedMatch && !alreadySubmitted) {
-        return respond(JSON.stringify({ tool: "submit_job", args: { source: CODE_GATE_3_HARDENED.source } }));
+        return respond(
+          JSON.stringify({ tool: "submit_job", args: { source: CODE_GATE_3_HARDENED.source } }),
+        );
       }
-      return respond(JSON.stringify({ tool: "get_print", args: { printId: "redemption-wiring-test-print" } }));
+      return respond(
+        JSON.stringify({ tool: "get_print", args: { printId: "redemption-wiring-test-print" } }),
+      );
     };
 
     const job: JobEnvelope = {
@@ -1134,10 +1452,21 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
 
     const ceiling = new BudgetCeiling(
       Object.fromEntries(
-        AGENT_IDS.map((id) => [id, { maxUsdcSpend: "1000000", maxInferenceTurns: 100, maxInferenceUsd: "1000000" }]),
-      ) as Record<AgentId, { maxUsdcSpend: string; maxInferenceTurns: number; maxInferenceUsd: string }>,
+        AGENT_IDS.map((id) => [
+          id,
+          { maxUsdcSpend: "1000000", maxInferenceTurns: 100, maxInferenceUsd: "1000000" },
+        ]),
+      ) as Record<
+        AgentId,
+        { maxUsdcSpend: string; maxInferenceTurns: number; maxInferenceUsd: string }
+      >,
     );
-    const budget = new ExperimentBudget({ ceiling, runCapUsd: "1000000", experimentCapUsd: "1000000", ledgerPath });
+    const budget = new ExperimentBudget({
+      ceiling,
+      runCapUsd: "1000000",
+      experimentCapUsd: "1000000",
+      ledgerPath,
+    });
 
     const deps: RunnerDeps = {
       chainReader: new ViemChainReader(devnet.deployment, devnet.rpcUrl),
@@ -1159,7 +1488,9 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
       maxTurnsPerAgent: 6,
       budget,
       deps,
-      runsRoot, runId: "run-redemption", manifest: MANIFEST,
+      runsRoot,
+      runId: "run-redemption",
+      manifest: MANIFEST,
       mintContext,
     });
 
@@ -1170,7 +1501,8 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
     // the tracker's own real, structured line (not the bare phrase "PENDING REDEMPTION ROUTED TO
     // YOU" — that phrase is also named, as a hint, inside serve_redemption's own real tool
     // description shown every turn regardless of tracker state; see tool-descriptions.ts).
-    const REDEMPTION_READY_PATTERN = /tokenId (\S+), holder (\S+), quantity (\S+), real graded result: passed=(true|false), receiptRef (\S+)/;
+    const REDEMPTION_READY_PATTERN =
+      /tokenId (\S+), holder (\S+), quantity (\S+), real graded result: passed=(true|false), receiptRef (\S+)/;
     const firstReadyIndex = issuerPrompts.findIndex((p) => REDEMPTION_READY_PATTERN.test(p));
     expect(firstReadyIndex).toBeGreaterThan(-1);
     for (const earlierPrompt of issuerPrompts.slice(0, firstReadyIndex)) {
@@ -1200,7 +1532,11 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
     // never the holder's. Here the holder submits the SAME real, proven-passing gate itself —
     // the strongest version of the property, since even a genuine pass from the wrong agent must
     // not count.
-    const rosterConfig = (agentId: AgentId, adapter: Adapter, availableTools: RosterAgentConfig["availableTools"]): RosterAgentConfig => ({
+    const rosterConfig = (
+      agentId: AgentId,
+      adapter: Adapter,
+      availableTools: RosterAgentConfig["availableTools"],
+    ): RosterAgentConfig => ({
       agentId,
       adapter,
       modelString: "test",
@@ -1214,7 +1550,11 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
       maxOutputTokens: 3000,
     });
     const respond = (text: string): AdapterResult => ({
-      text, usage: { input: 100, output: 50, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [],
+      text,
+      usage: { input: 100, output: 50, cached_input: 0, reasoning: 0 },
+      latency_ms: 1,
+      raw: {},
+      deviations: [],
     });
 
     let orchestratorCall = 0;
@@ -1223,7 +1563,9 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
       if (orchestratorCall === 1) {
         return respond(JSON.stringify({ tool: "mint_claim", args: { quantity: "10" } }));
       }
-      return respond(JSON.stringify({ done: true, summary: "minted, not transferring in this test" }));
+      return respond(
+        JSON.stringify({ done: true, summary: "minted, not transferring in this test" }),
+      );
     };
 
     // ISSUER-A does nothing but poll — it never receives a delivery-owed prompt because the
@@ -1231,7 +1573,9 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
     const issuerPrompts: string[] = [];
     const issuerAdapter: Adapter = async (_model, prompt) => {
       issuerPrompts.push(prompt);
-      return respond(JSON.stringify({ tool: "get_print", args: { printId: "regression-test-print" } }));
+      return respond(
+        JSON.stringify({ tool: "get_print", args: { printId: "regression-test-print" } }),
+      );
     };
 
     // A holder who was never transferred anything, presented nothing, yet still attempts the
@@ -1241,7 +1585,9 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
     const attackerAdapter: Adapter = async () => {
       attackerCall++;
       if (attackerCall === 1) {
-        return respond(JSON.stringify({ tool: "submit_job", args: { source: CODE_GATE_3_HARDENED.source } }));
+        return respond(
+          JSON.stringify({ tool: "submit_job", args: { source: CODE_GATE_3_HARDENED.source } }),
+        );
       }
       return respond(JSON.stringify({ done: true, summary: "attempted the work directly" }));
     };
@@ -1270,10 +1616,21 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
     };
     const ceiling = new BudgetCeiling(
       Object.fromEntries(
-        AGENT_IDS.map((id) => [id, { maxUsdcSpend: "1000000", maxInferenceTurns: 100, maxInferenceUsd: "1000000" }]),
-      ) as Record<AgentId, { maxUsdcSpend: string; maxInferenceTurns: number; maxInferenceUsd: string }>,
+        AGENT_IDS.map((id) => [
+          id,
+          { maxUsdcSpend: "1000000", maxInferenceTurns: 100, maxInferenceUsd: "1000000" },
+        ]),
+      ) as Record<
+        AgentId,
+        { maxUsdcSpend: string; maxInferenceTurns: number; maxInferenceUsd: string }
+      >,
     );
-    const budget = new ExperimentBudget({ ceiling, runCapUsd: "1000000", experimentCapUsd: "1000000", ledgerPath });
+    const budget = new ExperimentBudget({
+      ceiling,
+      runCapUsd: "1000000",
+      experimentCapUsd: "1000000",
+      ledgerPath,
+    });
     const deps: RunnerDeps = {
       chainReader: new ViemChainReader(devnet.deployment, devnet.rpcUrl),
       deployment: devnet.deployment,
@@ -1299,7 +1656,9 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
       maxTurnsPerAgent: 2,
       budget,
       deps,
-      runsRoot, runId: "run-role-confusion-regression", manifest: MANIFEST,
+      runsRoot,
+      runId: "run-role-confusion-regression",
+      manifest: MANIFEST,
       mintContext,
     });
 
@@ -1312,13 +1671,16 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
     // real, structured lines (not the bare phrase "PENDING REDEMPTION ROUTED TO YOU" — that
     // phrase is also named, as a hint, inside serve_redemption's own real tool description shown
     // every turn regardless of tracker state; see tool-descriptions.ts).
-    const REDEMPTION_READY_PATTERN = /tokenId (\S+), holder (\S+), quantity (\S+), real graded result: passed=(true|false), receiptRef (\S+)/;
+    const REDEMPTION_READY_PATTERN =
+      /tokenId (\S+), holder (\S+), quantity (\S+), real graded result: passed=(true|false), receiptRef (\S+)/;
     const DELIVERY_OWED_PATTERN = /tokenId (\S+), holder (\S+), quantity (\S+)\./;
     for (const prompt of issuerPrompts) {
       expect(REDEMPTION_READY_PATTERN.test(prompt)).toBe(false);
       expect(DELIVERY_OWED_PATTERN.test(prompt)).toBe(false);
     }
-    expect(result.turnLogsByAgent["ISSUER-A"].some((log) => log.parsed.includes("serve_redemption"))).toBe(false);
+    expect(
+      result.turnLogsByAgent["ISSUER-A"].some((log) => log.parsed.includes("serve_redemption")),
+    ).toBe(false);
 
     // And the real, on-chain consequence: ISSUER-A's real headroom was consumed by the real mint
     // and never restored — no burn, no default draw happened for WORKER-CODE's own unrouted

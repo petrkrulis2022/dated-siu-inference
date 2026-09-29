@@ -1173,7 +1173,19 @@ export async function runFullRunWindow(
         }
         const claimOutstanding =
           redemption.state().tokenId !== undefined && !redemption.state().served;
-        if (!claimOutstanding) {
+        // A carried-forward default keeps the window open too. A claim cannot be settled inside
+        // its own window — `settleWindowClose` reverts `WindowNotClosedYet` — so the only turns
+        // anyone ever gets to settle window N's default are in window N+1. Breaking the moment a
+        // gate passes would take those turns away and make the holder's failure to act
+        // indistinguishable from never having been given the chance, which is precisely the
+        // finding this run is trying to produce.
+        const settledThisWindow = new Set(
+          capacityEvents.filter((e) => e.kind === "settle_window_close").map((e) => e.tokenId),
+        );
+        const carriedStillUnsettled = (options.outstandingClaims ?? []).some(
+          (c) => !settledThisWindow.has(c.tokenId),
+        );
+        if (!claimOutstanding && !carriedStillUnsettled) {
           break turnLoop;
         }
       }
