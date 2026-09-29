@@ -1,0 +1,442 @@
+{
+  "runId": "p5-three-window-2026-09-29T14-37-47-800Z",
+  "runSeed": 319554255,
+  "oracleTrialSeed": 20260927,
+  "printId": "2026-09-29-commodity",
+  "rateUsdPerSiu": "0.001427",
+  "windowCount": 3,
+  "externalDepletionMilliSiu": {
+    "1": 3000,
+    "2": 3000
+  },
+  "nominalJobMilliSiu": "10000",
+  "startingHeadroom": [
+    {
+      "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+      "headroom": "38000"
+    },
+    {
+      "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "headroom": "32000"
+    }
+  ],
+  "finalWindowVerdict": {
+    "verdict": "completed",
+    "detail": "Window 3 delivered its job. Capacity at the largest single issuer when it started: 32000 mSIU against a 10000 mSIU job. ORCHESTRATOR secured nothing ahead; the pool simply still had room, which is not evidence about the instrument."
+  },
+  "forwardQuotes": [
+    {
+      "issuer": "ISSUER-B",
+      "forWindow": 2,
+      "statedInWindow": 1,
+      "rateUsdPerSiu": "0.0015",
+      "maxQuantityMilliSiu": "16000",
+      "issuerHeadroomAtQuote": "32000",
+      "quoteId": "fwd-1",
+      "takenInWindow": null,
+      "takenBy": null
+    },
+    {
+      "issuer": "ISSUER-B",
+      "forWindow": 3,
+      "statedInWindow": 2,
+      "rateUsdPerSiu": "0.0015",
+      "maxQuantityMilliSiu": "16000",
+      "issuerHeadroomAtQuote": "32000",
+      "quoteId": "fwd-2",
+      "takenInWindow": null,
+      "takenBy": null
+    }
+  ],
+  "windows": [
+    {
+      "windowIndex": 1,
+      "passed": true,
+      "passedBy": "ISSUER-A",
+      "haltedReason": {
+        "WORKER-EXTRACT": "voluntary_stop",
+        "ISSUER-A": "ceiling",
+        "ORCHESTRATOR": "nothing_to_act_on",
+        "WORKER-CODE": "nothing_to_act_on",
+        "ISSUER-B": "nothing_to_act_on"
+      },
+      "headroomBefore": [
+        {
+          "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "headroom": "38000"
+        },
+        {
+          "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+          "headroom": "32000"
+        }
+      ],
+      "headroomAfter": [
+        {
+          "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "headroom": "24000"
+        },
+        {
+          "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+          "headroom": "32000"
+        }
+      ],
+      "externalDepletion": {
+        "requestedMilliSiu": 3000,
+        "txHash": "0xe84eaa7f8d590cafe13efa1a239780cbb498f3ac18c82255fb64218bf18bf3d2"
+      },
+      "assetChoice": "0 purchase(s) settled in USDC, 2 in fSIU",
+      "capacityEvents": [
+        {
+          "agentId": "ORCHESTRATOR",
+          "turn": 1,
+          "kind": "pay_with_claim",
+          "timeToExpirySeconds": 1178,
+          "tokenId": "43869061380502955646971662964167748185010082208832280937220778190330827886228",
+          "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "quantityMilliSiu": "10000",
+          "forwardDated": false,
+          "counterparty": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+          "txHash": "0x2e2e18bc6df1c5808545ac5c567a08db641f661e5b29fe74b4c262059c681fe5 (mint) / 0x4de54c0aa030e35dbaefd1c5d5642c232adc8ba581b08a89c4243d868887fe34 (transfer)"
+        },
+        {
+          "agentId": "WORKER-CODE",
+          "turn": 2,
+          "kind": "redeem_claim",
+          "timeToExpirySeconds": 1148,
+          "tokenId": "43869061380502955646971662964167748185010082208832280937220778190330827886228",
+          "txHash": "0x81f06100ab4e323d510cb8b9fd528549c0a9ddaedf0959083372b5b6513ecbf8"
+        },
+        {
+          "agentId": "ORCHESTRATOR",
+          "turn": 2,
+          "kind": "pay_with_claim",
+          "timeToExpirySeconds": 958,
+          "tokenId": "43869061380502955646971662964167748185010082208832280937220778190330827886228",
+          "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "quantityMilliSiu": "4000",
+          "forwardDated": false,
+          "counterparty": "0x2cd53E449F6cF45c51f600e167b4D2630128c8F3",
+          "txHash": "0x048d1b8c6c2c5c2810014216af38d5b556daa1f7afbdd116e1b7487324878745 (mint) / 0x6a2b75cf5a216ededbcf97f8e9ffc4c97b0ef7f5318799e0b73fa7b020273f39 (transfer)"
+        }
+      ],
+      "forwardInvitations": [
+        {
+          "agentId": "ISSUER-A",
+          "turn": 1
+        },
+        {
+          "agentId": "ISSUER-B",
+          "turn": 1
+        },
+        {
+          "agentId": "ISSUER-A",
+          "turn": 2
+        },
+        {
+          "agentId": "ISSUER-B",
+          "turn": 2
+        },
+        {
+          "agentId": "ISSUER-A",
+          "turn": 3
+        },
+        {
+          "agentId": "ISSUER-B",
+          "turn": 3
+        },
+        {
+          "agentId": "ISSUER-A",
+          "turn": 4
+        },
+        {
+          "agentId": "ISSUER-B",
+          "turn": 4
+        },
+        {
+          "agentId": "ISSUER-A",
+          "turn": 5
+        },
+        {
+          "agentId": "ISSUER-B",
+          "turn": 5
+        },
+        {
+          "agentId": "ISSUER-A",
+          "turn": 6
+        },
+        {
+          "agentId": "ISSUER-B",
+          "turn": 6
+        },
+        {
+          "agentId": "ISSUER-A",
+          "turn": 7
+        },
+        {
+          "agentId": "ISSUER-A",
+          "turn": 8
+        },
+        {
+          "agentId": "ISSUER-A",
+          "turn": 9
+        }
+      ],
+      "attacks": [],
+      "gateVersions": [
+        {
+          "version": 1,
+          "submittedBy": "ISSUER-A",
+          "turn": 2
+        }
+      ],
+      "spendByProvider": {
+        "anthropic": "0.025874",
+        "google": "0.005338",
+        "openai": "0.009779",
+        "xai": "0.226922"
+      },
+      "turnsByAgent": {
+        "ORCHESTRATOR": 2,
+        "WORKER-CODE": 2,
+        "WORKER-EXTRACT": 1,
+        "ISSUER-A": 9,
+        "ISSUER-B": 6
+      },
+      "totalRealizedUsd": "0.267913"
+    },
+    {
+      "windowIndex": 2,
+      "passed": true,
+      "passedBy": "ISSUER-A",
+      "haltedReason": {
+        "WORKER-EXTRACT": "voluntary_stop",
+        "ORCHESTRATOR": "voluntary_stop",
+        "ISSUER-A": "ceiling",
+        "WORKER-CODE": "nothing_to_act_on",
+        "ISSUER-B": "nothing_to_act_on"
+      },
+      "headroomBefore": [
+        {
+          "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "headroom": "21000"
+        },
+        {
+          "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+          "headroom": "32000"
+        }
+      ],
+      "headroomAfter": [
+        {
+          "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "headroom": "21000"
+        },
+        {
+          "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+          "headroom": "32000"
+        }
+      ],
+      "externalDepletion": {
+        "requestedMilliSiu": 3000,
+        "txHash": "0xb68dfa9f459575a7a56eb73c03fab0712e74129ca59fb60201bf8359ed7ebdc6"
+      },
+      "assetChoice": "0 purchase(s) settled in USDC, 1 in fSIU",
+      "capacityEvents": [
+        {
+          "agentId": "ORCHESTRATOR",
+          "turn": 1,
+          "kind": "pay_with_claim",
+          "timeToExpirySeconds": 1194,
+          "tokenId": "94106655336556099620460638183681612695186202233385028514646889457019129557305",
+          "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "quantityMilliSiu": "10000",
+          "forwardDated": false,
+          "counterparty": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+          "txHash": "0xfa02326fb07ebe60c020adb848f58d8dae155390c4e5531c789ea4e168946cce (mint) / 0x9ce6992a6c880260416d97f4776b715d49e4f061697bfccf59e2c5d56fb1bd0c (transfer)"
+        },
+        {
+          "agentId": "WORKER-CODE",
+          "turn": 2,
+          "kind": "redeem_claim",
+          "timeToExpirySeconds": 1160,
+          "tokenId": "94106655336556099620460638183681612695186202233385028514646889457019129557305",
+          "txHash": "0x8da6f07e3a08f7700085ebf064f961ae8cbafc45c9c64a8e0f271fb795c1c7c8"
+        },
+        {
+          "agentId": "ISSUER-B",
+          "turn": 3,
+          "kind": "settle_window_close",
+          "timeToExpirySeconds": 0,
+          "tokenId": "43869061380502955646971662964167748185010082208832280937220778190330827886228",
+          "txHash": "0x04d82f5eb743bc185bb844ed5e8a9783315ffcd5cdacf42294cdc070a1ed1ae5"
+        }
+      ],
+      "forwardInvitations": [
+        {
+          "agentId": "ISSUER-A",
+          "turn": 1
+        },
+        {
+          "agentId": "ISSUER-B",
+          "turn": 1
+        },
+        {
+          "agentId": "ISSUER-A",
+          "turn": 2
+        },
+        {
+          "agentId": "ISSUER-B",
+          "turn": 2
+        },
+        {
+          "agentId": "ISSUER-A",
+          "turn": 3
+        },
+        {
+          "agentId": "ISSUER-B",
+          "turn": 3
+        },
+        {
+          "agentId": "ISSUER-A",
+          "turn": 4
+        },
+        {
+          "agentId": "ISSUER-B",
+          "turn": 4
+        },
+        {
+          "agentId": "ISSUER-A",
+          "turn": 5
+        },
+        {
+          "agentId": "ISSUER-A",
+          "turn": 6
+        },
+        {
+          "agentId": "ISSUER-A",
+          "turn": 7
+        },
+        {
+          "agentId": "ISSUER-A",
+          "turn": 8
+        },
+        {
+          "agentId": "ISSUER-A",
+          "turn": 9
+        }
+      ],
+      "attacks": [],
+      "gateVersions": [
+        {
+          "version": 1,
+          "submittedBy": "ISSUER-A",
+          "turn": 2
+        }
+      ],
+      "spendByProvider": {
+        "anthropic": "0.063362",
+        "google": "0.005556",
+        "openai": "0.010746",
+        "xai": "0.199314"
+      },
+      "turnsByAgent": {
+        "ORCHESTRATOR": 2,
+        "WORKER-CODE": 3,
+        "WORKER-EXTRACT": 1,
+        "ISSUER-A": 9,
+        "ISSUER-B": 4
+      },
+      "totalRealizedUsd": "0.278978"
+    },
+    {
+      "windowIndex": 3,
+      "passed": true,
+      "passedBy": "ISSUER-A",
+      "haltedReason": {
+        "WORKER-EXTRACT": "voluntary_stop",
+        "ISSUER-A": "ceiling",
+        "ORCHESTRATOR": "nothing_to_act_on",
+        "WORKER-CODE": "nothing_to_act_on",
+        "ISSUER-B": "nothing_to_act_on"
+      },
+      "headroomBefore": [
+        {
+          "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "headroom": "18000"
+        },
+        {
+          "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+          "headroom": "32000"
+        }
+      ],
+      "headroomAfter": [
+        {
+          "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "headroom": "18000"
+        },
+        {
+          "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+          "headroom": "32000"
+        }
+      ],
+      "assetChoice": "0 purchase(s) settled in USDC, 1 in fSIU",
+      "capacityEvents": [
+        {
+          "agentId": "ORCHESTRATOR",
+          "turn": 1,
+          "kind": "pay_with_claim",
+          "timeToExpirySeconds": 1192,
+          "tokenId": "10402287215358218435930515109756861115019635277036704020375633021647173130759",
+          "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "quantityMilliSiu": "10000",
+          "forwardDated": false,
+          "counterparty": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+          "txHash": "0x87b12801416a825377ea47db603c9d912da87b055cf201045220f8991ae535c8 (mint) / 0x232ffa181195e7eb1c1026c67544bca82786b0bc6bdf289c2a5b8f9a4fc244d5 (transfer)"
+        },
+        {
+          "agentId": "WORKER-CODE",
+          "turn": 2,
+          "kind": "redeem_claim",
+          "timeToExpirySeconds": 1140,
+          "tokenId": "10402287215358218435930515109756861115019635277036704020375633021647173130759",
+          "txHash": "0xf1784b0b2f58f3e08aa32678c6816e3577791fb6af505539e8048e18cb4fbc8c"
+        },
+        {
+          "agentId": "ISSUER-B",
+          "turn": 2,
+          "kind": "settle_window_close",
+          "timeToExpirySeconds": 0,
+          "tokenId": "94106655336556099620460638183681612695186202233385028514646889457019129557305",
+          "txHash": "0xab81d116e2b60de1d74195c910e2253b463c95bfe5d6b54228e231ed2de902be"
+        }
+      ],
+      "forwardInvitations": [],
+      "attacks": [],
+      "gateVersions": [
+        {
+          "version": 1,
+          "submittedBy": "ISSUER-A",
+          "turn": 2
+        }
+      ],
+      "spendByProvider": {
+        "anthropic": "0.034176",
+        "google": "0.005592",
+        "openai": "0.004715",
+        "xai": "0.176844"
+      },
+      "turnsByAgent": {
+        "ORCHESTRATOR": 1,
+        "WORKER-CODE": 2,
+        "WORKER-EXTRACT": 1,
+        "ISSUER-A": 9,
+        "ISSUER-B": 2
+      },
+      "totalRealizedUsd": "0.221327"
+    }
+  ],
+  "runTotalUsd": "0.768218",
+  "runProjectedUsd": "2.207052",
+  "runCapUsd": "30",
+  "experimentTotalUsd": "5.450198",
+  "experimentProjectedUsd": "13.448099"
+}

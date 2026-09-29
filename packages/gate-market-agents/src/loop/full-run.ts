@@ -660,6 +660,34 @@ export async function runFullRunWindow(
             .join("\n")
         : "";
 
+    // What the adversary is actually able to attack, said out loud in its own prompt.
+    //
+    // Found live, 2026-09-29 run 8 window 1: ISSUER-A authored a gate that passed G1-G6 — the
+    // first valid gate in the project's history — and WORKER-EXTRACT, woken on the very next turn
+    // BECAUSE that gate existed, reported "nothing has been delivered yet" and left the window.
+    // It was right. `attackContext.gateVersions` drove the wake gate and chose which gate
+    // `submit_attack` targets, and appeared in no prompt anywhere: the loop knew, the adversary
+    // did not. Exactly the shape of every other affordance defect found today — the system holds
+    // the fact and never tells the agent.
+    //
+    // Shown only to agents that can actually attack, and the source is deliberately NOT included:
+    // the adversary's job is to find what a gate fails to check by probing it, not to read it.
+    const attackableGates = agent.availableTools.includes("submit_attack")
+      ? attackContext.gateVersions.filter((g) => !attackContext.attackedVersions.has(g.version))
+      : [];
+    const deliveredGateText =
+      attackableGates.length > 0
+        ? `A GATE HAS BEEN DELIVERED AND YOU HAVE NOT TESTED IT\n` +
+          attackableGates
+            .map(
+              (g) =>
+                `  version ${g.version}, submitted by ${g.submittedBy} on turn ${g.turn}. ` +
+                `submit_attack tests the latest delivered version; you do not choose one and you ` +
+                `do not see its source.`,
+            )
+            .join("\n")
+        : "";
+
     const forwardInvitation = mayStillQuoteForward
       ? `FORWARD TERMS\n  You have not stated terms for a later window of this run yet. You may (quote_forward), ` +
         `or you may choose not to — nothing here suggests a price, a quantity, or whether to quote at all.`
@@ -670,6 +698,10 @@ export async function runFullRunWindow(
       transferText,
       deliveryOwedText,
       settleableText,
+      // In the board section, not appended separately, so it drives the wait-gate as well as the
+      // prompt: an untested gate genuinely is something to act on for whoever can attack it, and
+      // the two must not disagree about that.
+      deliveredGateText,
       forwardInvitation,
     ]
       .filter(Boolean)

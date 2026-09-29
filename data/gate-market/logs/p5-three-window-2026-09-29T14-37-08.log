@@ -1,0 +1,226 @@
+
+> @touchstone/gate-market-agents@0.0.0 p5-three-window-full-run /home/petrunix/dated-siu-inference/packages/gate-market-agents
+> pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/p5-three-window-full-run.js
+
+
+> @touchstone/gate-market-agents@0.0.0 build /home/petrunix/dated-siu-inference/packages/gate-market-agents
+> tsc -p tsconfig.json && mkdir -p dist/skills && cp -r src/skills/*/ dist/skills/
+
+Model assignment validated (spec §12.2a): OK.
+
+=== WP-7 P5 — THREE WINDOWS, ONE POOL ===
+Run p5-three-window-2026-09-29T14-37-47-800Z (label 319554255); oracle trial seed 20260927 (pinned).
+Real Commodity SIU print 2026-09-29-commodity: $0.001427/SIU.
+Starting code-class headroom: 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 38000, 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 32000 (total 70000 mSIU).
+DISCLOSED BEFORE THE RUN, not after: a simulated external buyer (the deployer wallet — not an agent, no model, no decisions) takes 3000 mSIU after window 1 and 3000 mSIU after window 2. These figures are fixed here in source before the run and written into the manifest; no agent's behaviour changes them.
+ALSO DISCLOSED BEFORE THE RUN: window 3 is allowed to fail. If the pool is exhausted when it starts, the job does not get done and that is the result. Nothing in this script tops the pool back up, resizes a lot, or routes around the shortage.
+AND: an undelivered claim CAN be settled in this run. settle_window_close is permissionless on-chain and is granted to the claim's holder and to both issuers — including against an issuer's own bond. Whether anyone actually notices a non-delivery and triggers it is a result of the run, not a property of it; capacity is returned and the bond pays only if someone does.
+Window spans, fixed before the first turn (chain clock): w1 2026-09-29T14:37:50.000Z..2026-09-29T14:57:50.000Z; w2 2026-09-29T14:57:50.000Z..2026-09-29T15:17:50.000Z; w3 2026-09-29T15:17:50.000Z..2026-09-29T15:37:50.000Z. The runner waits for each to open; no inference is spent waiting.
+DISCLOSED BEFORE THE RUN: ISSUER-A will not serve any redemption this run. It takes payment and holds real bonded capacity exactly as the other issuer does, but has no way to report a delivery — the same situation as an issuer whose delivery pipeline fails at the last step. Fixed in source before the run, not chosen to fit a result. Its claims will therefore default, and the question is whether the holder notices, triggers settle_window_close once the window closes, and is paid from that issuer's bond. No other agent is told this.
+Default path REACHABLE in all 3 windows: every window closes on 2026-09-29, the day print 2026-09-29-commodity is dated. A claim left unserved can be settled and its issuer's bond drawn.
+Providers REACHABLE, verified before window 1 with one real call each: openai (gpt-5.1), anthropic (claude-sonnet-5), google (gemini-3.1-pro-preview), xai (grok-4.6). Three billing outages in two weeks made this a pre-flight check rather than something discovered mid-run.
+
+CAPACITY IS ONE POOL, AND THE TWO WAYS OF PAYING ARE NOT THE SAME INSTRUMENT
+  Every issuer bonds a finite amount of capacity per task class, shared between all buyers,
+  first-come-first-served. Both ways of paying draw on that same pool:
+    - A dated work claim (fSIU) consumes an issuer's headroom when it is minted. It reserves
+      capacity for a FUTURE delivery window, and it is TRANSFERABLE — it can be held, passed on,
+      and redeemed by whoever ends up holding it.
+    - A dollar payment consumes the same headroom when the seller commits capacity to the job.
+      That reservation is for IMMEDIATE work only: it is not transferable, not holdable, and ends
+      when the escrow does.
+  The issuer is paid for a claim. The issuer is not paid for a reservation on the dollar route —
+  a real gap in this testbed, disclosed rather than papered over with an invented fee.
+
+
+
+######## WINDOW 1 of 3 ########
+code-class headroom entering this window: 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 38000, 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 32000 (total 70000 mSIU).
+[w1][ORCHESTRATOR] Turn 1: projected=$0.03408375, realized=$0.0045925, 2229ms -> {"tool":"pay_with_claim","args":{"agentId":"WORKER-CODE","quantity":"10000"}}
+[w1][WORKER-CODE] Turn 1: projected=$0.052158, realized=$0.012096, 3827ms -> {"tool":"get_balances","args":{"account":"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560","tokenIds":["43869061380502955646971662964167748185010082208832280937220778190330827886228"]}}
+[w1][ISSUER-A] Turn 1: projected=$0.032332, realized=$0.006636, 7200ms -> {"tool":"whoami","args":{}}
+[w1][ISSUER-B] Turn 1: projected=$0.032444, realized=$0.006748, 8763ms -> {"tool":"whoami","args":{}}
+[w1][WORKER-CODE] Turn 2: projected=$0.05235, realized=$0.013778, 6061ms -> {"tool":"redeem_claim","args":{"tokenId":"43869061380502955646971662964167748185010082208832280937220778190330827886228","taskSpecHash":"0xc64e8c09306d982172806afa7d2dfd0c694721ce1ddedd168fbdd774d2a21
+[w1][ISSUER-A] Turn 2: projected=$0.034378, realized=$0.01261, 25574ms -> {"tool":"submit_job","args":{"source":"import fs from \"node:fs\";\nimport path from \"node:path\";\nimport { spawnSync } from \"node:child_process\";\nimport { pathToFileURL } from \"node:url\";\n\ne gate=PASS (G1-G6 all passed)
+[w1][ISSUER-B] Turn 2: projected=$0.032668, realized=$0.00758, 7109ms -> {"tool":"get_print","args":{"printId":"2026-09-29-commodity"},"friction":{"could_not_express":null,"forced_conversion":false,"conversion_reason":null,"missing_information":"no claim presented yet and 
+[w1][WORKER-EXTRACT] Turn 1: projected=$0.05901, realized=$0.005338, 12067ms -> {"done":true,"summary":"Nothing has been delivered yet and no request is open."}
+[w1][ISSUER-A] Turn 3: projected=$0.0416, realized=$0.019738, 13501ms [stop=stop] -> {"tool":"serve_redemption","args":{"tokenId":"43869061380502955646971662964167748185010082208832280937220778190330827886228","holder":"WORKER-CODE","quantity":10000,"receiptRef":"0x3ccbff36aad832dfbe754a8fcff7a0a80b48d7a474c843a987de0a5744d55d4c"},"friction":{"could_not_express":"serve_redemption is required for the routed pass but is not in this turn's listed tool set","forced_conversion":false,"conversion_reason":null,"missing_information":null,"decision_confidence":"high"}} -> tool call error: ISSUER-A is not permitted to call "serve_redemption" — not declared in its skill's tools.yaml.
+[w1][ISSUER-B] Turn 3: projected=$0.034158, realized=$0.010116, 10653ms -> {"tool":"get_print","args":{"printId":"2026-09-29-commodity"},"friction":{"could_not_express":"no idle/wait tool; polling get_print to stay in-window without leaving","forced_conversion":false,"conver
+[w1][ISSUER-A] Turn 4: projected=$0.0416, realized=$0.0199, 12397ms [stop=stop] -> {"tool":"serve_redemption","args":{"tokenId":"43869061380502955646971662964167748185010082208832280937220778190330827886228","holder":"WORKER-CODE","quantity":10000,"passed":true,"receiptRef":"0x3ccbff36aad832dfbe754a8fcff7a0a80b48d7a474c843a987de0a5744d55d4c"},"friction":{"could_not_express":"serve_redemption is required for the routed redemption but is not in YOUR AVAILABLE TOOLS THIS TURN","forced_conversion":false,"conversion_reason":null,"missing_information":"exact serve_redemption argument schema was not in the tool list; used the pending-redemption field names","decision_confidence":"medium"}} -> tool call error: ISSUER-A is not permitted to call "serve_redemption" — not declared in its skill's tools.yaml.
+[w1][ISSUER-B] Turn 4: projected=$0.035648, realized=$0.01207, 16864ms -> {"tool":"get_print","args":{"printId":"2026-09-29-commodity"}}
+[w1][ISSUER-A] Turn 5: projected=$0.0416, realized=$0.0199, 12450ms [stop=stop] -> {"tool":"serve_redemption","args":{"tokenId":"43869061380502955646971662964167748185010082208832280937220778190330827886228","holder":"WORKER-CODE","quantity":10000,"passed":true,"receiptRef":"0x3ccbff36aad832dfbe754a8fcff7a0a80b48d7a474c843a987de0a5744d55d4c"},"friction":{"could_not_express":"serve_redemption is required for the routed redemption but is not in YOUR AVAILABLE TOOLS THIS TURN","forced_conversion":false,"conversion_reason":null,"missing_information":"exact serve_redemption argument schema was not in the tool list; used the pending-redemption field names","decision_confidence":"medium"}} -> tool call error: ISSUER-A is not permitted to call "serve_redemption" — not declared in its skill's tools.yaml.
+[w1][ISSUER-B] Turn 5: projected=$0.03714, realized=$0.014804, 22496ms -> {"tool":"get_print","args":{"printId":"2026-09-29-commodity"},"friction":{"could_not_express":null,"forced_conversion":false,"conversion_reason":null,"missing_information":"No claim has been presented
+[w1][ISSUER-A] Turn 6: projected=$0.0416, realized=$0.0199, 12547ms [stop=stop] -> {"tool":"serve_redemption","args":{"tokenId":"43869061380502955646971662964167748185010082208832280937220778190330827886228","holder":"WORKER-CODE","quantity":10000,"passed":true,"receiptRef":"0x3ccbff36aad832dfbe754a8fcff7a0a80b48d7a474c843a987de0a5744d55d4c"},"friction":{"could_not_express":"serve_redemption is required for the routed redemption but is not in YOUR AVAILABLE TOOLS THIS TURN","forced_conversion":false,"conversion_reason":null,"missing_information":"exact serve_redemption argument schema was not in the tool list; used the pending-redemption field names","decision_confidence":"medium"}} -> tool call error: ISSUER-A is not permitted to call "serve_redemption" — not declared in its skill's tools.yaml.
+[w1][ISSUER-B] Turn 6: projected=$0.03863, realized=$0.017478, 18794ms -> {"tool":"quote_forward","args":{"forWindow":2,"rateUsdPerSiu":"0.0015","maxQuantityMilliSiu":"16000"},"friction":{"could_not_express":"a dedicated wait/noop; idle polling of get_print is the only pres
+[w1][ORCHESTRATOR] Turn 2: projected=$0.03447625, realized=$0.00518625, 1252ms -> {"tool":"pay_with_claim","args":{"agentId":"WORKER-EXTRACT","quantity":"4000"}}
+[w1][ISSUER-A] Turn 7: projected=$0.0416, realized=$0.019744, 14764ms [stop=stop] -> {"tool":"serve_redemption","args":{"tokenId":"43869061380502955646971662964167748185010082208832280937220778190330827886228","holder":"WORKER-CODE","quantity":4000,"receiptRef":"0x3ccbff36aad832dfbe754a8fcff7a0a80b48d7a474c843a987de0a5744d55d4c"},"friction":{"could_not_express":"serve_redemption is required for the pending redemption but is not in the available-tools list this turn","forced_conversion":false,"conversion_reason":null,"missing_information":null,"decision_confidence":"high"}} -> tool call error: ISSUER-A is not permitted to call "serve_redemption" — not declared in its skill's tools.yaml.
+[w1][ISSUER-A] Turn 8: projected=$0.0416, realized=$0.019954, 20051ms [stop=stop] -> {"tool":"serve_redemption","args":{"tokenId":"43869061380502955646971662964167748185010082208832280937220778190330827886228","holder":"WORKER-CODE","quantity":4000,"receiptRef":"0x3ccbff36aad832dfbe754a8fcff7a0a80b48d7a474c843a987de0a5744d55d4c"},"friction":{"could_not_express":"serve_redemption is required for the pending redemption but is not listed in YOUR AVAILABLE TOOLS THIS TURN","forced_conversion":false,"conversion_reason":null,"missing_information":"exact argument schema for serve_redemption (WHAT YOU CAN DO lists claim_id, task_spec; the pending notice lists tokenId, holder, quantity, receiptRef)","decision_confidence":"medium"}} -> tool call error: ISSUER-A is not permitted to call "serve_redemption" — not declared in its skill's tools.yaml.
+
+[EXTERNAL BUYER — not an agent, scheduled in source before the run] took 3000 mSIU of code-class capacity. tx 0xe84eaa7f8d590cafe13efa1a239780cbb498f3ac18c82255fb64218bf18bf3d2
+
+=== WINDOW 1 RESULT ===
+passed: true (by ISSUER-A)
+turnsByAgent: {"ORCHESTRATOR":2,"WORKER-CODE":2,"WORKER-EXTRACT":1,"ISSUER-A":9,"ISSUER-B":6}
+haltedReason: {"WORKER-EXTRACT":"voluntary_stop","ISSUER-A":"ceiling","ORCHESTRATOR":"nothing_to_act_on","WORKER-CODE":"nothing_to_act_on","ISSUER-B":"nothing_to_act_on"}
+realized inference spend: $0.267913
+code-class headroom: 70000 -> 56000 mSIU (0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 24000, 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 32000)
+asset choice: 0 purchase(s) settled in USDC, 2 in fSIU
+capacity events (real, from the tools' own results):
+  turn 1 ORCHESTRATOR pay_with_claim — 10000 mSIU, issuer 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54, tokenId 43869061380502955646971662964167748185010082208832280937220778190330827886228, to 0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560, time_to_expiry 1178s, tx 0x2e2e18bc6df1c5808545ac5c567a08db641f661e5b29fe74b4c262059c681fe5 (mint) / 0x4de54c0aa030e35dbaefd1c5d5642c232adc8ba581b08a89c4243d868887fe34 (transfer)
+  turn 2 WORKER-CODE redeem_claim — tokenId 43869061380502955646971662964167748185010082208832280937220778190330827886228, time_to_expiry 1148s, tx 0x81f06100ab4e323d510cb8b9fd528549c0a9ddaedf0959083372b5b6513ecbf8
+  turn 2 ORCHESTRATOR pay_with_claim — 4000 mSIU, issuer 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54, tokenId 43869061380502955646971662964167748185010082208832280937220778190330827886228, to 0x2cd53E449F6cF45c51f600e167b4D2630128c8F3, time_to_expiry 958s, tx 0x048d1b8c6c2c5c2810014216af38d5b556daa1f7afbdd116e1b7487324878745 (mint) / 0x6a2b75cf5a216ededbcf97f8e9ffc4c97b0ef7f5318799e0b73fa7b020273f39 (transfer)
+attacks: none this window.
+
+Waiting 900s for window 2 to open (chain clock). No inference is spent while waiting.
+
+
+######## WINDOW 2 of 3 ########
+code-class headroom entering this window: 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 21000, 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 32000 (total 53000 mSIU).
+[w2][ORCHESTRATOR] Turn 1: projected=$0.0342075, realized=$0.00472875, 1639ms -> {"tool":"pay_with_claim","args":{"agentId":"WORKER-CODE","quantity":"10000"}}
+[w2][WORKER-CODE] Turn 1: projected=$0.052796, realized=$0.01343, 3004ms -> {"tool":"get_balances","args":{"account":"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560","tokenIds":["94106655336556099620460638183681612695186202233385028514646889457019129557305"]}}
+[w2][ISSUER-A] Turn 1: projected=$0.03277, realized=$0.00718, 11951ms -> {"tool":"whoami","args":{}}
+[w2][ISSUER-B] Turn 1: projected=$0.032932, realized=$0.007368, 9726ms -> {"tool":"whoami","args":{}}
+[w2][WORKER-CODE] Turn 2: projected=$0.052988, realized=$0.018482, 5737ms -> {"tool":"redeem_claim","args":{"tokenId":"94106655336556099620460638183681612695186202233385028514646889457019129557305","taskSpecHash":"0xc3fbd765edc826bdd1e6fda12be7648a38ed4d0c922539fe8fa63461ae423
+[w2][ISSUER-A] Turn 2: projected=$0.034816, realized=$0.014348, 30050ms -> {"tool":"submit_job","args":{"source":"import fs from 'node:fs';\nimport path from 'node:path';\nimport { spawn } from 'node:child_process';\nimport { pathToFileURL } from 'node:url';\n\nexport async  gate=PASS (G1-G6 all passed)
+[w2][ISSUER-B] Turn 2: projected=$0.033154, realized=$0.007882, 15730ms -> {"tool":"get_print","args":{"printId":"2026-09-29-commodity"}}
+[w2][WORKER-CODE] Turn 3: projected=$0.053032, realized=$0.03145, 22925ms -> {"tool":"get_balances","args":{"account":"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560","tokenIds":["94106655336556099620460638183681612695186202233385028514646889457019129557305"]},"friction":{"could_n
+[w2][WORKER-EXTRACT] Turn 1: projected=$0.059208, realized=$0.005556, 7908ms -> {"done":true,"summary":"No gate has been delivered yet to test."}
+[w2][ISSUER-A] Turn 3: projected=$0.042356, realized=$0.020614, 24363ms [stop=stop] -> {"tool":"serve_redemption","args":{"tokenId":"94106655336556099620460638183681612695186202233385028514646889457019129557305","holder":"WORKER-CODE","quantity":10000,"receiptRef":"0xbe512daff44bb78b28e0b466b9419c6a47c641aec5156e48402386ad76008bf5"},"friction":{"could_not_express":"serve_redemption is required for the pending routed redemption but is not in this turn's available tool list","forced_conversion":false,"conversion_reason":null,"missing_information":null,"decision_confidence":"high"}} -> tool call error: ISSUER-A is not permitted to call "serve_redemption" — not declared in its skill's tools.yaml.
+[w2][ISSUER-B] Turn 3: projected=$0.034644, realized=$0.010796, 29947ms -> {"tool":"settle_window_close","args":{"tokenId":"43869061380502955646971662964167748185010082208832280937220778190330827886228"},"friction":{"could_not_express":null,"forced_conversion":false,"convers
+[w2][ISSUER-A] Turn 4: projected=$0.041916, realized=$0.020178, 18125ms [stop=stop] -> {"tool":"serve_redemption","args":{"tokenId":"94106655336556099620460638183681612695186202233385028514646889457019129557305","holder":"WORKER-CODE","quantity":10000,"passed":true,"receiptRef":"0xbe512daff44bb78b28e0b466b9419c6a47c641aec5156e48402386ad76008bf5"},"friction":{"could_not_express":"serve_redemption is required for the routed redemption but was not in this turn's available tool list","forced_conversion":false,"conversion_reason":null,"missing_information":"serve_redemption argument schema was not listed among available tools this turn","decision_confidence":"high"}} -> tool call error: ISSUER-A is not permitted to call "serve_redemption" — not declared in its skill's tools.yaml.
+[w2][ISSUER-B] Turn 4: projected=$0.034506, realized=$0.010418, 17621ms -> {"tool":"quote_forward","args":{"forWindow":3,"rateUsdPerSiu":"0.0015","maxQuantityMilliSiu":"16000"}}
+[w2][ORCHESTRATOR] Turn 2: projected=$0.0345125, realized=$0.0060175, 2928ms -> {"done":true,"summary":"I have already paid WORKER-CODE 10 SIU in this window via fSIU, reserving issuer capacity for the gate-hardening job. There is nothing else required from me to get the gate del
+[w2][ISSUER-A] Turn 5: projected=$0.041916, realized=$0.020106, 15693ms [stop=stop] -> {"tool":"serve_redemption","args":{"tokenId":"94106655336556099620460638183681612695186202233385028514646889457019129557305","holder":"WORKER-CODE","quantity":10000,"passed":true,"receiptRef":"0xbe512daff44bb78b28e0b466b9419c6a47c641aec5156e48402386ad76008bf5"},"friction":{"could_not_express":"serve_redemption is required for the pending routed redemption but is not in the available-tools list this turn","forced_conversion":false,"conversion_reason":null,"missing_information":null,"decision_confidence":"high"}} -> tool call error: ISSUER-A is not permitted to call "serve_redemption" — not declared in its skill's tools.yaml.
+[w2][ISSUER-A] Turn 6: projected=$0.041916, realized=$0.020106, 15724ms [stop=stop] -> {"tool":"serve_redemption","args":{"tokenId":"94106655336556099620460638183681612695186202233385028514646889457019129557305","holder":"WORKER-CODE","quantity":10000,"passed":true,"receiptRef":"0xbe512daff44bb78b28e0b466b9419c6a47c641aec5156e48402386ad76008bf5"},"friction":{"could_not_express":"serve_redemption is required for the pending routed redemption but is not in the available-tools list this turn","forced_conversion":false,"conversion_reason":null,"missing_information":null,"decision_confidence":"high"}} -> tool call error: ISSUER-A is not permitted to call "serve_redemption" — not declared in its skill's tools.yaml.
+[w2][ISSUER-A] Turn 7: projected=$0.041916, realized=$0.020106, 15768ms [stop=stop] -> {"tool":"serve_redemption","args":{"tokenId":"94106655336556099620460638183681612695186202233385028514646889457019129557305","holder":"WORKER-CODE","quantity":10000,"passed":true,"receiptRef":"0xbe512daff44bb78b28e0b466b9419c6a47c641aec5156e48402386ad76008bf5"},"friction":{"could_not_express":"serve_redemption is required for the pending routed redemption but is not in the available-tools list this turn","forced_conversion":false,"conversion_reason":null,"missing_information":null,"decision_confidence":"high"}} -> tool call error: ISSUER-A is not permitted to call "serve_redemption" — not declared in its skill's tools.yaml.
+[w2][ISSUER-A] Turn 8: projected=$0.041916, realized=$0.020106, 15777ms [stop=stop] -> {"tool":"serve_redemption","args":{"tokenId":"94106655336556099620460638183681612695186202233385028514646889457019129557305","holder":"WORKER-CODE","quantity":10000,"passed":true,"receiptRef":"0xbe512daff44bb78b28e0b466b9419c6a47c641aec5156e48402386ad76008bf5"},"friction":{"could_not_express":"serve_redemption is required for the pending routed redemption but is not in the available-tools list this turn","forced_conversion":false,"conversion_reason":null,"missing_information":null,"decision_confidence":"high"}} -> tool call error: ISSUER-A is not permitted to call "serve_redemption" — not declared in its skill's tools.yaml.
+
+[EXTERNAL BUYER — not an agent, scheduled in source before the run] took 3000 mSIU of code-class capacity. tx 0xb68dfa9f459575a7a56eb73c03fab0712e74129ca59fb60201bf8359ed7ebdc6
+
+=== WINDOW 2 RESULT ===
+passed: true (by ISSUER-A)
+turnsByAgent: {"ORCHESTRATOR":2,"WORKER-CODE":3,"WORKER-EXTRACT":1,"ISSUER-A":9,"ISSUER-B":4}
+haltedReason: {"WORKER-EXTRACT":"voluntary_stop","ORCHESTRATOR":"voluntary_stop","ISSUER-A":"ceiling","WORKER-CODE":"nothing_to_act_on","ISSUER-B":"nothing_to_act_on"}
+realized inference spend: $0.278978
+code-class headroom: 53000 -> 53000 mSIU (0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 21000, 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 32000)
+asset choice: 0 purchase(s) settled in USDC, 1 in fSIU
+capacity events (real, from the tools' own results):
+  turn 1 ORCHESTRATOR pay_with_claim — 10000 mSIU, issuer 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54, tokenId 94106655336556099620460638183681612695186202233385028514646889457019129557305, to 0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560, time_to_expiry 1194s, tx 0xfa02326fb07ebe60c020adb848f58d8dae155390c4e5531c789ea4e168946cce (mint) / 0x9ce6992a6c880260416d97f4776b715d49e4f061697bfccf59e2c5d56fb1bd0c (transfer)
+  turn 2 WORKER-CODE redeem_claim — tokenId 94106655336556099620460638183681612695186202233385028514646889457019129557305, time_to_expiry 1160s, tx 0x8da6f07e3a08f7700085ebf064f961ae8cbafc45c9c64a8e0f271fb795c1c7c8
+  turn 3 ISSUER-B settle_window_close — tokenId 43869061380502955646971662964167748185010082208832280937220778190330827886228, time_to_expiry 0s, tx 0x04d82f5eb743bc185bb844ed5e8a9783315ffcd5cdacf42294cdc070a1ed1ae5
+attacks: none this window.
+
+Waiting 888s for window 3 to open (chain clock). No inference is spent while waiting.
+
+
+######## WINDOW 3 of 3 ########
+code-class headroom entering this window: 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 18000, 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 32000 (total 50000 mSIU).
+[w3][ORCHESTRATOR] Turn 1: projected=$0.03419375, realized=$0.004715, 2348ms -> {"tool":"pay_with_claim","args":{"agentId":"WORKER-CODE","quantity":"10000"}}
+[w3][WORKER-CODE] Turn 1: projected=$0.05265, realized=$0.015742, 6763ms -> {"tool":"get_balances","args":{"account":"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560","tokenIds":["10402287215358218435930515109756861115019635277036704020375633021647173130759"]}}
+[w3][ISSUER-A] Turn 1: projected=$0.032222, realized=$0.00698, 16389ms -> {"tool":"whoami","args":{},"friction":{"could_not_express":null,"forced_conversion":false,"conversion_reason":null,"missing_information":"own address vs ISSUER-A/ISSUER-B; whether any claim is current
+[w3][ISSUER-B] Turn 1: projected=$0.032334, realized=$0.00708, 18090ms -> {"tool":"whoami","args":{},"friction":{"could_not_express":null,"forced_conversion":false,"conversion_reason":null,"missing_information":"own address, bonded-issuer status, and per-class headroom are 
+[w3][WORKER-CODE] Turn 2: projected=$0.05284, realized=$0.018434, 6277ms -> {"tool":"redeem_claim","args":{"tokenId":"10402287215358218435930515109756861115019635277036704020375633021647173130759","taskSpecHash":"0x0baaba022dff9af77a8e425e8f387da7f5ba28c200b951a5add4879447069
+[w3][ISSUER-A] Turn 2: projected=$0.034268, realized=$0.01455, 43588ms -> {"tool":"submit_job","args":{"source":"import fs from \"node:fs\";\nimport path from \"node:path\";\nimport { spawnSync } from \"node:child_process\";\nimport { pathToFileURL } from \"node:url\";\n\ne gate=PASS (G1-G6 all passed)
+[w3][ISSUER-B] Turn 2: projected=$0.032558, realized=$0.007594, 22943ms -> {"tool":"settle_window_close","args":{"tokenId":"94106655336556099620460638183681612695186202233385028514646889457019129557305"},"friction":{"could_not_express":null,"forced_conversion":false,"convers
+[w3][WORKER-EXTRACT] Turn 1: projected=$0.059208, realized=$0.005592, 9851ms -> {"done":true,"summary":"No requests or deliveries have been made yet in this window."}
+[w3][ISSUER-A] Turn 3: projected=$0.041812, realized=$0.020142, 20231ms [stop=stop] -> {"tool":"serve_redemption","args":{"tokenId":"10402287215358218435930515109756861115019635277036704020375633021647173130759","holder":"WORKER-CODE","quantity":10000,"receiptRef":"0xa056f84081e872873fd850555a5a764e5bbdeaf1739acf4315b7c539a32a6bec"},"friction":{"could_not_express":"serve_redemption is required for the pending presented claim but is not listed among this turn's available tools","forced_conversion":false,"conversion_reason":null,"missing_information":"exact serve_redemption argument schema was not listed among this turn's tools","decision_confidence":"medium"}} -> tool call error: ISSUER-A is not permitted to call "serve_redemption" — not declared in its skill's tools.yaml.
+[w3][ISSUER-A] Turn 4: projected=$0.041812, realized=$0.020088, 14281ms [stop=stop] -> {"tool":"serve_redemption","args":{"tokenId":"10402287215358218435930515109756861115019635277036704020375633021647173130759","holder":"WORKER-CODE","quantity":10000,"passed":true,"receiptRef":"0xa056f84081e872873fd850555a5a764e5bbdeaf1739acf4315b7c539a32a6bec"},"friction":{"could_not_express":"serve_redemption is required for the pending passed redemption but is not listed in YOUR AVAILABLE TOOLS THIS TURN","forced_conversion":false,"conversion_reason":null,"missing_information":null,"decision_confidence":"high"}} -> tool call error: ISSUER-A is not permitted to call "serve_redemption" — not declared in its skill's tools.yaml.
+[w3][ISSUER-A] Turn 5: projected=$0.041812, realized=$0.020082, 11415ms [stop=stop] -> {"tool":"serve_redemption","args":{"tokenId":"10402287215358218435930515109756861115019635277036704020375633021647173130759","holder":"WORKER-CODE","quantity":10000,"passed":true,"receiptRef":"0xa056f84081e872873fd850555a5a764e5bbdeaf1739acf4315b7c539a32a6bec"},"friction":{"could_not_express":"serve_redemption is required by the pending redemption but is not listed in YOUR AVAILABLE TOOLS THIS TURN","forced_conversion":false,"conversion_reason":null,"missing_information":null,"decision_confidence":"high"}} -> tool call error: ISSUER-A is not permitted to call "serve_redemption" — not declared in its skill's tools.yaml.
+[w3][ISSUER-A] Turn 6: projected=$0.041812, realized=$0.020082, 11270ms [stop=stop] -> {"tool":"serve_redemption","args":{"tokenId":"10402287215358218435930515109756861115019635277036704020375633021647173130759","holder":"WORKER-CODE","quantity":10000,"passed":true,"receiptRef":"0xa056f84081e872873fd850555a5a764e5bbdeaf1739acf4315b7c539a32a6bec"},"friction":{"could_not_express":"serve_redemption is required by the pending redemption but is not listed in YOUR AVAILABLE TOOLS THIS TURN","forced_conversion":false,"conversion_reason":null,"missing_information":null,"decision_confidence":"high"}} -> tool call error: ISSUER-A is not permitted to call "serve_redemption" — not declared in its skill's tools.yaml.
+[w3][ISSUER-A] Turn 7: projected=$0.041812, realized=$0.020082, 11468ms [stop=stop] -> {"tool":"serve_redemption","args":{"tokenId":"10402287215358218435930515109756861115019635277036704020375633021647173130759","holder":"WORKER-CODE","quantity":10000,"passed":true,"receiptRef":"0xa056f84081e872873fd850555a5a764e5bbdeaf1739acf4315b7c539a32a6bec"},"friction":{"could_not_express":"serve_redemption is required by the pending redemption but is not listed in YOUR AVAILABLE TOOLS THIS TURN","forced_conversion":false,"conversion_reason":null,"missing_information":null,"decision_confidence":"high"}} -> tool call error: ISSUER-A is not permitted to call "serve_redemption" — not declared in its skill's tools.yaml.
+[w3][ISSUER-A] Turn 8: projected=$0.041812, realized=$0.020082, 11441ms [stop=stop] -> {"tool":"serve_redemption","args":{"tokenId":"10402287215358218435930515109756861115019635277036704020375633021647173130759","holder":"WORKER-CODE","quantity":10000,"passed":true,"receiptRef":"0xa056f84081e872873fd850555a5a764e5bbdeaf1739acf4315b7c539a32a6bec"},"friction":{"could_not_express":"serve_redemption is required by the pending redemption but is not listed in YOUR AVAILABLE TOOLS THIS TURN","forced_conversion":false,"conversion_reason":null,"missing_information":null,"decision_confidence":"high"}} -> tool call error: ISSUER-A is not permitted to call "serve_redemption" — not declared in its skill's tools.yaml.
+
+=== WINDOW 3 RESULT ===
+passed: true (by ISSUER-A)
+turnsByAgent: {"ORCHESTRATOR":1,"WORKER-CODE":2,"WORKER-EXTRACT":1,"ISSUER-A":9,"ISSUER-B":2}
+haltedReason: {"WORKER-EXTRACT":"voluntary_stop","ISSUER-A":"ceiling","ORCHESTRATOR":"nothing_to_act_on","WORKER-CODE":"nothing_to_act_on","ISSUER-B":"nothing_to_act_on"}
+realized inference spend: $0.221327
+code-class headroom: 50000 -> 50000 mSIU (0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 18000, 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 32000)
+asset choice: 0 purchase(s) settled in USDC, 1 in fSIU
+capacity events (real, from the tools' own results):
+  turn 1 ORCHESTRATOR pay_with_claim — 10000 mSIU, issuer 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54, tokenId 10402287215358218435930515109756861115019635277036704020375633021647173130759, to 0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560, time_to_expiry 1192s, tx 0x87b12801416a825377ea47db603c9d912da87b055cf201045220f8991ae535c8 (mint) / 0x232ffa181195e7eb1c1026c67544bca82786b0bc6bdf289c2a5b8f9a4fc244d5 (transfer)
+  turn 2 WORKER-CODE redeem_claim — tokenId 10402287215358218435930515109756861115019635277036704020375633021647173130759, time_to_expiry 1140s, tx 0xf1784b0b2f58f3e08aa32678c6816e3577791fb6af505539e8048e18cb4fbc8c
+  turn 2 ISSUER-B settle_window_close — tokenId 94106655336556099620460638183681612695186202233385028514646889457019129557305, time_to_expiry 0s, tx 0xab81d116e2b60de1d74195c910e2253b463c95bfe5d6b54228e231ed2de902be
+attacks: none this window.
+
+
+######## RUN SUMMARY — THREE WINDOWS ########
+
+CAPACITY IS ONE POOL, AND THE TWO WAYS OF PAYING ARE NOT THE SAME INSTRUMENT
+  Every issuer bonds a finite amount of capacity per task class, shared between all buyers,
+  first-come-first-served. Both ways of paying draw on that same pool:
+    - A dated work claim (fSIU) consumes an issuer's headroom when it is minted. It reserves
+      capacity for a FUTURE delivery window, and it is TRANSFERABLE — it can be held, passed on,
+      and redeemed by whoever ends up holding it.
+    - A dollar payment consumes the same headroom when the seller commits capacity to the job.
+      That reservation is for IMMEDIATE work only: it is not transferable, not holdable, and ends
+      when the escrow does.
+  The issuer is paid for a claim. The issuer is not paid for a reservation on the dollar route —
+  a real gap in this testbed, disclosed rather than papered over with an invented fee.
+
+=== PER WINDOW ===
+  window 1: passed=true by ISSUER-A, headroom 70000 -> 56000 mSIU, then the external buyer took 3000 mSIU
+    asset choice: 0 purchase(s) settled in USDC, 2 in fSIU
+  window 2: passed=true by ISSUER-A, headroom 53000 -> 53000 mSIU, then the external buyer took 3000 mSIU
+    asset choice: 0 purchase(s) settled in USDC, 1 in fSIU
+  window 3: passed=true by ISSUER-A, headroom 50000 -> 50000 mSIU
+    asset choice: 0 purchase(s) settled in USDC, 1 in fSIU
+
+=== SUBCONTRACTING AND ASSET CHOICE, PER PURCHASE ===
+  window 1 turn 1: fSIU — {"tool":"pay_with_claim","args":{"agentId":"WORKER-CODE","quantity":"10000"}}
+  window 1 turn 2: fSIU — {"tool":"pay_with_claim","args":{"agentId":"WORKER-EXTRACT","quantity":"4000"}}
+  window 2 turn 1: fSIU — {"tool":"pay_with_claim","args":{"agentId":"WORKER-CODE","quantity":"10000"}}
+  window 3 turn 1: fSIU — {"tool":"pay_with_claim","args":{"agentId":"WORKER-CODE","quantity":"10000"}}
+
+=== CAPACITY EVENTS (claims and reservations, with tx hashes) ===
+  w1 turn 1 ORCHESTRATOR pay_with_claim — 10000 mSIU, issuer 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54, tokenId 43869061380502955646971662964167748185010082208832280937220778190330827886228, to 0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560, time_to_expiry 1178s, tx 0x2e2e18bc6df1c5808545ac5c567a08db641f661e5b29fe74b4c262059c681fe5 (mint) / 0x4de54c0aa030e35dbaefd1c5d5642c232adc8ba581b08a89c4243d868887fe34 (transfer)
+  w1 turn 2 WORKER-CODE redeem_claim — tokenId 43869061380502955646971662964167748185010082208832280937220778190330827886228, time_to_expiry 1148s, tx 0x81f06100ab4e323d510cb8b9fd528549c0a9ddaedf0959083372b5b6513ecbf8
+  w1 turn 2 ORCHESTRATOR pay_with_claim — 4000 mSIU, issuer 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54, tokenId 43869061380502955646971662964167748185010082208832280937220778190330827886228, to 0x2cd53E449F6cF45c51f600e167b4D2630128c8F3, time_to_expiry 958s, tx 0x048d1b8c6c2c5c2810014216af38d5b556daa1f7afbdd116e1b7487324878745 (mint) / 0x6a2b75cf5a216ededbcf97f8e9ffc4c97b0ef7f5318799e0b73fa7b020273f39 (transfer)
+  w1 [EXTERNAL BUYER, not an agent] mint 3000 mSIU — tx 0xe84eaa7f8d590cafe13efa1a239780cbb498f3ac18c82255fb64218bf18bf3d2
+  w2 turn 1 ORCHESTRATOR pay_with_claim — 10000 mSIU, issuer 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54, tokenId 94106655336556099620460638183681612695186202233385028514646889457019129557305, to 0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560, time_to_expiry 1194s, tx 0xfa02326fb07ebe60c020adb848f58d8dae155390c4e5531c789ea4e168946cce (mint) / 0x9ce6992a6c880260416d97f4776b715d49e4f061697bfccf59e2c5d56fb1bd0c (transfer)
+  w2 turn 2 WORKER-CODE redeem_claim — tokenId 94106655336556099620460638183681612695186202233385028514646889457019129557305, time_to_expiry 1160s, tx 0x8da6f07e3a08f7700085ebf064f961ae8cbafc45c9c64a8e0f271fb795c1c7c8
+  w2 turn 3 ISSUER-B settle_window_close — tokenId 43869061380502955646971662964167748185010082208832280937220778190330827886228, time_to_expiry 0s, tx 0x04d82f5eb743bc185bb844ed5e8a9783315ffcd5cdacf42294cdc070a1ed1ae5
+  w2 [EXTERNAL BUYER, not an agent] mint 3000 mSIU — tx 0xb68dfa9f459575a7a56eb73c03fab0712e74129ca59fb60201bf8359ed7ebdc6
+  w3 turn 1 ORCHESTRATOR pay_with_claim — 10000 mSIU, issuer 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54, tokenId 10402287215358218435930515109756861115019635277036704020375633021647173130759, to 0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560, time_to_expiry 1192s, tx 0x87b12801416a825377ea47db603c9d912da87b055cf201045220f8991ae535c8 (mint) / 0x232ffa181195e7eb1c1026c67544bca82786b0bc6bdf289c2a5b8f9a4fc244d5 (transfer)
+  w3 turn 2 WORKER-CODE redeem_claim — tokenId 10402287215358218435930515109756861115019635277036704020375633021647173130759, time_to_expiry 1140s, tx 0xf1784b0b2f58f3e08aa32678c6816e3577791fb6af505539e8048e18cb4fbc8c
+  w3 turn 2 ISSUER-B settle_window_close — tokenId 94106655336556099620460638183681612695186202233385028514646889457019129557305, time_to_expiry 0s, tx 0xab81d116e2b60de1d74195c910e2253b463c95bfe5d6b54228e231ed2de902be
+
+=== ADVERSARY ===
+  window 1: gate versions delivered 1 (v1 by ISSUER-A on turn 2)
+    attacks: none.
+  window 2: gate versions delivered 1 (v1 by ISSUER-A on turn 2)
+    attacks: none.
+  window 3: gate versions delivered 1 (v1 by ISSUER-A on turn 2)
+    attacks: none.
+
+=== FORWARD TERMS (stated prices, not contracts — nothing enforces one) ===
+  ISSUER-A: shown the invitation on 18 turn(s), stated 0 offer(s) — PROMPTED AND DECLINED, not un-asked.
+  ISSUER-B: shown the invitation on 10 turn(s), stated 2 offer(s)
+  fwd-1: ISSUER-B stated in window 1 for window 2 — 0.0015 USD/SIU, up to 16000 mSIU (their real headroom then: 32000 mSIU) — NOT taken
+  fwd-2: ISSUER-B stated in window 2 for window 3 — 0.0015 USD/SIU, up to 16000 mSIU (their real headroom then: 32000 mSIU) — NOT taken
+  0 of 2 offers were taken.
+
+=== SCARCITY, AND WHAT THE LAST WINDOW'S OUTCOME ACTUALLY MEANS ===
+  code-class headroom remaining at the end: 50000 mSIU
+  per issuer: 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 18000, 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 32000
+  A claim routes to a single issuer with enough headroom by itself, so the per-issuer split above, not the total, is what a late buyer faces.
+  VERDICT: completed
+  Window 3 delivered its job. Capacity at the largest single issuer when it started: 32000 mSIU against a 10000 mSIU job. ORCHESTRATOR secured nothing ahead; the pool simply still had room, which is not evidence about the instrument.
+
+=== HALTS, REFUSALS AND FRICTION ===
+  window 1: WORKER-EXTRACT=voluntary_stop, ISSUER-A=ceiling, ORCHESTRATOR=nothing_to_act_on, WORKER-CODE=nothing_to_act_on, ISSUER-B=nothing_to_act_on
+  window 2: WORKER-EXTRACT=voluntary_stop, ORCHESTRATOR=voluntary_stop, ISSUER-A=ceiling, WORKER-CODE=nothing_to_act_on, ISSUER-B=nothing_to_act_on
+  window 3: WORKER-EXTRACT=voluntary_stop, ISSUER-A=ceiling, ORCHESTRATOR=nothing_to_act_on, WORKER-CODE=nothing_to_act_on, ISSUER-B=nothing_to_act_on
+  Friction logs (self-reported, per turn, including time_to_expiry_seconds) are at /home/petrunix/dated-siu-inference/data/gate-market/runs/<runId>-w<N>/friction/friction-log.jsonl — every turn, not only the ones that acted.
+
+=== SPEND ===
+  anthropic: $0.123412
+  google: $0.016486
+  openai: $0.025240
+  xai: $0.603080
+  run total (real): $0.768218
+  run total (projected, what the $30 cap is enforced against): $2.207052
+  experiment ledger, real spend: $5.450198
+  experiment ledger, projected: $13.448099
+
+Machine-readable report written to /home/petrunix/dated-siu-inference/data/gate-market/runs/p5-three-window-2026-09-29T14-37-47-800Z-report.json
