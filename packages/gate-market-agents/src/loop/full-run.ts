@@ -558,6 +558,14 @@ export async function runFullRunWindow(
    * for a window, so a third attempt at a tool already refused twice cannot succeed — see the
    * refusal counter at the tool-error branch. */
   const refusedToolCalls = new Map<string, number>();
+  /** Has `<agentId>:<tool>` already been refused twice this window? Hoisted out of the turn body
+   * (2026-09-29) because the stall check below has to ask this about OTHER agents, not only the
+   * one taking the turn. Suppressing an agent's own wake text while still counting that same text
+   * as proof the window is live is a deadlock: the suppressed agent is gated out on its own turn,
+   * every other agent sees it as able to act and skips, nothing awaits, and `turnLoop` spins at
+   * 100% CPU forever. Found in a real run, not a test — see the stall guard at the loop head. */
+  const refusedTwiceFor = (agentId: AgentId, tool: ToolName): boolean =>
+    (refusedToolCalls.get(`${agentId}:${tool}`) ?? 0) >= 2;
   const attackContext: AttackContext = {
     gateVersions: [],
     attackedVersions: new Set<number>(),
@@ -573,8 +581,33 @@ export async function runFullRunWindow(
 
   const activeAgents = new Set(options.roster.map((a) => a.agentId));
 
+  /** Cursor positions burned since anything last changed — see the stall guard below. */
+  let cursorsSinceProgress = 0;
+  let lastActiveSize = activeAgents.size;
+
   turnLoop: for (let turnCursor = 0; ; turnCursor++) {
     if (activeAgents.size === 0) break;
+
+    // A round-robin skip is synchronous: `continue` awaits nothing and changes nothing. So any
+    // disagreement between "this agent has nothing to act on" and "some other agent can act"
+    // is not a stall, it is an unbounded busy loop — no output, no turns, no end, 100% CPU.
+    // That happened for real on 2026-09-29 (run 17:06, 39 minutes of CPU, all three window
+    // spans lost) when the retry cap blanked an issuer's wake text without blanking the same
+    // text in the stall check. That specific disagreement is fixed at its source above; this
+    // guard exists so the NEXT one costs a clean stop and a recorded reason instead of a run.
+    // Two full passes over the roster with nothing changing is conclusive: the set of active
+    // agents is fixed, so a third pass reads exactly the same state as the second.
+    if (activeAgents.size !== lastActiveSize) {
+      lastActiveSize = activeAgents.size;
+      cursorsSinceProgress = 0;
+    }
+    if (++cursorsSinceProgress > options.roster.length * 2) {
+      for (const waiting of activeAgents) {
+        haltedReason[waiting] ??= "nothing_to_act_on";
+      }
+      break turnLoop;
+    }
+
     const agent = options.roster[turnCursor % options.roster.length];
     if (!activeAgents.has(agent.agentId)) continue;
 
@@ -613,8 +646,7 @@ export async function runFullRunWindow(
     // windows of run 8. Two attempts is enough to establish the grant is not there. The claim
     // itself is unaffected — it stays outstanding, still defaults, and its holder or anyone else
     // can still settle it; only this agent stops being told to do the impossible.
-    const refusedTwice = (tool: ToolName): boolean =>
-      (refusedToolCalls.get(`${agent.agentId}:${tool}`) ?? 0) >= 2;
+    const refusedTwice = (tool: ToolName): boolean => refusedTwiceFor(agent.agentId, tool);
     const redemptionText = refusedTwice("serve_redemption")
       ? ""
       : redemption.renderFor(agent.agentId);
@@ -764,9 +796,16 @@ export async function runFullRunWindow(
         if (other.waitsFor === "buyer" && !actedSuccessfully.has(other.agentId)) return true;
         return (
           board.renderFor(other.agentId, other.erc8004Id) !== "" ||
-          redemption.renderFor(other.agentId) !== "" ||
+          // Both of these are gated by the same retry cap that blanks the agent's own wake text
+          // above. Asking the unsuppressed renderer here is what deadlocked the 17:06 run: a
+          // claim pending against an issuer already refused `serve_redemption` twice counted as
+          // "someone can act" on every other agent's turn, while that issuer had nothing to act
+          // on when its own turn came round.
+          (!refusedTwiceFor(other.agentId, "serve_redemption") &&
+            redemption.renderFor(other.agentId) !== "") ||
           redemption.renderForHolder(other.agentId) !== "" ||
-          redemption.renderForIssuerAwaitingDelivery(other.agentId) !== "" ||
+          (!refusedTwiceFor(other.agentId, "submit_job") &&
+            redemption.renderForIssuerAwaitingDelivery(other.agentId) !== "") ||
           // A settleable claim is something to act on for whoever holds the tool — it was
           // missing from this guard, so a window whose only remaining business was an unsettled
           // claim could be declared stalled while that claim sat there.
@@ -793,6 +832,9 @@ export async function runFullRunWindow(
       }
       break turnLoop;
     }
+
+    // Past the wake gate: this agent is really taking a turn, so the loop is making progress.
+    cursorsSinceProgress = 0;
 
     // Recorded here, not where the invitation text is built: an agent that is gated out before
     // its adapter is called never actually saw it, and counting that as "prompted" is exactly the
