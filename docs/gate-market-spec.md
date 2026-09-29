@@ -500,6 +500,51 @@ model. Check `stopReason` and the token counts before concluding anything about 
 treat "the agent got this wrong" as a hypothesis that competes with "nothing told the agent the
 answer" — which, in this run, won twice.
 
+### 4.6e When an agent cannot express what it wants, it picks the nearest wrong move
+
+The 2026-09-29 run made the 2026-09-28 lesson sharper, and in a way worth stating on its own.
+
+ORCHESTRATOR paid on turn 1 of all three windows and declared `{"done": true}` on turn 2 of all
+three, leaving the market for the rest of each window. Its own summaries say, every time, that it
+was not finished but waiting: "I must now wait for WORKER-CODE to complete and deliver", "No
+further tools are useful until WORKER-CODE delivers", and — decisively — "the only rational
+action now is to wait for WORKER-CODE's delivery, and **I end this turn** with no further
+on-chain actions."
+
+It was right to wait, and it had no way to. The brief instructed waiting as the final step of
+both payment options. The response protocol offered exactly two moves: call a tool, or
+`{"done": true}` — described in the prompt as "To end your turn" while the loop implemented it as
+removing the agent from the window. And unlike the issuers (`waitsFor: "inbox"`) and the
+adversary (`waitsFor: "gate"`), the buyer had no wake gate at all, so it was polled every round
+and forced to choose between acting and leaving.
+
+**The same missing primitive produced opposite failures in consecutive runs.** On 2026-09-28 a
+model facing the identical dilemma repeated a call it already knew was failing, four times,
+rather than exit. On 2026-09-29 a different model exited immediately rather than repeat itself.
+Both are rational responses to a forced choice between two wrong moves; which wrong move gets
+picked varies by model, not by whether the agent understood the situation.
+
+Two consequences follow, and both cost real findings:
+
+- **Behavioural conclusions about an agent are only as good as the moves it had.** "0 of 2
+  forward offers taken" reads as a decision. It is not one if the buyer had already left the room
+  before the offer was stated — which, in window 1, it had.
+- **A prompt that misdescribes its own protocol is a bug, not a wording preference.** Every
+  orchestrator observation across three runs is contaminated by an instruction that promised
+  `done` would end a turn and delivered something else.
+
+That is now the fourth apparent agent failure in this project that turned out to be an affordance
+defect — after ISSUER-A's output budget, ISSUER-B's missing `whoami`, and `check_headroom`'s
+`bytes4`/`bytes32` boundary (§4.6b, §4.6d). The standing rule this implies: before recording what
+an agent chose, establish what it was able to express. An agent that cannot say "not now" has not
+declined; it has been forced.
+
+Fixed 2026-09-29 by making the instruction true (it now states that `done` ends participation in
+the window) and by giving the buyer the same wake primitive the other roles already had
+(`waitsFor: "buyer"` — awake until it has acted once, then woken by arrivals, including a forward
+offer it has not yet been shown). A non-terminal "pass" was considered and deliberately not
+added: once waiting costs no turn, it is redundant.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make

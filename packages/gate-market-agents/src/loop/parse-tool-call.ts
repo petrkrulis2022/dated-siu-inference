@@ -31,10 +31,18 @@ export interface DoneIntent {
 
 export class ModelResponseParseError extends Error {
   constructor(public readonly rawText: string) {
+    // The raw text comes FIRST, deliberately. Found live, 2026-09-29 (P5 run 3): this message
+    // used to open with ~190 characters of rationale and put `Raw response:` last, while the
+    // caller's own console line slices the whole thing at 200 characters — so all four parse
+    // failures in that run logged nothing but the boilerplate, and the one artefact that would
+    // have explained them was cut off every time. A diagnostic that is always truncated before
+    // the diagnosis is not a diagnostic. The rationale is still here; it is just no longer
+    // occupying the only part anyone reads.
     super(
-      `Could not find a valid tool-call JSON object in the model's response. Halting rather ` +
-        `than retrying or guessing — a smoke pass that silently papers over an unparseable ` +
-        `response would misreport real turns-to-completion. Raw response: ${JSON.stringify(rawText)}`,
+      `Unparseable model response (no valid tool-call JSON object). Raw response: ` +
+        `${JSON.stringify(rawText)} — halting this turn rather than retrying or guessing, ` +
+        `since silently papering over an unparseable response would misreport real ` +
+        `turns-to-completion.`,
     );
     this.name = "ModelResponseParseError";
   }

@@ -7,6 +7,22 @@ import type { GateMarketReceipt } from "../receipt/types.js";
 import type { ContextValidationError, ValidationFailureKind } from "../pack/validate.js";
 import type { AgentId } from "../identity/resolve.js";
 
+/**
+ * One model call as it actually happened, persisted by `RunRecorder.recordMessage` before any
+ * parsing is attempted. Every field is real and provider-reported — nothing here is derived from
+ * what the model appeared to mean. `parseError` is set exactly when the response could not be
+ * parsed into a tool call, which is the case this record exists to make diagnosable.
+ */
+export interface ModelCallRecord {
+  prompt: string;
+  rawText: string;
+  stopReason?: string;
+  usage?: { input: number; output: number; cached_input: number; reasoning: number };
+  contentBlockTypes?: string[];
+  latencyMs: number;
+  parseError?: string;
+}
+
 /** Spec §14.4: "bench version, pack version, agent configs, seeds." `agentConfigs` is left as
  * `Record<string, unknown>` deliberately — WP-7 defines the real per-agent config shape when it
  * wires the six agents; this package only needs to persist and diff it, never interpret it. */
@@ -60,9 +76,10 @@ export interface ValidatorVerdictRecord {
  * Spec §14.4's `/runs/<run_id>/` layout. `contexts/<agentId>/<turn>.json` persists the exact
  * `AgentContext` `assembleContext` already produces, written BEFORE the model call — the loop
  * already calls `assembleContext` at the right point in time (see `loop/smoke-pass.ts`); this is
- * what makes that persistence real rather than only ever held in memory. `messages/` is created
- * empty and stays that way — the free-text agent channel (spec §13.3) is explicitly out of scope
- * for WP-9. Synchronous fs calls throughout: this writes a handful of small files per turn, not a
+ * what makes that persistence real rather than only ever held in memory. `messages/<agentId>/
+ * <turn>.json` holds one `ModelCallRecord` per model call (see `recordMessage`) — the free-text
+ * agent channel of spec §13.3 remains explicitly out of scope; this is the model-call record, not
+ * that. Synchronous fs calls throughout: this writes a handful of small files per turn, not a
  * hot path, and a synchronous constructor can't await anyway.
  */
 export class RunRecorder {
@@ -83,6 +100,25 @@ export class RunRecorder {
     const dir = join(this.runDir, "contexts", agentId);
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, `${turn}.json`), JSON.stringify(context, null, 2), "utf-8");
+  }
+
+  /**
+   * One model call, exactly as it happened: the prompt sent, the untruncated text returned, and
+   * the provider's own stop reason, usage and content-block types. Written BEFORE the response is
+   * parsed, so a turn that fails to parse is recorded just as fully as one that succeeds — which
+   * is the whole reason this exists.
+   *
+   * Added 2026-09-29. `messages/` was created empty by this constructor from the start and
+   * documented as "stays that way" (the free-text agent channel of spec §13.3 is genuinely out of
+   * scope, and still is — this is not that). But P5 run 3 lost four unparseable turns to having
+   * nowhere to look: the console line slices at 200 characters, and the raw text existed only in
+   * memory. This is the model-call record, not an agent-to-agent channel; §13.3's "no agent
+   * messages" stays true.
+   */
+  recordMessage(agentId: AgentId, turn: number, message: ModelCallRecord): void {
+    const dir = join(this.runDir, "messages", agentId);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `${turn}.json`), JSON.stringify(message, null, 2), "utf-8");
   }
 
   recordReceipt(receipt: GateMarketReceipt): void {

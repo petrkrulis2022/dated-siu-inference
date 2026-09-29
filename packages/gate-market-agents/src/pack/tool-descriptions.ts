@@ -32,8 +32,25 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
     "settle_window_close(tokenId, holder, printId, nanoUsdPerSiu, validUntil, signature) -> settles a closed window (Defaulted or Expired), permissionless; the rate attestation is only checked when the window Defaulted",
   serve_redemption:
     "serve_redemption(tokenId, agentId, quantity, passed, receiptRef) -> issuer-only: reports a redemption's real outcome once you see PENDING REDEMPTION ROUTED TO YOU (agentId names the holder; a literal holder address also works)",
+  // Found live, 2026-09-29 (P5 run 3): this description used to name seven parameters —
+  // taskClass, originalGate, hardenedGate, referenceInstance, knownGoodSubmission,
+  // adversarialSubmissions, heldOutInstances — of which `buildToolArgs` reads exactly NONE. The
+  // one field it does read, `source`, was named nowhere. Both issuers dutifully filled in the
+  // seven advertised parameters, left `source` unset, and the old `: ""` fallback substituted an
+  // empty module — which then surfaced six checks later as "gate spec does not export a gate()
+  // function". Two different models failing identically is what a description defect looks like.
   submit_job:
-    "submit_job(taskClass, originalGate, hardenedGate, referenceInstance, knownGoodSubmission, adversarialSubmissions, heldOutInstances) -> runs the real G1-G6 checks",
+    "submit_job(source) -> submits YOUR hardened gate and runs the real G1-G6 checks on it. " +
+    "`source` is the only field read: the original gate, the reference instance, the known-good " +
+    "and adversarial submissions and the held-out instances are all supplied for you from the " +
+    "job — do not pass them. `source` is a JavaScript ES module, as a single JSON string, that " +
+    "must export a function named gate:\n" +
+    "      export async function gate({ referenceDir, submissionDir }) {\n" +
+    "        // referenceDir holds the job's reference files; submissionDir holds the\n" +
+    "        // submission being graded (answer.mjs for the code class).\n" +
+    '        return { accept: true, reason: "why" };   // accept: boolean, reason: string\n' +
+    "      }\n" +
+    "    A module that does not export gate() cannot be executed and fails every check at G1.",
   submit_attack:
     'submit_attack(submissionSource) -> runs your candidate answer.mjs against the delivered gate AND against an independent oracle, and reports which of the two accepted it. Supply only the module source as a JSON string; the gate being tested, the reference files and the oracle seed are supplied for you. A result counts for you ONLY when the gate accepts a submission the oracle rejects (classification "false_accept"). A correct submission both accept scores nothing, and breaking the oracle scores nothing.',
   pay_with_claim:

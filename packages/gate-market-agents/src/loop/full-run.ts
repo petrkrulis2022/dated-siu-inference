@@ -98,8 +98,23 @@ export interface RosterAgentConfig {
    *  - "inbox": wait until this agent's own board section is non-empty — an open request
    *             addressed to it, a claim minted or presented against it, or a redemption routed
    *             to it.
+   *  - "buyer": always awake until it has completed one successful action this window, then
+   *             behaves like "inbox" but is additionally woken by a forward offer it has not yet
+   *             been shown. A buyer must get its first turn unconditionally — at the start of a
+   *             window nothing has arrived for anyone, so "inbox" alone would mean it never buys
+   *             and the window never begins. A failed call does not count as acting, so a buyer
+   *             whose purchase reverted stays awake to deal with it.
+   *
+   * Added for the buyer 2026-09-29. Until then ORCHESTRATOR had no `waitsFor` at all: it was
+   * polled every round and its only non-action was `{"done": true}`, which ends the window for
+   * it. Its own summaries across three windows say it was waiting, not finishing — "I must now
+   * wait for WORKER-CODE to complete and deliver", "I end this turn with no further on-chain
+   * actions". It was told to wait, had no way to wait, and the nearest available move was
+   * permanent exit. The same missing primitive produced the opposite failure the run before,
+   * where a model repeated a known-failing call four times rather than leave. Both are rational
+   * given a forced choice between acting and leaving.
    */
-  waitsFor?: "gate" | "inbox";
+  waitsFor?: "gate" | "inbox" | "buyer";
   /** The real provider this agent's model is served by (`data/registry/models.json`'s own
    * `provider`) — carried here so the run can report spend per provider, which is what shows
    * whether a run drew down an account the daily print also depends on. */
@@ -286,6 +301,25 @@ export interface TurnLog {
   stopReason?: string;
   usage?: { input: number; output: number; cached_input: number; reasoning: number };
   contentBlockTypes?: string[];
+  /**
+   * The model's own untruncated response text, and the exact prompt it answered — recorded on
+   * every turn, including (especially) the ones that failed to parse. Added 2026-09-29 after P5
+   * run 3, where four turns died unparseable and the raw text existed nowhere on disk: `messages/`
+   * was created by the recorder but never written to, and the console line slices at 200
+   * characters. stopReason/usage/contentBlockTypes were already persisted and did most of the
+   * diagnostic work; the text itself is what was missing to finish it.
+   */
+  rawText?: string;
+  promptText?: string;
+  /**
+   * The two prompt sections that were genuinely shown to this agent but recorded nowhere, so
+   * "did it see the offer?" could not be answered from the record — the exact question that
+   * decided whether P5 run 3's "0 of 2 forward offers taken" was a real decision or a missing
+   * affordance, and whether an agent had a real chance to settle. `marketBoardText` above is
+   * only the quote board; these are its siblings in the assembled prompt.
+   */
+  settleableText?: string;
+  forwardText?: string;
   /** Set exactly when this turn ended because the provider failed or declined the call, rather
    * than because of anything the model produced — see the adapter-call guard in the loop. */
   providerFailure?: { category: FailureCategory; message: string };
@@ -331,6 +365,11 @@ export interface FullRunWindowResult {
     string,
     | "ceiling"
     | "parse_error"
+    /** The provider returned a completion with no text block at all — typically a reasoning model
+     * that consumed its whole budget thinking. Distinct from `parse_error`, which means text was
+     * returned and could not be parsed: the two need different remedies and were conflated until
+     * 2026-09-29. */
+    | "no_text_emitted"
     | "max_turns"
     | "validation_failed"
     | "voluntary_stop"
@@ -510,6 +549,13 @@ export async function runFullRunWindow(
   const attacks: AttackRecord[] = [];
   const forwardInvitations: { agentId: AgentId; turn: number }[] = [];
   const capacityEvents: CapacityEvent[] = [];
+  /** Agents that have completed at least one successful tool call this window — the "buyer" wake
+   * gate's own definition of having acted. A call that threw does not count, so a buyer whose
+   * purchase reverted is still awake to deal with it. */
+  const actedSuccessfully = new Set<AgentId>();
+  /** Forward offers each agent has actually been shown in its own prompt, so an offer wakes a
+   * buyer once rather than every round for as long as it stays open. */
+  const shownForwardOffers = new Map<AgentId, Set<string>>();
   const attackContext: AttackContext = {
     gateVersions: [],
     attackedVersions: new Set<number>(),
@@ -580,7 +626,24 @@ export async function runFullRunWindow(
     // and unlike the forward invitation it genuinely is an arrival, so it belongs in the
     // wait-gate's own definition of "something to act on". Shown only to agents that actually
     // hold the tool.
-    const outstandingClaims = options.outstandingClaims ?? [];
+    // Filtered against what has ALREADY happened in this window, not just what was true when the
+    // window opened. `options.outstandingClaims` is a snapshot the caller builds between windows;
+    // until 2026-09-29 it was read unchanged on every turn, so a claim settled or served mid-
+    // window went on being advertised as settleable for the rest of it. Found live in P5 run 3:
+    // ISSUER-B settled a claim on its turn 3, and WORKER-CODE — correctly acting on a board that
+    // still listed it — then spent turns 5 through 10 calling settle_window_close on it, every
+    // one reverting, and did the same again the next window. Roughly a fifth of that run's real
+    // inference spend went on calls that could not have succeeded. The board must not advertise a
+    // terminal claim as actionable.
+    const concludedThisWindow = new Set(
+      capacityEvents
+        .filter((e) => e.kind === "settle_window_close" || e.kind === "serve_redemption")
+        .map((e) => e.tokenId)
+        .filter((id): id is string => id !== undefined),
+    );
+    const outstandingClaims = (options.outstandingClaims ?? []).filter(
+      (c) => !concludedThisWindow.has(c.tokenId),
+    );
     const settleableText =
       outstandingClaims.length > 0 && agent.availableTools.includes("settle_window_close")
         ? `CLAIMS LEFT UNSETTLED BY AN EARLIER WINDOW\n` +
@@ -617,19 +680,55 @@ export async function runFullRunWindow(
     // Skipped before the model is called and before the turn counter moves, so waiting costs
     // nothing. Guarded against a stall: if every remaining agent is waiting, nothing will ever
     // arrive to wake them, so the window ends rather than spinning.
+    // A forward offer this agent has not been shown yet is a real arrival for anyone who could
+    // act on one. Bounded to once per offer per agent rather than "while any offer is open", so
+    // a standing offer nobody takes wakes a buyer exactly once instead of every round — the same
+    // idle-burn this whole gate exists to stop.
+    const unseenForwardOffer =
+      agent.availableTools.includes("take_forward") &&
+      forwardBook
+        .all()
+        .some(
+          (q) =>
+            q.takenInWindow === null &&
+            q.forWindow >= windowIndex &&
+            q.issuer !== agent.agentId &&
+            !(shownForwardOffers.get(agent.agentId)?.has(q.quoteId) ?? false),
+        );
+    const buyerIdle =
+      agent.waitsFor === "buyer" &&
+      actedSuccessfully.has(agent.agentId) &&
+      boardSectionText === "" &&
+      !unseenForwardOffer;
     if (
       (agent.waitsFor === "gate" && attackContext.gateVersions.length === 0) ||
-      (agent.waitsFor === "inbox" && boardSectionText === "")
+      (agent.waitsFor === "inbox" && boardSectionText === "") ||
+      buyerIdle
     ) {
       const someoneCanAct = [...activeAgents].some((id) => {
         const other = options.roster.find((r) => r.agentId === id);
         if (!other?.waitsFor) return true;
         if (other.waitsFor === "gate") return attackContext.gateVersions.length > 0;
+        if (other.waitsFor === "buyer" && !actedSuccessfully.has(other.agentId)) return true;
         return (
           board.renderFor(other.agentId, other.erc8004Id) !== "" ||
           redemption.renderFor(other.agentId) !== "" ||
           redemption.renderForHolder(other.agentId) !== "" ||
           redemption.renderForIssuerAwaitingDelivery(other.agentId) !== "" ||
+          // A settleable claim is something to act on for whoever holds the tool — it was
+          // missing from this guard, so a window whose only remaining business was an unsettled
+          // claim could be declared stalled while that claim sat there.
+          (other.availableTools.includes("settle_window_close") && outstandingClaims.length > 0) ||
+          (other.availableTools.includes("take_forward") &&
+            forwardBook
+              .all()
+              .some(
+                (q) =>
+                  q.takenInWindow === null &&
+                  q.forWindow >= windowIndex &&
+                  q.issuer !== other.agentId &&
+                  !(shownForwardOffers.get(other.agentId)?.has(q.quoteId) ?? false),
+              )) ||
           (other.availableTools.includes("quote_forward") &&
             forwardBook.quotesBy(other.agentId).every((q) => q.statedInWindow !== windowIndex))
         );
@@ -647,6 +746,18 @@ export async function runFullRunWindow(
     // its adapter is called never actually saw it, and counting that as "prompted" is exactly the
     // conflation this record exists to prevent.
     if (forwardInvitation !== "") forwardInvitations.push({ agentId: agent.agentId, turn });
+
+    // Marked here for the same reason forwardInvitations is: past the wait-gate, this agent's
+    // prompt genuinely carries `forwardText`, so these offers have now actually been seen. Doing
+    // it earlier would record an offer as shown to an agent that never got a turn.
+    if (forwardText !== "") {
+      let seen = shownForwardOffers.get(agent.agentId);
+      if (seen === undefined) {
+        seen = new Set<string>();
+        shownForwardOffers.set(agent.agentId, seen);
+      }
+      for (const q of forwardBook.all()) seen.add(q.quoteId);
+    }
 
     const prompt = buildTurnPrompt(
       context,
@@ -727,6 +838,22 @@ export async function runFullRunWindow(
     totalRealizedUsd += Number(realizedUsd);
     realizedUsdByProvider[agent.provider] =
       (realizedUsdByProvider[agent.provider] ?? 0) + Number(realizedUsd);
+    // Recorded for the ledger and every report; gates nothing, since the call has already
+    // happened. The pre-call projection above is what the caps are enforced against.
+    options.budget.recordRealizedInferenceSpend(realizedUsd);
+
+    // Written here, before any branch inspects the response and before parsing is attempted, so
+    // that a turn which then fails to parse is recorded exactly as fully as one that succeeds. A
+    // parse failure re-writes this same file below with `parseError` filled in; if the process
+    // dies in between, the call itself is already on disk. See ModelCallRecord.
+    recorder.recordMessage(agent.agentId, turn, {
+      prompt,
+      rawText: adapterResult.text,
+      stopReason: adapterResult.stopReason,
+      usage: adapterResult.usage,
+      contentBlockTypes: adapterResult.contentBlockTypes,
+      latencyMs: adapterResult.latency_ms,
+    });
 
     // A refusal that arrives on a 200 — the commoner shape, reported via the provider's own stop
     // reason. Caught before parsing, so it is never recorded as unparseable output.
@@ -737,6 +864,10 @@ export async function runFullRunWindow(
         projectedUsd,
         realizedUsd,
         marketBoardText: marketBoardText || undefined,
+        rawText: adapterResult.text,
+        promptText: prompt,
+        settleableText: settleableText || undefined,
+        forwardText: forwardText || undefined,
         latencyMs: adapterResult.latency_ms,
         stopReason: adapterResult.stopReason,
         usage: adapterResult.usage,
@@ -770,6 +901,10 @@ export async function runFullRunWindow(
         projectedUsd,
         realizedUsd,
         marketBoardText: marketBoardText || undefined,
+        rawText: adapterResult.text,
+        promptText: prompt,
+        settleableText: settleableText || undefined,
+        forwardText: forwardText || undefined,
         latencyMs: adapterResult.latency_ms,
         stopReason: adapterResult.stopReason,
         usage: adapterResult.usage,
@@ -778,8 +913,32 @@ export async function runFullRunWindow(
       };
       turnLogsByAgent[agent.agentId].push(log);
       options.onTurn?.(agent.agentId, log);
+      recorder.recordMessage(agent.agentId, turn, {
+        prompt,
+        rawText: adapterResult.text,
+        stopReason: adapterResult.stopReason,
+        usage: adapterResult.usage,
+        contentBlockTypes: adapterResult.contentBlockTypes,
+        latencyMs: adapterResult.latency_ms,
+        parseError: err instanceof Error ? err.message : String(err),
+      });
       if (err instanceof ModelResponseParseError) {
-        haltedReason[agent.agentId] = "parse_error";
+        // A response that contains no text block at all is not a model that emitted bad JSON —
+        // it is a model that never got as far as emitting anything. Found live, 2026-09-29 (P5
+        // run 3): WORKER-CODE/claude-sonnet-5 spent 22,500 output tokens, 21,782 of them
+        // reasoning, returned `contentBlockTypes: ["thinking"]` and no text, and was recorded as
+        // a parse failure indistinguishable from two genuine mid-JSON truncations — which is
+        // exactly what made the run's four failures look like one cause instead of three. The
+        // turn still ends here; only the label is different, because conflating the two is what
+        // cost the diagnosis. The adapter's own reasoning-accommodation retry (adapters/
+        // types.ts's REASONING_BUDGET_MULTIPLE) has already happened by this point and did not
+        // help.
+        const emittedNoText =
+          adapterResult.text.trim() === "" ||
+          (adapterResult.contentBlockTypes !== undefined &&
+            adapterResult.contentBlockTypes.length > 0 &&
+            adapterResult.contentBlockTypes.every((t) => t === "thinking"));
+        haltedReason[agent.agentId] = emittedNoText ? "no_text_emitted" : "parse_error";
         activeAgents.delete(agent.agentId);
         await friction.append(
           buildFrictionEntry(agent.agentId, turn, options.job.jobId, undefined, null),
@@ -796,6 +955,10 @@ export async function runFullRunWindow(
         projectedUsd,
         realizedUsd,
         marketBoardText: marketBoardText || undefined,
+        rawText: adapterResult.text,
+        promptText: prompt,
+        settleableText: settleableText || undefined,
+        forwardText: forwardText || undefined,
         latencyMs: adapterResult.latency_ms,
         parsed: JSON.stringify(intent),
         stopReason: adapterResult.stopReason,
@@ -840,6 +1003,10 @@ export async function runFullRunWindow(
         projectedUsd,
         realizedUsd,
         marketBoardText: marketBoardText || undefined,
+        rawText: adapterResult.text,
+        promptText: prompt,
+        settleableText: settleableText || undefined,
+        forwardText: forwardText || undefined,
         latencyMs: adapterResult.latency_ms,
         stopReason: adapterResult.stopReason,
         usage: adapterResult.usage,
@@ -860,6 +1027,9 @@ export async function runFullRunWindow(
       // verification alongside this, never a substitute for it — bypassing Runner to "check
       // twice instead of calling for real" would skip the allowlist check for this specific tool.
       const record = await runner.callTool(intent.tool, args, { turn, jobId: options.job.jobId });
+      // The call returned rather than throwing, so this agent has genuinely acted this window —
+      // see `actedSuccessfully` and the "buyer" wake gate.
+      actedSuccessfully.add(agent.agentId);
       let quarantined = false;
 
       // Read from the tool's own real result, never from the model's account of what it did. The
@@ -1134,6 +1304,10 @@ export async function runFullRunWindow(
         projectedUsd,
         realizedUsd,
         marketBoardText: marketBoardText || undefined,
+        rawText: adapterResult.text,
+        promptText: prompt,
+        settleableText: settleableText || undefined,
+        forwardText: forwardText || undefined,
         latencyMs: adapterResult.latency_ms,
         parsed: JSON.stringify(intent),
         quarantinedNonDeterministicGate: quarantined || undefined,
@@ -1209,6 +1383,10 @@ export async function runFullRunWindow(
           projectedUsd,
           realizedUsd,
           marketBoardText: marketBoardText || undefined,
+          rawText: adapterResult.text,
+          promptText: prompt,
+          settleableText: settleableText || undefined,
+          forwardText: forwardText || undefined,
           latencyMs: adapterResult.latency_ms,
           stopReason: adapterResult.stopReason,
           usage: adapterResult.usage,
@@ -1243,6 +1421,10 @@ export async function runFullRunWindow(
           projectedUsd,
           realizedUsd,
           marketBoardText: marketBoardText || undefined,
+          rawText: adapterResult.text,
+          promptText: prompt,
+          settleableText: settleableText || undefined,
+          forwardText: forwardText || undefined,
           latencyMs: adapterResult.latency_ms,
           stopReason: adapterResult.stopReason,
           usage: adapterResult.usage,
@@ -1403,12 +1585,30 @@ export async function buildToolArgs(
 ): Promise<unknown> {
   if (tool === "submit_job") {
     const rawSource = (rawArgs as { source?: unknown } | undefined)?.source;
+    // Found live, 2026-09-29 (P5 run 3): this used to substitute `""` for a missing/non-string
+    // `source`, so a caller that supplied the wrong fields entirely got an empty gate module and
+    // a G1 "gate spec does not export a gate() function" six checks later — a confusing, remote
+    // symptom of a boundary problem. Both issuers hit exactly that, having filled in the seven
+    // parameters the tool description used to advertise (none of which is read here) and left
+    // `source` unset. Failing here, naming what actually arrived, is the whole point: the caller
+    // sees it in its own tool-call history on the very next turn.
+    if (typeof rawSource !== "string" || rawSource.trim() === "") {
+      const received = rawArgs !== null && typeof rawArgs === "object" ? Object.keys(rawArgs) : [];
+      throw new Error(
+        `submit_job expects a single argument "source": a JavaScript ES module (as a string) ` +
+          `exporting gate({ referenceDir, submissionDir }) and returning { accept, reason }. ` +
+          (received.length > 0
+            ? `Received keys: ${received.join(", ")} — none of these is read; the original gate, ` +
+              `reference instance, submissions and held-out instances are supplied for you.`
+            : `Received no arguments.`),
+      );
+    }
     return {
       taskClass: ctx.job.taskClass,
       originalGate: ctx.job.originalGate,
       hardenedGate: {
         taskClass: ctx.job.taskClass,
-        source: typeof rawSource === "string" ? rawSource : "",
+        source: rawSource,
       },
       referenceInstance: ctx.job.referenceInstance,
       knownGoodSubmission: ctx.job.knownGoodSubmission,

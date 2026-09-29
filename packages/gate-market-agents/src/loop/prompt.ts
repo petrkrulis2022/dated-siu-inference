@@ -5,7 +5,12 @@ import type { ToolName } from "../tools/index.js";
 const RESPONSE_FORMAT_INSTRUCTIONS = `Respond with exactly one JSON object and nothing else.
 
 To call a tool: {"tool": "<tool_name>", "args": {...}}
-To end your turn, once the job is delivered (or you have no further useful action): {"done": true, "summary": "<what happened>"}
+To stop taking part for the REST OF THIS WINDOW: {"done": true, "summary": "<what happened>"}
+  This is not "end this turn" — it ends your participation in the window entirely. You will not
+  be asked again, and you will not see anything that happens afterwards. Use it only when you
+  are genuinely finished, not when you are waiting for something: you are not asked for a turn
+  at all unless there is something for you to act on, so waiting costs you nothing and needs no
+  response.
 
 Optionally, add a "friction" field to that SAME object — never a second, separate JSON object —
 reporting anything real about *this* turn's decision, appended to your friction log every turn

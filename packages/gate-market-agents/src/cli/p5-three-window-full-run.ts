@@ -541,9 +541,21 @@ async function main(): Promise<void> {
           : turn.quarantinedNonDeterministicGate
             ? " QUARANTINED (non-deterministic gate)"
             : "";
+        // A turn that failed gets a much longer slice and its provider-reported stop reason.
+        // Found live, 2026-09-29: at a flat 200 characters every one of run 3's four parse
+        // failures logged nothing but the error's own boilerplate preamble, so the log said four
+        // agents "failed" and could not say why — while stopReason, which distinguishes a
+        // mid-JSON truncation from a model that emitted no text at all, was never printed.
+        const failed =
+          turn.providerFailure !== undefined ||
+          turn.parsed.startsWith("Unparseable model response") ||
+          turn.parsed.includes("-> args error:") ||
+          turn.parsed.includes("-> tool call error:");
+        const stopNote = failed && turn.stopReason ? ` [stop=${turn.stopReason}]` : "";
         console.log(
           `[w${windowIndex}][${agentId}] Turn ${turn.turn}: projected=$${turn.projectedUsd}, ` +
-            `realized=$${turn.realizedUsd}, ${turn.latencyMs}ms -> ${turn.parsed.slice(0, 200)}${gateNote}`,
+            `realized=$${turn.realizedUsd}, ${turn.latencyMs}ms${stopNote} -> ` +
+            `${turn.parsed.slice(0, failed ? 1200 : 200)}${gateNote}`,
         );
       },
     });
@@ -638,8 +650,10 @@ async function main(): Promise<void> {
           totalRealizedUsd: o.result.totalRealizedUsd,
         })),
         runTotalUsd: budget.runTotalUsd(),
+        runProjectedUsd: budget.runProjectedUsd(),
         runCapUsd: RUN_CAP_USD,
         experimentTotalUsd: budget.experimentTotalUsd(),
+        experimentProjectedUsd: budget.experimentProjectedUsd(),
       },
       null,
       2,
@@ -775,13 +789,19 @@ YOUR JOB THIS WINDOW
     Step 2 (once WORKER-CODE has issued a quote — you will see it on the market board):
       {"tool": "pay", "args": {"requestId": "<the requestId from the board>",
       "settler": "0x0000000000000000000000000000000000000000"}}
-    Step 3: wait for delivery.
 
   OPTION B — settle in fSIU (a dated work claim, not a dollar):
     Step 1: {"tool": "pay_with_claim", "args": {"agentId": "WORKER-CODE", "quantity": "10000"}}
       (quantity is in milli-SIU; 10000 = 10 SIU, matching Option A's own quote size.)
-    Step 2: wait, same as Option A's step 3.
     mint_claim and transfer_claim remain available if you want the two steps separately.
+
+  HOW THE REST OF THE WINDOW WORKS, STATED AS A FACT
+  The window does not end when you have paid. You are asked for a turn only when there is
+  something for you to act on — a quote answering your request, a purchase that failed, a claim
+  matter, or forward terms you have not seen. Between those you are not asked at all, and that
+  costs you nothing: there is no need to respond in order to wait. {"done": true} is not a way
+  to wait — it ends your participation in this window entirely, including anything that would
+  otherwise have reached you later.
 
   A FACT ABOUT CLAIMS, STATED AS A FACT
   A claim names the delivery window it is for. By default that is the window you are in. Both
@@ -809,8 +829,8 @@ ${runShapeFacts}
   same way you buy the gate itself. It is a separate purchase with its own quote; nothing here
   says which way to pay for either, and the two need not match.
 
-  If you genuinely have nothing further to do, respond with {"done": true, "summary": "<why>"}
-  rather than repeating a call with nothing new.
+  If you are finished with this window entirely — not merely waiting for something — respond
+  with {"done": true, "summary": "<why>"} rather than repeating a call with nothing new.
 `;
 
   const workerCodeBrief = `
@@ -989,6 +1009,13 @@ ${runShapeFacts}`;
         "get_balances",
         "get_print",
       ],
+      // Awake unconditionally until it has bought something, then only when there is genuinely
+      // something for it: a quote answering its request, a claim or settlement matter, or a
+      // forward offer it has not yet seen. Before 2026-09-29 it had no wake gate at all and its
+      // only way to say "nothing right now" was {"done": true}, which ends the window — so it
+      // left on turn 2 of all three windows while saying, each time, that it was waiting. See
+      // RosterAgentConfig.waitsFor.
+      waitsFor: "buyer" as const,
       privateKeyHex: keys.ORCHESTRATOR,
       address: addresses.ORCHESTRATOR,
       erc8004Id: erc8004IdFor(addresses.ORCHESTRATOR),
@@ -1018,6 +1045,13 @@ ${runShapeFacts}`;
         // this run asks: does a holder notice non-delivery and act on it.
         "settle_window_close",
       ],
+      // "inbox", not "buyer": unlike the orchestrator it has nothing to do until something
+      // arrives, and everything it acts on is already a board item — a quote request addressed
+      // to it, a claim transferred or presented, an unsettled claim it could settle. It had no
+      // wake gate either before 2026-09-29, which is why it spent turns 5-10 of window 2 and
+      // 3-10 of window 3 re-calling settle_window_close: awake every round, with the stale board
+      // still advertising a claim that was already settled, and exit as the only alternative.
+      waitsFor: "inbox" as const,
       privateKeyHex: keys["WORKER-CODE"],
       address: addresses["WORKER-CODE"],
       erc8004Id: workerCodeErc8004Id,
@@ -1534,8 +1568,17 @@ function printRunSummary(
   for (const [provider, usd] of Object.entries(byProvider).sort(([a], [b]) => a.localeCompare(b))) {
     console.log(`  ${provider}: $${usd.toFixed(6)}`);
   }
-  console.log(`  run total: $${budget.runTotalUsd()} of the $${RUN_CAP_USD} cap`);
-  console.log(`  experiment ledger total now: $${budget.experimentTotalUsd()}`);
+  // Real spend first and labelled as such; the projection is shown beside it because the cap is
+  // enforced against the projection, so a run can halt on a number that is not what it spent.
+  // Until 2026-09-29 only the projection was reported, as though it were spend — run 3 printed
+  // "$2.777609 of the $30 cap" having actually spent $1.132689.
+  console.log(`  run total (real): $${budget.runTotalUsd()}`);
+  console.log(
+    `  run total (projected, what the $${RUN_CAP_USD} cap is enforced against): ` +
+      `$${budget.runProjectedUsd()}`,
+  );
+  console.log(`  experiment ledger, real spend: $${budget.experimentTotalUsd()}`);
+  console.log(`  experiment ledger, projected: $${budget.experimentProjectedUsd()}`);
 }
 
 /** Only when run as a script — `buildRoster` and the schedule constants are imported by tests,

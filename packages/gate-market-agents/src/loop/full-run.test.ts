@@ -736,6 +736,49 @@ describe("buildToolArgs", () => {
     expect(args.referenceFiles).toEqual(JOB.referenceInstance.files);
   });
 
+  it(
+    "submit_job: names the fields it actually received when `source` is missing, instead of " +
+      "silently substituting an empty gate — the exact P5 run 3 failure, where both issuers filled " +
+      "in the seven parameters the tool description then advertised (none of which is read) and " +
+      "got a G1 'does not export a gate() function' six checks later",
+    async () => {
+      await expect(
+        buildToolArgs(
+          "submit_job",
+          {
+            taskClass: "code",
+            originalGate: { language: "python", entry: "clamp" },
+            hardenedGate: "",
+          },
+          baseCtx(),
+        ),
+      ).rejects.toThrow(/Received keys: taskClass, originalGate, hardenedGate/);
+    },
+  );
+
+  it(
+    "submit_job: rejects a whitespace-only source rather than submitting a gate that cannot " +
+      "export anything",
+    async () => {
+      await expect(buildToolArgs("submit_job", { source: "   " }, baseCtx())).rejects.toThrow(
+        /expects a single argument "source"/,
+      );
+    },
+  );
+
+  it("submit_job: passes a real module source straight through as the hardened gate", async () => {
+    const source =
+      'export async function gate({ referenceDir, submissionDir }) { return { accept: true, reason: "ok" }; }';
+    const args = (await buildToolArgs("submit_job", { source }, baseCtx())) as {
+      hardenedGate: { source: string; taskClass: string };
+      taskClass: string;
+    };
+    expect(args.hardenedGate.source).toBe(source);
+    // Everything except `source` still comes from the job, never from the caller.
+    expect(args.taskClass).toBe(JOB.taskClass);
+    expect(args.hardenedGate.taskClass).toBe(JOB.taskClass);
+  });
+
   it("submit_attack: refuses before any gate has been delivered", async () => {
     await expect(
       buildToolArgs(
