@@ -801,12 +801,14 @@ YOUR JOB THIS WINDOW
     mint_claim and transfer_claim remain available if you want the two steps separately.
 
   HOW THE REST OF THE WINDOW WORKS, STATED AS A FACT
-  The window does not end when you have paid. You are asked for a turn only when there is
-  something for you to act on — a quote answering your request, a purchase that failed, a claim
-  matter, or forward terms you have not seen. Between those you are not asked at all, and that
-  costs you nothing: there is no need to respond in order to wait. {"done": true} is not a way
-  to wait — it ends your participation in this window entirely, including anything that would
-  otherwise have reached you later.
+  The window does not end when you have paid. Delivery, forward offers from issuers, and failures
+  all happen after it, and any of them may still concern you.
+
+  {"done": true} does NOT mean "wake me when something happens" — nothing will wake you. It means
+  you leave this window now and never learn what happened in it, including a delivery you paid
+  for. If you are merely waiting, answer with a harmless read instead — {"tool": "get_balances",
+  "args": {"account": "${addresses.ORCHESTRATOR}"}} or get_print — and you will still be here when
+  something arrives.
 
   A FACT ABOUT CLAIMS, STATED AS A FACT
   A claim names the delivery window it is for. By default that is the window you are in. Both
@@ -834,8 +836,9 @@ ${runShapeFacts}
   same way you buy the gate itself. It is a separate purchase with its own quote; nothing here
   says which way to pay for either, and the two need not match.
 
-  If you are finished with this window entirely — not merely waiting for something — respond
-  with {"done": true, "summary": "<why>"} rather than repeating a call with nothing new.
+  Respond with {"done": true, "summary": "<why>"} only if you would not want to be shown a
+  delivery, an offer or a failure for the rest of this window — that is what it costs. If you are
+  waiting rather than finished, take a harmless read instead.
 `;
 
   const workerCodeBrief = `
@@ -1062,13 +1065,22 @@ ${runShapeFacts}`;
         // this run asks: does a holder notice non-delivery and act on it.
         "settle_window_close",
       ],
-      // "inbox", not "buyer": unlike the orchestrator it has nothing to do until something
-      // arrives, and everything it acts on is already a board item — a quote request addressed
-      // to it, a claim transferred or presented, an unsettled claim it could settle. It had no
-      // wake gate either before 2026-09-29, which is why it spent turns 5-10 of window 2 and
-      // 3-10 of window 3 re-calling settle_window_close: awake every round, with the stale board
-      // still advertising a claim that was already settled, and exit as the only alternative.
-      waitsFor: "inbox" as const,
+      // NO wake gate, deliberately, and this is a correction of a wrong call made earlier the
+      // same day. It was given `waitsFor: "inbox"` on the reasoning that "everything it acts on
+      // is already a board item". That is false: **being paid is not a board item.** On the USDC
+      // route the seller learns it was paid by checking get_balances — its own brief says so —
+      // and a wake gate is precisely what stops it looking. Found live within one window of
+      // shipping it (2026-09-29 run 4, window 1): ORCHESTRATOR requested a quote, WORKER-CODE
+      // issued it, ORCHESTRATOR paid, and WORKER-CODE was never woken again. One turn all
+      // window, no reserve_for_work, no gate, no settle_escrow, "capacity events: none" — real
+      // USDC committed to an escrow against work that was never done, because the seller was
+      // asleep through its own job.
+      //
+      // A gate here needs the board to carry "you were paid, you owe delivery" first. Until it
+      // does, polling is this role's only way to discover the fact it most needs, and the
+      // turn-burn that motivated the gate is already addressed at its real source: the stale
+      // settleable-claims board (fixed the same day) is what had it re-calling
+      // settle_window_close on an already-settled claim, not the absence of a wake gate.
       privateKeyHex: keys["WORKER-CODE"],
       address: addresses["WORKER-CODE"],
       erc8004Id: workerCodeErc8004Id,
