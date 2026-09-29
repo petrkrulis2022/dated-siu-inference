@@ -699,14 +699,21 @@ export async function runFullRunWindow(
       boardSectionText === "" &&
       !unseenForwardOffer;
     if (
-      (agent.waitsFor === "gate" && attackContext.gateVersions.length === 0) ||
+      // "gate" waits for a gate to exist AND for its own inbox to be empty. The adversary is also
+      // a seller: a buyer may request a quote for attack testing before any gate has been
+      // authored, and gating purely on the gate meant that request could never be answered — the
+      // second of a window's two purchases was structurally unreachable (found while enabling it,
+      // 2026-09-29).
+      (agent.waitsFor === "gate" &&
+        attackContext.gateVersions.length === 0 &&
+        boardSectionText === "") ||
       (agent.waitsFor === "inbox" && boardSectionText === "") ||
       buyerIdle
     ) {
       const someoneCanAct = [...activeAgents].some((id) => {
         const other = options.roster.find((r) => r.agentId === id);
         if (!other?.waitsFor) return true;
-        if (other.waitsFor === "gate") return attackContext.gateVersions.length > 0;
+        if (other.waitsFor === "gate" && attackContext.gateVersions.length > 0) return true;
         if (other.waitsFor === "buyer" && !actedSuccessfully.has(other.agentId)) return true;
         return (
           board.renderFor(other.agentId, other.erc8004Id) !== "" ||
@@ -1066,6 +1073,14 @@ export async function runFullRunWindow(
         }
       }
 
+      // Payment is the one event both sides of a dollar deal must be woken by: it is the buyer's
+      // resolution and the seller's obligation. Recorded from the real tool result, so the board
+      // can stop advertising a paid quote to its buyer and start telling its seller it owes work.
+      if (intent.tool === "pay") {
+        const requestId = (intent.args as { requestId?: unknown } | undefined)?.requestId;
+        if (typeof requestId === "string") board.recordPaid(requestId);
+      }
+
       if (intent.tool === "mint_claim") {
         const mintResult = record.result as { tokenId: string; issuer: string; txHash?: string };
         const issuerAgentId = agentIdByAddress[mintResult.issuer.toLowerCase()];
@@ -1150,6 +1165,14 @@ export async function runFullRunWindow(
         const settled = record.result as { txHash: string; releaseTxHash?: string };
         if (settled.releaseTxHash) {
           await recordCapacityEvent("release_on_settle", { txHash: settled.releaseTxHash });
+        }
+        // The obligation is discharged, so the board stops telling this seller it owes the work —
+        // matching the same quote `buildToolArgs` actually settled.
+        const settledQuote = (args as { quote?: { seller_id?: string } } | undefined)?.quote;
+        if (settledQuote !== undefined) {
+          const mine = board.issuedQuotesBySeller(agent.erc8004Id);
+          const match = mine.find((i) => i.quote === settledQuote) ?? mine.at(-1);
+          if (match) board.recordSettled(match.requestId);
         }
       }
 
@@ -1771,11 +1794,19 @@ export async function buildToolArgs(
     if (!erc8004Id) {
       throw new Error("settle_escrow: no caller identity on this turn.");
     }
-    // The seller's own signed quote, newest first — never reconstructed by the model, for the
-    // same reason `pay` takes the real object: a hand-copied quote hashes to a different, and
-    // nonexistent, escrow.
+    // The seller's own signed quote — never reconstructed by the model, for the same reason
+    // `pay` takes the real object: a hand-copied quote hashes to a different, and nonexistent,
+    // escrow.
+    //
+    // The PAID-and-unsettled one, not simply the newest. While a seller could only ever hold one
+    // quote per window "newest" happened to coincide with "the one with an escrow"; once a buyer
+    // makes two independent purchases in a window (gate authoring and attack testing) it does
+    // not, and settling the newest would reach for an escrow that does not exist while the real
+    // one stayed open. Falls back to the newest only when nothing is recorded as paid, so an
+    // unpaid caller still gets the honest "no escrow to settle" error below.
+    const paidUnsettled = ctx.board.paidUnsettledFor(erc8004Id);
     const mine = ctx.board.issuedQuotesBySeller(erc8004Id);
-    const latest = mine.at(-1);
+    const latest = paidUnsettled.at(0) ?? mine.at(-1);
     if (!latest) {
       throw new Error(
         "settle_escrow: you have not issued any quote this window, so there is no escrow to settle.",

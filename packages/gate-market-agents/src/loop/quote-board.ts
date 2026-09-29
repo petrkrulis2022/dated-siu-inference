@@ -31,11 +31,30 @@ export interface QuoteBoardIssuedQuote {
 export class QuoteBoard {
   #requests: QuoteBoardRequest[] = [];
   #issued: QuoteBoardIssuedQuote[] = [];
+  /**
+   * Requests whose quote has actually been paid, and those whose escrow has actually been
+   * settled — both recorded from real tool results, never inferred.
+   *
+   * Added 2026-09-29, for two failures the same window exposed. A board that cannot say whether a
+   * quote was paid (a) keeps showing a buyer a quote it has already paid, so a wake gate keyed on
+   * "the board has something" wakes it for state it has already resolved, and (b) cannot tell a
+   * SELLER it was paid at all — which on the dollar route is the single fact it most needs, and
+   * the reason WORKER-CODE slept through a job it had been paid for while USDC sat in escrow.
+   * Payment is the actionable event on both sides; until it was recorded here neither side could
+   * be woken by it.
+   */
+  #paid = new Set<string>();
+  #settled = new Set<string>();
   #nextId = 1;
 
   /** Called by the loop right after a real `request_quote` tool call returns — never invented. */
   postRequest(buyer: AgentId, body: QuoteBody): QuoteBoardRequest {
-    const request: QuoteBoardRequest = { requestId: `qr-${this.#nextId++}`, buyer, sellerId: body.seller_id, body };
+    const request: QuoteBoardRequest = {
+      requestId: `qr-${this.#nextId++}`,
+      buyer,
+      sellerId: body.seller_id,
+      body,
+    };
     this.#requests.push(request);
     return request;
   }
@@ -47,6 +66,35 @@ export class QuoteBoard {
   /** Called by the loop right after a real `issue_quote` tool call returns. */
   postIssuedQuote(requestId: string, quote: TouchstoneQuote): void {
     this.#issued.push({ requestId, quote });
+  }
+
+  /** Called by the loop right after a real, successful `pay` — never inferred from a balance. */
+  recordPaid(requestId: string): void {
+    this.#paid.add(requestId);
+  }
+
+  /** Called by the loop right after a real, successful `settle_escrow`. */
+  recordSettled(requestId: string): void {
+    this.#settled.add(requestId);
+  }
+
+  isPaid(requestId: string): boolean {
+    return this.#paid.has(requestId);
+  }
+
+  /** Quotes answering this buyer's own requests that it has NOT yet paid — the buyer's only
+   * genuinely actionable quote state. A quote it has already paid is resolved, and showing it
+   * again is what woke a buyer with nothing to do. */
+  unpaidQuotesFor(buyer: AgentId): QuoteBoardIssuedQuote[] {
+    return this.issuedQuotesFor(buyer).filter((i) => !this.#paid.has(i.requestId));
+  }
+
+  /** Quotes this seller signed that have been paid and not yet settled — it owes the work, and
+   * on the dollar route this is how it finds out at all. */
+  paidUnsettledFor(sellerId: string): QuoteBoardIssuedQuote[] {
+    return this.issuedQuotesBySeller(sellerId).filter(
+      (i) => this.#paid.has(i.requestId) && !this.#settled.has(i.requestId),
+    );
   }
 
   /** The exact, real, seller-signed `TouchstoneQuote` for one request — what `pay` must actually
@@ -69,7 +117,9 @@ export class QuoteBoard {
   /** Quotes issued in answer to a request `buyer` itself made — what a buyer's own turn should
    * see, so it can decide whether to `pay` against one. */
   issuedQuotesFor(buyer: AgentId): QuoteBoardIssuedQuote[] {
-    const myRequestIds = new Set(this.#requests.filter((r) => r.buyer === buyer).map((r) => r.requestId));
+    const myRequestIds = new Set(
+      this.#requests.filter((r) => r.buyer === buyer).map((r) => r.requestId),
+    );
     return this.#issued.filter((i) => myRequestIds.has(i.requestId));
   }
 
@@ -90,12 +140,19 @@ export class QuoteBoard {
    * so a turn with no open market activity doesn't carry a hollow "MARKET BOARD" header. */
   renderFor(agentId: AgentId, myErc8004Id: string): string {
     const openRequests = this.openRequestsFor(myErc8004Id);
-    const myQuotes = this.issuedQuotesFor(agentId);
-    if (openRequests.length === 0 && myQuotes.length === 0) return "";
+    // Only genuinely actionable state. A quote this buyer has already paid is resolved: showing
+    // it again is what woke ORCHESTRATOR on a turn where it had nothing left to do (2026-09-29
+    // run 4, window 1), which put it straight back into the forced choice between acting and
+    // leaving that the wake gate exists to remove.
+    const myQuotes = this.unpaidQuotesFor(agentId);
+    const owedBySeller = this.paidUnsettledFor(myErc8004Id);
+    if (openRequests.length === 0 && myQuotes.length === 0 && owedBySeller.length === 0) return "";
 
     const lines: string[] = ["MARKET BOARD"];
     if (openRequests.length > 0) {
-      lines.push("Open quote requests addressed to you (call issue_quote with { requestId } to answer one):");
+      lines.push(
+        "Open quote requests addressed to you (call issue_quote with { requestId } to answer one):",
+      );
       for (const r of openRequests) {
         lines.push(
           `  ${r.requestId}: from ${r.buyer}, ${r.body.siu} SIU, model ${r.body.model}, ` +
@@ -103,8 +160,23 @@ export class QuoteBoard {
         );
       }
     }
+    if (owedBySeller.length > 0) {
+      lines.push(
+        "YOU HAVE BEEN PAID AND OWE THE WORK — real USDC is in escrow in your favour and is not " +
+          "yours until you deliver and settle:",
+      );
+      for (const i of owedBySeller) {
+        lines.push(
+          `  answers ${i.requestId}: amount_usd_max ${i.quote.amount_usd_max}. Commit the capacity ` +
+            `first (reserve_for_work), then do the work (submit_job) until it passes, then ` +
+            `settle_escrow.`,
+        );
+      }
+    }
     if (myQuotes.length > 0) {
-      lines.push("Quotes you have received (pay against one with the real quote object, via get_balances/pay):");
+      lines.push(
+        "Quotes you have received (pay against one with the real quote object, via get_balances/pay):",
+      );
       for (const i of myQuotes) {
         lines.push(
           `  answers ${i.requestId}: seller ${i.quote.seller_id}, amount_usd_max ${i.quote.amount_usd_max}, ` +

@@ -5,15 +5,16 @@ import type { ToolName } from "../tools/index.js";
 const RESPONSE_FORMAT_INSTRUCTIONS = `Respond with exactly one JSON object and nothing else.
 
 To call a tool: {"tool": "<tool_name>", "args": {...}}
-To LEAVE this window permanently: {"done": true, "summary": "<what happened>"}
-  Read this literally. It is not "end this turn" and it is not "wake me when something happens".
-  Nothing will re-engage you: not a delivery, not a payment, not an offer, not a failure. You
-  will be gone for the rest of the window and will never learn what happened in it.
+To leave this window for good: {"done": true, "summary": "<what happened>"}
 
-  It is therefore NEVER the right way to wait. If you are waiting for something, do not answer
-  with "done" — take any harmless read (get_balances, get_print) instead, or act. Only answer
-  with "done" when you would not want to be shown a delivery, a payment or an offer even if one
-  arrived.
+YOU DO NOT NEED TO DO ANYTHING IN ORDER TO WAIT.
+  You are given a turn only when something has genuinely arrived for you to act on. Between
+  those you are not asked at all — no turn is spent, nothing is lost, and you stay in the
+  window. "Waiting for a delivery" therefore needs no response from you; it is the default.
+
+  So {"done": true} is not how you wait. It is how you leave: you will not be given another
+  turn in this window whatever arrives, and will never learn what happened in it. Use it only
+  when you would not want to be shown a delivery, a payment or an offer even if one came.
 
 Optionally, add a "friction" field to that SAME object — never a second, separate JSON object —
 reporting anything real about *this* turn's decision, appended to your friction log every turn

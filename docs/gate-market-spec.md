@@ -545,6 +545,39 @@ the window) and by giving the buyer the same wake primitive the other roles alre
 offer it has not yet been shown). A non-terminal "pass" was considered and deliberately not
 added: once waiting costs no turn, it is redundant.
 
+### 4.6f The "9 of 9 chose fSIU" result is an artefact, and must not be quoted without this
+
+Across runs 1-3 every purchase an agent made settled in fSIU: nine decisions, no dollars. That
+looked like the clearest signal the testbed had produced — agents offered two genuinely different
+instruments consistently reached for the claim.
+
+It is not safe to read that way, because the two routes did not cost the same number of turns.
+
+- `pay_with_claim` is **one call**. Decide, call, done.
+- The dollar route is **three turns spread across a wait**: `request_quote`, then the seller must
+  answer with `issue_quote`, and only then can the buyer `pay` against a real signed quote.
+
+Until 2026-09-29 the buyer had no way to wait (§4.6e). It was polled every round, and its only
+non-action was `{"done": true}`, which ends its participation in the window. So the dollar route
+required it to stay alive across a gap it had no primitive for, while the claim route fit
+entirely inside a single turn. An agent with one turn of usable runway has a structural reason to
+prefer the one-call instrument **whatever it thinks of the economics**.
+
+The moment waiting became free, the very first purchase went the other way: run 4's window 1
+opened `request_quote` → `issue_quote` → `pay`, settled in USDC — the first dollar-settled
+purchase in the project's history.
+
+That is one window, and one window is not a result either. The point is narrower and firmer: the
+nine-for-nine figure cannot distinguish "agents prefer claims" from "agents avoided a route they
+could not afford the turns for", so **any F1 number quoted from runs 1-3 must carry this
+caveat**, and the asset-choice question has to be re-measured under the current protocol.
+
+This is the second time an F1 signal turned out to be a property of the tool surface rather than
+of agent preference — after the prompt-level prohibition that `toolGuard` replaced (§4.6a). It is
+the reason the five comparable runs must all execute under one protocol, and the reason a result
+that flatters the instrument deserves more scrutiny than one that does not: nine-for-nine was the
+most quotable number here, and it was measuring the harness.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make

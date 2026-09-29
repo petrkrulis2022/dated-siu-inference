@@ -804,11 +804,8 @@ YOUR JOB THIS WINDOW
   The window does not end when you have paid. Delivery, forward offers from issuers, and failures
   all happen after it, and any of them may still concern you.
 
-  {"done": true} does NOT mean "wake me when something happens" — nothing will wake you. It means
-  you leave this window now and never learn what happened in it, including a delivery you paid
-  for. If you are merely waiting, answer with a harmless read instead — {"tool": "get_balances",
-  "args": {"account": "${addresses.ORCHESTRATOR}"}} or get_print — and you will still be here when
-  something arrives.
+  You will be given a turn when one of them arrives, and not before. Waiting costs you no turn
+  and requires no response — you remain in the window by default.
 
   A FACT ABOUT CLAIMS, STATED AS A FACT
   A claim names the delivery window it is for. By default that is the window you are in. Both
@@ -837,8 +834,8 @@ ${runShapeFacts}
   says which way to pay for either, and the two need not match.
 
   Respond with {"done": true, "summary": "<why>"} only if you would not want to be shown a
-  delivery, an offer or a failure for the rest of this window — that is what it costs. If you are
-  waiting rather than finished, take a harmless read instead.
+  delivery, an offer or a failure for the rest of this window — that is what it costs. Waiting
+  is not a reason to use it; waiting happens on its own.
 `;
 
   const workerCodeBrief = `
@@ -849,9 +846,9 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${WINDOW_COUNT})
 
   TWO SEPARATE ENGAGEMENTS — DO NOT MIX THEM UP:
 
-  (a) PAID IN USDC. If a quote you issued was paid against (check get_balances to confirm real
-      funds actually arrived, including the escrow standing in your favour), you were engaged
-      directly for your own labor.
+  (a) PAID IN USDC. You will be told: "YOU HAVE BEEN PAID AND OWE THE WORK" appears on your
+      market board, naming the request it answers and the amount in escrow. You do not need to
+      go looking for it, and an absence of it means you have not been paid.
       Before you deliver, commit the capacity the job will use:
       {"tool": "reserve_for_work", "args": {"classId": "${classIdFor("code")}"}}
       That draws on exactly the same finite issuer capacity a claim would, sized to your own
@@ -872,9 +869,10 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${WINDOW_COUNT})
   it ({"tool": "issue_quote", "args": {"requestId": "<the requestId shown>"}}) — this signs the
   exact terms ORCHESTRATOR proposed. Issuing a quote is not being paid; wait for real funds.
 
-  If there is nothing here for you to do yet, DO NOT respond with {"done": true} — that would end
-  your participation in this window. Check again with {"tool": "get_balances", "args": {"account":
-  "${addresses["WORKER-CODE"]}"}} (your own real address).
+  You are not asked for a turn unless something has genuinely arrived for you — a request
+  addressed to you, a payment, a claim. You do not need to poll for any of it, and you do not
+  need to act in order to stay in this window. {"done": true} would end your participation for
+  the rest of it, including work you have been paid for.
 ${runShapeFacts}
 
 THE CONTRACT BELOW APPLIES TO ENGAGEMENT (a) ONLY — WORK YOU WERE PAID IN USDC TO DO YOURSELF.
@@ -921,8 +919,14 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${WINDOW_COUNT})
 
   ORCHESTRATOR may buy this testing from you, in USDC or in a work claim — that choice is
   ORCHESTRATOR's, not yours to influence. If an open request addressed to you appears on the
-  market board, you may answer it with issue_quote, and settle with settle_escrow once real funds
-  arrive.
+  market board, you may answer it with issue_quote. You will be told when it has been paid:
+  "YOU HAVE BEEN PAID AND OWE THE WORK" appears on your board, naming the amount in escrow.
+  Before you do the work, commit the capacity it will use:
+    {"tool": "reserve_for_work", "args": {"classId": "${classIdFor("code")}"}}
+  That draws on exactly the same finite issuer capacity a work claim would, sized to your own
+  quote, and is returned when you settle. Then do the testing, and settle with settle_escrow.
+  If the reservation fails because no issuer has enough headroom left, the work cannot be backed
+  and you should say so rather than deliver anyway.
 ${runShapeFacts}`;
 
   const issueWorkClaimsSkill = loadSkill("issue-work-claims");
@@ -1065,22 +1069,16 @@ ${runShapeFacts}`;
         // this run asks: does a holder notice non-delivery and act on it.
         "settle_window_close",
       ],
-      // NO wake gate, deliberately, and this is a correction of a wrong call made earlier the
-      // same day. It was given `waitsFor: "inbox"` on the reasoning that "everything it acts on
-      // is already a board item". That is false: **being paid is not a board item.** On the USDC
-      // route the seller learns it was paid by checking get_balances — its own brief says so —
-      // and a wake gate is precisely what stops it looking. Found live within one window of
-      // shipping it (2026-09-29 run 4, window 1): ORCHESTRATOR requested a quote, WORKER-CODE
-      // issued it, ORCHESTRATOR paid, and WORKER-CODE was never woken again. One turn all
-      // window, no reserve_for_work, no gate, no settle_escrow, "capacity events: none" — real
-      // USDC committed to an escrow against work that was never done, because the seller was
-      // asleep through its own job.
-      //
-      // A gate here needs the board to carry "you were paid, you owe delivery" first. Until it
-      // does, polling is this role's only way to discover the fact it most needs, and the
-      // turn-burn that motivated the gate is already addressed at its real source: the stale
-      // settleable-claims board (fixed the same day) is what had it re-calling
-      // settle_window_close on an already-settled claim, not the absence of a wake gate.
+      // "inbox" — but only now that the board genuinely carries the fact this role most needs.
+      // It was given this gate once before on the false reasoning that "everything it acts on is
+      // already a board item": being paid was not one, so on the dollar route the seller never
+      // woke. Found live within one window (2026-09-29 run 4, w1): quote requested, quote issued,
+      // quote paid, and WORKER-CODE never woken again — one turn all window, no reserve_for_work,
+      // no gate, no settle_escrow, "capacity events: none", with real USDC sitting in escrow
+      // against work nobody did. The gate is only safe because QuoteBoard now records payment and
+      // settlement and renders "YOU HAVE BEEN PAID AND OWE THE WORK" to the seller; without that
+      // this line is a starvation bug, not an optimisation.
+      waitsFor: "inbox" as const,
       privateKeyHex: keys["WORKER-CODE"],
       address: addresses["WORKER-CODE"],
       erc8004Id: workerCodeErc8004Id,
@@ -1097,6 +1095,13 @@ ${runShapeFacts}`;
       skillPackText: `${loadSkill("quote-and-deliver").promptTemplate}\n\n${CANONICAL_ASSET_DESCRIPTION}\n\n${workerExtractBrief}`,
       availableTools: [
         "issue_quote",
+        // Symmetric with WORKER-CODE's own dollar route. Without it an attack-testing job bought
+        // in USDC would consume no bonded capacity while the same job bought in fSIU would — and
+        // every agent is told, in ONE_POOL_DISCLOSURE, that both routes draw on one pool. Adding
+        // it keeps that statement true for the window's second purchase; leaving it out would
+        // have quietly made the cheaper-looking route the dollar one, biasing the very choice
+        // this run measures.
+        "reserve_for_work",
         "settle_escrow",
         "submit_attack",
         "get_balances",

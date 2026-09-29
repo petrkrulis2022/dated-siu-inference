@@ -91,4 +91,67 @@ describe("QuoteBoard", () => {
     expect(board.issuedQuoteById(request.requestId)).toBe(quote);
     expect(board.issuedQuoteById("qr-999")).toBeUndefined();
   });
+
+  it(
+    "tells a PAID SELLER it owes the work — the fact the dollar route turns on, and the one the " +
+      "board could not carry before 2026-09-29, when WORKER-CODE slept through a job it had been " +
+      "paid for while real USDC sat in escrow",
+    () => {
+      const board = new QuoteBoard();
+      const request = board.postRequest("ORCHESTRATOR", fakeQuoteBody("erc8004:0xWORKERCODE"));
+      board.postIssuedQuote(request.requestId, fakeQuote("erc8004:0xWORKERCODE"));
+
+      // Before payment the seller is owed nothing and must not be told otherwise.
+      expect(board.renderFor("WORKER-CODE", "erc8004:0xWORKERCODE")).not.toContain(
+        "YOU HAVE BEEN PAID",
+      );
+
+      board.recordPaid(request.requestId);
+      const paidView = board.renderFor("WORKER-CODE", "erc8004:0xWORKERCODE");
+      expect(paidView).toContain("YOU HAVE BEEN PAID AND OWE THE WORK");
+      expect(paidView).toContain(request.requestId);
+
+      // Settling discharges it — the board stops asking for work already delivered.
+      board.recordSettled(request.requestId);
+      expect(board.renderFor("WORKER-CODE", "erc8004:0xWORKERCODE")).not.toContain(
+        "YOU HAVE BEEN PAID",
+      );
+    },
+  );
+
+  it(
+    "stops showing a buyer a quote it has already paid — showing resolved state is what woke " +
+      "ORCHESTRATOR on a turn with nothing left to do",
+    () => {
+      const board = new QuoteBoard();
+      const request = board.postRequest("ORCHESTRATOR", fakeQuoteBody("erc8004:0xWORKERCODE"));
+      board.postIssuedQuote(request.requestId, fakeQuote("erc8004:0xWORKERCODE"));
+
+      expect(board.unpaidQuotesFor("ORCHESTRATOR")).toHaveLength(1);
+      expect(board.renderFor("ORCHESTRATOR", "erc8004:0xORCHESTRATOR")).toContain(
+        "Quotes you have received",
+      );
+
+      board.recordPaid(request.requestId);
+      expect(board.unpaidQuotesFor("ORCHESTRATOR")).toHaveLength(0);
+      // Nothing actionable left for the buyer at all, so the board is empty for it — which is what
+      // lets a wake gate keyed on "the board has something" actually let it idle.
+      expect(board.renderFor("ORCHESTRATOR", "erc8004:0xORCHESTRATOR")).toBe("");
+    },
+  );
+
+  it(
+    "a paid quote is owed by its seller and resolved for its buyer at the same time — the two " +
+      "views never disagree",
+    () => {
+      const board = new QuoteBoard();
+      const request = board.postRequest("ORCHESTRATOR", fakeQuoteBody("erc8004:0xWORKERCODE"));
+      board.postIssuedQuote(request.requestId, fakeQuote("erc8004:0xWORKERCODE"));
+      board.recordPaid(request.requestId);
+
+      expect(board.isPaid(request.requestId)).toBe(true);
+      expect(board.paidUnsettledFor("erc8004:0xWORKERCODE")).toHaveLength(1);
+      expect(board.unpaidQuotesFor("ORCHESTRATOR")).toHaveLength(0);
+    },
+  );
 });
