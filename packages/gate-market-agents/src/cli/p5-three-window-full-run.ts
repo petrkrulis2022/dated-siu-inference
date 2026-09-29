@@ -891,6 +891,10 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${WINDOW_COUNT})
   it ({"tool": "issue_quote", "args": {"requestId": "<the requestId shown>"}}) — this signs the
   exact terms ORCHESTRATOR proposed. Issuing a quote is not being paid; wait for real funds.
 
+  YOUR OWN ADDRESS is ${addresses["WORKER-CODE"]} — wherever a tool asks for an account, that is
+  yours. ({"tool": "whoami", "args": {}} returns it too, but you do not need to spend a turn on
+  that.) There is no such account as "self".
+
   You are not asked for a turn unless something has genuinely arrived for you — a request
   addressed to you, a payment, a claim. You do not need to poll for any of it, and you do not
   need to act in order to stay in this window. {"done": true} would end your participation for
