@@ -35,6 +35,7 @@ import {
   buildToolArgs,
   runFullRunWindow,
   shuffledToolOrder,
+  submitJobRefusalFor,
   type BuildToolArgsContext,
   type JobEnvelope,
   type MintContext,
@@ -614,6 +615,65 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
     expect(result.turnsByAgent.ORCHESTRATOR).toBe(2);
     expect(result.turnLogsByAgent.ORCHESTRATOR[0].parsed).toContain("tool call error");
     expect(result.turnLogsByAgent.ORCHESTRATOR[0].parsed).toContain("not permitted to call");
+  });
+});
+
+describe("submitJobRefusalFor — who may author the gate", () => {
+  const presentedToA = {
+    tokenId: "1",
+    issuerAgentId: "ISSUER-A" as const,
+    holder: "WORKER-CODE" as const,
+    quantity: "10000",
+    served: false,
+  };
+
+  it("refuses the holder: it does not owe the delivery its own claim's issuer owes", () => {
+    const refusal = submitJobRefusalFor("submit_job", "WORKER-CODE", presentedToA);
+    expect(refusal).toContain("you hold a work claim");
+    expect(refusal).toContain("ISSUER-A");
+  });
+
+  it(
+    "permits the ROUTED ISSUER — the exemption the whole work layer rests on. It is the party " +
+      "redemption grades, so refusing it would leave nobody able to deliver at all",
+    () => {
+      expect(submitJobRefusalFor("submit_job", "ISSUER-A", presentedToA)).toBeNull();
+    },
+  );
+
+  it(
+    "permits an agent holding no claim for this job — the USDC route, where the seller really " +
+      "was paid for its own labour",
+    () => {
+      expect(submitJobRefusalFor("submit_job", "WORKER-EXTRACT", presentedToA)).toBeNull();
+      expect(submitJobRefusalFor("submit_job", "ISSUER-B", presentedToA)).toBeNull();
+    },
+  );
+
+  it(
+    "permits the holder again once the redemption has been served — the claim is concluded and " +
+      "nothing is being graded any more",
+    () => {
+      expect(
+        submitJobRefusalFor("submit_job", "WORKER-CODE", { ...presentedToA, served: true }),
+      ).toBeNull();
+    },
+  );
+
+  it("refuses a holder that was transferred a claim but has not presented it yet", () => {
+    expect(
+      submitJobRefusalFor("submit_job", "WORKER-CODE", {
+        tokenId: "1",
+        issuerAgentId: "ISSUER-A",
+        transferredTo: "WORKER-CODE",
+        served: false,
+      }),
+    ).not.toBeNull();
+  });
+
+  it("never touches any tool but submit_job", () => {
+    expect(submitJobRefusalFor("redeem_claim", "WORKER-CODE", presentedToA)).toBeNull();
+    expect(submitJobRefusalFor("settle_window_close", "WORKER-CODE", presentedToA)).toBeNull();
   });
 });
 
@@ -1535,10 +1595,20 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
       runId: "run-redemption",
       manifest: MANIFEST,
       mintContext,
+      taskSpecText: "SPEC-CARRIED-WITH-THE-REDEMPTION: dedupeSorted(arr)",
     });
 
     expect(result.passed).toBe(true);
     expect(result.passedBy).toBe("ISSUER-A"); // the routed issuer delivered — not the holder
+
+    // The spec reached the routed issuer, in its own prompt, as part of the redemption — and only
+    // after the claim was actually presented against it. Before 2026-09-29 it reached no issuer at
+    // all, so an issuer was told it owed a gate for a job it had never seen.
+    const firstSpecIndex = issuerPrompts.findIndex((p) =>
+      p.includes("SPEC-CARRIED-WITH-THE-REDEMPTION"),
+    );
+    expect(firstSpecIndex).toBeGreaterThanOrEqual(0);
+    expect(issuerPrompts[0]).not.toContain("SPEC-CARRIED-WITH-THE-REDEMPTION");
 
     // ISSUER-A never saw a pending redemption until every real fact was actually in. Matched on
     // the tracker's own real, structured line (not the bare phrase "PENDING REDEMPTION ROUTED TO

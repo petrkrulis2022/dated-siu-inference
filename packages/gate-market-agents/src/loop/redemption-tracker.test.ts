@@ -75,6 +75,38 @@ describe("RedemptionTracker", () => {
     expect(tracker.renderForIssuerAwaitingDelivery("WORKER-CODE")).toBe("");
   });
 
+  it(
+    "carries the presented task spec to the routed issuer, and to nobody else — without it the " +
+      "issuer is told it owes a gate for a job it has never seen, which is why no issuer-authored " +
+      "gate was ever valid before 2026-09-29",
+    () => {
+      const tracker = new RedemptionTracker();
+      tracker.recordMint("1", "ISSUER-A", "500");
+      tracker.recordPresented("WORKER-CODE", "THE FUNCTION UNDER TEST: dedupeSorted(arr)");
+
+      const rendered = tracker.renderForIssuerAwaitingDelivery("ISSUER-A");
+      expect(rendered).toContain("THE TASK THIS CLAIM WAS PRESENTED AGAINST");
+      expect(rendered).toContain("THE FUNCTION UNDER TEST: dedupeSorted(arr)");
+      // Only the routed issuer — the spec arrives with the claim, so an issuer with no claim
+      // presented against it sees nothing at all.
+      expect(tracker.renderForIssuerAwaitingDelivery("ISSUER-B")).toBe("");
+      expect(tracker.state().taskSpecText).toBe("THE FUNCTION UNDER TEST: dedupeSorted(arr)");
+    },
+  );
+
+  it(
+    "omits the task-spec section entirely when none was presented, rather than printing an " +
+      "empty heading",
+    () => {
+      const tracker = new RedemptionTracker();
+      tracker.recordMint("1", "ISSUER-A", "500");
+      tracker.recordPresented("WORKER-CODE");
+      const rendered = tracker.renderForIssuerAwaitingDelivery("ISSUER-A");
+      expect(rendered).toContain("tokenId 1");
+      expect(rendered).not.toContain("THE TASK THIS CLAIM WAS PRESENTED AGAINST");
+    },
+  );
+
   it("renderForIssuerAwaitingDelivery stops once a genuine pass is in — renderFor takes over", () => {
     const tracker = new RedemptionTracker();
     tracker.recordMint("1", "ISSUER-A", "500");

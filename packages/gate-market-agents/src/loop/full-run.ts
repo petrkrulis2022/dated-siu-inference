@@ -38,7 +38,7 @@ import { FrictionLogWriter, type FrictionLogEntry } from "../friction/log.js";
 import { QuoteBoard } from "./quote-board.js";
 import { ForwardQuoteBook, type ForwardQuote } from "./forward-book.js";
 import { classIdFor } from "../tools/class-id.js";
-import { RedemptionTracker } from "./redemption-tracker.js";
+import { RedemptionTracker, type RedemptionState } from "./redemption-tracker.js";
 import { buildTurnPrompt } from "./prompt.js";
 import {
   ModelResponseParseError,
@@ -189,6 +189,18 @@ export interface FullRunWindowOptions {
    * slower way to pay for work about to be consumed rather than a reservation of future capacity —
    * the instrument's whole claimed property. Absent for a single-window run. */
   windowBoundsByIndex?: Record<number, { from: bigint; to: bigint }>;
+  /**
+   * The task specification a holder presents with `redeem_claim`, handed on to the routed issuer
+   * in its own "A CLAIM WAS PRESENTED AGAINST YOU" notice — the materials, reference inputs and
+   * gate contract it needs to author the deliverable it owes.
+   *
+   * Absent means the issuer is told it owes work without being told what the work is, which is
+   * what every run before 2026-09-29 did: the contract lived only in the holder's static pack, so
+   * no issuer had ever seen a job it was asked to deliver, no issuer-authored gate was ever valid,
+   * and every window that ever passed was passed by the holder doing work the economic model says
+   * it must not do.
+   */
+  taskSpecText?: string;
   /** Claims minted in an EARLIER window that their issuer never served, carried forward so this
    * window's issuers can settle them.
    *
@@ -522,21 +534,7 @@ export async function runFullRunWindow(
         // Deliberately keyed on holding rather than on identity: an agent that holds no claim
         // may author freely, and the routed issuer may always author — it is the one being
         // graded. Refused only for the agent currently standing on a live claim for this job.
-        toolGuard: (toolName) => {
-          if (toolName !== "submit_job") return null;
-          const state = redemption.state();
-          if (state.served) return null;
-          const holdsIt = state.transferredTo === agent.agentId || state.holder === agent.agentId;
-          if (!holdsIt) return null;
-          if (state.issuerAgentId === agent.agentId) return null;
-          return (
-            `you hold a work claim (tokenId ${state.tokenId ?? "unknown"}) for this job, so its ` +
-            `routed issuer ${state.issuerAgentId ?? "(unknown)"} owes the delivery, not you. ` +
-            "Redemption grades that issuer's own work; authoring it yourself would be doing the " +
-            "issuer's job with no way for anyone to attribute it correctly. Present the claim " +
-            "and wait, or transfer it on."
-          );
-        },
+        toolGuard: (toolName) => submitJobRefusalFor(toolName, agent.agentId, redemption.state()),
       }),
     ]),
   );
@@ -1216,7 +1214,10 @@ export async function runFullRunWindow(
       }
 
       if (intent.tool === "redeem_claim") {
-        redemption.recordPresented(agent.agentId);
+        // The spec travels with the redemption — see RedemptionState.taskSpecText. The holder is
+        // presenting the job it holds a claim against, so the spec comes from the job itself,
+        // exactly as `buildToolArgs` already sources every other job-owned field.
+        redemption.recordPresented(agent.agentId, options.taskSpecText);
         const presented = record.result as { txHash?: string; timeToExpirySeconds?: number };
         const tokenId = (args as { tokenId?: unknown } | undefined)?.tokenId;
         await recordCapacityEvent("redeem_claim", {
@@ -1578,6 +1579,45 @@ function asDecimalString(value: unknown): unknown {
  * `submit_job`'s own fixed envelope — never overrides an agent's real economic decision (how
  * much to mint, whether to request a quote, whether to pay).
  */
+/**
+ * Structural enforcement of the one rule a brief alone could not hold: a holder does not owe its
+ * claim's delivery — the routed issuer does, and redemption grades that issuer's own work
+ * (WorkClaim.sol's own top doc comment). WORKER-CODE's brief said exactly this, in capitals, and
+ * it authored the gate anyway in all three windows of the 2026-09-28 run, after the same thing had
+ * already happened on 2026-09-26. Every one of those windows then reported `passed: true` off work
+ * nobody had bought, which is how a scarcity result came to be printed as the instrument
+ * succeeding.
+ *
+ * Keyed on holding, never on identity. Two exemptions matter and both are deliberate:
+ *   - An agent holding no claim for this job may author freely — that is the USDC route, where the
+ *     seller genuinely was paid for its own labour.
+ *   - **The routed issuer may always author, even if it somehow also holds the claim.** It is the
+ *     party being graded, so refusing it would leave nobody able to deliver at all. That exemption
+ *     became load-bearing on 2026-09-29, when the issuer finally started receiving the task spec
+ *     with the redemption and could author for the first time.
+ *
+ * Extracted from the loop's own `toolGuard` closure so the rule is testable directly rather than
+ * only through a full window.
+ */
+export function submitJobRefusalFor(
+  toolName: ToolName,
+  agentId: AgentId,
+  state: Readonly<RedemptionState>,
+): string | null {
+  if (toolName !== "submit_job") return null;
+  if (state.served) return null;
+  const holdsIt = state.transferredTo === agentId || state.holder === agentId;
+  if (!holdsIt) return null;
+  if (state.issuerAgentId === agentId) return null;
+  return (
+    `you hold a work claim (tokenId ${state.tokenId ?? "unknown"}) for this job, so its ` +
+    `routed issuer ${state.issuerAgentId ?? "(unknown)"} owes the delivery, not you. ` +
+    "Redemption grades that issuer's own work; authoring it yourself would be doing the " +
+    "issuer's job with no way for anyone to attribute it correctly. Present the claim " +
+    "and wait, or transfer it on."
+  );
+}
+
 export async function buildToolArgs(
   tool: ToolName,
   rawArgs: unknown,

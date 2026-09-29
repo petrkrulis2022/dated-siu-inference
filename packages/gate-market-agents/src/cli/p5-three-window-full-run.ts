@@ -531,6 +531,11 @@ async function main(): Promise<void> {
       windowIndex,
       windowCount: WINDOW_COUNT,
       windowBoundsByIndex,
+      // Handed to whichever issuer a claim is actually presented against, as part of that
+      // redemption — not put in anyone's pack up front. The same text WORKER-CODE is held to when
+      // it authors under the USDC route, so a gate is authored under identical terms whoever owes
+      // it and runs stay comparable.
+      taskSpecText: TECHNICAL_CONTRACT,
       outstandingClaims: [...outstandingClaims],
       forwardBook,
       mintContext,
@@ -868,6 +873,11 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${WINDOW_COUNT})
   your participation in this window. Check again with {"tool": "get_balances", "args": {"account":
   "${addresses["WORKER-CODE"]}"}} (your own real address).
 ${runShapeFacts}
+
+THE CONTRACT BELOW APPLIES TO ENGAGEMENT (a) ONLY — WORK YOU WERE PAID IN USDC TO DO YOURSELF.
+  It is not a licence to author a gate for a claim you hold. On route (b) the claim's issuer owes
+  the delivery and is given this same specification when you present the claim; submit_job is
+  refused for a job whose claim you are holding, and that refusal is the rule working, not a bug.
 ${TECHNICAL_CONTRACT}`;
 
   const workerExtractBrief = `
@@ -953,6 +963,13 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${WINDOW_COUNT})
   do the work yourself with submit_job until it genuinely passes, then call serve_redemption to
   report ONLY the pass. Never report a fail: an undelivered claim defaults against your own bond
   automatically once the window closes.
+
+  THE TASK ARRIVES WITH THE CLAIM, NOT BEFORE IT
+  You are not told what the work is until a claim is actually presented against you. The holder
+  presents the task specification with it, and that notice carries the whole of it: the function
+  under test, the commercial intent, the pinned test suite, the technical contract your gate
+  module must satisfy, and the exact submit_job call to make. Until then there is nothing for you
+  to author and nothing to guess at — do not attempt a gate before you have been presented one.
 
   WHEN A CLAIM WAS NEVER SERVED
   A claim whose delivery window has closed without being served is in default, and the defaulting

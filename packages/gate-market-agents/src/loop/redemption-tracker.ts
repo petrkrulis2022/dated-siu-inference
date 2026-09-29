@@ -25,6 +25,20 @@ export interface RedemptionState {
   transferredTo?: AgentId;
   holder?: AgentId;
   quantity?: string;
+  /**
+   * The task specification the holder presented with the claim — the source materials, reference
+   * inputs and gate contract the routed issuer needs in order to author anything at all.
+   *
+   * It travels with the redemption rather than sitting in anyone's static pack, because that is
+   * what a claim is: a promise of work, redeemed against a task the holder presents. Before
+   * 2026-09-29 it sat only in WORKER-CODE's own pack, so the issuer that actually owed the
+   * delivery had never seen the job. Every gate an issuer submitted was empty or malformed, every
+   * window that ever passed was passed by WORKER-CODE, and once `toolGuard` correctly stopped the
+   * holder authoring, no valid gate was reachable at all. The issuer also sees this only for a
+   * claim genuinely presented against it, which keeps its context to work it has actually been
+   * asked to do.
+   */
+  taskSpecText?: string;
   passed?: boolean;
   receiptRef?: string;
   served: boolean;
@@ -49,8 +63,9 @@ export class RedemptionTracker {
   /** The full minted quantity is assumed presented — this window's one real job never splits a
    * claim across a transfer/presentation, matching the same single-job simplification this
    * tracker's own top comment already discloses. */
-  recordPresented(holder: AgentId): void {
+  recordPresented(holder: AgentId, taskSpecText?: string): void {
     this.#state.holder = holder;
+    if (taskSpecText !== undefined) this.#state.taskSpecText = taskSpecText;
   }
 
   /**
@@ -114,7 +129,12 @@ export class RedemptionTracker {
    * in (deliver is done, `renderFor` takes over) or once served. */
   renderForIssuerAwaitingDelivery(agentId: AgentId): string {
     const s = this.#state;
-    if (s.issuerAgentId !== agentId || s.holder === undefined || s.passed !== undefined || s.served) {
+    if (
+      s.issuerAgentId !== agentId ||
+      s.holder === undefined ||
+      s.passed !== undefined ||
+      s.served
+    ) {
       return "";
     }
     return [
@@ -124,6 +144,16 @@ export class RedemptionTracker {
       "  then call serve_redemption to report the pass. A failed attempt is not final — keep",
       "  trying within the window. Never report a fail; an undelivered claim defaults against",
       "  your bond automatically when the window closes, you do not report that yourself.",
+      // The spec the holder presented, in full. Without it the instruction above is unactionable:
+      // an issuer told to author a gate for a job it has never seen can only guess, which is
+      // exactly what both issuers did on 2026-09-29.
+      ...(s.taskSpecText !== undefined
+        ? [
+            "",
+            "  THE TASK THIS CLAIM WAS PRESENTED AGAINST — everything you need to author it:",
+            s.taskSpecText,
+          ]
+        : []),
     ].join("\n");
   }
 
