@@ -578,6 +578,40 @@ the reason the five comparable runs must all execute under one protocol, and the
 that flatters the instrument deserves more scrutiny than one that does not: nine-for-nine was the
 most quotable number here, and it was measuring the harness.
 
+### 4.6g Routing is first-fit, so nothing in the system reacts to a chronic defaulter
+
+`ClaimRouter.route` returns the first issuer, in registration order, with enough headroom by
+itself. Headroom is the only input. An issuer that has defaulted on every claim ever presented to
+it is exactly as eligible as one that has served every one, and keeps absorbing new claims until
+arithmetic — not reputation — drops it below the job size.
+
+This was invisible until the pool was sized properly. In run 3 it resolved itself by accident:
+ISSUER-A, the deliberately non-serving issuer, was crowded out of window 3 because two external
+buyer takes pushed its headroom under 10,000 mSIU, and the work went to the issuer that could
+actually serve. That looked like the market routing around an unreliable provider. It was not.
+Nothing had noticed the defaults; the capacity simply ran out. With the fifth trio's 48,000 mSIU
+per issuer, ISSUER-A can absorb four consecutive 10,000 claims before the same arithmetic bites,
+so the accident does not repeat and a non-delivering issuer holds the routing slot far longer.
+
+**The design's own answer is a redemption-pressure rule** — route to the issuer with the highest
+ratio of outstanding claims to work actually delivered, which moves work away from a chronic
+defaulter automatically and without anyone adjudicating anything. The testbed implements
+first-fit instead.
+
+Recorded rather than fixed. Changing the routing rule mid-experiment would alter which issuer
+receives which claim and make runs non-comparable, which is the same mistake as reweighting a
+basket mid-series. The point of writing it down is that the next run starts from a decision about
+it rather than rediscovering it.
+
+Two honest caveats on the citation. First, this spec's own §3 states the rule as "routes to
+whichever issuer has headroom in that class", which is what `ClaimRouter` implements — so the
+contract matches the document it was written against, and the gap is between the testbed and the
+monetary design rather than between the code and this spec. Second, the redemption-pressure rule
+above is recorded here from the project owner's own statement of it; it is not presently written
+in `docs/monetary-design.md`, and a search of `docs/` finds no section stating it. It should be
+written into the monetary design proper before anything is built against it, because a routing
+rule that exists only in conversation is not a specification.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make

@@ -207,6 +207,69 @@ export interface DefaultReachability {
 }
 
 /**
+ * One trivial call per distinct provider the roster uses, before any window opens, refusing to
+ * start the run if any of them fails.
+ *
+ * Added 2026-09-29, after the third billing outage in two weeks: Anthropic (09-17, 09-25), Google
+ * (09-26) and xAI (today, `403 permission-denied` — "your team has either used all available
+ * credits or reached its monthly spending limit"). Every time the symptom was the same, and every
+ * time we found out by burning turns mid-run: on the last one both issuers died on their second
+ * and third turns, a window's worth of scheduling was spent on a roster that could not think, and
+ * the failure looked at first like an agent problem rather than an unpaid invoice.
+ *
+ * A few cents of tokens up front is worth a window. This never retries and never degrades to a
+ * different model: a provider that cannot answer a one-token prompt is not a provider this run
+ * can use, and starting anyway would produce a run whose gaps have to be explained afterwards.
+ * Reported with the other pre-flight disclosures for the same reason they are — a run states what
+ * it verified before it began, rather than discovering it later.
+ */
+export async function assertProvidersReachable(
+  adaptersByAgent: Record<
+    string,
+    (
+      model: string,
+      prompt: string,
+      params: { temperature: number; max_tokens: number },
+    ) => Promise<unknown>
+  >,
+  modelsByAgent: Record<string, string>,
+  providerOf: (model: string) => string,
+): Promise<{ provider: string; model: string; viaAgent: string }[]> {
+  // One agent per provider — the roster shares providers between agents, and checking the same
+  // endpoint four times proves nothing extra.
+  const byProvider = new Map<string, { model: string; agentId: string }>();
+  for (const [agentId, model] of Object.entries(modelsByAgent)) {
+    const provider = providerOf(model);
+    if (!byProvider.has(provider)) byProvider.set(provider, { model, agentId });
+  }
+
+  const checked: { provider: string; model: string; viaAgent: string }[] = [];
+  const failures: string[] = [];
+  for (const [provider, { model, agentId }] of byProvider) {
+    try {
+      await adaptersByAgent[agentId]!(model, "Reply with the single word: ok", {
+        temperature: 0,
+        max_tokens: 5,
+      });
+      checked.push({ provider, model, viaAgent: agentId });
+    } catch (err) {
+      failures.push(`${provider} (${model}): ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `PRE-FLIGHT FAILED — ${failures.length} of ${byProvider.size} provider(s) could not answer a ` +
+        `one-token prompt, so this run would have burned turns discovering it mid-window:\n` +
+        failures.map((f) => `  - ${f}`).join("\n") +
+        `\nA 403 here is usually billing, not configuration: check the provider's credit balance ` +
+        `and spending limit. Nothing has been spent and no window has opened.`,
+    );
+  }
+  return checked;
+}
+
+/**
  * Whether a default can actually be settled for each window, checked BEFORE the run starts.
  *
  * `WorkClaim.settleWindowClose` requires, on the Defaulted branch only — the branch where the
@@ -444,6 +507,28 @@ async function main(): Promise<void> {
         `  Cause is almost always one of: started before the day's 00:17 UTC print published, or the run spans midnight UTC.`,
     );
   }
+
+  // Before anything else costs anything: one trivial call per provider. Throws and stops the run
+  // if any cannot answer — see assertProvidersReachable for why this exists.
+  const providersChecked = await assertProvidersReachable(
+    adapters as unknown as Record<
+      string,
+      (
+        m: string,
+        p: string,
+        params: { temperature: number; max_tokens: number },
+      ) => Promise<unknown>
+    >,
+    models,
+    (model) => registryEntry(model).provider,
+  );
+  console.log(
+    `Providers REACHABLE, verified before window 1 with one real call each: ` +
+      providersChecked.map((c) => `${c.provider} (${c.model})`).join(", ") +
+      `. Three billing outages in two weeks made this a pre-flight check rather than something ` +
+      `discovered mid-run.`,
+  );
+
   console.log(ONE_POOL_DISCLOSURE);
 
   const manifest: RunManifest = {

@@ -5,6 +5,7 @@ import {
   NON_SERVING_ISSUER,
   WINDOW_SECONDS,
   defaultReachability,
+  assertProvidersReachable,
   WINDOW_COUNT,
   buildRoster,
   type RosterInput,
@@ -466,4 +467,74 @@ describe("the deliberately non-serving issuer", () => {
       );
     }
   });
+});
+
+describe("assertProvidersReachable", () => {
+  const models = {
+    ORCHESTRATOR: "gpt-5.1",
+    "WORKER-CODE": "claude-sonnet-5",
+    "ISSUER-A": "grok-4.6",
+    "ISSUER-B": "grok-4.6",
+  };
+  const providerOf = (m: string) =>
+    m.startsWith("gpt") ? "openai" : m.startsWith("claude") ? "anthropic" : "xai";
+
+  it(
+    "checks each distinct provider exactly once, not each agent — two agents on one provider " +
+      "prove nothing extra about that endpoint",
+    async () => {
+      const calls: string[] = [];
+      const ok = Object.fromEntries(
+        Object.keys(models).map((a) => [
+          a,
+          async (model: string) => {
+            calls.push(`${a}:${model}`);
+            return {};
+          },
+        ]),
+      );
+      const checked = await assertProvidersReachable(ok, models, providerOf);
+      expect(calls).toHaveLength(3); // openai, anthropic, xai — not four agents
+      expect(checked.map((c) => c.provider).sort()).toEqual(["anthropic", "openai", "xai"]);
+    },
+  );
+
+  it(
+    "refuses to start the run when a provider cannot answer, naming it and its real error — " +
+      "the exact xAI 403 that killed both issuers mid-window on 2026-09-29",
+    async () => {
+      const adapters = Object.fromEntries(
+        Object.keys(models).map((a) => [
+          a,
+          async (model: string) => {
+            if (model === "grok-4.6") {
+              throw new Error("OpenAI-compatible request failed: 403 permission-denied");
+            }
+            return {};
+          },
+        ]),
+      );
+      await expect(assertProvidersReachable(adapters, models, providerOf)).rejects.toThrow(
+        /PRE-FLIGHT FAILED[\s\S]*xai \(grok-4\.6\)[\s\S]*403/,
+      );
+    },
+  );
+
+  it(
+    "reports every failing provider, not merely the first — an outage rarely arrives alone and " +
+      "fixing one at a time costs a run each",
+    async () => {
+      const adapters = Object.fromEntries(
+        Object.keys(models).map((a) => [
+          a,
+          async () => {
+            throw new Error("no credits");
+          },
+        ]),
+      );
+      await expect(assertProvidersReachable(adapters, models, providerOf)).rejects.toThrow(
+        /3 of 3 provider\(s\)/,
+      );
+    },
+  );
 });
