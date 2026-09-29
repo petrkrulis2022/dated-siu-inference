@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { Hex } from "viem";
 import {
   EXTERNAL_DEPLETION_MILLI_SIU,
+  NON_SERVING_ISSUER,
+  WINDOW_SECONDS,
+  defaultReachability,
   WINDOW_COUNT,
   buildRoster,
   type RosterInput,
@@ -37,8 +40,16 @@ function input(windowIndex: number, overrides: Partial<RosterInput> = {}): Roste
     workerCodeErc8004Id: "erc8004:0xworker",
     workerExtractErc8004Id: "erc8004:0xextract",
     capacityLots: {
-      "ISSUER-A": { measuredRateMilliSiuPerHour: 120, committedCapacityHours: 400, bondedUsdcPerClass: 1_000_000 },
-      "ISSUER-B": { measuredRateMilliSiuPerHour: 80, committedCapacityHours: 400, bondedUsdcPerClass: 1_000_000 },
+      "ISSUER-A": {
+        measuredRateMilliSiuPerHour: 120,
+        committedCapacityHours: 400,
+        bondedUsdcPerClass: 1_000_000,
+      },
+      "ISSUER-B": {
+        measuredRateMilliSiuPerHour: 80,
+        committedCapacityHours: 400,
+        bondedUsdcPerClass: 1_000_000,
+      },
     },
     windowFrom: 1_800_000_000n,
     windowTo: 1_800_003_600n,
@@ -98,8 +109,12 @@ describe("p5 three-window roster", () => {
     // F1's whole finding dies on a single such sentence (spec §7.1), so this is asserted
     // structurally rather than trusted to review.
     const forbidden = [
-      /pay in fSIU/i, /prefer (?:fSIU|USDC|claims|dollars)/i, /you should (?:mint|pay|hold)/i,
-      /better to (?:mint|pay|hold)/i, /recommend/i, /cheaper option/i,
+      /pay in fSIU/i,
+      /prefer (?:fSIU|USDC|claims|dollars)/i,
+      /you should (?:mint|pay|hold)/i,
+      /better to (?:mint|pay|hold)/i,
+      /recommend/i,
+      /cheaper option/i,
     ];
     for (const w of [1, 2, 3]) {
       for (const agent of buildRoster(input(w))) {
@@ -200,7 +215,11 @@ describe("window-3 outcome classification", () => {
   it("refuses to call it scarcity when the orchestrator had secured capacity ahead", () => {
     // Same empty pool, opposite cause: this is a defect to investigate, not the finding.
     const verdict = classifyFinalWindow([
-      outcome(1, ["24000", "16000"], windowResult({ passed: true, capacityEvents: [forwardDatedMint] })),
+      outcome(
+        1,
+        ["24000", "16000"],
+        windowResult({ passed: true, capacityEvents: [forwardDatedMint] }),
+      ),
       outcome(2, ["14000", "6000"], windowResult({ passed: true })),
       outcome(3, ["4000", "2000"], windowResult({ passed: false })),
     ]);
@@ -270,7 +289,11 @@ describe("window-3 outcome classification", () => {
 
   it("separates a completed window that used pre-secured capacity from one that got lucky", () => {
     const secured = classifyFinalWindow([
-      outcome(1, ["24000", "16000"], windowResult({ passed: true, capacityEvents: [forwardDatedMint] })),
+      outcome(
+        1,
+        ["24000", "16000"],
+        windowResult({ passed: true, capacityEvents: [forwardDatedMint] }),
+      ),
       outcome(2, ["14000", "6000"], windowResult({ passed: true })),
       outcome(3, ["4000", "2000"], windowResult({ passed: true })),
     ]);
@@ -303,7 +326,10 @@ function route(pool: Record<string, number>, quantity: number): string | null {
 }
 
 /** Plays the run out under one buyer policy and reports whether window 3 got its job done. */
-function simulate(reserveAhead: boolean): { window3Delivered: boolean; finalPool: Record<string, number> } {
+function simulate(reserveAhead: boolean): {
+  window3Delivered: boolean;
+  finalPool: Record<string, number>;
+} {
   const pool: Record<string, number> = { A: 24_000, B: 16_000 }; // the live lots
   const job = 10_000; // the size the briefs quote
   let heldForWindow3: string | null = null;
@@ -346,5 +372,88 @@ describe("external depletion schedule", () => {
     // Outcome (c). Both branches have to be reachable, or the "choice" is not one.
     const { window3Delivered } = simulate(true);
     expect(window3Delivered).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------- default reachability
+
+const DAY = 86_400n;
+const MIDNIGHT = 1_790_640_000n; // a real UTC midnight
+const bounds = (startOffsetSeconds: bigint) =>
+  Object.fromEntries(
+    [1, 2, 3].map((i) => [
+      i,
+      {
+        from: MIDNIGHT + startOffsetSeconds + BigInt(i - 1) * WINDOW_SECONDS,
+        to: MIDNIGHT + startOffsetSeconds + BigInt(i) * WINDOW_SECONDS,
+      },
+    ]),
+  );
+
+describe("defaultReachability — a run that cannot settle defaults must say so before it starts", () => {
+  it("is reachable when every window closes on the day the print is dated", () => {
+    // 12:42 UTC against that same day's print — the 2026-09-28 run's own shape, which worked
+    // only because of that timing.
+    const r = defaultReachability(bounds(12n * 3600n + 42n * 60n), MIDNIGHT);
+    expect(r.every((w) => w.reachable)).toBe(true);
+  });
+
+  it("is UNREACHABLE when the run starts before the day's 00:17 UTC print has published", () => {
+    // Latest print is still yesterday's; every window closes today. Without the check this is
+    // silent — settle_window_close just reverts like any other failed call.
+    const r = defaultReachability(bounds(5n * 60n), MIDNIGHT - DAY);
+    expect(r.every((w) => !w.reachable)).toBe(true);
+  });
+
+  it("is UNREACHABLE for windows that fall the other side of midnight UTC", () => {
+    // Starting 23:40 with 20-minute windows pushes every close past midnight, onto a day no
+    // print exists for yet.
+    const r = defaultReachability(bounds(23n * 3600n + 40n * 60n), MIDNIGHT);
+    expect(r.every((w) => !w.reachable)).toBe(true);
+  });
+
+  it("reports per window rather than as one verdict, since a run can straddle the boundary", () => {
+    // 23:50 start: window 1 closes 00:10 next day, so all three are past midnight — but the
+    // shape of the answer is per-window, which is what a straddling run needs.
+    const r = defaultReachability(bounds(23n * 3600n + 50n * 60n), MIDNIGHT);
+    expect(r).toHaveLength(3);
+    expect(r.map((w) => w.windowIndex)).toEqual([1, 2, 3]);
+    for (const w of r) expect(typeof w.reachable).toBe("boolean");
+  });
+});
+
+describe("the deliberately non-serving issuer", () => {
+  it("is fixed in source before the run, like the depletion schedule", () => {
+    // If this ever becomes a function of anything observed during a run, the enforcement test
+    // stops being disclosable in advance.
+    expect(NON_SERVING_ISSUER).toBe("ISSUER-A");
+  });
+
+  it("has no way to serve a redemption, while the other issuer does", () => {
+    const roster = buildRoster(input(1));
+    expect(find(roster, "ISSUER-A").availableTools).not.toContain("serve_redemption");
+    expect(find(roster, "ISSUER-B").availableTools).toContain("serve_redemption");
+  });
+
+  it("still takes payment and still holds capacity — a defaulter, not an absentee", () => {
+    // It keeps mint_claim and check_headroom: a claim must still be mintable against it for the
+    // default to be reachable at all.
+    const issuerA = find(buildRoster(input(1)), "ISSUER-A");
+    expect(issuerA.availableTools).toContain("mint_claim");
+    expect(issuerA.availableTools).toContain("check_headroom");
+  });
+
+  it("gives the holder the means to settle, since a default pays the holder", () => {
+    expect(find(buildRoster(input(1)), "WORKER-CODE").availableTools).toContain(
+      "settle_window_close",
+    );
+  });
+
+  it("tells no other agent that this issuer will not serve — noticing is what is being tested", () => {
+    for (const agent of buildRoster(input(1))) {
+      expect(agent.skillPackText).not.toMatch(
+        /will not serve|non-serving|deliberately.*not deliver/i,
+      );
+    }
   });
 });

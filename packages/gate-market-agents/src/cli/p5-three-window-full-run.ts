@@ -158,11 +158,79 @@ export const WINDOW_SECONDS = 1200n;
  */
 export const EXTERNAL_DEPLETION_MILLI_SIU: Record<number, number> = { 1: 16_000, 2: 14_000 };
 
+/**
+ * An issuer that will not serve, on purpose — the same treatment as the external depletion: fixed
+ * in source before the run, printed before window 1, written into the manifest, and labelled in
+ * every output. No agent's behaviour changes it and it cannot have been chosen to fit a result.
+ *
+ * Why force it. The 2026-09-28 run's central finding was a paid issuer delivering nothing while
+ * nobody could trigger the default that exists for exactly that — and it arrived by accident,
+ * from ISSUER-A being truncated at 1500 output tokens. With that bug fixed, the same finding
+ * would very likely not recur, and the enforcement path would go on being untested because
+ * everything happened to work. So it is now produced deliberately instead of hoped for: this
+ * issuer takes payment, is presented a claim, and never serves it.
+ *
+ * What that makes testable, none of which has ever run in an agent context: does the holder
+ * notice non-delivery; does anyone trigger `settle_window_close` once the window closes; does the
+ * bond actually pay the holder; and does the non-serving issuer's own headroom stay consumed.
+ *
+ * Set to null to disable. The non-serving issuer still takes payment and still holds real bonded
+ * capacity — it is a defaulter, not an absentee.
+ */
+export const NON_SERVING_ISSUER: "ISSUER-A" | "ISSUER-B" | null = "ISSUER-A";
+
 /** The job size the briefs quote (10 SIU), in mSIU. Used only to classify window 3's outcome: a
  * window that failed with no single issuer holding this much is a different finding from one that
  * failed with capacity available, and the test needs some figure to mean "enough for the job". It
  * is the same number the briefs put in front of the agents, not one chosen afterwards. */
 const NOMINAL_JOB_MILLI_SIU = 10_000n;
+
+const SECONDS_PER_DAY = 86_400n;
+
+export interface DefaultReachability {
+  windowIndex: number;
+  /** The UTC day this window's claims close on, as a Unix day-start. */
+  windowCloseDay: bigint;
+  /** The day the print this run prices against is dated. */
+  printDay: bigint;
+  reachable: boolean;
+}
+
+/**
+ * Whether a default can actually be settled for each window, checked BEFORE the run starts.
+ *
+ * `WorkClaim.settleWindowClose` requires, on the Defaulted branch only — the branch where the
+ * bond actually pays — that the attested `printDate` equals `_dayStart(windowTo)`: the calendar
+ * day the claim's own window closed. The attestation this run signs carries the print's own real
+ * date, and bending it to match would be falsifying the thing being settled against. So when a
+ * window closes on a day the run's print is not dated for, that window's defaults are
+ * unreachable, and the bond cannot pay however badly its issuer behaved.
+ *
+ * Two ways that happens, neither hypothetical:
+ *   - the run starts before the day's print publishes (the cron is 00:17 UTC), so the newest
+ *     print is still yesterday's while every window closes today;
+ *   - the run spans midnight UTC, so windows after it close on a day no print exists for yet.
+ *
+ * Both are silent without this check: an agent's `settle_window_close` would simply revert like
+ * any other failed call, and a run reporting "no defaults settled" would look identical whether
+ * nobody tried or nobody could. The 2026-09-28 run avoided it only by timing — 12:42 UTC, after
+ * that day's print, entirely inside one UTC day.
+ */
+export function defaultReachability(
+  windowBoundsByIndex: Record<number, { from: bigint; to: bigint }>,
+  printDateUnix: bigint,
+): DefaultReachability[] {
+  const printDay = printDateUnix - (printDateUnix % SECONDS_PER_DAY);
+  return Object.entries(windowBoundsByIndex).map(([index, bounds]) => {
+    const windowCloseDay = bounds.to - (bounds.to % SECONDS_PER_DAY);
+    return {
+      windowIndex: Number(index),
+      windowCloseDay,
+      printDay,
+      reachable: windowCloseDay === printDay,
+    };
+  });
+}
 
 export interface WindowOutcome {
   windowIndex: number;
@@ -330,6 +398,42 @@ async function main(): Promise<void> {
         .join("; ") +
       `. The runner waits for each to open; no inference is spent waiting.`,
   );
+  if (NON_SERVING_ISSUER) {
+    console.log(
+      `DISCLOSED BEFORE THE RUN: ${NON_SERVING_ISSUER} will not serve any redemption this run. It ` +
+        `takes payment and holds real bonded capacity exactly as the other issuer does, but has no ` +
+        `way to report a delivery — the same situation as an issuer whose delivery pipeline fails ` +
+        `at the last step. Fixed in source before the run, not chosen to fit a result. Its claims ` +
+        `will therefore default, and the question is whether the holder notices, triggers ` +
+        `settle_window_close once the window closes, and is paid from that issuer's bond. No other ` +
+        `agent is told this.`,
+    );
+  }
+
+  // Stated before window 1, never discovered afterwards: whether the bond can actually pay on a
+  // default in each window. A run that cannot settle defaults must say so up front, or "no
+  // defaults settled" reads the same whether nobody tried or nobody could.
+  const reachability = defaultReachability(
+    windowBoundsByIndex,
+    printDateToUnixDay(commodityPrint.date),
+  );
+  const unreachable = reachability.filter((r) => !r.reachable);
+  if (unreachable.length === 0) {
+    console.log(
+      `Default path REACHABLE in all ${WINDOW_COUNT} windows: every window closes on ${commodityPrint.date}, ` +
+        `the day print ${printId} is dated. A claim left unserved can be settled and its issuer's bond drawn.`,
+    );
+  } else {
+    console.log(
+      `\n!!! DEFAULT PATH UNREACHABLE in window(s) ${unreachable.map((r) => r.windowIndex).join(", ")} !!!\n` +
+        `  settleWindowClose requires the attested printDate to equal the day the claim's own window closed.\n` +
+        `  This run prices against ${printId}, dated ${commodityPrint.date}; ` +
+        `those windows close on a different UTC day.\n` +
+        `  Their defaults CANNOT be settled and no bond can pay, however badly an issuer behaves.\n` +
+        `  Stated now, before the run, so that "no defaults settled" is never mistaken for "nobody tried".\n` +
+        `  Cause is almost always one of: started before the day's 00:17 UTC print published, or the run spans midnight UTC.`,
+    );
+  }
   console.log(ONE_POOL_DISCLOSURE);
 
   const manifest: RunManifest = {
@@ -899,6 +1003,7 @@ ${runShapeFacts}`;
       prices: PRICES[models["WORKER-CODE"]],
       skillPackText: `${loadSkill("quote-and-deliver").promptTemplate}\n\n${CANONICAL_ASSET_DESCRIPTION}\n\n${workerCodeBrief}`,
       availableTools: [
+        "whoami",
         "issue_quote",
         "reserve_for_work",
         "settle_escrow",
@@ -907,6 +1012,10 @@ ${runShapeFacts}`;
         "redeem_claim",
         "get_balances",
         "get_print",
+        // The holder is the party a default pays, and settleWindowClose is permissionless by
+        // design — so the agent standing to be paid can trigger it itself. That is the question
+        // this run asks: does a holder notice non-delivery and act on it.
+        "settle_window_close",
       ],
       privateKeyHex: keys["WORKER-CODE"],
       address: addresses["WORKER-CODE"],
@@ -944,7 +1053,15 @@ ${runShapeFacts}`;
       modelString: models[issuer],
       prices: PRICES[models[issuer]],
       skillPackText: issuerBrief(issuer),
-      availableTools: issuerTools,
+      // The designated non-serving issuer simply has no way to report a delivery — the same
+      // situation as a real issuer whose delivery pipeline fails at the last step. It still takes
+      // payment, still holds real bonded capacity, and still tries to do the work; it just cannot
+      // serve, so its claims default. Nothing tells the other agents this: the holder noticing
+      // non-delivery and acting on it is precisely what the run is testing.
+      availableTools:
+        issuer === NON_SERVING_ISSUER
+          ? issuerTools.filter((t) => t !== "serve_redemption")
+          : issuerTools,
       // "inbox" in every window, including the ones where forward terms are available: the loop
       // itself treats "you have not quoted yet this window" as an inbox item exactly once, so an
       // issuer can still state terms before anything is routed to it without going back to

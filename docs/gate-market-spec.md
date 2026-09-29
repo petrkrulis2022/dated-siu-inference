@@ -461,6 +461,45 @@ attestation. The attestation carries the print's **own real date**, never one be
 claim — if the print this run prices against is not dated the day the claim's window closed, the
 contract refuses the default with `StalePrintDate`, and that refusal is correct.
 
+**That refusal is also a trap, so a run now states up front whether it can settle at all.** The
+Defaulted branch — the only branch where a bond pays — requires the attested `printDate` to equal
+the claim's own window-close day. Two ordinary situations break it: a run starting before that
+day's print publishes (the cron is 00:17 UTC), so the newest print is still yesterday's while every
+window closes today; and a run spanning midnight UTC, so later windows close on a day no print
+exists for. In both, every default is unreachable and the bond cannot pay however badly an issuer
+behaves — and it is silent, because `settle_window_close` simply reverts like any other failed
+call and "no defaults settled" looks identical whether nobody tried or nobody could. The
+2026-09-28 run avoided this only by timing. `defaultReachability()` is now computed before window 1
+from the real window bounds and the real print date, printed loudly, and written to the manifest as
+`defaultReachableByWindow`.
+
+**And the path is exercised deliberately rather than hoped for.** One issuer is given no way to
+serve — fixed in source before the run, printed before window 1, recorded in the manifest as
+`nonServingIssuer`, exactly like the external depletion schedule. It still takes payment and still
+holds real bonded capacity: a defaulter, not an absentee. No other agent is told, because the
+holder *noticing* non-delivery is part of what is being measured. That makes four things testable
+that never have been: whether a holder notices it was not delivered to, whether anyone triggers the
+settlement once the window closes, whether the bond actually pays, and whether the defaulting
+issuer's headroom stays consumed.
+
+### 4.6d Agents fail loudly for boring reasons more often than they fail interestingly
+
+Worth stating as a general lesson, because two of us read the same evidence wrongly before
+checking it. Of the three apparent agent failures in the 2026-09-28 run:
+
+| Looked like | Actually was |
+| --- | --- |
+| ISSUER-A cannot emit the tool-call format (grok-4.6 output shape?) | **an output-budget bug of ours.** `stopReason: "length"` at exactly its 1500-token cap, mid-JSON, having emitted a valid `{"tool":"submit_job","args":{…}`. An issuer authors gates on a third of the worker's budget. |
+| ISSUER-B cannot work out which issuer it is | **a missing affordance.** No tool returned its own address; it derived one from issuance-limit arithmetic, correctly. And nine `check_headroom` calls died on `bytes4` vs `bytes32` because the boundary demanded a hash it was never given. |
+| WORKER-CODE ignored its instructions | **genuinely that** — an unenforceable prompt rule, now enforced at the tool boundary (§4.6a). |
+
+**Two of three were our bugs, not the models'.** The failure mode that matters here is the
+diagnosis, not the defect: a truncated response and a model that cannot follow a format are
+indistinguishable from the parse error alone, and the cheap reading is the one that blames the
+model. Check `stopReason` and the token counts before concluding anything about capability, and
+treat "the agent got this wrong" as a hypothesis that competes with "nothing told the agent the
+answer" — which, in this run, won twice.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make

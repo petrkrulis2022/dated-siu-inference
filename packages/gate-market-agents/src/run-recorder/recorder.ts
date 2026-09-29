@@ -36,6 +36,16 @@ export interface RunManifest {
    * first turn of the run. Recorded because a claim minted for a later window names that window's
    * bounds, so the bounds are part of what the run means, not an implementation detail. */
   windowBounds?: Record<number, { from: number; to: number }>;
+  /** Per window, whether a default could actually be settled at all — `settleWindowClose`'s
+   * Defaulted branch requires the attested printDate to equal the claim's own window-close day,
+   * so a window closing on a day this run's print is not dated for cannot draw a bond however
+   * badly its issuer behaves. Recorded so that a run with no settled defaults can be told apart
+   * from a run where settling one was impossible. */
+  defaultReachableByWindow?: Record<number, boolean>;
+  /** An issuer deliberately given no way to serve, so its claims default and the enforcement path
+   * is exercised rather than hoped for. Fixed in source before the run, like the external
+   * depletion schedule, so it cannot have been chosen to fit a result. */
+  nonServingIssuer?: string | null;
 }
 
 /** Spec §12.4: "every validator verdict... including passes." */
@@ -76,18 +86,30 @@ export class RunRecorder {
   }
 
   recordReceipt(receipt: GateMarketReceipt): void {
-    writeFileSync(join(this.runDir, "receipts", `${receipt.receipt_id}.json`), JSON.stringify(receipt, null, 2), "utf-8");
+    writeFileSync(
+      join(this.runDir, "receipts", `${receipt.receipt_id}.json`),
+      JSON.stringify(receipt, null, 2),
+      "utf-8",
+    );
   }
 
   /** Pass `null` for a passing turn — spec §12.4's "including passes" is the point of this
    * method existing at all; a validator that only ever gets logged when it fails can't be
    * distinguished from a validator that was never run. */
-  recordValidatorVerdict(agentId: AgentId, turn: number, error: ContextValidationError | null): void {
+  recordValidatorVerdict(
+    agentId: AgentId,
+    turn: number,
+    error: ContextValidationError | null,
+  ): void {
     const record: ValidatorVerdictRecord = error
       ? { agentId, turn, passed: false, failure: { kind: error.kind, matched: error.matched } }
       : { agentId, turn, passed: true };
     this.#validatorVerdicts.push(record);
-    writeFileSync(join(this.runDir, "validator.json"), JSON.stringify(this.#validatorVerdicts, null, 2), "utf-8");
+    writeFileSync(
+      join(this.runDir, "validator.json"),
+      JSON.stringify(this.#validatorVerdicts, null, 2),
+      "utf-8",
+    );
   }
 
   /** Left as `unknown`, not `Record<string, unknown>` — every caller's own result shape (a
