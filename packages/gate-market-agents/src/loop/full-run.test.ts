@@ -618,6 +618,201 @@ describe("runFullRunWindow — P4 shape: one agent, one job", () => {
   });
 });
 
+describe("the adversary is told a gate exists", () => {
+  let runsRoot: string;
+  let ledgerPath: string;
+
+  beforeEach(async () => {
+    runsRoot = await mkdtemp(path.join(tmpdir(), "adversary-test-"));
+    ledgerPath = path.join(runsRoot, "ledger.json");
+  });
+
+  afterEach(async () => {
+    await rm(runsRoot, { recursive: true, force: true });
+  });
+
+  /** Budget that lets the adversary actually take turns — generousBudget zeroes it. */
+  function budgetWithAdversary(): ExperimentBudget {
+    const ceiling = new BudgetCeiling({
+      "ISSUER-A": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+      "ISSUER-B": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+      ORCHESTRATOR: { maxUsdcSpend: "0", maxInferenceTurns: 10, maxInferenceUsd: "2" },
+      "WORKER-CODE": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+      "WORKER-EXTRACT": { maxUsdcSpend: "0", maxInferenceTurns: 10, maxInferenceUsd: "2" },
+      HEDGER: { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+    });
+    return new ExperimentBudget({ ceiling, runCapUsd: "30", experimentCapUsd: "150", ledgerPath });
+  }
+
+  it(
+    "reproduces run 8's exact failure and shows it fixed: the adversary, woken on the turn " +
+      "AFTER a gate passes, now sees that gate in its own prompt. Before 2026-09-29 " +
+      "attackContext.gateVersions decided when to wake it and which gate submit_attack targets, " +
+      "and appeared in no prompt anywhere — so in all three windows of run 8 it woke, saw nothing, " +
+      'reported "no gate has been delivered yet to test" and left',
+    async () => {
+      const adversaryPrompts: string[] = [];
+      const adversaryAdapter: Adapter = async (_model, prompt) => {
+        adversaryPrompts.push(prompt);
+        return {
+          text: JSON.stringify({ done: true, summary: "noted" }),
+          usage: { input: 100, output: 20, cached_input: 0, reasoning: 0 },
+          latency_ms: 1,
+          raw: {},
+          deviations: [],
+        };
+      };
+
+      const result = await runFullRunWindow({
+        windowId: "w-adversary",
+        roster: [
+          orchestratorConfig(
+            scriptedAdapter(["export async function gate(){ return {accept:true,reason:'ok'}; }"]),
+          ),
+          {
+            agentId: "WORKER-EXTRACT",
+            adapter: adversaryAdapter,
+            modelString: "test",
+            prices: PRICES,
+            skillPackText: CANONICAL_ASSET_DESCRIPTION,
+            availableTools: ["submit_attack"] as const,
+            // The real roster's own setting for the adversary, and half the bug: it is woken BY
+            // the gate existing.
+            waitsFor: "gate" as const,
+            privateKeyHex: "0xa715563de5d5c011627720140757574d96bcfc02bdf2e0ee1f68d64e171fe89a",
+            address: "0x0000000000000000000000000000000000000002",
+            erc8004Id: "erc8004:0x0000000000000000000000000000000000000002",
+            rpcUrl: "http://127.0.0.1:1",
+            maxOutputTokens: 3000,
+          },
+        ],
+        job: JOB,
+        maxTurnsPerAgent: 4,
+        budget: budgetWithAdversary(),
+        deps: fakeDeps(async () => PASS),
+        runsRoot,
+        runId: "run-adversary",
+        manifest: MANIFEST,
+      });
+
+      // The gate really was delivered and really did pass — otherwise this test proves nothing.
+      expect(result.passed).toBe(true);
+      expect(result.gateVersions.length).toBeGreaterThan(0);
+
+      // The adversary was given a turn at all...
+      expect(adversaryPrompts.length).toBeGreaterThan(0);
+      // ...and the prompt it was given SAYS a gate is there. This is the assertion that would have
+      // failed in run 8.
+      const sawGate = adversaryPrompts.some((p) =>
+        p.includes("A GATE HAS BEEN DELIVERED AND YOU HAVE NOT TESTED IT"),
+      );
+      expect(sawGate).toBe(true);
+      expect(adversaryPrompts.some((p) => p.includes("version 1"))).toBe(true);
+      expect(adversaryPrompts.some((p) => p.includes("submitted by ORCHESTRATOR"))).toBe(true);
+    },
+  );
+
+  it(
+    "does not leak the gate's source to the adversary — its job is to probe a gate by " +
+      "behaviour, not to read it",
+    async () => {
+      const secret = "export async function gate(){ return {accept:true,reason:'SECRET-MARKER'}; }";
+      const adversaryPrompts: string[] = [];
+      const adversaryAdapter: Adapter = async (_model, prompt) => {
+        adversaryPrompts.push(prompt);
+        return {
+          text: JSON.stringify({ done: true, summary: "noted" }),
+          usage: { input: 100, output: 20, cached_input: 0, reasoning: 0 },
+          latency_ms: 1,
+          raw: {},
+          deviations: [],
+        };
+      };
+
+      await runFullRunWindow({
+        windowId: "w-adversary-2",
+        roster: [
+          orchestratorConfig(scriptedAdapter([secret])),
+          {
+            agentId: "WORKER-EXTRACT",
+            adapter: adversaryAdapter,
+            modelString: "test",
+            prices: PRICES,
+            skillPackText: CANONICAL_ASSET_DESCRIPTION,
+            availableTools: ["submit_attack"] as const,
+            waitsFor: "gate" as const,
+            privateKeyHex: "0xa715563de5d5c011627720140757574d96bcfc02bdf2e0ee1f68d64e171fe89a",
+            address: "0x0000000000000000000000000000000000000002",
+            erc8004Id: "erc8004:0x0000000000000000000000000000000000000002",
+            rpcUrl: "http://127.0.0.1:1",
+            maxOutputTokens: 3000,
+          },
+        ],
+        job: JOB,
+        maxTurnsPerAgent: 4,
+        budget: budgetWithAdversary(),
+        deps: fakeDeps(async () => PASS),
+        runsRoot,
+        runId: "run-adversary-2",
+        manifest: MANIFEST,
+      });
+
+      expect(adversaryPrompts.some((p) => p.includes("A GATE HAS BEEN DELIVERED"))).toBe(true);
+      expect(adversaryPrompts.every((p) => !p.includes("SECRET-MARKER"))).toBe(true);
+    },
+  );
+
+  it(
+    "says nothing to an agent that cannot attack — the notice is an affordance, not an " +
+      "announcement",
+    async () => {
+      const bystanderPrompts: string[] = [];
+      const bystander: Adapter = async (_model, prompt) => {
+        bystanderPrompts.push(prompt);
+        return {
+          text: JSON.stringify({ done: true, summary: "noted" }),
+          usage: { input: 100, output: 20, cached_input: 0, reasoning: 0 },
+          latency_ms: 1,
+          raw: {},
+          deviations: [],
+        };
+      };
+
+      await runFullRunWindow({
+        windowId: "w-adversary-3",
+        roster: [
+          orchestratorConfig(
+            scriptedAdapter(["export async function gate(){ return {accept:true,reason:'ok'}; }"]),
+          ),
+          {
+            agentId: "WORKER-EXTRACT",
+            adapter: bystander,
+            modelString: "test",
+            prices: PRICES,
+            skillPackText: CANONICAL_ASSET_DESCRIPTION,
+            // No submit_attack.
+            availableTools: ["get_print"] as const,
+            privateKeyHex: "0xa715563de5d5c011627720140757574d96bcfc02bdf2e0ee1f68d64e171fe89a",
+            address: "0x0000000000000000000000000000000000000002",
+            erc8004Id: "erc8004:0x0000000000000000000000000000000000000002",
+            rpcUrl: "http://127.0.0.1:1",
+            maxOutputTokens: 3000,
+          },
+        ],
+        job: JOB,
+        maxTurnsPerAgent: 4,
+        budget: budgetWithAdversary(),
+        deps: fakeDeps(async () => PASS),
+        runsRoot,
+        runId: "run-adversary-3",
+        manifest: MANIFEST,
+      });
+
+      expect(bystanderPrompts.every((p) => !p.includes("A GATE HAS BEEN DELIVERED"))).toBe(true);
+    },
+  );
+});
+
 describe("submitJobRefusalFor — who may author the gate", () => {
   const presentedToA = {
     tokenId: "1",

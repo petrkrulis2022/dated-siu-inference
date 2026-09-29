@@ -554,7 +554,7 @@ async function main(): Promise<void> {
   console.log(
     `Providers REACHABLE, verified before window 1 with one real call each: ` +
       providersChecked.map((c) => `${c.provider} (${c.model})`).join(", ") +
-      `. Three billing outages in two weeks made this a pre-flight check rather than something ` +
+      `. Four provider interruptions in two weeks made this a pre-flight check rather than something ` +
       `discovered mid-run.`,
   );
 

@@ -554,6 +554,10 @@ export async function runFullRunWindow(
   /** Forward offers each agent has actually been shown in its own prompt, so an offer wakes a
    * buyer once rather than every round for as long as it stays open. */
   const shownForwardOffers = new Map<AgentId, Set<string>>();
+  /** How many times each `<agentId>:<tool>` pair has been refused this window. A grant is static
+   * for a window, so a third attempt at a tool already refused twice cannot succeed — see the
+   * refusal counter at the tool-error branch. */
+  const refusedToolCalls = new Map<string, number>();
   const attackContext: AttackContext = {
     gateVersions: [],
     attackedVersions: new Set<number>(),
@@ -604,9 +608,20 @@ export async function runFullRunWindow(
     }
 
     const marketBoardText = board.renderFor(agent.agentId, agent.erc8004Id);
-    const redemptionText = redemption.renderFor(agent.agentId);
+    // A prompt that tells an agent to call a tool it has now been refused twice is an instruction
+    // it cannot follow, and repeating it is what burned ISSUER-A to its cost ceiling in all three
+    // windows of run 8. Two attempts is enough to establish the grant is not there. The claim
+    // itself is unaffected — it stays outstanding, still defaults, and its holder or anyone else
+    // can still settle it; only this agent stops being told to do the impossible.
+    const refusedTwice = (tool: ToolName): boolean =>
+      (refusedToolCalls.get(`${agent.agentId}:${tool}`) ?? 0) >= 2;
+    const redemptionText = refusedTwice("serve_redemption")
+      ? ""
+      : redemption.renderFor(agent.agentId);
     const transferText = redemption.renderForHolder(agent.agentId);
-    const deliveryOwedText = redemption.renderForIssuerAwaitingDelivery(agent.agentId);
+    const deliveryOwedText = refusedTwice("submit_job")
+      ? ""
+      : redemption.renderForIssuerAwaitingDelivery(agent.agentId);
     const canQuoteForward = agent.availableTools.includes("quote_forward");
     // An issuer's own standing offers are NOT an inbox item: they are not an arrival, and an
     // issuer whose only reason to wake is its own earlier quote would spin turns re-reading it.
@@ -1415,7 +1430,24 @@ export async function runFullRunWindow(
         const carriedStillUnsettled = (options.outstandingClaims ?? []).some(
           (c) => !settledThisWindow.has(c.tokenId),
         );
-        if (!claimOutstanding && !carriedStillUnsettled) {
+        // An untested gate keeps the window open too, for exactly the reason the carried-forward
+        // default does. A gate nobody has tried to defeat is the whole point of the adversary
+        // arm, and it can only be attacked AFTER it exists — so breaking the instant it passes
+        // takes away the only turns in which an attack was ever possible, and makes "the
+        // adversary did not attack" indistinguishable from "it was never given the chance".
+        //
+        // Found by the test written for the visibility fix, 2026-09-29, not by a run: run 8 paid
+        // in fSIU every time, so `claimOutstanding` happened to hold every window open and this
+        // never bit. On the dollar route there is no claim, and a passing gate would have ended
+        // the window instantly with the adversary never having had a turn — so the attack arm
+        // was unreachable on that route no matter what any prompt said.
+        const someoneCanAttack = [...activeAgents].some((id) =>
+          options.roster.find((r) => r.agentId === id)?.availableTools.includes("submit_attack"),
+        );
+        const untestedGate =
+          someoneCanAttack &&
+          attackContext.gateVersions.some((g) => !attackContext.attackedVersions.has(g.version));
+        if (!claimOutstanding && !carriedStillUnsettled && !untestedGate) {
           break turnLoop;
         }
       }
@@ -1471,6 +1503,20 @@ export async function runFullRunWindow(
       // `.catch` remains the backstop for a genuinely unrecoverable launch-time failure (a
       // missing env var, an unreachable RPC endpoint) — those throw before this loop ever runs.
       {
+        // An agent that has now been refused the same tool twice is not going to succeed at it on
+        // the third attempt: the grant is static for the window. Found live, run 8 (2026-09-29):
+        // ISSUER-A, whose serve_redemption is withheld by construction, authored a passing gate in
+        // every window and then spent five to eight turns per window trying to report it —
+        // burning to its cost ceiling in all three, roughly a third of the run's inference, on an
+        // agent that could not succeed. Its own friction named the cause correctly every single
+        // time, which is what makes the retries waste rather than exploration.
+        //
+        // Counted, not prevented: the call is still made and still refused and still recorded, so
+        // "it kept trying" stays visible in the record. What changes is that after the second
+        // refusal this agent stops being WOKEN for that tool's own prompt (see refusedTwice
+        // below), so the budget goes to agents that can act.
+        const refusalKey = `${agent.agentId}:${intent.tool}`;
+        refusedToolCalls.set(refusalKey, (refusedToolCalls.get(refusalKey) ?? 0) + 1);
         const log: TurnLog = {
           turn,
           promptChars: prompt.length,
