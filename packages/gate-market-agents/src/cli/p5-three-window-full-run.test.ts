@@ -322,7 +322,6 @@ function route(pool: Record<string, number>, quantity: number): string | null {
   return null;
 }
 
-
 /** The run as it actually is now: ISSUER-A never serves, so its claims stay consumed unless the
  * holder settles them. Mirrors ClaimRouter's real rule (first issuer with enough by itself). */
 function simulateNonServing(holderSettles: boolean, extraPurchase = false) {
