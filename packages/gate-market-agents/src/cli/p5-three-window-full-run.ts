@@ -186,6 +186,15 @@ export const NON_SERVING_ISSUER: "ISSUER-A" | "ISSUER-B" | null = "ISSUER-A";
  * is the same number the briefs put in front of the agents, not one chosen afterwards. */
 const NOMINAL_JOB_MILLI_SIU = 10_000n;
 
+/**
+ * The second purchase a buyer may make each window: adversarial testing of the gate, bought from
+ * WORKER-EXTRACT. Smaller than the gate job deliberately, and not as a concession to capacity —
+ * authoring a hardened gate and writing one adversarial submission are genuinely different
+ * amounts of work, and pricing them identically was arbitrary. Gate authoring stays at 10,000 and
+ * comparable with every earlier run; this is a new job with no prior to preserve.
+ */
+const ATTACK_JOB_MILLI_SIU = 4_000n;
+
 const SECONDS_PER_DAY = 86_400n;
 
 export interface DefaultReachability {
@@ -832,6 +841,19 @@ ${runShapeFacts}
   whether the gate accepted something an independent oracle rejects. You may buy that testing the
   same way you buy the gate itself. It is a separate purchase with its own quote; nothing here
   says which way to pay for either, and the two need not match.
+
+  It is a smaller job than the gate: ${ATTACK_JOB_MILLI_SIU} mSIU against the gate's
+  ${NOMINAL_JOB_MILLI_SIU} mSIU, because writing an adversarial submission is less work than
+  authoring a hardened gate. Either way of paying works exactly as above, with that quantity:
+    USDC:  {"tool": "request_quote", "args": {"siu": "${Number(ATTACK_JOB_MILLI_SIU) / 1000}",
+      "model": "${models["WORKER-EXTRACT"]}", "rateUsdPerSiu": "${rateUsdPerSiu}",
+      "indexVersion": "SIU-2026a", "printId": "${printId}", "printHash": "0x00",
+      "sellerId": "${workerExtractErc8004Id}", "chain": "base-sepolia",
+      "expiresInSeconds": 3600, "pattern": "fixed"}}  then pay against the quote it issues.
+    fSIU:  {"tool": "pay_with_claim", "args": {"agentId": "WORKER-EXTRACT",
+      "quantity": "${ATTACK_JOB_MILLI_SIU}"}}
+  Buying it is optional, and so is buying the gate. Nothing here says to do either, or to settle
+  the two the same way.
 
   Respond with {"done": true, "summary": "<why>"} only if you would not want to be shown a
   delivery, an offer or a failure for the rest of this window — that is what it costs. Waiting

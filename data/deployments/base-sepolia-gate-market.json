@@ -10,7 +10,7 @@
     "gitCommitShort": "0e9d636",
     "treeCleanAtDeploy": false,
     "path": "packages/contracts",
-    "treeCleanAtDeployNote": "The deploy ran before the commit, not after: gitCommit above is the commit that CONTAINS the deployed source, made immediately afterwards (the prior commit, 709fc9e, does not). Recorded this way rather than pointing at 709fc9e and disclosing a gap, because a deployment record whose commit does not contain the deployed source is not a record. Verified rather than asserted: the runtime bytecode read back from this chain (cast code 0xe0D9B879F9841ef6Be5Af9001ed8F015030324A4) is byte-identical to `forge inspect src/WorkClaim.sol:WorkClaim deployedBytecode` at this commit apart from the immutable placeholders, which the local build leaves zeroed — 0 differing nibbles outside them. The full suite (152 contracts, 248 gate-market-agents) is green at this commit."
+    "treeCleanAtDeployNote": "The deploy ran before the commit, not after: gitCommit above is the commit that CONTAINS the deployed source, made immediately afterwards (the prior commit, 709fc9e, does not). Recorded this way rather than pointing at 709fc9e and disclosing a gap, because a deployment record whose commit does not contain the deployed source is not a record. Verified rather than asserted: the runtime bytecode read back from this chain (cast code 0xe0D9B879F9841ef6Be5Af9001ed8F015030324A4) is byte-identical to `forge inspect src/WorkClaim.sol:WorkClaim deployedBytecode` at this commit apart from the immutable placeholders, which the local build leaves zeroed \u2014 0 differing nibbles outside them. The full suite (152 contracts, 248 gate-market-agents) is green at this commit."
   },
   "compiler": {
     "solc": "0.8.24+commit.e11b9ed9",
@@ -20,83 +20,150 @@
       "runs": 200
     },
     "bytecodeHash": "none",
-    "evmVersionRationale": "Same pin as base-sepolia.json's own TouchstoneAttestation/TouchstoneEscrow deployment — shanghai keeps Arc a deployment target rather than a rewrite; also why RateAttestationVerifier.sol hand-rolls EIP-712 instead of using OZ's MCOPY-emitting EIP712 base."
+    "evmVersionRationale": "Same pin as base-sepolia.json's own TouchstoneAttestation/TouchstoneEscrow deployment \u2014 shanghai keeps Arc a deployment target rather than a rewrite; also why RateAttestationVerifier.sol hand-rolls EIP-712 instead of using OZ's MCOPY-emitting EIP712 base."
   },
   "deployedAt": {
-    "unix": 1790579988,
-    "iso": "2026-09-28T07:19:48Z",
-    "note": "This is the CURRENT (fourth) trio's deploy timestamp, read from block 47405850 via cast block. See redeployment below for why a fourth deployment exists; deployedAt/deployer/contractsDetail/capacityLots all describe the currently-live trio, not any retired one."
+    "unix": 1790683000,
+    "iso": "2026-09-29T12:16:40Z",
+    "note": "Fifth trio. Approximate to the minute from the deploy transaction; the authoritative timestamp is the block containing the CapacityBond creation."
   },
   "deployer": "0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e",
   "usdc": {
     "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
     "symbol": "USDC",
     "decimals": 6,
-    "source": "Same address base-sepolia.json already verified (Circle official documentation, Circle's MCP server, 2026-08-16) — reused, not re-resolved.",
+    "source": "Same address base-sepolia.json already verified (Circle official documentation, Circle's MCP server, 2026-08-16) \u2014 reused, not re-resolved.",
     "verifiedOnChain": "symbol() == 'USDC' and decimals() == 6, already established by the prior deployment on this same chain"
   },
   "capacityBond": {
-    "address": "0xa76967016ae221Ab22d58471f7CB9c6Dae57634e"
+    "address": "0x88034c6d644c9eeaB1823c80a00f54CF1c042bf1"
   },
   "claimRouter": {
-    "address": "0x277b67694aba7bd0988d85dE888fBf7053295AE1"
+    "address": "0xeda362D1C7e1Ca2089a9331527FB028d09Dfa24d"
   },
   "workClaim": {
-    "address": "0xe0D9B879F9841ef6Be5Af9001ed8F015030324A4"
+    "address": "0xc2e058E55211F460556E60a45963Ea3a3C31a898"
   },
   "redeployment": {
-    "date": "2026-09-28",
-    "reason": "One pool. `WorkClaim` gained `reserveForWork`/`releaseReservation` so that work paid for in USDC consumes the same bonded `CapacityBond` headroom a minted claim does. Before this, minting consumed capacity and paying in dollars consumed nothing at all — verified live in the first real P5 window, where ISSUER-A's headroom was untouched across an entire USDC purchase. Scarcity that binds only one of two routes makes F1 ('which asset does an agent choose when nothing recommends either') a question about accepting a constraint rather than about the instruments, so every asset-choice number taken against the old bytecode measures the asymmetry. `reserveForWork` is tied to a real, currently-Open `TouchstoneEscrow` and callable only by that escrow's named seller (consuming headroom costs the caller nothing directly, so without that tie anyone could lock an issuer's pool); `releaseReservation` is permissionless and allowed once the escrow settles or its own expiry passes. See docs/gate-market-spec.md §4.4's RESERVE/RELEASE rows and §7.1(d). Covered by 13 new unit tests, two new invariants (no double reserve, no double release), a rewritten conservation invariant (outstanding == live claims + live reservations, fuzzed with both consumers moving at once) and a real-devnet end-to-end scenario (packages/gate-market-agents/src/dry-loop/one-pool.test.ts) — full suite 152/152 (contracts) and 229/229 (gate-market-agents) before redeploying.",
-    "scarcitySizing": "Deliberately resized at the same time, from 60,000/40,000 mSIU per class to 24,000/16,000. The old pool could not bind: roughly 60,000 mSIU of three-window demand against 100,000 mSIU of capacity meant no agent ever met the constraint the experiment exists to observe. Both lots are immutable once created (`CapacityBond.createLot` reverts `LotExists`) and `ClaimRouter.route` drains issuers in registration order, so adding smaller lots alongside the old ones would not have worked either — resizing required this redeploy regardless of the bytecode change. 40,000 mSIU total is $0.0573 of work at the 2026-09-27 commodity print ($0.001433/SIU), and the 3:2 inequality between the two issuers (spec §3.5) is preserved.",
-    "whyTheWholeTrioMovedNotJustWorkClaim": "Same structural reason as every prior redeployment: CapacityBond's constructor takes WorkClaim's own address as an immutable, precomputed via vm.computeCreateAddress before WorkClaim exists (DeployGateMarket.s.sol); ClaimRouter is pinned to CapacityBond the same way. All three redeployed together as one script run. TouchstoneEscrow did NOT move and did not need to: WorkClaim only reads it (`escrows(bytes32)`), and the escrow has never heard of WorkClaim.",
-    "previousTrio": {
-      "capacityBond": "0x8582a738A810666f6CA5c4877710bbc55dF94434",
-      "claimRouter": "0x1A1DC8061617d78f2a037Ed3f3AFB2F0fd07123f",
-      "workClaim": "0x0dF15076d534896D375D80b87E0243b4C83131Fc",
+    "date": "2026-09-29",
+    "reason": "Capacity, not bytecode. The contracts are unchanged from the fourth trio; the lots are not. Three windows now carry TWO independent purchases each (gate authoring at 10,000 mSIU, adversarial testing at 4,000), so worst-case demand is 42,000 mSIU before the external buyer's 6,000 and before any capacity that stays consumed while a claim goes unserved. Against the fourth trio's remaining 31,000 that would have exhausted the pool in window 2 and cost roughly four of the six asset-choice decisions \u2014 turning a run whose primary measurement is WHICH INSTRUMENT AN AGENT CHOOSES into a re-measurement of scarcity, which three earlier runs already established on-chain. CapacityBond.createLot is one lot per (issuer, class) forever with no top-up path (its own doc comment: mutating committed figures would retroactively change the basis every already-minted claim was issued under), and bondedUsdc plays no part in issuanceLimit, so adding collateral could not have raised headroom. A new trio with larger lots was the only way to size the pool.",
+    "sizing": "800 committedCapacityHours per lot, against the fourth trio's 400. issuanceLimit = hours * measuredRate * 0.5, so ISSUER-A 48,000 mSIU per class and ISSUER-B 32,000 \u2014 80,000 mSIU of code-class capacity against 42,000 of worst-case demand, roughly 1.9x. Sized for real slack rather than to the minimum, so scarcity stays a visible secondary observation without being able to foreclose a purchase decision. The A>B asymmetry is preserved deliberately: ClaimRouter drains issuers in registration order, and that asymmetry is what routes later work to the second issuer.",
+    "retiredTrio": {
+      "capacityBond": "0xa76967016ae221Ab22d58471f7CB9c6Dae57634e",
+      "claimRouter": "0x277b67694aba7bd0988d85dE888fBf7053295AE1",
+      "workClaim": "0xe0D9B879F9841ef6Be5Af9001ed8F015030324A4",
       "deployedAt": {
-        "unix": 1790520562,
-        "iso": "2026-09-27T14:49:22Z"
+        "unix": 1790579988,
+        "iso": "2026-09-28T07:19:48Z",
+        "note": "This is the CURRENT (fourth) trio's deploy timestamp, read from block 47405850 via cast block. See redeployment below for why a fourth deployment exists; deployedAt/deployer/contractsDetail/capacityLots all describe the currently-live trio, not any retired one."
       },
-      "retiredNote": "Left deployed, unfunded of further use. Its own capacity lots (60,000/40,000 mSIU per class, 10 USDC bonded per class) stay bonded and stranded there — lots are immutable and there is no withdrawal path, which is the no-admin-path invariant working as intended, not an oversight. No default was ever settled against this trio."
-    },
-    "postRedeploySteps": "Both issuers funded with 2 USDC each from the deployer and bonded on the new CapacityBond (createLot per class: committedCapacityHours 400, measuredRateMilliSiuPerHour 120 for ISSUER-A / 80 for ISSUER-B, 1 USDC bonded per class). ORCHESTRATOR's USDC allowance re-approved (2 USDC) against the new WorkClaim address. Live headroom confirmed at exactly 24,000 mSIU (ISSUER-A) and 16,000 mSIU (ISSUER-B) in both classes, read back on-chain. The deployer wallet's own USDC allowance (2 USDC) was also approved against the new WorkClaim: it is the simulated external buyer in the three-window run (packages/gate-market-agents/src/cli/p5-three-window-full-run.ts), which mints real claims between windows on a schedule fixed in source before the run. It is not an agent, has no model, and makes no decisions.",
-    "liveSmokeTest": "The new reservation surface exercised end to end on real Base Sepolia before any P5 run, not only in Foundry. ORCHESTRATOR opened and funded a real escrow (quoteHash 0xeec250fd3633b81287e83dcb225a5e7d92f43a093dc1fa34dfa963873b062d0b, seller WORKER-CODE, 0.02 USDC, tx 0x3ad4ae0e9f850a047c46c799cc4ad253eed746d0ad020ba173065b58ba97e398). Then, in order: (1) ORCHESTRATOR — the buyer, not the seller — attempted `reserveForWork` and reverted `NotTheEscrowSeller` (0xe0f51291); (2) WORKER-CODE, the named seller, reserved 100 mSIU successfully (tx 0x97ffd8b1e8868de0db1cd25e5294f8601d4e4a1923324e2afa259f42a0cddbb8) and ISSUER-A's real headroom moved 24,000 -> 23,900, which is the whole point: a dollar-paid job consumed capacity a mint would otherwise have had; (3) a second reserve on the same quoteHash reverted `ReservationExists` (0x73f18ad7); (4) release while the escrow was still Open and before its deadline reverted `ReservationNotReleasable` (0xd74a1795); (5) WORKER-CODE settled the escrow and the DEPLOYER — a stranger to that escrow, proving the release is genuinely permissionless — released it (tx 0xb298782687a13b43fa1ac9f75b5e3234e22b812bd15fea9f10a1f9dad4d163ea), restoring headroom to exactly 24,000; (6) a second release reverted `ReservationAlreadyReleased` (0xbc361360). Every one of these is a real on-chain result, not a Foundry-only check.",
-    "priorRedeployment": {
-      "date": "2026-09-27",
-      "reason": "Grade (series — frontier/commodity) added as a discriminant across ClaimType/tokenIdFor/RateAttestation, enforced by both mint (series must match) and settleWindowClose (series AND printDate — the claim's own default day — must both match). Design review found grade completely unmodeled: nothing tied a claim or its rate attestation to a specific Touchstone Assay print series, so a frontier claim could previously have defaulted against a blended or commodity rate, and within the ±50% settlement band a caller could settle against a stale, more favourable print. See docs/gate-market-spec.md §4.3/§4.4 (corrected the same commit) and RateAttestationVerifier.sol/WorkClaim.sol's own doc comments for the full account. Covered by 4 new unit tests (series-mismatch-at-mint, series-mismatch-at-settle, printDate-mismatch-at-settle, tokenIdFor differs across series) plus the invariant handler now fuzzing both series values — full suite 137/137 (contracts) and 217/217 (gate-market-agents) before redeploying.",
-      "whyTheWholeTrioMovedNotJustWorkClaim": "Same structural reason as the 2026-09-26 redeployment below: CapacityBond's constructor takes WorkClaim's own address as an immutable, precomputed via vm.computeCreateAddress before WorkClaim exists (DeployGateMarket.s.sol); ClaimRouter is pinned to CapacityBond the same way. All three redeployed together as one script run.",
-      "previousTrio": {
-        "capacityBond": "0xa053bd236954C6633cBB902a1eA46a125F565060",
-        "claimRouter": "0xaec219812145a4150E510b62e64F6A4f19F52D51",
-        "workClaim": "0xD3cC27A711B1eF3893975927cfE86d651a35337B",
-        "deployedAt": {
-          "unix": 1790426592,
-          "iso": "2026-09-26T12:43:12Z"
-        },
-        "retiredNote": "Left deployed, unfunded of further use. No default was ever settled against this trio (unlike the 2026-09-25 trio it itself replaced)."
-      },
-      "postRedeploySteps": "Both issuers topped up (ISSUER-A +19.4 USDC to reach 20; ISSUER-B +20 USDC from 0) from the deployer and re-bonded on the new CapacityBond (createLot per class, same measuredRateMilliSiuPerHour/committedCapacityHours/bondedUsdcPerClass as every prior bonding) — confirmedLiveHeadroom below matches the pre-redeployment state exactly (60,000,000/60,000,000 for ISSUER-A, 40,000,000/40,000,000 for ISSUER-B). ORCHESTRATOR's USDC allowance re-approved (2 USDC) against the new WorkClaim address.",
-      "liveSmokeTest": "Before resuming P5: a real mint_claim (ORCHESTRATOR, 10 mSIU code-class, genuinely publisher-signed SERIES_COMMODITY attestation) succeeded on-chain (tx 0x5df5c83b940651c81f029eacd78e5cead81b5bbd5ff9fd9a144c390674916599, block 47376230) — confirms the new bytecode's series check accepts a genuinely matching attestation, not just that it compiles. A second attempt with the identical claim (declared SERIES_COMMODITY) but an attestation genuinely signed for SERIES_FRONTIER reverted exactly as designed: `SeriesMismatch(0x6a33dd97c27182e82445945d5176f9e8f757598cf3cdc2b0d74eee7238b4c63b, 0x28b9bd511509601dd60a2359acd77ace0051da8b8fd3a5d60e5ce73794ae0f82)` (frontier attested, commodity expected) — a real on-chain revert, not a Foundry-only check. SERIES_FRONTIER()/SERIES_COMMODITY() also read back on-chain and confirmed to match packages/gate-market-agents/src/chain/rate-attestation.ts's own SERIES_FRONTIER/SERIES_COMMODITY constants exactly, independently computed (viem keccak256) versus the deployed contract's own public constants — same cross-implementation discipline as rate-attestation-cross-implementation.test.ts.",
-      "priorRedeployment": {
-        "date": "2026-09-26",
-        "reason": "serveRedemption had no window-closed check: a routed issuer could race settleWindowClose with a late passed=true report after the window closed and escape a genuine default. Fixed in WorkClaim.sol (WindowClosed() revert once block.timestamp >= ct.windowTo, mirroring the same guard already on presentForRedemption), covered by two new unit tests and a new invariant (invariant_noServeSucceededAfterWindowClosed, confirmed at FOUNDRY_INVARIANT_RUNS=10000 — 640000 calls, 0 reverts across all 6 invariants) before redeploying.",
-        "whyTheWholeTrioMovedNotJustWorkClaim": "CapacityBond's constructor takes WorkClaim's own address as an immutable, precomputed via vm.computeCreateAddress before WorkClaim exists (DeployGateMarket.s.sol) — the two are mutually address-pinned at construction, so WorkClaim cannot be redeployed in isolation; ClaimRouter is pinned to CapacityBond the same way. All three redeployed together as one script run.",
-        "previousTrio": {
-          "capacityBond": "0xC4030792e815e6D08Ae5f434B84A3DCCa2FBe999",
-          "claimRouter": "0x88fbBF79727bB3c903D5C94a860033959Ba88Ec8",
-          "workClaim": "0x7583BB12751F0EA622F5Aa8F69df37c1506F9061",
-          "deployedAt": {
-            "unix": 1790365534,
-            "iso": "2026-09-25T19:45:34Z"
+      "closingStateAtBlock": 47458301,
+      "closingStateReadIso": "2026-09-29T12:10:00Z",
+      "closingState": {
+        "note": "Read on-chain immediately before the fifth trio went live, so the enforcement history this trio accumulated is legible here without reconstructing it from run logs. The contracts remain deployed and every transaction hash below stays valid; what retires is their use, not the evidence.",
+        "ISSUER-A": {
+          "address": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "code": {
+            "committedCapacityHours": 400,
+            "measuredRateMilliSiuPerHour": 120,
+            "bondedUsdc": 942800,
+            "outstanding": 9000,
+            "headroom": 15000
           },
-          "retiredNote": "Left deployed, unfunded of further use — its own first real default (data/gate-market/first-real-default-2026-09-26.json) was settled against this trio before the redeploy, and that record is left describing this (now-doubly-retired) trio's own addresses, which is correct: that default genuinely happened on this trio, not either later one."
+          "extract": {
+            "committedCapacityHours": 400,
+            "measuredRateMilliSiuPerHour": 120,
+            "bondedUsdc": 1000000,
+            "outstanding": 0,
+            "headroom": 24000
+          },
+          "drawnByDefaults": 57200,
+          "defaultsSuffered": 4
         },
-        "postRedeploySteps": "Both issuers topped up with 15 USDC each from the deployer and re-bonded on the new CapacityBond (createLot per class, same measuredRateMilliSiuPerHour/committedCapacityHours/bondedUsdcPerClass as the original bonding) to restore identical headroom to the pre-redeployment state. ORCHESTRATOR's USDC allowance re-approved (2 USDC) against the new WorkClaim address."
+        "ISSUER-B": {
+          "address": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+          "code": {
+            "committedCapacityHours": 400,
+            "measuredRateMilliSiuPerHour": 80,
+            "bondedUsdc": 985730,
+            "outstanding": 0,
+            "headroom": 16000
+          },
+          "extract": {
+            "committedCapacityHours": 400,
+            "measuredRateMilliSiuPerHour": 80,
+            "bondedUsdc": 1000000,
+            "outstanding": 0,
+            "headroom": 16000
+          },
+          "drawnByDefaults": 14270,
+          "defaultsSuffered": 1
+        },
+        "holderWorkerCodeUsdc": 191370,
+        "conservationCheck": "Bonds drew 57,200 + 14,270 = 71,470 uUSDC across five real defaults in three runs. WORKER-CODE's USDC went 119,900 -> 191,370, exactly +71,470. Every micro-USDC drawn from a bond reached the holder it was owed to; none was lost, retained or rounded away.",
+        "settlementTxs": [
+          "0xea41b569... and 0xb68661b3... (2026-09-28's two defaults, settled 2026-09-29)",
+          "0x184cbb156bf14ea2ae89ccc4a0d330838af9eb547c40943fab3937f5032882fc (run 3 w2: ISSUER-B settled a RIVAL's default)",
+          "0x5f84a6ca75c1dff9fc601e17f501598079b9034e34ed097071c1c6bfa2340709 (run 3 w3: ISSUER-A settled its OWN default)",
+          "0x6517aae6bbbc9382ac7053113ac507c4af730c6203c9ef7add848c9d2e4b193a (post-run-3 housekeeping: first draw on ISSUER-B's bond)"
+        ],
+        "strandedBonds": "3,928,530 uUSDC stays bonded and unreachable in the retiring CapacityBond across all four lots. Lots are immutable and there is no withdrawal path, which is the no-admin-path invariant working as intended, not an oversight."
+      }
+    },
+    "previousRedeployment": {
+      "date": "2026-09-28",
+      "reason": "One pool. `WorkClaim` gained `reserveForWork`/`releaseReservation` so that work paid for in USDC consumes the same bonded `CapacityBond` headroom a minted claim does. Before this, minting consumed capacity and paying in dollars consumed nothing at all \u2014 verified live in the first real P5 window, where ISSUER-A's headroom was untouched across an entire USDC purchase. Scarcity that binds only one of two routes makes F1 ('which asset does an agent choose when nothing recommends either') a question about accepting a constraint rather than about the instruments, so every asset-choice number taken against the old bytecode measures the asymmetry. `reserveForWork` is tied to a real, currently-Open `TouchstoneEscrow` and callable only by that escrow's named seller (consuming headroom costs the caller nothing directly, so without that tie anyone could lock an issuer's pool); `releaseReservation` is permissionless and allowed once the escrow settles or its own expiry passes. See docs/gate-market-spec.md \u00a74.4's RESERVE/RELEASE rows and \u00a77.1(d). Covered by 13 new unit tests, two new invariants (no double reserve, no double release), a rewritten conservation invariant (outstanding == live claims + live reservations, fuzzed with both consumers moving at once) and a real-devnet end-to-end scenario (packages/gate-market-agents/src/dry-loop/one-pool.test.ts) \u2014 full suite 152/152 (contracts) and 229/229 (gate-market-agents) before redeploying.",
+      "scarcitySizing": "Deliberately resized at the same time, from 60,000/40,000 mSIU per class to 24,000/16,000. The old pool could not bind: roughly 60,000 mSIU of three-window demand against 100,000 mSIU of capacity meant no agent ever met the constraint the experiment exists to observe. Both lots are immutable once created (`CapacityBond.createLot` reverts `LotExists`) and `ClaimRouter.route` drains issuers in registration order, so adding smaller lots alongside the old ones would not have worked either \u2014 resizing required this redeploy regardless of the bytecode change. 40,000 mSIU total is $0.0573 of work at the 2026-09-27 commodity print ($0.001433/SIU), and the 3:2 inequality between the two issuers (spec \u00a73.5) is preserved.",
+      "whyTheWholeTrioMovedNotJustWorkClaim": "Same structural reason as every prior redeployment: CapacityBond's constructor takes WorkClaim's own address as an immutable, precomputed via vm.computeCreateAddress before WorkClaim exists (DeployGateMarket.s.sol); ClaimRouter is pinned to CapacityBond the same way. All three redeployed together as one script run. TouchstoneEscrow did NOT move and did not need to: WorkClaim only reads it (`escrows(bytes32)`), and the escrow has never heard of WorkClaim.",
+      "previousTrio": {
+        "capacityBond": "0x8582a738A810666f6CA5c4877710bbc55dF94434",
+        "claimRouter": "0x1A1DC8061617d78f2a037Ed3f3AFB2F0fd07123f",
+        "workClaim": "0x0dF15076d534896D375D80b87E0243b4C83131Fc",
+        "deployedAt": {
+          "unix": 1790520562,
+          "iso": "2026-09-27T14:49:22Z"
+        },
+        "retiredNote": "Left deployed, unfunded of further use. Its own capacity lots (60,000/40,000 mSIU per class, 10 USDC bonded per class) stay bonded and stranded there \u2014 lots are immutable and there is no withdrawal path, which is the no-admin-path invariant working as intended, not an oversight. No default was ever settled against this trio."
+      },
+      "postRedeploySteps": "Both issuers funded with 2 USDC each from the deployer and bonded on the new CapacityBond (createLot per class: committedCapacityHours 400, measuredRateMilliSiuPerHour 120 for ISSUER-A / 80 for ISSUER-B, 1 USDC bonded per class). ORCHESTRATOR's USDC allowance re-approved (2 USDC) against the new WorkClaim address. Live headroom confirmed at exactly 24,000 mSIU (ISSUER-A) and 16,000 mSIU (ISSUER-B) in both classes, read back on-chain. The deployer wallet's own USDC allowance (2 USDC) was also approved against the new WorkClaim: it is the simulated external buyer in the three-window run (packages/gate-market-agents/src/cli/p5-three-window-full-run.ts), which mints real claims between windows on a schedule fixed in source before the run. It is not an agent, has no model, and makes no decisions.",
+      "liveSmokeTest": "The new reservation surface exercised end to end on real Base Sepolia before any P5 run, not only in Foundry. ORCHESTRATOR opened and funded a real escrow (quoteHash 0xeec250fd3633b81287e83dcb225a5e7d92f43a093dc1fa34dfa963873b062d0b, seller WORKER-CODE, 0.02 USDC, tx 0x3ad4ae0e9f850a047c46c799cc4ad253eed746d0ad020ba173065b58ba97e398). Then, in order: (1) ORCHESTRATOR \u2014 the buyer, not the seller \u2014 attempted `reserveForWork` and reverted `NotTheEscrowSeller` (0xe0f51291); (2) WORKER-CODE, the named seller, reserved 100 mSIU successfully (tx 0x97ffd8b1e8868de0db1cd25e5294f8601d4e4a1923324e2afa259f42a0cddbb8) and ISSUER-A's real headroom moved 24,000 -> 23,900, which is the whole point: a dollar-paid job consumed capacity a mint would otherwise have had; (3) a second reserve on the same quoteHash reverted `ReservationExists` (0x73f18ad7); (4) release while the escrow was still Open and before its deadline reverted `ReservationNotReleasable` (0xd74a1795); (5) WORKER-CODE settled the escrow and the DEPLOYER \u2014 a stranger to that escrow, proving the release is genuinely permissionless \u2014 released it (tx 0xb298782687a13b43fa1ac9f75b5e3234e22b812bd15fea9f10a1f9dad4d163ea), restoring headroom to exactly 24,000; (6) a second release reverted `ReservationAlreadyReleased` (0xbc361360). Every one of these is a real on-chain result, not a Foundry-only check.",
+      "priorRedeployment": {
+        "date": "2026-09-27",
+        "reason": "Grade (series \u2014 frontier/commodity) added as a discriminant across ClaimType/tokenIdFor/RateAttestation, enforced by both mint (series must match) and settleWindowClose (series AND printDate \u2014 the claim's own default day \u2014 must both match). Design review found grade completely unmodeled: nothing tied a claim or its rate attestation to a specific Touchstone Assay print series, so a frontier claim could previously have defaulted against a blended or commodity rate, and within the \u00b150% settlement band a caller could settle against a stale, more favourable print. See docs/gate-market-spec.md \u00a74.3/\u00a74.4 (corrected the same commit) and RateAttestationVerifier.sol/WorkClaim.sol's own doc comments for the full account. Covered by 4 new unit tests (series-mismatch-at-mint, series-mismatch-at-settle, printDate-mismatch-at-settle, tokenIdFor differs across series) plus the invariant handler now fuzzing both series values \u2014 full suite 137/137 (contracts) and 217/217 (gate-market-agents) before redeploying.",
+        "whyTheWholeTrioMovedNotJustWorkClaim": "Same structural reason as the 2026-09-26 redeployment below: CapacityBond's constructor takes WorkClaim's own address as an immutable, precomputed via vm.computeCreateAddress before WorkClaim exists (DeployGateMarket.s.sol); ClaimRouter is pinned to CapacityBond the same way. All three redeployed together as one script run.",
+        "previousTrio": {
+          "capacityBond": "0xa053bd236954C6633cBB902a1eA46a125F565060",
+          "claimRouter": "0xaec219812145a4150E510b62e64F6A4f19F52D51",
+          "workClaim": "0xD3cC27A711B1eF3893975927cfE86d651a35337B",
+          "deployedAt": {
+            "unix": 1790426592,
+            "iso": "2026-09-26T12:43:12Z"
+          },
+          "retiredNote": "Left deployed, unfunded of further use. No default was ever settled against this trio (unlike the 2026-09-25 trio it itself replaced)."
+        },
+        "postRedeploySteps": "Both issuers topped up (ISSUER-A +19.4 USDC to reach 20; ISSUER-B +20 USDC from 0) from the deployer and re-bonded on the new CapacityBond (createLot per class, same measuredRateMilliSiuPerHour/committedCapacityHours/bondedUsdcPerClass as every prior bonding) \u2014 confirmedLiveHeadroom below matches the pre-redeployment state exactly (60,000,000/60,000,000 for ISSUER-A, 40,000,000/40,000,000 for ISSUER-B). ORCHESTRATOR's USDC allowance re-approved (2 USDC) against the new WorkClaim address.",
+        "liveSmokeTest": "Before resuming P5: a real mint_claim (ORCHESTRATOR, 10 mSIU code-class, genuinely publisher-signed SERIES_COMMODITY attestation) succeeded on-chain (tx 0x5df5c83b940651c81f029eacd78e5cead81b5bbd5ff9fd9a144c390674916599, block 47376230) \u2014 confirms the new bytecode's series check accepts a genuinely matching attestation, not just that it compiles. A second attempt with the identical claim (declared SERIES_COMMODITY) but an attestation genuinely signed for SERIES_FRONTIER reverted exactly as designed: `SeriesMismatch(0x6a33dd97c27182e82445945d5176f9e8f757598cf3cdc2b0d74eee7238b4c63b, 0x28b9bd511509601dd60a2359acd77ace0051da8b8fd3a5d60e5ce73794ae0f82)` (frontier attested, commodity expected) \u2014 a real on-chain revert, not a Foundry-only check. SERIES_FRONTIER()/SERIES_COMMODITY() also read back on-chain and confirmed to match packages/gate-market-agents/src/chain/rate-attestation.ts's own SERIES_FRONTIER/SERIES_COMMODITY constants exactly, independently computed (viem keccak256) versus the deployed contract's own public constants \u2014 same cross-implementation discipline as rate-attestation-cross-implementation.test.ts.",
+        "priorRedeployment": {
+          "date": "2026-09-26",
+          "reason": "serveRedemption had no window-closed check: a routed issuer could race settleWindowClose with a late passed=true report after the window closed and escape a genuine default. Fixed in WorkClaim.sol (WindowClosed() revert once block.timestamp >= ct.windowTo, mirroring the same guard already on presentForRedemption), covered by two new unit tests and a new invariant (invariant_noServeSucceededAfterWindowClosed, confirmed at FOUNDRY_INVARIANT_RUNS=10000 \u2014 640000 calls, 0 reverts across all 6 invariants) before redeploying.",
+          "whyTheWholeTrioMovedNotJustWorkClaim": "CapacityBond's constructor takes WorkClaim's own address as an immutable, precomputed via vm.computeCreateAddress before WorkClaim exists (DeployGateMarket.s.sol) \u2014 the two are mutually address-pinned at construction, so WorkClaim cannot be redeployed in isolation; ClaimRouter is pinned to CapacityBond the same way. All three redeployed together as one script run.",
+          "previousTrio": {
+            "capacityBond": "0xC4030792e815e6D08Ae5f434B84A3DCCa2FBe999",
+            "claimRouter": "0x88fbBF79727bB3c903D5C94a860033959Ba88Ec8",
+            "workClaim": "0x7583BB12751F0EA622F5Aa8F69df37c1506F9061",
+            "deployedAt": {
+              "unix": 1790365534,
+              "iso": "2026-09-25T19:45:34Z"
+            },
+            "retiredNote": "Left deployed, unfunded of further use \u2014 its own first real default (data/gate-market/first-real-default-2026-09-26.json) was settled against this trio before the redeploy, and that record is left describing this (now-doubly-retired) trio's own addresses, which is correct: that default genuinely happened on this trio, not either later one."
+          },
+          "postRedeploySteps": "Both issuers topped up with 15 USDC each from the deployer and re-bonded on the new CapacityBond (createLot per class, same measuredRateMilliSiuPerHour/committedCapacityHours/bondedUsdcPerClass as the original bonding) to restore identical headroom to the pre-redeployment state. ORCHESTRATOR's USDC allowance re-approved (2 USDC) against the new WorkClaim address."
+        }
       }
     }
   },
   "contractsDetail": {
-    "note": "Documentary detail beyond what GateMarketDeployment's own strict interface reads (chain/deployment.ts) — the flat capacityBond/claimRouter/workClaim keys above are the ones actually parsed. Describes the CURRENT (fourth) trio; see redeployment.previousTrio and the nested priorRedeployment entries for the three retired ones.",
+    "note": "Documentary detail beyond what GateMarketDeployment's own strict interface reads (chain/deployment.ts) \u2014 the flat capacityBond/claimRouter/workClaim keys above are the ones actually parsed. Describes the CURRENT (fourth) trio; see redeployment.previousTrio and the nested priorRedeployment entries for the three retired ones.",
     "CapacityBond": {
       "address": "0xa76967016ae221Ab22d58471f7CB9c6Dae57634e",
       "deploymentTx": "0xff52d5b20d43fdf8882893f2c24c4fee127e9815bc1a28ffd4117ef1b2020102",
@@ -106,11 +173,8 @@
         "usdc_": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
         "workClaim_": "0xe0D9B879F9841ef6Be5Af9001ed8F015030324A4"
       },
-      "constructorArgOrder": [
-        "usdc_",
-        "workClaim_"
-      ],
-      "verified": "Not yet verified on Basescan — does not block agent operation (chain/deployment.ts reads bytecode/state directly, not the explorer).",
+      "constructorArgOrder": ["usdc_", "workClaim_"],
+      "verified": "Not yet verified on Basescan \u2014 does not block agent operation (chain/deployment.ts reads bytecode/state directly, not the explorer).",
       "explorerUrl": "https://sepolia.basescan.org/address/0xa76967016ae221Ab22d58471f7CB9c6Dae57634e",
       "notes": "Unchanged source from the prior trio; it moved only because WorkClaim's address is baked into it as an immutable. workClaim() read back on-chain and confirmed to match."
     },
@@ -122,10 +186,8 @@
       "constructorArgs": {
         "bond_": "0xa76967016ae221Ab22d58471f7CB9c6Dae57634e"
       },
-      "constructorArgOrder": [
-        "bond_"
-      ],
-      "verified": "Not yet verified on Basescan — same note as CapacityBond above.",
+      "constructorArgOrder": ["bond_"],
+      "verified": "Not yet verified on Basescan \u2014 same note as CapacityBond above.",
       "explorerUrl": "https://sepolia.basescan.org/address/0x277b67694aba7bd0988d85dE888fBf7053295AE1",
       "notes": "Unchanged source. bond() read back on-chain and confirmed. Now routes for both consumers of the pool: `mint` and `reserveForWork` call the same `route()`."
     },
@@ -141,21 +203,15 @@
         "publisher_": "0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a",
         "escrow_": "0x3eC06FFe8d5250d5Edf8Fff26b163aaaD65c8a00"
       },
-      "constructorArgOrder": [
-        "usdc_",
-        "bond_",
-        "router_",
-        "publisher_",
-        "escrow_"
-      ],
-      "verified": "Not yet verified on Basescan — same note as CapacityBond above. On-chain state confirmed directly instead: usdc()/bond()/router()/publisher()/escrow() all read back exactly matching constructorArgs above.",
+      "constructorArgOrder": ["usdc_", "bond_", "router_", "publisher_", "escrow_"],
+      "verified": "Not yet verified on Basescan \u2014 same note as CapacityBond above. On-chain state confirmed directly instead: usdc()/bond()/router()/publisher()/escrow() all read back exactly matching constructorArgs above.",
       "explorerUrl": "https://sepolia.basescan.org/address/0xe0D9B879F9841ef6Be5Af9001ed8F015030324A4",
-      "notes": "escrow_ is the TouchstoneEscrow already deployed on this chain (data/deployments/base-sepolia.json, 2026-08-18) — the same one packages/gate-market-agents already pays through. WorkClaim only reads it. This bytecode carries everything the prior trio did (settlement-rate band, rate-attestation binding, serveRedemption window guard, the series/printDate discriminant) plus reserveForWork/releaseReservation. Its ABI now exposes nine state-mutating functions rather than seven; NoAdminPath.t.sol asserts that exact set, so the growth was a reviewed change rather than a silent one."
+      "notes": "escrow_ is the TouchstoneEscrow already deployed on this chain (data/deployments/base-sepolia.json, 2026-08-18) \u2014 the same one packages/gate-market-agents already pays through. WorkClaim only reads it. This bytecode carries everything the prior trio did (settlement-rate band, rate-attestation binding, serveRedemption window guard, the series/printDate discriminant) plus reserveForWork/releaseReservation. Its ABI now exposes nine state-mutating functions rather than seven; NoAdminPath.t.sol asserts that exact set, so the growth was a reviewed change rather than a silent one."
     }
   },
   "capacityLots": {
-    "note": "Bonded live, 2026-09-28, immediately after the fourth deploy — real testnet USDC, real transactions, both classes (code/extract) per issuer. Deliberately smaller than every prior trio's: see redeployment.scarcitySizing above for why the old sizing could not bind. issuanceLimit = committedCapacityHours * measuredRateMilliSiuPerHour * 0.5 (CapacityBond.ISSUANCE_RATIO_BPS); bondedUsdc plays no part in it. classId = keccak256(bytes(\"code\")) / keccak256(bytes(\"extract\")), unchanged by the redeploy since a classId depends only on the class string.",
-    "rateFiguresAreFixtures": "Neither committedCapacityHours nor measuredRateMilliSiuPerHour is a measurement, here or in any prior trio — the earlier 1000h x 120,000/80,000 mSIU per hour were illustrative too. These were chosen so the issuance limits land on 24,000 and 16,000 mSIU while preserving the deliberate 3:2 inequality between the two issuers that spec §3.5 calls for. Stated plainly rather than presented as a throughput result.",
+    "note": "Bonded live, 2026-09-29, immediately after the fifth deploy \u2014 real testnet USDC, real transactions, both classes per issuer, 1 USDC bonded per lot. issuanceLimit = committedCapacityHours * measuredRateMilliSiuPerHour * 0.5 (CapacityBond.ISSUANCE_RATIO_BPS); bondedUsdc plays no part in it. classId = keccak256(bytes(\"code\")) / keccak256(bytes(\"extract\")), unchanged by the redeploy since a classId depends only on the class string. Extract lots are bonded but unused by the current run, which is code-class throughout \u2014 they are NOT available headroom for a code-class job, a distinction worth keeping explicit because unused capacity in another class reads like slack and is not.",
+    "rateFiguresAreFixtures": "Neither committedCapacityHours nor measuredRateMilliSiuPerHour is a measurement, here or in any prior trio \u2014 the earlier 1000h x 120,000/80,000 mSIU per hour were illustrative too. These were chosen so the issuance limits land on 24,000 and 16,000 mSIU while preserving the deliberate 3:2 inequality between the two issuers that spec \u00a73.5 calls for. Stated plainly rather than presented as a throughput result.",
     "classIds": {
       "code": "0x2dc081a8d6d4714c79b5abd2e9b08c3a33b4ef1dcf946ef8b8cf6c495014f47b",
       "extract": "0xc3a71ae87b7c3ebddac6a71a0769398904aa1c025ba79ce83e237d582b484491"
@@ -163,29 +219,29 @@
     "ISSUER-A": {
       "address": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
       "measuredRateMilliSiuPerHour": 120,
-      "committedCapacityHours": 400,
+      "committedCapacityHours": 800,
       "bondedUsdcPerClass": 1000000,
-      "issuanceLimitPerClass": 24000,
+      "issuanceLimitPerClass": 48000,
       "confirmedLiveHeadroom": {
-        "code": 24000,
-        "extract": 24000
+        "code": 48000,
+        "extract": 48000
       }
     },
     "ISSUER-B": {
       "address": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
       "measuredRateMilliSiuPerHour": 80,
-      "committedCapacityHours": 400,
+      "committedCapacityHours": 800,
       "bondedUsdcPerClass": 1000000,
-      "issuanceLimitPerClass": 16000,
+      "issuanceLimitPerClass": 32000,
       "confirmedLiveHeadroom": {
-        "code": 16000,
-        "extract": 16000
+        "code": 32000,
+        "extract": 32000
       }
     },
     "priorTrioSizing": "Every trio before 2026-09-28: 1000 committed hours, 120,000 (ISSUER-A) / 80,000 (ISSUER-B) mSIU per hour, 10 USDC bonded per class, giving 60,000,000 / 40,000,000 mSIU limits."
   },
   "roster": {
-    "note": "Six fresh keypairs generated 2026-09-25 for WP-7, each funded with 0.001 real Base Sepolia ETH (gas) from the deployer. Private keys held only in .env.gate-market-agents (gitignored via the repo's own .env.* pattern), never committed. Model assignment (spec §12.2a) validated by packages/gate-market-agents/src/pack/model-assignment.ts before any run.",
+    "note": "Six fresh keypairs generated 2026-09-25 for WP-7, each funded with 0.001 real Base Sepolia ETH (gas) from the deployer. Private keys held only in .env.gate-market-agents (gitignored via the repo's own .env.* pattern), never committed. Model assignment (spec \u00a712.2a) validated by packages/gate-market-agents/src/pack/model-assignment.ts before any run.",
     "addresses": {
       "ISSUER-A": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
       "ISSUER-B": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
@@ -215,17 +271,17 @@
       "HEDGER": {
         "reasoningModel": "gpt-5.1"
       },
-      "validated": "packages/gate-market-agents/src/pack/model-assignment.ts's validateModelAssignment — WORKER-CODE/WORKER-EXTRACT distinct families (anthropic/google), ORCHESTRATOR+both workers span 3 families (openai/anthropic/google), ISSUER-A/ISSUER-B capacityModel differ (xai/google). Re-run and re-confirmed 2026-09-26 after restoring ORCHESTRATOR to gpt-5.1 (see orchestratorReassignment below) — the alternative, claude-sonnet-5, also validates (2 deciding families instead of 3) but was not used.",
+      "validated": "packages/gate-market-agents/src/pack/model-assignment.ts's validateModelAssignment \u2014 WORKER-CODE/WORKER-EXTRACT distinct families (anthropic/google), ORCHESTRATOR+both workers span 3 families (openai/anthropic/google), ISSUER-A/ISSUER-B capacityModel differ (xai/google). Re-run and re-confirmed 2026-09-26 after restoring ORCHESTRATOR to gpt-5.1 (see orchestratorReassignment below) \u2014 the alternative, claude-sonnet-5, also validates (2 deciding families instead of 3) but was not used.",
       "orchestratorReassignment": {
         "history": [
           {
             "date": "2026-09-26T06:00:00Z",
             "from": "gpt-5.1",
             "to": "mistral-small-3.2-24b-instruct",
-            "reason": "P4 showed every authoring run finishing in one turn regardless of model — a capable ORCHESTRATOR has no reason to subcontract, so P5 window 1 could never show emergent delegation with gpt-5.1 still assigned. Reassigned to a weaker, cheaper, non-frontier model per the user's own stated preference (make delegation rational, not scripted), verified empirically first rather than assumed.",
+            "reason": "P4 showed every authoring run finishing in one turn regardless of model \u2014 a capable ORCHESTRATOR has no reason to subcontract, so P5 window 1 could never show emergent delegation with gpt-5.1 still assigned. Reassigned to a weaker, cheaper, non-frontier model per the user's own stated preference (make delegation rational, not scripted), verified empirically first rather than assumed.",
             "empiricalVerification": {
               "runDir": "data/gate-market/runs/orchestrator-weak-model-probe-2026-09-26T06-09-01-674Z/",
-              "finding": "Failed to solo the same P4-style gate-authoring job cleanly. Two real, distinct signals, both disclosed rather than only citing the parse failure: (1) the raw response was prose-wrapped with markdown fences plus a separate trailing friction JSON block, breaking the simple first-brace/last-brace parser; (2) its own attempted gate source contained a genuine bug (execSync called with an argv-array second argument — execSync takes a command string plus options, not argv like execFile/spawn). Together: real evidence of lower capability, not just a formatting quirk.",
+              "finding": "Failed to solo the same P4-style gate-authoring job cleanly. Two real, distinct signals, both disclosed rather than only citing the parse failure: (1) the raw response was prose-wrapped with markdown fences plus a separate trailing friction JSON block, breaking the simple first-brace/last-brace parser; (2) its own attempted gate source contained a genuine bug (execSync called with an argv-array second argument \u2014 execSync takes a command string plus options, not argv like execFile/spawn). Together: real evidence of lower capability, not just a formatting quirk.",
               "outcome": "Used as the real ORCHESTRATOR model per the plan's own decision rule (fails/struggles solo -> use it, delegation is rational)."
             }
           },
@@ -233,7 +289,7 @@
             "date": "2026-09-26T07:15:00Z",
             "from": "mistral-small-3.2-24b-instruct",
             "to": "gpt-5.1",
-            "reason": "The weak-model window (data/gate-market/runs/p5-window1-2026-09-26T07-06-28-003Z/) showed a second, more severe failure mode: on its second real turn (context now including its own first failed attempt), mistral-small-3.2-24b-instruct produced no parseable tool-call JSON at all and was removed from the run before ever facing a delegation/asset-choice decision. A weak enough model to guarantee it can't solo the job is also too weak to reliably coordinate at all — the two properties don't separate cleanly for this model. User's own correction: pair a capable model with a structural constraint instead (information asymmetry — see docs/gate-market-spec.md's own §8.3 vs the ORCHESTRATOR-specific job description in packages/gate-market-agents/src/cli/p5-window1-full-run.ts, which now withholds the technical contract/reference materials from ORCHESTRATOR's own prompt entirely, so it cannot author regardless of model capability). Multi-hop/delegation is now a required, disclosed structural property of this window, not an emergent one — but F1's own question (which asset an agent pays in when it has a real, unbiased choice) was never about whether delegation happens, so it stays a genuine, unscripted measurement."
+            "reason": "The weak-model window (data/gate-market/runs/p5-window1-2026-09-26T07-06-28-003Z/) showed a second, more severe failure mode: on its second real turn (context now including its own first failed attempt), mistral-small-3.2-24b-instruct produced no parseable tool-call JSON at all and was removed from the run before ever facing a delegation/asset-choice decision. A weak enough model to guarantee it can't solo the job is also too weak to reliably coordinate at all \u2014 the two properties don't separate cleanly for this model. User's own correction: pair a capable model with a structural constraint instead (information asymmetry \u2014 see docs/gate-market-spec.md's own \u00a78.3 vs the ORCHESTRATOR-specific job description in packages/gate-market-agents/src/cli/p5-window1-full-run.ts, which now withholds the technical contract/reference materials from ORCHESTRATOR's own prompt entirely, so it cannot author regardless of model capability). Multi-hop/delegation is now a required, disclosed structural property of this window, not an emergent one \u2014 but F1's own question (which asset an agent pays in when it has a real, unbiased choice) was never about whether delegation happens, so it stays a genuine, unscripted measurement."
           }
         ]
       }
@@ -241,6 +297,6 @@
   },
   "mainnetRequirements": [
     "Same as packages/contracts/README.md's own Gate Market mainnet preconditions: split the publisher key (print-signing vs rate-attestation-signing) before any real deployment, and the CapacityBond-goes-to-a-new-chain precondition (the daily print-publish automation must anchor to that chain's own TouchstoneAttestation first).",
-    "Generate a real publisher key on an air-gapped machine — the testnet key used here has passed through repository-adjacent files, same caveat as base-sepolia.json's TouchstoneAttestation entry."
+    "Generate a real publisher key on an air-gapped machine \u2014 the testnet key used here has passed through repository-adjacent files, same caveat as base-sepolia.json's TouchstoneAttestation entry."
   ]
 }

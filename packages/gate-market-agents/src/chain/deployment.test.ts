@@ -11,21 +11,26 @@ describe("loadGateMarketDeployment", () => {
     );
   });
 
-  it("loads the real Base Sepolia deployment — redeployed 2026-09-27 for the series (grade) discriminant", () => {
-    // Addresses updated 2026-09-28: the third trio (0x8582.../0x1A1D.../0x0dF1..., now recorded
-    // under redeployment.previousTrio in the deployment JSON; the two older trios are recorded
-    // one and two levels deeper under redeployment.priorRedeployment) was retired when
-    // `reserveForWork`/`releaseReservation` were added, so that USDC-paid work draws on the same
-    // bonded headroom a minted claim does. The whole mutually-address-pinned trio has to
-    // redeploy together — `CapacityBond` takes WorkClaim's address as an immutable. The same
-    // deploy resized both issuers' lots (60,000/40,000 -> 24,000/16,000 mSIU per class), which
-    // would have required a redeploy on its own: `createLot` reverts `LotExists`, so a lot is
-    // immutable once made.
+  it("loads the real Base Sepolia deployment — the fifth trio, redeployed 2026-09-29 to resize capacity", () => {
+    // Addresses updated 2026-09-29. Unlike every earlier redeploy this one changed no bytecode:
+    // the contracts are identical to the fourth trio's and only the LOTS are new, at 800
+    // committedCapacityHours against 400. Three windows now carry two independent purchases each
+    // (gate authoring 10,000 mSIU, adversarial testing 4,000), so worst-case demand is 42,000
+    // before the external buyer's takes — more than the fourth trio's remaining 31,000 could
+    // cover, which would have exhausted the pool in window 2 and cost most of the run's
+    // asset-choice decisions.
+    //
+    // A redeploy was the only route: `CapacityBond.createLot` is one lot per (issuer, class)
+    // forever and reverts `LotExists`, with no top-up path by design, and `bondedUsdc` plays no
+    // part in `issuanceLimit` — so adding collateral raises the default-paying bond and moves
+    // headroom by exactly zero. The retiring trio's closing state (both bonds after five real
+    // defaults, the holder's USDC, the conservation check) is recorded under
+    // redeployment.retiredTrio in the deployment JSON; older trios nest below it.
     const deployment = loadGateMarketDeployment();
     expect(deployment.network).toMatchObject({ name: "Base Sepolia", chainId: 84532 });
     expect(deployment.usdc.address).toBe("0x036CbD53842c5426634e7929541eC2318f3dCF7e");
-    expect(deployment.capacityBond.address).toBe("0xa76967016ae221Ab22d58471f7CB9c6Dae57634e");
-    expect(deployment.claimRouter.address).toBe("0x277b67694aba7bd0988d85dE888fBf7053295AE1");
-    expect(deployment.workClaim.address).toBe("0xe0D9B879F9841ef6Be5Af9001ed8F015030324A4");
+    expect(deployment.capacityBond.address).toBe("0x88034c6d644c9eeaB1823c80a00f54CF1c042bf1");
+    expect(deployment.claimRouter.address).toBe("0xeda362D1C7e1Ca2089a9331527FB028d09Dfa24d");
+    expect(deployment.workClaim.address).toBe("0xc2e058E55211F460556E60a45963Ea3a3C31a898");
   });
 });
