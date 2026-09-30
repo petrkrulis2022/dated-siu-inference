@@ -1014,6 +1014,48 @@ belongs before the block starts, not inside it. The fix is not to remove the inv
 issuer that has never been told it may quote forward cannot be said to have declined either. It
 is to make declining representable, and to stop re-asking once it has been.
 
+### 4.6t The sandbox has no /tmp, so idiomatic Node fails all six G-checks
+
+Run 13, window 2. ISSUER-B authored a gate that passed G1-G6 on its turn 2. Its revision on turn
+4 failed **all six** with the same cause:
+
+```
+hardened gate did not execute (G1): Error: ENOENT: no such file or directory,
+mkdtemp '/tmp/g-XXXXXX'
+```
+
+Reproduced directly against the real bwrap argument list, not inferred:
+
+```
+os.tmpdir() = /tmp        TMPDIR = undefined
+/tmp exists = false       mkdtemp FAILS: ENOENT ... mkdtemp '/tmp/g-XXXXXX'
+/scratch writable = true
+```
+
+`run-sandboxed.ts` binds `/usr`, `/bin`, `/lib`, `/lib64`, node's own directory, `/proc`, `/dev`
+and a writable `/scratch`. It does not bind or create `/tmp`. `--clearenv` then unsets `TMPDIR`,
+so node's `os.tmpdir()` falls back to its compiled default of `/tmp` — a directory that is not
+there. **`os.tmpdir()` returns a path that does not exist, and says nothing about it.**
+
+A gate author writing the most ordinary line in Node — `mkdtemp(join(tmpdir(), 'g-'))` — is
+graded FAIL on every check for a reason that has nothing to do with the gate. Nothing in the
+brief or the skill pack says the filesystem is restricted or that `/scratch` is the writable
+place, and the one API that exists to answer "where may I write?" answers wrongly.
+
+**This is not a grading result and must never be counted as one.** It cost run 13 the more
+important half of the artefact: ISSUER-B had a passing gate, was attacked, and revised — and the
+revision could not execute. A revision that crashes on apparatus cannot be read as an author
+failing to harden its gate.
+
+Two defects, and the second hid the first:
+
+- **No writable temp directory.** Fix with `--tmpfs /tmp`, which keeps isolation (in-memory,
+  discarded with the sandbox) while making `os.tmpdir()` true. Setting `TMPDIR=/scratch` also
+  works but leaves gate scratch files mixed in with staged inputs.
+- **Every check reports the wrong label.** G2 through G6 each reported `did not execute (G1)`.
+  Six identical messages naming one check read as six independent failures rather than one cause
+  observed six times, which is exactly the misreading that made this look like gate drift.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make
