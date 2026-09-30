@@ -30,6 +30,7 @@ import { ViemChainReader } from "../chain/reader.js";
 import { AGENT_IDS, erc8004IdFor, type AgentId } from "../identity/resolve.js";
 import { printDateToUnixDay, SERIES_COMMODITY } from "../chain/rate-attestation.js";
 import { QuoteBoard } from "./quote-board.js";
+import { summarisePurchases } from "./purchases.js";
 import { ForwardQuoteBook } from "./forward-book.js";
 import {
   buildToolArgs,
@@ -2116,4 +2117,186 @@ describe("turns are bounded by their window's span", () => {
     expect(result.turnsByAgent.ORCHESTRATOR).toBeGreaterThan(0);
     expect(result.haltedReason?.ORCHESTRATOR).not.toBe("window_span_elapsed");
   }, 30_000);
+});
+
+/**
+ * **A claim you already hold, settling somebody else's quote.** Real anvil, real contracts, real
+ * board.
+ *
+ * This is the circulation case and it was not expressible until 2026-09-30. `pay_with_claim`
+ * MINTS a fresh claim — new issuance, new headroom — so paying with it is not a claim changing
+ * hands. Only `transfer_claim` passes on an existing one, and `transfer_claim` could not settle
+ * a quote, because `board.recordPaid` was reached from the `pay` branch alone. A seller would
+ * have watched a claim arrive while its quote stayed open and it was never told it owed work —
+ * the buyer out of pocket, the job undone, which is the failure that cost run 4's window 1.
+ */
+describe("runFullRunWindow — a held claim settles a quote, and the seller is told", () => {
+  let devnet: DevnetHandle;
+  let runsRoot: string;
+  let ledgerPath: string;
+
+  beforeAll(async () => {
+    devnet = await setupDevnet();
+  }, 180_000);
+
+  afterAll(async () => {
+    await devnet.stop();
+  });
+
+  beforeEach(async () => {
+    runsRoot = await mkdtemp(path.join(tmpdir(), "full-run-circulation-"));
+    ledgerPath = path.join(runsRoot, "ledger.json");
+  });
+
+  afterEach(async () => {
+    await rm(runsRoot, { recursive: true, force: true });
+  });
+
+  it("marks the quote paid when a held claim is transferred to settle it", async () => {
+    const cfg = (
+      agentId: AgentId,
+      adapter: Adapter,
+      availableTools: RosterAgentConfig["availableTools"],
+    ): RosterAgentConfig => ({
+      agentId,
+      adapter,
+      modelString: "test",
+      prices: PRICES,
+      skillPackText: CANONICAL_ASSET_DESCRIPTION,
+      availableTools,
+      privateKeyHex: devnet.agents[agentId].privateKeyHex,
+      address: devnet.agents[agentId].address,
+      erc8004Id: erc8004IdFor(devnet.agents[agentId].address),
+      rpcUrl: devnet.rpcUrl,
+      maxOutputTokens: 3000,
+      temperature: 0.7,
+      provider: "openai",
+    });
+    const respond = (text: string): AdapterResult => ({
+      text,
+      usage: { input: 100, output: 50, cached_input: 0, reasoning: 0 },
+      latency_ms: 1,
+      raw: {},
+      deviations: [],
+    });
+
+    let tokenId: string | undefined;
+    let orchCall = 0;
+    const orchAdapter: Adapter = async (_m, prompt) => {
+      orchCall++;
+      if (orchCall === 1) return respond(JSON.stringify({ tool: "mint_claim", args: { quantity: "10" } }));
+      if (orchCall === 2) {
+        tokenId = prompt.match(/"tokenId":"(\d+)"/)?.[1];
+        return respond(
+          JSON.stringify({
+            tool: "transfer_claim",
+            args: { agentId: "WORKER-CODE", tokenId, quantity: "10" },
+          }),
+        );
+      }
+      return respond(JSON.stringify({ done: true, summary: "funded the buyer" }));
+    };
+
+    // The buyer: asks WORKER-EXTRACT for a quote, then settles it with the claim it is holding
+    // rather than redeeming it or paying dollars.
+    const sellerId = erc8004IdFor(devnet.agents["WORKER-EXTRACT"].address);
+    let buyerCall = 0;
+    const buyerAdapter: Adapter = async (_m, prompt) => {
+      buyerCall++;
+      if (buyerCall === 1) {
+        return respond(
+          JSON.stringify({
+            tool: "request_quote",
+            args: {
+              siu: "1", model: "test", rateUsdPerSiu: "0.0100", indexVersion: "SIU-2026a",
+              printId: "circulation-test-print", printHash: `0x${"11".repeat(32)}`,
+              sellerId, chain: "base-sepolia", expiresInSeconds: 3600, pattern: "fixed",
+            },
+          }),
+        );
+      }
+      const requestId = prompt.match(/(qr-\d+)/)?.[1];
+      // ORCHESTRATOR transfers on its own turn earlier in the same round, so by the buyer's
+      // second turn the claim is genuinely held — the chain write has already happened and
+      // transfer_claim would revert otherwise.
+      if (requestId !== undefined && tokenId !== undefined) {
+        return respond(
+          JSON.stringify({
+            tool: "transfer_claim",
+            args: { agentId: "WORKER-EXTRACT", tokenId, quantity: "4", requestId },
+          }),
+        );
+      }
+      return respond(
+        JSON.stringify({
+          tool: "get_balances",
+          args: { account: devnet.agents["WORKER-CODE"].address, tokenIds: tokenId ? [tokenId] : [] },
+        }),
+      );
+    };
+
+    const sellerPrompts: string[] = [];
+    const sellerAdapter: Adapter = async (_m, prompt) => {
+      sellerPrompts.push(prompt);
+      const requestId = prompt.match(/(qr-\d+)/)?.[1];
+      if (requestId && !prompt.includes("YOU HAVE BEEN PAID")) {
+        return respond(JSON.stringify({ tool: "issue_quote", args: { requestId } }));
+      }
+      return respond(JSON.stringify({ tool: "get_print", args: { printId: "circulation-test-print" } }));
+    };
+
+    const ceiling = new BudgetCeiling(
+      Object.fromEntries(
+        AGENT_IDS.map((id) => [id, { maxUsdcSpend: "1000000", maxInferenceTurns: 100, maxInferenceUsd: "1000000" }]),
+      ) as Record<AgentId, { maxUsdcSpend: string; maxInferenceTurns: number; maxInferenceUsd: string }>,
+    );
+
+    const result = await runFullRunWindow({
+      windowId: "w-circulation",
+      roster: [
+        cfg("ORCHESTRATOR", orchAdapter, ["mint_claim", "transfer_claim"]),
+        cfg("WORKER-CODE", buyerAdapter, ["get_balances", "request_quote", "transfer_claim"]),
+        cfg("WORKER-EXTRACT", sellerAdapter, ["issue_quote", "get_print"]),
+      ],
+      job: JOB,
+      maxTurnsPerAgent: 6,
+      budget: new ExperimentBudget({ ceiling, runCapUsd: "1000000", experimentCapUsd: "1000000", ledgerPath }),
+      deps: {
+        chainReader: new ViemChainReader(devnet.deployment, devnet.rpcUrl),
+        deployment: devnet.deployment,
+        escrowAddress: "0x0000000000000000000000000000000000dead",
+        runGateHardeningChecks,
+        loadPrint: async () => ({ print_id: "circulation-test-print" }) as unknown as Print,
+        isReconciled: async () => false,
+      },
+      runsRoot,
+      runId: "run-circulation",
+      manifest: MANIFEST,
+      mintContext: {
+        publisherPrivateKeyHex: devnet.publisherPrivateKeyHex,
+        printId: "circulation-test-print",
+        series: SERIES_COMMODITY,
+        printDate: printDateToUnixDay("2026-09-25"),
+        nanoUsdPerSiu: 10_000_000n,
+        validitySeconds: 3600n,
+      },
+    });
+
+    // The claim really moved from the holder to the seller.
+    const buyerTransfer = result.capacityEvents.find(
+      (e) => e.kind === "transfer_claim" && e.agentId === "WORKER-CODE",
+    );
+    expect(buyerTransfer, "WORKER-CODE must have paid with the claim it held").toBeDefined();
+
+    // And the seller was TOLD — the assertion that fails without the recordPaid fix. Without it
+    // the claim arrives and the quote stays open forever.
+    expect(
+      sellerPrompts.some((p) => p.includes("YOU HAVE BEEN PAID")),
+      "the seller must learn its quote was settled by the transfer",
+    ).toBe(true);
+
+    // And it is recorded as circulation, not as a fresh purchase.
+    const journey = summarisePurchases(result).journeys.find((j) => j.tokenId === tokenId);
+    expect(journey?.outcome).toBe("passed_onward");
+  }, 180_000);
 });

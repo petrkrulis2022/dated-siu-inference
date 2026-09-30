@@ -1290,17 +1290,7 @@ export async function runFullRunWindow(
       // told it owed the work. `settle_split` shipped with the same gap earlier the same day.
       // That is the shape of failure that cost run 4's window 1 — an escrow with no settle leg —
       // and it is why WORKER-CODE could not have paid a quote in claims before this.
-      // `transfer_claim` is in this list deliberately, and it is the one that makes fSIU money
-      // rather than a settlement rail. `pay_with_claim` MINTS a fresh claim — new issuance, new
-      // headroom consumed. Passing on a claim you already hold is a different act: the payer
-      // gives up an existing asset instead of creating one, which is what circulation means and
-      // what no run has ever shown. Without a quote link it was not expressible at all.
-      if (
-        intent.tool === "pay" ||
-        intent.tool === "pay_with_claim" ||
-        intent.tool === "settle_split" ||
-        intent.tool === "transfer_claim"
-      ) {
+      if (settlesQuote(intent.tool)) {
         const requestId = (intent.args as { requestId?: unknown } | undefined)?.requestId;
         if (typeof requestId === "string") board.recordPaid(requestId);
       }
@@ -1842,6 +1832,32 @@ export interface BuildToolArgsContext {
   windowBoundsByIndex?: Record<number, { from: bigint; to: bigint }>;
   /** See `FullRunWindowOptions.outstandingClaims`. */
   outstandingClaims?: readonly OutstandingClaim[];
+}
+
+/**
+ * Tools that can settle a quote, so the board stops advertising it to the buyer and starts
+ * telling the seller it owes work.
+ *
+ * Until 2026-09-30 this was `pay` alone, and the consequence was invisible because the fSIU
+ * route never involved a quote: the orchestrator's Option B is a bare `pay_with_claim` while
+ * Option A is the full request/issue/pay/settle cycle. §4.6f logs that difference as a turn-count
+ * asymmetry; an fSIU payment being unable to settle a quote at all is the same difference wearing
+ * another face. A payment the seller does not recognise leaves the buyer out of pocket and the
+ * job undone — the failure that cost run 4's window 1.
+ *
+ * `transfer_claim` belongs here and is the one that matters. `pay_with_claim` MINTS a fresh claim
+ * — new issuance, new headroom consumed — which is not circulation. Paying with a claim you
+ * ALREADY HOLD is the different act: the payer gives up an existing asset rather than creating
+ * one. That is what fSIU circulating means, no run has ever shown it, and without a quote link
+ * it was not expressible.
+ */
+export function settlesQuote(tool: ToolName): boolean {
+  return (
+    tool === "pay" ||
+    tool === "pay_with_claim" ||
+    tool === "settle_split" ||
+    tool === "transfer_claim"
+  );
 }
 
 /** Gate v1 -> attacks -> the builder may revise -> attacks again. Capped so an adaptive exchange
