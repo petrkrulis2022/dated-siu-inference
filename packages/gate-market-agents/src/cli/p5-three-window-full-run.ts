@@ -965,8 +965,8 @@ YOUR JOB THIS WINDOW
   blind.
 
   Your real job is to get WORKER-CODE (seller_id "${workerCodeErc8004Id}") to deliver it, and to
-  choose how to pay for that — you have two genuinely different ways, and nothing here tells you
-  which to prefer:
+  choose how to pay for that — you have three genuinely different ways, and nothing here tells
+  you which to prefer:
 
   OPTION A — settle in USDC: request a quote from WORKER-CODE, then pay the real quote it issues.
     Step 1: {"tool": "request_quote", "args": {"siu": "10", "model": "${models["WORKER-CODE"]}",
@@ -980,7 +980,18 @@ YOUR JOB THIS WINDOW
   OPTION B — settle in fSIU (a dated work claim, not a dollar):
     Step 1: {"tool": "pay_with_claim", "args": {"agentId": "WORKER-CODE", "quantity": "10000"}}
       (quantity is in milli-SIU; 10000 = 10 SIU, matching Option A's own quote size.)
-    mint_claim and transfer_claim remain available if you want the two steps separately.
+
+  OPTION C — settle one quote partly in each. Request a quote as in Option A, then:
+    {"tool": "settle_split", "args": {"requestId": "<the requestId from the board>",
+      "claimQuantityMilliSiu": "<how much of it to settle in claims>",
+      "settler": "0x0000000000000000000000000000000000000000"}}
+    The dollar leg is whatever the quote's remaining value is, and the escrow opens for that.
+    One call, one turn — the same turn cost as settling wholly in either asset.
+
+  mint_claim and transfer_claim remain available if you want the steps separately:
+    {"tool": "mint_claim", "args": {"quantity": "10000"}}
+    {"tool": "transfer_claim", "args": {"agentId": "WORKER-CODE", "tokenId": "<tokenId>",
+      "quantity": "10000"}}
 
   HOW THE REST OF THE WINDOW WORKS, STATED AS A FACT
   The window does not end when you have paid. Delivery, forward offers from issuers, and failures
@@ -1226,6 +1237,7 @@ ${runShapeFacts}`;
         "request_quote",
         "pay",
         "pay_with_claim",
+        "settle_split",
         "mint_claim",
         "transfer_claim",
         "check_headroom",

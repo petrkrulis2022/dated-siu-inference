@@ -815,6 +815,40 @@ Claims could not circulate either, for the same kind of reason: WORKER-CODE held
 "fSIU never passes between parties, so it is a settlement rail rather than money" was a property
 of the tool grant, not a finding about agents.
 
+### 4.6q Worked syntax for one option is a steer, even when the prose is neutral
+
+The third form of the same defect, after the prompt-level prohibition (§4.6a) and the turn-cost
+asymmetry (§4.6f). Found 2026-09-30 while auditing the briefs for bias.
+
+WORKER-CODE's brief described what a claim is, then said:
+
+> *"confirm the balance with `get_balances`, then present it with exactly:
+> `{"tool": "redeem_claim", "args": {...}}`"*
+
+Read as prose it is close to neutral — it describes a mechanism. What it actually did was supply
+**a call the agent could paste** for redeeming, and nothing of the kind for transferring, paying
+onward, or holding. An agent reaches for the option it has a working call for, so the surface
+chose even though the prose did not.
+
+**This is the turn-cost confound on a different surface.** §4.6f's version made one route cost
+three turns and the other one; this version makes one route cost zero thought and the others an
+act of construction. Both produce a choice that reads as a preference and is not.
+
+**The rule: among the options an agent genuinely has, either every one is demonstrated or none
+is.** Describing several and demonstrating one is not neutrality.
+
+**Audited across every brief, not only the one it was found in — and it had a second instance.**
+ORCHESTRATOR, the agent whose asset choice *is* the F1 measurement, was granted both
+`transfer_claim` and `pay_with_claim` and demonstrated only the latter. Its two *payment* routes
+were already symmetric (Option A and Option B both carry full worked calls, which is why the
+headline F1 comparison is not contaminated), but the disposal options were not. A test now
+asserts the property for every agent in every window, so a fourth instance fails a test rather
+than a run.
+
+A corollary worth stating, because it bit immediately: **adding an option means demonstrating it
+too.** `settle_split` would otherwise have arrived as the new under-demonstrated route and been
+under-chosen for exactly this reason.
+
 ### 4.6o Verifying the stated property is not enough when a wrong implementation satisfies it
 
 A method note, from a real near-miss on 2026-09-30.

@@ -202,6 +202,37 @@ describe("p5 three-window roster", () => {
     }
   });
 
+  /**
+   * The general form of the Phase 2 finding, checked across EVERY brief rather than the one it
+   * was found in.
+   *
+   * WORKER-CODE's brief used to describe several things a holder might do and supply a working
+   * call for exactly one of them — `redeem_claim`. The prose was neutral; the surface was not.
+   * An agent reaches for the option it has been handed a call it can paste, so demonstrating one
+   * option while describing the rest in prose is a steer by the same mechanism as the turn-cost
+   * confound (§4.6f): one route is cheaper to take, and the resulting choice reads as a
+   * preference. See spec §4.6q.
+   *
+   * The rule asserted here: among the ways an agent can DISPOSE OF A CLAIM it holds, either
+   * every one it has been granted is demonstrated, or none is.
+   */
+  it("never demonstrates one claim option while leaving its siblings in prose", () => {
+    const dispositions = ["redeem_claim", "transfer_claim", "pay_with_claim", "settle_split"];
+    for (const w of [1, 2, WINDOW_COUNT]) {
+      for (const agent of buildRoster(input(w))) {
+        const granted = dispositions.filter((t) => agent.availableTools.includes(t as never));
+        if (granted.length < 2) continue;
+        const demonstrated = granted.filter((t) => agent.skillPackText.includes(`"tool": "${t}"`));
+        expect(
+          demonstrated.length === 0 || demonstrated.length === granted.length,
+          `${agent.agentId} (window ${w}) is granted [${granted.join(", ")}] but demonstrates ` +
+            `only [${demonstrated.join(", ")}] — supplying a working call for some options and ` +
+            `not others is a steer even when the prose is even-handed.`,
+        ).toBe(true);
+      }
+    }
+  });
+
   it("gives WORKER-CODE the capacity-commitment step on the dollar route", () => {
     const worker = find(buildRoster(input(1)), "WORKER-CODE");
     expect(worker.availableTools).toContain("reserve_for_work");
