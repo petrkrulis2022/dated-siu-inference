@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Runner, ToolRefusedError } from "./runner.js";
+import { Runner, ToolRefusedError, type RunnerOptions } from "./runner.js";
 import { BudgetCeiling } from "./budget/ceiling.js";
 import { AGENT_IDS, type AgentId } from "./identity/resolve.js";
 import type { RunnerDeps } from "./deps.js";
@@ -63,7 +63,7 @@ function runnerWithGuard(guard?: (t: string) => string | null): Runner {
     deps: deps(),
     ceiling: generousCeiling(),
     allowedTools: ["submit_job", "get_print"],
-    toolGuard: guard as ((t: never) => string | null) | undefined,
+    toolGuard: guard as RunnerOptions["toolGuard"],
   });
 }
 

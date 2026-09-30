@@ -44,6 +44,25 @@ function fakeDeps(runGateHardeningChecks: RunnerDeps["runGateHardeningChecks"]):
       issuanceLimit: async () => 0n,
       claimWindow: async () => ({ windowFrom: 0n, windowTo: 0n }),
       currentBlockTimestamp: async () => 0n,
+      // Added 2026-09-30: these three were missing from every test double in this package
+      // because tsconfig excluded *.test.ts from typecheck, so the doubles silently
+      // implemented an older ChainReader than production used.
+      escrowState: async () => ({
+        status: "none" as const,
+        buyer: `0x${"00".repeat(20)}`,
+        seller: `0x${"00".repeat(20)}`,
+        maxAmountMinorUnits: 0n,
+        expiryUnix: 0n,
+      }),
+      reservation: async () => ({
+        exists: false,
+        released: false,
+        issuer: `0x${"00".repeat(20)}`,
+        classId: `0x${"00".repeat(32)}`,
+        quantityMilliSiu: 0n,
+        deadlineUnix: 0n,
+      }),
+      issuersForClass: async () => [],
     },
     deployment: {
       network: { name: "test", chainId: 0 },

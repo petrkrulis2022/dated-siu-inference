@@ -22,7 +22,7 @@ async function attack(gateSource: string, submissionSource: string): Promise<Att
     referenceFiles: CODE_REFERENCE.files,
     oracleSeed: SEED,
     gateVersion: 1,
-  });
+  }, "0x00");
 }
 
 describe("submit_attack — the real end-to-end adversary path", () => {

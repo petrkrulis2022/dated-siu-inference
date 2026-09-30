@@ -7,7 +7,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
     "test": "vitest run",
     "seed:registry": "pnpm run build && node dist/cli/seed-registry.js",
     "fetch:prices": "pnpm run build && node dist/cli/fetch-prices.js",

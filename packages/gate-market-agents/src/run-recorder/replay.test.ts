@@ -23,7 +23,7 @@ function fakeReceipt(receiptId: string, usdcEquivalent: string, claimRetired: bo
     executor: "WORKER-CODE",
     class: "code",
     siu_delivered: 1,
-    gate_results: { G1: true, G2: true, G3: true, G4: true, G5: claimRetired },
+    gate_results: { G1: true, G2: true, G3: true, G4: true, G5: claimRetired, G6: claimRetired },
     settlement_asset: "USDC",
     settlement_amount: 1,
     usdc_equivalent_at_print: usdcEquivalent,

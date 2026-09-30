@@ -16,7 +16,7 @@ describe.each([
   ["trivial-accept", TRIVIAL_ACCEPT_PACK],
 ] as const)("runPackSelfCheck against %s", (_label, pack) => {
   it("passes: known-good accepted, every adversarial fixture rejected", async () => {
-    const result = await runPackSelfCheck(pack);
+    const result = await runPackSelfCheck(pack as Parameters<typeof runPackSelfCheck>[0]);
     expect(result.packName).toBe(pack.name);
     expect(result.knownGoodAccepted).toBe(true);
     expect(result.adversarialRejectedCount).toBe(result.adversarialTotalCount);

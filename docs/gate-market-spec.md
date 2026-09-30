@@ -764,6 +764,39 @@ Not changed here, deliberately: what the payer should default to, or whether the
 told it can forward-date, is a change to the freedom set and belongs in a decision about the F1
 protocol rather than in a quiet edit before the runs that are meant to be comparable.
 
+### 4.6o Verifying the stated property is not enough when a wrong implementation satisfies it
+
+A method note, from a real near-miss on 2026-09-30.
+
+The depletion ratchet was fixed by giving the external buyer's claim a window that ends with the
+run and expiring it there. The property to verify was obvious and was stated as the requirement:
+**capacity consumed is returned, so consecutive runs start from identical headroom.** A test
+asserting exactly that would have passed.
+
+It would also have passed against an implementation that returned the capacity **immediately** —
+and that implementation is wrong in a way the stated property cannot see. Returning capacity
+mid-run tops the pool back up while the run is still going, which makes window 3 easier, removes
+the scarcity the three-window design exists to produce, and quietly destroys the finding the run
+was for. Between-run headroom would look perfect the whole time.
+
+So the scenario asserts three things, and the middle one is load-bearing:
+
+```
+consumed exactly     headroomBefore - headroomDuringRun === quantity
+NOT returned early   settle_window_close reverts while the run is still open
+returned exactly     headroomAfterRunEnd === headroomBefore
+```
+
+**The general rule: before writing the test for a stated property, ask what else would satisfy
+it.** If a plausible wrong implementation passes, the property is underspecified and the test is
+measuring agreement rather than correctness. The same reasoning that makes a gate that never
+verifies its suite ran not a gate (§4.6j) makes a test that cannot distinguish right from
+plausibly-wrong not a test.
+
+This is the second time in one day that verifying the obvious thing surfaced the subtler one —
+the first being §4.6m, where checking whether the adversary could infer a gate's bounds turned up
+two channels that had simply told it.
+
 ### 4.6l Attack classes: volume defends against one of them and not the other
 
 The strongest finding of run 10 (2026-09-30), and the first remedy-shaped answer this project has

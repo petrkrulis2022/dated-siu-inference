@@ -18,7 +18,7 @@ import {
   runGateHardeningChecks,
   type GateHardeningResult,
 } from "@touchstone/task-pack-gate-hardening";
-import type { Print } from "@touchstone/sdk";
+import type { Print, QuoteBody } from "@touchstone/sdk";
 import type { RunnerDeps } from "../deps.js";
 import type { RunManifest } from "../run-recorder/recorder.js";
 import { BudgetCeiling } from "../budget/ceiling.js";
@@ -75,6 +75,25 @@ function fakeDeps(runGateHardeningChecks: RunnerDeps["runGateHardeningChecks"]):
       issuanceLimit: async () => 0n,
       claimWindow: async () => ({ windowFrom: 0n, windowTo: 0n }),
       currentBlockTimestamp: async () => 0n,
+      // Added 2026-09-30: these three were missing from every test double in this package
+      // because tsconfig excluded *.test.ts from typecheck, so the doubles silently
+      // implemented an older ChainReader than production used.
+      escrowState: async () => ({
+        status: "none" as const,
+        buyer: `0x${"00".repeat(20)}`,
+        seller: `0x${"00".repeat(20)}`,
+        maxAmountMinorUnits: 0n,
+        expiryUnix: 0n,
+      }),
+      reservation: async () => ({
+        exists: false,
+        released: false,
+        issuer: `0x${"00".repeat(20)}`,
+        classId: `0x${"00".repeat(32)}`,
+        quantityMilliSiu: 0n,
+        deadlineUnix: 0n,
+      }),
+      issuersForClass: async () => [],
     },
     deployment: {
       network: { name: "test", chainId: 0 },
@@ -144,6 +163,8 @@ function orchestratorConfig(adapter: Adapter): RosterAgentConfig {
     erc8004Id: "erc8004:0x0000000000000000000000000000000000000001",
     rpcUrl: "http://127.0.0.1:1",
     maxOutputTokens: 3000,
+    temperature: 0.7,
+    provider: "openai",
   };
 }
 
@@ -684,6 +705,8 @@ describe("the adversary is told a gate exists", () => {
             erc8004Id: "erc8004:0x0000000000000000000000000000000000000002",
             rpcUrl: "http://127.0.0.1:1",
             maxOutputTokens: 3000,
+            temperature: 0.7,
+            provider: "openai",
           },
         ],
         job: JOB,
@@ -746,6 +769,8 @@ describe("the adversary is told a gate exists", () => {
             erc8004Id: "erc8004:0x0000000000000000000000000000000000000002",
             rpcUrl: "http://127.0.0.1:1",
             maxOutputTokens: 3000,
+            temperature: 0.7,
+            provider: "openai",
           },
         ],
         job: JOB,
@@ -797,6 +822,8 @@ describe("the adversary is told a gate exists", () => {
             erc8004Id: "erc8004:0x0000000000000000000000000000000000000002",
             rpcUrl: "http://127.0.0.1:1",
             maxOutputTokens: 3000,
+            temperature: 0.7,
+            provider: "openai",
           },
         ],
         job: JOB,
@@ -1192,7 +1219,12 @@ describe("buildToolArgs", () => {
       print_hash: "0xabc",
       seller_id: "erc8004:0xWORKERCODE",
       expiry: "2026-09-26T00:00:00Z",
-      settlement: [{ asset: "usdc" as const, address: "0x0", amount_max: "500000" }],
+      // `chain` is required by SettlementEntry and was missing from this fixture until
+      // 2026-09-30 — the schema gained it and the fixture never did, which no typecheck
+      // could see while *.test.ts was excluded.
+      settlement: [
+        { asset: "usdc", chain: "base-sepolia", address: "0x0", amount_max: "500000" },
+      ] as QuoteBody["settlement"],
     };
     const request = board.postRequest("ORCHESTRATOR", realBody);
 
@@ -1225,7 +1257,12 @@ describe("buildToolArgs", () => {
       print_hash: "0xabc",
       seller_id: "erc8004:0xWORKERCODE",
       expiry: "2026-09-26T00:00:00Z",
-      settlement: [{ asset: "usdc" as const, address: "0x0", amount_max: "500000" }],
+      // `chain` is required by SettlementEntry and was missing from this fixture until
+      // 2026-09-30 — the schema gained it and the fixture never did, which no typecheck
+      // could see while *.test.ts was excluded.
+      settlement: [
+        { asset: "usdc", chain: "base-sepolia", address: "0x0", amount_max: "500000" },
+      ] as QuoteBody["settlement"],
     };
     const request = board.postRequest("ORCHESTRATOR", realBody);
     const realQuote = { ...realBody, sig: "0xrealsignature" };
@@ -1536,6 +1573,8 @@ describe("runFullRunWindow — the quote board makes a real two-agent negotiatio
       erc8004Id: "erc8004:0xWORKERCODE",
       rpcUrl: "http://127.0.0.1:1",
       maxOutputTokens: 3000,
+      temperature: 0.7,
+      provider: "openai",
     };
 
     const budgetCeiling = new BudgetCeiling({
@@ -1620,6 +1659,8 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
       erc8004Id: erc8004IdFor(devnet.agents[agentId].address),
       rpcUrl: devnet.rpcUrl,
       maxOutputTokens: 3000,
+      temperature: 0.7,
+      provider: "openai",
     });
 
     const respond = (text: string): AdapterResult => ({
@@ -1856,6 +1897,8 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
       erc8004Id: erc8004IdFor(devnet.agents[agentId].address),
       rpcUrl: devnet.rpcUrl,
       maxOutputTokens: 3000,
+      temperature: 0.7,
+      provider: "openai",
     });
     const respond = (text: string): AdapterResult => ({
       text,
