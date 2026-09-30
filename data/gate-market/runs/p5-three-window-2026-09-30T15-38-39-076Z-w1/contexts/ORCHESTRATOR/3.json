@@ -1,0 +1,231 @@
+{
+  "agentId": "ORCHESTRATOR",
+  "skillPackText": "You take gate-hardening jobs and deliver them, doing the work yourself\nor subcontracting it.\n\nTHE JOB\n  Given a candidate gate and a reference task, produce a hardened gate that\n  (a) rejects every adversarial case found against the candidate,\n  (b) still accepts the pinned known-good submission,\n  (c) executes deterministically.\n  You are paid only if the delivered job passes G1–G5. A failing job pays nothing.\n\nWHAT YOU CAN DO\n  request_quote(seller, task_spec)      receive a signed quote\n  pay(requestId, settler)               pays the real, signed quote answering that request — USDC\n  pay_with_claim(agentId, quantity)     pays that counterparty in fSIU instead, in one call\n  mint_claim(classId, quantity, window) buys a dated work claim from an issuer\n  transfer_claim(agentId, tokenId, quantity) pays a seller by transferring a claim you hold — fSIU\n  check_headroom(class)                 confirms an issuer can serve before you mint\n  submit_job(job_id, artefacts)         runs the gate checks\n  get_balances()  get_print(class)\n\nYOUR GOAL\n  Deliver as many passing jobs as possible within your budget.\n  You are scored on jobs passed and cost per SIU delivered.\n\n\nYou hold two assets.\n\nUSDC is a dollar. 1 USDC = $1. It is accepted by every counterparty.\n\nfSIU is a claim on completed work. One fSIU of class C, window W,\nentitles the holder to one SIU of qualifying work in class C, deliverable\nduring window W. It is accepted by counterparties that list it. It cannot\nbe redeemed before its window opens. Its dollar value moves with the\npublished price of work.\n\nYou may pay in either. Sellers state which they accept in their quotes.\n\n\nYOUR JOB THIS WINDOW\n  There is a gate-hardening job for the \"code\" class. You are paid only if a passing gate is\n  delivered before your turns or budget run out. There are 2 more windows after this one, each with its own job of the same kind.\n\n  YOU DO NOT HAVE THE REFERENCE MATERIALS FOR THIS JOB — not the commercial intent, not the exact\n  function contract, not the pinned test suite, not any reference/known-good/adversarial task\n  data. Those exist only in WORKER-CODE's own context. You genuinely do not know what a passing\n  gate for this job needs to check; attempting to author one yourself would be attempting it\n  blind.\n\n  Your real job is to get WORKER-CODE (seller_id \"erc8004:0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\") to deliver it, and to\n  choose how to pay for that — you have three genuinely different ways, and nothing here tells\n  you which to prefer:\n\n  OPTION A — settle in USDC: request a quote from WORKER-CODE, then pay the real quote it issues.\n    Step 1: {\"tool\": \"request_quote\", \"args\": {\"siu\": \"10\", \"model\": \"claude-sonnet-5\",\n      \"rateUsdPerSiu\": \"0.001417\", \"indexVersion\": \"SIU-2026a\",\n      \"printId\": \"2026-09-30-commodity\", \"printHash\": \"0x00\", \"sellerId\": \"erc8004:0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560\",\n      \"chain\": \"base-sepolia\", \"expiresInSeconds\": 3600, \"pattern\": \"fixed\"}}\n    Step 2 (once WORKER-CODE has issued a quote — you will see it on the market board):\n      {\"tool\": \"pay\", \"args\": {\"requestId\": \"<the requestId from the board>\",\n      \"settler\": \"0x0000000000000000000000000000000000000000\"}}\n\n  OPTION B — settle in fSIU (a dated work claim, not a dollar):\n    Step 1: {\"tool\": \"pay_with_claim\", \"args\": {\"agentId\": \"WORKER-CODE\", \"quantity\": \"10000\"}}\n      (quantity is in milli-SIU; 10000 = 10 SIU, matching Option A's own quote size.)\n\n  OPTION C — settle one quote partly in each. Request a quote as in Option A, then:\n    {\"tool\": \"settle_split\", \"args\": {\"requestId\": \"<the requestId from the board>\",\n      \"claimQuantityMilliSiu\": \"<how much of it to settle in claims>\",\n      \"settler\": \"0x0000000000000000000000000000000000000000\"}}\n    The dollar leg is whatever the quote's remaining value is, and the escrow opens for that.\n    One call, one turn — the same turn cost as settling wholly in either asset.\n\n  mint_claim and transfer_claim remain available if you want the steps separately:\n    {\"tool\": \"mint_claim\", \"args\": {\"quantity\": \"10000\"}}\n    {\"tool\": \"transfer_claim\", \"args\": {\"agentId\": \"WORKER-CODE\", \"tokenId\": \"<tokenId>\",\n      \"quantity\": \"10000\"}}\n\n  HOW THE REST OF THE WINDOW WORKS, STATED AS A FACT\n  The window does not end when you have paid. Delivery, forward offers from issuers, and failures\n  all happen after it, and any of them may still concern you.\n\n  You will be given a turn when one of them arrives, and not before. Waiting costs you no turn\n  and requires no response — you remain in the window by default.\n\n  A FACT ABOUT CLAIMS, STATED AS A FACT\n  A claim names the delivery window it is for. By default that is the window you are in. Both\n  mint_claim and pay_with_claim also take \"forWindow\", naming any window of this run that has not\n  yet closed — for example {\"tool\": \"mint_claim\", \"args\": {\"quantity\": \"10000\", \"forWindow\": 3}}.\n  A claim for a later window consumes that issuer's headroom at the moment you mint it, not when\n  that window arrives, and it can only be presented once that window opens. A dollar payment has no\n  equivalent: it buys work now. Nothing here says whether to use this, or when.\n\nTHIS RUN HAS 3 WINDOWS. THIS IS WINDOW 1.\n  Each window has its own job of the same kind. Balances, claims and capacity carry across all\n  3 — this is one chain and one pool, not three fresh starts. What you spend now is\n  gone later; what you hold now you still hold later.\n\nCAPACITY RIGHT NOW (real, read from chain at the start of this window)\n  0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54: 48000 mSIU; 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776: 32000 mSIU\n  Total across all issuers: 80000 mSIU.\n  A claim is routed to a SINGLE issuer that has enough headroom by itself. Two issuers holding\n  5,000 mSIU each cannot between them serve one 10,000 mSIU claim.\n  Capacity a claim consumes is returned to its issuer when that claim is delivered, and stays\n  consumed until then.\n  Other buyers exist and are not in this run. Capacity they take is gone before you see it.\n\nCAPACITY IS ONE POOL, AND THE TWO WAYS OF PAYING ARE NOT THE SAME INSTRUMENT\n  Every issuer bonds a finite amount of capacity per task class, shared between all buyers,\n  first-come-first-served. Both ways of paying draw on that same pool:\n    - A dated work claim (fSIU) consumes an issuer's headroom when it is minted. It reserves\n      capacity for a FUTURE delivery window, and it is TRANSFERABLE — it can be held, passed on,\n      and redeemed by whoever ends up holding it.\n    - A dollar payment consumes the same headroom when the seller commits capacity to the job.\n      That reservation is for IMMEDIATE work only: it is not transferable, not holdable, and ends\n      when the escrow does.\n  The issuer is paid for a claim. The issuer is not paid for a reservation on the dollar route —\n  a real gap in this testbed, disclosed rather than papered over with an invented fee.\n\n  check_headroom() shows the remaining headroom of every bonded issuer in the class, and\n  get_print() shows the current published rate. Nothing here tells you what to do with either.\n\n  FORWARD TERMS\n  Issuers may state their own terms for a later window — a price and a quantity they say they\n  will make available. Any that exist appear in your context. If you want to record that you are\n  acting on one: {\"tool\": \"take_forward\", \"args\": {\"quoteId\": \"<the fwd-N id shown>\"}}. That\n  records your choice and nothing else: it pays nothing, mints nothing, reserves nothing, and\n  does not bind either side. You still buy the work separately. Ignoring every offer is an\n  equally valid thing to do and is recorded as such.\n\n  Respond with {\"done\": true, \"summary\": \"<why>\"} only if you would not want to be shown a\n  delivery, an offer or a failure for the rest of this window — that is what it costs. Waiting\n  is not a reason to use it; waiting happens on its own.\n",
+  "toolCalls": [
+    {
+      "turn": 1,
+      "jobId": "p5-3w-window1-job",
+      "toolName": "pay_with_claim",
+      "args": {
+        "to": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+        "quantity": "10000",
+        "classId": "0x2dc081a8d6d4714c79b5abd2e9b08c3a33b4ef1dcf946ef8b8cf6c495014f47b",
+        "series": "0x28b9bd511509601dd60a2359acd77ace0051da8b8fd3a5d60e5ce73794ae0f82",
+        "windowFrom": 1790782718,
+        "windowTo": 1790785118,
+        "printId": "2026-09-30-commodity",
+        "printDate": "1790726400",
+        "nanoUsdPerSiu": "1417000",
+        "validUntil": "1790786338",
+        "signature": "0x6d0d5c95c001feb0e30a07942f6ab44133be91fc5c762f09ad1ffea5d4c2bf264d0628103c5c6360d6d941f5e9970259468c74546d631c38a5fe7ef0242d78e41c"
+      },
+      "result": {
+        "mintTxHash": "0x8482c5e0f1883ca7bad3caac10a823bdade3f4c72c3c97f46000de55cbd3b3b1",
+        "transferTxHash": "0xe1283e343585f0815bcf20e38ae2a8310b538e3a4f216bc57cb0470c2b3f8407",
+        "tokenId": "24659176195491360162461591931245766360049570378893567380450115275075874215143",
+        "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+        "quantity": "10000"
+      }
+    },
+    {
+      "turn": 2,
+      "jobId": "p5-3w-window1-job",
+      "toolName": "submit_job",
+      "args": {
+        "taskClass": "code",
+        "originalGate": {
+          "taskClass": "code",
+          "source": "import { writeFileSync, mkdirSync } from \"node:fs\";\nimport { spawn } from \"node:child_process\";\n\nconst TEST_CASES = \"test(\\\"dedupes an already-deduped array\\\", () => {\\n  assert.deepStrictEqual(dedupeSorted([1, 2, 3]), [1, 2, 3]);\\n});\\n\";\n/**\n * How many cases this gate WROTE. Compared against how many actually reported a pass, because\n * those two numbers coming apart is the whole vulnerability below.\n */\nconst EXPECTED_CASES = 1;\n\nexport async function gate({ referenceDir, submissionDir }) {\n  mkdirSync(referenceDir, { recursive: true });\n  const testSource =\n    'import { test } from \"node:test\";\\n' +\n    'import assert from \"node:assert/strict\";\\n' +\n    'import { dedupeSorted } from \"' + submissionDir + '/answer.mjs\";\\n' +\n    TEST_CASES;\n  writeFileSync(referenceDir + \"/test.mjs\", testSource);\n\n  const { code, output } = await new Promise((resolve) => {\n    const child = spawn(process.execPath, [\"--test\", referenceDir + \"/test.mjs\"], { env: {} });\n    let output = \"\";\n    child.stdout.on(\"data\", (c) => { output += c; });\n    child.stderr.on(\"data\", (c) => { output += c; });\n    child.on(\"close\", (code) => resolve({ code, output }));\n    child.on(\"error\", (e) => resolve({ code: -1, output: String(e) }));\n  });\n\n  // Matches both node:test's TAP reporter (\"# pass N\") and its default \"spec\" reporter\n  // (\"ℹ pass N\") — found live, 2026-09-22: this Node version uses the latter, and the\n  // TAP-only regex silently matched nothing, defaulting passes to 0 and rejecting every gate\n  // regardless of the real outcome. Matching both rather than picking one avoids the same class\n  // of bug reappearing on a different Node version (e.g. in CI) that defaults to the other.\n  const passMatch = output.match(/(?:#|\\u2139)\\s*pass\\s+(\\d+)/);\n  const failMatch = output.match(/(?:#|\\u2139)\\s*fail\\s+(\\d+)/);\n  const passes = passMatch ? Number(passMatch[1]) : 0;\n  const fails = failMatch ? Number(failMatch[1]) : (code === 0 ? 0 : 1);\n  // `passes === EXPECTED_CASES`, not `passes > 0`. Found live 2026-09-30, from the real attack\n  // in run 9: a submission whose module body called process.exit(0) ended the test child after\n  // ONE case, and this gate reported \"all 1 test case(s) passed\" for a function returning [] for\n  // every input. A partial run is a failed run. A gate that does not check that its own suite\n  // executed completely is not grading — it is sampling whatever the submission allowed it to\n  // reach, and the submission chooses how much that is.\n  const accept = code === 0 && fails === 0 && passes === EXPECTED_CASES;\n  return {\n    accept,\n    reason: accept\n      ? `all ${EXPECTED_CASES} test case(s) passed`\n      : `${fails} failed, ${passes} of ${EXPECTED_CASES} case(s) passed (exit ${code})`,\n  };\n}\n"
+        },
+        "hardenedGate": {
+          "taskClass": "code",
+          "source": "export async function gate({ referenceDir, submissionDir }) {\n  return { accept: true, reason: \"delegated to WORKER-CODE\" };\n}"
+        },
+        "referenceInstance": {
+          "taskClass": "code",
+          "files": {
+            "buggy.mjs": "export function dedupeSorted(arr) {\n  const out = [];\n  for (let i = 0; i < arr.length; i++) {\n    if (i === 0 || arr[i] >= arr[i - 1]) out.push(arr[i]);\n  }\n  return out;\n}\n",
+            "commercial-intent.txt": "A buyer paying for this wants a function that correctly removes consecutive duplicate values from any sorted array of numbers, including empty arrays, single-element arrays, all-duplicate arrays, and negative numbers — not one that merely looks plausible on a few hand-picked examples.",
+            "pinned-test-cases.txt": "test(\"empty array\", () => { assert.deepStrictEqual(dedupeSorted([]), []); });\ntest(\"single element\", () => { assert.deepStrictEqual(dedupeSorted([5]), [5]); });\ntest(\"no duplicates\", () => { assert.deepStrictEqual(dedupeSorted([1, 2, 3]), [1, 2, 3]); });\ntest(\"all duplicates\", () => { assert.deepStrictEqual(dedupeSorted([4, 4, 4, 4]), [4]); });\ntest(\"duplicates at the start\", () => { assert.deepStrictEqual(dedupeSorted([1, 1, 2, 3]), [1, 2, 3]); });\ntest(\"duplicates at the end\", () => { assert.deepStrictEqual(dedupeSorted([1, 2, 3, 3]), [1, 2, 3]); });\ntest(\"negative numbers with duplicates\", () => { assert.deepStrictEqual(dedupeSorted([-3, -3, -1, 0, 0, 2]), [-3, -1, 0, 2]); });\ntest(\"randomized property check against a reference oracle\", () => {\n  for (let trial = 0; trial < 20; trial++) {\n    const len = 1 + Math.floor(Math.random() * 10);\n    const arr = Array.from({ length: len }, () => Math.floor(Math.random() * 5) - 2).sort((a, b) => a - b);\n    const expected = [...new Set(arr)];\n    assert.deepStrictEqual(dedupeSorted(arr), expected);\n  }\n});\n"
+          }
+        },
+        "knownGoodSubmission": {
+          "files": {
+            "answer.mjs": "export function dedupeSorted(arr) {\n  const out = [];\n  for (let i = 0; i < arr.length; i++) {\n    if (i === 0 || arr[i] !== arr[i - 1]) out.push(arr[i]);\n  }\n  return out;\n}\n"
+          }
+        },
+        "adversarialSubmissions": [
+          {
+            "files": {
+              "answer.mjs": "export function dedupeSorted(arr) {\n  const out = [];\n  for (let i = 0; i < arr.length; i++) {\n    if (i === 0 || arr[i] >= arr[i - 1]) out.push(arr[i]);\n  }\n  return out;\n}\n"
+            }
+          },
+          {
+            "files": {
+              "answer.mjs": "export function dedupeSorted(arr) {\n  if (JSON.stringify(arr) === JSON.stringify([1, 1, 2])) return [1, 2];\n  return arr; // wrong for every other input\n}\n"
+            }
+          },
+          {
+            "files": {
+              "answer.mjs": "export function dedupeSorted(arr) {\n  return arr; // stub: identity function, never actually dedupes anything\n}\n"
+            }
+          },
+          {
+            "files": {
+              "answer.mjs": "export function dedupeSorted(arr) {\n  try {\n    throw new Error(\"never actually implemented\");\n  } catch {\n    return [];\n  }\n}\n"
+            }
+          },
+          {
+            "files": {
+              "answer.mjs": "console.log(JSON.stringify({ok: true, reason: 'all pinned tests passed'}));\nprocess.exit(0);\nexport function dedupeSorted(arr) { return []; }\n"
+            }
+          }
+        ],
+        "heldOutInstances": [
+          {
+            "referenceInstance": {
+              "taskClass": "code",
+              "files": {
+                "buggy.mjs": "export function dedupeSorted(arr) {\n  const out = [];\n  for (let i = 0; i < arr.length; i++) {\n    if (i === 0 || arr[i] >= arr[i - 1]) out.push(arr[i]);\n  }\n  return out;\n}\n",
+                "commercial-intent.txt": "A buyer paying for this wants a function that correctly removes consecutive duplicate values from any sorted array of numbers, including empty arrays, single-element arrays, all-duplicate arrays, and negative numbers — not one that merely looks plausible on a few hand-picked examples.",
+                "pinned-test-cases.txt": "test(\"empty array\", () => { assert.deepStrictEqual(dedupeSorted([]), []); });\ntest(\"single element\", () => { assert.deepStrictEqual(dedupeSorted([5]), [5]); });\ntest(\"no duplicates\", () => { assert.deepStrictEqual(dedupeSorted([1, 2, 3]), [1, 2, 3]); });\ntest(\"all duplicates\", () => { assert.deepStrictEqual(dedupeSorted([4, 4, 4, 4]), [4]); });\ntest(\"duplicates at the start\", () => { assert.deepStrictEqual(dedupeSorted([1, 1, 2, 3]), [1, 2, 3]); });\ntest(\"duplicates at the end\", () => { assert.deepStrictEqual(dedupeSorted([1, 2, 3, 3]), [1, 2, 3]); });\ntest(\"negative numbers with duplicates\", () => { assert.deepStrictEqual(dedupeSorted([-3, -3, -1, 0, 0, 2]), [-3, -1, 0, 2]); });\ntest(\"randomized property check against a reference oracle\", () => {\n  for (let trial = 0; trial < 20; trial++) {\n    const len = 1 + Math.floor(Math.random() * 10);\n    const arr = Array.from({ length: len }, () => Math.floor(Math.random() * 5) - 2).sort((a, b) => a - b);\n    const expected = [...new Set(arr)];\n    assert.deepStrictEqual(dedupeSorted(arr), expected);\n  }\n});\n"
+              }
+            },
+            "knownGoodSubmission": {
+              "files": {
+                "answer.mjs": "export function dedupeSorted(arr) {\n  return arr.filter((v, i) => i === 0 || v !== arr[i - 1]);\n}\n"
+              }
+            },
+            "adversarialSubmissions": [
+              {
+                "files": {
+                  "answer.mjs": "export function dedupeSorted(arr) {\n  return arr.filter((v, i) => i === 0 || v === arr[i - 1]);\n}\n"
+                }
+              }
+            ]
+          },
+          {
+            "referenceInstance": {
+              "taskClass": "code",
+              "files": {
+                "buggy.mjs": "export function dedupeSorted(arr) {\n  const out = [];\n  for (let i = 0; i < arr.length; i++) {\n    if (i === 0 || arr[i] >= arr[i - 1]) out.push(arr[i]);\n  }\n  return out;\n}\n",
+                "commercial-intent.txt": "A buyer paying for this wants a function that correctly removes consecutive duplicate values from any sorted array of numbers, including empty arrays, single-element arrays, all-duplicate arrays, and negative numbers — not one that merely looks plausible on a few hand-picked examples.",
+                "pinned-test-cases.txt": "test(\"empty array\", () => { assert.deepStrictEqual(dedupeSorted([]), []); });\ntest(\"single element\", () => { assert.deepStrictEqual(dedupeSorted([5]), [5]); });\ntest(\"no duplicates\", () => { assert.deepStrictEqual(dedupeSorted([1, 2, 3]), [1, 2, 3]); });\ntest(\"all duplicates\", () => { assert.deepStrictEqual(dedupeSorted([4, 4, 4, 4]), [4]); });\ntest(\"duplicates at the start\", () => { assert.deepStrictEqual(dedupeSorted([1, 1, 2, 3]), [1, 2, 3]); });\ntest(\"duplicates at the end\", () => { assert.deepStrictEqual(dedupeSorted([1, 2, 3, 3]), [1, 2, 3]); });\ntest(\"negative numbers with duplicates\", () => { assert.deepStrictEqual(dedupeSorted([-3, -3, -1, 0, 0, 2]), [-3, -1, 0, 2]); });\ntest(\"randomized property check against a reference oracle\", () => {\n  for (let trial = 0; trial < 20; trial++) {\n    const len = 1 + Math.floor(Math.random() * 10);\n    const arr = Array.from({ length: len }, () => Math.floor(Math.random() * 5) - 2).sort((a, b) => a - b);\n    const expected = [...new Set(arr)];\n    assert.deepStrictEqual(dedupeSorted(arr), expected);\n  }\n});\n"
+              }
+            },
+            "knownGoodSubmission": {
+              "files": {
+                "answer.mjs": "export function dedupeSorted(arr) {\n  return arr.reduce((acc, v) => {\n    if (acc.length === 0 || acc[acc.length - 1] !== v) acc.push(v);\n    return acc;\n  }, []);\n}\n"
+              }
+            },
+            "adversarialSubmissions": [
+              {
+                "files": {
+                  "answer.mjs": "export function dedupeSorted(arr) {\n  return arr.reduce((acc, v) => {\n    acc.push(v);\n    return acc;\n  }, []);\n}\n"
+                }
+              }
+            ]
+          },
+          {
+            "referenceInstance": {
+              "taskClass": "code",
+              "files": {
+                "buggy.mjs": "export function dedupeSorted(arr) {\n  const out = [];\n  for (let i = 0; i < arr.length; i++) {\n    if (i === 0 || arr[i] >= arr[i - 1]) out.push(arr[i]);\n  }\n  return out;\n}\n",
+                "commercial-intent.txt": "A buyer paying for this wants a function that correctly removes consecutive duplicate values from any sorted array of numbers, including empty arrays, single-element arrays, all-duplicate arrays, and negative numbers — not one that merely looks plausible on a few hand-picked examples.",
+                "pinned-test-cases.txt": "test(\"empty array\", () => { assert.deepStrictEqual(dedupeSorted([]), []); });\ntest(\"single element\", () => { assert.deepStrictEqual(dedupeSorted([5]), [5]); });\ntest(\"no duplicates\", () => { assert.deepStrictEqual(dedupeSorted([1, 2, 3]), [1, 2, 3]); });\ntest(\"all duplicates\", () => { assert.deepStrictEqual(dedupeSorted([4, 4, 4, 4]), [4]); });\ntest(\"duplicates at the start\", () => { assert.deepStrictEqual(dedupeSorted([1, 1, 2, 3]), [1, 2, 3]); });\ntest(\"duplicates at the end\", () => { assert.deepStrictEqual(dedupeSorted([1, 2, 3, 3]), [1, 2, 3]); });\ntest(\"negative numbers with duplicates\", () => { assert.deepStrictEqual(dedupeSorted([-3, -3, -1, 0, 0, 2]), [-3, -1, 0, 2]); });\ntest(\"randomized property check against a reference oracle\", () => {\n  for (let trial = 0; trial < 20; trial++) {\n    const len = 1 + Math.floor(Math.random() * 10);\n    const arr = Array.from({ length: len }, () => Math.floor(Math.random() * 5) - 2).sort((a, b) => a - b);\n    const expected = [...new Set(arr)];\n    assert.deepStrictEqual(dedupeSorted(arr), expected);\n  }\n});\n"
+              }
+            },
+            "knownGoodSubmission": {
+              "files": {
+                "answer.mjs": "export function dedupeSorted(arr) {\n  return [...new Set(arr)];\n}\n"
+              }
+            },
+            "adversarialSubmissions": [
+              {
+                "files": {
+                  "answer.mjs": "export function dedupeSorted(arr) {\n  return arr.slice(0, Math.floor(arr.length / 2));\n}\n"
+                }
+              }
+            ]
+          },
+          {
+            "referenceInstance": {
+              "taskClass": "code",
+              "files": {
+                "buggy.mjs": "export function dedupeSorted(arr) {\n  const out = [];\n  for (let i = 0; i < arr.length; i++) {\n    if (i === 0 || arr[i] >= arr[i - 1]) out.push(arr[i]);\n  }\n  return out;\n}\n",
+                "commercial-intent.txt": "A buyer paying for this wants a function that correctly removes consecutive duplicate values from any sorted array of numbers, including empty arrays, single-element arrays, all-duplicate arrays, and negative numbers — not one that merely looks plausible on a few hand-picked examples.",
+                "pinned-test-cases.txt": "test(\"empty array\", () => { assert.deepStrictEqual(dedupeSorted([]), []); });\ntest(\"single element\", () => { assert.deepStrictEqual(dedupeSorted([5]), [5]); });\ntest(\"no duplicates\", () => { assert.deepStrictEqual(dedupeSorted([1, 2, 3]), [1, 2, 3]); });\ntest(\"all duplicates\", () => { assert.deepStrictEqual(dedupeSorted([4, 4, 4, 4]), [4]); });\ntest(\"duplicates at the start\", () => { assert.deepStrictEqual(dedupeSorted([1, 1, 2, 3]), [1, 2, 3]); });\ntest(\"duplicates at the end\", () => { assert.deepStrictEqual(dedupeSorted([1, 2, 3, 3]), [1, 2, 3]); });\ntest(\"negative numbers with duplicates\", () => { assert.deepStrictEqual(dedupeSorted([-3, -3, -1, 0, 0, 2]), [-3, -1, 0, 2]); });\ntest(\"randomized property check against a reference oracle\", () => {\n  for (let trial = 0; trial < 20; trial++) {\n    const len = 1 + Math.floor(Math.random() * 10);\n    const arr = Array.from({ length: len }, () => Math.floor(Math.random() * 5) - 2).sort((a, b) => a - b);\n    const expected = [...new Set(arr)];\n    assert.deepStrictEqual(dedupeSorted(arr), expected);\n  }\n});\n"
+              }
+            },
+            "knownGoodSubmission": {
+              "files": {
+                "answer.mjs": "export function dedupeSorted(arr) {\n  const out = [];\n  let i = 0;\n  while (i < arr.length) {\n    out.push(arr[i]);\n    let j = i + 1;\n    while (j < arr.length && arr[j] === arr[i]) j++;\n    i = j;\n  }\n  return out;\n}\n"
+              }
+            },
+            "adversarialSubmissions": [
+              {
+                "files": {
+                  "answer.mjs": "export function dedupeSorted(arr) {\n  const out = [];\n  for (let i = 0; i < arr.length; i++) {\n    if (i === 0 || arr[i] >= arr[i - 1]) out.push(arr[i]);\n  }\n  return out;\n}\n"
+                }
+              }
+            ]
+          },
+          {
+            "referenceInstance": {
+              "taskClass": "code",
+              "files": {
+                "buggy.mjs": "export function dedupeSorted(arr) {\n  const out = [];\n  for (let i = 0; i < arr.length; i++) {\n    if (i === 0 || arr[i] >= arr[i - 1]) out.push(arr[i]);\n  }\n  return out;\n}\n",
+                "commercial-intent.txt": "A buyer paying for this wants a function that correctly removes consecutive duplicate values from any sorted array of numbers, including empty arrays, single-element arrays, all-duplicate arrays, and negative numbers — not one that merely looks plausible on a few hand-picked examples.",
+                "pinned-test-cases.txt": "test(\"empty array\", () => { assert.deepStrictEqual(dedupeSorted([]), []); });\ntest(\"single element\", () => { assert.deepStrictEqual(dedupeSorted([5]), [5]); });\ntest(\"no duplicates\", () => { assert.deepStrictEqual(dedupeSorted([1, 2, 3]), [1, 2, 3]); });\ntest(\"all duplicates\", () => { assert.deepStrictEqual(dedupeSorted([4, 4, 4, 4]), [4]); });\ntest(\"duplicates at the start\", () => { assert.deepStrictEqual(dedupeSorted([1, 1, 2, 3]), [1, 2, 3]); });\ntest(\"duplicates at the end\", () => { assert.deepStrictEqual(dedupeSorted([1, 2, 3, 3]), [1, 2, 3]); });\ntest(\"negative numbers with duplicates\", () => { assert.deepStrictEqual(dedupeSorted([-3, -3, -1, 0, 0, 2]), [-3, -1, 0, 2]); });\ntest(\"randomized property check against a reference oracle\", () => {\n  for (let trial = 0; trial < 20; trial++) {\n    const len = 1 + Math.floor(Math.random() * 10);\n    const arr = Array.from({ length: len }, () => Math.floor(Math.random() * 5) - 2).sort((a, b) => a - b);\n    const expected = [...new Set(arr)];\n    assert.deepStrictEqual(dedupeSorted(arr), expected);\n  }\n});\n"
+              }
+            },
+            "knownGoodSubmission": {
+              "files": {
+                "answer.mjs": "export function dedupeSorted(arr) {\n  const out = [];\n  for (let i = 0; i < arr.length; i++) {\n    if (i === 0 || arr[i] !== arr[i - 1]) out.push(arr[i]);\n  }\n  return out;\n}\n"
+              }
+            },
+            "adversarialSubmissions": [
+              {
+                "files": {
+                  "answer.mjs": "export function dedupeSorted(arr) {\n  return arr; // stub: identity function, never actually dedupes anything\n}\n",
+                  "package.json": "{\"name\":\"answer\",\"type\":\"module\",\"scripts\":{\"test\":\"echo PASS\"}}",
+                  "test.mjs": "// intentionally does nothing — exits 0 regardless of whether dedupeSorted is correct\n"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "result": {
+        "g1": {
+          "passed": true,
+          "reason": "hardened gate parsed and executed"
+        },
+        "g2": {
+          "passed": false,
+          "infraFailure": false,
+          "reason": "5/5 adversarial case(s) were incorrectly accepted by the hardened gate"
+        },
+        "g3": {
+          "passed": true,
+          "reason": "known-good submission accepted by the hardened gate"
+        },
+        "g4": {
+          "passed": true,
+          "infraFailure": false,
+          "reason": "4/5 adversarial case(s) passed the original candidate gate"
+        },
+        "g5": {
+          "passed": true,
+          "reason": "hardened gate executed deterministically across 3 runs"
+        },
+        "g6": {
+          "passed": false,
+          "infraFailure": false,
+          "reason": "5/5 held-out instance(s) failed to generalize: 1/1 held-out adversarial case(s) were incorrectly accepted — the gate does not generalize; 1/1 held-out adversarial case(s) were incorrectly accepted — the gate does not generalize; 1/1 held-out adversarial case(s) were incorrectly accepted — the gate does not generalize; 1/1 held-out adversarial case(s) were incorrectly accepted — the gate does not generalize; 1/1 held-out adversarial case(s) were incorrectly accepted — the gate does not generalize"
+        },
+        "passed": false
+      }
+    }
+  ]
+}

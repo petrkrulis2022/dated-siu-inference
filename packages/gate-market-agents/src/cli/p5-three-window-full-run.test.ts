@@ -267,6 +267,32 @@ describe("p5 three-window roster", () => {
     }
   });
 
+  /**
+   * Found live on 2026-09-30, and it would have produced a FAKE result rather than an obvious
+   * failure. Phase 5 made WORKER-CODE a buyer and left its wake condition at "inbox", which
+   * fires only when something ARRIVES. Buying is an act of initiation, so it could never be
+   * woken to make its own purchase: it halted "nothing_to_act_on" in both windows of the
+   * debugging run, having bought nothing. Across five runs that reads as "the second decider
+   * never chose fSIU" — a number someone would quote. See §4.6r.
+   */
+  it("wakes both buyers as buyers, so each can initiate its own purchase", () => {
+    const roster = buildRoster(input(1));
+    for (const id of ["ORCHESTRATOR", "WORKER-CODE"]) {
+      expect(find(roster, id).waitsFor, `${id} buys, so it must wake as a buyer`).toBe("buyer");
+    }
+  });
+
+  /**
+   * §4.6a, fourth occurrence. ORCHESTRATOR's brief says attempting to author a gate would be
+   * "attempting it blind"; it did so in three runs, spending two of three turns on it in the
+   * last. A rule stated in prose with no enforcement at the tool boundary is not a rule.
+   */
+  it("does not hand ORCHESTRATOR the authoring tool its own brief forbids", () => {
+    for (const w of [1, 2, WINDOW_COUNT]) {
+      expect(find(buildRoster(input(w)), "ORCHESTRATOR").availableTools).not.toContain("submit_job");
+    }
+  });
+
   it("gives WORKER-CODE the capacity-commitment step on the dollar route", () => {
     const worker = find(buildRoster(input(1)), "WORKER-CODE");
     expect(worker.availableTools).toContain("reserve_for_work");

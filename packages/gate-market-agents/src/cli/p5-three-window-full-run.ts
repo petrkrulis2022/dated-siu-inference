@@ -1255,7 +1255,11 @@ ${runShapeFacts}`;
         "transfer_claim",
         "check_headroom",
         "take_forward",
-        "submit_job",
+        // submit_job removed 2026-09-30. Its own brief says "you genuinely do not know what a
+        // passing gate for this job needs to check; attempting to author one yourself would be
+        // attempting it blind" — and it did exactly that in three separate runs, spending two of
+        // three turns on it in the last one. A rule stated in prose with no enforcement at the
+        // tool boundary is not a rule (§4.6a, fourth occurrence).
         "get_balances",
         "get_print",
       ],
@@ -1316,7 +1320,11 @@ ${runShapeFacts}`;
       // against work nobody did. The gate is only safe because QuoteBoard now records payment and
       // settlement and renders "YOU HAVE BEEN PAID AND OWE THE WORK" to the seller; without that
       // this line is a starvation bug, not an optimisation.
-      waitsFor: "inbox" as const,
+      // "buyer", not "inbox", since Phase 5 made it one. An inbox wake fires only when
+      // something ARRIVES — a request addressed to it, a payment, a claim — and buying is an act
+      // of initiation, so an inbox-gated buyer can never be woken to make its own purchase. Found
+      // live 2026-09-30: it halted "nothing_to_act_on" in both windows having never bought.
+      waitsFor: "buyer" as const,
       privateKeyHex: keys["WORKER-CODE"],
       address: addresses["WORKER-CODE"],
       erc8004Id: workerCodeErc8004Id,

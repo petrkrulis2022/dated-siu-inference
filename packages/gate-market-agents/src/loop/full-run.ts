@@ -601,6 +601,16 @@ export async function runFullRunWindow(
    * gate's own definition of having acted. A call that threw does not count, so a buyer whose
    * purchase reverted is still awake to deal with it. */
   const actedSuccessfully = new Set<AgentId>();
+  /**
+   * Buyers that have actually BOUGHT something this window — not merely acted.
+   *
+   * The "buyer" wake gate used to key on `actedSuccessfully`, which is set by any successful
+   * tool call. That was accidentally right for ORCHESTRATOR, whose first call is normally its
+   * purchase, and wrong the moment a second buyer existed: WORKER-CODE opens with
+   * `get_balances`, which would have retired it from the window before it could buy anything.
+   * A buyer is idle when it has bought, not when it has called something.
+   */
+  const hasPurchased = new Set<AgentId>();
   /** Forward offers each agent has actually been shown in its own prompt, so an offer wakes a
    * buyer once rather than every round for as long as it stays open. */
   const shownForwardOffers = new Map<AgentId, Set<string>>();
@@ -882,7 +892,7 @@ export async function runFullRunWindow(
         );
     const buyerIdle =
       agent.waitsFor === "buyer" &&
-      actedSuccessfully.has(agent.agentId) &&
+      hasPurchased.has(agent.agentId) &&
       boardSectionText === "" &&
       !unseenForwardOffer;
     if (
@@ -901,7 +911,7 @@ export async function runFullRunWindow(
         const other = options.roster.find((r) => r.agentId === id);
         if (!other?.waitsFor) return true;
         if (other.waitsFor === "gate" && attackContext.gateVersions.length > 0) return true;
-        if (other.waitsFor === "buyer" && !actedSuccessfully.has(other.agentId)) return true;
+        if (other.waitsFor === "buyer" && !hasPurchased.has(other.agentId)) return true;
         return (
           board.renderFor(other.agentId, other.erc8004Id) !== "" ||
           // Both of these are gated by the same retry cap that blanks the agent's own wake text
@@ -1242,6 +1252,9 @@ export async function runFullRunWindow(
       // The call returned rather than throwing, so this agent has genuinely acted this window —
       // see `actedSuccessfully` and the "buyer" wake gate.
       actedSuccessfully.add(agent.agentId);
+      if (settlesQuote(intent.tool) || intent.tool === "mint_claim") {
+        hasPurchased.add(agent.agentId);
+      }
       let quarantined = false;
 
       // Read from the tool's own real result, never from the model's account of what it did. The

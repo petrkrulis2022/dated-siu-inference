@@ -849,6 +849,39 @@ A corollary worth stating, because it bit immediately: **adding an option means 
 too.** `settle_split` would otherwise have arrived as the new under-demonstrated route and been
 under-chosen for exactly this reason.
 
+### 4.6r Moving a responsibility means moving everything that gates it
+
+Found in the debugging run of 2026-09-30, and it is the most dangerous instance of this class so
+far because it would have produced a **plausible number rather than an obvious failure**.
+
+Phase 5 moved the adversarial-testing purchase from ORCHESTRATOR to WORKER-CODE. The roster, the
+briefs, the tool grants and the accounting all moved with it. Its **wake condition did not**:
+WORKER-CODE kept `waitsFor: "inbox"`, which fires only when something *arrives* — a request
+addressed to it, a payment, a claim.
+
+**Buying is an act of initiation, not a response to an arrival.** So the new buyer could never be
+woken to make its own purchase. It halted `nothing_to_act_on` in both windows of the debugging
+run, having bought nothing, after two turns spent on a redemption that did arrive.
+
+Across the five comparable runs that would have read as **"the second decider never chose
+fSIU"** — a clean-looking F1 result that someone would quote, describing a wake gate rather than
+a preference. An obviously broken run is safer than this: it announces itself.
+
+Third surface of one class, after §4.6a (a rule in prose with no enforcement) and §4.6f (a route
+costing more turns than its alternative). Each time, what an agent *could express* diverged from
+what the design assumed, and each time the resulting behaviour read as a choice.
+
+**The rule: when a structural change moves a responsibility, move everything that gates it** —
+the tools that perform it, the brief that describes it, the wake condition that grants the turn
+to do it, and the accounting that records it. Enumerate those four before calling such a change
+done.
+
+The fix also corrected something that was only accidentally right. The `buyer` wake gate keyed on
+`actedSuccessfully`, set by ANY successful call — which happened to work for ORCHESTRATOR, whose
+first call is normally its purchase, and failed immediately for a buyer that opens with
+`get_balances`. It now keys on `hasPurchased`. A gate that is right for one agent by coincidence
+is not a gate.
+
 ### 4.6o Verifying the stated property is not enough when a wrong implementation satisfies it
 
 A method note, from a real near-miss on 2026-09-30.
