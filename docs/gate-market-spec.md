@@ -1069,9 +1069,13 @@ Two defects, and the second hid the first:
 - **No writable temp directory.** Fix with `--tmpfs /tmp`, which keeps isolation (in-memory,
   discarded with the sandbox) while making `os.tmpdir()` true. Setting `TMPDIR=/scratch` also
   works but leaves gate scratch files mixed in with staged inputs.
-- **Every check reports the wrong label.** G2 through G6 each reported `did not execute (G1)`.
-  Six identical messages naming one check read as six independent failures rather than one cause
-  observed six times, which is exactly the misreading that made this look like gate drift.
+- **One cause is presented as six failures.** G2 through G6 each reported `did not execute
+  (G1)`. The label is *correct* — `allFail()` assigns a single `CheckResult` to all six, and G1
+  is precisely "does the gate execute?", so when it does not, the other five cannot be evaluated
+  at all. The defect is presentational, not semantic: six identical lines read as six
+  independent failures rather than one cause, and that is what first made this look like gate
+  drift rather than apparatus. Worth distinguishing an unevaluable check from a failed one in
+  the output; not worth changing the propagation, which is right.
 
 ### 4.6u WORKER-CODE emits nothing once per window, and F1 cannot tell that from a decision
 
