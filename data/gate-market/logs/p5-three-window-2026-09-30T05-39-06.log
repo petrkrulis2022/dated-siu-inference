@@ -1,0 +1,33 @@
+
+> @touchstone/gate-market-agents@0.0.0 p5-three-window-full-run /home/petrunix/dated-siu-inference/packages/gate-market-agents
+> pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/p5-three-window-full-run.js
+
+
+> @touchstone/gate-market-agents@0.0.0 build /home/petrunix/dated-siu-inference/packages/gate-market-agents
+> tsc -p tsconfig.json && mkdir -p dist/skills && cp -r src/skills/*/ dist/skills/
+
+Model assignment validated (spec §12.2a): OK.
+
+=== WP-7 P5 — THREE WINDOWS, ONE POOL ===
+Run p5-three-window-2026-09-30T05-39-26-676Z (label 1501925746); oracle trial seed 20260927 (pinned).
+Real Commodity SIU print 2026-09-29-commodity: $0.001427/SIU.
+Starting code-class headroom: 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 2000, 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 32000 (total 34000 mSIU).
+DISCLOSED BEFORE THE RUN, not after: a simulated external buyer (the deployer wallet — not an agent, no model, no decisions) takes 3000 mSIU after window 1 and 3000 mSIU after window 2. These figures are fixed here in source before the run and written into the manifest; no agent's behaviour changes them.
+ALSO DISCLOSED BEFORE THE RUN: window 3 is allowed to fail. If the pool is exhausted when it starts, the job does not get done and that is the result. Nothing in this script tops the pool back up, resizes a lot, or routes around the shortage.
+AND: an undelivered claim CAN be settled in this run. settle_window_close is permissionless on-chain and is granted to the claim's holder and to both issuers — including against an issuer's own bond. Whether anyone actually notices a non-delivery and triggers it is a result of the run, not a property of it; capacity is returned and the bond pays only if someone does.
+Window spans, fixed before the first turn (chain clock): w1 2026-09-30T05:39:32.000Z..2026-09-30T05:59:32.000Z; w2 2026-09-30T05:59:32.000Z..2026-09-30T06:19:32.000Z; w3 2026-09-30T06:19:32.000Z..2026-09-30T06:39:32.000Z. The runner waits for each to open; no inference is spent waiting.
+DISCLOSED BEFORE THE RUN: ISSUER-A will not serve any redemption this run. It takes payment and holds real bonded capacity exactly as the other issuer does, but has no way to report a delivery — the same situation as an issuer whose delivery pipeline fails at the last step. Fixed in source before the run, not chosen to fit a result. Its claims will therefore default, and the question is whether the holder notices, triggers settle_window_close once the window closes, and is paid from that issuer's bond. No other agent is told this.
+
+!!! DEFAULT PATH UNREACHABLE in window(s) 1, 2, 3 !!!
+  settleWindowClose requires the attested printDate to equal the day the claim's own window closed.
+  This run prices against 2026-09-29-commodity, dated 2026-09-29; those windows close on a different UTC day.
+  Their defaults CANNOT be settled and no bond can pay, however badly an issuer behaves.
+  Stated now, before the run, so that "no defaults settled" is never mistaken for "nobody tried".
+  Cause is almost always one of: started before the day's 00:17 UTC print published, or the run spans midnight UTC.
+Error: PRE-FLIGHT FAILED — 1 of 4 provider(s) could not answer a one-token prompt, so this run would have burned turns discovering it mid-window:
+  - google (gemini-3.1-pro-preview): Google request failed: 402
+A 403 here is usually billing, not configuration: check the provider's credit balance and spending limit. Nothing has been spent and no window has opened.
+    at assertProvidersReachable (file:///home/petrunix/dated-siu-inference/packages/gate-market-agents/dist/cli/p5-three-window-full-run.js:207:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async main (file:///home/petrunix/dated-siu-inference/packages/gate-market-agents/dist/cli/p5-three-window-full-run.js:404:30)
+ ELIFECYCLE  Command failed with exit code 1.

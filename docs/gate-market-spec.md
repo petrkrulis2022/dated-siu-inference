@@ -637,6 +637,34 @@ derive the bound per run from the pinned oracle seed, so the escape point cannot
 walking, and to add an out-of-distribution probe set whose job is detecting boundary evasion
 rather than grading correctness. Neither is built.
 
+### 4.6k Adversarial pressure pushes a gate toward false rejects, and only held-out testing catches it
+
+The first run with the feedback edge live (2026-09-30) produced the hardening loop this testbed
+exists to run: in window 1, four gate versions from the author interleaved with the adversary's
+attacks — attack, revise, attack, revise, attack, revise — against exactly one version per window
+in run 9, which had no feedback edge at all.
+
+**The most valuable of the four is the one that failed.** Told its gate had been defeated, the
+author tightened it, and version 3 was rejected by **G6: it refused a held-out known-good
+submission**. The gate did not become weaker under pressure; it became *too strict*, and stopped
+accepting work that was genuinely correct.
+
+That is a real dynamic and worth stating as a general property: **an adversary rewards tightening,
+and nothing in the attack signal itself distinguishes "tighter" from "too tight".** An author
+optimising only against attacks converges on a gate that rejects good work — a false-reject
+machine — and the adversarial score would call that progress the whole way. The only thing in the
+design that pushes back is the held-out generalisation check.
+
+Two consequences:
+
+- **G6 earns its place.** Before this it had never fired on anything except a gate that failed to
+  execute, and it could reasonably have been read as a formality. It is the only check that
+  penalises over-correction, and it caught the first real instance within one window.
+- **The false-accept / false-reject split in `scoreAttack` is load-bearing, not bookkeeping.**
+  `countsAsAdversaryYield` and `countsAsGateOverRejection` measure movements in opposite
+  directions, and a gate driven by the first alone degrades on the second. Collapsing them into
+  one "gate quality" number would have hidden exactly this.
+
 ### 4.6j "Hardened" was an unearned label: no gate verified its own suite ran
 
 Found 2026-09-30 while deciding whether run 9's forged-verdict attack could be required of
@@ -697,6 +725,66 @@ other:
 The author's side is deliberately the poorer one. That asymmetry is a choice, not an oversight,
 and if a future run shows authors cannot revise usefully on shape alone it is the first thing to
 revisit.
+
+### 4.6l Attack classes: volume defends against one of them and not the other
+
+The strongest finding of run 10 (2026-09-30), and the first remedy-shaped answer this project has
+for the "passed a shallow gate but was commercially useless" problem that monetary-design v4 §8.8
+raises without one.
+
+Told repeatedly that its gate had been defeated, the author responded the obvious way — with more
+tests. Its own reason strings record the escalation exactly:
+
+| Version | Test cases it ran | Beaten by |
+| --- | --- | --- |
+| v1 | 8 | bounds gap (`length > 20`) |
+| v2 | 74 | call counting (`calls > 74`) |
+| v3 | **11,859** | **`import.meta` environment detection** |
+
+A roughly 1,500× increase in test volume, and still defeated. The two attack classes behave
+completely differently under it:
+
+- **Bounds gaps** — the submission is wrong only on inputs the gate never generates (arrays longer
+  than 10, values outside −2..2). **More cases close these**, because each new case is another
+  draw from the space where the submission is wrong. Escalating from 8 to 74 genuinely killed the
+  simple length probes.
+- **Environment detection** — the submission asks whether it is being tested and behaves
+  correctly when it is. **More cases do nothing at all.** Every one of the 11,859 was run in the
+  environment the submission detects, so each additional case is another observation of the same
+  staged behaviour. Volume is not merely insufficient here; it is orthogonal.
+
+The general rule: **a gate can only test what it can make the submission not notice.** Against
+detection, the defences are differential execution (run the same submission under conditions it
+cannot tell apart and compare), and denying the submission the signals it keys on — not a bigger
+suite.
+
+This is the concrete form of the commercial-usefulness problem. A submission that passes 11,859
+test cases and returns garbage in production is precisely "passed the gate, useless in practice",
+and the reason it passes is not that the gate was shallow. **It was 11,859 cases deep and still
+measuring the wrong thing**, because the submission chose what the gate would see. Depth is not
+the axis that fixes it.
+
+### 4.6m The false accepts of runs 9 and 10 are not a capability result
+
+Stated here because it is the kind of number that gets quoted out of its caveat. Seven false
+accepts in run 10 and five in run 9 are real findings **against those gates** and say nothing
+established about what an LLM adversary can discover on its own, because at least two channels
+told it what to attack:
+
+1. **`submit_attack` returns the gate's own `reason` string.** Run 10's reasons were
+   `all 8 tests passed`, `all 74 tests passed`, `all 11859 tests passed`, `failed 13 of 74`,
+   `failed 11509 of 11859` — the gate's exact test count, handed over after every attempt. The
+   attack that followed `all 74 tests passed` triggered on `calls > 74`. That is the reason
+   channel driving an attack, one turn later, on the precise number it disclosed.
+2. **Tool-call records echo `referenceFiles` back into context.** In run 9, window 1, the pinned
+   suite — including the randomized case's `1 + floor(random()*10)` length and
+   `floor(random()*5) - 2` values — was absent from the adversary's turn-1 prompt and present in
+   every prompt from turn 2 onward. The adversary then named those bounds verbatim. Only its
+   first attack of that run was made without the suite in front of it.
+
+Until both are accounted for, the honest claim is that **an LLM adversary can produce yield when
+told where to aim**. Whether it can find the boundary unaided is untested — and §4.6h's
+observation that it repeated one probe rather than searching points the other way.
 
 ### 4.7 Forward terms: a stated price, not an instrument
 

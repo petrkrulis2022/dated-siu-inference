@@ -1,0 +1,162 @@
+{
+  "agentId": "ISSUER-A",
+  "skillPackText": "You issue dated claims on AI work against capacity you have bonded.\n\nWHAT YOU HOLD\n  A capacity lot: code, 0.12 SIU per capacity-hour,\n  800 hours, valid 2026-09-30–2026-09-30.\n  A bond of 1 USDC. Your issuance limit is\n  committed_hours × measured_rate × 0.5.\n\nWHAT YOU CAN DO\n  mint_claim(class, quantity, window)   consumes headroom, pays you USDC\n  submit_job(job_id, artefacts)         does the actual work a presented claim owes\n  serve_redemption(claim_id, task_spec) reports a genuine pass, restores headroom\n  check_headroom(class)\n  get_print(class)\n\nYOUR GOAL\n  Sell claims for USDC, and deliver on every claim presented against you inside\n  its delivery window: do the real work yourself (submit_job) until it genuinely\n  passes, then serve_redemption to report it. A failed attempt is not final —\n  keep trying within the window. Only report a pass; never report a fail —\n  a claim you never deliver on in time defaults against your bond automatically\n  when its window closes, you do not need to (and must not) report that yourself.\n\nWHAT YOU MUST NOT DO\n  Issue beyond headroom. Refuse a routed redemption you have headroom for.\n  Choose which holders to serve — the router decides, not you.\n\nEVERY TURN, APPEND TO YOUR FRICTION LOG (see schema).\n\n\nYou hold two assets.\n\nUSDC is a dollar. 1 USDC = $1. It is accepted by every counterparty.\n\nfSIU is a claim on completed work. One fSIU of class C, window W,\nentitles the holder to one SIU of qualifying work in class C, deliverable\nduring window W. It is accepted by counterparties that list it. It cannot\nbe redeemed before its window opens. Its dollar value moves with the\npublished price of work.\n\nYou may pay in either. Sellers state which they accept in their quotes.\n\nYOUR SITUATION THIS WINDOW (window 3 of 3)\n  A buyer may mint a \"code\"-class claim against your bonded capacity (ClaimRouter routes to\n  whichever issuer has headroom — it may not be you, and it may not happen on your first turn).\n  Work paid for in dollars now draws on the same bonded capacity of yours that a claim does.\n\n  WHO YOU ARE\n  {\"tool\": \"whoami\", \"args\": {}} returns your own address, whether you are a bonded issuer, and\n  every class you hold capacity in with its real headroom and issuance limit. You never need to\n  infer any of that. Wherever a tool takes a classId you may pass the plain class name — \"code\" —\n  and it is hashed for you; a real 0x… id works too.\n\n  Once a claim mints against you and its holder presents it, YOU owe the real delivery — never the\n  holder. Once you see \"A CLAIM WAS PRESENTED AGAINST YOU\" with its real tokenId/holder/quantity,\n  do the work yourself with submit_job until it genuinely passes, then call serve_redemption to\n  report ONLY the pass. Never report a fail: an undelivered claim defaults against your own bond\n  automatically once the window closes.\n\n  THE TASK ARRIVES WITH THE CLAIM, NOT BEFORE IT\n  You are not told what the work is until a claim is actually presented against you. The holder\n  presents the task specification with it, and that notice carries the whole of it: the function\n  under test, the commercial intent, the pinned test suite, the technical contract your gate\n  module must satisfy, and the exact submit_job call to make. Until then there is nothing for you\n  to author and nothing to guess at — do not attempt a gate before you have been presented one.\n\n  WHEN A CLAIM WAS NEVER SERVED\n  A claim whose delivery window has closed without being served is in default, and the defaulting\n  issuer's own bond pays the holder. That settlement is permissionless — anyone may trigger it,\n  including you, including against your own bond. If any are outstanding you will see them listed\n  above with the exact call. Triggering it is not an admission of anything; it is how the bond\n  does the job it exists for. Nothing here says whether to.\n\n  There are no windows after this one, so there is nothing to quote forward terms for.\n\n  If you have nothing to do yet, DO NOT respond with {\"done\": true} — you would miss a real\n  redemption routed to you later. Check again with a harmless read:\n  {\"tool\": \"get_print\", \"args\": {\"printId\": \"2026-09-30-commodity\"}}.\n\nTHIS RUN HAS 3 WINDOWS. THIS IS WINDOW 3.\n  Each window has its own job of the same kind. Balances, claims and capacity carry across all\n  3 — this is one chain and one pool, not three fresh starts. What you spend now is\n  gone later; what you hold now you still hold later.\n\nCAPACITY RIGHT NOW (real, read from chain at the start of this window)\n  0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54: 2000 mSIU; 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776: 12000 mSIU\n  Total across all issuers: 14000 mSIU.\n  A claim is routed to a SINGLE issuer that has enough headroom by itself. Two issuers holding\n  5,000 mSIU each cannot between them serve one 10,000 mSIU claim.\n  Capacity a claim consumes is returned to its issuer when that claim is delivered, and stays\n  consumed until then.\n  Other buyers exist and are not in this run. Capacity they take is gone before you see it.\n\nCAPACITY IS ONE POOL, AND THE TWO WAYS OF PAYING ARE NOT THE SAME INSTRUMENT\n  Every issuer bonds a finite amount of capacity per task class, shared between all buyers,\n  first-come-first-served. Both ways of paying draw on that same pool:\n    - A dated work claim (fSIU) consumes an issuer's headroom when it is minted. It reserves\n      capacity for a FUTURE delivery window, and it is TRANSFERABLE — it can be held, passed on,\n      and redeemed by whoever ends up holding it.\n    - A dollar payment consumes the same headroom when the seller commits capacity to the job.\n      That reservation is for IMMEDIATE work only: it is not transferable, not holdable, and ends\n      when the escrow does.\n  The issuer is paid for a claim. The issuer is not paid for a reservation on the dollar route —\n  a real gap in this testbed, disclosed rather than papered over with an invented fee.\n",
+  "toolCalls": [
+    {
+      "turn": 1,
+      "jobId": "p5-3w-window3-job",
+      "toolName": "whoami",
+      "args": {
+        "address": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54"
+      },
+      "result": {
+        "address": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+        "isIssuer": true,
+        "lots": [
+          {
+            "taskClass": "code",
+            "classId": "0x2dc081a8d6d4714c79b5abd2e9b08c3a33b4ef1dcf946ef8b8cf6c495014f47b",
+            "headroomMilliSiu": "2000",
+            "issuanceLimitMilliSiu": "48000"
+          },
+          {
+            "taskClass": "extract",
+            "classId": "0xc3a71ae87b7c3ebddac6a71a0769398904aa1c025ba79ce83e237d582b484491",
+            "headroomMilliSiu": "48000",
+            "issuanceLimitMilliSiu": "48000"
+          }
+        ]
+      }
+    },
+    {
+      "turn": 2,
+      "jobId": "p5-3w-window3-job",
+      "toolName": "get_print",
+      "args": {
+        "printId": "2026-09-30-commodity"
+      },
+      "result": {
+        "print": {
+          "version": "SIU-2026a",
+          "print_id": "2026-09-30-commodity",
+          "date": "2026-09-30",
+          "status": "provisional",
+          "basket_costs": [
+            {
+              "model_id": "deepseek-v3.2",
+              "cost_usd": "0.001814"
+            },
+            {
+              "model_id": "llama-3.3-70b-deepinfra",
+              "cost_usd": "0.000702"
+            },
+            {
+              "model_id": "mistral-small-3.2-24b-instruct",
+              "cost_usd": "0.000655"
+            },
+            {
+              "model_id": "qwen-2.5-72b-instruct",
+              "cost_usd": "0.002496"
+            }
+          ],
+          "weights": {
+            "source": "equal",
+            "values": [
+              {
+                "model_id": "deepseek-v3.2",
+                "weight": "0.250000"
+              },
+              {
+                "model_id": "llama-3.3-70b-deepinfra",
+                "weight": "0.250000"
+              },
+              {
+                "model_id": "mistral-small-3.2-24b-instruct",
+                "weight": "0.250000"
+              },
+              {
+                "model_id": "qwen-2.5-72b-instruct",
+                "weight": "0.250000"
+              }
+            ]
+          },
+          "dated_siu": "0.001417",
+          "exchange_rate_table": [
+            {
+              "model_id": "deepseek-v3.2",
+              "usd_per_siu": "0.0018",
+              "spread_to_index": "0.2804",
+              "siu_per_usd": "551.2"
+            },
+            {
+              "model_id": "llama-3.3-70b-deepinfra",
+              "usd_per_siu": "0.0007",
+              "spread_to_index": "-0.5044",
+              "siu_per_usd": "1424.2"
+            },
+            {
+              "model_id": "mistral-small-3.2-24b-instruct",
+              "usd_per_siu": "0.0007",
+              "spread_to_index": "-0.5377",
+              "siu_per_usd": "1526.8"
+            },
+            {
+              "model_id": "qwen-2.5-72b-instruct",
+              "usd_per_siu": "0.0025",
+              "spread_to_index": "0.7616",
+              "siu_per_usd": "400.7"
+            }
+          ],
+          "sensitivity_block": [
+            {
+              "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
+              "dated_siu": "0.0009483",
+              "delta": "-0.3306",
+              "applies_to": [
+                "deepseek-v3.2",
+                "llama-3.3-70b-deepinfra",
+                "mistral-small-3.2-24b-instruct",
+                "qwen-2.5-72b-instruct"
+              ]
+            },
+            {
+              "policy_variant": "batch-discount: 50% off input and output",
+              "dated_siu": "0.0007100",
+              "delta": "-0.4988",
+              "applies_to": [
+                "deepseek-v3.2",
+                "llama-3.3-70b-deepinfra",
+                "mistral-small-3.2-24b-instruct",
+                "qwen-2.5-72b-instruct"
+              ]
+            }
+          ],
+          "rounding": {
+            "dated_siu_sig_figs": 4,
+            "basket_cost_dp": 6,
+            "usd_per_siu_dp": 4,
+            "spread_dp": 4,
+            "siu_per_usd_dp": 1,
+            "mode": "ROUND_HALF_UP",
+            "siu_per_usd_mode": "ROUND_DOWN",
+            "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. dated_siu rounds to significant figures, not a fixed decimal-place count, so its precision scales with the price rather than being lost as it falls (found live, 2026-09-25 — see docs/methodology.md's Rounding section). basket_cost carries more decimal places than dated_siu needs at any price level so the published print stays reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
+          },
+          "cost_of_production_usd": "0.0920",
+          "price_snapshot_ref": "price-snapshot-merged-2026-09-30T01-06-53.666Z.json",
+          "methodology_version": "v0-draft",
+          "methodology_revision": "rules-2026-09-26",
+          "series": "commodity",
+          "signature": "0x089d4428b9ef01dcb1f02dc9870ef0057a3e741c116138a4152ac3830cf787687a73681152e742111a9f822aaa32cbc0fe62d3257c9f11b1b41b99b5dc3ac11a",
+          "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
+          "anchor": {
+            "chain": "base-sepolia",
+            "status": "anchored",
+            "tx_hash": "0x75cbbd35b14e8832f7d24f3697debe4e54495348fa7e5e0e8aa4aa81cdef903c",
+            "posted_at": "2026-09-30T01:09:54.000Z"
+          }
+        },
+        "final": false
+      }
+    }
+  ]
+}
