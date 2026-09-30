@@ -1154,6 +1154,38 @@ Fix, structural rather than analytical: **run two claim windows, and place the F
 
 **Negative result is a real result.** If agents redeem on receipt every time, the instrument has no transitive use, and that is worth knowing before building a contract for it.
 
+### 7.1a The protocol freeze, and what breaks a block
+
+Agreed 2026-09-30, before the five comparable runs. §7.1(c) sets the floor at five runs differing
+only in seed; this is what "only in seed" is allowed to mean in practice, decided in advance
+because these are exactly the judgements nobody makes well at run 3 with four good runs behind
+them.
+
+**The protocol freezes at the debugging run.** No fix lands during the five, however obviously
+right. Every run in this project's history surfaced something worth fixing mid-flight, and the
+discipline that makes five runs comparable is precisely not doing that.
+
+Three categories, and the distinction that matters is whether the thing changes *what an agent
+could express*:
+
+**Finish and disclose.** An agent behaving oddly, a gate failing, an attack not landing, a window
+producing nothing, a purchase not made. These are results, however disappointing, and a run that
+produced one is a valid member of the block.
+
+**An affordance defect ENDS the block.** Not restarts it — ends it. If one is found in run 3, the
+remaining two would execute under a protocol already known to be wrong, and the block's findings
+could not be quoted either way. So: finish the run in progress, report it, stop. The default is
+stop rather than continue, and whether to fix and start five fresh is a decision taken with the
+report in hand rather than mid-block.
+
+This is the category that has bitten eight times (§4.6a, §4.6e–g, §4.6n, §4.6p, and the two
+surfaced while building the freedom set), which is why it gets the strictest rule.
+
+**A provider outage means re-running THAT run, not the block.** An outage is external and changes
+no protocol, so the completed runs stay comparable with each other and with a replacement. Losing
+four good runs to one bad hour would be a self-inflicted cost. Record which run was re-run and
+why, so the block's composition is legible afterwards.
+
 ### 7.2 F2 — the shock test
 
 **Question:** does a forward actually protect a fixed-price seller when the cost of work moves?
