@@ -25,7 +25,7 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   mint_claim:
     "mint_claim(quantity, forWindow?) -> mints a dated work claim for the job/class at the published rate (the class id, window bounds and rate attestation are all supplied for you); routed to an issuer with headroom, returns tokenId + the routed issuer. forWindow names which delivery window the claim is for, and defaults to the one you are in; a claim for a later window consumes that issuer's headroom now and can only be presented once that window opens.",
   transfer_claim:
-    "transfer_claim(agentId, tokenId, quantity) -> free ERC-1155 transfer to a named roster agent (or transfer_claim(to, tokenId, quantity) with a literal address)",
+    "transfer_claim(agentId, tokenId, quantity, requestId?) -> free ERC-1155 transfer to a named roster agent (or transfer_claim(to, tokenId, quantity) with a literal address). Pass requestId to settle a quote you have received with a claim you already hold, instead of paying in dollars or minting a new one; the seller is then told it has been paid and owes the work.",
   redeem_claim:
     "redeem_claim(tokenId, taskSpecHash) -> presents your claim for redemption inside its window",
   settle_window_close:

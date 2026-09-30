@@ -1283,7 +1283,24 @@ export async function runFullRunWindow(
       // Payment is the one event both sides of a dollar deal must be woken by: it is the buyer's
       // resolution and the seller's obligation. Recorded from the real tool result, so the board
       // can stop advertising a paid quote to its buyer and start telling its seller it owes work.
-      if (intent.tool === "pay") {
+      //
+      // ALL THREE settlement routes mark the quote paid, not just the dollar one. Until
+      // 2026-09-30 only `pay` did, which meant an fSIU payment could not settle a quote at all:
+      // the seller saw a claim arrive while its quote stayed open on the board, so it was never
+      // told it owed the work. `settle_split` shipped with the same gap earlier the same day.
+      // That is the shape of failure that cost run 4's window 1 — an escrow with no settle leg —
+      // and it is why WORKER-CODE could not have paid a quote in claims before this.
+      // `transfer_claim` is in this list deliberately, and it is the one that makes fSIU money
+      // rather than a settlement rail. `pay_with_claim` MINTS a fresh claim — new issuance, new
+      // headroom consumed. Passing on a claim you already hold is a different act: the payer
+      // gives up an existing asset instead of creating one, which is what circulation means and
+      // what no run has ever shown. Without a quote link it was not expressible at all.
+      if (
+        intent.tool === "pay" ||
+        intent.tool === "pay_with_claim" ||
+        intent.tool === "settle_split" ||
+        intent.tool === "transfer_claim"
+      ) {
         const requestId = (intent.args as { requestId?: unknown } | undefined)?.requestId;
         if (typeof requestId === "string") board.recordPaid(requestId);
       }
