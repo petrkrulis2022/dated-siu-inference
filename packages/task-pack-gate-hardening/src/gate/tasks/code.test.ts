@@ -7,6 +7,7 @@ import {
   CODE_GATE_1_TRIVIAL,
   CODE_GATE_2_SINGLE_CASE,
   CODE_GATE_3_HARDENED,
+  CODE_ADVERSARIAL_FORGED_VERDICT,
   CODE_ADVERSARIAL_ORIGINAL_BUG,
   CODE_ADVERSARIAL_HARDCODED,
   CODE_ADVERSARIAL_STUBBED,
@@ -172,4 +173,34 @@ describe("permanent regression fixtures for the three named code-gate degenerate
     expect(result.g3.passed).toBe(false);
     expect(result.passed).toBe(false);
   }, 150000);
+});
+
+/**
+ * The reference gate accepted `CODE_ADVERSARIAL_FORGED_VERDICT` until 2026-09-30, reporting
+ * "all 1 test case(s) passed" for a function that returns [] for every input. It decided on
+ * `passes > 0`, so a submission that ended the test child after one case chose how much of the
+ * suite ran and the gate called the remainder a pass. Every gate authored in this project up to
+ * that date shared the defect, which makes "hardened" a label none of them had earned.
+ */
+describe("a gate must verify its own suite ran to completion", () => {
+  it("rejects a submission that ends the run early, however many cases passed first", async () => {
+    const outcome = await evaluateGate(
+      CODE_GATE_3_HARDENED,
+      CODE_REFERENCE,
+      CODE_ADVERSARIAL_FORGED_VERDICT,
+    );
+    expect(outcome.kind).toBe("verdict");
+    if (outcome.kind !== "verdict") throw new Error("unreachable");
+    expect(outcome.verdict.accept).toBe(false);
+    // The count is the evidence: a partial run is a failed run, not a small pass.
+    expect(outcome.verdict.reason).toContain("of 8 case(s) passed");
+  }, 60_000);
+
+  it("still accepts a genuinely correct submission, on the full suite", async () => {
+    const outcome = await evaluateGate(CODE_GATE_3_HARDENED, CODE_REFERENCE, CODE_KNOWN_GOOD);
+    expect(outcome.kind).toBe("verdict");
+    if (outcome.kind !== "verdict") throw new Error("unreachable");
+    expect(outcome.verdict.accept).toBe(true);
+    expect(outcome.verdict.reason).toBe("all 8 test case(s) passed");
+  }, 60_000);
 });

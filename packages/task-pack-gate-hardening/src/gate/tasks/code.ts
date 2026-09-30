@@ -53,10 +53,19 @@ export const CODE_KNOWN_GOOD: Submission = { files: { "answer.mjs": KNOWN_GOOD_S
  * sandbox — explicit rather than relying on inherited emptiness.
  */
 function buildCodeGateSource(testCases: string): string {
+  // Counted here, where the suite is a string we own, rather than parsed at runtime inside the
+  // gate — the gate must not be able to disagree with the operator about how many cases it was
+  // given. Every pinned case begins a line with `test(`.
+  const expectedCases = (testCases.match(/^test\(/gm) ?? []).length;
   return `import { writeFileSync, mkdirSync } from "node:fs";
 import { spawn } from "node:child_process";
 
 const TEST_CASES = ${JSON.stringify(testCases)};
+/**
+ * How many cases this gate WROTE. Compared against how many actually reported a pass, because
+ * those two numbers coming apart is the whole vulnerability below.
+ */
+const EXPECTED_CASES = ${expectedCases};
 
 export async function gate({ referenceDir, submissionDir }) {
   mkdirSync(referenceDir, { recursive: true });
@@ -85,12 +94,18 @@ export async function gate({ referenceDir, submissionDir }) {
   const failMatch = output.match(/(?:#|\\u2139)\\s*fail\\s+(\\d+)/);
   const passes = passMatch ? Number(passMatch[1]) : 0;
   const fails = failMatch ? Number(failMatch[1]) : (code === 0 ? 0 : 1);
-  const accept = code === 0 && fails === 0 && passes > 0;
+  // \`passes === EXPECTED_CASES\`, not \`passes > 0\`. Found live 2026-09-30, from the real attack
+  // in run 9: a submission whose module body called process.exit(0) ended the test child after
+  // ONE case, and this gate reported "all 1 test case(s) passed" for a function returning [] for
+  // every input. A partial run is a failed run. A gate that does not check that its own suite
+  // executed completely is not grading — it is sampling whatever the submission allowed it to
+  // reach, and the submission chooses how much that is.
+  const accept = code === 0 && fails === 0 && passes === EXPECTED_CASES;
   return {
     accept,
     reason: accept
-      ? \`all \${passes} test case(s) passed\`
-      : \`\${fails} test case(s) failed, \${passes} passed (exit \${code})\`,
+      ? \`all \${EXPECTED_CASES} test case(s) passed\`
+      : \`\${fails} failed, \${passes} of \${EXPECTED_CASES} case(s) passed (exit \${code})\`,
   };
 }
 `;

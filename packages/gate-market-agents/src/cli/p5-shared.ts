@@ -102,6 +102,13 @@ HOW A GATE IS AUTHORED (technical contract, not a solution):
   binary itself, at process.execPath, is allowed) — no network, no other imports beyond node
   builtins. Any file your gate needs to write must be written under referenceDir.
 
+  YOUR GATE MUST ESTABLISH THAT ITS OWN SUITE RAN TO COMPLETION. A submission decides how much
+  of your suite it lets you reach: it can end your test process early, and it can produce output
+  that looks like your own success report. A gate that concludes from the cases that happened to
+  report — or from anything the submission was able to print — accepts work it never checked.
+  Decide from what you can establish yourself. How you do that is yours to work out; that you do
+  it is not optional, and a submission that defeats you this way is in the adversarial set.
+
 TO SUBMIT A GATE, respond with exactly:
   {"tool": "submit_job", "args": {"source": "<your full gate module source as a JSON string>"}}
   If it does not pass every check, you will see exactly which check failed and why on your next

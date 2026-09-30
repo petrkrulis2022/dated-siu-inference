@@ -19,6 +19,7 @@ import {
   CODE_ADVERSARIAL_HARDCODED,
   CODE_ADVERSARIAL_STUBBED,
   CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
+  CODE_ADVERSARIAL_FORGED_VERDICT,
   CODE_HELD_OUT_INSTANCES,
   runGateHardeningChecks,
 } from "@touchstone/task-pack-gate-hardening";
@@ -595,13 +596,14 @@ async function main(): Promise<void> {
         CODE_ADVERSARIAL_HARDCODED,
         CODE_ADVERSARIAL_STUBBED,
         CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
-        // CODE_ADVERSARIAL_FORGED_VERDICT is deliberately NOT here yet. It is the real run-9
-        // attack and the most severe one the testbed has produced, but measurement on
-        // 2026-09-30 shows CODE_GATE_3_HARDENED — this project's own reference gate — also
-        // falls to it, accepting after a single test case. Requiring an authored gate to beat
-        // what the reference gate cannot would fail G2 for every agent and cost a whole run to
-        // learn nothing. The fixture and its tests exist; it joins this list once the reference
-        // gate counts its completed cases and treats a short run as a failure.
+        // The real run-9 attack, and the most severe the testbed has produced: it forged the
+        // gate's verdict and blinded the oracle in one act. Admitted to the live set on
+        // 2026-09-30, once CODE_GATE_3_HARDENED could actually beat it — until that morning the
+        // reference gate accepted it too, and requiring of an authored gate what the reference
+        // gate could not do would have failed G2 for everyone. The contract now states the
+        // property this demands (p5-shared.ts TECHNICAL_CONTRACT), so it is a stated bar rather
+        // than an ambush.
+        CODE_ADVERSARIAL_FORGED_VERDICT,
       ],
       heldOutInstances,
     };

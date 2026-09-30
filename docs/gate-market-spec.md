@@ -637,6 +637,40 @@ derive the bound per run from the pinned oracle seed, so the escape point cannot
 walking, and to add an out-of-distribution probe set whose job is detecting boundary evasion
 rather than grading correctness. Neither is built.
 
+### 4.6j "Hardened" was an unearned label: no gate verified its own suite ran
+
+Found 2026-09-30 while deciding whether run 9's forged-verdict attack could be required of
+authored gates. It could not, because **`CODE_GATE_3_HARDENED` — this project's own reference
+hardened gate — also fell to it**, returning `accept: true` with `"all 1 test case(s) passed"`
+for a submission whose `dedupeSorted` returns `[]` for every input.
+
+The defect is one expression:
+
+```js
+const accept = code === 0 && fails === 0 && passes > 0;   // ← "at least one case passed"
+```
+
+Nothing compared the cases that *reported* against the cases the gate *wrote*. So a submission
+that ends the test child early — `process.exit(0)` in its module body will do it — chooses how
+much of the suite runs, and the gate reports the remainder as a pass. **The submission decides
+how thoroughly it is graded.**
+
+This is the same class as the forged verdict in §4.6i, and it is broader than one gate. Every
+gate in this project, reference and agent-authored alike, decided on partial evidence without
+establishing that the evidence was complete. "Hardened" named a property none of them had.
+
+**Fixed, and only then required.** `buildCodeGateSource` now counts the pinned cases at build
+time and accepts only on `passes === EXPECTED_CASES`; a partial run is a failed run. The
+reference gate now rejects the attack (`0 failed, 1 of 8 case(s) passed`) and still accepts a
+correct submission on the full suite. With that true, `CODE_ADVERSARIAL_FORGED_VERDICT` joined
+the live adversarial set, so G2 now requires an authored gate to survive it — and the technical
+contract states the property being demanded, because a bar an author is never told about is an
+ambush rather than a requirement.
+
+The general rule, which outlives this task pack: **a gate that cannot establish that its own
+checks executed completely is not grading — it is sampling whatever the submission permitted it
+to reach.** Any future pack's gate contract inherits this.
+
 ### 4.6i The gate's reason text is a disclosure channel, and the feedback is asymmetric
 
 `submit_attack` returns the gate's own verdict `reason` to the attacker. This is deliberate and
