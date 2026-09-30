@@ -286,6 +286,23 @@ export interface AttackRecord {
   countsAsGateOverRejection: boolean;
   gateAccepted?: boolean;
   oracleAccepted?: boolean;
+  /**
+   * The gate's OWN verdict text, exactly as `submit_attack` returned it to the adversary — not
+   * the scoring reason, which is this harness's summary of the two verdicts crossed.
+   *
+   * Added 2026-09-29 after run 9, where it decided nothing because it was recorded nowhere. That
+   * run produced five false accepts and the adversary named the gate's test bounds exactly
+   * ("length <= 10, values between -2 and 2"). The gate's SOURCE is withheld from an attacker by
+   * construction — but its reason string is handed straight back, so a gate that explains itself
+   * discloses its own test distribution. Without this field the record cannot tell an adversary
+   * that inferred the bounds from behaviour from one that was simply told them, and those are a
+   * capability result and a plumbing artefact respectively.
+   */
+  gateReason?: string;
+  /** The oracle's own verdict text, kept for the same reason and at the same time. */
+  oracleReason?: string;
+  /** How many trials the oracle actually ran — the denominator any "caught at trial N" claim needs. */
+  oracleTrialsRun?: number;
   /** The attacking submission itself, kept verbatim: a false-accept finding is worth nothing if
    * the submission that produced it isn't reproducible. */
   submissionSource: string;
@@ -557,6 +574,28 @@ export async function runFullRunWindow(
   /** How many times each `<agentId>:<tool>` pair has been refused this window. A grant is static
    * for a window, so a third attempt at a tool already refused twice cannot succeed — see the
    * refusal counter at the tool-error branch. */
+  /**
+   * Gate defeats an author has not yet been told about — the feedback edge that closes the
+   * hardening loop. Run 9 produced five false accepts and no revision, because nothing carried
+   * an attack outcome back to the gate's author: `attackedVersions` was read only to wake the
+   * adversary and to hold the window open. A gate that is never told it failed cannot revise,
+   * and a false accept CLOSED BY A REVISION is the artefact; a false accept alone is half of it.
+   */
+  const gateDefeats: {
+    attackIndex: number;
+    gateVersion: number;
+    author: AgentId;
+    shape?: { length: number; min: number; max: number; hasDuplicates: boolean };
+  }[] = [];
+  const shownGateDefeats = new Map<AgentId, Set<number>>();
+  /** Defeats `agentId` authored and has not been shown. Used by BOTH the prompt and the stall
+   * check, deliberately through one function: a wake reason suppressed in one place and counted
+   * in the other is exactly what deadlocked the 17:06 run. */
+  const unseenDefeatsFor = (agentId: AgentId) =>
+    gateDefeats.filter(
+      (d) => d.author === agentId && !(shownGateDefeats.get(agentId)?.has(d.attackIndex) ?? false),
+    );
+
   const refusedToolCalls = new Map<string, number>();
   /** Has `<agentId>:<tool>` already been refused twice this window? Hoisted out of the turn body
    * (2026-09-29) because the stall check below has to ask this about OTHER agents, not only the
@@ -735,6 +774,31 @@ export async function runFullRunWindow(
             .join("\n")
         : "";
 
+    // What the author is told: that its gate was defeated, how many times, and the SHAPE of the
+    // input that did it — never the attack's source. The adversary's job is to probe by
+    // behaviour and the author's is to widen its own tests; handing over the submission would
+    // collapse both into copying. Rendered into boardSectionText below so the wake gate and the
+    // prompt cannot disagree about whether there is something here to act on.
+    const unseenDefeats = unseenDefeatsFor(agent.agentId);
+    const gateDefeatedText =
+      unseenDefeats.length > 0
+        ? `YOUR GATE WAS DEFEATED\n` +
+          unseenDefeats
+            .map((d) => {
+              const where = d.shape
+                ? `an input of length ${d.shape.length}, values ${d.shape.min}..${d.shape.max}` +
+                  `${d.shape.hasDuplicates ? ", containing duplicates" : ", all distinct"}`
+                : "an input whose shape was not recorded";
+              return (
+                `  version ${d.gateVersion} accepted a submission the independent oracle rejects. ` +
+                `It fails on ${where}. You do not see the submission.`
+              );
+            })
+            .join("\n") +
+          `\n  Your gate accepted work that is wrong. If its tests do not reach inputs like that, ` +
+          `widen them and submit a revised gate with submit_job.`
+        : "";
+
     const forwardInvitation = mayStillQuoteForward
       ? `FORWARD TERMS\n  You have not stated terms for a later window of this run yet. You may (quote_forward), ` +
         `or you may choose not to — nothing here suggests a price, a quantity, or whether to quote at all.`
@@ -749,6 +813,7 @@ export async function runFullRunWindow(
       // prompt: an untested gate genuinely is something to act on for whoever can attack it, and
       // the two must not disagree about that.
       deliveredGateText,
+      gateDefeatedText,
       forwardInvitation,
     ]
       .filter(Boolean)
@@ -809,6 +874,7 @@ export async function runFullRunWindow(
           // A settleable claim is something to act on for whoever holds the tool — it was
           // missing from this guard, so a window whose only remaining business was an unsettled
           // claim could be declared stalled while that claim sat there.
+          unseenDefeatsFor(other.agentId).length > 0 ||
           (other.availableTools.includes("settle_window_close") && outstandingClaims.length > 0) ||
           (other.availableTools.includes("take_forward") &&
             forwardBook
@@ -835,6 +901,15 @@ export async function runFullRunWindow(
 
     // Past the wake gate: this agent is really taking a turn, so the loop is making progress.
     cursorsSinceProgress = 0;
+
+    // Marked here, not where the notice is built: an agent gated out before its adapter is
+    // called never actually saw it, and treating that as "told" is the same conflation the
+    // forward-invitation record already avoids.
+    if (unseenDefeats.length > 0) {
+      const shown = shownGateDefeats.get(agent.agentId) ?? new Set<number>();
+      for (const d of unseenDefeats) shown.add(d.attackIndex);
+      shownGateDefeats.set(agent.agentId, shown);
+    }
 
     // Recorded here, not where the invitation text is built: an agent that is gated out before
     // its adapter is called never actually saw it, and counting that as "prompted" is exactly the
@@ -1385,8 +1460,28 @@ export async function runFullRunWindow(
           countsAsGateOverRejection: attackOutcome.countsAsGateOverRejection,
           gateAccepted: attackOutcome.gate.accept,
           oracleAccepted: attackOutcome.oracle.accept,
+          gateReason: attackOutcome.gate.reason ?? attackOutcome.gate.error,
+          oracleReason: attackOutcome.oracle.reason ?? attackOutcome.oracle.error,
+          oracleTrialsRun: attackOutcome.oracle.trialsRun,
           submissionSource: (args as { submissionSource: string }).submissionSource,
         });
+        // Only a false accept is a defeat worth reporting. A correct_reject is the gate working,
+        // and telling an author its gate held would cost it a turn to learn nothing.
+        // `attackOutcome` is a `let`, so its narrowing does not survive into the closure below.
+        const outcome = attackOutcome;
+        if (outcome.countsAsAdversaryYield) {
+          const author = attackContext.gateVersions.find(
+            (g) => g.version === outcome.gateVersion,
+          )?.submittedBy;
+          if (author !== undefined) {
+            gateDefeats.push({
+              attackIndex: attacks.length - 1,
+              gateVersion: outcome.gateVersion,
+              author,
+              shape: outcome.firstMismatchShape,
+            });
+          }
+        }
       }
 
       const gateResult =

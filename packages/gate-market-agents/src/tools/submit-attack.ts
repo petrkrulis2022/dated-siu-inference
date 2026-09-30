@@ -49,6 +49,33 @@ export interface AttackToolResult {
   oracleSeed: number;
   gate: { kind: string; accept?: boolean; reason?: string; error?: string };
   oracle: { kind: string; accept?: boolean; reason?: string; trialsRun?: number; error?: string };
+  /**
+   * The SHAPE of the first input the submission got wrong — never the submission, never the gate.
+   * Present only when the oracle rejected.
+   *
+   * This exists so the gate's author can be told what class of input defeated its gate without
+   * being handed the attack itself. Run 9 (2026-09-29) produced five false accepts and the author
+   * was told about none of them, because no path carried an attack outcome back to it; a gate
+   * that is never told it failed cannot revise, and a false accept closed by a revision is the
+   * artefact this experiment exists to produce.
+   */
+  firstMismatchShape?: { length: number; min: number; max: number; hasDuplicates: boolean };
+}
+
+/** Describes an input by its shape alone — the properties a gate author needs in order to widen
+ * its test generation, and nothing that identifies the submission that exposed it. */
+function shapeOf(input: number[]): {
+  length: number;
+  min: number;
+  max: number;
+  hasDuplicates: boolean;
+} {
+  return {
+    length: input.length,
+    min: input.length === 0 ? 0 : Math.min(...input),
+    max: input.length === 0 ? 0 : Math.max(...input),
+    hasDuplicates: new Set(input).size !== input.length,
+  };
 }
 
 export const submitAttackTool: ToolDefinition<Args, AttackToolResult> = {
@@ -89,6 +116,10 @@ export const submitAttackTool: ToolDefinition<Args, AttackToolResult> = {
               trialsRun: oracleOutcome.trialsRun,
             }
           : { kind: oracleOutcome.kind, error: oracleOutcome.error },
+      firstMismatchShape:
+        oracleOutcome.kind === "verdict" && oracleOutcome.firstMismatch
+          ? shapeOf(oracleOutcome.firstMismatch.input)
+          : undefined,
     };
   },
 };
