@@ -1114,6 +1114,38 @@ Three things are entangled here and should not be conflated:
   other turns did emit text, and chose `get_balances` and `whoami`. Both may be true at once, and
   the fix for one is not the fix for the other.
 
+### 4.6v The attack-round cap spent the budget it exists to protect
+
+Run 13, window 2. WORKER-EXTRACT took **ten** turns, every one of them a `submit_attack` with a
+distinct payload. **Four were scored.** The other six produced nothing.
+
+Not data loss — `MAX_ATTACK_ROUNDS = 3`, and `buildToolArgs` throws once three versions have been
+tested and the newest is not among them. Attacks 1-4 covered versions 1, 2 and 3, so
+`attackedVersions.size` reached 3. ISSUER-B then delivered v4, the newest version became one the
+cap forbids testing, and every later `submit_attack` threw.
+
+The cap's own comment says it exists so the adversary *"cannot spend the whole run's budget on
+itself."* **It spent six turns and $0.185 doing exactly that, hitting the cap.**
+
+This is §4.6r again, in the place §4.6r warned about: the responsibility moved to the tool and
+the thing that gates it did not move with it. Two guards should have stopped this and neither
+applies:
+
+- The **refusal cap** (`refusedTwiceFor`) blanks an agent's wake text after two refusals of the
+  same tool. It never reached the adversary, because the adversary's wake condition is
+  `waitsFor === "gate" && gateVersions.length === 0 && boardSectionText === ""`. Gates existed,
+  so it woke on every cursor no matter how many times the tool had just refused it.
+- The **wake gate** does not consult `MAX_ATTACK_ROUNDS` at all. The loop knew, on every one of
+  those six cursors, that no attack could succeed, and woke the agent anyway.
+
+The fix is not to raise the cap. It is to make the cap visible to the thing that decides whether
+to spend a turn — and, for the adversary specifically, to gate waking on *an attackable version
+existing*, which is already computed one screen above as `attackableGates`.
+
+**A second consequence, for the record rather than the budget.** A v4 that no adversary may test
+is a gate version that enters the run untested by construction. Any claim about what a window's
+final gate withstands must name the version that was actually attacked — here v3, not v4.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make
