@@ -2001,3 +2001,76 @@ describe("runFullRunWindow — the redemption tracker makes a real fSIU claim ac
     expect(issuerHeadroomAfter).toBeLessThan(issuerHeadroomBefore);
   }, 90_000);
 });
+
+/**
+ * The span bound, which run comparability rests on and which had no test behind it.
+ *
+ * Turns used to run until their agents were done rather than until their window ended, so a slow
+ * window ate the next one's time: run 10's window 1 overran by ~13 minutes and window 2 opened
+ * with 386 seconds of its 1,200-second span. Windows whose real duration depends on how long the
+ * previous one took are not comparable to each other, and five comparable F1 runs need them to
+ * be.
+ *
+ * Five lines at the loop head, exactly the shape of the wake gate that starved WORKER-CODE and
+ * the window-break that made the dollar route's attack arm unreachable — both five-line changes,
+ * both wrong, both found only by running them.
+ */
+describe("turns are bounded by their window's span", () => {
+  let runsRoot: string;
+  let ledgerPath: string;
+
+  beforeEach(async () => {
+    runsRoot = await mkdtemp(path.join(tmpdir(), "full-run-span-"));
+    ledgerPath = path.join(runsRoot, "ledger.json");
+  });
+
+  afterEach(async () => {
+    await rm(runsRoot, { recursive: true, force: true });
+  });
+
+  it("hands out no turns at all when the span has already elapsed", async () => {
+    let calls = 0;
+    const adapter: Adapter = async () => {
+      calls++;
+      throw new Error("the adapter must not be called: the window's span is already over");
+    };
+
+    const result = await runFullRunWindow({
+      windowId: "w0",
+      roster: [orchestratorConfig(adapter)],
+      job: JOB,
+      maxTurnsPerAgent: 5,
+      // One hour in the past.
+      windowSpanEndsAtUnixSeconds: BigInt(Math.floor(Date.now() / 1000) - 3600),
+      budget: generousBudget(ledgerPath),
+      deps: fakeDeps(async () => PASS),
+      runsRoot,
+      runId: "run-span-elapsed",
+      manifest: MANIFEST,
+    });
+
+    expect(calls).toBe(0);
+    expect(result.turnsByAgent.ORCHESTRATOR).toBe(0);
+    expect(result.haltedReason?.ORCHESTRATOR).toBe("window_span_elapsed");
+  }, 20_000);
+
+  it("still runs the window normally when the span is open", async () => {
+    // The bound must not become the next blocker — the failure mode that made both prior
+    // five-line changes wrong. A window with time left behaves exactly as before.
+    const result = await runFullRunWindow({
+      windowId: "w0",
+      roster: [orchestratorConfig(scriptedAdapter(["export async function gate(){ return {accept:true,reason:'ok'}; }"]))],
+      job: JOB,
+      maxTurnsPerAgent: 2,
+      windowSpanEndsAtUnixSeconds: BigInt(Math.floor(Date.now() / 1000) + 3600),
+      budget: generousBudget(ledgerPath),
+      deps: fakeDeps(async () => PASS),
+      runsRoot,
+      runId: "run-span-open",
+      manifest: MANIFEST,
+    });
+
+    expect(result.turnsByAgent.ORCHESTRATOR).toBeGreaterThan(0);
+    expect(result.haltedReason?.ORCHESTRATOR).not.toBe("window_span_elapsed");
+  }, 30_000);
+});
