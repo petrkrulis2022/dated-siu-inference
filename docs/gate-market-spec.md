@@ -1009,6 +1009,17 @@ Two consequences, and the second is the expensive one:
   `fsiu-design.md`, which reads forward-quote behaviour as a signal. **Run 9's "both issuers
   above spot" and run 13's "both issuers at spot" are a comparison between two artefacts.**
 
+**Window 2 of the same run confirmed it prospectively, with a control.** ISSUER-A repeated the
+signature exactly — `whoami`, `get_print`, `get_print`, `quote_forward`, then no further turns,
+stopping the instant it quoted. ISSUER-B, which owed delivery against ORCHESTRATOR's claim and
+therefore had real board items every turn, spent all five of its turns on that work
+(`submit_job`, `serve_redemption`, `submit_job`, `submit_job`) and never quoted forward at all.
+
+That contrast is the finding in one line: **an issuer with work does its work; an issuer without
+work is re-asked until it quotes.** The invitation is not competing with an issuer's judgement,
+it is filling the space where an issuer has nothing to do — which is exactly the space a
+"did this agent want to quote?" measurement needs to be empty.
+
 Recorded, not fixed: the protocol freeze of §7.1a holds from the debugging run onward, so the fix
 belongs before the block starts, not inside it. The fix is not to remove the invitation — an
 issuer that has never been told it may quote forward cannot be said to have declined either. It
