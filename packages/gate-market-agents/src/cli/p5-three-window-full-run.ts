@@ -5,6 +5,7 @@ import {
   createPublicClient,
   http,
   keccak256,
+  parseEventLogs,
   stringToBytes,
   type Hex,
 } from "viem";
@@ -113,6 +114,8 @@ import {
  * any wallet balance does — which is the intended order. */
 const RUN_CAP_USD = "30";
 const EXPERIMENT_CAP_USD = "150";
+const ZERO_BYTES32 = `0x${"0".repeat(64)}` as Hex;
+
 export const WINDOW_COUNT = 3;
 /**
  * Each window is a real, fixed 20-minute span — spec §9.2's "three weekly windows", compressed.
@@ -444,6 +447,9 @@ async function main(): Promise<void> {
   // window 3 names window 3's own span, so the span cannot be "whenever window 2's agents happen
   // to finish" — it has to exist before the first turn is taken.
   const runStart = await chainReader.currentBlockTimestamp();
+  /** External-buyer claims minted this run, to be expired at the end so the capacity they
+   * consumed returns before the next run starts. See `releaseExternalClaims`. */
+  const externalClaims: { tokenId: bigint; holder: Hex; quantityMilliSiu: number }[] = [];
   const windowBoundsByIndex: Record<number, { from: bigint; to: bigint }> = {};
   for (let i = 1; i <= WINDOW_COUNT; i++) {
     windowBoundsByIndex[i] = {
@@ -653,6 +659,10 @@ async function main(): Promise<void> {
       roster,
       job,
       maxTurnsPerAgent: 10,
+      // Turns stop when the span does. Without this, window 1 of run 10 ran 13 minutes past its
+      // own end and window 2 opened with 386 seconds of its 1,200 left — windows whose real
+      // duration depends on the previous one's are not comparable to each other.
+      windowSpanEndsAtUnixSeconds: windowTo,
       budget,
       deps,
       runsRoot: RUNS_ROOT,
@@ -733,7 +743,7 @@ async function main(): Promise<void> {
 
     const depletion = EXTERNAL_DEPLETION_MILLI_SIU[windowIndex];
     if (depletion !== undefined) {
-      outcome.externalDepletion = await depleteExternally({
+      const depleted = await depleteExternally({
         quantityMilliSiu: BigInt(depletion),
         classId,
         deployment,
@@ -741,13 +751,37 @@ async function main(): Promise<void> {
         commodityPrint,
         rateUsdPerSiu,
         windowSeconds: WINDOW_SECONDS,
+        runEndsAtUnixSeconds: windowBoundsByIndex[WINDOW_COUNT].to,
         chainReader,
       });
+      // The report is JSON, and a tokenId is a bigint — JSON.stringify throws on those. The id
+      // and holder are kept here, out of anything that gets serialized, and only the three
+      // serializable fields go into the run record.
+      if (depleted.tokenId !== undefined && depleted.holder !== undefined) {
+        externalClaims.push({
+          tokenId: depleted.tokenId,
+          holder: depleted.holder,
+          quantityMilliSiu: depletion,
+        });
+      }
+      outcome.externalDepletion = {
+        requestedMilliSiu: depleted.requestedMilliSiu,
+        txHash: depleted.txHash,
+        failedBecause: depleted.failedBecause,
+      };
     }
 
     outcomes.push(outcome);
     printWindowSummary(outcome, totalOf);
   }
+
+  await releaseExternalClaims({
+    claims: externalClaims,
+    deployment,
+    rpcUrl,
+    chainReader,
+    runEndsAtUnixSeconds: windowBoundsByIndex[WINDOW_COUNT].to,
+  });
 
   printRunSummary(outcomes, forwardBook, totalOf, budget);
 
@@ -1320,6 +1354,8 @@ ${runShapeFacts}`;
  */
 async function depleteExternally(input: {
   quantityMilliSiu: bigint;
+  /** The last window's own close time — the external claim expires with the run. */
+  runEndsAtUnixSeconds: bigint;
   classId: Hex;
   deployment: ReturnType<typeof loadGateMarketDeployment>;
   rpcUrl: string;
@@ -1327,7 +1363,13 @@ async function depleteExternally(input: {
   rateUsdPerSiu: string;
   windowSeconds: bigint;
   chainReader: ViemChainReader;
-}): Promise<{ requestedMilliSiu: number; txHash?: string; failedBecause?: string }> {
+}): Promise<{
+  requestedMilliSiu: number;
+  txHash?: string;
+  failedBecause?: string;
+  tokenId?: bigint;
+  holder?: Hex;
+}> {
   const requested = Number(input.quantityMilliSiu);
   try {
     const account = privateKeyToAccount(
@@ -1341,9 +1383,16 @@ async function depleteExternally(input: {
     const publicClient = createPublicClient({ chain: baseSepolia, transport: http(input.rpcUrl) });
 
     const now = await input.chainReader.currentBlockTimestamp();
-    // Past the end of the whole run by a wide margin — see this function's own doc comment.
+    // Ends WITH THE RUN, not far beyond it. Until 2026-09-30 this was
+    // `now + windowSeconds * WINDOW_COUNT * 4`, which put the claim's window so far out that it
+    // could never be settled — so the capacity it consumed never came back and every run started
+    // poorer than the last. Six thousand mSIU a run, permanently, which quietly changed the
+    // market between runs that are supposed to be comparable. Ending at the run's own end keeps
+    // the scarcity WITHIN a run exactly as it was, and lets the capacity be returned BETWEEN
+    // runs by settling the claim once the run is over. The buyer never presents, so settlement
+    // is an Expire: headroom restored, nothing paid, no bond touched.
     const windowFrom = now - 60n;
-    const windowTo = now + input.windowSeconds * BigInt(WINDOW_COUNT) * 4n;
+    const windowTo = input.runEndsAtUnixSeconds;
     const validUntil = now + 3600n;
     const signature = await signRateAttestation(
       {
@@ -1384,7 +1433,17 @@ async function depleteExternally(input: {
       `\n[EXTERNAL BUYER — not an agent, scheduled in source before the run] took ${requested} mSIU ` +
         `of code-class capacity. tx ${txHash}`,
     );
-    return { requestedMilliSiu: requested, txHash };
+    // Decoded from the contract's own Minted event rather than guessed from a log position or
+    // recomputed from a pre-read route — the router picks the issuer inside the mint, so any id
+    // derived beforehand is a guess about which issuer won.
+    const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+    const minted = parseEventLogs({
+      abi: WORK_CLAIM_ABI,
+      eventName: "Minted",
+      logs: receipt.logs,
+    })[0];
+    const tokenId = minted?.args.tokenId;
+    return { requestedMilliSiu: requested, txHash, tokenId, holder: account.address };
   } catch (err) {
     const failedBecause = err instanceof Error ? err.message : String(err);
     console.log(
@@ -1393,6 +1452,90 @@ async function depleteExternally(input: {
         "the agents got there first, and that is a result rather than an error to work around.",
     );
     return { requestedMilliSiu: requested, failedBecause };
+  }
+}
+
+/**
+ * Expires the external buyer's claims once the run is over, returning the capacity they consumed.
+ *
+ * WHY THIS EXISTS. The external buyer takes 6,000 mSIU a run and, until 2026-09-30, never gave
+ * any of it back: its claim was minted with a window ending far beyond the run, so it could never
+ * be settled and the headroom was gone permanently. Five runs in, ISSUER-A was down to 2,000 mSIU
+ * — below every job size in the experiment — and had stopped being a participant at all. Runs
+ * that are supposed to be comparable were each starting from a poorer market than the last, which
+ * is a change to the thing being measured rather than to the measurement.
+ *
+ * WHAT IT DOES NOT DO. It does not top the pool up mid-run, and it does not make window 3 easier:
+ * the claims expire only after the last window has closed, so scarcity WITHIN a run is exactly
+ * what it was. This returns capacity BETWEEN runs.
+ *
+ * The buyer never presents, so `everPresented` is false and this is an Expire, not a Default:
+ * headroom is restored, nothing is paid out, and no bond is touched. The attestation argument is
+ * unused on that branch and is passed empty deliberately — see WorkClaim.settleWindowClose.
+ */
+async function releaseExternalClaims(input: {
+  claims: { tokenId: bigint; holder: Hex; quantityMilliSiu: number }[];
+  deployment: ReturnType<typeof loadGateMarketDeployment>;
+  rpcUrl: string;
+  chainReader: ViemChainReader;
+  runEndsAtUnixSeconds: bigint;
+}): Promise<void> {
+  if (input.claims.length === 0) return;
+
+  console.log(`\n=== RETURNING EXTERNAL-BUYER CAPACITY ===`);
+  try {
+    const account = privateKeyToAccount(
+      toHex(process.env.DEPLOYER_PRIVATE_KEY, "DEPLOYER_PRIVATE_KEY"),
+    );
+    const walletClient = createWalletClient({
+      account,
+      chain: baseSepolia,
+      transport: http(input.rpcUrl),
+    });
+    const publicClient = createPublicClient({ chain: baseSepolia, transport: http(input.rpcUrl) });
+
+    // settleWindowClose reverts WindowNotClosedYet until the chain clock passes the claim's own
+    // window end, which is the run's end. Turns are bounded by their spans now, so this is a
+    // short wait at most — but it is a real one and is reported rather than slept through blind.
+    let now = await input.chainReader.currentBlockTimestamp();
+    while (now < input.runEndsAtUnixSeconds) {
+      const waitSeconds = Number(input.runEndsAtUnixSeconds - now) + 2;
+      console.log(`  waiting ${waitSeconds}s for the run's own end before settling.`);
+      await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+      now = await input.chainReader.currentBlockTimestamp();
+    }
+
+    for (const claim of input.claims) {
+      try {
+        const txHash = await walletClient.writeContract({
+          address: input.deployment.workClaim.address as Hex,
+          abi: WORK_CLAIM_ABI,
+          functionName: "settleWindowClose",
+          args: [
+            claim.tokenId,
+            claim.holder,
+            { printId: "", series: ZERO_BYTES32, printDate: 0n, nanoUsdPerSiu: 0n, validUntil: 0n },
+            "0x",
+          ],
+          chain: baseSepolia,
+        });
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        console.log(
+          `  expired ${claim.quantityMilliSiu} mSIU of external-buyer capacity back to its ` +
+            `issuer. tx ${txHash}`,
+        );
+      } catch (err) {
+        console.log(
+          `  ${claim.quantityMilliSiu} mSIU NOT returned: ${err instanceof Error ? err.message : String(err)}\n` +
+            "  Reported rather than retried: the next run starts from whatever this actually left " +
+            "behind, and a silent failure here is how the ratchet went unnoticed for five runs.",
+        );
+      }
+    }
+  } catch (err) {
+    console.log(
+      `  external capacity could not be returned at all: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 

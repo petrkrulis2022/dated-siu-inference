@@ -163,6 +163,23 @@ export interface FullRunWindowOptions {
    * each is delivered or abandoned — not built here; see this file's own top comment. */
   job: JobEnvelope;
   maxTurnsPerAgent: number;
+  /**
+   * Unix seconds at which this window's span ends. Turns stop being handed out once it passes.
+   *
+   * Bounding turns to the span, rather than letting a window run until its agents are done, is
+   * the deliberate choice between the two available fixes. The alternative — starting each
+   * window's clock when its first turn actually runs — cannot work here: `resolveTargetWindow`
+   * lets a buyer mint for a LATER window, which requires that window's real bounds to be known
+   * and stable before it begins. A clock that starts late moves those bounds after a claim has
+   * been minted against them, and a forward-dated claim whose window shifts is a claim that can
+   * expire before it can ever be presented. The instrument's defining property has to win over
+   * the convenience of never truncating an exchange.
+   *
+   * The cost is real and is not hidden: an exchange can be cut off mid-hardening-loop. That is
+   * also what a real delivery window does, and the remedy is to size the span for the exchange
+   * rather than to let the exchange redefine the span.
+   */
+  windowSpanEndsAtUnixSeconds?: bigint;
   budget: ExperimentBudget;
   deps: RunnerDeps;
   runsRoot: string;
@@ -412,6 +429,12 @@ export interface FullRunWindowResult {
     | "policy_refusal"
     | "adapter_error"
     | "nothing_to_act_on"
+    /** The window's own span ran out while this agent was still active. Added 2026-09-30: turns
+     * used to run past their window's end, so a slow window ate the next one's time — run 10's
+     * window 2 opened with 386 seconds of its 1,200-second span left because window 1 overran.
+     * Windows whose real duration depends on how long the previous one took are not comparable,
+     * and claim windows are fixed on-chain before any of them starts. */
+    | "window_span_elapsed"
   >;
   turnLogsByAgent: Record<string, TurnLog[]>;
 }
@@ -651,6 +674,16 @@ export async function runFullRunWindow(
         haltedReason[waiting] ??= "nothing_to_act_on";
       }
       break turnLoop;
+    }
+
+    if (options.windowSpanEndsAtUnixSeconds !== undefined) {
+      const nowSeconds = BigInt(Math.floor(Date.now() / 1000));
+      if (nowSeconds >= options.windowSpanEndsAtUnixSeconds) {
+        for (const waiting of activeAgents) {
+          haltedReason[waiting] ??= "window_span_elapsed";
+        }
+        break turnLoop;
+      }
     }
 
     const agent = options.roster[turnCursor % options.roster.length];
