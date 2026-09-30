@@ -1150,6 +1150,49 @@ existing*, which is already computed one screen above as `attackableGates`.
 is a gate version that enters the run untested by construction. Any claim about what a window's
 final gate withstands must name the version that was actually attacked — here v3, not v4.
 
+### 4.6w WORKER-CODE was not refusing to buy — and the detector built to catch that said nothing
+
+Run 13. WORKER-CODE made **zero purchases in three windows** while holding `request_quote`,
+`pay_with_claim`, `settle_split` and `transfer_claim`, and spent nine of window 3's ten turns on
+`get_balances`. Read from the outside that looks like a buyer declining, or a brief that fails to
+prompt one. It is neither. Its own friction says what it wanted:
+
+> *"No tool exists to check whether the issuer has actually served the redeemed claim"*
+> *"No indication of what concrete deliverable the issuer will serve for a generic job"*
+
+It had redeemed a claim and was trying to confirm delivery. **No tool does that.** `get_balances`
+was the nearest thing available, so it called it nine times — §4.6e's "picks the nearest wrong
+move", in its purest form yet, and the repetition is the tell rather than the defect.
+
+Two consequences:
+
+- **The F1 reading was nearly inverted.** "The second decider orients without buying" invites a
+  brief rewrite. The actual defect is a missing capability, and rewriting the brief would have
+  buried it while appearing to fix it. §4.6e's rule earns its keep again: establish what an agent
+  was able to express before recording what it chose.
+- **Nothing guards a repeated *successful* call.** `refusedTwiceFor` counts refusals; the stall
+  guard fires only when no agent acts at all. An agent looping on a call that succeeds and tells
+  it nothing is invisible to both, and it cost nine turns and roughly $0.5.
+
+**And the detector meant to catch precisely this stayed silent.** `missingToolFrictions` requires
+the friction text to contain the name of an existing tool:
+
+```ts
+const named = toolNames.find((t) => text.includes(t));
+if (named === undefined) continue;
+```
+
+WORKER-CODE named no tool, because the tool it wanted does not exist. So the run's loudest
+finding was dropped and never reached the report's `!!! AGENTS NAMED TOOLS THEY DID NOT HAVE !!!`
+banner.
+
+The detector answers "was this agent denied a tool that exists?" — a **grant** problem. It cannot
+answer "did this agent need a capability nobody built?" — a **design** problem, which is the more
+valuable of the two and the only one that can invalidate a measurement without anyone noticing.
+It must surface every `could_not_express` that reads as a capability gap, whether or not a known
+tool name appears in it, and separate "named a tool it lacks" from "named a capability that does
+not exist" rather than reporting only the first.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make
