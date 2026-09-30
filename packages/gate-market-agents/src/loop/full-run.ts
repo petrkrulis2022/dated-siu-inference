@@ -256,11 +256,15 @@ export interface CapacityEvent {
     | "redeem_claim"
     | "serve_redemption"
     | "settle_window_close"
-    | "take_forward";
+    | "take_forward"
+    /** One quote settled in both assets at once — see tools/settle-split.ts. */
+    | "settle_split";
   quantityMilliSiu?: string;
   issuer?: string;
   tokenId?: string;
   quoteHash?: string;
+  /** Claim share of the quote, 0..1 as a decimal string — `settle_split` only. */
+  claimShare?: string;
   counterparty?: string;
   txHash?: string;
   /** Seconds until the claim's own window closes at the moment of the decision — §7.1(a)'s own
@@ -1319,6 +1323,32 @@ export async function runFullRunWindow(
 
       // One call, but the same two real events mint_claim + transfer_claim would have produced —
       // so the redemption tracker sees an fSIU payment identically whichever tool made it.
+      if (intent.tool === "settle_split") {
+        const split = record.result as {
+          claimTokenId: string;
+          claimIssuer: string;
+          claimQuantityMilliSiu: string;
+          claimShare: string;
+          claimMintTxHash?: string;
+        };
+        const issuerAgentId = agentIdByAddress[split.claimIssuer.toLowerCase()];
+        if (issuerAgentId) {
+          redemption.recordMint(split.claimTokenId, issuerAgentId, split.claimQuantityMilliSiu);
+        }
+        const to = (args as { to?: unknown } | undefined)?.to;
+        if (typeof to === "string") {
+          const recipientAgentId = agentIdByAddress[to.toLowerCase()];
+          if (recipientAgentId) redemption.recordTransfer(recipientAgentId);
+        }
+        await recordCapacityEvent("settle_split", {
+          tokenId: split.claimTokenId,
+          issuer: split.claimIssuer,
+          quantityMilliSiu: split.claimQuantityMilliSiu,
+          claimShare: split.claimShare,
+          ...(split.claimMintTxHash ? { txHash: split.claimMintTxHash } : {}),
+        });
+      }
+
       if (intent.tool === "pay_with_claim") {
         const paid = record.result as {
           tokenId: string;

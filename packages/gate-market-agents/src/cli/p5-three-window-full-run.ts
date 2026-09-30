@@ -42,6 +42,7 @@ import type { RunnerDeps } from "../deps.js";
 import { loadGateMarketDeployment } from "../chain/deployment.js";
 import { ViemChainReader } from "../chain/reader.js";
 import { ForwardQuoteBook } from "../loop/forward-book.js";
+import { renderPurchaseSummary, summarisePurchases } from "../loop/purchases.js";
 import {
   F1_ORACLE_TRIAL_SEED,
   classIdFor,
@@ -827,7 +828,8 @@ async function main(): Promise<void> {
           headroomBefore: o.headroomBefore,
           headroomAfter: o.headroomAfter,
           externalDepletion: o.externalDepletion,
-          assetChoice: describeAssetChoice(o.result),
+          assetChoice: renderPurchaseSummary(summarisePurchases(o.result)).join("\n").trim(),
+          purchases: summarisePurchases(o.result),
           capacityEvents: o.result.capacityEvents,
           forwardInvitations: o.result.forwardInvitations,
           attacks: o.result.attacks,
@@ -1600,7 +1602,8 @@ function printWindowSummary(
       `(${headroomAfter.map((r) => `${r.issuer} ${r.headroom}`).join(", ")})`,
   );
 
-  console.log(`asset choice: ${describeAssetChoice(result)}`);
+  console.log("asset choice, per buyer:");
+  for (const line of renderPurchaseSummary(summarisePurchases(result))) console.log(line);
 
   if (result.capacityEvents.length === 0) {
     console.log("capacity events: none — nothing moved on-chain this window.");
@@ -1628,18 +1631,6 @@ function printWindowSummary(
  * for. Read from the real capacity events and the real tool calls, never from a model's own
  * account of what it did.
  */
-function describeAssetChoice(result: FullRunWindowResult): string {
-  const calls = (result.turnLogsByAgent.ORCHESTRATOR ?? []).map((t) => t.parsed);
-  const usdcPurchases = calls.filter((p) => p.includes('"pay"')).length;
-  const claimPurchases = result.capacityEvents.filter(
-    (e) => e.agentId === "ORCHESTRATOR" && (e.kind === "pay_with_claim" || e.kind === "mint_claim"),
-  ).length;
-  if (usdcPurchases === 0 && claimPurchases === 0) {
-    return "ORCHESTRATOR reached no asset-choice action this window";
-  }
-  return `${usdcPurchases} purchase(s) settled in USDC, ${claimPurchases} in fSIU`;
-}
-
 function describeCapacityEvent(e: CapacityEvent): string {
   const parts: string[] = [];
   if (e.quantityMilliSiu) parts.push(`${e.quantityMilliSiu} mSIU`);
@@ -1827,7 +1818,8 @@ function printRunSummary(
       `  window ${o.windowIndex}: passed=${o.result.passed}${o.result.passedBy ? ` by ${o.result.passedBy}` : ""}, ` +
         `headroom ${totalOf(o.headroomBefore)} -> ${totalOf(o.headroomAfter)} mSIU${depletion}`,
     );
-    console.log(`    asset choice: ${describeAssetChoice(o.result)}`);
+    console.log("    asset choice, per buyer:");
+    for (const line of renderPurchaseSummary(summarisePurchases(o.result))) console.log(`  ${line}`);
   }
 
   console.log("\n=== SUBCONTRACTING AND ASSET CHOICE, PER PURCHASE ===");
