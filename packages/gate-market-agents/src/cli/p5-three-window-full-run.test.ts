@@ -233,6 +233,40 @@ describe("p5 three-window roster", () => {
     }
   });
 
+  /**
+   * Phase 5: the adversarial testing is bought by WORKER-CODE, not ORCHESTRATOR, so a claim can
+   * reach a second pair of hands and be spent onward instead of redeemed.
+   */
+  it("moves the adversarial-testing purchase to WORKER-CODE, and stops telling ORCHESTRATOR about it", () => {
+    const roster = buildRoster(input(1));
+    const orchestrator = find(roster, "ORCHESTRATOR").skillPackText;
+    const workerCode = find(roster, "WORKER-CODE").skillPackText;
+
+    // A brief that still described a purchase the agent no longer makes would describe a world
+    // the agent is not in — the same defect as the "wait" instruction for a protocol that
+    // offered no way to wait.
+    expect(orchestrator).not.toContain("A SECOND PIECE OF WORK");
+    expect(orchestrator).not.toContain("erc8004:0xextract");
+
+    expect(workerCode).toContain("BUYING THE ADVERSARIAL TESTING");
+    expect(workerCode).toContain("erc8004:0xextract");
+  });
+
+  /**
+   * Two F1 deciders facing different menus produce choices that cannot be compared with each
+   * other — the comparison would measure the menus. They get the same payment routes.
+   */
+  it("gives both buyers the same payment menu", () => {
+    const roster = buildRoster(input(1));
+    const routes = ["pay", "pay_with_claim", "settle_split", "transfer_claim"];
+    for (const id of ["ORCHESTRATOR", "WORKER-CODE"]) {
+      const tools = find(roster, id).availableTools;
+      for (const route of routes) {
+        expect(tools, `${id} must be able to settle via ${route}`).toContain(route);
+      }
+    }
+  });
+
   it("gives WORKER-CODE the capacity-commitment step on the dollar route", () => {
     const worker = find(buildRoster(input(1)), "WORKER-CODE");
     expect(worker.availableTools).toContain("reserve_for_work");

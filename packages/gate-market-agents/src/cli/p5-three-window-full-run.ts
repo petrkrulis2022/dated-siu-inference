@@ -1021,26 +1021,6 @@ ${runShapeFacts}
   does not bind either side. You still buy the work separately. Ignoring every offer is an
   equally valid thing to do and is recorded as such.
 
-  A SECOND PIECE OF WORK, SEPARATE FROM THE ABOVE
-  A gate that nobody has tried to defeat is not worth much. WORKER-EXTRACT (seller_id
-  "${workerExtractErc8004Id}") tests a delivered gate and reports, for each submission it tries,
-  whether the gate accepted something an independent oracle rejects. You may buy that testing the
-  same way you buy the gate itself. It is a separate purchase with its own quote; nothing here
-  says which way to pay for either, and the two need not match.
-
-  It is a smaller job than the gate: ${ATTACK_JOB_MILLI_SIU} mSIU against the gate's
-  ${NOMINAL_JOB_MILLI_SIU} mSIU, because writing an adversarial submission is less work than
-  authoring a hardened gate. Either way of paying works exactly as above, with that quantity:
-    USDC:  {"tool": "request_quote", "args": {"siu": "${Number(ATTACK_JOB_MILLI_SIU) / 1000}",
-      "model": "${models["WORKER-EXTRACT"]}", "rateUsdPerSiu": "${rateUsdPerSiu}",
-      "indexVersion": "SIU-2026a", "printId": "${printId}", "printHash": "0x00",
-      "sellerId": "${workerExtractErc8004Id}", "chain": "base-sepolia",
-      "expiresInSeconds": 3600, "pattern": "fixed"}}  then pay against the quote it issues.
-    fSIU:  {"tool": "pay_with_claim", "args": {"agentId": "WORKER-EXTRACT",
-      "quantity": "${ATTACK_JOB_MILLI_SIU}"}}
-  Buying it is optional, and so is buying the gate. Nothing here says to do either, or to settle
-  the two the same way.
-
   Respond with {"done": true, "summary": "<why>"} only if you would not want to be shown a
   delivery, an offer or a failure for the rest of this window — that is what it costs. Waiting
   is not a reason to use it; waiting happens on its own.
@@ -1070,6 +1050,36 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${WINDOW_COUNT})
       you, owes the delivery, and what you do with the claim is yours to decide: the full set of
       options and their exact calls is under "WHAT A WORK CLAIM IS" below. If you do present it,
       you are done for that claim — never call submit_job for one you hold.
+
+  A SEPARATE DECISION OF YOUR OWN: BUYING THE ADVERSARIAL TESTING
+  A gate that nobody has tried to defeat is not worth much. WORKER-EXTRACT (seller_id
+  "${workerExtractErc8004Id}") tests a delivered gate and reports, for each submission it tries,
+  whether the gate accepted something an independent oracle rejects. Buying that testing is
+  yours to decide and to pay for. It is ${ATTACK_JOB_MILLI_SIU} mSIU — smaller than the gate's
+  ${NOMINAL_JOB_MILLI_SIU} mSIU, because writing an adversarial submission is less work than
+  authoring a hardened gate.
+
+  Ask for a quote first:
+    {"tool": "request_quote", "args": {"siu": "${Number(ATTACK_JOB_MILLI_SIU) / 1000}",
+      "model": "${models["WORKER-EXTRACT"]}", "rateUsdPerSiu": "${rateUsdPerSiu}",
+      "indexVersion": "SIU-2026a", "printId": "${printId}", "printHash": "0x00",
+      "sellerId": "${workerExtractErc8004Id}", "chain": "base-sepolia",
+      "expiresInSeconds": 3600, "pattern": "fixed"}}
+
+  Then settle it in any of these ways. Nothing here says which.
+    IN USDC:  {"tool": "pay", "args": {"requestId": "<the requestId from the board>",
+      "settler": "0x0000000000000000000000000000000000000000"}}
+    IN fSIU, minting a new claim:  {"tool": "pay_with_claim",
+      "args": {"agentId": "WORKER-EXTRACT", "quantity": "${ATTACK_JOB_MILLI_SIU}"}}
+    IN fSIU, using a claim you ALREADY HOLD — no new capacity is consumed, the claim simply
+    changes hands:  {"tool": "transfer_claim", "args": {"agentId": "WORKER-EXTRACT",
+      "tokenId": "<the tokenId you hold>", "quantity": "${ATTACK_JOB_MILLI_SIU}",
+      "requestId": "<the requestId from the board>"}}
+    PARTLY IN EACH:  {"tool": "settle_split", "args": {"requestId": "<the requestId>",
+      "claimQuantityMilliSiu": "<how much of it to settle in claims>",
+      "settler": "0x0000000000000000000000000000000000000000"}}
+
+  Buying it is optional. Nothing here says to do it, or how to pay if you do.
 
   If you see an open request addressed to you on the market board, you may issue_quote to answer
   it ({"tool": "issue_quote", "args": {"requestId": "<the requestId shown>"}}) — this signs the
@@ -1128,8 +1138,9 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${WINDOW_COUNT})
   have genuinely run out of ideas, say so with {"done": true, "summary": "<why>"} — but do not
   stop merely because your first submission failed.
 
-  ORCHESTRATOR may buy this testing from you, in USDC or in a work claim — that choice is
-  ORCHESTRATOR's, not yours to influence. If an open request addressed to you appears on the
+  WORKER-CODE may buy this testing from you, in USDC or in a work claim — including a claim it
+  already holds, passed on to you rather than redeemed. That choice is WORKER-CODE's, not yours
+  to influence. If an open request addressed to you appears on the
   market board, you may answer it with issue_quote. You will be told when it has been paid:
   "YOU HAVE BEEN PAID AND OWE THE WORK" appears on your board, naming the amount in escrow.
   Before you do the work, commit the capacity it will use:
@@ -1276,7 +1287,13 @@ ${runShapeFacts}`;
         "settle_escrow",
         "submit_job",
         "pay",
-        // Added 2026-09-30. Without these a holder's only move is redeem-then-pay-dollars, so
+        // WORKER-CODE buys the adversarial testing from 2026-09-30, which makes it the second
+        // F1 decider. It is granted the SAME payment menu as ORCHESTRATOR deliberately: two
+        // buyers facing different option sets produce choices that cannot be compared, which
+        // would defeat the point of measuring both.
+        "request_quote",
+        "settle_split",
+        // Without these a holder's only move is redeem-then-pay-dollars, so
         // a claim can never pass from one party to another and fSIU is a settlement rail rather
         // than money. "Claims do not circulate" was not an observation about agent behaviour;
         // it was a property of the tool grant.
