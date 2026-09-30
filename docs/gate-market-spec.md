@@ -726,6 +726,44 @@ The author's side is deliberately the poorer one. That asymmetry is a choice, no
 and if a future run shows authors cannot revise usefully on shape alone it is the first thing to
 revisit.
 
+### 4.6n The seventh affordance defect: no agent has ever been able to hold a claim
+
+Established from the code and then from the records, 2026-09-30.
+
+`resolveTargetWindow` supports forward-dating on both `mint_claim` and `pay_with_claim`: an
+optional `forWindow` resolves to that window's real, pre-computed bounds, an earlier or unknown
+window is refused rather than clamped, and omitting it defaults to **the window the buyer is
+standing in**. The capability has existed since 2026-09-28.
+
+**`forwardDated: true` appears zero times across all six windows of runs 9 and 10.** Every claim
+anyone was ever paid in was minted for the window it was bought in, because the payer always
+omitted `forWindow` and the default is current-window.
+
+What follows is not a small thing:
+
+- A current-window claim held past its window is not deferred, it is **lost**. Worse than lost:
+  an unpresented claim `Expires`, which restores the issuer's headroom and pays the holder
+  **nothing**. Only a claim that was *presented* and not served `Defaults` and draws the bond.
+  Run 10's window 2 is the demonstration — two claims, neither presented, both expired, the buyer
+  paid twice for nothing with no recourse.
+- Therefore **immediate presentation was always the only value-preserving move**, and
+  hold-versus-redeem has never been a decision any agent could make.
+- So every observation of the form "agents redeem immediately" is an artefact of the payer's
+  default argument, not a preference. It belongs with §4.6a's prompt-level prohibition and
+  §4.6f's turn-cost asymmetry: the third time a behavioural reading turned out to be a property
+  of the tool surface.
+
+**And it means the F1 question has not been asked yet, rather than asked and unanswered.** The
+freedom set was built around a choice between a dollar payment and a *dated claim on future
+capacity*. What has actually been offered every time is a choice between a dollar payment and a
+same-window claim that must be redeemed immediately — a materially narrower question, and not the
+one the instrument is defined by. No F1 number from any run to date is a measurement of the
+intended comparison.
+
+Not changed here, deliberately: what the payer should default to, or whether the buyer should be
+told it can forward-date, is a change to the freedom set and belongs in a decision about the F1
+protocol rather than in a quiet edit before the runs that are meant to be comparable.
+
 ### 4.6l Attack classes: volume defends against one of them and not the other
 
 The strongest finding of run 10 (2026-09-30), and the first remedy-shaped answer this project has

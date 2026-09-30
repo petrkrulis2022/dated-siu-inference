@@ -401,6 +401,27 @@ headroom. An issuer offered twice the capacity it held. That is exactly the case
 `issuerHeadroomAtQuote` was added to expose, and it is why an offer recorded without the headroom
 behind it would be a misleading datum rather than a thin one.
 
+### 5.4b The deferral property has never been exercised
+
+Recorded 2026-09-30, because it bears directly on every claim this document makes about what an
+fSIU *is*.
+
+§1 defines the instrument by its delivery window: a claim reserves capacity for a **future**
+window, and that is what separates it from a payment for immediate work (§4.5). The mint path
+implements this — `forWindow` on `mint_claim` and `pay_with_claim` resolves to a later window's
+real bounds, and refuses a window outside the run rather than clamping.
+
+**No claim in any run has ever used it.** Across all six windows of runs 9 and 10, every claim was
+minted for the window it was bought in, because the payer omitted `forWindow` and the default is
+current-window.
+
+The consequence for this document's own claims: the testbed has so far exercised the *settlement*
+half of the instrument (mint, present, serve, default, expire, one shared bonded pool) and none of
+the *dating* half. A same-window claim that must be presented immediately or expire worthless is,
+economically, a prepayment with a bond behind it — not a forward. Nothing here about term
+structure, scarcity across windows, or what makes a later window worth paying for (§5.5) has yet
+been tested against an agent that could actually choose to wait.
+
 ### 5.5 What makes a later window worth paying for, absent a decline
 
 **Scarcity.** Capacity for a later window is finite, shared across all buyers first-come

@@ -128,7 +128,20 @@ export const WINDOW_COUNT = 3;
  * were still working would break redemption for its own claims — a far more expensive failure
  * than idling. No inference is spent while waiting.
  */
-export const WINDOW_SECONDS = 1200n;
+/**
+ * Raised 1200 -> 2400 on 2026-09-30, once turns became bounded by their span.
+ *
+ * Run 10's window 1 needed roughly 33 minutes for a four-version hardening exchange — attack,
+ * revise, attack, revise — which is the artefact this whole testbed exists to produce. Bounding
+ * turns at 1,200s without raising the span would have truncated exactly that, which is the same
+ * class of mistake as the wake gate that starved WORKER-CODE: a fix that becomes the next
+ * blocker.
+ *
+ * The consequence is stated rather than discovered later: a run is now about two hours of wall
+ * clock, and the five comparable F1 runs each need four providers healthy for that whole time.
+ * That argues for running them close together once the protocol is stable, not spread over days.
+ */
+export const WINDOW_SECONDS = 2400n;
 
 /**
  * The simulated external buyer's schedule, in mSIU of `code`-class capacity taken between
