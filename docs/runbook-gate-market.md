@@ -98,6 +98,22 @@ normally. Use `awk '{ print substr($0, 1, 200); fflush() }'` instead.
 
 ---
 
+## Before pushing
+
+**Run the CI pipeline's own steps, not just the tests.** CI runs build, typecheck, lint, format,
+a deployments-sync check and then the tests — and it stops at the first failure, so a lint error
+hides everything after it. Nine consecutive pushes went red on one unused variable while the
+test suite passed locally every time.
+
+```
+pnpm run build && pnpm run typecheck && pnpm run lint
+gh run list --limit 3          # after pushing, actually look
+```
+
+`pnpm run format` is unreliable locally unless dependencies were installed with
+`--frozen-lockfile`: a different prettier version flags thousands of long-committed data files
+that CI is perfectly happy with. Trust CI's format step over a local one.
+
 ## Costs
 
 A three-window run at 2,400-second windows is about two hours of wall clock and $1–2 of real
