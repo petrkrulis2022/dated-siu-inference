@@ -760,9 +760,60 @@ same-window claim that must be redeemed immediately — a materially narrower qu
 one the instrument is defined by. No F1 number from any run to date is a measurement of the
 intended comparison.
 
+**Corrected 2026-09-30, and the correction matters.** An earlier version of this section said
+hold-versus-redeem "has never been a decision any agent could make". That is too strong for the
+payer. `forWindow` was not merely implemented: it was *disclosed to ORCHESTRATOR in its own
+brief*, neutrally, with a worked example and the sentence "Nothing here says whether to use this,
+or when" — added in `6df4fa4` on 2026-09-28, before both runs. The payer knew, had the tool, and
+chose the default every time. **That is behaviour, not an affordance gap.**
+
+It is also a rational default, which is why it is not yet evidence of a preference: the recipient
+of a deferred claim could do nothing with it (§4.6p). Deferring delivery for a holder who cannot
+transfer, cannot pay onward, and in one case could not even redeem, buys nobody anything. The
+honest statement is that the payer declined an option whose value to the recipient was
+structurally zero.
+
 Not changed here, deliberately: what the payer should default to, or whether the buyer should be
 told it can forward-date, is a change to the freedom set and belongs in a decision about the F1
 protocol rather than in a quiet edit before the runs that are meant to be comparable.
+
+### 4.6p The adversary was paid in an asset it could not redeem, and said so
+
+The eighth affordance defect, and the most expensive: it invalidates a measurement rather than
+wasting turns.
+
+**WORKER-EXTRACT held no claim tool at all** — `issue_quote`, `reserve_for_work`,
+`settle_escrow`, `submit_attack`, `get_balances`, `get_print`, and nothing else. No
+`redeem_claim`, no `transfer_claim`, no `settle_window_close`.
+
+It was paid in fSIU anyway. 4,000 mSIU in run 9 and 4,000 in run 10, for attack testing. Both
+claims were unredeemable from the moment they arrived, both expired worthless, and both were
+finally cleared by operator sweep on 2026-09-30.
+
+**So the second purchase in both runs was never a choice between two assets.** For a recipient
+that cannot redeem, fSIU is not an alternative to dollars — it is a way of paying nothing. The
+buyer was choosing between an asset and a broken one, and **any F1 figure that includes the
+attack-testing purchase is measuring a defect**. The gate-authoring purchase, to WORKER-CODE,
+which could redeem, is unaffected.
+
+This is the same class as §4.6f's turn-cost asymmetry: the tool surface made one route
+structurally worse and the resulting choice looked like a preference.
+
+**And it was reported at the time.** WORKER-EXTRACT's own friction log, run 10 window 2:
+
+> `"could_not_express": "redeem_claim is not in the list of available tools this turn"`
+
+That is the field doing precisely what it exists for. The run report printed the *path* to the
+friction log and never its contents, so one entry in seventy went unread across two runs. Fixed:
+a `could_not_express` naming a tool the agent did not have is now surfaced at the top of the run
+report, separately from friction about workflow or waiting, with the note that every measurement
+involving that agent is suspect until the grant is fixed. **A missing tool and a missing
+convenience are different severities and must not share a heading.**
+
+Claims could not circulate either, for the same kind of reason: WORKER-CODE held neither
+`transfer_claim` nor `pay_with_claim`, so a holder's only move was redeem-then-pay-dollars.
+"fSIU never passes between parties, so it is a settlement rail rather than money" was a property
+of the tool grant, not a finding about agents.
 
 ### 4.6o Verifying the stated property is not enough when a wrong implementation satisfies it
 

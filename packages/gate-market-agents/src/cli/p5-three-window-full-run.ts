@@ -55,6 +55,8 @@ import {
 } from "../loop/full-run.js";
 import type { RunManifest } from "../run-recorder/recorder.js";
 import { RUNS_ROOT } from "./runs-root.js";
+import { missingToolFrictions } from "../friction/missing-tool.js";
+import type { FrictionLogEntry } from "../friction/log.js";
 import {
   LEDGER_PATH,
   ONE_POOL_DISCLOSURE,
@@ -796,7 +798,7 @@ async function main(): Promise<void> {
     runEndsAtUnixSeconds: windowBoundsByIndex[WINDOW_COUNT].to,
   });
 
-  printRunSummary(outcomes, forwardBook, totalOf, budget);
+  printRunSummary(outcomes, forwardBook, totalOf, budget, runId);
 
   // Written as well as printed: a report that exists only in terminal scrollback is not a record,
   // and this run is expensive enough that losing it to a closed window would be a real loss.
@@ -1740,13 +1742,63 @@ export function classifyFinalWindow(outcomes: WindowOutcome[]): {
   };
 }
 
+/** Reads every window's friction log for this run and returns the entries in which an agent
+ * named a tool it did not have. See friction/missing-tool.ts for why this is separated out. */
+function readMissingToolFrictions(
+  runId: string,
+): { window: number; agent: string; turn: number; tool: string; text: string }[] {
+  const out: { window: number; agent: string; turn: number; tool: string; text: string }[] = [];
+  for (let w = 1; w <= WINDOW_COUNT; w++) {
+    const path = join(RUNS_ROOT, `${runId}-w${w}`, "friction", "friction-log.jsonl");
+    let raw: string;
+    try {
+      raw = readFileSync(path, "utf-8");
+    } catch {
+      continue;
+    }
+    const entries: FrictionLogEntry[] = [];
+    for (const line of raw.split("\n")) {
+      if (line.trim() === "") continue;
+      try {
+        entries.push(JSON.parse(line) as FrictionLogEntry);
+      } catch {
+        // A malformed line is not a reason to lose the rest of the window's friction.
+      }
+    }
+    for (const m of missingToolFrictions(entries)) out.push({ window: w, ...m });
+  }
+  return out;
+}
+
 function printRunSummary(
   outcomes: WindowOutcome[],
   forwardBook: ForwardQuoteBook,
   totalOf: (rows: { headroom: string }[]) => bigint,
   budget: ExperimentBudget,
+  runId?: string,
 ): void {
   console.log("\n\n######## RUN SUMMARY — THREE WINDOWS ########");
+
+  // FIRST, before anything else in the report. An agent that names a tool it was not given has
+  // reported that some measurement involving it is invalid, and in runs 9 and 10 exactly that
+  // was written to the friction log and never read: the report printed the log's path and
+  // nothing more. WORKER-EXTRACT was paid in fSIU twice while unable to redeem, and both claims
+  // expired worthless. This section exists so that cannot happen quietly again.
+  if (runId !== undefined) {
+    const missing = readMissingToolFrictions(runId);
+    if (missing.length > 0) {
+      console.log("\n!!! AGENTS NAMED TOOLS THEY DID NOT HAVE !!!");
+      console.log(
+        "  Each line is an agent reporting it could not do something because a tool was absent.\n" +
+          "  Treat every measurement involving that agent as suspect until the grant is fixed —\n" +
+          "  this is a different severity from friction about workflow or waiting.",
+      );
+      for (const m of missing) {
+        console.log(`  window ${m.window} ${m.agent} turn ${m.turn}: ${m.tool} — "${m.text}"`);
+      }
+    }
+  }
+
   console.log(ONE_POOL_DISCLOSURE);
 
   console.log("=== PER WINDOW ===");
