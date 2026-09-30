@@ -612,6 +612,58 @@ in `docs/monetary-design.md`, and a search of `docs/` finds no section stating i
 written into the monetary design proper before anything is built against it, because a routing
 rule that exists only in conversation is not a specification.
 
+### 4.6h The adversary produced yield; it did not search
+
+Run 9 (2026-09-29) gave the project its first adversarial yield: five false accepts across three
+windows. The behaviour that produced them is narrower than "an LLM adversary finds a gate's
+boundary."
+
+It used `length > 10` on its **first attack of the run** and then repeated it, unvaried, four more
+times. There was no ladder. The deleted run earlier the same evening — the one lost to the turn-loop
+deadlock — did search: call-count thresholds walked 150 → 80 → 60 → 45, then input-size thresholds
+at 12, 15 and 40. That was genuine convergence toward a boundary, and it never reached a verdict
+because the run died.
+
+So the honest claim is: **an LLM adversary can produce yield. It is not yet shown to converge.**
+Anything stronger is an artefact of quoting the run that finished over the run that searched.
+
+One of the input-size probes in the lost run is worth recording separately. `arr.length > 40` sits
+*outside the oracle's own input distribution* — `buildOracleTrials` generates lengths 0..40
+inclusive, and its largest fixed case is exactly 40 — so a submission that misbehaves only above
+40 behaves perfectly across all 509 trials and the oracle accepts it as correct. Any bounded
+generator has an escape hatch at its boundary, and length is only the first axis; element range
+(−6..6), duplicate density and sortedness are the same hole on other axes. The mitigations are to
+derive the bound per run from the pinned oracle seed, so the escape point cannot be found by
+walking, and to add an out-of-distribution probe set whose job is detecting boundary evasion
+rather than grading correctness. Neither is built.
+
+### 4.6i The gate's reason text is a disclosure channel, and the feedback is asymmetric
+
+`submit_attack` returns the gate's own verdict `reason` to the attacker. This is deliberate and
+should stay — a hardening loop in which failures are unexplained is not a hardening loop — but it
+is a disclosure channel and must be recorded as one.
+
+It was used. In run 9 the adversary received `"all pinned tests passed"` as a gate reason on one
+attack and, on the next turn, submitted a module whose body printed that exact string before
+calling `process.exit(0)`. See the run's own `-RESTATEMENT.md`.
+
+The channel is not the defect. **A gate whose verdict can be forged by a submission printing its
+success line is broken regardless of who reads the reason**, because it trusts output the
+submission controls. The reason text only made the vulnerability discoverable in one turn instead
+of several.
+
+State the asymmetry plainly, because it is by design in one direction and unrestricted in the
+other:
+
+| Direction | What travels | Why |
+| --- | --- | --- |
+| author → attacker | the gate's full verdict reason | a probe with no feedback teaches nothing |
+| attacker → author | that the gate was defeated, and the **shape** of the failing input only — length, value range, whether duplicates were present | the attack's source would turn hardening into copying |
+
+The author's side is deliberately the poorer one. That asymmetry is a choice, not an oversight,
+and if a future run shows authors cannot revise usefully on shape alone it is the first thing to
+revisit.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make

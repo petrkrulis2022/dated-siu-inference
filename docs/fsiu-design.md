@@ -374,6 +374,33 @@ this is often assumed to express.** Across 26 Commodity SIU prints the log-linea
 confounded by registry growth, since each admission changes basket composition. A forward price
 cannot be derived from this series. It has to come from what issuers quote and buyers accept.
 
+### 5.4a The first observable sign, from run 9
+
+Four forward offers were stated in run 9 (2026-09-29) and **none was taken**, so there is still no
+basis. What is new is that the offers themselves are now observable, and both issuers priced
+*above* the prevailing print of $0.001427/SIU:
+
+| Offer | Issuer | For | Rate | vs print | Quantity | Real headroom at quote |
+| --- | --- | --- | --- | --- | --- | --- |
+| fwd-1 | ISSUER-B | w2 | $0.002 | +40% | 32,000 | 32,000 |
+| fwd-2 | ISSUER-A | w2 | $0.0015 | +5% | 8,000 | **4,000** |
+| fwd-3 | ISSUER-A | w3 | $0.0015 | +5% | 1,000 | 5,000 |
+| fwd-4 | ISSUER-B | w3 | $0.002 | +40% | 32,000 | 32,000 |
+
+That is the direction §5.4's inverted carry predicts — a seller of forward work is supplying
+protection to a structurally crowded short side and should ask above expected spot. It is the
+first time the sign has been observable at all.
+
+**It is a sign and not a basis, and the gap between those is not rhetorical.** Four offers, zero
+takes, from two agents, none binding, in a testbed where a mint charges the attested print
+regardless of anything an issuer says. Nothing here is a transacted price, and a curve cannot be
+built from offers nobody accepted.
+
+fwd-2 is worth keeping for a different reason: 8,000 mSIU offered against 4,000 mSIU of real
+headroom. An issuer offered twice the capacity it held. That is exactly the case
+`issuerHeadroomAtQuote` was added to expose, and it is why an offer recorded without the headroom
+behind it would be a misleading datum rather than a thin one.
+
 ### 5.5 What makes a later window worth paying for, absent a decline
 
 **Scarcity.** Capacity for a later window is finite, shared across all buyers first-come
