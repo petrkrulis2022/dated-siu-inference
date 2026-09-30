@@ -23,7 +23,7 @@ function chainStub(over: Partial<AttestationChain> = {}): AttestationChain {
 
 describe("anchorIdempotently", () => {
   it("anchors normally when the hash has never been posted", async () => {
-    const send = vi.fn(async () => `0x${"22".repeat(32)}`);
+    const send = vi.fn(async (_hash: string, _version: string) => `0x${"22".repeat(32)}`);
     let posted = 0n;
     const chain = chainStub({
       readPostedAt: async () => posted,
@@ -45,7 +45,7 @@ describe("anchorIdempotently", () => {
    * died before recording it. Re-running must succeed and must not send a second transaction.
    */
   it("treats an already-anchored hash as success and sends nothing", async () => {
-    const send = vi.fn(async () => `0x${"33".repeat(32)}`);
+    const send = vi.fn(async (_hash: string, _version: string) => `0x${"33".repeat(32)}`);
     const chain = chainStub({ readPostedAt: async () => 1786862412n, sendPostPrint: send });
 
     const result = await anchorIdempotently(chain, "base-sepolia", HASH, VERSION, FAST);
@@ -96,7 +96,7 @@ describe("anchorIdempotently", () => {
 
   it("is idempotent across repeated runs — a second call sends nothing more", async () => {
     let posted = 0n;
-    const send = vi.fn(async () => {
+    const send = vi.fn(async (_hash: string, _version: string) => {
       posted = 1786862412n;
       return `0x${"44".repeat(32)}`;
     });

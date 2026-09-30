@@ -3,7 +3,12 @@ import { computePrint } from "./compute/index.js";
 import { computeClassCost } from "./compute/class-cost.js";
 import { cachePolicyVariant } from "./compute/sensitivity.js";
 import { D } from "./decimal.js";
-import { formatDeltaPercent, formatSpreadPercent, roundDatedSiu } from "./rounding.js";
+import {
+  formatDeltaPercent,
+  formatSpreadPercent,
+  roundDatedSiu,
+  type RoundingRules,
+} from "./rounding.js";
 import { workedExampleInput } from "./worked-example.fixture.js";
 
 /**
@@ -116,7 +121,10 @@ describe("worked example reproduction", () => {
       if (!row.cost_usd) continue;
       total = total.plus(new D(row.cost_usd).times(weights.get(row.model_id) as string));
     }
-    expect(roundDatedSiu(total, body.rounding)).toBe(body.dated_siu);
+    // `rounding` is a union of the historical dated_siu_dp rule and the current
+    // sig-figs one; roundDatedSiu dispatches on which is present. The test asserts the
+    // real behaviour, so it takes the same permissive shape the function does.
+    expect(roundDatedSiu(total, body.rounding as RoundingRules)).toBe(body.dated_siu);
   });
 
   it("omits floor and market_spread when no measured floor is supplied", () => {
@@ -139,7 +147,7 @@ describe("worked example reproduction", () => {
   it("states its rounding rules in the print body", () => {
     expect(body.rounding.mode).toBe("ROUND_HALF_UP");
     expect(body.rounding.siu_per_usd_mode).toBe("ROUND_DOWN");
-    expect(body.rounding.dated_siu_sig_figs).toBe(4);
+    expect((body.rounding as RoundingRules).dated_siu_sig_figs).toBe(4);
     expect(body.rounding.basket_cost_dp).toBe(6);
   });
 });

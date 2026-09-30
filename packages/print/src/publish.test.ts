@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AttestationClient, AnchorResult } from "./anchor/attestation.js";
 import type { ModelInput } from "./compute/index.js";
+import type { Print } from "@touchstone/sdk";
 import {
   computeConstituentChanges,
   computeConstituentChangesForSeries,
@@ -447,19 +448,19 @@ describe("computeConstituentChanges", () => {
   });
 
   it("returns [] when the registry is unchanged from the previous print", () => {
-    const previous = { basket_costs: [{ model_id: "a" }, { model_id: "b" }] };
+    const previous = { basket_costs: [{ model_id: "a" }, { model_id: "b" }] } as Pick<Print, 'basket_costs'>;
     expect(computeConstituentChanges(["a", "b"], previous)).toEqual([]);
   });
 
   it("reports a new registry id as admitted", () => {
-    const previous = { basket_costs: [{ model_id: "a" }] };
+    const previous = { basket_costs: [{ model_id: "a" }] } as Pick<Print, 'basket_costs'>;
     expect(computeConstituentChanges(["a", "b"], previous)).toEqual([
       { model_id: "b", change: "admitted" },
     ]);
   });
 
   it("reports an id present in the previous print but absent from the registry as removed", () => {
-    const previous = { basket_costs: [{ model_id: "a" }, { model_id: "b" }] };
+    const previous = { basket_costs: [{ model_id: "a" }, { model_id: "b" }] } as Pick<Print, 'basket_costs'>;
     expect(computeConstituentChanges(["a"], previous)).toEqual([
       { model_id: "b", change: "removed" },
     ]);
@@ -474,12 +475,12 @@ describe("computeConstituentChanges", () => {
         { model_id: "a", cost_usd: "0.01" },
         { model_id: "b", excluded_reason: "no run records" },
       ],
-    };
+    } as Pick<Print, 'basket_costs'>;
     expect(computeConstituentChanges(["a", "b"], previous)).toEqual([]);
   });
 
   it("reports both admissions and removals together", () => {
-    const previous = { basket_costs: [{ model_id: "old" }] };
+    const previous = { basket_costs: [{ model_id: "old" }] } as Pick<Print, 'basket_costs'>;
     expect(computeConstituentChanges(["new"], previous)).toEqual([
       { model_id: "new", change: "admitted" },
       { model_id: "old", change: "removed" },
@@ -507,7 +508,9 @@ describe("computeConstituentChangesForSeries", () => {
       { model_id: "deepseek-v3.2" },
       { model_id: "llama-3.3-70b-deepinfra" },
     ],
-  };
+    // Only model_id is read by the functions under test — publish.ts:171 casts the same way
+    // for the same reason.
+  } as Pick<Print, "basket_costs">;
 
   it("discloses a tier series' debut print as only its genuinely new admissions, not its whole founding membership", () => {
     const frontierIds = [
@@ -543,7 +546,10 @@ describe("computeConstituentChangesForSeries", () => {
   it("treats a tier with zero constituents in the previous print as every current id being newly admitted", () => {
     // No frontier model existed at all as of the previous print — a tier having its first-ever
     // constituent is itself an admission event, not silence.
-    const noFrontierYet = { basket_costs: [{ model_id: "deepseek-v3.2" }] };
+    const noFrontierYet = { basket_costs: [{ model_id: "deepseek-v3.2" }] } as Pick<
+      Print,
+      "basket_costs"
+    >;
     expect(
       computeConstituentChangesForSeries(["claude-sonnet-5"], noFrontierYet, openWeightsById, false),
     ).toEqual([{ model_id: "claude-sonnet-5", change: "admitted" }]);
