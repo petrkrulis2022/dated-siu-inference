@@ -168,6 +168,40 @@ describe("p5 three-window roster", () => {
     expect(worker.availableTools).toContain("pay_with_claim");
   });
 
+  /**
+   * Phase 2/3 of the freedom set. The briefs used to tell a holder to "confirm the balance with
+   * get_balances, then present it with exactly: {redeem_claim ...}" — one prescribed path, with
+   * exact call syntax supplied for redeeming and for nothing else. Withholding syntax for the
+   * alternatives is the same shape of steer as the turn-cost asymmetry behind §4.6f, so the
+   * options must be documented equally or the measurement is contaminated before it starts.
+   */
+  it("gives every claim option the same treatment, so none is easier to reach than another", () => {
+    for (const id of ["WORKER-CODE", "WORKER-EXTRACT"]) {
+      const brief = find(buildRoster(input(1)), id).skillPackText;
+      // Each option, with its exact call — equal footing, no favoured path.
+      for (const tool of ["redeem_claim", "transfer_claim", "pay_with_claim"]) {
+        expect(brief, `${id} must be told how to ${tool}`).toContain(`"tool": "${tool}"`);
+      }
+      // The instrument's properties, as facts.
+      expect(brief).toContain("fixed in SIU");
+      expect(brief).toContain("the bond pays you instead");
+      expect(brief).toContain("Nothing here says which to use");
+    }
+  });
+
+  it("carries no steer toward redeeming, and no counter-steer toward holding", () => {
+    for (const agent of buildRoster(input(1))) {
+      const brief = agent.skillPackText;
+      // The removed instruction, and anything of its shape.
+      expect(brief).not.toMatch(/then present it with exactly/i);
+      // Counter-bias would contaminate the finding in the other direction and is equally banned.
+      expect(brief).not.toMatch(/consider holding|redemption is not the goal|you may wish to hold/i);
+      // Nothing about price movement: one print and three windows, so no price can move while
+      // anyone holds. Prompting toward it would describe an unavailable opportunity.
+      expect(brief).not.toMatch(/in case prices|if prices rise|price may rise/i);
+    }
+  });
+
   it("gives WORKER-CODE the capacity-commitment step on the dollar route", () => {
     const worker = find(buildRoster(input(1)), "WORKER-CODE");
     expect(worker.availableTools).toContain("reserve_for_work");

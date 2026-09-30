@@ -116,6 +116,53 @@ TO SUBMIT A GATE, respond with exactly:
 `;
 
 /**
+ * What a claim IS, stated to everyone who can hold one, in the same words everywhere.
+ *
+ * Added 2026-09-30 for two reasons, one of them a correction. The briefs used to tell a holder
+ * to "confirm the balance with get_balances, then present it with exactly: {redeem_claim ...}",
+ * which is a single prescribed path presented as the thing one does with a claim — and it
+ * supplied exact call syntax for redeeming and for nothing else. Withholding the syntax for the
+ * alternatives is itself a steer, the same shape as the turn-cost asymmetry that manufactured
+ * the "9 of 9 chose fSIU" figure (spec §4.6f). Every option below therefore gets the same
+ * treatment: what it does, and exactly how to call it.
+ *
+ * These are facts about the instrument, not advice. Nothing here says which to use, and nothing
+ * anywhere else should either — a push toward holding would contaminate the measurement exactly
+ * as the push toward redeeming did, only in the other direction. If agents still redeem
+ * immediately now that the alternatives are real and equally documented, that is the finding.
+ */
+export function claimFactsFor(taskSpecHash: string): string {
+  return `
+WHAT A WORK CLAIM IS, AND EVERYTHING YOU CAN DO WITH ONE
+  A claim is a dated, transferable right to a quantity of work from ONE issuer's bonded
+  capacity. Holding it is a position: it is fixed in SIU, so its dollar value is whatever the
+  published print says a SIU costs.
+
+  You have all of the following. Nothing here says which to use, or when.
+
+  REDEEM IT for the work, inside its delivery window:
+    {"tool": "redeem_claim", "args": {"tokenId": "<tokenId>", "taskSpecHash": "${taskSpecHash}"}}
+    You present it; the issuer then serves it and may serve part of the quantity rather than all.
+
+  TRANSFER IT to another agent, free, at any time, in whole or in part:
+    {"tool": "transfer_claim", "args": {"agentId": "<AGENT>", "tokenId": "<tokenId>",
+      "quantity": "<mSIU>"}}
+    A claim is divisible: transferring part of it leaves you holding the rest.
+
+  PAY WITH IT — settle something you are buying, without redeeming first:
+    {"tool": "pay_with_claim", "args": {"agentId": "<AGENT>", "quantity": "<mSIU>"}}
+
+  IF THE ISSUER DOES NOT DELIVER, the bond pays you instead. Once the delivery window closes
+  with the claim unredeemed, it can no longer be redeemed for work: if you presented it and were
+  not served, it is claimable against that issuer's bond; if you never presented it, it simply
+  expires and pays nothing.
+
+  A claim carries the delivery window it was minted for. Holding it past that window does not
+  move the window.
+`;
+}
+
+/**
  * The instrument asymmetry, stated identically wherever it is shown — to agents, in run output,
  * and in docs/gate-market-spec.md §4.4. Both routes draw on one finite bonded pool as of
  * 2026-09-28; what remains different between them is a property of the two instruments, not of

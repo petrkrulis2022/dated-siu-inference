@@ -58,6 +58,7 @@ import { RUNS_ROOT } from "./runs-root.js";
 import { missingToolFrictions } from "../friction/missing-tool.js";
 import type { FrictionLogEntry } from "../friction/log.js";
 import {
+  claimFactsFor,
   LEDGER_PATH,
   ONE_POOL_DISCLOSURE,
   PRICES,
@@ -1053,11 +1054,9 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${WINDOW_COUNT})
 
   (b) A WORK CLAIM (fSIU) TRANSFERRED TO YOU. This is NOT the same as being paid to do the work —
       it means you HOLD a dated claim on an issuer's bonded capacity. The claim's issuer, not
-      you, owes the delivery. If you see "A WORK CLAIM WAS TRANSFERRED TO YOU" below with its real
-      tokenId and quantity, confirm the balance with get_balances, then present it with exactly:
-      {"tool": "redeem_claim", "args": {"tokenId": "<the tokenId shown>",
-      "taskSpecHash": "${taskSpecHash}"}}
-      Once presented you are done for that claim — never call submit_job for it.
+      you, owes the delivery, and what you do with the claim is yours to decide: the full set of
+      options and their exact calls is under "WHAT A WORK CLAIM IS" below. If you do present it,
+      you are done for that claim — never call submit_job for one you hold.
 
   If you see an open request addressed to you on the market board, you may issue_quote to answer
   it ({"tool": "issue_quote", "args": {"requestId": "<the requestId shown>"}}) — this signs the
@@ -1077,6 +1076,7 @@ THE CONTRACT BELOW APPLIES TO ENGAGEMENT (a) ONLY — WORK YOU WERE PAID IN USDC
   It is not a licence to author a gate for a claim you hold. On route (b) the claim's issuer owes
   the delivery and is given this same specification when you present the claim; submit_job is
   refused for a job whose claim you are holding, and that refusal is the rule working, not a bug.
+${claimFactsFor(taskSpecHash)}
 ${TECHNICAL_CONTRACT}`;
 
   const workerExtractBrief = `
@@ -1125,7 +1125,10 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${WINDOW_COUNT})
   quote, and is returned when you settle. Then do the testing, and settle with settle_escrow.
   If the reservation fails because no issuer has enough headroom left, the work cannot be backed
   and you should say so rather than deliver anyway.
-${runShapeFacts}`;
+
+  If you are paid in a WORK CLAIM instead, there is no escrow and nothing to settle_escrow: you
+  hold the claim itself, and what you do with it is under "WHAT A WORK CLAIM IS" below.
+${claimFactsFor(taskSpecHash)}${runShapeFacts}`;
 
   const issueWorkClaimsSkill = loadSkill("issue-work-claims");
   const issuerBrief = (issuer: "ISSUER-A" | "ISSUER-B"): string => {
