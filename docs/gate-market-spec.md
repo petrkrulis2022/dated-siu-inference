@@ -1073,6 +1073,47 @@ Two defects, and the second hid the first:
   Six identical messages naming one check read as six independent failures rather than one cause
   observed six times, which is exactly the misreading that made this look like gate drift.
 
+### 4.6u WORKER-CODE emits nothing once per window, and F1 cannot tell that from a decision
+
+Run 13, both windows, the same agent and the same failure:
+
+| | input | output | reasoning | text | stop | cost |
+| --- | --- | --- | --- | --- | --- | --- |
+| w1 turn 3 | 17,396 | 22,500 | 22,500 | 0 | `max_tokens` | $0.259792 |
+| w2 turn 6 | 16,896 | 22,500 | 22,498 | 0 | `max_tokens` | $0.258792 |
+
+Not a one-off, and not an unhandled case. `anthropic.ts` already accommodates this: a completion
+truncated with `stop_reason: max_tokens` and non-zero thinking tokens is retried once at
+`max_tokens * (1 + REASONING_BUDGET_MULTIPLE)`. With WORKER-CODE's `maxOutputTokens: 4500` and
+`REASONING_BUDGET_MULTIPLE = 3` that is 18,000, and the two calls are billed separately, which is
+exactly the 22,500 observed. **The accommodation fired, tripled the budget, and the model still
+spent every token reasoning and emitted no text.**
+
+`claude-sonnet-5` on a ~17,000-token prompt reasons past 18,000 output tokens without answering.
+The classification is right — `no_text_emitted`, kept distinct from `parse_error` — but the
+turn is gone.
+
+**This is a measurement defect, not just a cost one, and it lands on the worst possible agent.**
+WORKER-CODE is F1's second decider. A turn that emits nothing is indistinguishable, in the
+purchase record, from a turn that decided not to buy. §4.6e's rule applies with full force:
+establish what an agent was able to express before recording what it chose — and here it
+expressed nothing at all, twice, once per window. Any F1 run in which the second decider's
+silence includes a `no_text_emitted` turn cannot be read as that buyer declining.
+
+The cost is the smaller half but is not nothing: $0.52 across two turns that produced no output,
+against a run total of roughly $1. Extrapolated across the five F1 runs at three windows each,
+that is real money spent on turns that cannot be interpreted.
+
+Three things are entangled here and should not be conflated:
+
+- WORKER-CODE has the largest prompt in the roster (most tools, most board content), so it
+  reasons hardest and is the agent most likely to hit this.
+- Its per-turn cost climbs steeply within a window ($0.017 to $0.14 in window 2) as context
+  grows, which brings the next turn closer to the same ceiling.
+- Its non-buying (§4.6-orientation finding) is therefore **not** fully explained by this: its
+  other turns did emit text, and chose `get_balances` and `whoami`. Both may be true at once, and
+  the fix for one is not the fix for the other.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make
