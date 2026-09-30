@@ -4,6 +4,7 @@ import { payTool } from "./pay.js";
 import { mintClaimTool } from "./mint-claim.js";
 import { transferClaimTool } from "./transfer-claim.js";
 import { payWithClaimTool } from "./pay-with-claim.js";
+import { settleSplitTool } from "./settle-split.js";
 import { redeemClaimTool } from "./redeem-claim.js";
 import { settleWindowCloseTool } from "./settle-window-close.js";
 import { settleEscrowTool } from "./settle-escrow.js";
@@ -37,6 +38,7 @@ export const TOOLS = {
   mint_claim: mintClaimTool,
   transfer_claim: transferClaimTool,
   pay_with_claim: payWithClaimTool,
+  settle_split: settleSplitTool,
   redeem_claim: redeemClaimTool,
   settle_window_close: settleWindowCloseTool,
   settle_escrow: settleEscrowTool,

@@ -2347,6 +2347,66 @@ export async function buildToolArgs(
     return { to, tokenId: asDecimalString(raw?.tokenId), quantity: asDecimalString(raw?.quantity) };
   }
 
+  if (tool === "settle_split") {
+    // Both halves of a split, built from the two existing builders' own logic: the quote comes
+    // from the board by requestId exactly as `pay` resolves it (a model never reconstructs a
+    // seller-signed object), and the claim leg's mint arguments are built exactly as
+    // `pay_with_claim` builds them. The claim's recipient is the quote's own seller — a split
+    // pays one counterparty in two assets, not two counterparties.
+    if (!ctx.mintContext) {
+      throw new Error(
+        "settle_split: this window has no mintContext — no agent should have this tool.",
+      );
+    }
+    const raw = rawArgs as
+      | { requestId?: unknown; settler?: unknown; claimQuantityMilliSiu?: unknown }
+      | undefined;
+    if (typeof raw?.requestId !== "string") {
+      throw new Error('settle_split: expected a string "requestId" naming the quote being paid.');
+    }
+    const quote = ctx.board.issuedQuoteById(raw.requestId);
+    if (!quote) {
+      throw new Error(`settle_split: no issued quote found for request "${raw.requestId}".`);
+    }
+    const claimQuantityMilliSiu = asDecimalString(raw.claimQuantityMilliSiu);
+    if (typeof claimQuantityMilliSiu !== "string") {
+      throw new Error(
+        'settle_split: expected a string "claimQuantityMilliSiu" — how much of this quote to ' +
+          "settle in claims. The dollar leg is the remainder.",
+      );
+    }
+    const seller = quote.seller_id.replace(/^erc8004:/, "");
+    const validUntil = BigInt(Math.floor(Date.now() / 1000)) + ctx.mintContext.validitySeconds;
+    const signature = await signRateAttestation(
+      {
+        printId: ctx.mintContext.printId,
+        series: ctx.mintContext.series,
+        printDate: ctx.mintContext.printDate,
+        nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu,
+        validUntil,
+      },
+      ctx.deployment.network.chainId,
+      ctx.deployment.workClaim.address as Hex,
+      ctx.mintContext.publisherPrivateKeyHex,
+    );
+    const target = resolveTargetWindow("pay_with_claim", rawArgs, ctx);
+    return {
+      quote,
+      settler: raw.settler,
+      claimQuantityMilliSiu,
+      to: seller,
+      classId: classIdFor(ctx.job.taskClass),
+      series: ctx.mintContext.series,
+      windowFrom: Number(target.windowFrom),
+      windowTo: Number(target.windowTo),
+      printId: ctx.mintContext.printId,
+      printDate: ctx.mintContext.printDate.toString(),
+      nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu.toString(),
+      validUntil: validUntil.toString(),
+      signature,
+    };
+  }
+
   if (tool === "pay") {
     // `tools/pay.ts`'s real schema takes the full `{quote: TouchstoneQuote, settler}` — the exact
     // seller-signed object, not something a model reconstructs from the board's own deliberately
