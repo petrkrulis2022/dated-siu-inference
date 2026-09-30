@@ -1042,10 +1042,16 @@ graded FAIL on every check for a reason that has nothing to do with the gate. No
 brief or the skill pack says the filesystem is restricted or that `/scratch` is the writable
 place, and the one API that exists to answer "where may I write?" answers wrongly.
 
-**This is not a grading result and must never be counted as one.** It cost run 13 the more
-important half of the artefact: ISSUER-B had a passing gate, was attacked, and revised — and the
-revision could not execute. A revision that crashes on apparatus cannot be read as an author
-failing to harden its gate.
+**This is not a grading result and must never be counted as one.** A revision that crashes on
+apparatus cannot be read as an author failing to harden its gate, and a FAIL logged for this
+reason must be excluded from any count of gate quality.
+
+**The author recovered unaided, which is the more interesting half.** ISSUER-B's full chain in
+window 2 was: turn 2 gate v1 PASS, turn 4 gate v2 FAIL on this ENOENT, turn 5 gate v3 PASS. It
+read the failure text, inferred that the filesystem was not what `os.tmpdir()` claimed, and
+submitted a gate that does not use `/tmp`. So the error text reaching the author is doing real
+work and should be preserved. That recovery cost a turn and $0.037 to discover something the
+skill pack could simply have stated, which is the whole of the case for fixing it.
 
 Two defects, and the second hid the first:
 
