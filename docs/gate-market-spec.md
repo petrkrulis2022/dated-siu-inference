@@ -975,6 +975,45 @@ Until both are accounted for, the honest claim is that **an LLM adversary can pr
 told where to aim**. Whether it can find the boundary unaided is untested — and §4.6h's
 observation that it repeated one probe rather than searching points the other way.
 
+### 4.6s The eighth affordance defect: an invitation that can only be silenced by accepting it
+
+Run 13, window 1. Both issuers woke on every single turn until the exact turn they called
+`quote_forward`, and neither took a turn afterwards. ISSUER-A: four turns, quoted on turn 4.
+ISSUER-B: six turns, quoted on turn 6. In between they called `get_print` on the same print id
+three and four times respectively — the classic §4.6e signature of an agent that has nothing to
+do and no way to say so.
+
+Their own friction text names it: *"idle wait without polling or leaving the window"*, and
+*"no idle/wait tool; a claim has not been presented so there is nothing to serve"*.
+
+The mechanism is in `full-run.ts`. `forwardInvitation` is deliberately placed **inside**
+`boardSectionText` so that it drives the wake gate as well as the prompt. The comment beside
+`mayStillQuoteForward` states the intent — *"the wake is worth at most one turn per window"* —
+but the implementation clears the invitation only once the issuer has actually quoted and the
+quote is recorded in `forwardBook`. Declining is not a state the loop can represent. An issuer
+that exercises the permission the prompt explicitly grants it — *"or you may choose not to"* —
+is woken again, and again, for the rest of the window.
+
+**The prompt offers a choice the loop refuses to accept an answer to.** The only move that stops
+the asking is the move being asked for.
+
+Two consequences, and the second is the expensive one:
+
+- **Cost.** $0.105 of window 1's $0.414 total — a quarter of the window's real inference spend —
+  went to two agents whose entire output was two forward quotes. Per-turn cost rose monotonically
+  from $0.0069 to $0.0175 as the re-read context grew, so the waste compounds within a window.
+- **The forward-quote measurement is contaminated.** "Both issuers quoted forward" is not
+  evidence of appetite to quote. An agent woken repeatedly with a standing invitation, and given
+  no way to decline, will eventually take it — so the observation measures the wake gate, not the
+  issuer. This is precisely the §4.6f pattern in a new place, and it reaches §5.4a of
+  `fsiu-design.md`, which reads forward-quote behaviour as a signal. **Run 9's "both issuers
+  above spot" and run 13's "both issuers at spot" are a comparison between two artefacts.**
+
+Recorded, not fixed: the protocol freeze of §7.1a holds from the debugging run onward, so the fix
+belongs before the block starts, not inside it. The fix is not to remove the invitation — an
+issuer that has never been told it may quote forward cannot be said to have declined either. It
+is to make declining representable, and to stop re-asking once it has been.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make

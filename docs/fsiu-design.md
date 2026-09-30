@@ -401,6 +401,29 @@ headroom. An issuer offered twice the capacity it held. That is exactly the case
 `issuerHeadroomAtQuote` was added to expose, and it is why an offer recorded without the headroom
 behind it would be a misleading datum rather than a thin one.
 
+### 5.4a-i Both runs' forward quotes are artefacts of the wake gate, not appetite
+
+Run 13 (2026-09-30) produced two more forward offers, and on their face they read as an
+improvement on run 9: both were struck at exactly the prevailing print of $0.001417/SIU rather
+than above it, and both sat within the quoting issuer's real headroom, so run 9's fwd-2 problem
+(8,000 offered against 4,000 real) did not recur.
+
+**Neither observation can be read as issuer behaviour.** Spec §4.6s establishes why: the forward
+invitation sits inside the wake gate's own input, and it clears only when the issuer actually
+quotes. Both issuers in run 13 woke on every turn until the exact turn they called
+`quote_forward`, and neither took a turn after. An agent re-asked every turn, with no way to
+decline, eventually accepts — so what the offers measure is the loop, not the issuer's view of
+forward value.
+
+This applies retroactively to run 9. The table in §5.4a stands as a record of what was quoted; it
+does **not** support the inference drawn beneath it that issuers "should ask above expected spot"
+and were observed doing so. The direction may still be right — but four offers produced under a
+standing re-ask are not evidence for it, and run 13's move to spot is not evidence against it.
+Both are the same artefact at different temperatures.
+
+Nothing about forward pricing should be quoted from either run until the invitation is fixed and
+a run produces offers from issuers that could have declined.
+
 ### 5.4b The deferral property has never been exercised
 
 Recorded 2026-09-30, because it bears directly on every claim this document makes about what an
