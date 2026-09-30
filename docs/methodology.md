@@ -966,6 +966,31 @@ for any other reason is out of policy.
 the print immediately preceding the one in which it takes effect, and never applied
 retroactively — see Index governance's constituent-change rule below, which this section shares.
 
+**The serving surface is part of the constituent, not an implementation detail.** A model of the
+same name reached through a different API surface is a different constituent. Recorded
+2026-09-30, from a real decision: the Gemini constituent is served by the Gemini Developer API
+(`generativelanguage.googleapis.com`), and a Google Cloud credit prompted the question of whether
+to reach the same model through Vertex AI (`aiplatform.googleapis.com`) instead. The answer is no,
+and the reason is not operational convenience.
+
+Two surfaces serving a model of the same name can differ in build, region, default settings and
+price. **Vertex publishes its own price schedule, so `price_snapshot` would change even if the
+model behind it did not** — the index would move for a reason that has nothing to do with the
+market it claims to measure. Switching surfaces silently is therefore exactly the kind of
+composition change this section exists to prevent, and it is handled the same way as any other:
+announced in the preceding print, chain-linked, never applied retroactively.
+
+*The correct route, if Vertex is ever wanted:* admit it as a **separate constituent**
+(`gemini-3.1-pro-vertex`) alongside the existing entry — announced, parallel-published and
+chain-linked like any admission. That yields a measured price difference between two serving
+surfaces of one model, which is a finding worth having rather than a discontinuity to explain
+away. **Recorded as a future option only; not built, and not scheduled.** Nothing should point a
+Touchstone adapter at Vertex until that admission has actually happened.
+
+The same objection governs the Gate Market testbed, where the constraint is comparability rather
+than chain-linking: the five comparable F1 runs must execute under one protocol, and a serving
+surface is part of that protocol (`docs/gate-market-spec.md` §12.2a).
+
 **Minimum qualifying-set size: 4.** A print with fewer than 4 qualifying models is not published
 at all — `packages/print/src/publish.ts`'s `MINIMUM_QUALIFYING_MODELS` refuses before signing or
 anchoring, not merely before writing. Reasoning: under equal weighting (the current default),
