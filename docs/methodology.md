@@ -1429,10 +1429,34 @@ to avoid:
   contract's fixed deployment block forward, so it always needs archive access to reconstruct
   anything from before a public node's own pruning horizon — configured via
   `TOUCHSTONE_<CHAIN>_ARCHIVE_RPC` (e.g. `TOUCHSTONE_BASE_SEPOLIA_ARCHIVE_RPC`), kept separate
-  from the public `<CHAIN>_RPC_URL` used for current-state reads. We use
-  [Alchemy](https://www.alchemy.com/) — its Base Sepolia endpoints serve full history on every
-  tier, including the free one; Infura is an equally standard alternative. Anyone reconstructing
-  this project's own historical event record independently needs the same thing.
+  from the public `<CHAIN>_RPC_URL` used for current-state reads.
+
+  **Corrected 2026-09-30, measured rather than assumed.** This section previously said we use
+  [Alchemy](https://www.alchemy.com/) and that "its Base Sepolia endpoints serve full history on
+  every tier, including the free one". The history claim is true and the useful claim is not:
+  **Alchemy's free tier caps `eth_getLogs` at a 10-block range**, verbatim —
+
+  > `Under the Free tier plan, you can make eth_getLogs requests with up to a 10 block range.`
+
+  A scan from a deployment block to head is therefore not merely slow on the free tier, it is
+  infeasible: a day and a half of Base Sepolia is roughly 60,000 blocks, or 6,000 requests, and a
+  real deployment-to-head reconstruction is millions. **The documented verification path did not
+  work**, and anyone following it would have concluded this project's receipts do not verify when
+  the fault was entirely in the instructions.
+
+  **The working method, as actually used:** the public endpoint
+  (`sepolia.base.org`) in **1,000-block chunks** — its own documented `eth_getLogs` limit, a
+  hundred times the free archive tier's — which reconstructs everything inside its pruning
+  horizon at about 60 requests per day of history. Beyond that horizon (block ~46,000,000 at the
+  time of writing) a **paid** archive tier is required; the free one is not a substitute for it
+  and is worse than the public node for range scans. Infura and other providers impose their own
+  range limits, so check the limit before assuming a tier is adequate rather than after a scan
+  silently returns nothing.
+
+  Anyone reconstructing this project's own historical event record independently needs the same
+  thing, and needs to know which of the two limits — pruning depth or range width — is binding on
+  the query they are making. They are different constraints and only one of them is fixed by
+  paying for an archive endpoint.
 - **`verify_receipt`'s transaction-receipt lookup (`OnChainSettlementReader`) was checked against
   this exact pruning event, not assumed safe: it still succeeds reading a real settlement from
   August 2026.** `getTransactionReceipt` by hash appears to survive on this provider's public
@@ -1444,6 +1468,25 @@ to avoid:
 - **The gate-market testbed's own receipt-graph reconstruction (`packages/gate-market-agents/src/receipt/graph.ts`)
   was checked and confirmed unaffected**: it rebuilds a payment chain purely from already-emitted
   receipt records, and never queries the chain at all.
+
+### Two reading practices, both learned by getting a number wrong
+
+**Read back after confirmation, never immediately.** A headroom figure read straight after the
+last of four settlement transactions reported +9,000 when the true figure was +12,000: a
+load-balanced public endpoint served a view that did not yet include the final transaction. The
+error is invisible unless someone reads twice, and it is wrong in the direction that looks like a
+partial failure — which invites exactly the wrong follow-up action. Post-transaction verification
+either waits for the receipt of every write first, or re-reads from a second endpoint, and a
+figure that disagrees with expectation is re-read before it is reported.
+
+**An incomplete ABI undercounts silently; it does not error.** A scan reconciling consumed
+capacity against live headroom omitted `TransferSingle` from its ABI, so every claim that had
+moved from its buyer to a seller was invisible — `decodeEventLog` simply skipped those logs, and
+the scan reported "no open positions" while 38,000 mSIU sat in transferred ones. Nothing failed.
+Any reconciliation whose ABI is hand-written must therefore be checked against a total it can be
+proved against — here, `sum(HeadroomConsumed) - sum(HeadroomRestored)` against live `headroom()`,
+which is what eventually exposed the gap. **A scan that cannot be reconciled to an independent
+total is not evidence of absence.**
 
 ---
 
