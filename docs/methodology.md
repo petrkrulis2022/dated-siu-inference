@@ -1471,13 +1471,27 @@ to avoid:
 
 ### Two reading practices, both learned by getting a number wrong
 
-**Read back after confirmation, never immediately.** A headroom figure read straight after the
-last of four settlement transactions reported +9,000 when the true figure was +12,000: a
-load-balanced public endpoint served a view that did not yet include the final transaction. The
-error is invisible unless someone reads twice, and it is wrong in the direction that looks like a
-partial failure — which invites exactly the wrong follow-up action. Post-transaction verification
-either waits for the receipt of every write first, or re-reads from a second endpoint, and a
-figure that disagrees with expectation is re-read before it is reported.
+**A post-write read is provisional until independently confirmed — and waiting for the receipt is
+not enough.** Stated at this strength because the weaker version was tried and failed three times
+in one day, on 2026-09-30:
+
+| Reported | Actually | What had been done first |
+| --- | --- | --- |
+| headroom +9,000 | +12,000 | nothing — read straight after the writes |
+| headroom +4,000 (×2 → +0) | +8,000 | **every transaction receipt awaited** |
+| headroom +10,000, bond draw 14,270 | +30,000, draw 42,810 | **every transaction receipt awaited** |
+
+The second and third are the instructive ones. Awaiting each write's receipt is the obvious
+remedy and it does not work: a load-balanced public endpoint can serve a pre-transaction view
+*after* the receipt confirms, because the node answering the read is not necessarily the node
+that saw the write. Every one of these errors also pointed the same way — understating the
+change, which reads as a partial failure and invites exactly the wrong follow-up.
+
+**The rule: re-read from a fresh connection, at a block height at or beyond the transaction's,
+and treat any post-write read that is not independently confirmed as provisional.** A figure that
+disagrees with expectation is re-read before it is reported, never explained. Every settlement
+figure in `data/gate-market/fifth-trio-sweep-2026-09-30.md` comes from such a second read, and
+the numbers its own scripts printed are wrong.
 
 **An incomplete ABI undercounts silently; it does not error.** A scan reconciling consumed
 capacity against live headroom omitted `TransferSingle` from its ABI, so every claim that had
