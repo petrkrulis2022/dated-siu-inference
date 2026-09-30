@@ -1257,6 +1257,12 @@ ${runShapeFacts}`;
         "settle_escrow",
         "submit_job",
         "pay",
+        // Added 2026-09-30. Without these a holder's only move is redeem-then-pay-dollars, so
+        // a claim can never pass from one party to another and fSIU is a settlement rail rather
+        // than money. "Claims do not circulate" was not an observation about agent behaviour;
+        // it was a property of the tool grant.
+        "pay_with_claim",
+        "transfer_claim",
         "redeem_claim",
         "get_balances",
         "get_print",
@@ -1300,6 +1306,16 @@ ${runShapeFacts}`;
         "reserve_for_work",
         "settle_escrow",
         "submit_attack",
+        // A LIVE DEFECT UNTIL 2026-09-30, not a precaution. WORKER-EXTRACT held no claim tool
+        // at all, and was paid in fSIU anyway: 4,000 mSIU in run 9 and 4,000 in run 10, both
+        // unredeemable, both expired worthless. For the attack-testing purchase fSIU was
+        // therefore not one of two assets — it was strictly worse than dollars, and the buyer
+        // was choosing between an asset and a broken one. Its own friction log said so at the
+        // time: "redeem_claim is not in the list of available tools this turn".
+        "redeem_claim",
+        // The holder is who a default pays, and settleWindowClose is permissionless — the same
+        // reasoning that already grants it to WORKER-CODE.
+        "settle_window_close",
         "get_balances",
         "get_print",
       ],

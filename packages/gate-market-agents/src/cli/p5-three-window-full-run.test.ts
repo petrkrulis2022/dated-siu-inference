@@ -126,6 +126,48 @@ describe("p5 three-window roster", () => {
     }
   });
 
+  /**
+   * The defect this asserts against was live for two whole runs and cost 8,000 mSIU.
+   *
+   * WORKER-EXTRACT was paid in fSIU twice — 4,000 in run 9, 4,000 in run 10 — while holding no
+   * claim tool whatsoever. Both claims were unredeemable and both expired worthless. For the
+   * attack-testing purchase, fSIU was therefore not one of two assets a buyer was choosing
+   * between; it was strictly worse than dollars, and any F1 figure including that purchase is
+   * measuring a broken option rather than a preference.
+   *
+   * The agent reported it itself, in the field built for exactly this:
+   *   "redeem_claim is not in the list of available tools this turn"
+   *
+   * A roster test is the right place for this because a dry-loop scenario would not have caught
+   * it: `buildRunners` grants every tool, so the mechanics always worked. What was missing was
+   * the grant.
+   */
+  it("gives every agent that can be PAID in fSIU a way to redeem it", () => {
+    for (const w of [1, 2, WINDOW_COUNT]) {
+      const roster = buildRoster(input(w));
+      for (const id of ["WORKER-CODE", "WORKER-EXTRACT"]) {
+        const agent = find(roster, id);
+        expect(
+          agent.availableTools,
+          `${id} can be paid in fSIU and must be able to redeem it`,
+        ).toContain("redeem_claim");
+        // The holder is who a default pays, and settleWindowClose is permissionless.
+        expect(agent.availableTools).toContain("settle_window_close");
+      }
+    }
+  });
+
+  /**
+   * "Claims do not circulate" was a property of the tool grant, not an observation about agent
+   * behaviour: a holder's only move was redeem-then-pay-dollars, so a claim could never pass
+   * from one party to another, which makes fSIU a settlement rail rather than money.
+   */
+  it("lets a holder pass a claim on instead of redeeming it", () => {
+    const worker = find(buildRoster(input(1)), "WORKER-CODE");
+    expect(worker.availableTools).toContain("transfer_claim");
+    expect(worker.availableTools).toContain("pay_with_claim");
+  });
+
   it("gives WORKER-CODE the capacity-commitment step on the dollar route", () => {
     const worker = find(buildRoster(input(1)), "WORKER-CODE");
     expect(worker.availableTools).toContain("reserve_for_work");
