@@ -595,6 +595,13 @@ async function main(): Promise<void> {
         CODE_ADVERSARIAL_HARDCODED,
         CODE_ADVERSARIAL_STUBBED,
         CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
+        // CODE_ADVERSARIAL_FORGED_VERDICT is deliberately NOT here yet. It is the real run-9
+        // attack and the most severe one the testbed has produced, but measurement on
+        // 2026-09-30 shows CODE_GATE_3_HARDENED — this project's own reference gate — also
+        // falls to it, accepting after a single test case. Requiring an authored gate to beat
+        // what the reference gate cannot would fail G2 for every agent and cost a whole run to
+        // learn nothing. The fixture and its tests exist; it joins this list once the reference
+        // gate counts its completed cases and treats a short run as a failure.
       ],
       heldOutInstances,
     };

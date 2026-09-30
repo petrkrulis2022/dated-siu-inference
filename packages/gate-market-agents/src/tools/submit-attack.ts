@@ -45,10 +45,20 @@ export interface AttackToolResult {
   reason: string;
   countsAsAdversaryYield: boolean;
   countsAsGateOverRejection: boolean;
+  /** True only for `apparatus_attack` — the submission stopped or forged the measurement. */
+  countsAsApparatusAttack: boolean;
   gateVersion: number;
   oracleSeed: number;
   gate: { kind: string; accept?: boolean; reason?: string; error?: string };
-  oracle: { kind: string; accept?: boolean; reason?: string; trialsRun?: number; error?: string };
+  oracle: {
+    kind: string;
+    accept?: boolean;
+    reason?: string;
+    trialsRun?: number;
+    error?: string;
+    /** Why there is no verdict — distinguishes the apparatus failing from a submission stopping it. */
+    cause?: string;
+  };
   /**
    * The SHAPE of the first input the submission got wrong — never the submission, never the gate.
    * Present only when the oracle rejected.
@@ -101,6 +111,7 @@ export const submitAttackTool: ToolDefinition<Args, AttackToolResult> = {
       reason: score.reason,
       countsAsAdversaryYield: score.countsAsAdversaryYield,
       countsAsGateOverRejection: score.countsAsGateOverRejection,
+      countsAsApparatusAttack: score.countsAsApparatusAttack,
       gateVersion: args.gateVersion,
       oracleSeed: args.oracleSeed,
       gate:
@@ -115,7 +126,7 @@ export const submitAttackTool: ToolDefinition<Args, AttackToolResult> = {
               reason: oracleOutcome.reason,
               trialsRun: oracleOutcome.trialsRun,
             }
-          : { kind: oracleOutcome.kind, error: oracleOutcome.error },
+          : { kind: oracleOutcome.kind, error: oracleOutcome.error, cause: oracleOutcome.cause },
       firstMismatchShape:
         oracleOutcome.kind === "verdict" && oracleOutcome.firstMismatch
           ? shapeOf(oracleOutcome.firstMismatch.input)

@@ -284,6 +284,12 @@ export interface AttackRecord {
   reason: string;
   countsAsAdversaryYield: boolean;
   countsAsGateOverRejection: boolean;
+  /** True only for `apparatus_attack`: the submission attacked the measurement, not the gate.
+   * Counted separately from adversarial yield because it is a more severe finding, not a lesser
+   * one — run 9 filed exactly this as an infrastructure flake. */
+  countsAsApparatusAttack?: boolean;
+  /** Why the oracle returned no verdict, when it returned none. */
+  oracleErrorCause?: string;
   gateAccepted?: boolean;
   oracleAccepted?: boolean;
   /**
@@ -1458,6 +1464,8 @@ export async function runFullRunWindow(
           reason: attackOutcome.reason,
           countsAsAdversaryYield: attackOutcome.countsAsAdversaryYield,
           countsAsGateOverRejection: attackOutcome.countsAsGateOverRejection,
+          countsAsApparatusAttack: attackOutcome.countsAsApparatusAttack,
+          oracleErrorCause: attackOutcome.oracle.cause,
           gateAccepted: attackOutcome.gate.accept,
           oracleAccepted: attackOutcome.oracle.accept,
           gateReason: attackOutcome.gate.reason ?? attackOutcome.gate.error,

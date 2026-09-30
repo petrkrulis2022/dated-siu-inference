@@ -53,7 +53,21 @@ export type OracleOutcome =
        * show the real counterexample rather than only a count. */
       firstMismatch?: OracleMismatch;
     }
-  | { kind: "oracle_error"; error: string };
+  | { kind: "oracle_error"; error: string; cause?: OracleErrorCause };
+
+/**
+ * Why the oracle produced no verdict. The distinction that matters is between the apparatus
+ * failing on its own (`sandbox_failure`, `unreadable_result`) and the SUBMISSION stopping it
+ * (`submission_terminated_runner`, `forged_result`) — the second is an attack on the referee and
+ * is scored as one, never as noise. Run 9's window-1 attack 2 was the second and was reported as
+ * the first.
+ */
+export type OracleErrorCause =
+  | "submission_terminated_runner"
+  | "forged_result"
+  | "timeout"
+  | "sandbox_failure"
+  | "unreadable_result";
 
 export interface CodeOracleOptions {
   /** Recorded alongside every attack, so the exact trial set is reproducible from the run log. */
@@ -130,17 +144,93 @@ export function buildOracleTrials(seed: number, randomTrials = DEFAULT_TRIALS): 
   return [...fixed, ...generated].map((input) => ({ input, expected: referenceDedupeSorted(input) }));
 }
 
-/** Runs the submission over the trial inputs and reports only what it produced. Every per-trial
- * throw is captured as a marker rather than aborting the run, so a submission that throws on some
- * inputs is a genuine mismatch (a correct one never throws on a valid sorted array) instead of
- * collapsing the whole attempt into an inconclusive oracle error. */
+/**
+ * The driver. It never imports the submission — it spawns a child that does, and reads that
+ * child's result file.
+ *
+ * WHY, found live 2026-09-29 (run 9, window 1, attack 2). The submission used to be imported by
+ * this very script, so a submission whose module body called `process.exit(0)` killed the process
+ * before it could write anything, and the oracle reported only `ENOENT: oracle-result.json`. The
+ * same shared process let a submission stub `console.log`, patch `JSON.stringify`, or throw during
+ * import — every one of which corrupts the report rather than the measurement. A referee that the
+ * player can switch off is not a referee. This is the separation `gate/executor.ts` already used.
+ *
+ * The child is told a NONCE through the environment and deletes it from `process.env` before
+ * importing the submission, so a result file the submission forges cannot carry it and is
+ * rejected. The residual hole is stated rather than papered over: the submission still shares a
+ * process with the trial runner, so code that patches `fs` deeply enough could observe the real
+ * write and imitate it. Closing that completely means never letting submission code share a
+ * process with anything authoritative — one child per trial — which 509 trials cannot afford.
+ */
 function buildDriverScript(): string {
   return [
     'import { readFileSync, writeFileSync } from "node:fs";',
+    'import { spawnSync } from "node:child_process";',
+    'import { randomBytes } from "node:crypto";',
+    'const nonce = randomBytes(16).toString("hex");',
+    'const child = spawnSync(process.execPath, ["/scratch/runner.mjs"], {',
+    '  encoding: "utf8",',
+    "  timeout: 60000,",
+    "  env: { ...process.env, ORACLE_NONCE: nonce },",
+    "});",
+    "let payload = null;",
+    "try {",
+    '  payload = JSON.parse(readFileSync("/scratch/runner-output.json", "utf-8"));',
+    "} catch {",
+    "  payload = null;",
+    "}",
+    "// A result the submission wrote itself cannot carry the nonce, which it never saw.",
+    "if (payload && payload.nonce !== nonce) {",
+    '  writeFileSync("/scratch/oracle-result.json", JSON.stringify({',
+    '    completed: false, cause: "forged_result",',
+    '    error: "runner output did not carry this run\'s nonce — it was written by something else",',
+    "  }));",
+    "} else if (payload && payload.completed === true) {",
+    '  writeFileSync("/scratch/oracle-result.json", JSON.stringify({',
+    "    completed: true, outputs: payload.outputs,",
+    "  }));",
+    "} else {",
+    "  // No payload, or a partial one written by the runner's own exit handler: the submission",
+    "  // ended the trial run rather than completing it.",
+    '  writeFileSync("/scratch/oracle-result.json", JSON.stringify({',
+    '    completed: false, cause: "submission_terminated_runner",',
+    '    error: "the submission terminated the trial runner before it reported" +',
+    '      " (exit=" + String(child.status) + " signal=" + String(child.signal) + ")" +',
+    '      (payload && payload.error ? ": " + String(payload.error) : ""),',
+    "    trialsCompleted: payload && Array.isArray(payload.outputs) ? payload.outputs.length : 0,",
+    "  }));",
+    "}",
+  ].join("\n");
+}
+
+/**
+ * The child that actually touches the submission. Captures everything it needs — the write
+ * function, the nonce, the trials — BEFORE the import, so the submission cannot take them away
+ * afterwards, and registers an exit handler so that even `process.exit()` in a module body
+ * reports something rather than nothing.
+ */
+function buildRunnerScript(): string {
+  return [
+    'import { readFileSync, writeFileSync } from "node:fs";',
+    "// Captured before the submission is imported, so patching the module export later is moot.",
+    "const write = writeFileSync;",
+    "const nonce = process.env.ORACLE_NONCE;",
+    "// The submission must never be able to read this; without it, it cannot forge the report.",
+    "delete process.env.ORACLE_NONCE;",
     'const trials = JSON.parse(readFileSync("/scratch/trials.json", "utf-8"));',
     "const outputs = [];",
+    "let reported = false;",
+    "function report(completed, error) {",
+    "  if (reported) return;",
+    "  reported = true;",
+    "  try {",
+    '    write("/scratch/runner-output.json", JSON.stringify({ nonce, completed, outputs, error }));',
+    "  } catch {}",
+    "}",
+    "// Defence in depth: a module body calling process.exit still reports what it got through.",
+    'process.on("exit", () => report(false, "runner exited before completing the trial set"));',
     "try {",
-    '  const mod = await import("./submission/answer.mjs");',
+    '  const mod = await import("/scratch/submission/answer.mjs");',
     "  for (const input of trials) {",
     "    try {",
     '      if (typeof mod.dedupeSorted !== "function") throw new Error("no dedupeSorted export");',
@@ -149,12 +239,9 @@ function buildDriverScript(): string {
     "      outputs.push({ __threw: String((e && e.message) || e) });",
     "    }",
     "  }",
-    '  writeFileSync("/scratch/oracle-result.json", JSON.stringify({ completed: true, outputs }));',
+    "  report(true, undefined);",
     "} catch (e) {",
-    '  writeFileSync(',
-    '    "/scratch/oracle-result.json",',
-    '    JSON.stringify({ completed: false, error: String((e && e.stack) || e) }),',
-    "  );",
+    "  report(false, String((e && e.stack) || e));",
     "}",
   ].join("\n");
 }
@@ -176,6 +263,7 @@ export async function runCodeOracle(
 
   const files: Record<string, string> = {
     "entry.mjs": buildDriverScript(),
+    "runner.mjs": buildRunnerScript(),
     "trials.json": JSON.stringify(trials.map((t) => t.input)),
   };
   for (const [path, content] of Object.entries(submission.files)) {
@@ -191,25 +279,47 @@ export async function runCodeOracle(
       ...ORACLE_SANDBOX_LIMITS,
     });
   } catch (err) {
-    return { kind: "oracle_error", error: `sandbox failed to run: ${String(err)}` };
+    return {
+      kind: "oracle_error",
+      error: `sandbox failed to run: ${String(err)}`,
+      cause: "sandbox_failure",
+    };
   }
 
   try {
     if (result.timedOut) {
-      return { kind: "oracle_error", error: "submission did not finish within the oracle timeout" };
+      return {
+        kind: "oracle_error",
+        error: "submission did not finish within the oracle timeout",
+        cause: "timeout",
+      };
     }
 
-    let parsed: { completed?: boolean; outputs?: unknown; error?: string };
+    let parsed: {
+      completed?: boolean;
+      outputs?: unknown;
+      error?: string;
+      cause?: OracleErrorCause;
+      trialsCompleted?: number;
+    };
     try {
       parsed = JSON.parse(await readFile(join(result.scratchDir, "oracle-result.json"), "utf-8"));
     } catch (err) {
-      return { kind: "oracle_error", error: `no readable oracle result: ${String(err)}` };
+      // The driver no longer imports the submission, so reaching here means the DRIVER itself
+      // died — genuine apparatus failure, not something a submission can reach from inside its
+      // own child process.
+      return {
+        kind: "oracle_error",
+        error: `no readable oracle result: ${String(err)}`,
+        cause: "unreadable_result",
+      };
     }
 
     if (parsed.completed !== true || !Array.isArray(parsed.outputs)) {
       return {
         kind: "oracle_error",
         error: `submission did not complete the trial run: ${parsed.error ?? "no outputs"}`,
+        cause: parsed.cause ?? "unreadable_result",
       };
     }
     // A result file whose length disagrees with the trial set is not a rejection — it is an

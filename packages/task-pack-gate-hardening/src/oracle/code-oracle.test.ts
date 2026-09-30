@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { buildOracleTrials, referenceDedupeSorted, runCodeOracle } from "./code-oracle.js";
-import { BUGGY_SOURCE, CODE_KNOWN_GOOD, KNOWN_GOOD_SOURCE } from "../gate/tasks/code.js";
+import {
+  BUGGY_SOURCE,
+  CODE_ADVERSARIAL_FORGED_VERDICT,
+  CODE_KNOWN_GOOD,
+  KNOWN_GOOD_SOURCE,
+} from "../gate/tasks/code.js";
 
 const SEED = 20260927;
 
@@ -129,5 +134,42 @@ describe("runCodeOracle", () => {
     expect(outcome.kind).toBe("verdict");
     if (outcome.kind !== "verdict") return;
     expect(outcome.accept).toBe(true);
+  }, 60_000);
+});
+
+/**
+ * Run 9, window 1, turn 2 (2026-09-29). The submission below killed the oracle: it used to be
+ * imported by the driver's own process, so `process.exit(0)` in its module body ended the
+ * process before anything was written, and the oracle could say only
+ * `ENOENT: oracle-result.json`. The submission now runs in a child, so the driver survives to
+ * report what happened — which is the difference between "the apparatus broke" and "the
+ * submission broke it", and therefore between `inconclusive` and `apparatus_attack`.
+ */
+describe("a submission that tries to stop the oracle reporting", () => {
+  it("is reported as the submission terminating the runner, not as an unreadable result", async () => {
+    const outcome = await runCodeOracle(CODE_ADVERSARIAL_FORGED_VERDICT, { seed: SEED, trials: 20 });
+    expect(outcome.kind).toBe("oracle_error");
+    if (outcome.kind !== "oracle_error") throw new Error("unreachable");
+    expect(outcome.cause).toBe("submission_terminated_runner");
+    // The old failure mode, explicitly ruled out: the driver no longer dies with it.
+    expect(outcome.error).not.toContain("no readable oracle result");
+  }, 60_000);
+
+  it("is never mistaken for a correct submission, whatever it prints", async () => {
+    // It prints a forged success line on stdout. Nothing in the oracle reads stdout, and this
+    // asserts that stays true: the only accepting outcome is a verdict, and it must not get one.
+    const outcome = await runCodeOracle(CODE_ADVERSARIAL_FORGED_VERDICT, { seed: SEED, trials: 20 });
+    expect(outcome.kind).not.toBe("verdict");
+  }, 60_000);
+
+  it("still reaches a real verdict for an ordinary wrong submission", async () => {
+    // The isolation must not have cost the oracle its ordinary job.
+    const outcome = await runCodeOracle(
+      { files: { "answer.mjs": BUGGY_SOURCE } },
+      { seed: SEED, trials: 50 },
+    );
+    expect(outcome.kind).toBe("verdict");
+    if (outcome.kind !== "verdict") throw new Error("unreachable");
+    expect(outcome.accept).toBe(false);
   }, 60_000);
 });
