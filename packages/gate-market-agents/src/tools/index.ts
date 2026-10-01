@@ -18,6 +18,7 @@ import { submitAttackTool } from "./submit-attack.js";
 import { getBalancesTool } from "./get-balances.js";
 import { getPrintTool } from "./get-print.js";
 import { checkHeadroomTool } from "./check-headroom.js";
+import { listObligationsTool } from "./list-obligations.js";
 export type { ToolDefinition } from "./types.js";
 
 /** Spec §10's WP-4 tool list, dispatched by name — plus `submit_attack` (2026-09-27), the
@@ -52,6 +53,7 @@ export const TOOLS = {
   get_balances: getBalancesTool,
   get_print: getPrintTool,
   check_headroom: checkHeadroomTool,
+  list_obligations: listObligationsTool,
 } as const;
 
 export type ToolName = keyof typeof TOOLS;

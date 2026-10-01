@@ -1212,6 +1212,14 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${WINDOW_COUNT})
 
 ${forwardSection}
 
+  WHAT IS OUTSTANDING AGAINST YOU
+  You can ask what you currently owe at any time:
+    {"tool": "list_obligations", "args": {}}
+  It answers only about you and takes no arguments. It reports claims presented and awaiting
+  your work, claims presented and awaiting only your serve_redemption report, claims minted
+  against your bond that nobody has presented yet, and claims carried unsettled from an earlier
+  window. It is a read: it changes nothing, and it costs a turn like any other call.
+
   If you have nothing to do yet, DO NOT respond with {"done": true} — you would miss a real
   redemption routed to you later. Check again with a harmless read:
   {"tool": "get_print", "args": {"printId": "${printId}"}}.
@@ -1227,6 +1235,7 @@ ${runShapeFacts}`;
         "check_headroom",
         "get_print",
         "settle_window_close",
+        "list_obligations",
       ]
     : [
         "whoami",
@@ -1236,6 +1245,7 @@ ${runShapeFacts}`;
         "check_headroom",
         "get_print",
         "settle_window_close",
+        "list_obligations",
         "quote_forward",
       ];
 

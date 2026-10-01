@@ -71,6 +71,11 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
     "get_balances(account, tokenIds?) -> real USDC balance (decimal and integer minor-unit forms) plus claim balances",
   get_print: "get_print(printId) -> the real print body plus whether it's final",
   check_headroom: "check_headroom(issuer, classId) -> real headroom and issuance limit, in mSIU",
+  list_obligations:
+    "list_obligations() -> everything currently outstanding against you as an issuer: claims " +
+    "presented and awaiting your work, claims presented and awaiting only your serve_redemption " +
+    "report, claims minted against your bond that nobody has presented yet, and claims carried " +
+    "unsettled from an earlier window. Takes no arguments — it answers only about you. Read-only.",
 };
 
 export function formatToolList(): string {

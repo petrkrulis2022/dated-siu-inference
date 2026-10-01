@@ -29,6 +29,7 @@ import { gateResultsMatch } from "../gate/determinism.js";
 import { signRateAttestation } from "../chain/rate-attestation.js";
 import { Runner } from "../runner.js";
 import type { RunnerDeps } from "../deps.js";
+import type { IssuerObligation } from "../tools/list-obligations.js";
 import type { AgentId } from "../identity/resolve.js";
 import { ContextValidationError, validateAgentContext } from "../pack/validate.js";
 import type { ToolName } from "../tools/index.js";
@@ -597,6 +598,79 @@ export async function runFullRunWindow(
   const attacks: AttackRecord[] = [];
   const forwardInvitations: { agentId: AgentId; turn: number }[] = [];
   const capacityEvents: CapacityEvent[] = [];
+
+  /**
+   * Everything this issuer owes, or may come to owe, from the three places the loop keeps it.
+   *
+   * Assembled here rather than in `buildToolArgs` because `capacityEvents` and `redemption` are
+   * local to this window's closure. Spec §4.6x is why an issuer needs to be able to ask at all —
+   * fifteen entries across seven runs saying it had no way to list what was presented or routed
+   * to it. §4.6y is why it is a correctness fix rather than a convenience: of ten claims minted
+   * and never served, not one was an issuer declining to deliver, so until an issuer can see its
+   * own obligations a fulfilment measurement measures sight rather than reliability.
+   */
+  const buildObligationsFor = (agentId: AgentId): IssuerObligation[] => {
+    const out: IssuerObligation[] = [];
+    const mine = options.roster.find((r) => r.agentId === agentId)?.address?.toLowerCase();
+
+    // Carried from an earlier window and never settled — these default against the bond.
+    for (const c of options.outstandingClaims ?? []) {
+      if (c.issuerAgentId !== agentId) continue;
+      out.push({
+        tokenId: c.tokenId,
+        state: "carried_unsettled",
+        ...(c.quantityMilliSiu !== undefined ? { quantityMilliSiu: c.quantityMilliSiu } : {}),
+        holder: c.holderAgentId ?? c.holder,
+        mintedInWindow: c.mintedInWindow,
+      });
+    }
+
+    // Presented against this issuer in THIS window. The tracker already distinguishes "owes the
+    // work" from "owes only the report", and an issuer acts differently on each.
+    const presentedTokenIds = new Set<string>();
+    for (const [text, state] of [
+      [redemption.renderFor(agentId), "presented_graded_awaiting_service"],
+      [redemption.renderForIssuerAwaitingDelivery(agentId), "presented_awaiting_delivery"],
+    ] as const) {
+      if (text === "") continue;
+      const tokenId = /tokenId (\d+)/.exec(text)?.[1];
+      if (tokenId === undefined) continue;
+      const quantity = /quantity (\d+)/.exec(text)?.[1];
+      const holder = /holder ([A-Za-z0-9-]+)/.exec(text)?.[1];
+      presentedTokenIds.add(tokenId);
+      out.push({
+        tokenId,
+        state,
+        ...(quantity !== undefined ? { quantityMilliSiu: quantity } : {}),
+        ...(holder !== undefined ? { holder } : {}),
+        mintedInWindow: windowIndex,
+      });
+    }
+
+    // Minted against this issuer's bond this window and NOT presented. This is the state that
+    // was invisible: headroom consumed, by a holder the issuer could not name, for work it could
+    // not see. Matched on issuer ADDRESS, which is what the mint events carry.
+    const concluded = new Set(
+      capacityEvents
+        .filter((e) => e.kind === "serve_redemption" || e.kind === "settle_window_close")
+        .map((e) => e.tokenId)
+        .filter((t): t is string => t !== undefined),
+    );
+    for (const e of capacityEvents) {
+      if (e.kind !== "mint_claim" && e.kind !== "pay_with_claim") continue;
+      if (e.tokenId === undefined || e.issuer === undefined || mine === undefined) continue;
+      if (e.issuer.toLowerCase() !== mine) continue;
+      if (presentedTokenIds.has(e.tokenId) || concluded.has(e.tokenId)) continue;
+      if (out.some((o) => o.tokenId === e.tokenId)) continue;
+      out.push({
+        tokenId: e.tokenId,
+        state: "minted_not_presented",
+        ...(e.quantityMilliSiu !== undefined ? { quantityMilliSiu: e.quantityMilliSiu } : {}),
+        mintedInWindow: windowIndex,
+      });
+    }
+    return out;
+  };
   /** Agents that have completed at least one successful tool call this window — the "buyer" wake
    * gate's own definition of having acted. A call that threw does not count, so a buyer whose
    * purchase reverted is still awake to deal with it. */
@@ -1213,6 +1287,7 @@ export async function runFullRunWindow(
         windowCount,
         windowBoundsByIndex: options.windowBoundsByIndex,
         outstandingClaims: options.outstandingClaims,
+        obligationsFor: buildObligationsFor,
         caller: { agentId: agent.agentId, erc8004Id: agent.erc8004Id },
       });
     } catch (err) {
@@ -1845,6 +1920,13 @@ export interface BuildToolArgsContext {
   windowBoundsByIndex?: Record<number, { from: bigint; to: bigint }>;
   /** See `FullRunWindowOptions.outstandingClaims`. */
   outstandingClaims?: readonly OutstandingClaim[];
+  /**
+   * What an issuer owes, assembled by the loop because only the loop holds all of it: this
+   * window's mints (from `capacityEvents`), the live redemption tracker, and claims carried
+   * unsettled from earlier windows. Spliced into `list_obligations`, which the agent calls with
+   * no arguments of its own — see tools/list-obligations.ts and spec §4.6x/§4.6y.
+   */
+  obligationsFor?: (agentId: AgentId) => IssuerObligation[];
 }
 
 /**
@@ -2311,6 +2393,17 @@ export async function buildToolArgs(
     return {
       quote: latest.quote,
       classId: typeof raw.classId === "string" ? raw.classId : classIdFor(ctx.job.taskClass),
+    };
+  }
+
+  if (tool === "list_obligations") {
+    const caller = ctx.caller?.agentId;
+    // No caller means no "own" obligations to speak of. Returning an empty list rather than
+    // throwing: an issuer asking what it owes and being told "nothing" is a correct answer, and
+    // a tool that can only succeed is one an agent can rely on.
+    return {
+      obligations: caller !== undefined ? (ctx.obligationsFor?.(caller) ?? []) : [],
+      ...(ctx.windowIndex !== undefined ? { windowLabel: `window ${ctx.windowIndex}` } : {}),
     };
   }
 

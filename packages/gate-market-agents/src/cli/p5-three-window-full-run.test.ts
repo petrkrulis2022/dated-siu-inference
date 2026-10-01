@@ -705,3 +705,34 @@ describe("assertProvidersReachable", () => {
     },
   );
 });
+
+describe("issuers can see what they owe (spec §4.6x, §4.6y)", () => {
+  it("gives both issuers list_obligations, in every window", () => {
+    // Not seasonal, unlike quote_forward: an issuer owes work in the last window exactly as
+    // much as in the first, and the last window is where carried-unsettled claims land.
+    for (const w of [1, WINDOW_COUNT]) {
+      for (const id of ["ISSUER-A", "ISSUER-B"]) {
+        expect(find(buildRoster(input(w)), id).availableTools).toContain("list_obligations");
+      }
+    }
+  });
+
+  it("does not give it to buyers — it answers about the caller's own bond, which they have none of", () => {
+    for (const id of ["ORCHESTRATOR", "WORKER-CODE", "WORKER-EXTRACT"]) {
+      expect(find(buildRoster(input(1)), id).availableTools).not.toContain("list_obligations");
+    }
+  });
+
+  it("shows the issuer worked syntax for it, as it does for every other tool (§4.6q)", () => {
+    // §4.6q: a tool demonstrated in prose while its alternatives carry copy-pasteable JSON is
+    // not a neutral offer. This one takes no arguments, so the example must still show that.
+    const brief = find(buildRoster(input(1)), "ISSUER-A").skillPackText;
+    expect(brief).toContain('{"tool": "list_obligations", "args": {}}');
+  });
+
+  it("states it is a read that changes nothing, and that it costs a turn", () => {
+    const brief = find(buildRoster(input(1)), "ISSUER-B").skillPackText;
+    expect(brief).toMatch(/changes nothing/);
+    expect(brief).toMatch(/costs a turn/);
+  });
+});
