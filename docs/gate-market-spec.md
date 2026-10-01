@@ -1020,6 +1020,34 @@ work is re-asked until it quotes.** The invitation is not competing with an issu
 it is filling the space where an issuer has nothing to do — which is exactly the space a
 "did this agent want to quote?" measurement needs to be empty.
 
+**Resolved 2026-10-01: window 3 is the control, and it is decisive.** ISSUER-A took four turns
+in window 1, four in window 2 and **zero** in window 3, halting `nothing_to_act_on`. That looked
+at first like a contradiction — nothing in `mayStillQuoteForward` mentions the last window. The
+cause is in the roster, not the loop: `issuerTools` omits `quote_forward` entirely when
+`isLastWindow`, so `canQuoteForward` is false, the invitation is never built, the board section
+is empty, and the wake gate skips the agent on every cursor.
+
+So the same run contains both arms of the experiment:
+
+| window | invited? | turns taken | spent before quoting |
+| --- | --- | --- | --- |
+| 1 | yes | 4 | 2 `get_print` polls |
+| 2 | yes | 4 | 2 `get_print` polls |
+| 3 | **no** | **0** | — slept correctly |
+
+**Remove the invitation and the idle issuer behaves perfectly.** That is the finding stated as
+cleanly as this testbed is ever likely to state it, and it means the fix is not "suppress the
+invitation" but "show it once, then stop" — window 3 already demonstrates the stopped state is
+correct and costs nothing.
+
+**A latent defect found while resolving this.** The loop's `mayStillQuoteForward` does not check
+`windowCount`, and `buildToolArgs` throws for any `forWindow <= windowIndex`. The two agree today
+only because the roster happens to remove the tool in the last window, which flows through
+`canQuoteForward`. Grant `quote_forward` in a final window — a one-line roster change nobody
+would think twice about — and the loop will invite an issuer, every turn, to call a tool that
+cannot succeed: §4.6v's defect exactly, in a second place. The last-window rule belongs in the
+loop beside the invitation, not only in the roster that happens to feed it.
+
 Recorded, not fixed: the protocol freeze of §7.1a holds from the debugging run onward, so the fix
 belongs before the block starts, not inside it. The fix is not to remove the invitation — an
 issuer that has never been told it may quote forward cannot be said to have declined either. It
