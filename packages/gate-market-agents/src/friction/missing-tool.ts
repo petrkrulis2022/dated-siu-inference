@@ -6,7 +6,22 @@ export interface MissingToolReport {
   turn: number;
   tool: string;
   text: string;
+  /**
+   * True when the run deliberately withheld this tool from this agent — the non-serving issuer
+   * is supposed to have no `serve_redemption`, and says so every window.
+   *
+   * It is reported, never dropped: a disclosed absence is still the reason an agent could not
+   * act, and silently filtering it is how the first detector went wrong. But it must not be
+   * counted as a defect. Widening the phrasing regex (§4.6x) took the corpus from 12 grant
+   * problems to 27, of which 26 were the non-serving issuer behaving exactly as designed — a
+   * banner crying wolf 26 times, with the one real entry (WORKER-EXTRACT's `redeem_claim`,
+   * runs 9 and 10) buried in it. That is the same drowning this detector exists to prevent.
+   */
+  byDesign: boolean;
 }
+
+/** `agent:tool` pairs the run intends to withhold — see `MissingToolReport.byDesign`. */
+export type WithheldByDesign = ReadonlySet<string>;
 
 /**
  * Friction entries in which an agent named a TOOL IT DID NOT HAVE.
@@ -27,7 +42,10 @@ export interface MissingToolReport {
  * involving that agent is suspect until it is fixed. They are separated here so the second can
  * never again be read as an instance of the first.
  */
-export function missingToolFrictions(entries: FrictionLogEntry[]): MissingToolReport[] {
+export function missingToolFrictions(
+  entries: FrictionLogEntry[],
+  withheldByDesign: WithheldByDesign = new Set(),
+): MissingToolReport[] {
   const toolNames = Object.keys(TOOLS);
   const out: MissingToolReport[] = [];
   for (const e of entries) {
@@ -36,12 +54,33 @@ export function missingToolFrictions(entries: FrictionLogEntry[]): MissingToolRe
     // A tool name plus any phrasing of "I was not given it". Deliberately broad on the phrasing
     // and strict on the tool name: a false positive costs a line in a report, and a false
     // negative costs a run.
-    if (!/not (in the list of|listed|among|available)|unavailable|do(es)? not have|was not granted/i.test(text)) {
+    //
+    // Widened 2026-10-01 (spec §4.6x). The original required the words "not in the list of",
+    // "not listed", "not among" or "not available" more or less adjacent, and real agents do not
+    // write that way. The corpus scan found five live phrasings it missed — "is not in YOUR
+    // AVAILABLE TOOLS THIS TURN", "not in this turn's listed tool set", "not in this turn's tool
+    // list" — every one a named, existing tool reported absent, every one filed as the quieter
+    // kind. The gap between "not" and the denial word is now allowed to carry a few words.
+    //
+    // Precision still comes from the tool-name gate below, not from this regex, which is why
+    // widening it is safe. What it must NOT do is start matching phrasings that merely mention a
+    // tool while describing a different gap ("no idle/wait tool; polling get_print", "cannot
+    // submit_job and quote_forward in the same turn") — those are capability gaps and belong to
+    // the other detector. Both are pinned by test.
+    const denied =
+      /\bunavailable\b|\bdo(?:es)?\s+not\s+have\b|\bno\s+access\s+to\b|\bnot\b[^.;]{0,40}?\b(?:available|granted|listed|in the list|tool list|tool set)\b/i;
+    if (!denied.test(text)) {
       continue;
     }
     const named = toolNames.find((t) => text.includes(t));
     if (named === undefined) continue;
-    out.push({ agent: e.agent, turn: e.turn, tool: named, text });
+    out.push({
+      agent: e.agent,
+      turn: e.turn,
+      tool: named,
+      text,
+      byDesign: withheldByDesign.has(`${e.agent}:${named}`),
+    });
   }
   return out;
 }
@@ -74,8 +113,13 @@ export interface CapabilityGapReport {
  * problem is returned. Judging which gaps are "real" is what hid this one. A false positive
  * costs a line in a report; a false negative costs a measurement nobody knows is broken.
  */
-export function capabilityGapFrictions(entries: FrictionLogEntry[]): CapabilityGapReport[] {
-  const grantProblems = new Set(missingToolFrictions(entries).map((m) => `${m.agent}:${m.turn}`));
+export function capabilityGapFrictions(
+  entries: FrictionLogEntry[],
+  withheldByDesign: WithheldByDesign = new Set(),
+): CapabilityGapReport[] {
+  const grantProblems = new Set(
+    missingToolFrictions(entries, withheldByDesign).map((m) => `${m.agent}:${m.turn}`),
+  );
   const out: CapabilityGapReport[] = [];
   for (const e of entries) {
     const text = e.could_not_express;

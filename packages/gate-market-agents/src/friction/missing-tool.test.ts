@@ -85,3 +85,64 @@ describe("capabilityGapFrictions — the half that never reached the report", ()
     expect(capabilityGapFrictions([grant])).toEqual([]);
   });
 });
+
+describe("the grant detector's own phrasing gap, found by the 2026-10-01 corpus scan", () => {
+  // Every one of these is a real entry. All five name a tool that exists and say it was absent,
+  // and all five were filed as the quieter kind because the regex wanted "not in the list of".
+  const REAL = [
+    "serve_redemption is named in WHAT YOU CAN DO but is not in YOUR AVAILABLE TOOLS THIS TURN",
+    "serve_redemption is described as the pass-report step but is not in this turn's available tools",
+    "serve_redemption is required for the routed pass but is not in this turn's listed tool set",
+    "serve_redemption is not in this turn's tool list",
+    "serve_redemption is not in the available tools this turn",
+  ];
+
+  it.each(REAL)("catches %s", (text) => {
+    const found = missingToolFrictions([entry({ agent: "ISSUER-A", could_not_express: text })]);
+    expect(found).toHaveLength(1);
+    expect(found[0]?.tool).toBe("serve_redemption");
+  });
+
+  it("still does not swallow capability gaps that merely MENTION a tool", () => {
+    // Both name real tools. Neither is a denied grant: the first wants a primitive that does not
+    // exist, the second wants two calls in one turn. Misfiling these as grant problems would
+    // undo the severity split the grant detector exists to provide.
+    const gaps = [
+      "no idle/wait tool; polling get_print to stay in-window",
+      "cannot submit_job and quote_forward in the same turn",
+    ];
+    expect(missingToolFrictions(gaps.map((t) => entry({ could_not_express: t })))).toEqual([]);
+    expect(capabilityGapFrictions(gaps.map((t) => entry({ could_not_express: t })))).toHaveLength(2);
+  });
+});
+
+describe("a deliberately withheld tool is reported but not counted as a defect", () => {
+  const WITHHELD = new Set(["ISSUER-A:serve_redemption"]);
+
+  it("marks the non-serving issuer's own disclosed absence byDesign", () => {
+    const found = missingToolFrictions(
+      [entry({ agent: "ISSUER-A", could_not_express: "serve_redemption is not in this turn's tool list" })],
+      WITHHELD,
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]?.byDesign).toBe(true);
+  });
+
+  it("still flags a real grant problem as a defect, and does not hide it among them", () => {
+    const found = missingToolFrictions(
+      [
+        entry({ agent: "ISSUER-A", could_not_express: "serve_redemption is not in this turn's tool list" }),
+        entry({ agent: "WORKER-EXTRACT", could_not_express: "redeem_claim is not in the list of available tools this turn" }),
+      ],
+      WITHHELD,
+    );
+    expect(found.filter((f) => !f.byDesign).map((f) => f.tool)).toEqual(["redeem_claim"]);
+  });
+
+  it("never drops the by-design entry — a disclosed absence is still why an agent could not act", () => {
+    const e = [entry({ agent: "ISSUER-A", could_not_express: "serve_redemption is not in this turn's tool list" })];
+    expect(missingToolFrictions(e, WITHHELD)).toHaveLength(1);
+    // ...and it must not reappear as a capability gap as well.
+    expect(capabilityGapFrictions(e, WITHHELD)).toEqual([]);
+  });
+});

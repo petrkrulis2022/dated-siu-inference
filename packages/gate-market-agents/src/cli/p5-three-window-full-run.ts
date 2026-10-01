@@ -1775,10 +1775,25 @@ export function classifyFinalWindow(outcomes: WindowOutcome[]): {
 
 /** Reads every window's friction log for this run and returns the entries in which an agent
  * named a tool it did not have. See friction/missing-tool.ts for why this is separated out. */
+/**
+ * What this run deliberately withholds. Derived from `NON_SERVING_ISSUER` rather than written
+ * out, so it cannot drift from the roster that actually builds the grants.
+ */
+function withheldByDesign(): ReadonlySet<string> {
+  return new Set(NON_SERVING_ISSUER ? [`${NON_SERVING_ISSUER}:serve_redemption`] : []);
+}
+
 function readMissingToolFrictions(
   runId: string,
-): { window: number; agent: string; turn: number; tool: string; text: string }[] {
-  const out: { window: number; agent: string; turn: number; tool: string; text: string }[] = [];
+): { window: number; agent: string; turn: number; tool: string; text: string; byDesign: boolean }[] {
+  const out: {
+    window: number;
+    agent: string;
+    turn: number;
+    tool: string;
+    text: string;
+    byDesign: boolean;
+  }[] = [];
   for (let w = 1; w <= WINDOW_COUNT; w++) {
     const path = join(RUNS_ROOT, `${runId}-w${w}`, "friction", "friction-log.jsonl");
     let raw: string;
@@ -1796,7 +1811,7 @@ function readMissingToolFrictions(
         // A malformed line is not a reason to lose the rest of the window's friction.
       }
     }
-    for (const m of missingToolFrictions(entries)) out.push({ window: w, ...m });
+    for (const m of missingToolFrictions(entries, withheldByDesign())) out.push({ window: w, ...m });
   }
   return out;
 }
@@ -1828,7 +1843,7 @@ function readCapabilityGapFrictions(
         // A malformed line is not a reason to lose the rest of the window's friction.
       }
     }
-    for (const m of capabilityGapFrictions(entries)) out.push({ window: w, ...m });
+    for (const m of capabilityGapFrictions(entries, withheldByDesign())) out.push({ window: w, ...m });
   }
   return out;
 }
@@ -1849,16 +1864,28 @@ function printRunSummary(
   // expired worthless. This section exists so that cannot happen quietly again.
   if (runId !== undefined) {
     const missing = readMissingToolFrictions(runId);
-    if (missing.length > 0) {
+    const undisclosed = missing.filter((m) => !m.byDesign);
+    const disclosed = missing.filter((m) => m.byDesign);
+    if (undisclosed.length > 0) {
       console.log("\n!!! AGENTS NAMED TOOLS THEY DID NOT HAVE !!!");
       console.log(
         "  Each line is an agent reporting it could not do something because a tool was absent.\n" +
           "  Treat every measurement involving that agent as suspect until the grant is fixed —\n" +
           "  this is a different severity from friction about workflow or waiting.",
       );
-      for (const m of missing) {
+      for (const m of undisclosed) {
         console.log(`  window ${m.window} ${m.agent} turn ${m.turn}: ${m.tool} — "${m.text}"`);
       }
+    }
+    // Reported, never counted as a defect, and never allowed to crowd out the section above:
+    // the non-serving issuer says this every window by construction, and once the phrasing
+    // regex was widened (§4.6x) it outnumbered the real entries 26 to 1.
+    if (disclosed.length > 0) {
+      console.log(
+        `\n  (${disclosed.length} further entr${disclosed.length === 1 ? "y" : "ies"} name a tool this run ` +
+          `WITHHELD ON PURPOSE — ${[...new Set(disclosed.map((d) => `${d.agent}/${d.tool}`))].join(", ")}. ` +
+          `Disclosed before the run, so not a defect; still the reason those turns could not act.)`,
+      );
     }
 
     // Lower severity than a missing grant, higher than nothing — which is what it got before
