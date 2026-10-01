@@ -60,7 +60,7 @@ describe("checkSpendingMandate — the normative rule (build1-spec.md §8)", () 
   });
 
   it("ACCEPTS a fixed-pattern quote, which never needs siu_max", () => {
-    const quote = buildAndSign({ pattern: "fixed", siu: "1.400", siuMax: undefined });
+    const quote = buildAndSign({ pattern: "fixed", siu: "1.400" });
     expect(checkSpendingMandate(quote, mandate, NOW).accepted).toBe(true);
   });
 });

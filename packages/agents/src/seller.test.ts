@@ -5,7 +5,7 @@ import { createSellerApp, type SellerDeps } from "./seller.js";
 import type { ChainClients } from "./wallets.js";
 import type { EscrowRead } from "./escrow-client.js";
 
-const TEST_KEY = `0x${"44".repeat(32)}`;
+const TEST_KEY = `0x${"44".repeat(32)}` as `0x${string}`;
 const account = privateKeyToAccount(TEST_KEY);
 
 function clients(): ChainClients {

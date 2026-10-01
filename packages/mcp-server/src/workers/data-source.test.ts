@@ -34,6 +34,11 @@ function runRecord(id: string): RunRecord {
     latency_ms: 500,
     gate_passed: true,
     raw_response_ref: `${id}.raw.json`,
+    // Required on RunRecord, and the fixture predates it. Verified against the data rather than
+    // assumed: all 5,026 real run records under data/runs carry `deviations`; the only files
+    // without it are the 42 index.json manifests, which are not run records. So the type matches
+    // reality and the fixture was simply behind — this is not drift in the record shape.
+    deviations: [],
   };
 }
 

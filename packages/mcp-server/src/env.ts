@@ -14,7 +14,27 @@ export const ATTESTATION_KEY_ENV = "TOUCHSTONE_ATTESTATION_KEY";
 export const SELLER_ADDRESS_ENV = "TOUCHSTONE_SELLER_ADDRESS";
 export const CHAIN_NAME_ENV = "TOUCHSTONE_CHAIN_NAME";
 
-export function loadAttestationKeyFromEnv(env: NodeJS.ProcessEnv = process.env): string {
+/**
+ * What these loaders accept, and why it is not `EnvLike`.
+ *
+ * `wrangler types` generates `worker-configuration.d.ts` — git-tracked — which augments the
+ * GLOBAL `EnvLike` with this Worker's vars as string LITERALS, not strings:
+ *
+ *     TOUCHSTONE_SELLER_ADDRESS: "0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e";
+ *     TOUCHSTONE_CHAIN_NAME: "base-sepolia";
+ *
+ * Typing a parameter as `EnvLike` therefore drags one deployment's values into the
+ * signature. No test could pass a different address, and more seriously the type asserts that
+ * the chain IS "base-sepolia" — so a future `if (env[CHAIN_NAME_ENV] === "arc-testnet")` types
+ * as `never` and narrows away. CLAUDE.md's rule is that nothing carries chain-specific
+ * assumptions so Arc stays a deployment target rather than a rewrite; a literal type saying
+ * otherwise is exactly that assumption, hardened where nobody would look for it.
+ *
+ * A plain record is what these functions actually need: a bag of optional strings.
+ */
+export type EnvLike = Record<string, string | undefined>;
+
+export function loadAttestationKeyFromEnv(env: EnvLike = process.env): string {
   const key = env[ATTESTATION_KEY_ENV];
   if (!key) {
     throw new Error(
@@ -27,7 +47,7 @@ export function loadAttestationKeyFromEnv(env: NodeJS.ProcessEnv = process.env):
 }
 
 /** The EVM wallet address Circle's Gateway middleware pays out to — build1-spec.md §9. */
-export function loadSellerAddressFromEnv(env: NodeJS.ProcessEnv = process.env): string {
+export function loadSellerAddressFromEnv(env: EnvLike = process.env): string {
   const address = env[SELLER_ADDRESS_ENV];
   if (!address) {
     throw new Error(
@@ -45,7 +65,7 @@ export function loadSellerAddressFromEnv(env: NodeJS.ProcessEnv = process.env): 
  * section is the other caller, generated the same way).
  */
 export function loadSettlementReaderFromEnv(
-  env: NodeJS.ProcessEnv = process.env,
+  env: EnvLike = process.env,
 ): SettlementReader {
   const chainName = env[CHAIN_NAME_ENV] ?? "base-sepolia";
   const rpcEnvVar = `${chainName.toUpperCase().replaceAll("-", "_")}_RPC_URL`;

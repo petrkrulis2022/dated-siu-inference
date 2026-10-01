@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import Ajv from "ajv";
+// Same interop shim as the production grader at src/t1/grade.ts — ajv ships a CJS default
+// export that is not constructable under NodeNext without it. The test had the plain import and
+// only typechecked because test files were excluded from tsc until 2026-10-01.
+import { createRequire } from "node:module";
+const Ajv = createRequire(import.meta.url)("ajv").default as typeof import("ajv").default;
 import { generateT1Instance, generateT1Instances, T1_SCHEMA } from "./generate.js";
 
 describe("generateT1Instance", () => {

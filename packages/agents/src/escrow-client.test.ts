@@ -24,7 +24,7 @@ describe("escrowMatchesQuote", () => {
   });
 
   it("is case-insensitive on the seller address", () => {
-    expect(escrowMatchesQuote(openEscrow({ seller: SELLER.toLowerCase() }), EXPECTED)).toBe(true);
+    expect(escrowMatchesQuote(openEscrow({ seller: SELLER.toLowerCase() as `0x${string}` }), EXPECTED)).toBe(true);
   });
 
   it("rejects a not-yet-funded (None) escrow — the exact stale-read symptom seen live", () => {
