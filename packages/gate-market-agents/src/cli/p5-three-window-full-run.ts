@@ -1340,7 +1340,25 @@ ${runShapeFacts}`;
       address: addresses["WORKER-CODE"],
       erc8004Id: workerCodeErc8004Id,
       rpcUrl,
-      maxOutputTokens: 4500,
+      // 8000, not the 4500 every other agent gets, and this is a MITIGATION against a censored
+      // observation rather than a fix (spec §4.6u). WORKER-CODE emitted nothing twice in run 13,
+      // once per window: stop=max_tokens with ~22,500 output tokens, essentially all reasoning,
+      // zero text. anthropic.ts already retries a reasoning-truncated completion at
+      // max_tokens * (1 + REASONING_BUDGET_MULTIPLE), so 4500 gave an 18,000-token retry, and
+      // these two turns wanted more than that. How much more is unknown — both hit the ceiling,
+      // so the demand is censored. 8000 raises the retry to 32,000.
+      //
+      // Measured first, because the obvious lever was the wrong one: its prompt is ~8,000 tokens
+      // and near-flat across a window (19,364 to 22,291 characters over ten turns), and the
+      // 17,396 "input" that suggested otherwise is the truncated call and its retry billed
+      // together. Trimming the brief could not have helped — the static pack is ~3,450 tokens of
+      // it. No other agent needs this: ISSUER-B peaked at 3,477 output tokens against the same
+      // 4,500 and never truncated, WORKER-EXTRACT at 744.
+      //
+      // A failed turn now costs 40,000 output tokens instead of 22,500, so this trades a dearer
+      // failure for a rarer one. If it recurs at 32,000, the answer is a different model for this
+      // seat, not a third number — that is the 1,500-to-4,500 mistake repeating.
+      maxOutputTokens: 8000,
       temperature: 0.7,
       provider: registryEntry(models["WORKER-CODE"]).provider,
     },

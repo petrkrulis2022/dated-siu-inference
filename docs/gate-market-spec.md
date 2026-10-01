@@ -1121,7 +1121,34 @@ truncated with `stop_reason: max_tokens` and non-zero thinking tokens is retried
 exactly the 22,500 observed. **The accommodation fired, tripled the budget, and the model still
 spent every token reasoning and emitted no text.**
 
-`claude-sonnet-5` on a ~17,000-token prompt reasons past 18,000 output tokens without answering.
+**Corrected 2026-10-01, and the correction changes the fix.** The "~17,000-token prompt" above
+is a double count, and reading it as prompt size pointed at the wrong lever. `promptChars` for
+WORKER-CODE moves from 19,364 to 22,291 across ten turns — roughly 8,000 tokens, near-flat. The
+input *token* figure doubles only on the turns with huge output, because `anthropic.ts` bills
+the truncated first call and the accommodated retry **together**: 17,396 is ~8,700 counted
+twice. Its prompt was never the problem.
+
+What the per-turn record actually shows, across all three windows:
+
+| | input | output | reasoning | stop |
+| --- | --- | --- | --- | --- |
+| typical turn | ~8,000 | 1,600-4,400 | most of it | `end_turn` |
+| w2 t4 | 16,280 | 10,759 | 10,607 | `end_turn` — **the retry succeeded** |
+| w1 t3 | 17,396 | 22,500 | 22,500 | `max_tokens` |
+| w2 t6 | 16,896 | 22,500 | 22,498 | `max_tokens` |
+
+So the accommodation fires often and **usually works** — w2 t4 needed 10,759 output tokens and
+got them. Two turns in nineteen wanted more than the 18,000 the retry allows. `claude-sonnet-5`
+reasons past 18,000 on this task occasionally, not systematically, and nothing about the prompt
+distinguishes the turns where it does.
+
+**Two consequences for the fix.** Trimming the brief cannot be the lever: the static skill pack
+is 13,798 characters, roughly 3,450 tokens, well under half of an ~8,000-token prompt, and the
+rest is the board and the turn's own context. And the real demand is **censored** — both
+failures hit the ceiling, so all that is known is that they wanted more than 18,000, not how
+much more. Any new number is a mitigation chosen against an unknown, which is exactly what
+raising the issuers from 1,500 to 4,500 was, and must be recorded as such rather than as a fix.
+
 The classification is right — `no_text_emitted`, kept distinct from `parse_error` — but the
 turn is gone.
 
