@@ -126,6 +126,25 @@ WORKER-CODE alone took $0.80 of a single window, so a balance sized for one run 
 block dies partway through — and a provider outage re-runs that run (`gate-market-spec.md`
 §7.1a), so repeated exhaustion ends the block by billing rather than by findings.
 
+**The run now does this itself and aborts before spending anything.** `provider-preflight.ts`
+makes one real call per provider through the run's own adapter and refuses to start if any
+fails, so an exhausted account costs nothing instead of a window. It reports identity where a
+provider gives one — Anthropic's organization name, xAI's key name — because a dashboard showing
+credit while a key reports none means the credit landed on a different organization, and the org
+name is what makes that visible:
+
+```
+=== PROVIDER PRE-FLIGHT ===
+  FAILED  anthropic  claude-sonnet-5  org "SoundFlow Finance" — Anthropic request failed: 400
+  OK      google     gemini-3.1-pro-preview answered in 5628ms
+  OK      xai        grok-4.6 answered in 3742ms  key "siu-prints"
+```
+
+**No provider exposes a credit balance to an API key**, checked 2026-10-01: OpenAI's
+`/v1/dashboard/billing/credit_grants` accepts only a browser session key, and Anthropic and xAI
+have none. A live call is the better check anyway — it fails on an exhausted account, a revoked
+key, *and* a key billing to the wrong organization, which a balance figure would not catch.
+
 **Probe each provider through its own adapter before launching, not the dashboard.** A real
 call costs a fraction of a cent and is the only check that exercises the key, the organization
 and the balance together:

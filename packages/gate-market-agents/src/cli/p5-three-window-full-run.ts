@@ -12,6 +12,8 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
 import { createAdapterFor, loadApiKeysFromEnv } from "@touchstone/harness";
+import type { Adapter } from "@touchstone/harness";
+import { checkProviders, renderProviderChecks } from "./provider-preflight.js";
 import {
   CODE_GATE_1_TRIVIAL,
   CODE_REFERENCE,
@@ -394,6 +396,38 @@ async function main(): Promise<void> {
       withRetry(createAdapterFor(registryEntry(model), apiKeys)),
     ]),
   ) as Record<keyof typeof models, ReturnType<typeof withRetry>>;
+
+  // Before anything is spent or any claim is minted. Two runs in two days died mid-flight on an
+  // exhausted provider, and in both cases a dashboard said the balance was fine — a run spends
+  // through a key, and a key can bill to a different organization than the one topped up. One
+  // real call per provider, through the run's own adapter, is the only check that exercises key,
+  // organization and balance together (see provider-preflight.ts on why no balance figure).
+  //
+  // Fatal, not advisory: a provider that cannot answer now will take the run down mid-window,
+  // and §7.1a then costs the whole run anyway. Better to spend nothing.
+  {
+    const byProvider = new Map<string, { model: string; adapter: Adapter }>();
+    for (const [agentId, model] of Object.entries(models)) {
+      const provider = registryEntry(model).provider;
+      if (!byProvider.has(provider)) {
+        byProvider.set(provider, {
+          model,
+          adapter: adapters[agentId as keyof typeof models],
+        });
+      }
+    }
+    const checks = await checkProviders(byProvider);
+    console.log(renderProviderChecks(checks));
+    const dead = checks.filter((c) => !c.ok);
+    if (dead.length > 0) {
+      console.log(
+        `\nABORTING BEFORE SPENDING ANYTHING: ${dead.map((d) => d.provider).join(", ")} ` +
+          `cannot answer. Nothing has been minted, reserved or paid.`,
+      );
+      process.exit(1);
+    }
+    console.log("");
+  }
 
   const addresses = {
     ORCHESTRATOR: toHex(process.env.ORCHESTRATOR_ADDRESS, "ORCHESTRATOR_ADDRESS"),
