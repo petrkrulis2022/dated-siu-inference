@@ -763,6 +763,31 @@ export async function runFullRunWindow(
     attackedVersions: new Set<number>(),
     oracleSeed: options.oracleSeed ?? F1_ORACLE_TRIAL_SEED,
   };
+
+  /**
+   * Whether a `submit_attack` could actually succeed right now.
+   *
+   * The same three conditions `buildToolArgs` enforces, in ONE place, so nothing that spends a
+   * turn can disagree with the tool about whether there is anything to do. Before 2026-10-01
+   * the wake gate asked only "does any gate exist?", the stall check asked the same, and
+   * `untestedGate` asked "is any version unattacked?" — none of them consulted
+   * `MAX_ATTACK_ROUNDS`, which is the thing that decides.
+   *
+   * Run 13 window 2 is what that cost: WORKER-EXTRACT took ten turns, every one a distinct
+   * attack, and four were scored. Versions 1-3 had filled the cap, so the moment ISSUER-B
+   * delivered a v4 every later call threw — six turns and $0.185 spent hitting a cap whose own
+   * comment says it exists so the adversary "cannot spend the whole run's budget on itself"
+   * (spec §4.6v).
+   *
+   * Re-testing a version already attacked stays allowed, because the tool allows it: that is how
+   * attacks 1 and 2 both landed on v1.
+   */
+  const canAttackNow = (): boolean => {
+    const latest = attackContext.gateVersions.at(-1);
+    if (latest === undefined) return false;
+    if (attackContext.attackedVersions.has(latest.version)) return true;
+    return attackContext.attackedVersions.size < MAX_ATTACK_ROUNDS;
+  };
   let passed = false;
   let passedBy: AgentId | undefined;
 
@@ -1007,16 +1032,14 @@ export async function runFullRunWindow(
       // authored, and gating purely on the gate meant that request could never be answered — the
       // second of a window's two purchases was structurally unreachable (found while enabling it,
       // 2026-09-29).
-      (agent.waitsFor === "gate" &&
-        attackContext.gateVersions.length === 0 &&
-        boardSectionText === "") ||
+      (agent.waitsFor === "gate" && !canAttackNow() && boardSectionText === "") ||
       (agent.waitsFor === "inbox" && boardSectionText === "") ||
       buyerIdle
     ) {
       const someoneCanAct = [...activeAgents].some((id) => {
         const other = options.roster.find((r) => r.agentId === id);
         if (!other?.waitsFor) return true;
-        if (other.waitsFor === "gate" && attackContext.gateVersions.length > 0) return true;
+        if (other.waitsFor === "gate" && canAttackNow()) return true;
         if (other.waitsFor === "buyer" && !hasPurchased.has(other.agentId)) return true;
         return (
           board.renderFor(other.agentId, other.erc8004Id) !== "" ||
@@ -1778,9 +1801,10 @@ export async function runFullRunWindow(
         const someoneCanAttack = [...activeAgents].some((id) =>
           options.roster.find((r) => r.agentId === id)?.availableTools.includes("submit_attack"),
         );
-        const untestedGate =
-          someoneCanAttack &&
-          attackContext.gateVersions.some((g) => !attackContext.attackedVersions.has(g.version));
+        // `canAttackNow` and not merely "some version is unattacked": with the cap reached, a
+        // newest version nobody may test is unattacked forever, so the old form held the window
+        // open for work that could never happen — the same cap blindness as the wake gate.
+        const untestedGate = someoneCanAttack && canAttackNow();
         if (!claimOutstanding && !carriedStillUnsettled && !untestedGate) {
           break turnLoop;
         }

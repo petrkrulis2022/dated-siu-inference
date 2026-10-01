@@ -42,6 +42,7 @@ import {
   type MintContext,
   type RosterAgentConfig,
 } from "./full-run.js";
+import { MAX_ATTACK_ROUNDS } from "./full-run.js";
 
 const PRICES = { priceInUsdPer1M: "2", priceOutUsdPer1M: "12" };
 
@@ -2495,6 +2496,103 @@ describe("the last-window rule lives in the loop, not only in the roster (spec �
       // has nothing to act on, which is exactly what run 13's window 3 showed live.
       expect(prompts).toHaveLength(0);
       expect(result.haltedReason?.["ISSUER-A"]).toBe("nothing_to_act_on");
+    },
+  );
+});
+
+describe("the attack-round cap is visible to the thing that spends turns (spec §4.6v)", () => {
+  let runsRoot: string;
+  let ledgerPath: string;
+
+  beforeEach(async () => {
+    runsRoot = await mkdtemp(path.join(tmpdir(), "attack-cap-"));
+    ledgerPath = path.join(runsRoot, "ledger.json");
+  });
+
+  afterEach(async () => {
+    await rm(runsRoot, { recursive: true, force: true });
+  });
+
+  it(
+    "stops waking the adversary once MAX_ATTACK_ROUNDS forbids the newest version. Run 13 " +
+      "window 2: WORKER-EXTRACT took TEN turns, every one a distinct submit_attack, and four " +
+      "were scored — the cap had been reached by versions 1-3, so once a v4 arrived every " +
+      "later call threw. The cap's own comment says it exists so the adversary 'cannot spend " +
+      "the whole run's budget on itself'; it spent six turns and $0.185 hitting it, because " +
+      "neither the wake gate nor the stall check consults it.",
+    async () => {
+      let authored = 0;
+      const author: Adapter = async () => ({
+        // A fresh version every time, so the newest is always one the cap forbids testing.
+        text: JSON.stringify({
+          tool: "submit_job",
+          args: { source: `export async function gate(){ return {accept:true,reason:'v${++authored}'}; }` },
+        }),
+        usage: { input: 100, output: 20, cached_input: 0, reasoning: 0 },
+        latency_ms: 1,
+        raw: {},
+        deviations: [],
+      });
+
+      const attacks: number[] = [];
+      const adversary: Adapter = async () => {
+        attacks.push(attacks.length + 1);
+        return {
+          text: JSON.stringify({
+            tool: "submit_attack",
+            args: { submissionSource: `export function f(){ return ${attacks.length}; }` },
+          }),
+          usage: { input: 100, output: 20, cached_input: 0, reasoning: 0 },
+          latency_ms: 1,
+          raw: {},
+          deviations: [],
+        };
+      };
+
+      const ceiling = new BudgetCeiling({
+        "ISSUER-A": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+        "ISSUER-B": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+        ORCHESTRATOR: { maxUsdcSpend: "0", maxInferenceTurns: 12, maxInferenceUsd: "3" },
+        "WORKER-CODE": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+        "WORKER-EXTRACT": { maxUsdcSpend: "0", maxInferenceTurns: 12, maxInferenceUsd: "3" },
+        HEDGER: { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+      });
+
+      const result = await runFullRunWindow({
+        windowId: "w-attack-cap",
+        roster: [
+          orchestratorConfig(author),
+          {
+            agentId: "WORKER-EXTRACT",
+            adapter: adversary,
+            modelString: "test",
+            prices: PRICES,
+            skillPackText: CANONICAL_ASSET_DESCRIPTION,
+            availableTools: ["submit_attack"] as const,
+            waitsFor: "gate" as const,
+            privateKeyHex: "0xa715563de5d5c011627720140757574d96bcfc02bdf2e0ee1f68d64e171fe89a",
+            address: "0x0000000000000000000000000000000000000002",
+            erc8004Id: "erc8004:0x0000000000000000000000000000000000000002",
+            rpcUrl: "http://127.0.0.1:1",
+            maxOutputTokens: 3000,
+            temperature: 0.7,
+            provider: "openai",
+          },
+        ],
+        job: JOB,
+        maxTurnsPerAgent: 12,
+        budget: new ExperimentBudget({ ceiling, runCapUsd: "30", experimentCapUsd: "150", ledgerPath }),
+        deps: fakeDeps(async () => PASS),
+        runsRoot,
+        runId: "run-attack-cap",
+        manifest: MANIFEST,
+      });
+
+      // The cap really did bind — otherwise this test proves nothing about the cap.
+      expect(result.attacks.length).toBeLessThanOrEqual(MAX_ATTACK_ROUNDS);
+      // The adversary must not have been given turns it could not use. Allow the scored attacks
+      // plus one cursor of slack; run 13 spent SIX turns past this point.
+      expect(attacks.length).toBeLessThanOrEqual(MAX_ATTACK_ROUNDS + 1);
     },
   );
 });
