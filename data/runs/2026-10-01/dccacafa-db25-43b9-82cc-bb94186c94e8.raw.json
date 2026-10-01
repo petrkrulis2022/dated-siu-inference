@@ -1,0 +1,39 @@
+{
+  "id": "b45fde42-d968-96af-8f8d-512f50ae5e88",
+  "object": "chat.completion",
+  "created": 1790817394,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "7C8630\n62D1FE\n1D8072\n0E5EAC",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes in the log: 7C8630 for the southern annex, 62D1FE for the northern annex, 1D8072 for the lower annex, and 0E5EAC for the lower annex.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21953,
+    "completion_tokens": 20,
+    "total_tokens": 22408,
+    "prompt_tokens_details": {
+      "text_tokens": 21953,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 435,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 458680000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

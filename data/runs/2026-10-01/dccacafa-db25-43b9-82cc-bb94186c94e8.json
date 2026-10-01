@@ -1,0 +1,20 @@
+{
+  "run_id": "dccacafa-db25-43b9-82cc-bb94186c94e8",
+  "model_id": "grok-4.6",
+  "task_class": "T2",
+  "instance_id": "T2-03",
+  "seed": 4103530514,
+  "attempt": 1,
+  "usage": {
+    "input": 21953,
+    "output": 20,
+    "cached_input": 512,
+    "reasoning": 435
+  },
+  "latency_ms": 6288,
+  "gate_passed": true,
+  "raw_response_ref": "dccacafa-db25-43b9-82cc-bb94186c94e8.raw.json",
+  "deviations": [
+    "mandatory reasoning (thinking cannot be disabled) — 435 reasoning tokens used, billed separately from and not counted against max_tokens"
+  ]
+}
