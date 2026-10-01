@@ -1427,6 +1427,38 @@ leaving it to be noticed.
 **Adding the field changes nothing about parsing.** A call without it produces byte-identical
 output to before, pinned by test.
 
+### 4.6z-ii A claim minted in the last window has no later window to close it
+
+§4.6z fixed the dollar route's leak. Run 14 found the same shape on the claim route, one step
+further out, and found it by the conservation check rather than by anything going visibly wrong.
+
+Three ways capacity is given back at run end, and until 2026-10-01 only the first existed:
+
+| what holds capacity | who returns it |
+| --- | --- |
+| external-buyer claims | `releaseExternalClaims`, at run end |
+| dollar-route reservations | `releaseStrandedReservations`, at run end (§4.6z) |
+| **an agent's own claim** | **a later window — and the last window has none** |
+
+`outstandingClaims` is carried between windows precisely so an agent holding `settle_window_close`
+can close what the previous window left, and that works: in run 14 WORKER-EXTRACT closed window
+2's unserved claim unprompted, with no stake in it. But window 3 paid 10,000 mSIU to a
+WORKER-CODE that had just died on an exhausted provider, so the claim was never presented, no
+window 4 existed, and the run exited with the pool 10,000 short. The next run would have started
+there — the ratchet again, third route.
+
+Now swept at run end. Never-presented claims take the Expire branch, which needs no attestation
+and pays nobody. A presented-but-unserved claim is a real default whose bond payment needs a
+publisher-signed attestation dated to its window's close day; that is reported in full rather
+than improvised at run end, because getting it wrong moves money.
+
+**How it was found is the part worth keeping.** Nothing failed. The run reported success, wrote
+its report and exited. The only signal was that an independent on-chain read said 70,000 where
+the run said 54,000 — and chasing *that* discrepancy, which turned out to be a stale read,
+surfaced a real 10,000 the stale number had been hiding. **A reconciliation that disagrees with
+the record is worth running down even when the record looks fine, and especially when the
+disagreement turns out to be innocent**: the innocent explanation was true and incomplete.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make

@@ -807,6 +807,13 @@ async function main(): Promise<void> {
     chainReader,
   });
 
+  await settleOutstandingAgentClaims({
+    claims: outstandingClaims,
+    deployment,
+    rpcUrl,
+    chainReader,
+  });
+
   printRunSummary(outcomes, forwardBook, totalOf, budget, runId);
 
   // Written as well as printed: a report that exists only in terminal scrollback is not a record,
@@ -1697,6 +1704,102 @@ function printRationaleCoverage(
         "  precisely so it would not single payments out (§4.6q). If it has anyway, the emphasis\n" +
         "  effect is present by some other route and these rationales are not neutral self-report.",
     );
+  }
+}
+
+/**
+ * Settle any AGENT claim this run left outstanding when it ended.
+ *
+ * The third member of a family, and the one still missing on 2026-10-01. External-buyer claims
+ * are swept by `releaseExternalClaims`; dollar-route reservations by
+ * `releaseStrandedReservations` (spec §4.6z). An agent's own claim relies on a LATER window —
+ * `outstandingClaims` is carried forward so somebody holding `settle_window_close` can close it,
+ * and in run 14 WORKER-EXTRACT did exactly that for window 2's claim, unprompted and with no
+ * stake in it.
+ *
+ * **A claim minted in the FINAL window has no later window.** Run 14's window 3 paid 10,000 mSIU
+ * to a WORKER-CODE that had just died on an exhausted provider, so the claim was never presented
+ * and nothing ever closed it: the run exited with the pool 10,000 short and the next run would
+ * have started there. Same ratchet, third route.
+ *
+ * Never-presented claims take the Expire branch, which needs no attestation and pays nobody —
+ * the contract only verifies one inside `everPresented`. A presented-but-unserved claim is a
+ * real default whose bond payment needs a publisher-signed attestation dated to the window's
+ * close day; that is not something to improvise at run end, so it is reported in full detail
+ * for a deliberate sweep rather than attempted blind.
+ */
+async function settleOutstandingAgentClaims(input: {
+  claims: readonly OutstandingClaim[];
+  deployment: ReturnType<typeof loadGateMarketDeployment>;
+  rpcUrl: string;
+  chainReader: ViemChainReader;
+}): Promise<void> {
+  if (input.claims.length === 0) return;
+  const workClaim = input.deployment.workClaim.address as Hex;
+
+  console.log(`\n=== SETTLING ${input.claims.length} OUTSTANDING AGENT CLAIM(S) ===`);
+  console.log(
+    "  Capacity an agent's claim still holds now the run is over. A claim minted in the last\n" +
+      "  window has no later window in which an agent could close it, so without this it stays\n" +
+      "  consumed into the next run (spec §4.6z-ii).",
+  );
+  try {
+    const account = privateKeyToAccount(
+      toHex(process.env.DEPLOYER_PRIVATE_KEY, "DEPLOYER_PRIVATE_KEY"),
+    );
+    const transport = http(input.rpcUrl);
+    const publicClient = createPublicClient({ chain: baseSepolia, transport });
+    const walletClient = createWalletClient({ account, chain: baseSepolia, transport });
+
+    for (const claim of input.claims) {
+      const tokenId = BigInt(claim.tokenId);
+      const holder = claim.holder as Hex;
+      let presented = false;
+      try {
+        presented = await publicClient.readContract({
+          address: workClaim,
+          abi: WORK_CLAIM_ABI,
+          functionName: "everPresented",
+          args: [tokenId, holder],
+        });
+      } catch {
+        // Unreadable means unknown, and unknown is not "safe to expire".
+        console.log(`  ${claim.tokenId.slice(0, 18)}…: could not read everPresented — left alone.`);
+        continue;
+      }
+      if (presented) {
+        console.log(
+          `  ${claim.quantityMilliSiu ?? "?"} mSIU tokenId ${claim.tokenId} holder ${claim.holder} ` +
+            `WAS PRESENTED — this is a real default and its bond payment needs a publisher-signed ` +
+            `attestation dated the day its window closed. Not attempted here; sweep deliberately.`,
+        );
+        continue;
+      }
+      try {
+        const txHash = await walletClient.writeContract({
+          address: workClaim,
+          abi: WORK_CLAIM_ABI,
+          functionName: "settleWindowClose",
+          args: [
+            tokenId,
+            holder,
+            { printId: "", series: ZERO_BYTES32, printDate: 0n, nanoUsdPerSiu: 0n, validUntil: 0n },
+            "0x",
+          ],
+          chain: baseSepolia,
+        });
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        console.log(
+          `  expired ${claim.quantityMilliSiu ?? "?"} mSIU back to its issuer (never presented). tx ${txHash}`,
+        );
+      } catch (err) {
+        console.log(
+          `  ${claim.quantityMilliSiu ?? "?"} mSIU NOT returned: ${err instanceof Error ? err.message.split("\n")[0] : String(err)}`,
+        );
+      }
+    }
+  } catch (err) {
+    console.log(`  agent-claim sweep failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
