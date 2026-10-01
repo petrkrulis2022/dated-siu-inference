@@ -2300,3 +2300,201 @@ describe("runFullRunWindow — a held claim settles a quote, and the seller is t
     expect(journey?.outcome).toBe("passed_onward");
   }, 180_000);
 });
+
+describe("an issuer that declines to quote forward is not re-asked every turn (spec §4.6s)", () => {
+  let runsRoot: string;
+  let ledgerPath: string;
+
+  beforeEach(async () => {
+    runsRoot = await mkdtemp(path.join(tmpdir(), "forward-invite-test-"));
+    ledgerPath = path.join(runsRoot, "ledger.json");
+  });
+
+  afterEach(async () => {
+    await rm(runsRoot, { recursive: true, force: true });
+  });
+
+  it(
+    "reproduces run 13's window 1: both issuers woke on EVERY turn until the exact turn they " +
+      "called quote_forward, and neither took a turn after. The forward invitation sits inside " +
+      "boardSectionText, so it drives the wake gate, and it clears only once a quote is recorded " +
+      "in forwardBook — so an issuer exercising the permission the prompt grants it ('or you may " +
+      "choose not to') is woken again for the rest of the window. A quarter of that window's real " +
+      "inference spend went on two agents whose entire output was two forward quotes.",
+    async () => {
+      const issuerPrompts: string[] = [];
+      // Declines, every turn: calls a harmless local tool rather than quote_forward.
+      const decliningIssuer: Adapter = async (_model, prompt) => {
+        issuerPrompts.push(prompt);
+        return {
+          text: JSON.stringify({ tool: "whoami", args: {} }),
+          usage: { input: 100, output: 20, cached_input: 0, reasoning: 0 },
+          latency_ms: 1,
+          raw: {},
+          deviations: [],
+        };
+      };
+
+      const ceiling = new BudgetCeiling({
+        "ISSUER-A": { maxUsdcSpend: "0", maxInferenceTurns: 8, maxInferenceUsd: "2" },
+        "ISSUER-B": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+        ORCHESTRATOR: { maxUsdcSpend: "0", maxInferenceTurns: 8, maxInferenceUsd: "2" },
+        "WORKER-CODE": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+        "WORKER-EXTRACT": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+        HEDGER: { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+      });
+
+      await runFullRunWindow({
+        windowId: "w-forward-invite",
+        roster: [
+          // Leaves on its own first turn. A PASSING gate ends the window instantly unless a
+          // claim is outstanding or an untested gate remains (see the `someoneCanAttack` guard),
+          // and that would end the window before the issuer ever reached a cursor — which is
+          // what the first draft of this test did, and why the guard assertion below is here.
+          orchestratorConfig(async () => ({
+            text: JSON.stringify({ done: true, summary: "nothing for me here" }),
+            usage: { input: 100, output: 20, cached_input: 0, reasoning: 0 },
+            latency_ms: 1,
+            raw: {},
+            deviations: [],
+          })),
+          {
+            agentId: "ISSUER-A",
+            adapter: decliningIssuer,
+            modelString: "test",
+            prices: PRICES,
+            skillPackText: CANONICAL_ASSET_DESCRIPTION,
+            availableTools: ["whoami", "quote_forward"] as const,
+            waitsFor: "inbox" as const,
+            privateKeyHex:
+              "0xa715563de5d5c011627720140757574d96bcfc02bdf2e0ee1f68d64e171fe89a",
+            address: "0x0000000000000000000000000000000000000002",
+            erc8004Id: "erc8004:0x0000000000000000000000000000000000000002",
+            rpcUrl: "http://127.0.0.1:1",
+            maxOutputTokens: 3000,
+            temperature: 0.7,
+            provider: "openai",
+          },
+        ],
+        job: JOB,
+        maxTurnsPerAgent: 8,
+        // Window 1 OF 3. Without this the window is its own last, and the 2026-10-01 rule
+        // correctly builds no invitation at all — which is the other half of the fix and is
+        // covered by its own test below.
+        windowIndex: 1,
+        windowCount: 3,
+        budget: new ExperimentBudget({
+          ceiling,
+          runCapUsd: "30",
+          experimentCapUsd: "150",
+          ledgerPath,
+        }),
+        deps: fakeDeps(async () => PASS),
+        runsRoot,
+        runId: "run-forward-invite",
+        manifest: MANIFEST,
+      });
+
+      // The issuer really was woken and really was invited — otherwise this proves nothing.
+      expect(issuerPrompts.length).toBeGreaterThan(0);
+      const invited = issuerPrompts.filter((p) => p.includes("FORWARD TERMS"));
+      expect(invited.length).toBeGreaterThan(0);
+
+      // The assertion that fails against run 13's behaviour. An issuer that has been told once
+      // that it may quote, and did not, has declined. Asking again is not a neutral re-offer:
+      // it is the only move that stops the asking, so re-asking manufactures the quote it
+      // then reports as a signal (§4.6f, fsiu-design §5.4a-i).
+      expect(invited.length).toBe(1);
+    },
+  );
+});
+
+describe("the last-window rule lives in the loop, not only in the roster (spec §4.6s)", () => {
+  let runsRoot: string;
+  let ledgerPath: string;
+
+  beforeEach(async () => {
+    runsRoot = await mkdtemp(path.join(tmpdir(), "forward-lastwindow-"));
+    ledgerPath = path.join(runsRoot, "ledger.json");
+  });
+
+  afterEach(async () => {
+    await rm(runsRoot, { recursive: true, force: true });
+  });
+
+  it(
+    "never invites an issuer to quote forward in the FINAL window, even when the roster hands " +
+      "it the tool. buildToolArgs throws for any forWindow <= windowIndex, so every such call " +
+      "fails; until 2026-10-01 the loop agreed only because p5's roster happens to drop " +
+      "quote_forward when isLastWindow. Two invariants held together by coincidence — grant the " +
+      "tool in a final window, which is a one-line roster change nobody would question, and the " +
+      "loop would invite the issuer every turn to call a tool that cannot succeed (§4.6o, §4.6v).",
+    async () => {
+      const prompts: string[] = [];
+      const issuer: Adapter = async (_m, prompt) => {
+        prompts.push(prompt);
+        return {
+          text: JSON.stringify({ tool: "whoami", args: {} }),
+          usage: { input: 100, output: 20, cached_input: 0, reasoning: 0 },
+          latency_ms: 1,
+          raw: {},
+          deviations: [],
+        };
+      };
+
+      const ceiling = new BudgetCeiling({
+        "ISSUER-A": { maxUsdcSpend: "0", maxInferenceTurns: 8, maxInferenceUsd: "2" },
+        "ISSUER-B": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+        ORCHESTRATOR: { maxUsdcSpend: "0", maxInferenceTurns: 8, maxInferenceUsd: "2" },
+        "WORKER-CODE": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+        "WORKER-EXTRACT": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+        HEDGER: { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+      });
+
+      const result = await runFullRunWindow({
+        windowId: "w-last",
+        roster: [
+          orchestratorConfig(async () => ({
+            text: JSON.stringify({ done: true, summary: "nothing for me here" }),
+            usage: { input: 100, output: 20, cached_input: 0, reasoning: 0 },
+            latency_ms: 1,
+            raw: {},
+            deviations: [],
+          })),
+          {
+            agentId: "ISSUER-A",
+            adapter: issuer,
+            modelString: "test",
+            prices: PRICES,
+            skillPackText: CANONICAL_ASSET_DESCRIPTION,
+            // Deliberately granted in the final window — the thing the roster currently avoids.
+            availableTools: ["whoami", "quote_forward"] as const,
+            waitsFor: "inbox" as const,
+            privateKeyHex: "0xa715563de5d5c011627720140757574d96bcfc02bdf2e0ee1f68d64e171fe89a",
+            address: "0x0000000000000000000000000000000000000002",
+            erc8004Id: "erc8004:0x0000000000000000000000000000000000000002",
+            rpcUrl: "http://127.0.0.1:1",
+            maxOutputTokens: 3000,
+            temperature: 0.7,
+            provider: "openai",
+          },
+        ],
+        job: JOB,
+        maxTurnsPerAgent: 8,
+        windowIndex: 3,
+        windowCount: 3, // the last window
+        budget: new ExperimentBudget({ ceiling, runCapUsd: "30", experimentCapUsd: "150", ledgerPath }),
+        deps: fakeDeps(async () => PASS),
+        runsRoot,
+        runId: "run-last-window",
+        manifest: MANIFEST,
+      });
+
+      expect(prompts.some((p) => p.includes("FORWARD TERMS"))).toBe(false);
+      // And it must not have been woken at all: an agent with an empty board and no invitation
+      // has nothing to act on, which is exactly what run 13's window 3 showed live.
+      expect(prompts).toHaveLength(0);
+      expect(result.haltedReason?.["ISSUER-A"]).toBe("nothing_to_act_on");
+    },
+  );
+});

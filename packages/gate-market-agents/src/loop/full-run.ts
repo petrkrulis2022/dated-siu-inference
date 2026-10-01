@@ -722,6 +722,42 @@ export async function runFullRunWindow(
    * 100% CPU forever. Found in a real run, not a test — see the stall guard at the loop head. */
   const refusedTwiceFor = (agentId: AgentId, tool: ToolName): boolean =>
     (refusedToolCalls.get(`${agentId}:${tool}`) ?? 0) >= 2;
+
+  /**
+   * Whether this agent still has a forward quote worth waking it for.
+   *
+   * ONE definition, used by the wake gate and by the `someoneCanAct` stall check, for the reason
+   * `refusedTwiceFor` above exists: a `continue` is synchronous, so any disagreement between
+   * "this agent has nothing to do" and "some other agent can act" is not a stall but an unbounded
+   * busy loop. These two were previously written out twice.
+   *
+   * Three conditions, and the last two are each a defect found on 2026-09-30/10-01:
+   *
+   * - It must hold the tool at all.
+   * - **It must not have been invited already this window** (spec §4.6s). The invitation used to
+   *   clear only once the issuer actually quoted, so an issuer exercising the permission the
+   *   prompt explicitly grants it — "or you may choose not to" — was re-asked every turn for the
+   *   rest of the window. Declining was not a state the loop could represent, and the only move
+   *   that stopped the asking was the move being asked for. Run 13 window 1: ISSUER-A woke four
+   *   times, ISSUER-B six, each stopping on the exact turn it gave in. Asked once, an issuer that
+   *   says no is left alone — which is what window 3 already demonstrated, where the invitation
+   *   was never built and the idle issuer slept correctly through every cursor.
+   * - **There must be a later window to quote for.** `buildToolArgs` throws for any
+   *   `forWindow <= windowIndex`, so in the final window every call fails. Until now the two
+   *   agreed only because the roster happens to drop `quote_forward` when `isLastWindow` — two
+   *   invariants held together by coincidence, which is the §4.6o shape. Granting the tool in a
+   *   final window, a one-line roster change nobody would question, would have had the loop
+   *   invite an issuer every turn to call a tool that cannot succeed. The rule belongs here,
+   *   beside the invitation, not only in the roster that feeds it.
+   */
+  const mayStillQuoteForwardFor = (
+    agentId: AgentId,
+    availableTools: readonly ToolName[],
+  ): boolean =>
+    availableTools.includes("quote_forward") &&
+    windowIndex < windowCount &&
+    !forwardInvitations.some((i) => i.agentId === agentId) &&
+    forwardBook.quotesBy(agentId).every((q) => q.statedInWindow !== windowIndex);
   const attackContext: AttackContext = {
     gateVersions: [],
     attackedVersions: new Set<number>(),
@@ -827,12 +863,8 @@ export async function runFullRunWindow(
     // The one exception, and the reason it is separate: an issuer that has not yet stated terms
     // for a later window genuinely does have something to do before anything is routed to it —
     // and gating that on an inbox would mean it could only ever quote *after* being minted
-    // against, which is exactly when a forward offer stops being forward. Once it has quoted,
-    // this line disappears and the ordinary wait-gate applies again, so the wake is worth at most
-    // one turn per window rather than every turn.
-    const mayStillQuoteForward =
-      canQuoteForward &&
-      forwardBook.quotesBy(agent.agentId).every((q) => q.statedInWindow !== windowIndex);
+    // against, which is exactly when a forward offer stops being forward.
+    const mayStillQuoteForward = mayStillQuoteForwardFor(agent.agentId, agent.availableTools);
     // An unsettled claim from an earlier window is a real inbox item for whoever can settle it —
     // and unlike the forward invitation it genuinely is an arrival, so it belongs in the
     // wait-gate's own definition of "something to act on". Shown only to agents that actually
@@ -1013,8 +1045,7 @@ export async function runFullRunWindow(
                   q.issuer !== other.agentId &&
                   !(shownForwardOffers.get(other.agentId)?.has(q.quoteId) ?? false),
               )) ||
-          (other.availableTools.includes("quote_forward") &&
-            forwardBook.quotesBy(other.agentId).every((q) => q.statedInWindow !== windowIndex))
+          mayStillQuoteForwardFor(other.agentId, other.availableTools)
         );
       });
       if (someoneCanAct) continue;
