@@ -173,6 +173,19 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
         uint256 indexed tokenId, uint256 attestedNanoUsdPerSiu, uint256 clampedNanoUsdPerSiu, uint256 referenceNanoUsdPerSiu
     );
 
+    /// @notice Emitted only when a default settled against the day BEFORE its window closed,
+    ///         never for a same-day settlement — so, like SettlementRateClamped, its mere
+    ///         presence is the signal.
+    /// @dev    The prior day is admissible because a window closing between 00:00 and 00:17 UTC
+    ///         has no same-day print yet (the publisher's cron runs 00:17), and under a
+    ///         strict same-day rule such a default could never settle at all — silently, since
+    ///         settleWindowClose simply reverts like any other failed call. Silence was the
+    ///         original defect, so the looser rule is paired with a visible record of when it
+    ///         was used rather than leaving it inferable from the attestation alone.
+    event SettledWithPriorDayPrint(
+        uint256 indexed tokenId, uint64 attestedPrintDate, uint64 windowClosePrintDate
+    );
+
     IERC20 public immutable usdc;
     CapacityBond public immutable bond;
     ClaimRouter public immutable router;
@@ -281,9 +294,12 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
     /// @notice The rate attestation's own `series` doesn't match the claim's — added 2026-09-27,
     ///         see SERIES_FRONTIER/SERIES_COMMODITY's own doc comment.
     error SeriesMismatch(bytes32 attested, bytes32 expected);
-    /// @notice On settleWindowClose's Defaulted branch only: the attestation's `printDate` isn't
-    ///         the same calendar day this claim's window actually closed on — added 2026-09-27 to
-    ///         stop a caller settling within the ±50% band against a stale, more favourable day.
+    /// @notice On settleWindowClose's Defaulted branch only: the attestation's `printDate` is
+    ///         neither the calendar day this claim's window closed on nor the day before —
+    ///         added 2026-09-27 to stop a caller settling within the ±50% band against a stale,
+    ///         more favourable day, widened to two days on 2026-10-01 so a window closing before
+    ///         the 00:17 UTC publishing cron can still settle. `expected` reports the
+    ///         window-close day; the day before it is also admissible.
     error StalePrintDate(uint64 attested, uint64 expected);
 
     constructor(
@@ -606,9 +622,37 @@ contract WorkClaim is MinimalERC1155, ReentrancyGuard, RateAttestationVerifier {
             (uint256 nanoUsdPerSiu, bytes32 attestedSeries, uint64 attestedPrintDate) =
                 _verifyRateAttestation(att, signature);
             if (attestedSeries != ct.series) revert SeriesMismatch(attestedSeries, ct.series);
-            uint64 expectedPrintDate = _dayStart(ct.windowTo);
-            if (attestedPrintDate != expectedPrintDate) {
-                revert StalePrintDate(attestedPrintDate, expectedPrintDate);
+            // The day the window closed, or the day before it. Two days, and no more.
+            //
+            // Same-day alone leaves a dead zone: the publisher's cron runs at 00:17 UTC, so a
+            // window closing between 00:00 and 00:17 has no same-day print and its default can
+            // never settle — silently, because settleWindowClose just reverts.
+            //
+            // Not "the most recent print at settlement time", which was considered and
+            // rejected: settlement is permissionless and can happen at any time after windowTo,
+            // so that would let a settler WAIT for a favourable print and turn a fixed
+            // obligation into a timing option against the bond.
+            //
+            // Nor is SETTLEMENT_RATE_BAND_BPS a substitute for this check. They bound different
+            // attacks and the band is useless against this one: measured over 30 published
+            // commodity prints (2026-09-01..2026-10-01) the whole history spans 2.86% and the
+            // largest single-day move is 1.93%, so every print ever published sits inside the
+            // +-50% band of every other. The band bounds forgery MAGNITUDE; this bounds
+            // date-shopping. Dropping it would remove the only constraint on which day a
+            // settler picks.
+            // Scoped so `expectedPrintDate` does not live to the end of the function: without
+            // the block this is one local too many and solc fails "Stack too deep".
+            {
+                uint64 expectedPrintDate = _dayStart(ct.windowTo);
+                if (
+                    attestedPrintDate != expectedPrintDate
+                        && attestedPrintDate != expectedPrintDate - 1 days
+                ) {
+                    revert StalePrintDate(attestedPrintDate, expectedPrintDate);
+                }
+                if (attestedPrintDate != expectedPrintDate) {
+                    emit SettledWithPriorDayPrint(tokenId, attestedPrintDate, expectedPrintDate);
+                }
             }
             uint256 clampedNanoUsdPerSiu =
                 _clampToSettlementBand(nanoUsdPerSiu, ct.referenceNanoUsdPerSiu);

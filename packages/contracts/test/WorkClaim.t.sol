@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
 
-import {Test} from "forge-std/Test.sol";
+import {Test, Vm} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {CapacityBond} from "../src/CapacityBond.sol";
 import {ClaimRouter} from "../src/ClaimRouter.sol";
@@ -510,14 +510,19 @@ contract WorkClaimTest is Test {
     }
 
     /// The Defaulted branch only: a genuine, unexpired, correctly-signed, in-band, correct-grade
-    /// attestation for a *different calendar day* than the one this claim's window actually
-    /// closed on must still revert — closes a real gap where, within the ±50% settlement band, a
-    /// caller could otherwise settle against a stale, more favourable print.
+    /// attestation for a day outside the admissible window must still revert — closes a real gap
+    /// where, within the ±50% settlement band, a caller could otherwise settle against a stale,
+    /// more favourable print.
+    ///
+    /// Updated 2026-10-01: this used to assert that the day BEFORE the window close reverts.
+    /// That day is now admissible (a window closing before the 00:17 UTC publishing cron has no
+    /// same-day print and could never settle, silently). Two days before is the nearest day that
+    /// must still fail, so that is what this now pins.
     function test_settleWindowClose_revertsOnStalePrintDate() public {
         uint256 tokenId = _mint(500);
         _presentAndCloseWindow(tokenId);
 
-        uint64 wrongDay = _dayStartOf(windowTo) - 1 days;
+        uint64 wrongDay = _dayStartOf(windowTo) - 2 days;
         (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
             _signRate(PRICE_NANO_USD_PER_SIU, PRINT_ID, _series(), wrongDay, uint64(block.timestamp + 1 days));
 
@@ -525,6 +530,87 @@ contract WorkClaimTest is Test {
             abi.encodeWithSelector(WorkClaim.StalePrintDate.selector, wrongDay, _dayStartOf(windowTo))
         );
         claim.settleWindowClose(tokenId, buyer, att, sig);
+    }
+
+    /// A print dated AFTER the window closed must revert too. Settlement is permissionless and
+    /// can happen at any time once the window is shut, so without this a settler could wait for
+    /// a favourable later print — turning a fixed obligation into a timing option against the
+    /// bond. That is exactly why "most recent print at settlement" was rejected in favour of a
+    /// two-day window.
+    function test_settleWindowClose_revertsOnPrintDatedAfterTheWindowClosed() public {
+        uint256 tokenId = _mint(500);
+        _presentAndCloseWindow(tokenId);
+
+        uint64 laterDay = _dayStartOf(windowTo) + 1 days;
+        vm.warp(uint256(laterDay) + 1 hours);
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) =
+            _signRate(PRICE_NANO_USD_PER_SIU, PRINT_ID, _series(), laterDay, uint64(block.timestamp + 1 days));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(WorkClaim.StalePrintDate.selector, laterDay, _dayStartOf(windowTo))
+        );
+        claim.settleWindowClose(tokenId, buyer, att, sig);
+    }
+
+    /// Both admissible days must settle IDENTICALLY — same headroom restored, same bond draw,
+    /// and the prior day additionally announces itself. The prior day exists to close the
+    /// 00:00-00:17 UTC dead zone, not to pay differently.
+    ///
+    /// Run from a snapshot rather than on two different claims, so the two settlements start
+    /// from byte-identical state and the ONLY difference is which day was attested.
+    function test_settleWindowClose_bothAdmissibleDaysSettleIdentically() public {
+        uint256 tokenId = _mint(500);
+        _presentAndCloseWindow(tokenId);
+        uint256 headroomBefore = bond.headroom(issuer, CLASS_CODE);
+        uint256 holderBefore = usdc.balanceOf(buyer);
+        uint256 snap = vm.snapshotState();
+
+        (RateAttestationVerifier.RateAttestation memory sameAtt, bytes memory sameSig) = _signRate(
+            PRICE_NANO_USD_PER_SIU, PRINT_ID, _series(), _dayStartOf(windowTo), uint64(block.timestamp + 1 days)
+        );
+        claim.settleWindowClose(tokenId, buyer, sameAtt, sameSig);
+        uint256 restoredSameDay = bond.headroom(issuer, CLASS_CODE) - headroomBefore;
+        uint256 paidSameDay = usdc.balanceOf(buyer) - holderBefore;
+        assertGt(restoredSameDay, 0, "the same-day settlement must actually have done something");
+
+        vm.revertToState(snap);
+
+        (RateAttestationVerifier.RateAttestation memory priorAtt, bytes memory priorSig) = _signRate(
+            PRICE_NANO_USD_PER_SIU, PRINT_ID, _series(), _dayStartOf(windowTo) - 1 days, uint64(block.timestamp + 1 days)
+        );
+        // The prior day must be visible on-chain, not merely inferable from the attestation —
+        // silence was the original defect this change exists to remove.
+        vm.expectEmit(true, false, false, true, address(claim));
+        emit WorkClaim.SettledWithPriorDayPrint(tokenId, _dayStartOf(windowTo) - 1 days, _dayStartOf(windowTo));
+        claim.settleWindowClose(tokenId, buyer, priorAtt, priorSig);
+
+        assertEq(
+            bond.headroom(issuer, CLASS_CODE) - headroomBefore,
+            restoredSameDay,
+            "headroom restored must not depend on which admissible day was attested"
+        );
+        assertEq(
+            usdc.balanceOf(buyer) - holderBefore,
+            paidSameDay,
+            "bond draw must not depend on which admissible day was attested"
+        );
+    }
+
+    /// The same-day settlement must NOT emit the prior-day event — its presence is the signal,
+    /// so an event fired on every settlement would carry no information at all.
+    function test_settleWindowClose_sameDaySettlementEmitsNoPriorDayEvent() public {
+        uint256 tokenId = _mint(500);
+        _presentAndCloseWindow(tokenId);
+        (RateAttestationVerifier.RateAttestation memory att, bytes memory sig) = _signRate(
+            PRICE_NANO_USD_PER_SIU, PRINT_ID, _series(), _dayStartOf(windowTo), uint64(block.timestamp + 1 days)
+        );
+        vm.recordLogs();
+        claim.settleWindowClose(tokenId, buyer, att, sig);
+        bytes32 topic = keccak256("SettledWithPriorDayPrint(uint256,uint64,uint64)");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i = 0; i < logs.length; i++) {
+            assertTrue(logs[i].topics[0] != topic, "same-day settlement must not announce a prior day");
+        }
     }
 
     /// Direct assertion, not just an implication of the hash change: two claims identical in
