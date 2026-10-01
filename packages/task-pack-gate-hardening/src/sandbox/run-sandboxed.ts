@@ -120,6 +120,19 @@ function buildBwrapArgs(
     "/proc",
     "--dev",
     "/dev",
+    // A writable, private, in-memory /tmp. Found live 2026-09-30 (spec §4.6t): without it
+    // `os.tmpdir()` returns "/tmp" — node's compiled default, because --clearenv unsets TMPDIR —
+    // and nothing bound it, so the directory does not exist. ISSUER-B's revised gate failed all
+    // six G-checks on `ENOENT ... mkdtemp '/tmp/g-XXXXXX'`, which is not a grading result: the
+    // single most ordinary line in Node for "I need scratch space" was an automatic fail, and
+    // nothing in any brief said the filesystem was restricted.
+    //
+    // --tmpfs rather than binding the host's /tmp, and rather than setting TMPDIR=/scratch. A
+    // tmpfs keeps the isolation the sandbox exists for (it is empty at start, private to this
+    // sandbox, and vanishes with it), while making `os.tmpdir()` tell the truth. Pointing TMPDIR
+    // at /scratch would work too but would mix a gate's scratch files in with its staged inputs.
+    "--tmpfs",
+    "/tmp",
     "--bind",
     scratchDir,
     "/scratch",

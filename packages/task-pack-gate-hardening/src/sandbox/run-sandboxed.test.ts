@@ -282,3 +282,63 @@ describe("runSandboxed", () => {
     await cleanupScratch(result.scratchDir);
   }, 10000);
 });
+
+describe("a writable temp directory (spec §4.6t)", () => {
+  it(
+    "os.tmpdir() names a directory that exists and can be written to. Run 13 window 2: " +
+      "ISSUER-B's revised gate failed ALL SIX G-checks on ENOENT from mkdtemp('/tmp/g-XXXXXX'). " +
+      "--clearenv unsets TMPDIR, node falls back to its compiled default of /tmp, and nothing " +
+      "bound /tmp — so the one API that answers 'where may I write?' answered wrongly, and the " +
+      "most ordinary line in Node graded as a gate failure.",
+    async () => {
+      const result = await runSandboxed({
+        ...DEFAULT_OPTS,
+        files: {
+          "entry.mjs": [
+            'import { tmpdir } from "node:os";',
+            'import { mkdtempSync, writeFileSync, readFileSync, existsSync } from "node:fs";',
+            'import { join } from "node:path";',
+            "const dir = tmpdir();",
+            "const made = mkdtempSync(join(dir, 'g-'));",
+            "writeFileSync(join(made, 'probe'), 'ok');",
+            "console.log(JSON.stringify({",
+            "  tmpdir: dir,",
+            "  exists: existsSync(dir),",
+            "  roundTrip: readFileSync(join(made, 'probe'), 'utf-8'),",
+            "}));",
+          ].join("\n"),
+        },
+        entry: "entry.mjs",
+      });
+      expect(result.stderr).toBe("");
+      const out = JSON.parse(result.stdout) as {
+        tmpdir: string;
+        exists: boolean;
+        roundTrip: string;
+      };
+      expect(out.exists).toBe(true);
+      expect(out.roundTrip).toBe("ok");
+      await cleanupScratch(result.scratchDir);
+    },
+  );
+
+  it("keeps /tmp private to the sandbox — it is a tmpfs, not the host's /tmp", async () => {
+    // The isolation this fix must not cost: a writable temp directory that is actually the
+    // host's would hand agent-authored gate code a channel into the machine running the run.
+    const result = await runSandboxed({
+      ...DEFAULT_OPTS,
+      files: {
+        "entry.mjs": [
+          'import { readdirSync } from "node:fs";',
+          'import { tmpdir } from "node:os";',
+          "console.log(JSON.stringify({ entries: readdirSync(tmpdir()) }));",
+        ].join("\n"),
+      },
+      entry: "entry.mjs",
+    });
+    const out = JSON.parse(result.stdout) as { entries: string[] };
+    // A fresh tmpfs is empty. The host's /tmp on any machine running this project is not.
+    expect(out.entries).toEqual([]);
+    await cleanupScratch(result.scratchDir);
+  });
+});
