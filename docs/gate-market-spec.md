@@ -1325,6 +1325,69 @@ set out to confirm. A hypothesis that sends you to check the records earns its k
 the records say something else — and writing down the narrower finding, rather than the one that
 motivated the search, is the whole discipline.
 
+### 4.6z The dollar route kept its capacity; the claim route gave it back
+
+Sweeping before the block found **36,000 mSIU stranded**, all of it against ISSUER-A — against
+an expectation of 10,000. Four never-presented claims (26,000) and one reservation (10,000). The
+enumeration reconciled to live `headroom()` exactly, 36,000 against 36,000, before anything was
+touched, which is what made it safe to act on. Afterwards the pool stood at **80,000 / 80,000,
+nothing consumed, for the first time in the project's history.**
+
+**The reservation is the finding, and it is an F1 confound.** `reserve_for_work` consumes
+headroom and `settle_escrow` gives it back by calling `releaseReservation` itself — on the happy
+path, which was the only one. Run 13 window 1 reserved 10,000 mSIU, WORKER-CODE then emitted
+nothing, the window failed, the escrow never settled, and that capacity was still consumed a day
+later. An abandoned **claim** expires at window close and its headroom returns. An abandoned
+**reservation** held it indefinitely.
+
+So the two routes F1 compares were not symmetric in what they cost the pool. Across five runs
+every failed dollar purchase would permanently shrink it while every failed claim purchase
+returned, and the comparison would have been measuring that asymmetry rather than preference —
+the same class as §4.6f, §4.6p and §4.6s.
+
+**The contract was never at fault, and that is the instructive part.** `reserveForWork` has
+always recorded the escrow's own expiry as a deadline, and `releaseReservation` has always been
+permissionless once it passes — which is exactly how the manual sweep recovered it. Nothing ever
+called it on the failure path. The fix is the missing caller: the run now collects every
+`reserve_for_work` quote hash and releases any still open at the end, mirroring
+`releaseExternalClaims`, so a run cleans up after itself rather than relying on an agent to
+choose to.
+
+**Why the fuzz suite never caught it.** `WorkClaim.invariant.t.sol` already asserts
+`headroom + outstanding == issuanceLimit` and `noDoubleReleaseEverSucceeded`, and both pass with
+roughly 1,200 calls per handler action. They pass *while* a reservation is stranded forever,
+because stranded capacity is still outstanding. Conservation is a **safety** property —
+"nothing is ever lost" — and what failed here is **liveness** — "every reservation is eventually
+released". Invariant testing proves the first and is structurally blind to the second. A green
+invariant suite is not evidence that capacity comes back; it is evidence that it is accounted
+for while it does not.
+
+### 4.6z-i A truncated identifier must never be round-tripped into a call
+
+The first sweep attempt built four token ids from the **18-character prefixes an earlier
+printout had truncated to**, padding them back into full-length numbers that looked entirely
+plausible. All four reverted `NothingToSettle`, because `balanceOf` for a token id that does not
+exist is zero.
+
+**That revert resembles success.** `NothingToSettle` is exactly what an already-swept claim
+returns. Four of them in a row reads as "the pool is already clean", and the next step would
+have been to report it as clean and move on — with 26,000 mSIU still consumed and a
+reconciliation that had, correctly, said otherwise minutes earlier.
+
+Two rules, and the second is the general one:
+
+- **Never round-trip a truncated identifier.** Display truncation and call arguments must come
+  from different code paths; a `…` in a log line is a presentation choice, and reconstructing a
+  value from it fabricates data that type-checks.
+- **A revert that resembles success deserves an independent check.** `NothingToSettle`,
+  `AlreadySettled`, "no rows updated", HTTP 404 on a delete — each is ambiguous between "already
+  done" and "wrong target". Resolve it against a source that cannot share the mistake: here,
+  `balanceOf` was zero for the fabricated ids and non-zero for the real ones, and the on-chain
+  reconciliation had already said 36,000 was outstanding.
+
+Simulating before sending is what caught it. Had the writes gone straight out, the four failures
+would have cost nothing on-chain and the wrong conclusion everything.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make

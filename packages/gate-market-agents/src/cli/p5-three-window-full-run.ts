@@ -800,6 +800,13 @@ async function main(): Promise<void> {
     runEndsAtUnixSeconds: windowBoundsByIndex[WINDOW_COUNT].to,
   });
 
+  await releaseStrandedReservations({
+    quoteHashes: reservedQuoteHashes(outcomes),
+    deployment,
+    rpcUrl,
+    chainReader,
+  });
+
   printRunSummary(outcomes, forwardBook, totalOf, budget, runId);
 
   // Written as well as printed: a report that exists only in terminal scrollback is not a record,
@@ -1576,6 +1583,103 @@ async function depleteExternally(input: {
  * headroom is restored, nothing is paid out, and no bond is touched. The attestation argument is
  * unused on that branch and is passed empty deliberately — see WorkClaim.settleWindowClose.
  */
+/**
+ * Release any reservation this run opened and never settled.
+ *
+ * The dollar route consumes headroom at `reserve_for_work` and gives it back when the escrow
+ * settles — `settle_escrow` calls `releaseReservation` itself. That is the HAPPY path, and it
+ * was the only one. If the escrow never settles, nothing released the reservation and the
+ * capacity stood forever: run 13's window 1 reserved 10,000 mSIU, WORKER-CODE then emitted
+ * nothing and the window failed, and that 10,000 was still consumed a day later. It took a
+ * manual sweep to recover (spec §4.6z).
+ *
+ * **This is an F1 confound, not only a leak.** An unserved CLAIM expires at window close and its
+ * headroom returns; an unsettled RESERVATION held it indefinitely. So the two routes F1 compares
+ * were not symmetric in their cost to the pool — across five runs the dollar route would
+ * compound damage the fSIU route does not, and the comparison would be measuring that instead of
+ * preference.
+ *
+ * The contract already had the answer and nothing used it: `reserveForWork` records the escrow's
+ * own expiry as a deadline, and `releaseReservation` is permissionless once it passes. This is
+ * the missing caller, and it mirrors `releaseExternalClaims` — the run cleans up after itself
+ * rather than relying on an agent to choose to.
+ */
+/**
+ * Every quote hash this run reserved capacity against, across all windows.
+ *
+ * Exported for test because the defect was not in the release call — the contract has had a
+ * deadline and a permissionless release all along — but in nothing ever collecting these and
+ * asking. See `releaseStrandedReservations` and spec §4.6z.
+ */
+export function reservedQuoteHashes(outcomes: readonly WindowOutcome[]): string[] {
+  return outcomes.flatMap((o) =>
+    o.result.capacityEvents
+      .filter((e) => e.kind === "reserve_for_work")
+      .map((e) => e.quoteHash)
+      .filter((q): q is string => q !== undefined),
+  );
+}
+
+async function releaseStrandedReservations(input: {
+  quoteHashes: string[];
+  deployment: ReturnType<typeof loadGateMarketDeployment>;
+  rpcUrl: string;
+  chainReader: ViemChainReader;
+}): Promise<void> {
+  if (input.quoteHashes.length === 0) return;
+  const workClaim = input.deployment.workClaim.address as Hex;
+  const unique = [...new Set(input.quoteHashes)];
+
+  // Read first: most reservations ARE released by settle_escrow's happy path, and this should
+  // normally find nothing. Only the ones that path missed are reported, so a quiet run stays
+  // quiet and a leak is visible.
+  const open: string[] = [];
+  for (const quoteHash of unique) {
+    try {
+      const r = await input.chainReader.reservation(workClaim, quoteHash as Hex);
+      if (r.exists && !r.released) open.push(quoteHash);
+    } catch {
+      // A read failure is not a reason to abandon the rest of the sweep.
+    }
+  }
+  if (open.length === 0) return;
+
+  console.log(`\n=== RELEASING ${open.length} UNSETTLED RESERVATION(S) ===`);
+  console.log(
+    "  Each is headroom the dollar route consumed for work whose escrow never settled. Left " +
+      "alone it stays consumed forever, which an unserved claim never does — see spec §4.6z.",
+  );
+  try {
+    const account = privateKeyToAccount(
+      toHex(process.env.DEPLOYER_PRIVATE_KEY, "DEPLOYER_PRIVATE_KEY"),
+    );
+    const transport = http(input.rpcUrl);
+    const publicClient = createPublicClient({ chain: baseSepolia, transport });
+    const walletClient = createWalletClient({ account, chain: baseSepolia, transport });
+    for (const quoteHash of open) {
+      try {
+        const txHash = await walletClient.writeContract({
+          address: workClaim,
+          abi: WORK_CLAIM_ABI,
+          functionName: "releaseReservation",
+          args: [quoteHash as Hex],
+          chain: baseSepolia,
+        });
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        console.log(`  released reservation ${quoteHash.slice(0, 18)}… tx ${txHash}`);
+      } catch (err) {
+        // Before its deadline and with the escrow unsettled the contract refuses, correctly —
+        // reported rather than swallowed, because the capacity is still out there either way.
+        console.log(
+          `  COULD NOT release ${quoteHash.slice(0, 18)}…: ${err instanceof Error ? err.message.split("\n")[0] : String(err)}`,
+        );
+      }
+    }
+  } catch (err) {
+    console.log(`  reservation sweep failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 async function releaseExternalClaims(input: {
   claims: { tokenId: bigint; holder: Hex; quantityMilliSiu: number }[];
   deployment: ReturnType<typeof loadGateMarketDeployment>;

@@ -8,6 +8,7 @@ import {
   assertProvidersReachable,
   WINDOW_COUNT,
   buildRoster,
+  reservedQuoteHashes,
   type RosterInput,
 } from "./p5-three-window-full-run.js";
 import type { AdapterResult } from "@touchstone/harness";
@@ -765,5 +766,54 @@ describe("a holder can check whether what it paid for arrived (spec §4.6w)", ()
       const brief = find(buildRoster(input(1)), id).skillPackText;
       expect(brief).not.toMatch(/\b(prefer|better|recommend|should use|best)\b.{0,40}\b(fSIU|USDC|claim|dollar)\b/i);
     }
+  });
+});
+
+describe("the dollar route gives its capacity back too (spec §4.6z)", () => {
+  const outcome = (windowIndex: number, events: { kind: string; quoteHash?: string }[]) =>
+    ({
+      windowIndex,
+      result: { capacityEvents: events },
+      headroomBefore: [],
+      headroomAfter: [],
+    }) as unknown as Parameters<typeof reservedQuoteHashes>[0][number];
+
+  it("collects every reserve_for_work across all windows, which nothing did before", () => {
+    // The leak was never in releaseReservation — the contract has recorded the escrow's expiry
+    // as a deadline and allowed anyone to release past it all along. settle_escrow called it on
+    // the HAPPY path only, so a window that failed left its reservation standing forever. Run
+    // 13 window 1 reserved 10,000 mSIU, WORKER-CODE then emitted nothing, and that capacity was
+    // still consumed a day later.
+    expect(
+      reservedQuoteHashes([
+        outcome(1, [{ kind: "reserve_for_work", quoteHash: "0xaa" }, { kind: "pay_with_claim" }]),
+        outcome(2, [{ kind: "redeem_claim" }]),
+        outcome(3, [{ kind: "reserve_for_work", quoteHash: "0xbb" }]),
+      ]),
+    ).toEqual(["0xaa", "0xbb"]);
+  });
+
+  it("ignores every other capacity event — only reservations hold headroom this way", () => {
+    // A claim that is minted and abandoned expires at window close and returns its headroom.
+    // That asymmetry between the two routes is the F1 confound, and it is why only
+    // reserve_for_work needs sweeping.
+    expect(
+      reservedQuoteHashes([
+        outcome(1, [
+          { kind: "mint_claim", quoteHash: "0xcc" },
+          { kind: "pay_with_claim", quoteHash: "0xdd" },
+          { kind: "serve_redemption", quoteHash: "0xee" },
+          { kind: "settle_split", quoteHash: "0xff" },
+        ]),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("returns nothing for a run that never used the dollar route", () => {
+    expect(reservedQuoteHashes([outcome(1, [{ kind: "pay_with_claim" }])])).toEqual([]);
+  });
+
+  it("drops a reserve_for_work with no quote hash rather than sweeping undefined", () => {
+    expect(reservedQuoteHashes([outcome(1, [{ kind: "reserve_for_work" }])])).toEqual([]);
   });
 });
