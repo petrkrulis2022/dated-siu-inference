@@ -1459,6 +1459,57 @@ surfaced a real 10,000 the stale number had been hiding. **A reconciliation that
 the record is worth running down even when the record looks fine, and especially when the
 disagreement turns out to be innocent**: the innocent explanation was true and incomplete.
 
+### 4.6ab The two routes differ in consent, and that is the result rather than a caveat
+
+Run 14 produced the first direct evidence for §4.6f, from the agent rather than from us.
+ORCHESTRATOR gave its own reason for choosing fSIU, unprompted, in two separate windows:
+
+> *"Directly pay WORKER-CODE 10 SIU in fSIU to get the gate hardened **without extra
+> quote/settlement steps**."*
+> *"Settle the 10 SIU job with WORKER-CODE in fSIU directly... **without extra turns**."*
+
+§4.6f was inferred from behaviour across runs 1-3 and the nine-for-nine figure was retracted on
+that inference. The inference was right.
+
+**Measured, the asymmetry is two buyer turns against one**, not the four-against-one a glance at
+the tool sequence suggests — `issue_quote` and `settle_escrow` are the *seller's* turns and are
+not the buyer's cost. Across every window in the corpus that settled:
+
+| route | buyer turns | measured over |
+| --- | --- | --- |
+| USDC | **2** (`request_quote`, `pay`) | 3 of 3 windows |
+| fSIU | **1** (`pay_with_claim`) | 15 of 18 windows (the three 2s are two purchases, not two turns) |
+
+**But the turn count is the smaller half.** The routes are not the same transaction:
+
+- `pay` takes a seller-signed quote. A quote exists only because the seller chose to issue one,
+  and `issue_quote` requires an open request — a seller cannot quote unprompted.
+- `pay_with_claim` takes `{agentId, quantity}`. No request, no quote, no seller consent. **The
+  buyer settles unilaterally.**
+
+**This is not a confound to apologise for. It is what the two instruments are.** A bearer claim
+can be sent; a dollar payment against a quote cannot. Equalising it would model a world that
+does not exist — which is why both obvious "fixes" are wrong: adding a `pay_direct` invents a
+dollar primitive x402 and MPP do not have, and requiring a quote for `pay_with_claim` deletes
+the transferability that is the thing under test.
+
+So the caption is part of the result, and F1's number is not quotable without it:
+
+> **Agents chose fSIU N of M times, where fSIU settles unilaterally and USDC requires a
+> seller-issued quote.**
+
+A preference for unilateral settlement *is* a reason to want a bearer instrument. Reported that
+way, the asymmetry is a finding about why such an instrument is wanted, not noise obscuring one.
+
+**The separable component, which IS artefact.** One of the two buyer turns is the loop, not the
+dollar: the buyer spends a turn asking because a seller cannot have quoted in advance. That is
+removable without touching consent — a resting ask, the same shape `quote_forward` already gives
+issuers, lets a buyer `pay` against a standing offer on its first turn, and a seller that posted
+an offer *has* consented. **Not built before the block**: it is a new market primitive needing
+board state and offer expiry, it changes what sellers do with their turns, and nothing has
+measured that — it would need its own debugging run. Recorded here so the consent finding is not
+muddied by a loop detail, and so the one turn is attributed to the right cause.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make
