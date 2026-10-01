@@ -1,0 +1,53 @@
+{
+  "review": "Attribution review of every claim minted and not served",
+  "date": "2026-10-01",
+  "network": "base-sepolia",
+  "prompted_by": "docs/gate-market-spec.md §4.6x — the capability-gap detector found 15 entries across 7 runs in which an issuer said it had no way to list claims presented or routed to it. An issuer that cannot see a pending redemption and then fails to serve it has not chosen to default, so every non-service attributed to an agent needed re-reading.",
+  "method": "Enumerated mint/pay_with_claim events against serve_redemption events, per window, across every run report in data/gate-market/runs. For each unserved claim, read that window's capacity events, turnsByAgent, haltedReason, and the issuer's own friction log.",
+  "annotation_not_rewrite": "Nothing in the original run records is altered. This file is read alongside them, in the manner of the 2026-09-30 restatement in spec §4.6f.",
+
+  "headline": "Ten claims were minted and not served. None of the ten is an issuer choosing not to deliver. Eight are the deliberately non-serving issuer behaving exactly as disclosed; the remaining two are an issuer removed mid-window by a parse error while operating without sight of what it owed, and a claim its holder never presented at all.",
+
+  "what_stands": "The enforcement results are unaffected. Where a default was settled, the bond paid the holder correctly and the conservation identity closed exactly. This review changes attribution — who or what caused a non-service — and nothing about whether the mechanism worked.",
+
+  "by_design": {
+    "count": 8,
+    "issuer": "ISSUER-A",
+    "address": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+    "note": "NON_SERVING_ISSUER. Disclosed before every run: it holds no serve_redemption tool and its claims are expected to default. These are the experiment operating as designed and were never evidence about agent behaviour.",
+    "runs": [
+      "p5-three-window-2026-09-28T12-42-54-137Z w1, w2",
+      "p5-three-window-2026-09-29T06-35-32-182Z w1, w2",
+      "p5-three-window-2026-09-29T14-37-47-800Z w1, w2, w3",
+      "p5-three-window-2026-09-29T18-21-47-012Z w1"
+    ]
+  },
+
+  "re_attributed": [
+    {
+      "run": "p5-three-window-2026-09-29T06-35-32-182Z",
+      "window": 3,
+      "tokenId": "49388080096713",
+      "issuer": "ISSUER-B",
+      "address": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "originally_reads_as": "the serving issuer failed to serve a presented claim",
+      "what_actually_happened": "The claim was minted on turn 1 and genuinely presented on turn 2. ISSUER-B then halted with parse_error on its third turn and was removed from the window. It did not decline to serve; it stopped being able to act.",
+      "compounding_blindness": "In the same run ISSUER-B reported, in its own friction log, 'no tool to list pending claims or redemptions routed to me' (w1 t3), 'no tool to list pending redemptions or poll whether a claim has been routed to me' (w2 t6) and, in this very window, 'no tool to fetch the presented claim's task_spec / artefact schema before submit_job' (w3 t2). It did not know what it owed before it was removed.",
+      "corrected_attribution": "Apparatus — an adapter parse failure, against a background of an issuer with no way to see or specify its own obligations. Not a delivery refusal."
+    },
+    {
+      "run": "p5-three-window-2026-09-30T06-16-43-846Z",
+      "window": 2,
+      "tokenId": "79572753221043",
+      "issuer": "ISSUER-B",
+      "address": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "originally_reads_as": "the serving issuer failed to serve",
+      "what_actually_happened": "The claim was never presented. The window's capacity events show pay_with_claim and no redeem_claim at all; the holder, WORKER-CODE, halted with parse_error after two turns. ISSUER-B halted nothing_to_act_on, which was correct: no redemption had been presented to it.",
+      "corrected_attribution": "Not an issuer event at all. A holder removed before it could present. An issuer cannot serve a redemption nobody asked for."
+    }
+  ],
+
+  "what_this_does_not_show": "Blindness was the hypothesis that prompted the review and it is supported in the first case as a contributing condition, not as the proximate cause. No claim here is that blindness caused a default; the claim is narrower and firmer — that no non-service on record was an issuer deciding not to deliver, so no run to date is evidence about willingness to serve. Issuer reliability remains unmeasured.",
+
+  "consequence_for_the_block": "Until issuers can list what has been presented or routed to them, a run measuring fulfilment measures sight, not reliability. Spec §4.6x, item 2 of the 2026-10-01 fix set."
+}

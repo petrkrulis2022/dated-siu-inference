@@ -1236,6 +1236,40 @@ lacking something that was never built. Run 13's loudest result sat unread for t
 runs 9 and 10's did, one level up. When adding a detector, state what it *cannot* see, and
 report the residue unfiltered rather than discarding it.
 
+### 4.6y No non-service on record was an issuer choosing not to deliver
+
+§4.6x's finding — fifteen entries across seven runs in which an issuer said it could not list
+what had been presented or routed to it — meant every non-service attributed to an agent had to
+be re-read. Every claim minted and not served was enumerated against its window's capacity
+events, halt reasons and the issuer's own friction. The record is
+`data/gate-market/default-attribution-review-2026-10-01.json`; the original run records are
+annotated, not rewritten, as in §4.6f.
+
+**Ten claims minted and not served. None is an issuer declining to deliver.**
+
+- **Eight are ISSUER-A**, the `NON_SERVING_ISSUER`, disclosed before every run as holding no
+  `serve_redemption` tool. These were never evidence about behaviour.
+- **One** (run `2026-09-29T06-35-32` w3) was presented on turn 2 and ISSUER-B halted
+  `parse_error` on turn 3. It was removed, not unwilling — and in that same run it had already
+  reported having no way to list redemptions routed to it, and in that very window no way to
+  fetch the presented claim's `task_spec`. It did not know what it owed before it stopped.
+- **One** (run `2026-09-30T06-16-43` w2) was **never presented**: `pay_with_claim` with no
+  `redeem_claim`, the holder gone on `parse_error` after two turns, and ISSUER-B correctly
+  halting `nothing_to_act_on`. Not an issuer event at all.
+
+**What stands and what does not.** The enforcement results are untouched: where a default was
+settled the bond paid the holder correctly and the conservation identity closed exactly. The
+mechanism works. What does not stand is attribution — and with it, any reading of these runs as
+evidence about whether issuers deliver. **Issuer reliability is unmeasured**, and a run that
+measures fulfilment before issuers can see their own obligations measures sight, not reliability.
+
+**The methodological point is the durable one.** The blindness hypothesis prompted this review
+and turned out to be a contributing condition in one case out of ten rather than the cause of
+any. The review was still worth doing, and the conclusion it produced is firmer than the one it
+set out to confirm. A hypothesis that sends you to check the records earns its keep even when
+the records say something else — and writing down the narrower finding, rather than the one that
+motivated the search, is the whole discipline.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make
