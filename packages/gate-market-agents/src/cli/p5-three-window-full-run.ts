@@ -1314,6 +1314,7 @@ ${runShapeFacts}`;
         "pay_with_claim",
         "transfer_claim",
         "redeem_claim",
+        "check_delivery",
         "get_balances",
         "get_print",
         // The holder is the party a default pays, and settleWindowClose is permissionless by
@@ -1367,6 +1368,7 @@ ${runShapeFacts}`;
         // was choosing between an asset and a broken one. Its own friction log said so at the
         // time: "redeem_claim is not in the list of available tools this turn".
         "redeem_claim",
+        "check_delivery",
         // The holder is who a default pays, and settleWindowClose is permissionless — the same
         // reasoning that already grants it to WORKER-CODE.
         "settle_window_close",

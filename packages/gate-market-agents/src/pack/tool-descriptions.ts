@@ -76,6 +76,10 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
     "presented and awaiting your work, claims presented and awaiting only your serve_redemption " +
     "report, claims minted against your bond that nobody has presented yet, and claims carried " +
     "unsettled from an earlier window. Takes no arguments — it answers only about you. Read-only.",
+  check_delivery:
+    "check_delivery() -> for each claim you hold or have presented: whether the issuer has " +
+    "actually served it, and with a pass or a fail. Takes no arguments — it answers only about " +
+    "your own claims. Read-only.",
 };
 
 export function formatToolList(): string {

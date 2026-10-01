@@ -30,6 +30,7 @@ import { signRateAttestation } from "../chain/rate-attestation.js";
 import { Runner } from "../runner.js";
 import type { RunnerDeps } from "../deps.js";
 import type { IssuerObligation } from "../tools/list-obligations.js";
+import type { DeliveryStatus } from "../tools/check-delivery.js";
 import type { AgentId } from "../identity/resolve.js";
 import { ContextValidationError, validateAgentContext } from "../pack/validate.js";
 import type { ToolName } from "../tools/index.js";
@@ -625,24 +626,20 @@ export async function runFullRunWindow(
       });
     }
 
-    // Presented against this issuer in THIS window. The tracker already distinguishes "owes the
-    // work" from "owes only the report", and an issuer acts differently on each.
+    // Presented against this issuer in THIS window. Read from the tracker's own state rather
+    // than parsed back out of its rendered prompt text, which was the first draft here and is
+    // exactly the kind of second source of truth that drifts.
+    const r = redemption.state();
     const presentedTokenIds = new Set<string>();
-    for (const [text, state] of [
-      [redemption.renderFor(agentId), "presented_graded_awaiting_service"],
-      [redemption.renderForIssuerAwaitingDelivery(agentId), "presented_awaiting_delivery"],
-    ] as const) {
-      if (text === "") continue;
-      const tokenId = /tokenId (\d+)/.exec(text)?.[1];
-      if (tokenId === undefined) continue;
-      const quantity = /quantity (\d+)/.exec(text)?.[1];
-      const holder = /holder ([A-Za-z0-9-]+)/.exec(text)?.[1];
-      presentedTokenIds.add(tokenId);
+    if (r.tokenId !== undefined && r.issuerAgentId === agentId && r.holder !== undefined && !r.served) {
+      presentedTokenIds.add(r.tokenId);
       out.push({
-        tokenId,
-        state,
-        ...(quantity !== undefined ? { quantityMilliSiu: quantity } : {}),
-        ...(holder !== undefined ? { holder } : {}),
+        tokenId: r.tokenId,
+        // Graded means the issuer owes only the serve_redemption report; ungraded means it still
+        // owes the work. An issuer acts differently on each, so the states are kept apart.
+        state: r.passed !== undefined ? "presented_graded_awaiting_service" : "presented_awaiting_delivery",
+        ...(r.quantity !== undefined ? { quantityMilliSiu: r.quantity } : {}),
+        holder: r.holder,
         mintedInWindow: windowIndex,
       });
     }
@@ -670,6 +667,36 @@ export async function runFullRunWindow(
       });
     }
     return out;
+  };
+
+  /**
+   * The holder's side of the same question: for each claim this agent holds or has presented,
+   * has the issuer actually served it?
+   *
+   * WORKER-CODE asked for exactly this in run 13 and had no way to (spec §4.6w). It is the
+   * mirror of `buildObligationsFor`, from the same tracker state, and exists for the same
+   * reason: the loop knew and the agent could not ask.
+   */
+  const buildDeliveryFor = (agentId: AgentId): DeliveryStatus[] => {
+    const r = redemption.state();
+    if (r.tokenId === undefined) return [];
+    // Held by having presented it, or by having been transferred it and not yet presented.
+    if (r.holder !== agentId && r.transferredTo !== agentId) return [];
+    const state: DeliveryStatus["state"] = r.served
+      ? r.passed === true
+        ? "served_passed"
+        : "served_failed"
+      : r.holder === undefined
+        ? "not_presented"
+        : "presented_awaiting_issuer";
+    return [
+      {
+        tokenId: r.tokenId,
+        state,
+        ...(r.issuerAgentId !== undefined ? { issuer: r.issuerAgentId } : {}),
+        ...(r.quantity !== undefined ? { quantityMilliSiu: r.quantity } : {}),
+      },
+    ];
   };
   /** Agents that have completed at least one successful tool call this window — the "buyer" wake
    * gate's own definition of having acted. A call that threw does not count, so a buyer whose
@@ -1342,6 +1369,7 @@ export async function runFullRunWindow(
         windowBoundsByIndex: options.windowBoundsByIndex,
         outstandingClaims: options.outstandingClaims,
         obligationsFor: buildObligationsFor,
+        deliveryFor: buildDeliveryFor,
         caller: { agentId: agent.agentId, erc8004Id: agent.erc8004Id },
       });
     } catch (err) {
@@ -1982,6 +2010,8 @@ export interface BuildToolArgsContext {
    * no arguments of its own — see tools/list-obligations.ts and spec §4.6x/§4.6y.
    */
   obligationsFor?: (agentId: AgentId) => IssuerObligation[];
+  /** The holder's mirror of `obligationsFor` — see tools/check-delivery.ts and spec §4.6w. */
+  deliveryFor?: (agentId: AgentId) => DeliveryStatus[];
 }
 
 /**
@@ -2448,6 +2478,14 @@ export async function buildToolArgs(
     return {
       quote: latest.quote,
       classId: typeof raw.classId === "string" ? raw.classId : classIdFor(ctx.job.taskClass),
+    };
+  }
+
+  if (tool === "check_delivery") {
+    const caller = ctx.caller?.agentId;
+    return {
+      claims: caller !== undefined ? (ctx.deliveryFor?.(caller) ?? []) : [],
+      ...(ctx.windowIndex !== undefined ? { windowLabel: `window ${ctx.windowIndex}` } : {}),
     };
   }
 

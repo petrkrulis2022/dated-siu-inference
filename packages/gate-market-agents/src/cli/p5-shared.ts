@@ -152,6 +152,12 @@ WHAT A WORK CLAIM IS, AND EVERYTHING YOU CAN DO WITH ONE
   PAY WITH IT — settle something you are buying, without redeeming first:
     {"tool": "pay_with_claim", "args": {"agentId": "<AGENT>", "quantity": "<mSIU>"}}
 
+  CHECK WHETHER THE ISSUER HAS ACTUALLY SERVED IT:
+    {"tool": "check_delivery", "args": {}}
+    Takes no arguments and answers only about your own claims: for each, whether it has been
+    presented, whether the issuer has served it, and whether that was a pass or a fail. It is a
+    read: it changes nothing, and it costs a turn like any other call.
+
   IF THE ISSUER DOES NOT DELIVER, the bond pays you instead. Once the delivery window closes
   with the claim unredeemed, it can no longer be redeemed for work: if you presented it and were
   not served, it is claimable against that issuer's bond; if you never presented it, it simply

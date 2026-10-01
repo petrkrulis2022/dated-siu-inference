@@ -736,3 +736,34 @@ describe("issuers can see what they owe (spec §4.6x, §4.6y)", () => {
     expect(brief).toMatch(/costs a turn/);
   });
 });
+
+describe("a holder can check whether what it paid for arrived (spec §4.6w)", () => {
+  it("gives check_delivery to every agent that can be paid in fSIU, in every window", () => {
+    for (const w of [1, 2, WINDOW_COUNT]) {
+      for (const id of ["WORKER-CODE", "WORKER-EXTRACT"]) {
+        expect(
+          find(buildRoster(input(w)), id).availableTools,
+          `${id} can be paid in fSIU and must be able to check it was served`,
+        ).toContain("check_delivery");
+      }
+    }
+  });
+
+  it("shows it with worked syntax beside every other thing a holder can do (§4.6q)", () => {
+    // The claim-holder section already gives redeem / transfer / pay_with_claim copy-pasteable
+    // JSON. A verification option described only in prose would be the steer §4.6q warns about.
+    const brief = find(buildRoster(input(1)), "WORKER-CODE").skillPackText;
+    expect(brief).toContain('{"tool": "check_delivery", "args": {}}');
+    expect(brief).toContain('{"tool": "redeem_claim"');
+    expect(brief).toContain('{"tool": "pay_with_claim"');
+  });
+
+  it("still names no preferred asset — the new tools must not tilt the F1 question", () => {
+    // F1 asks which asset agents use when nothing recommends either. Two tools added on the
+    // fSIU side could read as encouragement, so the existing neutrality guard must still hold.
+    for (const id of ["ORCHESTRATOR", "WORKER-CODE", "ISSUER-A", "ISSUER-B"]) {
+      const brief = find(buildRoster(input(1)), id).skillPackText;
+      expect(brief).not.toMatch(/\b(prefer|better|recommend|should use|best)\b.{0,40}\b(fSIU|USDC|claim|dollar)\b/i);
+    }
+  });
+});
