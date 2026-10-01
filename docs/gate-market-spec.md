@@ -1193,6 +1193,49 @@ It must surface every `could_not_express` that reads as a capability gap, whethe
 tool name appears in it, and separate "named a tool it lacks" from "named a capability that does
 not exist" rather than reporting only the first.
 
+### 4.6x What the second detector found the moment it existed
+
+Built 2026-10-01 and run over every friction log the project has: **74 capability gaps against
+12 grant problems.** Only the 12 had ever reached a banner. Themed, with the number of distinct
+runs each appeared in:
+
+| n | runs | who | what the agent said it could not do |
+| --- | --- | --- | --- |
+| 23 | **10** | both issuers | wait without burning a turn |
+| 15 | 7 | both issuers | see what has been presented or routed to them |
+| 6 | 4 | both issuers | do two things in one turn |
+| 4 | 3 | issuers, WORKER-CODE | know what they must actually deliver |
+| 2 | 1 | ISSUER-B | read their own issuer address |
+| 1 | 1 | WORKER-CODE | confirm the issuer served a redeemed claim |
+
+Three of these change how earlier results should be read:
+
+- **"No way to wait" was reported in ten separate runs.** §4.6s treated the forward invitation as
+  the thing waking an idle issuer. The invitation is the *occasion*; the absence of a wait
+  primitive is why a woken issuer burns the turn instead of standing down. Ten runs said so and
+  nothing surfaced it.
+- **Issuers cannot see their own obligations.** Fifteen entries across seven runs: no way to list
+  claims presented against them or routed to them. An issuer that cannot see a pending
+  redemption and then fails to serve it has not chosen to default. Every default this project has
+  recorded against an agent, rather than against the deliberately non-serving issuer, needs
+  re-reading in that light.
+- **ISSUER-B could not read its own address** and *inferred it from issuance-limit arithmetic*
+  ("inferred 0xD4Be… from 400h × 0.08"). It got the right answer. That it had to is the finding.
+
+**A second-order defect, found by the same scan.** Of the 74, roughly 23 are ISSUER-A reporting
+`serve_redemption` absent — phrased as "is not in YOUR AVAILABLE TOOLS THIS TURN", which the
+grant detector's regex (`not (in the list of|listed|among|available)`) does not match. Most are
+the deliberately non-serving issuer behaving as designed, so they are not defects; but the
+phrasing gap is real, and a genuine grant problem worded that way would be filed as the quieter
+kind. The grant detector needs the looser phrasing too, not only the second detector.
+
+**The generalisable rule.** A detector built around the failure that prompted it inherits that
+failure's shape. `missingToolFrictions` was written after an agent named a tool it lacked, so it
+required a tool name, and was structurally incapable of seeing the larger class — an agent
+lacking something that was never built. Run 13's loudest result sat unread for the same reason
+runs 9 and 10's did, one level up. When adding a detector, state what it *cannot* see, and
+report the residue unfiltered rather than discarding it.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make

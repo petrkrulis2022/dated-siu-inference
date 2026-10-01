@@ -45,3 +45,43 @@ export function missingToolFrictions(entries: FrictionLogEntry[]): MissingToolRe
   }
   return out;
 }
+
+export interface CapabilityGapReport {
+  agent: string;
+  turn: number;
+  text: string;
+}
+
+/**
+ * Every OTHER `could_not_express` — an agent saying it could not do something, where no tool it
+ * already has would have let it.
+ *
+ * `missingToolFrictions` answers "was this agent denied a tool that EXISTS?" — a grant problem,
+ * and the louder of the two. It cannot answer "did this agent need a capability nobody built?",
+ * because it requires the text to name a known tool, and the name of a tool that does not exist
+ * is not in `TOOLS`. For two runs that was a gap nobody had hit. Run 13 hit it:
+ *
+ *     "No tool exists to check whether the issuer has actually served the redeemed claim"
+ *
+ * WORKER-CODE had redeemed a claim and wanted to confirm delivery. Nothing does that, so it
+ * called `get_balances` nine times as the nearest proxy, bought nothing in three windows, and
+ * read from the outside as a buyer declining to buy. That entry matched neither the phrasing
+ * regex ("No tool exists" is not "not available") nor any tool name, so the run report printed
+ * no banner and the run's loudest finding sat in a JSONL file — exactly the failure
+ * `missingToolFrictions` was written to end, one level up.
+ *
+ * Deliberately unfiltered: every non-null `could_not_express` that is not already a grant
+ * problem is returned. Judging which gaps are "real" is what hid this one. A false positive
+ * costs a line in a report; a false negative costs a measurement nobody knows is broken.
+ */
+export function capabilityGapFrictions(entries: FrictionLogEntry[]): CapabilityGapReport[] {
+  const grantProblems = new Set(missingToolFrictions(entries).map((m) => `${m.agent}:${m.turn}`));
+  const out: CapabilityGapReport[] = [];
+  for (const e of entries) {
+    const text = e.could_not_express;
+    if (!text) continue;
+    if (grantProblems.has(`${e.agent}:${e.turn}`)) continue;
+    out.push({ agent: e.agent, turn: e.turn, text });
+  }
+  return out;
+}

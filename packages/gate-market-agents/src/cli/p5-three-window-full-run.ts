@@ -56,7 +56,7 @@ import {
 } from "../loop/full-run.js";
 import type { RunManifest } from "../run-recorder/recorder.js";
 import { RUNS_ROOT } from "./runs-root.js";
-import { missingToolFrictions } from "../friction/missing-tool.js";
+import { capabilityGapFrictions, missingToolFrictions } from "../friction/missing-tool.js";
 import type { FrictionLogEntry } from "../friction/log.js";
 import {
   claimFactsFor,
@@ -1801,6 +1801,38 @@ function readMissingToolFrictions(
   return out;
 }
 
+/**
+ * The other half, added 2026-10-01 after run 13 (spec §4.6w). `readMissingToolFrictions` can
+ * only see an agent denied a tool that EXISTS; a capability nobody built has no name in `TOOLS`,
+ * so WORKER-CODE's "No tool exists to check whether the issuer has actually served the redeemed
+ * claim" reached no banner at all and the run's loudest finding sat unread in a JSONL file.
+ */
+function readCapabilityGapFrictions(
+  runId: string,
+): { window: number; agent: string; turn: number; text: string }[] {
+  const out: { window: number; agent: string; turn: number; text: string }[] = [];
+  for (let w = 1; w <= WINDOW_COUNT; w++) {
+    const path = join(RUNS_ROOT, `${runId}-w${w}`, "friction", "friction-log.jsonl");
+    let raw: string;
+    try {
+      raw = readFileSync(path, "utf-8");
+    } catch {
+      continue;
+    }
+    const entries: FrictionLogEntry[] = [];
+    for (const line of raw.split("\n")) {
+      if (line.trim() === "") continue;
+      try {
+        entries.push(JSON.parse(line) as FrictionLogEntry);
+      } catch {
+        // A malformed line is not a reason to lose the rest of the window's friction.
+      }
+    }
+    for (const m of capabilityGapFrictions(entries)) out.push({ window: w, ...m });
+  }
+  return out;
+}
+
 function printRunSummary(
   outcomes: WindowOutcome[],
   forwardBook: ForwardQuoteBook,
@@ -1826,6 +1858,24 @@ function printRunSummary(
       );
       for (const m of missing) {
         console.log(`  window ${m.window} ${m.agent} turn ${m.turn}: ${m.tool} — "${m.text}"`);
+      }
+    }
+
+    // Lower severity than a missing grant, higher than nothing — which is what it got before
+    // 2026-10-01. These are agents saying no tool they hold would do what they wanted. Run 13's
+    // most important finding was one of these, and it reached no banner at all.
+    const gaps = readCapabilityGapFrictions(runId);
+    if (gaps.length > 0) {
+      console.log("\n!!! AGENTS COULD NOT EXPRESS WHAT THEY WANTED !!!");
+      console.log(
+        "  Each line is an agent reporting that nothing it holds would do what it wanted. Unlike\n" +
+          "  the section above, no existing tool is named — because the capability may not exist.\n" +
+          "  Read these before concluding anything about what an agent CHOSE: an agent without a\n" +
+          "  way to do something does the nearest available thing instead, and that looks like a\n" +
+          "  decision (spec §4.6e, §4.6w).",
+      );
+      for (const g of gaps) {
+        console.log(`  window ${g.window} ${g.agent} turn ${g.turn}: "${g.text}"`);
       }
     }
   }
