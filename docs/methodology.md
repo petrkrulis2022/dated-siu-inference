@@ -1517,6 +1517,20 @@ disagrees with expectation is re-read before it is reported, never explained. Ev
 figure in `data/gate-market/fifth-trio-sweep-2026-09-30.md` comes from such a second read, and
 the numbers its own scripts printed are wrong.
 
+**Third occurrence, 2026-10-01, and this one reached a run report.** Run 14's window 3 printed
+`code-class headroom: 64000 -> 54000`, implying a settlement had not restored its 10,000 mSIU.
+It had: the settle transaction's own receipt carries `HeadroomRestored(ISSUER-A, 10000)`
+alongside `Defaulted`, and a fresh read at a later block returns 64,000. The run had read
+headroom from the same connection that wrote, inside the same window — the receipt was awaited
+and it still read stale.
+
+**All three understated the change** — +9,000 reported against +12,000, +0 against +8,000, and
+54,000 against 64,000. That is not a coincidence of direction: a lagging node serves the
+*pre-transaction* view, so the error is always toward "less happened than did". A
+post-write number smaller than expected is therefore the one to re-read, and a post-write number
+that looks like a partial success is the most likely of all to be a stale read rather than a
+partial success.
+
 **An incomplete ABI undercounts silently; it does not error.** A scan reconciling consumed
 capacity against live headroom omitted `TransferSingle` from its ABI, so every claim that had
 moved from its buyer to a seller was invisible — `decodeEventLog` simply skipped those logs, and

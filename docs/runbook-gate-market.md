@@ -114,6 +114,29 @@ gh run list --limit 3          # after pushing, actually look
 `--frozen-lockfile`: a different prettier version flags thousands of long-committed data files
 that CI is perfectly happy with. Trust CI's format step over a local one.
 
+## Provider credit, before a block
+
+**Two runs in two days died mid-flight on an exhausted provider** — Google on 2026-09-30
+(`402`), Anthropic on 2026-10-01 (`400`, body: *"Your credit balance is too low"*). Both were
+topped up shortly before. A balance that looks fine on a dashboard is not a pre-flight check.
+
+Before a five-run block, set **auto-reload on every provider: trigger below $25, add $50.**
+Anthropic, xAI, OpenAI and Google. One three-window run costs $2-3 of real inference and
+WORKER-CODE alone took $0.80 of a single window, so a balance sized for one run guarantees the
+block dies partway through — and a provider outage re-runs that run (`gate-market-spec.md`
+§7.1a), so repeated exhaustion ends the block by billing rather than by findings.
+
+**Probe each provider through its own adapter before launching, not the dashboard.** A real
+call costs a fraction of a cent and is the only check that exercises the key, the organization
+and the balance together:
+
+```
+node --env-file=.env --input-type=module -e 'import {createAnthropicAdapter} from "./packages/harness/dist/adapters/anthropic.js"; ...'
+```
+
+A dashboard showing credit while the key reports "balance too low" means the credit landed on a
+different organization or workspace than the key. Check that before waiting for propagation.
+
 ## Costs
 
 A three-window run at 2,400-second windows is about two hours of wall clock and $1–2 of real
