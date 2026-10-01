@@ -108,3 +108,47 @@ describe("FrictionLogWriter", () => {
     expect(JSON.parse(contents.trim()).time_to_expiry_seconds).toBe(1800);
   });
 });
+
+describe("the optional rationale on a logged turn (spec §7.4)", () => {
+  let root: string;
+  beforeEach(async () => {
+    root = await mkdtemp(path.join(tmpdir(), "friction-rationale-"));
+  });
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const base: FrictionLogEntry = {
+    agent: "ORCHESTRATOR",
+    turn: 1,
+    job_id: "j",
+    attempted: "turn taken",
+    outcome: "recorded",
+    could_not_express: null,
+    forced_conversion: false,
+    conversion_reason: null,
+    missing_information: null,
+    decision_confidence: "medium",
+    time_to_expiry_seconds: null,
+  };
+
+  const lineOf = async (): Promise<string> =>
+    (await readFile(path.join(root, "r", "friction", "friction-log.jsonl"), "utf-8")).trim();
+
+  it("is absent from the written JSON when the agent gave none", async () => {
+    // Absence is the signal. `"rationale": null` would make "settled without deliberating" and
+    // "deliberated and said nothing" look identical in the record.
+    const writer = new FrictionLogWriter(root, "r");
+    await writer.append(base);
+    const line = await lineOf();
+    expect(line).not.toContain("rationale");
+    expect(JSON.parse(line)).not.toHaveProperty("rationale");
+  });
+
+  it("round-trips the agent's own words when it gave one", async () => {
+    const writer = new FrictionLogWriter(root, "r");
+    const why = "redeeming now rather than holding; the window closes before the next job";
+    await writer.append({ ...base, agent: "WORKER-CODE", turn: 4, time_to_expiry_seconds: 2274, rationale: why });
+    expect(JSON.parse(await lineOf()).rationale).toBe(why);
+  });
+});

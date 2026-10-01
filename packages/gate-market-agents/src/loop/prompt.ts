@@ -27,7 +27,11 @@ regardless (spec §8.6). For example, on a tool call:
   "missing_information": "<something you needed but weren't given, or null>",
   "decision_confidence": "low" | "medium" | "high"
 }}
-Omit "friction" entirely if none of this applies this turn — do not invent friction that did not happen.`;
+Omit "friction" entirely if none of this applies this turn — do not invent friction that did not happen.
+
+You may also add a "rationale" field to that same object: one line, in your own words.
+{"tool": "<tool_name>", "args": {...}, "rationale": "<one line>"}
+It is available on every call and on {"done": true}. Omit it if you have nothing to add.`;
 
 /**
  * `packages/harness`'s `Adapter` is plain text in, plain text out — this builds the full prompt

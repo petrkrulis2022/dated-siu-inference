@@ -101,3 +101,55 @@ describe("parseModelResponse", () => {
     });
   });
 });
+
+describe("the optional per-decision rationale (spec §7.4)", () => {
+  // The field is available on EVERY call, not only payments. A payment-only rationale field
+  // would mark payment turns as the ones worth thinking about and change the decision being
+  // measured — §4.6q's shape on a new surface.
+
+  it("does not change parsing for a call that omits it — today's behaviour, byte for byte", () => {
+    const before = parseModelResponse('{"tool": "pay", "args": {"requestId": "qr-1"}}');
+    expect(before).toEqual({ tool: "pay", args: { requestId: "qr-1" } });
+    expect("rationale" in before).toBe(false);
+  });
+
+  it("omits the key entirely when absent, as friction does — absence is data, not an empty string", () => {
+    // A buyer that settled without recording one was not deliberating. `rationale: ""` and "no
+    // rationale" must stay distinguishable in the record.
+    const call = parseModelResponse('{"tool": "redeem_claim", "args": {"tokenId": "1"}}');
+    expect(Object.keys(call)).toEqual(["tool", "args"]);
+  });
+
+  it("carries it through on any tool, not a privileged subset", () => {
+    for (const tool of ["pay", "whoami", "submit_job", "quote_forward", "check_delivery"]) {
+      const call = parseModelResponse(`{"tool": "${tool}", "args": {}, "rationale": "because X"}`);
+      expect(call).toMatchObject({ tool, rationale: "because X" });
+    }
+  });
+
+  it("carries it on a done intent too — leaving is a decision as much as acting is", () => {
+    expect(parseModelResponse('{"done": true, "summary": "s", "rationale": "nothing left to buy"}')).toEqual(
+      { done: true, summary: "s", rationale: "nothing left to buy" },
+    );
+  });
+
+  it("accepts it alongside friction without either displacing the other", () => {
+    const call = parseModelResponse(
+      '{"tool": "pay", "args": {}, "friction": {"decision_confidence": "low"}, "rationale": "r"}',
+    );
+    expect(call).toMatchObject({ tool: "pay", rationale: "r", friction: { decision_confidence: "low" } });
+  });
+
+  it("ignores a non-string rationale rather than failing the turn", () => {
+    // Never validated, never required. A model that puts an object there loses the rationale,
+    // not the turn — the same forgiveness friction gets, for the same reason.
+    const call = parseModelResponse('{"tool": "pay", "args": {}, "rationale": {"not": "a string"}}');
+    expect(call).toMatchObject({ tool: "pay" });
+    expect("rationale" in call).toBe(false);
+  });
+
+  it("ignores an empty-string rationale — it is indistinguishable from not having one", () => {
+    const call = parseModelResponse('{"tool": "pay", "args": {}, "rationale": "   "}');
+    expect("rationale" in call).toBe(false);
+  });
+});

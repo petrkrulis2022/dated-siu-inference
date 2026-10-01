@@ -21,12 +21,14 @@ export interface ToolCallIntent {
   tool: ToolName;
   args: unknown;
   friction?: FrictionReport;
+  rationale?: string;
 }
 
 export interface DoneIntent {
   done: true;
   summary: string;
   friction?: FrictionReport;
+  rationale?: string;
 }
 
 export class ModelResponseParseError extends Error {
@@ -126,15 +128,39 @@ export function parseModelResponse(text: string): ToolCallIntent | DoneIntent {
       ? { friction: obj.friction as FrictionReport }
       : {};
 
+  /**
+   * One optional line on WHY, available on every call.
+   *
+   * Deliberately not payment-specific. A `rationale` offered only on `pay`/`pay_with_claim`
+   * would mark payment turns as the ones worth thinking about, and F1 measures precisely what
+   * agents do on payment turns — §4.6q's steer in a new place. It is offered on `done` for the
+   * same reason: leaving is a decision as much as acting is.
+   *
+   * Treated exactly as `friction` is, and for the same reason that field produced this build's
+   * best diagnostics: never required, never validated, never prompted for, and omitted entirely
+   * when absent. A blank or non-string rationale is dropped rather than failing the turn, so an
+   * empty rationale and no rationale are the same thing in the record — which is the honest
+   * encoding, because a buyer that settled without recording one was not deliberating.
+   *
+   * It is structure over data that already exists: the raw model output has been persisted since
+   * 2026-09-29 and contains the reasoning behind every call. **If a rationale ever contradicts
+   * the raw text, the raw text is authoritative** — this field is the agent's summary of itself,
+   * not a second source of truth.
+   */
+  const rationaleField =
+    typeof obj.rationale === "string" && obj.rationale.trim() !== ""
+      ? { rationale: obj.rationale.trim() }
+      : {};
+
   if (obj.done === true) {
     if (typeof obj.summary !== "string") {
       throw new ModelResponseParseError(text);
     }
-    return { done: true, summary: obj.summary, ...frictionField };
+    return { done: true, summary: obj.summary, ...frictionField, ...rationaleField };
   }
 
   if (typeof obj.tool !== "string") {
     throw new ModelResponseParseError(text);
   }
-  return { tool: obj.tool as ToolName, args: obj.args, ...frictionField };
+  return { tool: obj.tool as ToolName, args: obj.args, ...frictionField, ...rationaleField };
 }

@@ -26,6 +26,19 @@ export interface FrictionLogEntry {
   conversion_reason: string | null;
   missing_information: string | null;
   decision_confidence: "low" | "medium" | "high";
+  /**
+   * The agent's own one-line WHY for this turn, when it offered one, and absent when it did not.
+   *
+   * Optional on every tool call, never prompted for, never validated — the same treatment as
+   * `could_not_express`, which produced this build's best diagnostics precisely because nothing
+   * told agents to fill it in. An absent rationale is data: a buyer that settled without
+   * recording one was not deliberating.
+   *
+   * Not authoritative. The raw model output persisted since 2026-09-29 holds the real reasoning
+   * behind every call; this is the agent's summary of itself. Where the two disagree, the raw
+   * text wins.
+   */
+  rationale?: string;
   /** Spec §7.1a's structural fix for F1's expiry-pressure false-negative risk — logged on every
    * turn, `null` when this turn wasn't about a currently-held, in-window claim (most turns), a
    * real number (seconds until the claim's window closes) whenever one was. Pre-WP-7 fix,

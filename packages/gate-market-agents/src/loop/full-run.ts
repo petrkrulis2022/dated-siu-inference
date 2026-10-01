@@ -1347,7 +1347,9 @@ export async function runFullRunWindow(
       haltedReason[agent.agentId] = "voluntary_stop";
       activeAgents.delete(agent.agentId);
       await friction.append(
-        buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null),
+        buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null, {
+          ...(intent.rationale !== undefined ? { rationale: intent.rationale } : {}),
+        }),
       );
       continue;
     }
@@ -1395,7 +1397,9 @@ export async function runFullRunWindow(
       turnLogsByAgent[agent.agentId].push(log);
       options.onTurn?.(agent.agentId, log);
       await friction.append(
-        buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null),
+        buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null, {
+          ...(intent.rationale !== undefined ? { rationale: intent.rationale } : {}),
+        }),
       );
       continue;
     }
@@ -1786,7 +1790,9 @@ export async function runFullRunWindow(
 
       const timeToExpiry = await holdTimeToExpiry(options.deps, null);
       await friction.append(
-        buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, timeToExpiry),
+        buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, timeToExpiry, {
+          ...(intent.rationale !== undefined ? { rationale: intent.rationale } : {}),
+        }),
       );
 
       if (gateResult?.passed) {
@@ -1870,7 +1876,9 @@ export async function runFullRunWindow(
         turnLogsByAgent[agent.agentId].push(log);
         options.onTurn?.(agent.agentId, log);
         await friction.append(
-          buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null),
+          buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null, {
+          ...(intent.rationale !== undefined ? { rationale: intent.rationale } : {}),
+        }),
         );
         continue;
       }
@@ -1922,7 +1930,9 @@ export async function runFullRunWindow(
         turnLogsByAgent[agent.agentId].push(log);
         options.onTurn?.(agent.agentId, log);
         await friction.append(
-          buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null),
+          buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null, {
+          ...(intent.rationale !== undefined ? { rationale: intent.rationale } : {}),
+        }),
         );
         continue;
       }
@@ -1961,7 +1971,7 @@ function buildFrictionEntry(
   jobId: string,
   report: FrictionReport | undefined,
   timeToExpirySeconds: number | null,
-  overrides?: { attempted?: string; outcome?: string },
+  overrides?: { attempted?: string; outcome?: string; rationale?: string },
 ): FrictionLogEntry {
   const merged = { ...DEFAULT_FRICTION, ...report };
   return {
@@ -1976,6 +1986,9 @@ function buildFrictionEntry(
     missing_information: merged.missing_information,
     decision_confidence: merged.decision_confidence,
     time_to_expiry_seconds: timeToExpirySeconds,
+    // Spread rather than always set, so "no rationale" stays absent from the JSON rather than
+    // becoming `null` — the same encoding friction's own optional fields use.
+    ...(overrides?.rationale !== undefined ? { rationale: overrides.rationale } : {}),
   };
 }
 

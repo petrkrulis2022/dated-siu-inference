@@ -1388,6 +1388,45 @@ Two rules, and the second is the general one:
 Simulating before sending is what caught it. Had the writes gone straight out, the four failures
 would have cost nothing on-chain and the wrong conclusion everything.
 
+### 4.6aa Optional per-decision rationale, and why it is on every call
+
+Added 2026-10-01, before the freeze. An optional `rationale` — one line, the agent's own words —
+may accompany **any** tool call and `{"done": true}`.
+
+**It is deliberately not payment-specific**, and that is the whole design. A `rationale` offered
+only on `pay`/`pay_with_claim` would mark payment turns as the ones worth thinking about, and F1
+measures precisely what agents do on payment turns. That is §4.6q's steer on a new surface: the
+field would change the decision it exists to observe. It is offered on `done` for the same
+reason — leaving is a decision as much as acting is.
+
+It is treated exactly as `could_not_express` is, which is not an accident: that field produced
+this build's best diagnostics (§4.6w, §4.6x) precisely because nothing ever told an agent to
+fill it in.
+
+- **Never required, never validated, never prompted for.** The protocol says the field exists
+  and that it may be omitted, and says nothing about when or whether to use it. Tests assert the
+  offering sentence names no tool, asset or situation, and contains no "should", "always",
+  "whenever" or "make sure".
+- **An empty rationale is not a rationale.** A blank or non-string value is dropped rather than
+  failing the turn, and the key is omitted from the record entirely when absent. `""` and "none
+  given" must not be distinguishable, because they are the same fact: **a buyer that settled
+  without recording one was not deliberating.**
+- **Structure over existing data, not new capture.** Raw model output has been persisted since
+  2026-09-29 and already contains the reasoning behind every call. This only makes it readable
+  beside the decision without re-reading transcripts. **Where a rationale contradicts the raw
+  text, the raw text is authoritative** — the field is an agent's summary of itself, not a
+  second source of truth.
+
+The report prints each purchase's rationale beneath it, and prints **coverage before content**:
+how many turns carried one, split by purchase turns and all others. If rationales appear only on
+purchase turns, the emphasis effect has arrived by some route other than the prompt — the
+report's own layout, the reader's attention, the models' sense of which turns matter — and those
+rationales cannot be read as neutral self-report. The run says so in a warning rather than
+leaving it to be noticed.
+
+**Adding the field changes nothing about parsing.** A call without it produces byte-identical
+output to before, pinned by test.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make

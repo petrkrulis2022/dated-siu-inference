@@ -1611,6 +1611,95 @@ async function depleteExternally(input: {
  * deadline and a permissionless release all along — but in nothing ever collecting these and
  * asking. See `releaseStrandedReservations` and spec §4.6z.
  */
+/**
+ * Every friction row this run wrote, by window. One reader, because three separate copies of
+ * "open the JSONL, parse it line by line, tolerate a bad line" is three places to drift.
+ */
+function readFrictionEntries(runId: string): { window: number; entry: FrictionLogEntry }[] {
+  const out: { window: number; entry: FrictionLogEntry }[] = [];
+  for (let w = 1; w <= WINDOW_COUNT; w++) {
+    const path = join(RUNS_ROOT, `${runId}-w${w}`, "friction", "friction-log.jsonl");
+    let raw: string;
+    try {
+      raw = readFileSync(path, "utf-8");
+    } catch {
+      continue;
+    }
+    for (const line of raw.split("\n")) {
+      if (line.trim() === "") continue;
+      try {
+        out.push({ window: w, entry: JSON.parse(line) as FrictionLogEntry });
+      } catch {
+        // A malformed line is not a reason to lose the rest of the window's friction.
+      }
+    }
+  }
+  return out;
+}
+
+/** The rationale an agent gave on one turn, if it gave one. */
+function rationaleFor(
+  rows: readonly { window: number; entry: FrictionLogEntry }[],
+  window: number,
+  agentId: string,
+  turn: number,
+): string | undefined {
+  return rows.find((r) => r.window === window && r.entry.agent === agentId && r.entry.turn === turn)
+    ?.entry.rationale;
+}
+
+/**
+ * Where rationales actually appeared, across every agent and every turn.
+ *
+ * Printed because the field's own design risk needs checking before anything is read from it.
+ * `rationale` is offered on every tool call precisely so it does not mark payment turns as the
+ * ones worth thinking about (§4.6q). If rationales nonetheless cluster on payments and appear
+ * nowhere else, the emphasis effect has arrived by another route — through the report, through
+ * the reader's attention, or through the models' own sense of which turns matter — and the
+ * rationales on those turns cannot be read as neutral self-report.
+ *
+ * So the coverage is printed before the content is trusted, not after.
+ */
+function printRationaleCoverage(
+  outcomes: readonly WindowOutcome[],
+  rows: readonly { window: number; entry: FrictionLogEntry }[],
+): void {
+  const PURCHASE = new Set(["pay", "pay_with_claim", "settle_split", "mint_claim"]);
+  let withRationale = 0;
+  let total = 0;
+  let purchaseTurns = 0;
+  let purchaseWithRationale = 0;
+  for (const { window, entry: e } of rows) {
+    {
+      total += 1;
+      const has = e.rationale !== undefined;
+      if (has) withRationale += 1;
+      const o = outcomes.find((x) => x.windowIndex === window);
+      const calls = o?.result.turnLogsByAgent[e.agent] ?? [];
+      const parsed = calls.find((t) => t.turn === e.turn)?.parsed ?? "";
+      if ([...PURCHASE].some((p) => parsed.includes(`"${p}"`))) {
+        purchaseTurns += 1;
+        if (has) purchaseWithRationale += 1;
+      }
+    }
+  }
+  if (total === 0) return;
+  const other = total - purchaseTurns;
+  const otherWith = withRationale - purchaseWithRationale;
+  console.log("\n=== RATIONALE COVERAGE (read this before reading any rationale) ===");
+  console.log(
+    `  offered on ${withRationale} of ${total} turns overall; ` +
+      `${purchaseWithRationale}/${purchaseTurns} purchase turns, ${otherWith}/${other} others.`,
+  );
+  if (purchaseTurns > 0 && other > 0 && purchaseWithRationale > 0 && otherWith === 0) {
+    console.log(
+      "  WARNING: rationales appear ONLY on purchase turns. The field is offered on every call\n" +
+        "  precisely so it would not single payments out (§4.6q). If it has anyway, the emphasis\n" +
+        "  effect is present by some other route and these rationales are not neutral self-report.",
+    );
+  }
+}
+
 export function reservedQuoteHashes(outcomes: readonly WindowOutcome[]): string[] {
   return outcomes.flatMap((o) =>
     o.result.capacityEvents
@@ -2058,6 +2147,7 @@ function printRunSummary(
     for (const line of renderPurchaseSummary(summarisePurchases(o.result))) console.log(`  ${line}`);
   }
 
+  const frictionRows = runId !== undefined ? readFrictionEntries(runId) : [];
   console.log("\n=== SUBCONTRACTING AND ASSET CHOICE, PER PURCHASE ===");
   for (const o of outcomes) {
     const calls = o.result.turnLogsByAgent.ORCHESTRATOR ?? [];
@@ -2074,8 +2164,15 @@ function printRunSummary(
     for (const t of purchases) {
       const route = t.parsed.includes('"pay"') ? "USDC" : "fSIU";
       console.log(`  window ${o.windowIndex} turn ${t.turn}: ${route} — ${t.parsed.slice(0, 160)}`);
+      // Beside the decision it accompanied, so asset choices can be read with their stated
+      // reasons without going back to transcripts. Absent when the agent offered none, which is
+      // itself the reading: that purchase was not deliberated out loud.
+      const why = rationaleFor(frictionRows, o.windowIndex, "ORCHESTRATOR", t.turn);
+      if (why !== undefined) console.log(`      rationale: "${why}"`);
     }
   }
+
+  printRationaleCoverage(outcomes, frictionRows);
 
   console.log("\n=== CAPACITY EVENTS (claims and reservations, with tx hashes) ===");
   let anyEvent = false;
