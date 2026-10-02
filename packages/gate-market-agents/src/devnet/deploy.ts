@@ -107,6 +107,25 @@ const STARTING_USDC = 1_000_000_000n; // 1,000 USDC (6 decimals) — plenty for 
 const FIXED_MEASURED_RATE_MILLI_SIU_PER_HOUR = 100n;
 const FIXED_BONDED_USDC = STARTING_USDC / 2n; // half of each issuer's starting balance
 
+/**
+ * The order lots are created in, and it is load-bearing rather than cosmetic.
+ *
+ * `ClaimRouter.route` is first-fit over `CapacityBond.issuersForClass`, which is a `push`-ordered
+ * array appended to on an issuer's FIRST `createLot` for a class. So whichever address calls
+ * `createLot` first is the issuer every claim routes to while it has headroom — reputation and
+ * fulfilment history play no part (spec §4.6g).
+ *
+ * The sixth trio depends on ISSUER-A being first (spec §3.5a): its lot is deliberately smaller
+ * than a standard job, so it takes the undersized window-1 job and can never win routing again.
+ * Create ISSUER-B first and that inverts — ISSUER-B takes everything, every claim is served, and
+ * the default path is never exercised.
+ *
+ * Declared here rather than reusing `AGENT_IDS`, which is a general-purpose list whose order is
+ * incidental to several other callers and could be re-sorted by someone with no idea that
+ * routing depends on it.
+ */
+export const LOT_CREATION_ORDER = ["ISSUER-A", "ISSUER-B"] as const satisfies readonly AgentId[];
+
 const LOT_HOURS: Record<AgentId, { code: bigint; extract: bigint } | null> = {
   "ISSUER-A": { code: 1000n, extract: 1000n },
   "ISSUER-B": { code: 20n, extract: 1000n }, // small `code` capacity — headroom exhausts fast
@@ -215,7 +234,8 @@ async function provisionDevnet(devnet: LocalDevnet): Promise<DevnetHandle> {
     await publicClient.waitForTransactionReceipt({ hash: approveWorkClaimTx });
   }
 
-  for (const agentId of AGENT_IDS) {
+  // LOT_CREATION_ORDER, not AGENT_IDS: this loop sets routing priority for the whole run.
+  for (const agentId of LOT_CREATION_ORDER) {
     const hours = LOT_HOURS[agentId];
     if (!hours) continue;
 

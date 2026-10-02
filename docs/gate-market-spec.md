@@ -193,6 +193,64 @@ That makes the fungibility question concrete rather than theoretical and tests t
 
 **Routing rule: the holder never picks an issuer.** A redemption presents a class and a quantity, and routes to whichever issuer has headroom in that class. That is what keeps claims fungible, and it is what makes the cross-class headroom question (2.5) testable.
 
+
+#### 3.5a The sixth trio inverts the inequality to 1:4, on purpose
+
+**What the 3:2 split was for.** Unequal rates make fungibility concrete: the same dollar mints a
+different claim count at each issuer, so "are two issuers' claims the same thing?" becomes an
+arithmetic question rather than a definitional one. That purpose is unchanged and is not what
+this replaces.
+
+**What it cost.** `ClaimRouter.route` is first-fit over registration order with headroom as its
+only input (§4.6g), so the larger, first-registered issuer takes every claim while it has room.
+Through runs 13, 14 and 15 that was ISSUER-A, the deliberately non-serving issuer, and the
+consequence compounded:
+
+- **Every claim defaulted. The claim route delivered in no window of any run.**
+- ISSUER-A was therefore the sole gate author in every window, so one malformed response removed
+  gate authoring *and* the attack arm for a whole window (run 15 w2).
+- A buyer choosing fSIU was choosing an instrument that had failed to deliver in every prior
+  window of that run — a worse confound for F1 than any scenario change could be.
+
+**Why sizing alone could not fix it.** Every terminal state restores headroom — serve, default
+and expire all call `restoreHeadroom`. An issuer that spends 10,000 on a claim gets exactly
+10,000 back when it concludes, so `L_A − 10,000 + 10,000 = L_A`, and any issuer large enough to
+take the first job is large enough to take the next. Two sizings were worked and discarded on
+this: both reduced to a dependency on the external buyer's transactions landing, and one of
+those has already failed once in a live run.
+
+**The constraint that is deterministic.** Make ISSUER-A's whole lot smaller than a standard job.
+Then A's *maximum possible* headroom is below the job size, and no restoration at any time, in
+any order, can make it win routing again.
+
+```
+ISSUER-A   100 mSIU/capacity-hour ×   160 hours × 50%  →   8,000 issuance limit
+ISSUER-B    80 mSIU/capacity-hour ×   800 hours × 50%  →  32,000 issuance limit
+window 1 job  8,000 mSIU      windows 2-3 job  10,000 mSIU
+```
+
+Window 1's job is sized to A's lot, so A takes it and is exhausted. Windows 2 and 3 ask for
+10,000, which A can never hold. **One default, two deliveries, with no dependency on an external
+transaction, on turn order, or on when any claim is settled.**
+
+**What this gives up, stated rather than dropped.** The inequality inverts and widens from 3:2 to
+1:4, and ISSUER-A becomes a small issuer that serves one undersized job and is then out of the
+market for the rest of the run. Routing determinism was judged worth more than the original
+ratio, because the ratio tests an arithmetic question that a smaller A still poses, while
+non-determinism was corrupting the arm F1 actually measures.
+
+**Two things it does not change.** Window 1's job is 8,000 mSIU rather than 10,000 — that is the
+*payment*, not the work: the same gate-authoring task at a 20% lower price, so the hardening arm
+is untouched. And ISSUER-A may still quote forward against capacity it no longer has; that is a
+datum, not noise, and `issuerHeadroomAtQuote` already records the real figure beside the offer
+(the field exists for exactly this — run 9's fwd-2 offered 8,000 against 4,000).
+
+**Registration order is now deliberate.** First-fit is `push` order on `_issuersForClass`, set by
+whichever address calls `createLot` first. ISSUER-A must be first or the sizing means nothing, so
+the order is pinned in the provisioning code and written into `data/deployments/` rather than
+left to however a loop happens to iterate.
+
+
 ## 4. Economic objects
 
 Four objects. Each is the testbed-minimal version of something in the monetary design, and each is named the same so findings transfer.
