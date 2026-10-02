@@ -210,6 +210,71 @@ export const NON_SERVING_ISSUER: "ISSUER-A" | "ISSUER-B" | null = "ISSUER-A";
 const NOMINAL_JOB_MILLI_SIU = 10_000n;
 
 /**
+ * What each window's job costs, which is not necessarily the same in every window.
+ *
+ * Spec §3.5a sizes window 1's job to ISSUER-A's whole lot so that A takes it and is then
+ * permanently below the job size, which is what makes routing deterministic. **All three are
+ * 10,000 until ISSUER-A's 8,000 lot actually exists on chain** — setting the smaller figure
+ * against the current 48,000 lot would make window 1 a cheaper purchase and change nothing
+ * about routing, which is the worst of both. Flip window 1 to 8,000 in the same change that
+ * creates the lot, so the code and the deployment never disagree.
+ */
+export function jobMilliSiuForWindow(windowIndex: number): bigint {
+  const bySized: Record<number, bigint> = { 1: NOMINAL_JOB_MILLI_SIU };
+  return bySized[windowIndex] ?? NOMINAL_JOB_MILLI_SIU;
+}
+
+/**
+ * The run's schedule, stated as fact to anyone who can buy.
+ *
+ * Forward-dating (`forWindow` on `mint_claim`/`pay_with_claim`) and `take_forward` are both
+ * implemented, both carry worked syntax, and `forwardDated: true` appears **zero times across
+ * eleven runs** (§4.6n). The plausible reason is not reluctance but ignorance: a buyer is
+ * invited to reserve capacity for window 3 while knowing nothing about whether window 3 has a
+ * job, how big it is, or when it opens. That is a bet with no information on either side.
+ *
+ * This does not make a later window's work purchasable — it cannot, because that window's job
+ * does not exist until the window opens. It gives the two dormant capabilities a basis.
+ *
+ * **A schedule, never advice.** The test applied to every line: could a buyer read this and
+ * rationally decide to do nothing? Anything resembling "you will need capacity later",
+ * "consider reserving", or "holding may be advantageous" is a steer and must not appear here.
+ * It lists only what this run actually buys — naming work that never arrives would be a brief
+ * describing a world the agent is not in, and capacity reserved against it is stranded on false
+ * information.
+ */
+export function scheduleFacts(
+  windowIndex: number,
+  windowBoundsByIndex: Record<number, { from: bigint; to: bigint }>,
+  windowCount: number,
+): string {
+  const remaining = Object.entries(windowBoundsByIndex)
+    .map(([i, b]) => ({ index: Number(i), from: b.from }))
+    .filter((w) => w.index > windowIndex)
+    .sort((a, b) => a.index - b.index);
+  if (remaining.length === 0) {
+    return `THE REST OF THIS RUN
+  This is window ${windowIndex} of ${windowCount}, the last one. No further windows open, and no
+  further work is bought in this run.`;
+  }
+  const lines = remaining
+    .map(
+      (w) =>
+        `    window ${w.index}: one code-class gate-authoring job, ${jobMilliSiuForWindow(w.index)} mSIU, ` +
+        `opens ${new Date(Number(w.from) * 1000).toISOString()}`,
+    )
+    .join("\n");
+  return `THE REST OF THIS RUN
+  This run has ${windowCount} windows. This is window ${windowIndex}. What follows is the whole
+  schedule — no other work is bought in this run.
+${lines}
+  Each job is priced at the print published for its own day. A window's job does not exist until
+  that window opens.`;
+}
+
+
+
+/**
  * The second purchase a buyer may make each window: adversarial testing of the gate, bought from
  * WORKER-EXTRACT. Smaller than the gate job deliberately, and not as a concession to capacity —
  * authoring a hardened gate and writing one adversarial submission are genuinely different
@@ -676,6 +741,7 @@ async function main(): Promise<void> {
 
     const roster = buildRoster({
       windowIndex,
+      windowBoundsByIndex,
       headroomBefore,
       taskSpecHash,
       rateUsdPerSiu,
@@ -947,6 +1013,8 @@ export interface RosterInput {
       bondedUsdcPerClass: number;
     }
   >;
+  /** Every window's bounds, so a buyer can be shown the run's schedule as fact (§4.6ad). */
+  windowBoundsByIndex?: Record<number, { from: bigint; to: bigint }>;
   windowFrom: bigint;
   windowTo: bigint;
 }
@@ -962,6 +1030,7 @@ export interface RosterInput {
 export function buildRoster(input: RosterInput): RosterAgentConfig[] {
   const {
     windowIndex,
+    windowBoundsByIndex,
     headroomBefore,
     taskSpecHash,
     rateUsdPerSiu,
@@ -997,7 +1066,9 @@ CAPACITY RIGHT NOW (real, read from chain at the start of this window)
   Capacity a claim consumes is returned to its issuer when that claim is delivered, and stays
   consumed until then.
   Other buyers exist and are not in this run. Capacity they take is gone before you see it.
-${ONE_POOL_DISCLOSURE}`;
+${ONE_POOL_DISCLOSURE}
+
+${windowBoundsByIndex ? scheduleFacts(windowIndex, windowBoundsByIndex, WINDOW_COUNT) : ""}`;
 
   const orchestratorBrief = `
 YOUR JOB THIS WINDOW

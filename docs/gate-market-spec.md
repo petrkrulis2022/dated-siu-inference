@@ -1652,6 +1652,48 @@ wording problem — it is a defect that produces exactly the behaviour the guara
 prevent, and it reads as the agent being obtuse. Three runs were spent attributing to the agent
 what belonged to the promise.
 
+### 4.6ad The schedule is shown because two capabilities had no basis to be used
+
+`forWindow` on `mint_claim` and `pay_with_claim` has existed since 2026-09-28, carries worked
+syntax in the brief, and **`forwardDated: true` appears zero times across eleven runs** (§4.6n).
+`take_forward` likewise has worked syntax and **0 of 3 forward offers have ever been taken**.
+
+The pre-check asked whether a buyer can purchase more than one window's work at a time. It
+cannot: the job is constructed inside the window loop, so window 2's job does not exist while
+window 1 runs, and no amount of visibility makes a later window's work purchasable.
+
+**But "showing it changes nothing" was too strong.** A buyer was being invited to reserve
+capacity for window 3 while knowing nothing about whether window 3 has a job, how large it is,
+or when it opens — a bet with no information on either side. Two capabilities with worked syntax
+going unused across eleven runs is better explained by that than by reluctance.
+
+So the schedule is stated as fact to everyone who can buy: each remaining window, that it
+carries one code-class gate-authoring job, its size, and when it opens.
+
+**A schedule, never advice.** The test applied to every line is whether a buyer could read it
+and rationally decide to do nothing. Tests assert the text contains no "you will need",
+"consider", "advantageous", "should", "recommend", "worth", "secure", "before it runs out". It
+is placed beside the existing capacity facts — headroom finite, shared, first-come-first-served,
+consumed at mint, routed to a single issuer — because scarcity needs both halves and neither
+half says what to do.
+
+**It lists only what the run actually buys.** No ATC, no replay SDK, no rate fingerprinting —
+none of which any agent purchases. A schedule naming work that never arrives is a brief
+describing a world the agent is not in, and capacity reserved against it is stranded on false
+information.
+
+**Claim validity was checked and needed no correction.** Validity is the delivery window, not
+the print, and the text already said so: `redeem_claim` is described as "presents your claim for
+redemption inside its window", claims are "dated", and the shared facts state that "a claim
+carries the delivery window it was minted for. Holding it past that window does not move the
+window." The print sets the rate at mint and nothing ties lifetime to it.
+
+**If forward-dating and `take_forward` stay unused after this, that is a finding.** Two
+capabilities with equal syntax and a visible pipeline behind them, still unexercised, would say
+something real about whether these agents value deferral at all — and it would be the first
+evidence on that question not confounded by the agent simply not knowing there was a later
+window worth reserving for.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make

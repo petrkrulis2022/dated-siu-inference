@@ -8,6 +8,7 @@ import {
   assertProvidersReachable,
   WINDOW_COUNT,
   buildRoster,
+  scheduleFacts,
   reservedQuoteHashes,
   type RosterInput,
 } from "./p5-three-window-full-run.js";
@@ -815,5 +816,70 @@ describe("the dollar route gives its capacity back too (spec §4.6z)", () => {
 
   it("drops a reserve_for_work with no quote hash rather than sweeping undefined", () => {
     expect(reservedQuoteHashes([outcome(1, [{ kind: "reserve_for_work" }])])).toEqual([]);
+  });
+});
+
+describe("the run's schedule is shown as fact, never as advice (spec §4.6ad, §4.6q)", () => {
+  const BOUNDS = {
+    1: { from: 1_800_000_000n, to: 1_800_002_400n },
+    2: { from: 1_800_002_400n, to: 1_800_004_800n },
+    3: { from: 1_800_004_800n, to: 1_800_007_200n },
+  };
+
+  it("states each remaining window's job, size and opening time", () => {
+    const text = scheduleFacts(1, BOUNDS, 3);
+    expect(text).toContain("window 2:");
+    expect(text).toContain("window 3:");
+    expect(text).toContain("10000 mSIU");
+    expect(text).toMatch(/opens 2027-01-15T/);
+  });
+
+  it("names no window that has already opened — a schedule is what is still ahead", () => {
+    const text = scheduleFacts(2, BOUNDS, 3);
+    expect(text).toContain("window 3:");
+    expect(text).not.toContain("window 1:");
+    expect(text).not.toContain("window 2:");
+  });
+
+  it("says plainly there is nothing ahead in the last window, rather than going silent", () => {
+    const text = scheduleFacts(3, BOUNDS, 3);
+    expect(text).toMatch(/the last one/);
+    expect(text).toMatch(/no\s+further work is bought in this run/);
+  });
+
+  it("contains no steer — a buyer could read it and rationally do nothing", () => {
+    // The test §4.6q asks of any new surface. "You will need capacity later", "consider
+    // reserving", "holding may be advantageous" are advice; a schedule is not.
+    for (const w of [1, 2, 3]) {
+      const text = scheduleFacts(w, BOUNDS, 3).toLowerCase();
+      for (const steer of [
+        "you will need", "consider", "advantageous", "should", "recommend", "worth",
+        "ahead of time", "secure", "reserve now", "don't miss", "before it runs out",
+      ]) {
+        expect(text, `"${steer}" is advice, not a schedule`).not.toContain(steer);
+      }
+    }
+  });
+
+  it("lists only work this run actually buys", () => {
+    // A schedule naming work that never arrives describes a world the agent is not in, and
+    // capacity reserved against it is stranded on false information.
+    const text = scheduleFacts(1, BOUNDS, 3).toLowerCase();
+    for (const absent of ["atc", "replay", "fingerprint", "extract-class", "settlement sdk"]) {
+      expect(text).not.toContain(absent);
+    }
+  });
+
+  it("reaches every buyer's brief, not just one", () => {
+    for (const id of ["ORCHESTRATOR", "WORKER-CODE", "WORKER-EXTRACT"]) {
+      const brief = find(buildRoster(input(1, { windowBoundsByIndex: BOUNDS })), id).skillPackText;
+      expect(brief, `${id} must see the schedule`).toContain("THE REST OF THIS RUN");
+    }
+  });
+
+  it("leaves the capacity facts standing beside it — scarcity needs both", () => {
+    const brief = find(buildRoster(input(1, { windowBoundsByIndex: BOUNDS })), "ORCHESTRATOR").skillPackText;
+    expect(brief).toMatch(/routed to a SINGLE issuer/i);
+    expect(brief).toMatch(/Capacity they take is gone before you see it/);
   });
 });
