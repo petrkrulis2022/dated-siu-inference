@@ -441,6 +441,13 @@ export interface FullRunWindowResult {
      * Windows whose real duration depends on how long the previous one took are not comparable,
      * and claim windows are fixed on-chain before any of them starts. */
     | "window_span_elapsed"
+    /**
+     * The agent said it was waiting and nothing it can act on has changed since. Distinct from
+     * `nothing_to_act_on`, which the LOOP concludes, and from `voluntary_stop`, which leaves
+     * the window for good: a waiting agent is still in, and would have been woken had anything
+     * arrived. Read it as "idle by its own choice", not as a halt.
+     */
+    | "waiting"
   >;
   turnLogsByAgent: Record<string, TurnLog[]>;
 }
@@ -747,6 +754,14 @@ export async function runFullRunWindow(
    * as proof the window is live is a deadlock: the suppressed agent is gated out on its own turn,
    * every other agent sees it as able to act and skips, nothing awaits, and `turnLoop` spins at
    * 100% CPU forever. Found in a real run, not a test — see the stall guard at the loop head. */
+  /**
+   * Agents that have said they are waiting, and the actionable state they saw when they said it.
+   *
+   * An entry means "do not ask again until `boardSectionText` differs from this". Cleared the
+   * moment it does, so a wait costs exactly the one turn it was declared on. See `WaitIntent`.
+   */
+  const waitingOn = new Map<AgentId, string>();
+
   const refusedTwiceFor = (agentId: AgentId, tool: ToolName): boolean =>
     (refusedToolCalls.get(`${agentId}:${tool}`) ?? 0) >= 2;
 
@@ -1061,6 +1076,10 @@ export async function runFullRunWindow(
       // 2026-09-29).
       (agent.waitsFor === "gate" && !canAttackNow() && boardSectionText === "") ||
       (agent.waitsFor === "inbox" && boardSectionText === "") ||
+      // A wait the agent declared itself, honoured until what it can act on actually changes.
+      // Checked here with the other wake conditions so one `continue` covers every way of
+      // having nothing to do.
+      waitingOn.get(agent.agentId) === boardSectionText ||
       buyerIdle
     ) {
       const someoneCanAct = [...activeAgents].some((id) => {
@@ -1323,6 +1342,43 @@ export async function runFullRunWindow(
         continue;
       }
       throw err;
+    }
+
+    if ("wait" in intent) {
+      const log: TurnLog = {
+        turn,
+        promptChars: prompt.length,
+        projectedUsd,
+        realizedUsd,
+        marketBoardText: marketBoardText || undefined,
+        rawText: adapterResult.text,
+        promptText: prompt,
+        settleableText: settleableText || undefined,
+        forwardText: forwardText || undefined,
+        latencyMs: adapterResult.latency_ms,
+        parsed: JSON.stringify(intent),
+        stopReason: adapterResult.stopReason,
+        usage: adapterResult.usage,
+        contentBlockTypes: adapterResult.contentBlockTypes,
+      };
+      turnLogsByAgent[agent.agentId].push(log);
+      options.onTurn?.(agent.agentId, log);
+      // NOT removed from activeAgents — the whole difference from `done`. The agent stays in
+      // the window and is woken the moment its own actionable state differs from what it saw
+      // when it said it was waiting. `boardSectionText` is that state: it is already what the
+      // wake gate uses to decide whether an issuer has anything to act on, so a wait is woken
+      // by exactly the arrivals a non-waiting agent would have been woken by, and by nothing
+      // else. Being woken with an already-paid quote still on the board — which happened to
+      // ORCHESTRATOR once — would put the agent straight back into the forced choice this
+      // exists to end.
+      waitingOn.set(agent.agentId, boardSectionText);
+      haltedReason[agent.agentId] = "waiting";
+      await friction.append(
+        buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null, {
+          ...(intent.rationale !== undefined ? { rationale: intent.rationale } : {}),
+        }),
+      );
+      continue;
     }
 
     if ("done" in intent) {

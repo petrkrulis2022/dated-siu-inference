@@ -217,6 +217,15 @@ export async function runGateAuthoringPass(options: GateAuthoringPassOptions): P
       throw err;
     }
 
+    // A declared wait in THIS loop is a stop. The full-run loop honours a wait because things
+    // arrive there — quotes, claims, delivered gates. Nothing arrives in the gate-authoring pass: the
+    // agent is the only actor, so "wake me when something changes" can never be satisfied and
+    // treating it as waiting would hang the pass. Recorded as a voluntary stop, which is what
+    // it amounts to here.
+    if ("wait" in intent) {
+      intent = { done: true, summary: "declared a wait in a loop where nothing can arrive" };
+    }
+
     if ("done" in intent) {
       turnLogs.push({
         turn,

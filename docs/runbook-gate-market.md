@@ -88,6 +88,28 @@ unconfirmed post-write read as provisional.
 **Filter on content and you cannot see a stall**, because silence produces no events and looks
 identical to progress. That cost half an hour on 2026-09-29. Watch liveness separately.
 
+**A liveness monitor must not use a bare `pgrep -f`.** The runbook already says this for the
+kill procedure; it applies with more force to a watch, because a watch fails silently. Every
+liveness monitor armed on 2026-10-01 used `pgrep -f "dist/cli/p5-three-window-full-run.js"` and
+**could never have reported a dead run**: the pattern appears in the monitor's own shell command
+line, so `pgrep` matched the monitor itself and the process always looked alive. Demonstrated
+rather than argued — a dummy `node` process was started and killed:
+
+```
+after the kill:   pgrep -f  -> STILL RUNNING (wrong, it matched the checking shell)
+                  node-only -> GONE (correct)
+```
+
+Use the same filter the kill procedure uses, and nothing else:
+
+```bash
+ps -eo pid,args | grep "p5-three-window-full-run.js" | grep -E "^ *[0-9]+ node"
+```
+
+A watch that cannot fire is worse than no watch: during a five-run block a hung run would burn a
+day while the monitor reported nothing, which is exactly what "no events delivered" looks like
+when everything is fine.
+
 **Silence alone is not a deadlock.** The runner sleeps between windows by design. The
 discriminator is CPU: silent and idle is waiting, silent and burning 30%+ is spinning.
 

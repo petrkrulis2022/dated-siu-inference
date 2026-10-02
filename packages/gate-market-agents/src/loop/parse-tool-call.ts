@@ -31,6 +31,29 @@ export interface DoneIntent {
   rationale?: string;
 }
 
+/**
+ * "I have nothing to act on; do not ask me again until something changes."
+ *
+ * Distinct from `done`, which leaves the window for good. A waiting agent stays in, costs
+ * nothing while it waits, and is woken the moment its own actionable state changes.
+ *
+ * It exists because the response protocol already promised this and the loop did not deliver it.
+ * The prompt says "you are given a turn only when something has genuinely arrived for you to act
+ * on", which is false for a buyer that has not purchased: `buyerIdle` requires `hasPurchased`,
+ * so before its first purchase a buyer is woken on every cursor regardless of whether anything
+ * arrived. Run 15 is what that costs — WORKER-CODE woken on all ten turns of all three windows,
+ * eight of each spent on `check_delivery`, asking whether the thing it had been promised it
+ * would be told about had happened yet (spec §4.6ac).
+ *
+ * Declaring costs the one turn it is declared on. Everything after is free.
+ */
+export interface WaitIntent {
+  wait: true;
+  summary?: string;
+  friction?: FrictionReport;
+  rationale?: string;
+}
+
 export class ModelResponseParseError extends Error {
   constructor(public readonly rawText: string) {
     // The raw text comes FIRST, deliberately. Found live, 2026-09-29 (P5 run 3): this message
@@ -86,7 +109,7 @@ function matchingBraceIndex(text: string, openIndex: number): number | null {
  * don't always return *only* JSON despite being asked to — this scans for the first `{...}`
  * span and attempts to parse it, rather than requiring the entire response to be valid JSON.
  */
-export function parseModelResponse(text: string): ToolCallIntent | DoneIntent {
+export function parseModelResponse(text: string): ToolCallIntent | DoneIntent | WaitIntent {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start === -1 || end === -1 || end < start) {
@@ -151,6 +174,18 @@ export function parseModelResponse(text: string): ToolCallIntent | DoneIntent {
     typeof obj.rationale === "string" && obj.rationale.trim() !== ""
       ? { rationale: obj.rationale.trim() }
       : {};
+
+  if (obj.wait === true) {
+    // No required summary, unlike `done`. Leaving the window for good is a decision worth
+    // explaining; standing still for a moment is not, and demanding a summary would make the
+    // cheap option the wordy one.
+    return {
+      wait: true,
+      ...(typeof obj.summary === "string" ? { summary: obj.summary } : {}),
+      ...frictionField,
+      ...rationaleField,
+    };
+  }
 
   if (obj.done === true) {
     if (typeof obj.summary !== "string") {

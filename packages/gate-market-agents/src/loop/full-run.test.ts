@@ -2596,3 +2596,96 @@ describe("the attack-round cap is visible to the thing that spends turns (spec �
     },
   );
 });
+
+describe("an agent can declare a wait, and is then left alone (spec §4.6x, §4.6ac)", () => {
+  let runsRoot: string;
+  let ledgerPath: string;
+
+  beforeEach(async () => {
+    runsRoot = await mkdtemp(path.join(tmpdir(), "wait-primitive-"));
+    ledgerPath = path.join(runsRoot, "ledger.json");
+  });
+
+  afterEach(async () => {
+    await rm(runsRoot, { recursive: true, force: true });
+  });
+
+  it(
+    "stops waking an agent that said it is waiting, while nothing actionable changes. The " +
+      "response protocol promises 'you are given a turn only when something has genuinely " +
+      "arrived for you to act on' — which is FALSE for a buyer that has not purchased, because " +
+      "buyerIdle requires hasPurchased. Run 15: WORKER-CODE was woken on all 10 turns of all 3 " +
+      "windows and spent 8 of each on check_delivery, asking whether the thing it was promised " +
+      "it would be told about had happened.",
+    async () => {
+      const prompts: string[] = [];
+      // Declares a wait on its first turn and would poll forever after, if asked again.
+      const waiter: Adapter = async (_m, prompt) => {
+        prompts.push(prompt);
+        return {
+          text: JSON.stringify({ wait: true, summary: "nothing to act on; waiting" }),
+          usage: { input: 100, output: 20, cached_input: 0, reasoning: 0 },
+          latency_ms: 1,
+          raw: {},
+          deviations: [],
+        };
+      };
+
+      const ceiling = new BudgetCeiling({
+        "ISSUER-A": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+        "ISSUER-B": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+        ORCHESTRATOR: { maxUsdcSpend: "0", maxInferenceTurns: 10, maxInferenceUsd: "2" },
+        "WORKER-CODE": { maxUsdcSpend: "0", maxInferenceTurns: 10, maxInferenceUsd: "2" },
+        "WORKER-EXTRACT": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+        HEDGER: { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+      });
+
+      const result = await runFullRunWindow({
+        windowId: "w-wait",
+        roster: [
+          // Leaves immediately: a PASSING gate ends the window before WORKER-CODE reaches a
+          // cursor, which is how the first draft of this test measured nothing.
+          orchestratorConfig(async () => ({
+            text: JSON.stringify({ done: true, summary: "nothing for me here" }),
+            usage: { input: 100, output: 20, cached_input: 0, reasoning: 0 },
+            latency_ms: 1,
+            raw: {},
+            deviations: [],
+          })),
+          {
+            agentId: "WORKER-CODE",
+            adapter: waiter,
+            modelString: "test",
+            prices: PRICES,
+            skillPackText: CANONICAL_ASSET_DESCRIPTION,
+            availableTools: ["check_delivery", "get_balances"] as const,
+            waitsFor: "buyer" as const,
+            privateKeyHex: "0xa715563de5d5c011627720140757574d96bcfc02bdf2e0ee1f68d64e171fe89a",
+            address: "0x0000000000000000000000000000000000000002",
+            erc8004Id: "erc8004:0x0000000000000000000000000000000000000002",
+            rpcUrl: "http://127.0.0.1:1",
+            maxOutputTokens: 3000,
+            temperature: 0.7,
+            provider: "openai",
+          },
+        ],
+        job: JOB,
+        maxTurnsPerAgent: 10,
+        budget: new ExperimentBudget({ ceiling, runCapUsd: "30", experimentCapUsd: "150", ledgerPath }),
+        deps: fakeDeps(async () => PASS),
+        runsRoot,
+        runId: "run-wait",
+        manifest: MANIFEST,
+      });
+
+      // It declared the wait once. Being asked again, with nothing changed, is the defect —
+      // and costs a turn and real inference every time it happens.
+      expect(prompts).toHaveLength(1);
+      // And it must have been UNDERSTOOD, not merely unparseable. Today `{"wait": true}` is not
+      // a recognised response, so the agent is removed on a parse_error and the prompt count
+      // would be 1 for entirely the wrong reason — this is what distinguishes the fix from the
+      // bug it replaces.
+      expect(result.haltedReason?.["WORKER-CODE"]).toBe("waiting");
+    },
+  );
+});

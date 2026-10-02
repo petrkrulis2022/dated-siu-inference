@@ -1568,6 +1568,54 @@ board state and offer expiry, it changes what sellers do with their turns, and n
 measured that — it would need its own debugging run. Recorded here so the consent finding is not
 muddied by a loop detail, and so the one turn is attributed to the right cause.
 
+### 4.6ac The protocol promised a wake discipline the loop did not honour
+
+Run 15 reproduced one behaviour three times: WORKER-CODE woken on all ten turns of all three
+windows, eight of each spent on `check_delivery`, zero purchases. Two competing explanations
+were eliminated by the run itself — it had the tool it asked for and used it correctly, and its
+brief was unchanged from runs where other agents bought. What remained is this.
+
+**The response protocol told every agent:**
+
+> *"YOU DO NOT NEED TO DO ANYTHING IN ORDER TO WAIT. You are given a turn only when something
+> has genuinely arrived for you to act on."*
+
+**That was false for a buyer before its first purchase.** `buyerIdle` requires
+`hasPurchased`, so until a buyer buys it is woken on every cursor whether or not anything
+arrived — deliberately, because a buyer gated purely on arrivals could never initiate and the
+second of a window's two purchases was once structurally unreachable (§4.6e).
+
+So the agent was told it would be asked only when something arrived, was asked repeatedly with
+nothing new, and re-checked whether something had arrived. **That is not a failure of judgement;
+it is the only coherent reading of a promise the loop was breaking.** Giving it
+`check_delivery` changed which call it repeated, not that it repeated — run 13's nine
+`get_balances` became run 15's eight `check_delivery`.
+
+**The fix is `{"wait": true}`**, a third response beside `{"tool": …}` and `{"done": true}`:
+
+- **Declaring costs one turn; waiting after that is free.** The agent stays in the window — the
+  whole difference from `done`, which leaves for good.
+- **Woken only on genuinely actionable change.** The wake key is `boardSectionText`, already
+  what the wake gate uses to decide whether an issuer has anything to act on, so a waiting agent
+  is woken by exactly the arrivals that would have woken it anyway and by nothing else. Being
+  woken with an already-paid quote still on the board — which happened to ORCHESTRATOR once —
+  would put it straight back into the forced choice.
+- **Available to every agent**, not only the one that needed it. Granting it to one buyer would
+  make its behaviour incomparable with the other's.
+- **Syntax equal to every other option** (§4.6q). An option in prose while its alternative
+  carries copy-pasteable JSON is not a neutral offer.
+- **`haltedReason: "waiting"`**, distinct from `nothing_to_act_on` (which the loop concludes)
+  and `voluntary_stop` (which leaves). Idle by its own choice, still in the window.
+
+And the protocol no longer claims a turn comes only on an arrival, because it doesn't. It now
+says both things that are true: usually you are not asked, and if you are asked with nothing to
+do, you may say so once instead of paying a turn each time to re-check.
+
+**The general form.** A prompt that describes a guarantee the loop does not implement is not a
+wording problem — it is a defect that produces exactly the behaviour the guarantee was meant to
+prevent, and it reads as the agent being obtuse. Three runs were spent attributing to the agent
+what belonged to the promise.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make

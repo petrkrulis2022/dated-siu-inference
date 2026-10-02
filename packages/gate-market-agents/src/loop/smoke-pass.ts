@@ -222,6 +222,15 @@ export async function runSmokePass(options: SmokePassOptions): Promise<SmokePass
     });
     options.onTurn?.(turnLogs[turnLogs.length - 1]);
 
+    // A declared wait in THIS loop is a stop. The full-run loop honours a wait because things
+    // arrive there — quotes, claims, delivered gates. Nothing arrives in the smoke pass: the
+    // agent is the only actor, so "wake me when something changes" can never be satisfied and
+    // treating it as waiting would hang the pass. Recorded as a voluntary stop, which is what
+    // it amounts to here.
+    if ("wait" in intent) {
+      intent = { done: true, summary: "declared a wait in a loop where nothing can arrive" };
+    }
+
     if ("done" in intent) {
       return finalize({
         turnsUsed: turn,

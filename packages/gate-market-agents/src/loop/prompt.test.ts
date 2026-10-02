@@ -64,3 +64,31 @@ describe("the rationale field is offered without steering (spec §7.4, §4.6q)",
     expect(protocol).toContain("do not invent friction that did not happen");
   });
 });
+
+describe("waiting is offered with syntax equal to leaving (spec §4.6ac, §4.6q)", () => {
+  const protocol = buildTurnPrompt(assembleContext("WORKER-CODE", "skill text", []), ["get_print"]);
+
+  it("gives wait copy-pasteable syntax, as done has", () => {
+    // §4.6q: an option described in prose while its alternative carries JSON is not a neutral
+    // offer. Waiting must be as easy to reach as leaving, or leaving stays the cheaper move.
+    expect(protocol).toContain('{"wait": true}');
+    expect(protocol).toContain('{"done": true, "summary": "<what happened>"}');
+  });
+
+  it("no longer promises a turn comes ONLY when something has arrived", () => {
+    // That promise was false for a buyer before its first purchase — buyerIdle requires
+    // hasPurchased, so it was woken on every cursor. An agent told it would only be asked on
+    // an arrival, then asked repeatedly, rationally re-checks whether something arrived.
+    expect(protocol).not.toContain("You are given a turn only when something has genuinely arrived");
+  });
+
+  it("says plainly that waiting costs one turn and polling costs one each time", () => {
+    expect(protocol).toMatch(/Repeating a read to pass the time costs a turn every time/);
+    expect(protocol).toMatch(/waiting costs one, once/);
+  });
+
+  it("keeps wait and done distinct, so neither is mistaken for the other", () => {
+    expect(protocol).toMatch(/\{"done": true\} is NOT how you wait/);
+    expect(protocol).toMatch(/You stay in the window/);
+  });
+});

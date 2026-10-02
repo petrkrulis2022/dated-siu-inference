@@ -5,16 +5,21 @@ import type { ToolName } from "../tools/index.js";
 const RESPONSE_FORMAT_INSTRUCTIONS = `Respond with exactly one JSON object and nothing else.
 
 To call a tool: {"tool": "<tool_name>", "args": {...}}
+To wait:                       {"wait": true}
 To leave this window for good: {"done": true, "summary": "<what happened>"}
 
-YOU DO NOT NEED TO DO ANYTHING IN ORDER TO WAIT.
-  You are given a turn only when something has genuinely arrived for you to act on. Between
-  those you are not asked at all — no turn is spent, nothing is lost, and you stay in the
-  window. "Waiting for a delivery" therefore needs no response from you; it is the default.
+WAITING IS FREE, AND THERE ARE TWO WAYS TO DO IT.
+  Usually you are simply not asked. A turn comes to you when something has arrived for you to
+  act on; between those you are not called at all, no turn is spent, and you stay in the window.
 
-  So {"done": true} is not how you wait. It is how you leave: you will not be given another
-  turn in this window whatever arrives, and will never learn what happened in it. Use it only
-  when you would not want to be shown a delivery, a payment or an offer even if one came.
+  But you may also be given a turn with nothing to act on. If that happens and you want to
+  wait, say so: {"wait": true}. You stay in the window and will be given a turn again the
+  moment something you can act on changes. Until then you are not asked, and nothing is spent.
+  Repeating a read to pass the time costs a turn every time; waiting costs one, once.
+
+  {"done": true} is NOT how you wait. It is how you leave: you will not be given another turn
+  in this window whatever arrives, and will never learn what happened in it. Use it only when
+  you would not want to be shown a delivery, a payment or an offer even if one came.
 
 Optionally, add a "friction" field to that SAME object — never a second, separate JSON object —
 reporting anything real about *this* turn's decision, appended to your friction log every turn
