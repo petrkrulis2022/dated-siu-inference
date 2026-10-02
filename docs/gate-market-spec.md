@@ -455,6 +455,42 @@ between them serve one 10,000 mSIU claim. A pool can therefore be large in total
 to serve a buyer — fragmentation is a genuine feature of the bilateral design (§4.3), not a bug in
 the routing.
 
+### 4.6-RULE Before attributing a behaviour to an agent, check what the system promised it
+
+Every affordance defect in this project has the same shape, and run 15 stated it more precisely
+than §4.6e managed. Recorded here as the rule, because it has now been rediscovered eight times
+as individual findings.
+
+**The response protocol told every agent:** *"you are given a turn only when something has
+genuinely arrived for you to act on."* **That promise was false for a buyer before its first
+purchase** — `buyerIdle` requires `hasPurchased`, so until it buys, a buyer is woken on every
+cursor whether or not anything arrived.
+
+So WORKER-CODE was told it would be asked only on an arrival, was asked repeatedly with nothing
+new, and re-checked whether something had arrived. **The agent behaved correctly against a
+contract the system did not honour.** Three runs attributed to the agent what belonged to the
+promise: run 13 read it as a missing tool, run 14 as a brief problem, run 15 as a missing
+primitive — and only the third was close, because only then had the first two been eliminated.
+
+**The rule.** When an agent does something that looks obtuse — repeating a call, ignoring an
+option, picking an obviously worse move — the first question is not "why did it choose that?"
+but **"what did we tell it, and is that true?"** Read the prompt as a contract and check the
+loop honours it. In this project that question has been right every time it was asked:
+
+| the behaviour | what we told it | the truth |
+| --- | --- | --- |
+| §4.6e repeated a failing call four times | "to end your turn, say done" | `done` removed it from the window |
+| §4.6s quoted forward after declining | "or you may choose not to" | declining was not representable |
+| §4.6w polled `get_balances` nine times | — | no tool existed to ask what it wanted |
+| §4.6ac polled `check_delivery` eight times | "you are asked only on an arrival" | false for a buyer pre-purchase |
+
+**Why this generalises past the testbed.** A prompt is a specification an agent is entitled to
+rely on. A system whose loop contradicts its own prompt produces behaviour that looks like poor
+judgement and is actually correct reasoning from a false premise — and the debugging instinct it
+provokes, rewriting the brief to discourage the behaviour, makes it worse by adding a second
+contradiction. The cheap check is to diff what the prompt claims against what the loop does,
+and it is cheaper than the three runs it costs not to.
+
 ### 4.6a Rules are enforced where the call is made, not asserted in a brief
 
 **A prompt-level prohibition failed three times out of three, after already failing once.**
