@@ -1843,6 +1843,87 @@ both arms deliver the remaining jobs at the day-1 flat price
 
 **Why it belongs here.** It is nearly free — the decisions are happening anyway — and it produces the monetary design's strongest empirical claim (§3.3). It is also the only finding in this run that survives regardless of what happens to fSIU, because it is evidence about the *unit*, not the instrument.
 
+### 7.3a F3 runs standalone, not inside the market — and why
+
+**Status as of 2026-10-02: specified, partially built, never exercised, and structurally unable
+to produce a figure.** `DualRenderer` exists and is instantiated per agent, but it is wired into
+exactly one tool (`get_balances`), it shows the agent **both** representations at once —
+
+```json
+{"usdc":{"decimalUsd":"0.305618","integerMinorUnits":"305618","liveArm":"decimal"}}
+```
+
+— and `allRecords()` is never called, so the records die with the process. No run report has ever
+contained an F3 result. It also does not do what §7.3 specifies: §7.3 says each decision is
+*executed twice against identical state*, and the implementation alternates which form is
+nominally live across turns.
+
+**The Gate Market is the wrong venue, and defining the error metric is what shows it.** The
+metric needs decisions with objectively correct answers — which of two amounts is smaller, does
+a balance cover a cost, is a quote above or below a reference. The market has almost none: there
+is **one seller per job**, so no two-quote comparison ever occurs, and five runs would yield
+perhaps 15-30 genuine numeric decisions. That cannot detect a modest effect, and it would be
+buried inside $10 of market runs whose failures are affordance defects.
+
+**So F3 runs standalone. It does not block the protocol freeze.**
+
+#### Three arms, because two would confound the claim
+
+| arm | shown as | tests |
+| --- | --- | --- |
+| decimal USD | `$0.014170` | the baseline agents face today |
+| integer minor units | `14170` | **integers beat decimals** — true of any currency |
+| integer work units | `10000 mSIU` | **this unit beats dollars** — the claim that justifies SIU |
+
+Without the minor-units arm those two are confounded, and only the second is a result nobody
+else can produce. The first is a fact about number formatting that any team could establish.
+
+#### Four comparison types, and the one that can falsify the story
+
+| type | example | tests |
+| --- | --- | --- |
+| order-of-magnitude | `0.0034` vs `0.00034` | the 10x error — the expensive one in a payment |
+| unequal decimal length | `0.0003` vs `0.00029` | place-alignment, where integers should help most |
+| **transposition** | `0.001417` vs `0.001471` | **the control** |
+| coverage | does a balance of X cover a cost of Y | a decision, not only a comparison |
+
+**The transposition control is the point of the design, not a footnote.** Transposed digits are
+equally hard in every arm — place-alignment is not the mechanism there. So if integers beat
+decimals on transposition too, the proposed explanation is **wrong**, and the same data says so.
+An experiment of this shape that omits the control cannot falsify its own story.
+
+#### Method
+
+- **Paired**: the same underlying comparison in every arm, arm order randomised per trial, one
+  representation shown at a time, never labelled, never two at once.
+- **Magnitudes from the run records** — rates `0.001400`-`0.001440`, costs `0.008`-`0.015`,
+  quantities `3,000`-`16,000` mSIU — so the decimals are the ones agents actually face.
+- **Inside a decision frame** ("you are settling a quote; which costs less?"), never as bare
+  arithmetic. The claim is about representation under decision conditions, not about sums.
+- **Error metric**: proportion answered incorrectly, per model per arm, with **Wilson** intervals
+  (correct at low error rates where the normal approximation is not).
+- **Comparison**: **McNemar** on the paired responses, which uses only discordant pairs and is
+  the right test when the same item is answered under two conditions.
+- **Power**: detecting 8% -> 4% at 80% power needs about **400 paired trials per model**; four
+  model families across three arms is roughly 4,800 calls.
+- **Constrained and unconstrained as a factor.** Constrained (answer-only, low effort) measures
+  perception; unconstrained measures what happens in a loop, which is the claim that matters for
+  agents. **Reported separately — a result that holds only under constraint is a weaker claim
+  and must be labelled as one.**
+
+#### The floor effect is planned for, not merely noted
+
+Frontier reasoning models may answer everything correctly in every arm. If so the finding is
+"the unit does not matter for models of this class", which is publishable — **but only if the
+trials were hard enough to produce errors at all.** A null at the floor says the trials were
+easy, not that representation is irrelevant, and the two are not distinguishable after the fact.
+
+So the full run is **gated on a 50-trial pilot**, and the pilot's per-arm error rates are
+reported before anything scales. If they sit at the floor, the magnitudes are calibrated toward
+where error appears — more decimal places, closer values, a tighter token budget per answer —
+and **what was changed is stated**, so the eventual null reads as *"no difference where errors
+occur"* rather than *"no errors occurred"*.
+
 ### 7.4 Secondary observations worth capturing
 
 Not experiments, but cheap to record and useful later:
