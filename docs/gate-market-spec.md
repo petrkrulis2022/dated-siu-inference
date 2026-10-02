@@ -194,61 +194,51 @@ That makes the fungibility question concrete rather than theoretical and tests t
 **Routing rule: the holder never picks an issuer.** A redemption presents a class and a quantity, and routes to whichever issuer has headroom in that class. That is what keeps claims fungible, and it is what makes the cross-class headroom question (2.5) testable.
 
 
-#### 3.5a The sixth trio inverts the inequality to 1:4, on purpose
+#### 3.5a Routing was analysed and deliberately left alone — do not re-propose a new address
 
-**What the 3:2 split was for.** Unequal rates make fungibility concrete: the same dollar mints a
-different claim count at each issuer, so "are two issuers' claims the same thing?" becomes an
-arithmetic question rather than a definitional one. That purpose is unchanged and is not what
-this replaces.
+Recorded in full so this is not rediscovered. Through runs 13, 14 and 15 **every claim routed
+to ISSUER-A, the deliberately non-serving issuer, so the claim route defaulted in every window
+of every run and delivered in none.** `ClaimRouter.route` is first-fit over registration order
+with headroom its only input (§4.6g), and ISSUER-A was both first-registered and the largest.
 
-**What it cost.** `ClaimRouter.route` is first-fit over registration order with headroom as its
-only input (§4.6g), so the larger, first-registered issuer takes every claim while it has room.
-Through runs 13, 14 and 15 that was ISSUER-A, the deliberately non-serving issuer, and the
-consequence compounded:
+Four options were worked. **None was taken, and the reasoning matters more than the conclusion.**
 
-- **Every claim defaulted. The claim route delivered in no window of any run.**
-- ISSUER-A was therefore the sole gate author in every window, so one malformed response removed
-  gate authoring *and* the attack arm for a whole window (run 15 w2).
-- A buyer choosing fSIU was choosing an instrument that had failed to deliver in every prior
-  window of that run — a worse confound for F1 than any scenario change could be.
+**Lot resizing — blocked by the contract.** The idea was to make ISSUER-A's whole lot smaller
+than a job, so that its *maximum possible* headroom is below the job size and no restoration can
+make it win routing again. That is genuinely deterministic, unlike two earlier sizings that
+reduced to a dependency on the external buyer's transactions landing. But `createLot` reverts
+`LotExists`, so it needs a new address — and **`_issuersForClass` is append-only: there is no
+removal function and no admin path.** The existing ISSUER-A stays in first position with its
+48,000 lot forever, so a new address appends behind it and the old one keeps taking every claim,
+now with no agent controlling it. *Worse than the status quo.* This is the part to remember: a
+new issuer address cannot fix routing on a deployed CapacityBond.
 
-**Why sizing alone could not fix it.** Every terminal state restores headroom — serve, default
-and expire all call `restoreHeadroom`. An issuer that spends 10,000 on a claim gets exactly
-10,000 back when it concludes, so `L_A − 10,000 + 10,000 = L_A`, and any issuer large enough to
-take the first job is large enough to take the next. Two sizings were worked and discarded on
-this: both reduced to a dependency on the external buyer's transactions landing, and one of
-those has already failed once in a live run.
+**Draining the old issuer — rejected on cost to every future run.** Mint claims against ISSUER-A
+until its headroom falls below the job size and never settle them. It works, needs no new
+address and no contract change, but it parks roughly 38,000 mSIU permanently, halves the usable
+pool for every subsequent experiment, and its recovery path is self-defeating — settling those
+claims hands routing straight back to A. Degrading the environment for every later run to fix
+one scenario property of this block is the wrong trade.
 
-**The constraint that is deterministic.** Make ISSUER-A's whole lot smaller than a standard job.
-Then A's *maximum possible* headroom is below the job size, and no restoration at any time, in
-any order, can make it win routing again.
+**Redeploying the trio — rejected on risk.** It would put five comparable runs on contracts with
+no history, while the current trio has eleven runs behind it and three leak routes closed on it
+(§4.6z, §4.6z-ii). That is precisely the trade the freeze exists to prevent.
 
-```
-ISSUER-A   100 mSIU/capacity-hour ×   160 hours × 50%  →   8,000 issuance limit
-ISSUER-B    80 mSIU/capacity-hour ×   800 hours × 50%  →  32,000 issuance limit
-window 1 job  8,000 mSIU      windows 2-3 job  10,000 mSIU
-```
+**Leaving it alone — taken.** The reason routing mattered was that WORKER-CODE polled forever
+waiting for a delivery that could never arrive. **The wait primitive (§4.6ac) addresses that
+directly**: a buyer that can wait at zero cost does not burn its allocation on an answer that
+never changes, whether or not the claim is ever served. Gate-author redundancy was the secondary
+benefit, and one formatting slip costing one window across five runs is absorbable.
 
-Window 1's job is sized to A's lot, so A takes it and is exhausted. Windows 2 and 3 ask for
-10,000, which A can never hold. **One default, two deliveries, with no dependency on an external
-transaction, on turn order, or on when any claim is settled.**
+**So it becomes a disclosed scenario property, in the F1 caption where it cannot be missed:**
+every claim routes to the deliberately non-serving issuer, so the claim route defaults in every
+window and never delivers. That is a property of this scenario, **not a finding about fSIU**.
 
-**What this gives up, stated rather than dropped.** The inequality inverts and widens from 3:2 to
-1:4, and ISSUER-A becomes a small issuer that serves one undersized job and is then out of the
-market for the rest of the run. Routing determinism was judged worth more than the original
-ratio, because the ratio tests an arithmetic question that a smaller A still poses, while
-non-determinism was corrupting the arm F1 actually measures.
-
-**Two things it does not change.** Window 1's job is 8,000 mSIU rather than 10,000 — that is the
-*payment*, not the work: the same gate-authoring task at a 20% lower price, so the hardening arm
-is untouched. And ISSUER-A may still quote forward against capacity it no longer has; that is a
-datum, not noise, and `issuerHeadroomAtQuote` already records the real figure beside the offer
-(the field exists for exactly this — run 9's fwd-2 offered 8,000 against 4,000).
-
-**Registration order is now deliberate.** First-fit is `push` order on `_issuersForClass`, set by
-whichever address calls `createLot` first. ISSUER-A must be first or the sizing means nothing, so
-the order is pinned in the provisioning code and written into `data/deployments/` rather than
-left to however a loop happens to iterate.
+**One incidental discovery, worth its own note.** The two classes already disagree about
+registration order on the live bond — `code` is `ISSUER-A -> ISSUER-B`, `extract` is
+`ISSUER-B -> ISSUER-A`. Nothing depends on the extract order today, but it is a live instance of
+the hazard `LOT_CREATION_ORDER` was added to prevent: ordering that nobody chose, recorded
+nowhere, and load-bearing for routing.
 
 
 ## 4. Economic objects
@@ -1874,6 +1864,25 @@ The `?` is the finding. Each agent chooses USDC or fSIU per hop, and nothing tel
 **Question:** when USDC and fSIU are equally available and nothing recommends either, which do agents use?
 
 **Protocol.** Every worker and the orchestrator open with balances in both, sized to roughly equal purchasing power. Quotes list both settlement assets with no preference marker. No skill file, prompt or information pack mentions a preferred asset. Agents are told only what each asset is and how to use it.
+
+**THE CAPTION. No F1 number may be reported without these two sentences attached.** Both are
+properties of the instruments or the scenario, not of agent preference, and a figure quoted
+without them is the figure that gets retracted:
+
+> **Agents chose fSIU N of M times, where fSIU settles unilaterally and USDC requires a
+> seller-issued quote; and where every claim routed to the deliberately non-serving issuer, so
+> the claim route defaulted in every window and never delivered.**
+
+The first clause is a real difference between the instruments and part of the result — a bearer
+claim can be sent, a dollar payment against a quote cannot, and a preference for unilateral
+settlement *is* a reason to want a bearer instrument (§4.6ab). The second is a property of this
+scenario, not a finding about fSIU: first-fit routing sends every claim to the issuer that
+cannot serve, and that was analysed and deliberately left unfixed (§3.5a). A reader must be able
+to see both without going looking.
+
+There is also a separable artefact that is neither: the dollar route costs the buyer **one extra
+turn** (`request_quote` then `pay`, against `pay_with_claim` alone), because a seller cannot
+quote unprompted. That is the loop, not the dollar, and it is quantified rather than hidden.
 
 **Measured:**
 

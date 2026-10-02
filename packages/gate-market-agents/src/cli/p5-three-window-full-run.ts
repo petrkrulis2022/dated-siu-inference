@@ -210,21 +210,6 @@ export const NON_SERVING_ISSUER: "ISSUER-A" | "ISSUER-B" | null = "ISSUER-A";
 const NOMINAL_JOB_MILLI_SIU = 10_000n;
 
 /**
- * What each window's job costs, which is not necessarily the same in every window.
- *
- * Spec §3.5a sizes window 1's job to ISSUER-A's whole lot so that A takes it and is then
- * permanently below the job size, which is what makes routing deterministic. **All three are
- * 10,000 until ISSUER-A's 8,000 lot actually exists on chain** — setting the smaller figure
- * against the current 48,000 lot would make window 1 a cheaper purchase and change nothing
- * about routing, which is the worst of both. Flip window 1 to 8,000 in the same change that
- * creates the lot, so the code and the deployment never disagree.
- */
-export function jobMilliSiuForWindow(windowIndex: number): bigint {
-  const bySized: Record<number, bigint> = { 1: NOMINAL_JOB_MILLI_SIU };
-  return bySized[windowIndex] ?? NOMINAL_JOB_MILLI_SIU;
-}
-
-/**
  * The run's schedule, stated as fact to anyone who can buy.
  *
  * Forward-dating (`forWindow` on `mint_claim`/`pay_with_claim`) and `take_forward` are both
@@ -260,7 +245,7 @@ export function scheduleFacts(
   const lines = remaining
     .map(
       (w) =>
-        `    window ${w.index}: one code-class gate-authoring job, ${jobMilliSiuForWindow(w.index)} mSIU, ` +
+        `    window ${w.index}: one code-class gate-authoring job, ${NOMINAL_JOB_MILLI_SIU} mSIU, ` +
         `opens ${new Date(Number(w.from) * 1000).toISOString()}`,
     )
     .join("\n");

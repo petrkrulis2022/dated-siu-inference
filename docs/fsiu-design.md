@@ -424,6 +424,39 @@ Both are the same artefact at different temperatures.
 Nothing about forward pricing should be quoted from either run until the invitation is fixed and
 a run produces offers from issuers that could have declined.
 
+### 5.3c An issuer can never leave the routing set — a production design issue
+
+Found on 2026-10-02 while costing a testbed change, and it is not a testbed problem.
+
+`CapacityBond._issuersForClass` is a `push`-only array. **There is no removal function, no
+deregistration, and no admin path.** Once an address has created a lot for a class it is in that
+class's routing set permanently, and `ClaimRouter.route` is first-fit over that order with
+headroom its only input.
+
+**The consequence for a real market is direct: a provider that stops operating keeps absorbing
+claims forever.** It does not need to misbehave — it needs only to have registered once and to
+still show headroom. Every buyer routed to it mints against a bond nobody is serving, and every
+such claim defaults. The bond pays, so holders are made whole in dollars, but the *work* never
+happens and the capacity is consumed on the way. A departed provider is indistinguishable, to
+the router, from a working one with the same headroom.
+
+Three things follow for the production contract, none of which the testbed needs:
+
+- **Registration must be revocable**, by the issuer at minimum. An issuer winding down should be
+  able to stop receiving claims without draining its own headroom to do it.
+- **Routing should not be first-fit over registration order.** The design's own answer is a
+  redemption-pressure rule — route by the ratio of outstanding claims to work actually delivered
+  — which moves work away from a non-delivering issuer automatically and without anyone
+  adjudicating (§3.2). First-fit makes the *earliest* registrant structurally advantaged, which
+  is an accident of deployment order rather than a market property.
+- **Liveness is not headroom.** Headroom says an issuer *could* mint; it says nothing about
+  whether anyone is behind it. A router that cannot tell these apart will send work to the dead.
+
+The testbed demonstrates the failure rather than hypothesising it: across runs 13-15 every claim
+routed to the deliberately non-serving issuer and the claim route delivered in no window, purely
+because that issuer was registered first and large. Nothing in the system noticed or adapted
+(spec §4.6g, §3.5a).
+
 ### 5.4b The deferral property has never been exercised
 
 Recorded 2026-09-30, because it bears directly on every claim this document makes about what an

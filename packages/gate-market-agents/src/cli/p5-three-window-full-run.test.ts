@@ -883,3 +883,40 @@ describe("the run's schedule is shown as fact, never as advice (spec §4.6ad, §
     expect(brief).toMatch(/Capacity they take is gone before you see it/);
   });
 });
+
+describe("the schedule renders the REAL window bounds, not anything stale", () => {
+  it("prints exactly the computed bounds, for any run start", () => {
+    // The defect this whole change exists to avoid is telling an agent something false. A
+    // schedule showing dates that are not the run's own would be precisely that, and it would
+    // be invisible — the text looks right whatever numbers are in it.
+    const WINDOW_SECONDS = 2400n;
+    for (const runStart of [1_790_000_000n, 1_800_000_000n, BigInt(Math.floor(Date.now() / 1000))]) {
+      const bounds: Record<number, { from: bigint; to: bigint }> = {};
+      for (let i = 1; i <= 3; i++) {
+        bounds[i] = {
+          from: runStart + BigInt(i - 1) * WINDOW_SECONDS,
+          to: runStart + BigInt(i) * WINDOW_SECONDS,
+        };
+      }
+      const text = scheduleFacts(1, bounds, 3);
+      for (const i of [2, 3]) {
+        const expected = new Date(Number(bounds[i].from) * 1000).toISOString();
+        expect(text, `window ${i} must show its own computed opening time`).toContain(expected);
+      }
+      // And nothing from a window that is not in this run's bounds.
+      expect(text).not.toContain(new Date(Number(runStart - WINDOW_SECONDS) * 1000).toISOString());
+    }
+  });
+
+  it("moves with the run start — the same window index renders different times for different runs", () => {
+    // Catches a hard-coded or cached schedule, which would read as correct in every test that
+    // only checked the shape of the text.
+    const mk = (start: bigint) => ({
+      1: { from: start, to: start + 2400n },
+      2: { from: start + 2400n, to: start + 4800n },
+    });
+    const a = scheduleFacts(1, mk(1_790_000_000n), 2);
+    const b = scheduleFacts(1, mk(1_800_000_000n), 2);
+    expect(a).not.toEqual(b);
+  });
+});
