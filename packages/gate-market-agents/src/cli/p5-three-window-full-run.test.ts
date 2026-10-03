@@ -368,6 +368,26 @@ const failedPurchaseTurn = {
     '{"tool":"pay_with_claim","args":{"quantity":"10000"}} -> tool call error: mint reverted NoIssuerWithHeadroom',
 };
 
+/** A SUCCESSFUL dollar purchase, as the turn log records it. The buyer's own `pay` returned;
+ *  the capacity event it causes belongs to the SELLER, who is the one committing capacity. */
+const succeededDollarTurn = {
+  turn: 2,
+  promptChars: 0,
+  projectedUsd: "0",
+  realizedUsd: "0",
+  latencyMs: 0,
+  parsed: '{"tool":"pay","args":{"requestId":"qr-1"}}',
+  toolCall: { name: "pay" as const, ok: true },
+};
+
+/** The seller committing capacity for that dollar purchase — attributed to the SELLER. */
+const sellerReservation: CapacityEvent = {
+  agentId: "WORKER-CODE",
+  turn: 2,
+  kind: "reserve_for_work",
+  quantityMilliSiu: "10000",
+};
+
 describe("window-3 outcome classification", () => {
   it("calls it scarcity only when capacity was genuinely gone AND nothing was secured ahead", () => {
     const verdict = classifyFinalWindow([
@@ -377,6 +397,56 @@ describe("window-3 outcome classification", () => {
     ]);
     expect(verdict.verdict).toBe("scarcity");
     expect(verdict.detail).toContain("scarcity finding");
+  });
+
+  it("scores a SUCCESSFUL USDC final-window purchase as a purchase, not as scarcity", () => {
+    // Run 16, 2026-10-02, and the reason the protocol freeze was called off (spec §4.6af).
+    // ORCHESTRATOR paid dollars in window 3 and the payment settled. `purchaseSucceeded` looked
+    // only for a mint_claim/pay_with_claim capacity event attributed to the BUYER; a dollar
+    // payment produces neither, because its capacity event is the SELLER's reserve_for_work. So
+    // the attempt was counted and the success was invisible, `buyerWasShutOut` was true by
+    // construction, and the run reported scarcity while the largest issuer held 32,000 against a
+    // 10,000 job — a sentence that refutes itself.
+    //
+    // This matters beyond one label: every F1 run whose buyer chose dollars in the last window
+    // would have carried a verdict reading as the instrument failing. A scoring penalty applied
+    // to one arm of the comparison by the scoring code.
+    const verdict = classifyFinalWindow([
+      outcome(1, ["38000", "32000"], windowResult({ passed: true })),
+      outcome(2, ["35000", "32000"], windowResult({ passed: true })),
+      outcome(
+        3,
+        ["22000", "32000"],
+        windowResult({
+          passed: true,
+          turnLogsByAgent: { ORCHESTRATOR: [succeededDollarTurn] },
+          capacityEvents: [sellerReservation],
+        }),
+      ),
+    ]);
+    expect(verdict.verdict).not.toBe("scarcity");
+    expect(verdict.verdict).toBe("completed");
+  });
+
+  it("still calls it scarcity when the dollar purchase genuinely FAILED", () => {
+    // The mirror of the above, and the reason the fix cannot simply count `"pay"` in the turn
+    // log: a refused or reverted `pay` is recorded with the same tool name. Only a call that
+    // genuinely returned is a purchase.
+    const failedDollarTurn = {
+      ...succeededDollarTurn,
+      parsed: '{"tool":"pay","args":{"requestId":"qr-1"}} -> tool call error: reverted',
+      toolCall: { name: "pay" as const, ok: false },
+    };
+    const verdict = classifyFinalWindow([
+      outcome(1, ["24000", "16000"], windowResult({ passed: true })),
+      outcome(2, ["14000", "6000"], windowResult({ passed: true })),
+      outcome(
+        3,
+        ["4000", "2000"],
+        windowResult({ passed: false, turnLogsByAgent: { ORCHESTRATOR: [failedDollarTurn] } }),
+      ),
+    ]);
+    expect(verdict.verdict).toBe("scarcity");
   });
 
   it("refuses to call it scarcity when the orchestrator had secured capacity ahead", () => {

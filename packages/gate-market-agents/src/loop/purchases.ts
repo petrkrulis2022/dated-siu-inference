@@ -46,11 +46,11 @@ export function summarisePurchases(result: FullRunWindowResult): PurchaseSummary
   const decisions: PurchaseDecision[] = [];
 
   // Dollar settlements leave no capacity event — `pay` opens an escrow and moves no bonded
-  // capacity — so they are read from each agent's own parsed tool calls. Per agent, not just
-  // the orchestrator's.
+  // capacity — so they are read from each agent's own tool calls. Per agent, not just the
+  // orchestrator's.
   for (const [agentId, logs] of Object.entries(result.turnLogsByAgent)) {
     for (const log of logs) {
-      if (log.parsed.includes('"pay"')) {
+      if (settledInDollars(log)) {
         decisions.push({ buyer: agentId as AgentId, turn: log.turn, asset: "usdc" });
       }
     }
@@ -79,6 +79,24 @@ export function summarisePurchases(result: FullRunWindowResult): PurchaseSummary
   decisions.sort((a, b) => a.turn - b.turn);
 
   return { decisions, journeys: journeysFrom(events) };
+}
+
+/**
+ * Did this turn settle a quote in dollars — genuinely, not merely attempt to?
+ *
+ * Added 2026-10-02 alongside spec §4.6af, which is the same mistake seen from the other side.
+ * This function used to ask `log.parsed.includes('"pay"')`, and on a FAILED call the loop writes
+ * `parsed` as `{"tool":"pay",…} -> tool call error: …` — which contains `"pay"`. So a reverted
+ * or refused payment was reported as a settled one, and the run report's own asset-choice line
+ * over-counted the dollar route by every failure.
+ *
+ * `toolCall` is the recorded fact and is preferred wherever it exists. Records written before
+ * that field did not carry it, so the text is still read for them — but with the failure marker
+ * excluded, which is the part the old check was missing rather than a new guess.
+ */
+function settledInDollars(log: { parsed: string; toolCall?: { name: string; ok: boolean } }): boolean {
+  if (log.toolCall !== undefined) return log.toolCall.name === "pay" && log.toolCall.ok;
+  return log.parsed.includes('"pay"') && !log.parsed.includes("-> tool call error:");
 }
 
 function journeysFrom(events: readonly CapacityEvent[]): ClaimJourney[] {

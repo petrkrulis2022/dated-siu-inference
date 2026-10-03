@@ -344,6 +344,22 @@ export interface TurnLog {
   realizedUsd: string;
   latencyMs: number;
   parsed: string;
+  /**
+   * Which tool this turn called, and whether the call genuinely returned.
+   *
+   * Added 2026-10-02 (spec §4.6af). Before this, the only record of a tool call was `parsed`, a
+   * STRING: `JSON.stringify(intent)` on success and
+   * `` `${JSON.stringify(intent)} -> tool call error: …` `` on failure. Every reader therefore
+   * had to sniff that string, and two readers got it wrong in opposite directions at once — the
+   * final-window classifier could not see a successful dollar payment at all, while
+   * `summarisePurchases` counted a reverted one as settled. A dollar payment is the case that
+   * exposes this because it is the one route whose success leaves no capacity event of its own:
+   * `pay` opens an escrow, and the capacity event it leads to belongs to the SELLER.
+   *
+   * So the fact is recorded as a fact. Ownership of a capacity event is not ownership of a
+   * purchase, and the text of a model's own tool call is not evidence that the call worked.
+   */
+  toolCall?: { name: ToolName; ok: boolean };
   gateResult?: { passed: boolean; summary: string };
   quarantinedNonDeterministicGate?: boolean;
   /** The quote-board text this agent's own prompt actually carried this turn, if any — real
@@ -1826,6 +1842,7 @@ export async function runFullRunWindow(
         forwardText: forwardText || undefined,
         latencyMs: adapterResult.latency_ms,
         parsed: JSON.stringify(intent),
+        toolCall: { name: intent.tool, ok: true },
         quarantinedNonDeterministicGate: quarantined || undefined,
         stopReason: adapterResult.stopReason,
         usage: adapterResult.usage,
@@ -1982,6 +1999,7 @@ export async function runFullRunWindow(
           usage: adapterResult.usage,
           contentBlockTypes: adapterResult.contentBlockTypes,
           parsed: `${JSON.stringify(intent)} -> tool call error: ${err instanceof Error ? err.message : String(err)}`,
+          toolCall: { name: intent.tool, ok: false },
         };
         turnLogsByAgent[agent.agentId].push(log);
         options.onTurn?.(agent.agentId, log);

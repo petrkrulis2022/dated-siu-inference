@@ -3,11 +3,19 @@ import { renderPurchaseSummary, summarisePurchases } from "./purchases.js";
 import type { CapacityEvent, FullRunWindowResult } from "./full-run.js";
 
 const result = (
-  events: Partial<CapacityEvent>[],
-  logs: Record<string, { turn: number; parsed: string }[]> = {},
+  events: Partial<CapacityEvent>[] | Record<string, never>,
+  logs: Record<
+    string,
+    { turn: number; parsed: string; toolCall?: { name: string; ok: boolean } }[]
+  > = {},
 ): FullRunWindowResult =>
   ({
-    capacityEvents: events.map((e) => ({ agentId: "ORCHESTRATOR", turn: 1, kind: "mint_claim", ...e })),
+    capacityEvents: (Array.isArray(events) ? events : []).map((e) => ({
+      agentId: "ORCHESTRATOR",
+      turn: 1,
+      kind: "mint_claim",
+      ...e,
+    })),
     turnLogsByAgent: logs,
   }) as unknown as FullRunWindowResult;
 
@@ -27,6 +35,39 @@ describe("summarisePurchases", () => {
     const lines = renderPurchaseSummary(s).join("\n");
     expect(lines).toContain("ORCHESTRATOR: 0 in USDC, 1 in fSIU");
     expect(lines).toContain("WORKER-CODE: 1 in USDC, 0 in fSIU");
+  });
+
+  it("does NOT count a dollar payment that failed as a settled USDC purchase", () => {
+    // The mirror of spec §4.6af, found while fixing it. On a failed tool call the loop records
+    // `parsed` as `{"tool":"pay",...} -> tool call error: ...`, which still contains `"pay"` —
+    // so a reverted or refused payment was reported as a settled one. The dollar route's success
+    // was never observed from a fact, only guessed from the text of the model's own tool call,
+    // and that one mistake produced an over-count here and an under-count in the classifier.
+    const s = summarisePurchases(
+      result({}, {
+        ORCHESTRATOR: [
+          {
+            turn: 1,
+            parsed: '{"tool":"pay","args":{"requestId":"qr-1"}} -> tool call error: reverted NoIssuerWithHeadroom',
+            toolCall: { name: "pay", ok: false },
+          },
+        ],
+      }),
+    );
+    expect(s.decisions).toHaveLength(0);
+    expect(renderPurchaseSummary(s).join("\n")).toContain("no purchase decision was reached");
+  });
+
+  it("counts a dollar payment that genuinely returned", () => {
+    const s = summarisePurchases(
+      result({}, {
+        ORCHESTRATOR: [
+          { turn: 2, parsed: '{"tool":"pay","args":{"requestId":"qr-1"}}', toolCall: { name: "pay", ok: true } },
+        ],
+      }),
+    );
+    expect(s.decisions).toHaveLength(1);
+    expect(s.decisions[0]?.asset).toBe("usdc");
   });
 
   it("records a split with its ratio rather than collapsing it to one asset", () => {

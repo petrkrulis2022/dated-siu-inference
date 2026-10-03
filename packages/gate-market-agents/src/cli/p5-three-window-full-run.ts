@@ -2132,24 +2132,57 @@ export function classifyFinalWindow(outcomes: WindowOutcome[]): {
       t.parsed.includes('"pay_with_claim"') ||
       t.parsed.includes('"mint_claim"'),
   );
-  const purchaseSucceeded = last.result.capacityEvents.some(
-    (e) => e.agentId === "ORCHESTRATOR" && (e.kind === "mint_claim" || e.kind === "pay_with_claim"),
+  // A purchase that SUCCEEDED, whichever route it took.
+  //
+  // This asked `capacityEvents.some(e => e.agentId === "ORCHESTRATOR" && (mint_claim ||
+  // pay_with_claim))` until 2026-10-02, which can only ever see the claim route. A dollar
+  // payment produces no capacity event of its own — `pay` opens an escrow — and the
+  // `reserve_for_work` it leads to is attributed to the SELLER, who is the party committing
+  // capacity. So a successful USDC purchase was invisible here, `buyerWasShutOut` was true by
+  // construction for every dollar-route final window, and the run reported scarcity.
+  //
+  // Nine runs did not catch it because every final-window purchase before run 16 settled in
+  // fSIU — the §4.6f artefact. The classifier was correct only for as long as the bias held, and
+  // the mitigations that make the asset choice fair are exactly what broke it. Left in place it
+  // would have applied a scarcity verdict to every dollar-arm F1 run regardless of what
+  // happened: a penalty on one arm of the comparison, applied by the scoring code.
+  //
+  // `summarisePurchases` is asked rather than re-deriving the answer, because it already knows
+  // both routes, attributes per buyer, and is what the report's own asset-choice line prints.
+  // Two readers of the same fact disagreeing is how this arose; there is now one.
+  const purchaseSucceeded = summarisePurchases(last.result).decisions.some(
+    (d) => d.buyer === "ORCHESTRATOR",
   );
   const buyerWasShutOut = purchaseAttempts.length > 0 && !purchaseSucceeded;
 
   if (buyerWasShutOut && securedAhead.length === 0) {
+    // Scarcity means the capacity was gone. If an issuer was holding enough and the buyer still
+    // could not buy, that is a defect to investigate and the taxonomy already has a name for it
+    // — saying "no single issuer held the 10000 mSIU the job needs (largest: 32000 mSIU)" in one
+    // sentence, as this did, is a contradiction rather than a finding.
+    if (!hadCapacity) {
+      return {
+        verdict: "scarcity",
+        detail:
+          `Window ${WINDOW_COUNT}'s buyer could not buy: ${purchaseAttempts.length} purchase attempt(s), ` +
+          `every one of them failed, no single issuer held the ${NOMINAL_JOB_MILLI_SIU} mSIU the job ` +
+          `needs (largest: ${largestIssuer} mSIU), and ORCHESTRATOR had secured nothing ahead. This is ` +
+          "the scarcity finding." +
+          (last.result.passed
+            ? ` Note that the window still reports passed=true: a gate was delivered anyway, by ` +
+              `${last.result.passedBy ?? "someone"}, without the work ever being paid for. That says ` +
+              "nothing about the instrument and must not be read as it working."
+            : ""),
+      };
+    }
     return {
-      verdict: "scarcity",
+      verdict: "failed_with_capacity",
       detail:
         `Window ${WINDOW_COUNT}'s buyer could not buy: ${purchaseAttempts.length} purchase attempt(s), ` +
-        `every one of them failed, no single issuer held the ${NOMINAL_JOB_MILLI_SIU} mSIU the job ` +
-        `needs (largest: ${largestIssuer} mSIU), and ORCHESTRATOR had secured nothing ahead. This is ` +
-        "the scarcity finding." +
-        (last.result.passed
-          ? ` Note that the window still reports passed=true: a gate was delivered anyway, by ` +
-            `${last.result.passedBy ?? "someone"}, without the work ever being paid for. That says ` +
-            "nothing about the instrument and must not be read as it working."
-          : ""),
+        `every one of them failed — but NOT for want of capacity: the largest single issuer held ` +
+        `${largestIssuer} mSIU against a ${NOMINAL_JOB_MILLI_SIU} mSIU job. Treat this as a defect ` +
+        "to investigate, not as the scarcity result. Halted reasons: " +
+        JSON.stringify(last.result.haltedReason),
     };
   }
 
