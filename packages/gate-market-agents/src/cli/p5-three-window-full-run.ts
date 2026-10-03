@@ -39,7 +39,7 @@ import { CANONICAL_ASSET_DESCRIPTION } from "../skills/asset-description.js";
 import { BudgetCeiling } from "../budget/ceiling.js";
 import { ExperimentBudget } from "../budget/experiment-budget.js";
 import { validateModelAssignment, type ModelAssignments } from "../pack/model-assignment.js";
-import { erc8004IdFor } from "../identity/resolve.js";
+import { erc8004IdFor, type AgentId } from "../identity/resolve.js";
 import type { RunnerDeps } from "../deps.js";
 import { loadGateMarketDeployment } from "../chain/deployment.js";
 import { ViemChainReader } from "../chain/reader.js";
@@ -58,6 +58,16 @@ import {
 } from "../loop/full-run.js";
 import type { RunManifest } from "../run-recorder/recorder.js";
 import { RUNS_ROOT } from "./runs-root.js";
+import {
+  DECIDER_SEATS,
+  disqualification,
+  isCountable,
+  parseDebugFlags,
+  renderDebugBanner,
+  runIdPrefix,
+  type DebugConfig,
+} from "./debug-mode.js";
+import { KNOWN_GOOD_GATE_PROVENANCE, KNOWN_GOOD_GATE_SOURCE } from "./known-good-gate.js";
 import { capabilityGapFrictions, missingToolFrictions } from "../friction/missing-tool.js";
 import type { FrictionLogEntry } from "../friction/log.js";
 import {
@@ -122,7 +132,22 @@ const RUN_CAP_USD = "30";
 const EXPERIMENT_CAP_USD = "150";
 const ZERO_BYTES32 = `0x${"0".repeat(64)}` as Hex;
 
+/** The canonical shape of this experiment. A run that is not this shape cannot be compared
+ *  with one that is, which `debug-mode.ts` enforces rather than trusts. */
 export const WINDOW_COUNT = 3;
+
+/**
+ * How many windows THIS process will run. Equal to `WINDOW_COUNT` unless `--windows` says
+ * otherwise, and a run where they differ is disqualified by `isCountable`.
+ *
+ * Module-scoped and set once, before anything is spent, rather than threaded through twenty
+ * call sites — but deliberately NOT exported as a mutable binding: tests import `WINDOW_COUNT`
+ * and must keep seeing the canonical three whatever a previous run set.
+ */
+let runWindows: number = WINDOW_COUNT;
+function setRunWindows(n: number): void {
+  runWindows = n;
+}
 /**
  * Each window is a real, fixed 20-minute span — spec §9.2's "three weekly windows", compressed.
  *
@@ -408,6 +433,13 @@ export interface WindowOutcome {
 }
 
 async function main(): Promise<void> {
+  // Before anything is read, validated or spent: a run that cannot count should say so in its
+  // first lines, not in a footnote after $3 of inference.
+  const debug: DebugConfig = parseDebugFlags(process.argv.slice(2), WINDOW_COUNT);
+  setRunWindows(debug.windows);
+  console.log(renderDebugBanner(debug, WINDOW_COUNT));
+  console.log("");
+
   const registry = JSON.parse(readFileSync(join(REPO_ROOT, "data/registry/models.json"), "utf-8"));
   const deploymentRecord = JSON.parse(
     readFileSync(join(REPO_ROOT, "data/deployments/base-sepolia-gate-market.json"), "utf-8"),
@@ -432,13 +464,35 @@ async function main(): Promise<void> {
     return { provider: entry.provider, host: entry.host };
   };
 
-  const models = {
+  // The real assignment is validated above whatever happens, so §12.2a is checked on a debug
+  // run too — what changes is only which of those seats actually runs its assigned model.
+  // Deciders are never substituted: a cheaper decider is a different decider, and the behaviour
+  // being debugged is the behaviour that has to run.
+  const assigned = {
     ORCHESTRATOR: modelAssignment.ORCHESTRATOR.reasoningModel,
     "WORKER-CODE": modelAssignment["WORKER-CODE"].reasoningModel,
     "WORKER-EXTRACT": modelAssignment["WORKER-EXTRACT"].reasoningModel,
     "ISSUER-A": modelAssignment["ISSUER-A"].reasoningModel,
     "ISSUER-B": modelAssignment["ISSUER-B"].reasoningModel,
   } as const;
+  const models = Object.fromEntries(
+    Object.entries(assigned).map(([agentId, model]) => [
+      agentId,
+      debug.cheapNonDeciders && !DECIDER_SEATS.includes(agentId as AgentId)
+        ? debug.cheapModel
+        : model,
+    ]),
+  ) as Record<keyof typeof assigned, string>;
+  if (debug.cheapNonDeciders) {
+    for (const [agentId, model] of Object.entries(models)) {
+      if (model !== assigned[agentId as keyof typeof assigned]) {
+        console.log(
+          `  DEBUG substitution: ${agentId} ${assigned[agentId as keyof typeof assigned]} -> ${model}`,
+        );
+      }
+    }
+    console.log("");
+  }
 
   const adapters = Object.fromEntries(
     Object.entries(models).map(([agentId, model]) => [
@@ -530,7 +584,7 @@ async function main(): Promise<void> {
   };
 
   const runSeed = Math.floor(Math.random() * 2_147_483_647);
-  const runId = `p5-three-window-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  const runId = `${runIdPrefix(debug, WINDOW_COUNT)}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
 
   const headroomRows = async (): Promise<{ issuer: string; headroom: string }[]> => {
     const issuers = await chainReader.issuersForClass(classId);
@@ -552,7 +606,7 @@ async function main(): Promise<void> {
    * consumed returns before the next run starts. See `releaseExternalClaims`. */
   const externalClaims: { tokenId: bigint; holder: Hex; quantityMilliSiu: number }[] = [];
   const windowBoundsByIndex: Record<number, { from: bigint; to: bigint }> = {};
-  for (let i = 1; i <= WINDOW_COUNT; i++) {
+  for (let i = 1; i <= runWindows; i++) {
     windowBoundsByIndex[i] = {
       from: runStart + BigInt(i - 1) * WINDOW_SECONDS,
       to: runStart + BigInt(i) * WINDOW_SECONDS,
@@ -630,7 +684,7 @@ async function main(): Promise<void> {
   const unreachable = reachability.filter((r) => !r.reachable);
   if (unreachable.length === 0) {
     console.log(
-      `Default path REACHABLE in all ${WINDOW_COUNT} windows: every window closes on ${commodityPrint.date}, ` +
+      `Default path REACHABLE in all ${runWindows} windows: every window closes on ${commodityPrint.date}, ` +
         `the day print ${printId} is dated. A claim left unserved can be settled and its issuer's bond drawn.`,
     );
   } else {
@@ -675,7 +729,18 @@ async function main(): Promise<void> {
     seed: `p5-three-window:${runSeed}`,
     oracleTrialSeed: F1_ORACLE_TRIAL_SEED,
     externalDepletionMilliSiu: EXTERNAL_DEPLETION_MILLI_SIU,
-    windowCount: WINDOW_COUNT,
+    windowCount: runWindows,
+    debugMode: {
+      enabled: debug.enabled,
+      windows: debug.windows,
+      canonicalWindows: WINDOW_COUNT,
+      preAuthoredGate: debug.preAuthoredGate,
+      ...(debug.preAuthoredGate ? { gateProvenance: KNOWN_GOOD_GATE_PROVENANCE } : {}),
+      cheapNonDeciders: debug.cheapNonDeciders,
+      ...(debug.cheapNonDeciders ? { cheapModel: debug.cheapModel } : {}),
+      countsTowardF1: isCountable(debug, WINDOW_COUNT),
+      disqualifiedBecause: disqualification(debug, WINDOW_COUNT),
+    },
     windowBounds: Object.fromEntries(
       Object.entries(windowBoundsByIndex).map(([i, b]) => [
         i,
@@ -689,7 +754,7 @@ async function main(): Promise<void> {
   // default path is reachable at all — see runFullRunWindow's own `outstandingClaims` comment.
   const outstandingClaims: OutstandingClaim[] = [];
 
-  for (let windowIndex = 1; windowIndex <= WINDOW_COUNT; windowIndex++) {
+  for (let windowIndex = 1; windowIndex <= runWindows; windowIndex++) {
     const { from: windowFrom, to: windowTo } = windowBoundsByIndex[windowIndex];
     await waitForWindowToOpen(chainReader, windowIndex, windowFrom);
     const job: JobEnvelope = {
@@ -717,7 +782,7 @@ async function main(): Promise<void> {
     const taskSpecHash = keccak256(stringToBytes(`gate-hardening:${job.jobId}`));
 
     const headroomBefore = await headroomRows();
-    console.log(`\n\n######## WINDOW ${windowIndex} of ${WINDOW_COUNT} ########`);
+    console.log(`\n\n######## WINDOW ${windowIndex} of ${runWindows} ########`);
     console.log(
       `code-class headroom entering this window: ${headroomBefore
         .map((r) => `${r.issuer} ${r.headroom}`)
@@ -740,6 +805,7 @@ async function main(): Promise<void> {
       workerCodeErc8004Id,
       workerExtractErc8004Id,
       capacityLots: deploymentRecord.capacityLots,
+      windowCount: runWindows,
       windowFrom,
       windowTo,
     });
@@ -773,8 +839,15 @@ async function main(): Promise<void> {
       windowFrom,
       windowTo,
       windowIndex,
-      windowCount: WINDOW_COUNT,
+      windowCount: runWindows,
       windowBoundsByIndex,
+      ...(debug.preAuthoredGate ? { preAuthoredGateSource: KNOWN_GOOD_GATE_SOURCE } : {}),
+      onPreAuthoredGate: (ok, summary) => {
+        console.log(
+          `  DEBUG: pinned gate injected as version 1 and graded for real — ` +
+            `${ok ? "PASS" : "FAIL"} (${summary}). Author: ${KNOWN_GOOD_GATE_PROVENANCE}.`,
+        );
+      },
       // Handed to whichever issuer a claim is actually presented against, as part of that
       // redemption — not put in anyone's pack up front. The same text WORKER-CODE is held to when
       // it authors under the USDC route, so a gate is authored under identical terms whoever owes
@@ -822,6 +895,16 @@ async function main(): Promise<void> {
     const settledThisWindow = new Set(
       result.capacityEvents.filter((e) => e.kind === "settle_window_close").map((e) => e.tokenId),
     );
+    // Presentation decides whether settling pays the holder or nobody, so it has to travel with
+    // the claim into later windows (fsiu-design.md §4.3a). Read from the run's own real
+    // redeem_claim events, never assumed: a claim this run never saw presented is reported as
+    // such rather than guessed either way.
+    const presentedThisWindow = new Set(
+      result.capacityEvents.filter((e) => e.kind === "redeem_claim").map((e) => e.tokenId),
+    );
+    for (const c of outstandingClaims) {
+      if (presentedThisWindow.has(c.tokenId)) c.everPresented = true;
+    }
     for (let i = outstandingClaims.length - 1; i >= 0; i--) {
       if (settledThisWindow.has(outstandingClaims[i].tokenId)) outstandingClaims.splice(i, 1);
     }
@@ -840,6 +923,7 @@ async function main(): Promise<void> {
               : undefined,
         quantityMilliSiu: e.quantityMilliSiu,
         mintedInWindow: windowIndex,
+        everPresented: presentedThisWindow.has(e.tokenId),
       });
     }
 
@@ -853,7 +937,7 @@ async function main(): Promise<void> {
         commodityPrint,
         rateUsdPerSiu,
         windowSeconds: WINDOW_SECONDS,
-        runEndsAtUnixSeconds: windowBoundsByIndex[WINDOW_COUNT].to,
+        runEndsAtUnixSeconds: windowBoundsByIndex[runWindows].to,
         chainReader,
       });
       // The report is JSON, and a tokenId is a bigint — JSON.stringify throws on those. The id
@@ -882,7 +966,7 @@ async function main(): Promise<void> {
     deployment,
     rpcUrl,
     chainReader,
-    runEndsAtUnixSeconds: windowBoundsByIndex[WINDOW_COUNT].to,
+    runEndsAtUnixSeconds: windowBoundsByIndex[runWindows].to,
   });
 
   await releaseStrandedReservations({
@@ -913,15 +997,30 @@ async function main(): Promise<void> {
         oracleTrialSeed: F1_ORACLE_TRIAL_SEED,
         printId,
         rateUsdPerSiu,
-        windowCount: WINDOW_COUNT,
+        windowCount: runWindows,
         externalDepletionMilliSiu: EXTERNAL_DEPLETION_MILLI_SIU,
         nominalJobMilliSiu: NOMINAL_JOB_MILLI_SIU.toString(),
         startingHeadroom,
-        finalWindowVerdict: classifyFinalWindow(outcomes),
+        // Recorded in the artefact itself, not only in the log, so a reader months from now
+        // cannot pick up a debug run's numbers without the disqualification arriving with them.
+        // `assertCountableForF1` in debug-mode.ts reads exactly this field.
+        debugMode: {
+          enabled: debug.enabled,
+          windows: debug.windows,
+          canonicalWindows: WINDOW_COUNT,
+          preAuthoredGate: debug.preAuthoredGate,
+          ...(debug.preAuthoredGate ? { gateProvenance: KNOWN_GOOD_GATE_PROVENANCE } : {}),
+          cheapNonDeciders: debug.cheapNonDeciders,
+          ...(debug.cheapNonDeciders ? { cheapModel: debug.cheapModel } : {}),
+          deciderSeats: DECIDER_SEATS,
+          countsTowardF1: isCountable(debug, WINDOW_COUNT),
+          disqualifiedBecause: disqualification(debug, WINDOW_COUNT),
+        },
+        finalWindowVerdict: classifyFinalWindow(outcomes, runWindows),
         // Not a count of holders who declined to settle — a count of holders who were never
         // asked. See `claimsHolderWasNeverOfferedSettlement` and spec §4.6ae; reading the two
         // as the same thing is §4.6y repeated on the holder side.
-        holdersNeverOfferedSettlement: claimsHolderWasNeverOfferedSettlement(outstandingClaims).map(
+        holdersNeverOfferedSettlement: claimsHolderWasNeverOfferedSettlement(outstandingClaims, runWindows).map(
           (c) => ({
             tokenId: c.tokenId,
             holder: c.holderAgentId ?? c.holder,
@@ -991,6 +1090,8 @@ async function waitForWindowToOpen(
 
 export interface RosterInput {
   windowIndex: number;
+  /** Defaults to `WINDOW_COUNT`, so every existing caller and test is unchanged. */
+  windowCount?: number;
   headroomBefore: { issuer: string; headroom: string }[];
   taskSpecHash: Hex;
   rateUsdPerSiu: string;
@@ -1026,6 +1127,10 @@ export interface RosterInput {
  * mechanics of two new tools.
  */
 export function buildRoster(input: RosterInput): RosterAgentConfig[] {
+  // The run's own window count, not the canonical constant. buildRoster used to read
+  // WINDOW_COUNT directly while RosterInput carried no window count at all, so every brief
+  // said "of 3" whatever the run actually was.
+  const windowCount = input.windowCount ?? WINDOW_COUNT;
   const {
     windowIndex,
     windowBoundsByIndex,
@@ -1046,14 +1151,14 @@ export function buildRoster(input: RosterInput): RosterAgentConfig[] {
     windowTo,
   } = input;
 
-  const isLastWindow = windowIndex === WINDOW_COUNT;
+  const isLastWindow = windowIndex === windowCount;
   const poolText = headroomBefore.map((r) => `${r.issuer}: ${r.headroom} mSIU`).join("; ");
   const totalHeadroom = headroomBefore.reduce((sum, r) => sum + BigInt(r.headroom), 0n);
 
   const runShapeFacts = `
-THIS RUN HAS ${WINDOW_COUNT} WINDOWS. THIS IS WINDOW ${windowIndex}.
+THIS RUN HAS ${windowCount} WINDOWS. THIS IS WINDOW ${windowIndex}.
   Each window has its own job of the same kind. Balances, claims and capacity carry across all
-  ${WINDOW_COUNT} — this is one chain and one pool, not three fresh starts. What you spend now is
+  ${windowCount} — this is one chain and one pool, not three fresh starts. What you spend now is
   gone later; what you hold now you still hold later.
 
 CAPACITY RIGHT NOW (real, read from chain at the start of this window)
@@ -1066,7 +1171,7 @@ CAPACITY RIGHT NOW (real, read from chain at the start of this window)
   Other buyers exist and are not in this run. Capacity they take is gone before you see it.
 ${ONE_POOL_DISCLOSURE}
 
-${windowBoundsByIndex ? scheduleFacts(windowIndex, windowBoundsByIndex, WINDOW_COUNT) : ""}`;
+${windowBoundsByIndex ? scheduleFacts(windowIndex, windowBoundsByIndex, windowCount) : ""}`;
 
   const orchestratorBrief = `
 YOUR JOB THIS WINDOW
@@ -1074,7 +1179,7 @@ YOUR JOB THIS WINDOW
   delivered before your turns or budget run out. ${
     isLastWindow
       ? "This is the last window of the run."
-      : `There ${WINDOW_COUNT - windowIndex === 1 ? "is" : "are"} ${WINDOW_COUNT - windowIndex} more window${WINDOW_COUNT - windowIndex === 1 ? "" : "s"} after this one, each with its own job of the same kind.`
+      : `There ${windowCount - windowIndex === 1 ? "is" : "are"} ${windowCount - windowIndex} more window${windowCount - windowIndex === 1 ? "" : "s"} after this one, each with its own job of the same kind.`
   }
 
   YOU DO NOT HAVE THE REFERENCE MATERIALS FOR THIS JOB — not the commercial intent, not the exact
@@ -1151,7 +1256,7 @@ ${runShapeFacts}
 `;
 
   const workerCodeBrief = `
-YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${WINDOW_COUNT})
+YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${windowCount})
   ORCHESTRATOR has a gate-hardening job for the "code" class (technical contract below) and may
   subcontract it to you, in USDC or in a work claim (fSIU) — that choice is genuinely
   ORCHESTRATOR's, not yours to influence or pre-empt.
@@ -1229,7 +1334,7 @@ ${claimFactsFor(taskSpecHash)}
 ${TECHNICAL_CONTRACT}`;
 
   const workerExtractBrief = `
-YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${WINDOW_COUNT})
+YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${windowCount})
   There is no "extract"-class job to build. Your role is the other half of your skill: you are the
   ADVERSARY for the "code"-class gate ORCHESTRATOR is having built.
 
@@ -1295,7 +1400,7 @@ ${claimFactsFor(taskSpecHash)}${runShapeFacts}`;
       ? `  There are no windows after this one, so there is nothing to quote forward terms for.`
       : `  FORWARD TERMS — THE ONE PLACE YOU NAME YOUR OWN NUMBER
   You may state terms for a later window of this run:
-    {"tool": "quote_forward", "args": {"forWindow": <a window number above ${windowIndex}, up to ${WINDOW_COUNT}>,
+    {"tool": "quote_forward", "args": {"forWindow": <a window number above ${windowIndex}, up to ${windowCount}>,
      "rateUsdPerSiu": "<your own price>", "maxQuantityMilliSiu": "<how much you will make available>"}}
   Every quote is recorded with your real headroom at the time, whether or not anyone takes it.
   It is NOT binding: nothing on-chain holds you to it, and a claim minted later still prices at
@@ -1305,7 +1410,7 @@ ${claimFactsFor(taskSpecHash)}${runShapeFacts}`;
 
 ${CANONICAL_ASSET_DESCRIPTION}
 
-YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${WINDOW_COUNT})
+YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${windowCount})
   A buyer may mint a "code"-class claim against your bonded capacity (ClaimRouter routes to
   whichever issuer has headroom — it may not be you, and it may not happen on your first turn).
   Work paid for in dollars now draws on the same bonded capacity of yours that a claim does.
@@ -1736,7 +1841,7 @@ async function depleteExternally(input: {
  */
 function readFrictionEntries(runId: string): { window: number; entry: FrictionLogEntry }[] {
   const out: { window: number; entry: FrictionLogEntry }[] = [];
-  for (let w = 1; w <= WINDOW_COUNT; w++) {
+  for (let w = 1; w <= runWindows; w++) {
     const path = join(RUNS_ROOT, `${runId}-w${w}`, "friction", "friction-log.jsonl");
     let raw: string;
     try {
@@ -1855,8 +1960,9 @@ function printRationaleCoverage(
  */
 export function claimsHolderWasNeverOfferedSettlement(
   claims: readonly OutstandingClaim[],
+  windowCount: number = WINDOW_COUNT,
 ): readonly OutstandingClaim[] {
-  return claims.filter((c) => c.mintedInWindow === WINDOW_COUNT);
+  return claims.filter((c) => c.mintedInWindow === windowCount);
 }
 
 async function settleOutstandingAgentClaims(input: {
@@ -1874,7 +1980,7 @@ async function settleOutstandingAgentClaims(input: {
       "  window has no later window in which an agent could close it, so without this it stays\n" +
       "  consumed into the next run (spec §4.6z-ii).",
   );
-  const unoffered = claimsHolderWasNeverOfferedSettlement(input.claims);
+  const unoffered = claimsHolderWasNeverOfferedSettlement(input.claims, runWindows);
   if (unoffered.length > 0) {
     console.log(
       `  OF THESE, ${unoffered.length} WAS/WERE NEVER OFFERED TO THEIR HOLDER AT ALL. A holder only\n` +
@@ -2147,11 +2253,16 @@ function describeCapacityEvent(e: CapacityEvent): string {
  * only "window 3 failed" cannot distinguish the finding the experiment exists to produce from a
  * defect in it.
  */
-export function classifyFinalWindow(outcomes: WindowOutcome[]): {
+export function classifyFinalWindow(
+  outcomes: WindowOutcome[],
+  /** The run's own window count. Defaults to the canonical three so every existing caller and
+   *  test keeps its meaning; a shortened run passes its own. */
+  windowCount: number = WINDOW_COUNT,
+): {
   verdict: "scarcity" | "failed_with_capacity" | "completed" | "no_final_window";
   detail: string;
 } {
-  const last = outcomes.find((o) => o.windowIndex === WINDOW_COUNT);
+  const last = outcomes.find((o) => o.windowIndex === windowCount);
   if (!last)
     return { verdict: "no_final_window", detail: "The run did not reach its last window." };
 
@@ -2169,7 +2280,7 @@ export function classifyFinalWindow(outcomes: WindowOutcome[]): {
   // that: two same-window payments were read as "secured ahead" and a scarcity outcome was
   // reported as "the instrument working as intended".
   const securedAhead = outcomes
-    .filter((o) => o.windowIndex < WINDOW_COUNT)
+    .filter((o) => o.windowIndex < windowCount)
     .flatMap((o) => o.result.capacityEvents)
     .filter(
       (e) =>
@@ -2221,7 +2332,7 @@ export function classifyFinalWindow(outcomes: WindowOutcome[]): {
       return {
         verdict: "scarcity",
         detail:
-          `Window ${WINDOW_COUNT}'s buyer could not buy: ${purchaseAttempts.length} purchase attempt(s), ` +
+          `Window ${windowCount}'s buyer could not buy: ${purchaseAttempts.length} purchase attempt(s), ` +
           `every one of them failed, no single issuer held the ${NOMINAL_JOB_MILLI_SIU} mSIU the job ` +
           `needs (largest: ${largestIssuer} mSIU), and ORCHESTRATOR had secured nothing ahead. This is ` +
           "the scarcity finding." +
@@ -2235,7 +2346,7 @@ export function classifyFinalWindow(outcomes: WindowOutcome[]): {
     return {
       verdict: "failed_with_capacity",
       detail:
-        `Window ${WINDOW_COUNT}'s buyer could not buy: ${purchaseAttempts.length} purchase attempt(s), ` +
+        `Window ${windowCount}'s buyer could not buy: ${purchaseAttempts.length} purchase attempt(s), ` +
         `every one of them failed — but NOT for want of capacity: the largest single issuer held ` +
         `${largestIssuer} mSIU against a ${NOMINAL_JOB_MILLI_SIU} mSIU job. Treat this as a defect ` +
         "to investigate, not as the scarcity result. Halted reasons: " +
@@ -2247,7 +2358,7 @@ export function classifyFinalWindow(outcomes: WindowOutcome[]): {
     return {
       verdict: "completed",
       detail:
-        `Window ${WINDOW_COUNT} delivered its job. Capacity at the largest single issuer when it ` +
+        `Window ${windowCount} delivered its job. Capacity at the largest single issuer when it ` +
         `started: ${largestIssuer} mSIU against a ${NOMINAL_JOB_MILLI_SIU} mSIU job. ` +
         (securedAhead.length > 0
           ? `ORCHESTRATOR had secured capacity ahead with ${securedAhead.length} genuinely ` +
@@ -2261,7 +2372,7 @@ export function classifyFinalWindow(outcomes: WindowOutcome[]): {
     return {
       verdict: "scarcity",
       detail:
-        `Window ${WINDOW_COUNT} failed, no single issuer held the ${NOMINAL_JOB_MILLI_SIU} mSIU the ` +
+        `Window ${windowCount} failed, no single issuer held the ${NOMINAL_JOB_MILLI_SIU} mSIU the ` +
         `job needs (largest: ${largestIssuer} mSIU), and ORCHESTRATOR had secured nothing ahead. ` +
         "This is the scarcity finding: the capacity was gone and nothing had been reserved against it.",
     };
@@ -2270,7 +2381,7 @@ export function classifyFinalWindow(outcomes: WindowOutcome[]): {
   return {
     verdict: "failed_with_capacity",
     detail:
-      `Window ${WINDOW_COUNT} failed, but NOT for want of capacity — ` +
+      `Window ${windowCount} failed, but NOT for want of capacity — ` +
       (hadCapacity
         ? `the largest single issuer held ${largestIssuer} mSIU against a ${NOMINAL_JOB_MILLI_SIU} mSIU job`
         : `ORCHESTRATOR had secured ${securedAhead.length} capacity action(s) in earlier windows`) +
@@ -2300,7 +2411,7 @@ function readMissingToolFrictions(
     text: string;
     byDesign: boolean;
   }[] = [];
-  for (let w = 1; w <= WINDOW_COUNT; w++) {
+  for (let w = 1; w <= runWindows; w++) {
     const path = join(RUNS_ROOT, `${runId}-w${w}`, "friction", "friction-log.jsonl");
     let raw: string;
     try {
@@ -2332,7 +2443,7 @@ function readCapabilityGapFrictions(
   runId: string,
 ): { window: number; agent: string; turn: number; text: string }[] {
   const out: { window: number; agent: string; turn: number; text: string }[] = [];
-  for (let w = 1; w <= WINDOW_COUNT; w++) {
+  for (let w = 1; w <= runWindows; w++) {
     const path = join(RUNS_ROOT, `${runId}-w${w}`, "friction", "friction-log.jsonl");
     let raw: string;
     try {

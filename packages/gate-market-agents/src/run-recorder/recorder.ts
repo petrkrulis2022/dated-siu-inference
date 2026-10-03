@@ -47,6 +47,23 @@ export interface RunManifest {
    * fixed in the runner's own source before the run starts and recorded here so that a reading of
    * the result can confirm the depletion was not tuned to it. */
   windowCount?: number;
+  /**
+   * The run's shape, when it was not the canonical one. Present only on a run that cannot be
+   * quoted — a pinned gate, substituted models, or a non-canonical window count — so that the
+   * manifest beside the raw turns says so without anyone having to cross-reference the report.
+   * `cli/debug-mode.ts` builds it and `assertCountableForF1` reads the same fields.
+   */
+  debugMode?: {
+    enabled: boolean;
+    windows: number;
+    canonicalWindows: number;
+    preAuthoredGate: boolean;
+    gateProvenance?: string;
+    cheapNonDeciders: boolean;
+    cheapModel?: string;
+    countsTowardF1: boolean;
+    disqualifiedBecause: string | null;
+  };
   externalDepletionMilliSiu?: Record<number, number>;
   /** Every window's real, fixed span (Unix seconds), computed from the chain clock before the
    * first turn of the run. Recorded because a claim minted for a later window names that window's

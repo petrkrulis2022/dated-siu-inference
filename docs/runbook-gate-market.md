@@ -12,6 +12,36 @@ cd packages/gate-market-agents
 pnpm run p5-three-window-full-run > ../../data/gate-market/logs/p5-three-window-$(date -u +%Y-%m-%dT%H-%M-%S).log 2>&1
 ```
 
+### Debugging runs
+
+A run that exists to test the loop, not to produce a number:
+
+```
+pnpm run p5-three-window-full-run -- --debug
+```
+
+`--debug` pins a known-good gate instead of buying one (where almost all the money goes — run
+16's WORKER-CODE turns alone exceeded $0.90), and moves the non-decider seats to a cheap model.
+ORCHESTRATOR and WORKER-CODE keep their assigned models whatever happens: they are the seats F1
+is about and the ones every holder-facing finding has come from.
+
+`--windows N` shortens a run, and **defaults to three with or without `--debug`**. Three of the
+last four findings came from window 2 or later, so a short default would have hidden them while
+looking like a saving. Use it for tests that genuinely only need window 1.
+
+`--no-pre-authored-gate` and `--no-cheap-models` switch off either saving on its own.
+
+**A debug run cannot meet the bar or count toward F1, and this is enforced rather than
+remembered.** Its runId is prefixed `DEBUG-`, its manifest and report both carry a `debugMode`
+block with `countsTowardF1: false` and the reason, and `assertCountableForF1` throws on it. A
+shortened run is disqualified too, `--debug` or not: length changes comparability.
+
+The gate is still graded for real, by the same grader, on the same inputs. Every economic step —
+purchase, claim, presentation, delivery, attack, settlement, enforcement — is real on a real
+chain. What is not real is who authored the work and what the seats cost.
+
+---
+
 `pnpm` and `forge`/`anvil` are often not on a non-interactive shell's PATH:
 
 ```

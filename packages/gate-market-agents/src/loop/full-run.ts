@@ -230,6 +230,18 @@ export interface FullRunWindowOptions {
    * reach it at all. That is exactly why it had never run in an agent context before 2026-09-28
    * despite being the enforcement the whole bond design rests on. */
   outstandingClaims?: readonly OutstandingClaim[];
+  /**
+   * A pinned, already-known-good gate to inject at window start instead of buying one.
+   *
+   * `--debug` only (`cli/debug-mode.ts`), and the single biggest cost saving available: gate
+   * authoring is where a debugging run's money goes. It is still GRADED for real, by the same
+   * grader on the same job inputs — what is skipped is a model writing it, not the checking of
+   * it — and it is attributed to `PRE_AUTHORED` rather than to any agent.
+   */
+  preAuthoredGateSource?: string;
+  /** Reported so the log says the pinned gate was graded, and with what result, rather than a
+   *  window silently starting out already passed. */
+  onPreAuthoredGate?: (passed: boolean, summary: string) => void;
   /** The forward-terms book. Supplied by a multi-window runner so it survives from one window to
    * the next — an offer stated in window 1 for window 3 has to still be there in window 3, and a
    * book created per window could never hold one. A fresh one is made when omitted. */
@@ -296,6 +308,19 @@ export interface OutstandingClaim {
   issuerAgentId?: AgentId;
   quantityMilliSiu?: string;
   mintedInWindow: number;
+  /**
+   * Whether this claim was ever presented, which decides what settling it actually does.
+   *
+   * `WorkClaim.settleWindowClose` burns the claim and restores headroom either way, but the
+   * bond draw lives inside `if (everPresented[tokenId][holder])`. A presented claim pays its
+   * holder; an unpresented one emits `Expired` and pays nobody, returning the capacity to the
+   * issuer that failed to deliver. Run 17 settled one of each and the board text promised
+   * payment for both (fsiu-design.md §4.3a).
+   *
+   * Undefined on a claim whose history this run cannot see; the text then says what it knows
+   * rather than guessing, which is the only honest option.
+   */
+  everPresented?: boolean;
 }
 
 export interface AttackRecord {
@@ -403,7 +428,7 @@ export interface TurnLog {
 
 export interface FullRunWindowResult {
   passed: boolean;
-  passedBy?: AgentId;
+  passedBy?: AgentId | typeof PRE_AUTHORED;
   totalRealizedUsd: string;
   /** Real inference spend this run, per provider — decimal-string USD. Lands in metrics.json via
    * `recorder.finalizeMetrics(result)`. A single aggregate can't answer the question that
@@ -627,6 +652,49 @@ export function composeBoard(
     // turn, never of state the act of showing it destroys.
     wakeKeyNext: join((x) => x.wakes && x.oneShot !== true),
   };
+}
+
+/**
+ * What an agent is told about claims an earlier window left unsettled.
+ *
+ * Extracted and exported so it can be tested, which is the whole lesson of run 17: this text
+ * promised, unconditionally, that settling "defaults against its own issuer's bond, paying the
+ * holder". That is true only of a claim that was PRESENTED. For one that never was,
+ * `settleWindowClose` burns it, hands the issuer its capacity back and emits `Expired`, paying
+ * nobody — and WORKER-EXTRACT, reading this text, destroyed another agent's 10,000 mSIU
+ * position "as instructed" (fsiu-design.md §4.3a).
+ *
+ * A claim whose history this run cannot see says so, rather than defaulting to either claim.
+ */
+export function renderSettleableText(
+  claims: readonly OutstandingClaim[],
+  canSettle: boolean,
+): string {
+  if (claims.length === 0 || !canSettle) return "";
+  return (
+    `CLAIMS LEFT UNSETTLED BY AN EARLIER WINDOW\n` +
+    `  Their delivery windows have closed, so none of them can still be redeemed for work.\n` +
+    `  Settling is permissionless: anyone may trigger it, including you. What settling PAYS\n` +
+    `  depends on whether the claim was ever presented, and the two are not alike —\n` +
+    `    presented and then not served: it defaults, and the issuer's bond pays its holder.\n` +
+    `    never presented: it simply expires. The claim is burned, the issuer's capacity goes\n` +
+    `      back to the issuer, and NOBODY is paid.\n` +
+    claims
+      .map(
+        (c) =>
+          `  tokenId ${c.tokenId} — minted in window ${c.mintedInWindow}` +
+          (c.quantityMilliSiu ? `, ${c.quantityMilliSiu} mSIU` : "") +
+          (c.issuerAgentId ? `, issued by ${c.issuerAgentId}` : "") +
+          (c.holderAgentId ? `, held by ${c.holderAgentId}` : "") +
+          (c.everPresented === undefined
+            ? ", and this run cannot tell whether it was presented"
+            : c.everPresented
+              ? " — PRESENTED, so settling it draws on the bond and pays its holder"
+              : " — NEVER PRESENTED, so settling it pays nobody and returns the capacity") +
+          `\n    settle it with {"tool": "settle_window_close", "args": {"tokenId": "${c.tokenId}"}}`,
+      )
+      .join("\n")
+  );
 }
 
 async function holdTimeToExpiry(
@@ -980,11 +1048,47 @@ export async function runFullRunWindow(
     return attackContext.attackedVersions.size < MAX_ATTACK_ROUNDS;
   };
   let passed = false;
-  let passedBy: AgentId | undefined;
+  let passedBy: AgentId | typeof PRE_AUTHORED | undefined;
 
   for (const agent of options.roster) {
     turnsByAgent[agent.agentId] = 0;
     turnLogsByAgent[agent.agentId] = [];
+  }
+
+  /**
+   * The pinned gate, graded for real before the first turn (`--debug` only).
+   *
+   * Everything downstream behaves as though a gate had been delivered on turn 0: the adversary
+   * wakes because a version exists, attacks score against it normally, and the window can pass.
+   * What is skipped is a model writing it — which is where a debugging run's money goes — not
+   * the grading of it, which runs through the same `runGateHardeningChecks` on the same job
+   * inputs as any submitted gate.
+   *
+   * Attributed to `PRE_AUTHORED`, never to an agent, so nothing downstream can credit a seat
+   * with work it did not do.
+   */
+  if (options.preAuthoredGateSource !== undefined) {
+    const inputs = {
+      taskClass: options.job.taskClass,
+      originalGate: options.job.originalGate,
+      hardenedGate: { taskClass: options.job.taskClass, source: options.preAuthoredGateSource },
+      referenceInstance: options.job.referenceInstance,
+      knownGoodSubmission: options.job.knownGoodSubmission,
+      adversarialSubmissions: options.job.adversarialSubmissions,
+      heldOutInstances: options.job.heldOutInstances,
+    } as unknown as GateHardeningJobInputs;
+    const graded = await options.deps.runGateHardeningChecks(inputs);
+    attackContext.gateVersions.push({
+      version: 1,
+      source: options.preAuthoredGateSource,
+      submittedBy: PRE_AUTHORED,
+      turn: 0,
+    });
+    if (graded.passed) {
+      passed = true;
+      passedBy = PRE_AUTHORED;
+    }
+    options.onPreAuthoredGate?.(graded.passed, summarizeGateResult(graded));
   }
 
   const activeAgents = new Set(options.roster.map((a) => a.agentId));
@@ -1124,23 +1228,10 @@ export async function runFullRunWindow(
     const outstandingClaims = (options.outstandingClaims ?? []).filter(
       (c) => !concludedThisWindow.has(c.tokenId),
     );
-    const settleableText =
-      outstandingClaims.length > 0 && agent.availableTools.includes("settle_window_close")
-        ? `CLAIMS LEFT UNSETTLED BY AN EARLIER WINDOW\n` +
-          `  Their delivery windows have closed. A claim that was never served defaults against\n` +
-          `  its own issuer's bond, paying the holder — that is what the bond is for, and it is\n` +
-          `  permissionless: anyone may trigger it, including you.\n` +
-          outstandingClaims
-            .map(
-              (c) =>
-                `  tokenId ${c.tokenId} — minted in window ${c.mintedInWindow}` +
-                (c.quantityMilliSiu ? `, ${c.quantityMilliSiu} mSIU` : "") +
-                (c.issuerAgentId ? `, issued by ${c.issuerAgentId}` : "") +
-                (c.holderAgentId ? `, held by ${c.holderAgentId}` : "") +
-                `\n    settle it with {"tool": "settle_window_close", "args": {"tokenId": "${c.tokenId}"}}`,
-            )
-            .join("\n")
-        : "";
+    const settleableText = renderSettleableText(
+      outstandingClaims,
+      agent.availableTools.includes("settle_window_close"),
+    );
 
     // What the adversary is actually able to attack, said out loud in its own prompt.
     //
@@ -2007,7 +2098,11 @@ export async function runFullRunWindow(
           const author = attackContext.gateVersions.find(
             (g) => g.version === outcome.gateVersion,
           )?.submittedBy;
-          if (author !== undefined) {
+          // A pinned gate has no author to tell, and nobody could act on the telling: the
+          // defeat is still recorded as an attack and still counts as adversary yield, it just
+          // notifies no one. Telling an agent to widen tests it did not write would be an
+          // instruction it cannot follow — the §4.6s shape.
+          if (author !== undefined && author !== PRE_AUTHORED) {
             gateDefeats.push({
               attackIndex: attacks.length - 1,
               gateVersion: outcome.gateVersion,
@@ -2352,10 +2447,15 @@ export const MAX_ATTACK_ROUNDS = 3;
  */
 export const F1_ORACLE_TRIAL_SEED = 20260927;
 
+/** A gate the run did not buy: pinned, graded for real, injected at window start under
+ *  `--debug`. A distinct value rather than an agent id, so every reader that prints an author
+ *  has to confront the fact that no agent wrote this one. */
+export const PRE_AUTHORED = "PRE-AUTHORED" as const;
+
 export interface DeliveredGate {
   version: number;
   source: string;
-  submittedBy: AgentId;
+  submittedBy: AgentId | typeof PRE_AUTHORED;
   turn: number;
 }
 

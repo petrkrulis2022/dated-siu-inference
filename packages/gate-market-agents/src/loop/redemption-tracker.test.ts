@@ -296,3 +296,98 @@ describe("an unpresented claim's deadline and the memo (fsiu-design.md §4.3a)",
     expect(t.renderForHolder("WORKER-CODE", 1100)).toContain("closes in 300s");
   });
 });
+
+describe("every stage of a claim's life either addresses the holder or is deliberately silent", () => {
+  /**
+   * The test that would have caught §4.6ae before a run did.
+   *
+   * The original defect was not a wrong renderer; it was a MISSING one, and nothing failed
+   * when it was missing because no test asked "is there a renderer for this stage at all?".
+   * Run 16 spent $3 discovering that a holder hears nothing after presenting. This walks the
+   * whole lifecycle and requires each stage to be either covered or explicitly, named-in-code
+   * silent — so adding a stage without a channel fails here rather than in a live run.
+   */
+  const HOLDER = "WORKER-CODE";
+  const stage = (
+    name: string,
+    build: (t: RedemptionTracker) => void,
+    expectation: "addresses the holder" | "deliberately silent",
+    /** Each stage carries its own clock: "presented and still working" and "presented and
+     *  overdue" are the SAME state at different times, and a single shared `now` silently
+     *  turns the first into the second. */
+    now: number,
+    why?: string,
+  ) => ({ name, build, expectation, now, why });
+
+  const STAGES = [
+    stage("transferred, not yet presented", (t) => {
+      t.recordTransfer(HOLDER);
+      t.recordExpiry("77", 1400, 1000);
+    }, "addresses the holder", 1100),
+    stage("held too long, window closing", (t) => {
+      t.recordTransfer(HOLDER);
+      t.recordExpiry("77", 1400, 1000);
+    }, "addresses the holder", 1300),
+    stage(
+      "presented, issuer still legitimately working",
+      (t) => {
+        t.recordTransfer(HOLDER);
+        t.recordPresented(HOLDER, undefined, { atChainSeconds: 1000, secondsToExpiry: 400 });
+      },
+      "deliberately silent",
+      1100,
+      "nothing is owed to the holder yet and it has nothing new it could do; waking it here is §4.6ac",
+    ),
+    stage("presented, overdue", (t) => {
+      t.recordTransfer(HOLDER);
+      t.recordPresented(HOLDER, undefined, { atChainSeconds: 1000, secondsToExpiry: 400 });
+    }, "addresses the holder", 1300),
+    stage("served, passed", (t) => {
+      t.recordTransfer(HOLDER);
+      t.recordPresented(HOLDER, undefined, { atChainSeconds: 1000, secondsToExpiry: 400 });
+      t.recordServed(true);
+    }, "addresses the holder", 1300),
+    stage("served, failed", (t) => {
+      t.recordTransfer(HOLDER);
+      t.recordPresented(HOLDER, undefined, { atChainSeconds: 1000, secondsToExpiry: 400 });
+      t.recordServed(false);
+    }, "addresses the holder", 1300),
+  ];
+
+  for (const s of STAGES) {
+    it(`${s.name}: ${s.expectation}`, () => {
+      const t = new RedemptionTracker();
+      t.recordMint("77", "ISSUER-A", "10000");
+      s.build(t);
+      const now = s.now;
+      const said = [
+        t.renderForHolder(HOLDER, now),
+        t.renderUnpresentedLapsingForHolder(HOLDER, now),
+        t.renderUnservedForHolder(HOLDER, now),
+        t.renderServedForHolder(HOLDER),
+      ].filter(Boolean);
+      if (s.expectation === "addresses the holder") {
+        expect(said.length, `no renderer addresses a holder at: ${s.name}`).toBeGreaterThan(0);
+      } else {
+        expect(said, `${s.name} should be silent because ${s.why}`).toEqual([]);
+      }
+    });
+  }
+
+  it("never addresses an agent that is not the holder, at any stage", () => {
+    for (const s of STAGES) {
+      const t = new RedemptionTracker();
+      t.recordMint("77", "ISSUER-A", "10000");
+      s.build(t);
+      for (const other of ["ISSUER-A", "ISSUER-B", "ORCHESTRATOR", "WORKER-EXTRACT"] as const) {
+        const said = [
+          t.renderForHolder(other, s.now),
+          t.renderUnpresentedLapsingForHolder(other, s.now),
+          t.renderUnservedForHolder(other, s.now),
+          t.renderServedForHolder(other),
+        ].filter(Boolean);
+        expect(said, `${s.name} leaked to ${other}`).toEqual([]);
+      }
+    }
+  });
+});

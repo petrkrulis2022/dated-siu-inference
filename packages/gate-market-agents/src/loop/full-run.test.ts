@@ -43,7 +43,7 @@ import {
   type RosterAgentConfig,
 } from "./full-run.js";
 import { MAX_ATTACK_ROUNDS } from "./full-run.js";
-import { composeBoard, WAKE_SECTION_TOOLS, type BoardSections } from "./full-run.js";
+import { composeBoard, WAKE_SECTION_TOOLS, renderSettleableText, type BoardSections } from "./full-run.js";
 
 const PRICES = { priceInUsdPer1M: "2", priceOutUsdPer1M: "12" };
 
@@ -2879,5 +2879,51 @@ describe("composeBoard — what an agent is shown vs what wakes it (spec §4.6ae
   it("§4.6ac invariant: the mapping covers every section and invents none", () => {
     const sections = new Set(Object.keys(empty).filter((k) => k !== "servedWasFailure"));
     expect(new Set(Object.keys(WAKE_SECTION_TOOLS))).toEqual(sections);
+  });
+});
+
+
+describe("renderSettleableText — what settling actually pays (fsiu-design.md §4.3a)", () => {
+  const claim = (everPresented: boolean | undefined) => ({
+    tokenId: "77",
+    holder: "0xholder",
+    holderAgentId: "WORKER-CODE" as const,
+    issuerAgentId: "ISSUER-A" as const,
+    quantityMilliSiu: "10000",
+    mintedInWindow: 1,
+    ...(everPresented === undefined ? {} : { everPresented }),
+  });
+
+  it("does not promise a bond payment on a claim that was never presented", () => {
+    // The assertion run 17 needed and nobody had written. The old text said, of every claim,
+    // "defaults against its own issuer's bond, paying the holder". WORKER-EXTRACT read that,
+    // settled an unpresented claim "as instructed", and burned 10,000 mSIU belonging to another
+    // agent: Expired, not Defaulted, and nobody paid.
+    const text = renderSettleableText([claim(false)], true);
+    expect(text).toMatch(/NEVER PRESENTED/);
+    expect(text).toMatch(/pays nobody/);
+  });
+
+  it("does promise it on a presented one, because there the bond really does pay", () => {
+    const text = renderSettleableText([claim(true)], true);
+    expect(text).toMatch(/PRESENTED, so settling it draws on the bond and pays its holder/);
+  });
+
+  it("tells both stories whenever both kinds are outstanding at once", () => {
+    // Run 17 had exactly this: one of each, under one heading, with opposite consequences.
+    const text = renderSettleableText([claim(true), { ...claim(false), tokenId: "78" }], true);
+    expect(text).toMatch(/presented and then not served: it defaults/);
+    expect(text).toMatch(/never presented: it simply expires/);
+  });
+
+  it("says it does not know rather than guessing, when the run never saw the claim's history", () => {
+    const text = renderSettleableText([claim(undefined)], true);
+    expect(text).toMatch(/cannot tell whether it was presented/);
+    expect(text).not.toMatch(/NEVER PRESENTED|draws on the bond/);
+  });
+
+  it("says nothing to an agent that cannot settle, and nothing when nothing is outstanding", () => {
+    expect(renderSettleableText([claim(true)], false)).toBe("");
+    expect(renderSettleableText([], true)).toBe("");
   });
 });
