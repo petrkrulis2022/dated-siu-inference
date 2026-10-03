@@ -98,3 +98,165 @@ export function renderPoolReconciliation(r: PoolReconciliation, flag: string): s
   );
   return lines.join("\n");
 }
+
+/**
+ * Why a given claim is still holding capacity. The distinction that matters is **recoverable
+ * versus leaked**, and it is not visible from a headroom figure alone.
+ *
+ * Run 17 ended in `blocked_awaiting_print` legitimately: a claim presented in the final window
+ * cannot be settled until a print dated its close day exists, and the run-end sweep correctly
+ * declines to settle it. That is not a leak, and a pre-flight that reported it the same way as
+ * a crashed run's residue would push the operator to pass `--allow-partial-pool` every time.
+ * **An override reached for routinely has stopped being a gate**, so the categories exist to
+ * keep it rare.
+ */
+export type OutstandingCategory =
+  /** Its delivery window has not closed. Entirely normal; nothing to do. */
+  | "live"
+  /** Closed, presented, and a print dated its close day exists: settle it and the bond pays
+   *  the holder. Recoverable right now. */
+  | "settleable_pays_holder"
+  /** Closed and presented, but no print is dated its close day, so `settleWindowClose` would
+   *  revert. Recoverable, blocked, and not anyone's mistake — this is how run 17 ended. */
+  | "blocked_awaiting_print"
+  /** Closed and never presented. Settling burns it and returns the capacity to its issuer,
+   *  paying nobody (fsiu-design.md §4.3a). This is the shape a crashed run leaves behind. */
+  | "settleable_pays_nobody";
+
+export interface OutstandingClaim {
+  tokenId: string;
+  holder: string;
+  issuerAgentId?: string;
+  quantityMilliSiu: string;
+  /** Unix seconds; the claim's own delivery-window close. */
+  windowToUnix: number;
+  everPresented: boolean;
+}
+
+/** `availablePrintDates` holds `YYYY-MM-DD` strings for every commodity print on disk. */
+export function categorise(
+  c: OutstandingClaim,
+  nowUnix: number,
+  availablePrintDates: ReadonlySet<string>,
+): OutstandingCategory {
+  if (c.windowToUnix > nowUnix) return "live";
+  if (!c.everPresented) return "settleable_pays_nobody";
+  const day = new Date(Math.floor(c.windowToUnix / 86400) * 86400 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  return availablePrintDates.has(day) ? "settleable_pays_holder" : "blocked_awaiting_print";
+}
+
+/** True only for the categories an operator should act on before running again. */
+export function isRecoverableNow(cat: OutstandingCategory): boolean {
+  return cat === "settleable_pays_holder" || cat === "settleable_pays_nobody";
+}
+
+export function renderOutstanding(
+  claims: readonly (OutstandingClaim & { category: OutstandingCategory })[],
+  scannedBlocks: number,
+): string {
+  if (claims.length === 0) {
+    return (
+      `  No outstanding claim found in the last ${scannedBlocks} blocks. The shortfall is ` +
+      "therefore NOT explained — do not assume it is benign; it may predate the scan window."
+    );
+  }
+  const label: Record<OutstandingCategory, string> = {
+    live: "LIVE — window still open, nothing to do",
+    settleable_pays_holder: "SETTLE NOW — presented, and the bond will pay its holder",
+    blocked_awaiting_print: "BLOCKED — presented, but no print is dated its close day yet",
+    settleable_pays_nobody: "SETTLE NOW — never presented, so this only returns the capacity",
+  };
+  const lines = [`  Outstanding claims found (scanned the last ${scannedBlocks} blocks):`];
+  for (const c of claims) {
+    lines.push(
+      `    ${c.tokenId.slice(0, 18)}… ${c.quantityMilliSiu} mSIU, holder ${c.holder.slice(0, 10)}` +
+        `${c.issuerAgentId ? `, issued by ${c.issuerAgentId}` : ""}\n      ${label[c.category]}`,
+    );
+  }
+  const actionable = claims.filter((c) => isRecoverableNow(c.category));
+  lines.push(
+    actionable.length > 0
+      ? `  ${actionable.length} of these can be settled right now, and should be before running again.`
+      : "  None of these can be settled right now, so the shortfall is expected rather than leaked.",
+  );
+  return lines.join("\n");
+}
+
+/**
+ * Discovering WHICH claims are holding the capacity, which needs the chain.
+ *
+ * Deliberately **bounded**: `eth_getLogs` on a public endpoint is capped at 1,000 blocks per
+ * call, so this walks back a fixed number of chunks rather than the whole history. A shortfall
+ * older than the window therefore comes back unexplained, and `renderOutstanding` says so
+ * rather than reporting "none found" as though that were reassurance.
+ *
+ * The callbacks are injected so the categorisation above stays testable without a chain, and so
+ * this can be pointed at a different RPC without the CLI knowing.
+ */
+export interface ClaimEnumerationDeps {
+  latestBlock(): Promise<bigint>;
+  /** Minted events in `[from, to]`, which is where tokenId and buyer both come from. */
+  mintedIn(from: bigint, to: bigint): Promise<
+    { tokenId: bigint; issuer: string; buyer: string; quantity: bigint; windowTo: bigint }[]
+  >;
+  balanceOf(tokenId: bigint, holder: string): Promise<bigint>;
+  everPresented(tokenId: bigint, holder: string): Promise<boolean>;
+  nowUnix(): Promise<bigint>;
+}
+
+export const DEFAULT_SCAN_CHUNKS = 50;
+export const CHUNK_BLOCKS = 1000n;
+
+export async function enumerateOutstanding(
+  deps: ClaimEnumerationDeps,
+  issuerAgentIdByAddress: ReadonlyMap<string, string>,
+  availablePrintDates: ReadonlySet<string>,
+  chunks: number = DEFAULT_SCAN_CHUNKS,
+): Promise<{
+  claims: (OutstandingClaim & { category: OutstandingCategory })[];
+  scannedBlocks: number;
+}> {
+  const latest = await deps.latestBlock();
+  const nowUnix = Number(await deps.nowUnix());
+  const seen = new Map<string, OutstandingClaim>();
+  let scanned = 0;
+  for (let i = 0; i < chunks; i++) {
+    const to = latest - BigInt(i) * CHUNK_BLOCKS;
+    const from = to - CHUNK_BLOCKS + 1n;
+    if (to < 0n) break;
+    let minted: Awaited<ReturnType<ClaimEnumerationDeps["mintedIn"]>>;
+    try {
+      minted = await deps.mintedIn(from < 0n ? 0n : from, to);
+    } catch {
+      // One unreadable chunk is not a reason to abandon the scan, but it IS a reason not to
+      // claim the scan was complete — the block count below reflects only what was read.
+      continue;
+    }
+    scanned += Number(CHUNK_BLOCKS);
+    for (const m of minted) {
+      const key = `${m.tokenId}:${m.buyer.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      const balance = await deps.balanceOf(m.tokenId, m.buyer);
+      if (balance === 0n) continue; // burned, settled, or moved on — holding nothing now
+      seen.set(key, {
+        tokenId: m.tokenId.toString(),
+        holder: m.buyer,
+        ...(issuerAgentIdByAddress.get(m.issuer.toLowerCase()) !== undefined
+          ? { issuerAgentId: issuerAgentIdByAddress.get(m.issuer.toLowerCase()) as string }
+          : {}),
+        quantityMilliSiu: balance.toString(),
+        windowToUnix: Number(m.windowTo),
+        everPresented: await deps.everPresented(m.tokenId, m.buyer),
+      });
+    }
+  }
+  return {
+    claims: [...seen.values()].map((c) => ({
+      ...c,
+      category: categorise(c, nowUnix, availablePrintDates),
+    })),
+    scannedBlocks: scanned,
+  };
+}

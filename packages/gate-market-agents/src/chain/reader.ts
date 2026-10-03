@@ -1,4 +1,4 @@
-import { createPublicClient, http, type Hex, type PublicClient } from "viem";
+import { createPublicClient, http, parseAbiItem, type Hex, type PublicClient } from "viem";
 import { CAPACITY_BOND_ABI, ESCROW_READ_ABI, USDC_BALANCE_ABI, WORK_CLAIM_ABI } from "./abi.js";
 import type { GateMarketDeployment } from "./deployment.js";
 
@@ -78,6 +78,72 @@ export class ViemChainReader implements ChainReader {
       abi: USDC_BALANCE_ABI,
       functionName: "balanceOf",
       args: [account],
+    });
+  }
+
+  /** The chain's own head, for bounding a log scan. */
+  async latestBlockNumber(): Promise<bigint> {
+    return this.client.getBlockNumber();
+  }
+
+  /** Has this holder ever presented this claim? The latch that decides whether settling it
+   *  draws on the bond or merely expires it (fsiu-design.md §4.3a). */
+  async everPresented(tokenId: bigint, holder: Hex): Promise<boolean> {
+    return this.client.readContract({
+      address: this.deployment.workClaim.address as Hex,
+      abi: WORK_CLAIM_ABI,
+      functionName: "everPresented",
+      args: [tokenId, holder],
+    });
+  }
+
+  /**
+   * `Minted` events in one block range — the only way to discover which tokenIds exist, since
+   * nothing enumerates them. Callers chunk the range themselves: public endpoints cap
+   * `eth_getLogs` at 1,000 blocks and reject anything wider outright.
+   */
+  async mintedBetween(
+    from: bigint,
+    to: bigint,
+  ): Promise<
+    { tokenId: bigint; issuer: string; buyer: string; quantity: bigint; windowTo: bigint }[]
+  > {
+    const logs = await this.client.getLogs({
+      address: this.deployment.workClaim.address as Hex,
+      event: parseAbiItem(
+        "event Minted(uint256 indexed tokenId, address indexed issuer, address indexed buyer, bytes32 classId, bytes32 series, uint256 quantity, uint64 windowFrom, uint64 windowTo)",
+      ),
+      fromBlock: from,
+      toBlock: to,
+    });
+    return logs.flatMap((l) => {
+      const a = l.args as {
+        tokenId?: bigint;
+        issuer?: string;
+        buyer?: string;
+        quantity?: bigint;
+        windowTo?: bigint;
+      };
+      if (
+        a.tokenId === undefined ||
+        a.issuer === undefined ||
+        a.buyer === undefined ||
+        a.quantity === undefined ||
+        a.windowTo === undefined
+      ) {
+        // A log this ABI cannot fully decode is dropped rather than half-reported: a claim
+        // described by guessed fields would be worse than one not listed at all.
+        return [];
+      }
+      return [
+        {
+          tokenId: a.tokenId,
+          issuer: a.issuer,
+          buyer: a.buyer,
+          quantity: a.quantity,
+          windowTo: a.windowTo,
+        },
+      ];
     });
   }
 

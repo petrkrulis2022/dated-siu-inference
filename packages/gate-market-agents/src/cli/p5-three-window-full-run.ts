@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   createWalletClient,
@@ -59,7 +59,10 @@ import {
 import type { RunManifest } from "../run-recorder/recorder.js";
 import { RUNS_ROOT } from "./runs-root.js";
 import {
+  enumerateOutstanding,
+  isRecoverableNow,
   reconcilePool,
+  renderOutstanding,
   renderPoolReconciliation,
   type LotExpectation,
 } from "./pool-reconciliation.js";
@@ -662,11 +665,42 @@ async function main(): Promise<void> {
     new Map(startingHeadroom.map((r) => [r.issuer.toLowerCase(), BigInt(r.headroom)])),
   );
   console.log(renderPoolReconciliation(poolState, ALLOW_PARTIAL_POOL));
-  if (!poolState.whole && !process.argv.includes(ALLOW_PARTIAL_POOL)) {
-    throw new Error(
-      `Pool is short by ${poolState.shortfallTotal} mSIU at launch. Settle or expire what is ` +
-        `outstanding, or pass ${ALLOW_PARTIAL_POOL} to run anyway.`,
+  if (!poolState.whole) {
+    // Name WHAT is holding the capacity, not just how much. A headroom figure cannot
+    // distinguish a crash's residue from a claim that is legitimately waiting for a print
+    // dated its close day — which is how run 17 ended — and an operator who cannot tell them
+    // apart will reach for the override every time, at which point it has stopped being a gate.
+    const printDates = new Set(
+      readdirSync(join(REPO_ROOT, "data/prints"))
+        .filter((f: string) => f.endsWith("-commodity.json"))
+        .map((f: string) => f.slice(0, 10)),
     );
+    const found = await enumerateOutstanding(
+      {
+        latestBlock: () => chainReader.latestBlockNumber(),
+        nowUnix: () => chainReader.currentBlockTimestamp(),
+        mintedIn: (from, to) => chainReader.mintedBetween(from, to),
+        balanceOf: (tokenId, holder) => chainReader.claimBalance(tokenId, holder as Hex),
+        everPresented: (tokenId, holder) => chainReader.everPresented(tokenId, holder as Hex),
+      },
+      new Map(
+        (["ISSUER-A", "ISSUER-B"] as const).map((a) => [addresses[a].toLowerCase(), a as string]),
+      ),
+      printDates,
+    );
+    console.log(renderOutstanding(found.claims, found.scannedBlocks));
+    const actionable = found.claims.filter((c) => isRecoverableNow(c.category));
+    if (actionable.length > 0 && !process.argv.includes(ALLOW_PARTIAL_POOL)) {
+      throw new Error(
+        `Pool is short by ${poolState.shortfallTotal} mSIU and ${actionable.length} claim(s) ` +
+          `can be settled right now. Settle them, or pass ${ALLOW_PARTIAL_POOL}.`,
+      );
+    }
+    if (actionable.length === 0) {
+      console.log(
+        "  Proceeding: the shortfall is accounted for and none of it is recoverable yet.",
+      );
+    }
   }
   console.log("");
 
