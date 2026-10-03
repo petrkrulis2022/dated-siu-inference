@@ -1,7 +1,10 @@
 # Task: a holder-facing information channel
 
-Scoped 2026-10-02 from run 16. **Design only — not started.** Finding: `gate-market-spec.md`
-§4.6ae. Companion fix already landed: §4.6af.
+Scoped 2026-10-02 from run 16, **built 2026-10-03**. Finding: `gate-market-spec.md` §4.6ae.
+Companion fix landed separately: §4.6af.
+
+**Build notes are at the bottom** — what changed from this design, one place the stated invariant
+could not hold literally, and one limitation that remains.
 
 ---
 
@@ -110,3 +113,57 @@ behaviour first:
 
 No inference cost to build. One debugging run to verify, which is the run that would then be
 eligible to freeze the protocol.
+
+
+---
+
+# Build notes, 2026-10-03
+
+## The invariant is enforced, not merely asserted
+
+The design said to test every wake against §4.6ac. It turned out better to make it structural.
+`composeBoard(sections, availableTools)` consults `WAKE_SECTION_TOOLS` — a section→tools table
+living beside the composition — and **drops from `wakeKey` any section whose tools the agent does
+not hold**, while still showing it. §4.6ac cannot now be reintroduced by adding a section; it can
+only be reintroduced by adding a wrong entry to one visible table, which the tests check.
+
+## It caught a real case on its first run
+
+`WORKER-EXTRACT` holds `redeem_claim` (granted 2026-09-30 after it was twice paid in fSIU it
+could not redeem, §4.6p) and **no purchase tool at all**. So a served FAIL is real news it can do
+nothing with: waking it would have been §4.6ac returning, on the very agent that gap already hurt
+once. It is now shown the FAIL and not woken by it, while still being woken by an overdue claim,
+which it *can* act on — it holds `settle_window_close`. Both directions are pinned by tests.
+
+## Where the stated invariant could not hold literally
+
+The brief was: *assert the agent holds a tool it could now use **and could not have used
+before***. The second half cannot hold for either holder stage, and pretending otherwise would
+have meant writing a test that passes by being vague.
+
+Nothing is newly *granted* to a holder when its work fails or its claim goes overdue. Its tools
+are the ones it always had. What changes is that an action which was pointless becomes worth
+taking. So the implemented invariant is the first half plus a separate bound:
+
+- **affordance** — the woken agent holds a tool the section is about (`WAKE_SECTION_TOOLS`), and
+- **no repetition** — a given state wakes an agent at most once (`markUnservedWarningShown` for
+  the overdue warning; `served` is terminal for the served one).
+
+Together these give what the brief was protecting: you are not woken with nothing to do, and you
+are not woken twice for the same fact. Stated here rather than quietly reinterpreted.
+
+## A limitation that remains
+
+The overdue warning fires on the holder's next turn after the midpoint, and turns only come
+round while the window is live. **If every agent goes idle before the midpoint, the stall guard
+ends the window and the warning never fires.** That is correct behaviour rather than a bug —
+spinning the roster waiting for a clock is precisely the unbounded busy loop the guard was added
+to stop, after one cost 39 minutes of CPU and three window spans — but it does mean the channel
+is not guaranteed, only available. A quiet window still ends with the holder uninformed, and the
+claim still reaches the default path.
+
+## Not built, deliberately
+
+Ordering the holder first in `settleableText`. It is a fairness nicety, not a correctness issue,
+and run 16 showed the permissionless path works (WORKER-EXTRACT settled another agent's claim).
+Left alone rather than changed on the way past.

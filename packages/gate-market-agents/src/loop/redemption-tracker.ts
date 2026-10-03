@@ -42,6 +42,25 @@ export interface RedemptionState {
   passed?: boolean;
   receiptRef?: string;
   served: boolean;
+  /**
+   * What the issuer actually reported when it served. Distinct from `passed`, which is the
+   * grading verdict the loop observed from `submit_job`: an issuer can serve a FAIL (the
+   * contract permits it and emits `Served(…, passed=false, …)`), and the holder's position is
+   * entirely different in the two cases. Undefined until a serve happens.
+   */
+  servedPassed?: boolean;
+  /**
+   * The chain-clock instant the claim was presented, and the instant it expires — both derived
+   * from the `redeem_claim` result's own `timeToExpirySeconds`, measured against the chain clock
+   * at the moment of the decision. Present only when that real figure came back.
+   *
+   * They exist for the holder's unserved warning, whose trigger is "you have waited longer than
+   * you have left" — see `renderUnservedForHolder`.
+   */
+  presentedAtChainSeconds?: number;
+  expiresAtChainSeconds?: number;
+  /** The unserved warning is shown once per claim, never once per round — see §4.6ac. */
+  unservedWarningShown?: boolean;
 }
 
 export class RedemptionTracker {
@@ -63,9 +82,19 @@ export class RedemptionTracker {
   /** The full minted quantity is assumed presented — this window's one real job never splits a
    * claim across a transfer/presentation, matching the same single-job simplification this
    * tracker's own top comment already discloses. */
-  recordPresented(holder: AgentId, taskSpecText?: string): void {
+  recordPresented(
+    holder: AgentId,
+    taskSpecText?: string,
+    /** Real figures from the `redeem_claim` result, never wall-clock guesses. Omitted when the
+     *  tool did not return an expiry, in which case the holder simply gets no timed warning. */
+    timing?: { atChainSeconds: number; secondsToExpiry: number },
+  ): void {
     this.#state.holder = holder;
     if (taskSpecText !== undefined) this.#state.taskSpecText = taskSpecText;
+    if (timing !== undefined) {
+      this.#state.presentedAtChainSeconds = timing.atChainSeconds;
+      this.#state.expiresAtChainSeconds = timing.atChainSeconds + timing.secondsToExpiry;
+    }
   }
 
   /**
@@ -88,8 +117,11 @@ export class RedemptionTracker {
     this.#state.receiptRef = receiptRef;
   }
 
-  recordServed(): void {
+  /** `passed` is what the ISSUER reported on chain, which is not necessarily the grading verdict
+   *  the loop observed — see `RedemptionState.servedPassed`. */
+  recordServed(passed: boolean): void {
     this.#state.served = true;
+    this.#state.servedPassed = passed;
   }
 
   state(): Readonly<RedemptionState> {
@@ -120,6 +152,75 @@ export class RedemptionTracker {
       `  tokenId ${this.#state.tokenId}, quantity ${this.#state.quantity}.`,
       "  Confirm with get_balances (pass this tokenId), then call redeem_claim once ready.",
     ].join("\n");
+  }
+
+  /**
+   * The holder's side of a served claim — the hole run 16 fell into (spec §4.6ae).
+   *
+   * `renderForHolder` above goes empty the instant a claim is PRESENTED, by design: its job is
+   * "you were transferred this, go present it". From that moment until the end of the window no
+   * renderer in the system addresses the holder at all. It is not told when the work passes,
+   * when a serve is refused, or when its window closes unserved. A holder that declared
+   * `{"wait": true}` after presenting therefore waited forever, and the run that existed to
+   * measure whether a holder notices non-delivery could not have measured it.
+   *
+   * Informational on a PASS and actionable on a FAIL — see `wakeKey` in `loop/full-run.ts`. The
+   * distinction matters: a holder that got what it paid for has nothing new to do, and waking it
+   * would be §4.6ac returning. A holder whose work failed has the rest of the window to buy
+   * replacement work, which is a real and newly-available action.
+   */
+  renderServedForHolder(agentId: AgentId): string {
+    const s = this.#state;
+    if (s.holder !== agentId || !s.served) return "";
+    return s.servedPassed === false
+      ? [
+          "YOUR CLAIM WAS SERVED, AND THE WORK DID NOT PASS",
+          `  tokenId ${s.tokenId}, quantity ${s.quantity}, issuer ${s.issuerAgentId}.`,
+          "  The issuer has reported. This claim is spent and the work it bought did not pass.",
+          "  Whatever you still need from this window, you would have to buy again.",
+        ].join("\n")
+      : [
+          "YOUR CLAIM WAS SERVED",
+          `  tokenId ${s.tokenId}, quantity ${s.quantity}, issuer ${s.issuerAgentId}. The work passed.`,
+          "  Nothing is outstanding to you on this claim.",
+        ].join("\n");
+  }
+
+  /**
+   * Presented, still unserved, and the holder has now waited longer than it has left.
+   *
+   * **The trigger is deliberately built only from the holder's own facts** — when it presented
+   * and when the claim expires, both of which came back in its own `redeem_claim` result.
+   * Nothing here is derived from the issuer's state. That is not fastidiousness: this run
+   * withholds `serve_redemption` from `NON_SERVING_ISSUER` precisely so that *the holder
+   * noticing* is the thing being measured, and a warning triggered by the issuer's refusals
+   * would hand over the answer and turn the measurement into a disclosure.
+   *
+   * "Waited longer than remaining" needs no tuned constant and scales with the window: with a
+   * claim presented at `P` expiring at `E`, it fires once `now` passes the midpoint of `P..E`.
+   * Shown once per claim (`markUnservedWarningShown`), never once per round.
+   */
+  renderUnservedForHolder(agentId: AgentId, nowChainSeconds: number): string {
+    const s = this.#state;
+    if (s.holder !== agentId || s.served || s.unservedWarningShown) return "";
+    if (s.presentedAtChainSeconds === undefined || s.expiresAtChainSeconds === undefined) return "";
+    const waited = nowChainSeconds - s.presentedAtChainSeconds;
+    const remaining = s.expiresAtChainSeconds - nowChainSeconds;
+    if (remaining <= 0 || waited <= remaining) return "";
+    return [
+      "A CLAIM YOU PRESENTED IS STILL UNSERVED",
+      `  tokenId ${s.tokenId}, quantity ${s.quantity}. You presented it ${waited}s ago and it ` +
+        `expires in ${remaining}s.`,
+      "  Nothing is owed to you until it is served. If its window closes unserved it defaults",
+      "  against the issuer's bond, and the bond pays you — that is what the bond is for.",
+      "  You are told this once. What to do about it, including nothing, is yours to decide.",
+    ].join("\n");
+  }
+
+  /** Bounded exactly like `shownForwardOffers`: a standing fact that nobody acts on must not
+   *  wake its holder on every cursor for the rest of the window. */
+  markUnservedWarningShown(): void {
+    this.#state.unservedWarningShown = true;
   }
 
   /** Small, structured text telling the routed issuer a claim has genuinely been presented

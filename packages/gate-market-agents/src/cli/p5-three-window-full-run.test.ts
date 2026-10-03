@@ -66,6 +66,118 @@ const find = (roster: ReturnType<typeof buildRoster>, id: string) => {
   return agent;
 };
 
+describe("claims whose holder was never offered a settlement (spec §4.6ae)", () => {
+  const claim = (mintedInWindow: number, tokenId: string) => ({
+    tokenId,
+    holder: "0xholder",
+    holderAgentId: "WORKER-CODE" as const,
+    issuerAgentId: "ISSUER-A" as const,
+    quantityMilliSiu: "10000",
+    mintedInWindow,
+  });
+
+  it("names only last-window claims — an earlier one WAS shown to its holder", () => {
+    // settleableText lists claims carried from an earlier window, so a window-1 claim really is
+    // offered in window 2. Only a last-window claim has no turn left in which to offer it.
+    const out = claimsHolderWasNeverOfferedSettlement([
+      claim(1, "0xaa"),
+      claim(2, "0xbb"),
+      claim(WINDOW_COUNT, "0xcc"),
+    ]);
+    expect(out.map((c) => c.tokenId)).toEqual(["0xcc"]);
+  });
+
+  it("is empty when nothing is outstanding, so a clean run stays quiet", () => {
+    expect(claimsHolderWasNeverOfferedSettlement([])).toEqual([]);
+  });
+
+  it("does not silently drop several last-window claims", () => {
+    const out = claimsHolderWasNeverOfferedSettlement([
+      claim(WINDOW_COUNT, "0xcc"),
+      claim(WINDOW_COUNT, "0xdd"),
+    ]);
+    expect(out).toHaveLength(2);
+  });
+});
+
+describe("§4.6ac invariant, on the real roster", () => {
+  // The guarantee: an agent is never woken by a section it cannot act on. Checked against the
+  // roster that actually runs, through the real composition, for every section one at a time —
+  // a grant that drifts away from the wake table would otherwise reintroduce §4.6ac silently,
+  // and silently is how it arrived the first time.
+  const SECTIONS = Object.keys(WAKE_SECTION_TOOLS) as (keyof typeof WAKE_SECTION_TOOLS)[];
+  const blank = Object.fromEntries(SECTIONS.map((k) => [k, ""])) as Record<string, string>;
+
+  it("never puts a section in an agent's wake key unless that agent holds one of its tools", () => {
+    for (const w of [1, 2, WINDOW_COUNT]) {
+      for (const agent of buildRoster(input(w))) {
+        const tools = agent.availableTools as readonly string[];
+        for (const section of SECTIONS) {
+          const { shown, wakeKey } = composeBoard(
+            {
+              ...blank,
+              [section]: `TEXT-${section}`,
+              // Exercise the harder branch: a served FAIL is the only served state that wakes.
+              servedWasFailure: true,
+            } as Parameters<typeof composeBoard>[0],
+            agent.availableTools,
+          );
+          // Shown regardless — knowing is never gated on being able to act.
+          expect(shown).toBe(`TEXT-${section}`);
+          if (wakeKey !== "") {
+            const usable = WAKE_SECTION_TOOLS[section].filter((t) => tools.includes(t));
+            expect(
+              usable.length,
+              `w${w} ${agent.agentId} is woken by ${section} holding none of its tools`,
+            ).toBeGreaterThan(0);
+          }
+        }
+      }
+    }
+  });
+
+  it("WORKER-EXTRACT is shown a served FAIL and is NOT woken by it — it holds no way to buy again", () => {
+    // The case the invariant caught on its first run, pinned so a later grant change cannot
+    // quietly make it wrong in either direction. WORKER-EXTRACT can hold and redeem a claim
+    // (added 2026-09-30 after it was paid in fSIU it could not redeem, §4.6p) but has no
+    // purchase tool at all.
+    const agent = find(buildRoster(input(1)), "WORKER-EXTRACT");
+    expect(agent.availableTools).toContain("redeem_claim");
+    const { shown, wakeKey } = composeBoard(
+      { ...blank, servedText: "SERVED-FAIL", servedWasFailure: true } as Parameters<
+        typeof composeBoard
+      >[0],
+      agent.availableTools,
+    );
+    expect(shown).toBe("SERVED-FAIL");
+    expect(wakeKey).toBe("");
+  });
+
+  it("WORKER-CODE, which can buy, IS woken by a served FAIL", () => {
+    const agent = find(buildRoster(input(1)), "WORKER-CODE");
+    const { wakeKey } = composeBoard(
+      { ...blank, servedText: "SERVED-FAIL", servedWasFailure: true } as Parameters<
+        typeof composeBoard
+      >[0],
+      agent.availableTools,
+    );
+    expect(wakeKey).toBe("SERVED-FAIL");
+  });
+
+  it("both holders are woken by an overdue claim — each has something it can do about one", () => {
+    for (const who of ["WORKER-CODE", "WORKER-EXTRACT"] as const) {
+      const agent = find(buildRoster(input(1)), who);
+      const { wakeKey } = composeBoard(
+        { ...blank, unservedText: "OVERDUE", servedWasFailure: false } as Parameters<
+          typeof composeBoard
+        >[0],
+        agent.availableTools,
+      );
+      expect(wakeKey, `${who} cannot act on an overdue claim`).toBe("OVERDUE");
+    }
+  });
+});
+
 describe("p5 three-window roster", () => {
   it("offers quote_forward only while a later window still exists", () => {
     for (const w of [1, 2]) {
@@ -317,7 +429,12 @@ describe("p5 three-window roster", () => {
 
 // ---------------------------------------------------------------- outcome classification
 
-import { classifyFinalWindow, type WindowOutcome } from "./p5-three-window-full-run.js";
+import {
+  classifyFinalWindow,
+  claimsHolderWasNeverOfferedSettlement,
+  type WindowOutcome,
+} from "./p5-three-window-full-run.js";
+import { composeBoard, WAKE_SECTION_TOOLS } from "../loop/full-run.js";
 import type { CapacityEvent, FullRunWindowResult } from "../loop/full-run.js";
 
 function windowResult(overrides: Partial<FullRunWindowResult> = {}): FullRunWindowResult {

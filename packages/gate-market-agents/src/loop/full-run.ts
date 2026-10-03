@@ -496,6 +496,119 @@ const DEFAULT_FRICTION: Required<FrictionReport> = {
  * turn without redeeming it — P4's ORCHESTRATOR never mints/holds a claim (it authors gates
  * directly), so this always logs `time_to_expiry_seconds: null` for P4. Kept real and wired
  * rather than stubbed so a future P5 agent that does hold claims gets a genuine log, not a retrofit. */
+/**
+ * The board sections an agent's turn is built from, each already rendered for that agent.
+ *
+ * Named rather than positional because `composeBoard` makes a decision per section — whether it
+ * belongs in the wake key — and a list of eleven bare strings makes that decision unreadable and
+ * unreviewable.
+ */
+export interface BoardSections {
+  marketBoardText: string;
+  redemptionText: string;
+  transferText: string;
+  deliveryOwedText: string;
+  settleableText: string;
+  /** Holder-facing, added 2026-10-02 (spec §4.6ae). */
+  servedText: string;
+  /** Whether that serve reported a FAIL — the only case in which it wakes. */
+  servedWasFailure: boolean;
+  /** Holder-facing, added 2026-10-02 (spec §4.6ae). Fires once per claim. */
+  unservedText: string;
+  deliveredGateText: string;
+  gateDefeatedText: string;
+  forwardInvitation: string;
+}
+
+/**
+ * Which tool each wake-contributing section is about — the §4.6ac invariant made checkable.
+ *
+ * §4.6ac's finding was that an agent given a turn with nothing it can do is put straight back
+ * into the forced choice that costs it a turn to escape. So a section may only wake an agent
+ * that holds a tool the section is actually about. This table is what the tests assert against,
+ * and it lives beside the composition rather than in the test, so the two cannot drift.
+ *
+ * Deliberately NOT asserted by looking for tool names in the prose. §4.6q: worked syntax for one
+ * option is a steer even when the surrounding prose is neutral, and the holder's two sections are
+ * read by a buyer whose asset choice F1 is measuring. The mapping is structural; the prose stays
+ * free to name no action at all.
+ */
+export const WAKE_SECTION_TOOLS: Record<string, readonly ToolName[]> = {
+  marketBoardText: ["request_quote", "issue_quote", "pay", "pay_with_claim", "settle_split"],
+  redemptionText: ["serve_redemption"],
+  transferText: ["redeem_claim"],
+  deliveryOwedText: ["submit_job"],
+  settleableText: ["settle_window_close"],
+  // A holder whose work came back failed still has the rest of the window to buy again.
+  servedText: ["request_quote", "pay", "mint_claim", "pay_with_claim", "settle_split"],
+  // A holder told its claim is overdue can buy again, pass the claim on, or settle it later.
+  unservedText: ["request_quote", "pay", "transfer_claim", "settle_window_close"],
+  deliveredGateText: ["submit_attack"],
+  gateDefeatedText: ["submit_job"],
+  forwardInvitation: ["quote_forward"],
+};
+
+/**
+ * One board, two strings: what the agent is SHOWN, and what WAKES it.
+ *
+ * They were the same string until 2026-10-02, fused deliberately by §4.6ac so the prompt and the
+ * wake gate could not disagree about whether there was anything to act on. Run 16 showed what
+ * that fusion costs: **anything worth telling an agent had to wake it too**, so the only options
+ * were silence or the idle burn — and a holder, for whom no actionable section exists after it
+ * presents a claim, got silence. It waited through its own undelivered work and never learned
+ * (spec §4.6ae).
+ *
+ * Splitting them keeps §4.6ac's guarantee and removes the false choice: informational text may
+ * change freely without spending a turn, while `wakeKey` stays the strict subset that affords an
+ * action, checked against `WAKE_SECTION_TOOLS`.
+ */
+export function composeBoard(
+  s: BoardSections,
+  /**
+   * The woken agent's own grant. §4.6ac is enforced here rather than asserted elsewhere: a
+   * section whose tools this agent does not hold is still SHOWN — it may well be worth knowing —
+   * but it cannot spend the agent's turn.
+   *
+   * This is not hypothetical. WORKER-EXTRACT can hold and redeem a claim and holds no purchase
+   * tool at all, so a served FAIL is real news it can do nothing about; waking it would be the
+   * forced choice returning, on the agent whose claim already went unredeemable twice (§4.6p).
+   */
+  availableTools: readonly ToolName[],
+): { shown: string; wakeKey: string } {
+  const holds = (section: keyof typeof WAKE_SECTION_TOOLS): boolean =>
+    WAKE_SECTION_TOOLS[section].some((t) => availableTools.includes(t));
+
+  // `wakes` is per SECTION, not per string value: comparing by text would blank any other
+  // section that happened to render identically, and every section here is empty most turns.
+  const sections: { text: string; wakes: boolean }[] = [
+    { text: s.marketBoardText, wakes: holds("marketBoardText") },
+    { text: s.redemptionText, wakes: holds("redemptionText") },
+    { text: s.transferText, wakes: holds("transferText") },
+    { text: s.deliveryOwedText, wakes: holds("deliveryOwedText") },
+    { text: s.settleableText, wakes: holds("settleableText") },
+    // The one section shown but never woken on for its own sake: a holder that got what it paid
+    // for has nothing new to do, and waking it would be exactly the turn-burn §4.6ac exists to
+    // end. A FAIL is different — the rest of the window is its only chance to buy again, and
+    // only for an agent that can actually buy.
+    { text: s.servedText, wakes: s.servedWasFailure && holds("servedText") },
+    { text: s.unservedText, wakes: holds("unservedText") },
+    { text: s.deliveredGateText, wakes: holds("deliveredGateText") },
+    { text: s.gateDefeatedText, wakes: holds("gateDefeatedText") },
+    { text: s.forwardInvitation, wakes: holds("forwardInvitation") },
+  ];
+  return {
+    shown: sections
+      .map((x) => x.text)
+      .filter(Boolean)
+      .join("\n\n"),
+    wakeKey: sections
+      .filter((x) => x.wakes)
+      .map((x) => x.text)
+      .filter(Boolean)
+      .join("\n\n"),
+  };
+}
+
 async function holdTimeToExpiry(
   deps: RunnerDeps,
   heldTokenId: bigint | null,
@@ -860,8 +973,23 @@ export async function runFullRunWindow(
   let cursorsSinceProgress = 0;
   let lastActiveSize = activeAgents.size;
 
+  /**
+   * The chain clock, refreshed once per pass over the roster rather than per agent.
+   *
+   * Its only consumer is the holder's unserved warning, which compares against a midpoint
+   * typically minutes away, so a figure at most one round old is ample. Per-agent would add an
+   * RPC to every skipped cursor, including the quiet rounds where nobody acts at all. The chain
+   * clock and not `Date.now()` for the same reason `time_to_expiry` uses it: a devnet advances
+   * its own clock, and a wall-clock comparison against a chain-measured expiry is two different
+   * timelines.
+   */
+  let chainNowSeconds = Number(nowSeconds);
+
   turnLoop: for (let turnCursor = 0; ; turnCursor++) {
     if (activeAgents.size === 0) break;
+    if (turnCursor % options.roster.length === 0 && turnCursor > 0) {
+      chainNowSeconds = Number(await options.deps.chainReader.currentBlockTimestamp());
+    }
 
     // A round-robin skip is synchronous: `continue` awaits nothing and changes nothing. So any
     // disagreement between "this agent has nothing to act on" and "some other agent can act"
@@ -1045,21 +1173,25 @@ export async function runFullRunWindow(
       ? `FORWARD TERMS\n  You have not stated terms for a later window of this run yet. You may (quote_forward), ` +
         `or you may choose not to — nothing here suggests a price, a quantity, or whether to quote at all.`
       : "";
-    const boardSectionText = [
+    // The holder's own two sections (spec §4.6ae). `servedText` is informational on a PASS and
+    // actionable on a FAIL; `unservedText` fires once, when the holder has waited longer than it
+    // has left. Both are built only from facts the holder's own `redeem_claim` result returned.
+    const servedText = redemption.renderServedForHolder(agent.agentId);
+    const unservedText = redemption.renderUnservedForHolder(agent.agentId, chainNowSeconds);
+
+    const { shown: boardSectionText, wakeKey } = composeBoard({
       marketBoardText,
       redemptionText,
       transferText,
       deliveryOwedText,
       settleableText,
-      // In the board section, not appended separately, so it drives the wait-gate as well as the
-      // prompt: an untested gate genuinely is something to act on for whoever can attack it, and
-      // the two must not disagree about that.
+      servedText,
+      servedWasFailure: redemption.state().servedPassed === false,
+      unservedText,
       deliveredGateText,
       gateDefeatedText,
       forwardInvitation,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+    }, agent.availableTools);
 
     // Skipped before the model is called and before the turn counter moves, so waiting costs
     // nothing. Guarded against a stall: if every remaining agent is waiting, nothing will ever
@@ -1082,7 +1214,7 @@ export async function runFullRunWindow(
     const buyerIdle =
       agent.waitsFor === "buyer" &&
       hasPurchased.has(agent.agentId) &&
-      boardSectionText === "" &&
+      wakeKey === "" &&
       !unseenForwardOffer;
     if (
       // "gate" waits for a gate to exist AND for its own inbox to be empty. The adversary is also
@@ -1090,12 +1222,12 @@ export async function runFullRunWindow(
       // authored, and gating purely on the gate meant that request could never be answered — the
       // second of a window's two purchases was structurally unreachable (found while enabling it,
       // 2026-09-29).
-      (agent.waitsFor === "gate" && !canAttackNow() && boardSectionText === "") ||
-      (agent.waitsFor === "inbox" && boardSectionText === "") ||
+      (agent.waitsFor === "gate" && !canAttackNow() && wakeKey === "") ||
+      (agent.waitsFor === "inbox" && wakeKey === "") ||
       // A wait the agent declared itself, honoured until what it can act on actually changes.
       // Checked here with the other wake conditions so one `continue` covers every way of
       // having nothing to do.
-      waitingOn.get(agent.agentId) === boardSectionText ||
+      waitingOn.get(agent.agentId) === wakeKey ||
       buyerIdle
     ) {
       const someoneCanAct = [...activeAgents].some((id) => {
@@ -1170,6 +1302,12 @@ export async function runFullRunWindow(
       }
       for (const q of forwardBook.all()) seen.add(q.quoteId);
     }
+
+    // Same discipline, same reason (spec §4.6ae): the holder's unserved warning is marked shown
+    // only once it is genuinely in a prompt an agent received. Marking it when the text is built
+    // would burn the one showing on an agent the wait-gate then skipped, and the holder would
+    // never hear about its own undelivered claim at all.
+    if (unservedText !== "") redemption.markUnservedWarningShown();
 
     const prompt = buildTurnPrompt(
       context,
@@ -1381,13 +1519,17 @@ export async function runFullRunWindow(
       options.onTurn?.(agent.agentId, log);
       // NOT removed from activeAgents — the whole difference from `done`. The agent stays in
       // the window and is woken the moment its own actionable state differs from what it saw
-      // when it said it was waiting. `boardSectionText` is that state: it is already what the
-      // wake gate uses to decide whether an issuer has anything to act on, so a wait is woken
-      // by exactly the arrivals a non-waiting agent would have been woken by, and by nothing
-      // else. Being woken with an already-paid quote still on the board — which happened to
-      // ORCHESTRATOR once — would put the agent straight back into the forced choice this
-      // exists to end.
-      waitingOn.set(agent.agentId, boardSectionText);
+      // when it said it was waiting. `wakeKey` is that state — the subset of the board text
+      // that affords a NEW action, so a wait is woken by exactly the arrivals a non-waiting
+      // agent would have been woken by, and by nothing else. Being woken with an already-paid
+      // quote still on the board — which happened to ORCHESTRATOR once — would put the agent
+      // straight back into the forced choice this exists to end.
+      //
+      // Keyed on `wakeKey` and NOT on `boardSectionText` since 2026-10-02 (spec §4.6ae). They
+      // were the same string, and the cost was that a holder could not be told anything without
+      // also being woken — so it was told nothing, and run 16's holder slept through its own
+      // undelivered claim. Informational text may now change freely without spending a turn.
+      waitingOn.set(agent.agentId, wakeKey);
       haltedReason[agent.agentId] = "waiting";
       await friction.append(
         buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null, {
@@ -1726,8 +1868,19 @@ export async function runFullRunWindow(
         // The spec travels with the redemption — see RedemptionState.taskSpecText. The holder is
         // presenting the job it holds a claim against, so the spec comes from the job itself,
         // exactly as `buildToolArgs` already sources every other job-owned field.
-        redemption.recordPresented(agent.agentId, options.taskSpecText);
         const presented = record.result as { txHash?: string; timeToExpirySeconds?: number };
+        redemption.recordPresented(
+          agent.agentId,
+          options.taskSpecText,
+          // Only when `redeem_claim` genuinely returned an expiry. Without it the holder simply
+          // gets no timed warning, which is better than one anchored to an invented instant.
+          typeof presented.timeToExpirySeconds === "number"
+            ? {
+                atChainSeconds: chainNowSeconds,
+                secondsToExpiry: presented.timeToExpirySeconds,
+              }
+            : undefined,
+        );
         const tokenId = (args as { tokenId?: unknown } | undefined)?.tokenId;
         await recordCapacityEvent("redeem_claim", {
           ...(typeof tokenId === "string" ? { tokenId } : {}),
@@ -1741,7 +1894,10 @@ export async function runFullRunWindow(
       }
 
       if (intent.tool === "serve_redemption") {
-        redemption.recordServed();
+        // The issuer's own reported verdict, read from the args it actually sent rather than
+        // from the grading result the loop observed — they can differ, and which one the HOLDER
+        // is told about is the one that was reported on chain.
+        redemption.recordServed((args as { passed?: unknown } | undefined)?.passed !== false);
       }
 
       if (intent.tool === "submit_job") {

@@ -43,6 +43,7 @@ import {
   type RosterAgentConfig,
 } from "./full-run.js";
 import { MAX_ATTACK_ROUNDS } from "./full-run.js";
+import { composeBoard, WAKE_SECTION_TOOLS, type BoardSections } from "./full-run.js";
 
 const PRICES = { priceInUsdPer1M: "2", priceOutUsdPer1M: "12" };
 
@@ -2688,4 +2689,121 @@ describe("an agent can declare a wait, and is then left alone (spec §4.6x, §4.
       expect(result.haltedReason?.["WORKER-CODE"]).toBe("waiting");
     },
   );
+});
+
+
+describe("composeBoard — what an agent is shown vs what wakes it (spec §4.6ae)", () => {
+  /** A grant holding every tool, so a test about composition is not also a test about grants. */
+  const ALL_TOOLS = [...new Set(Object.values(WAKE_SECTION_TOOLS).flat())];
+  const empty: BoardSections = {
+    marketBoardText: "",
+    redemptionText: "",
+    transferText: "",
+    deliveryOwedText: "",
+    settleableText: "",
+    servedText: "",
+    servedWasFailure: false,
+    unservedText: "",
+    deliveredGateText: "",
+    gateDefeatedText: "",
+    forwardInvitation: "",
+  };
+
+  it("shows a served PASS without waking on it — the assertion the old single string could not satisfy", () => {
+    // Until 2026-10-02 there was ONE string doing both jobs, so `shown` and `wakeKey` were the
+    // same value by construction and this expectation was unsatisfiable. That fusion is why a
+    // holder was told nothing: the only way to tell it anything was to spend its turn, so §4.6ac
+    // kept the channel shut. Run 16's holder slept through its own undelivered claim as a
+    // result.
+    const { shown, wakeKey } = composeBoard(
+      { ...empty, servedText: "YOUR CLAIM WAS SERVED\n  The work passed.", servedWasFailure: false },
+      ALL_TOOLS,
+    );
+    expect(shown).toContain("YOUR CLAIM WAS SERVED");
+    expect(wakeKey).toBe("");
+    expect(shown).not.toBe(wakeKey);
+  });
+
+  it("wakes on a served FAIL, because buying again is a real action and the window is running", () => {
+    const { shown, wakeKey } = composeBoard(
+      { ...empty, servedText: "YOUR CLAIM WAS SERVED, AND THE WORK DID NOT PASS", servedWasFailure: true },
+      ALL_TOOLS,
+    );
+    expect(shown).toContain("DID NOT PASS");
+    expect(wakeKey).toContain("DID NOT PASS");
+  });
+
+  it("wakes on an overdue claim", () => {
+    const { wakeKey } = composeBoard(
+      { ...empty, unservedText: "A CLAIM YOU PRESENTED IS STILL UNSERVED" },
+      ALL_TOOLS,
+    );
+    expect(wakeKey).toContain("STILL UNSERVED");
+  });
+
+  it("wakes on nothing when there is nothing — an empty board is still an empty wake key", () => {
+    const { shown, wakeKey } = composeBoard(empty, ALL_TOOLS);
+    expect(shown).toBe("");
+    expect(wakeKey).toBe("");
+  });
+
+  it("keeps every other section's wake behaviour exactly as it was", () => {
+    // The split must not quietly change which of the pre-existing sections wake an agent.
+    for (const key of [
+      "marketBoardText",
+      "redemptionText",
+      "transferText",
+      "deliveryOwedText",
+      "settleableText",
+      "deliveredGateText",
+      "gateDefeatedText",
+      "forwardInvitation",
+    ] as const) {
+      const { shown, wakeKey } = composeBoard({ ...empty, [key]: `TEXT-${key}` }, ALL_TOOLS);
+      expect(shown).toBe(`TEXT-${key}`);
+      expect(wakeKey).toBe(`TEXT-${key}`);
+    }
+  });
+
+  it("does not wake an agent that cannot act on the section, however real the news", () => {
+    // Found by the roster invariant test on its first run: WORKER-EXTRACT can hold and redeem a
+    // claim and holds no purchase tool whatsoever, so a served FAIL is real news it can do
+    // nothing with. Showing it is right; spending its turn on it is §4.6ac returning.
+    const noPurchaseTools = ["submit_attack", "redeem_claim", "settle_window_close"] as const;
+    const { shown, wakeKey } = composeBoard(
+      { ...empty, servedText: "YOUR CLAIM WAS SERVED, AND THE WORK DID NOT PASS", servedWasFailure: true },
+      noPurchaseTools,
+    );
+    expect(shown).toContain("DID NOT PASS");
+    expect(wakeKey).toBe("");
+  });
+
+  it("still wakes that same agent on an overdue claim, which it CAN act on", () => {
+    // The gate is per section and per grant, not a blanket exclusion: WORKER-EXTRACT holds
+    // settle_window_close, so the default that pays it is genuinely actionable.
+    const { wakeKey } = composeBoard(
+      { ...empty, unservedText: "A CLAIM YOU PRESENTED IS STILL UNSERVED" },
+      ["submit_attack", "redeem_claim", "settle_window_close"],
+    );
+    expect(wakeKey).toContain("STILL UNSERVED");
+  });
+
+  it("§4.6ac invariant: every section that can wake names at least one tool it is about", () => {
+    // The guarantee §4.6ac exists to keep: an agent given a turn must have something it can do.
+    // A section with no tool behind it is information without affordance, which is the forced
+    // choice returning. Asserted structurally rather than by looking for tool names in the
+    // prose — §4.6q, worked syntax for one option is a steer, and the holder's sections are read
+    // by a buyer whose asset choice F1 is measuring.
+    const wakingSections = Object.keys(empty).filter((k) => k !== "servedWasFailure");
+    for (const section of wakingSections) {
+      const tools = WAKE_SECTION_TOOLS[section];
+      expect(tools, `${section} has no entry in WAKE_SECTION_TOOLS`).toBeDefined();
+      expect(tools?.length ?? 0, `${section} maps to no tool`).toBeGreaterThan(0);
+    }
+  });
+
+  it("§4.6ac invariant: the mapping covers every section and invents none", () => {
+    const sections = new Set(Object.keys(empty).filter((k) => k !== "servedWasFailure"));
+    expect(new Set(Object.keys(WAKE_SECTION_TOOLS))).toEqual(sections);
+  });
 });

@@ -1760,12 +1760,35 @@ was written for.
 **Consequence for the block.** This is an affordance defect, so run 16 does not meet the bar and
 the protocol does not freeze on it. The five F1 runs do not start here.
 
-**The fix is designed, not built:** `docs/task-holder-visibility.md`. Its central point is that
-widening the wake condition is the wrong move — `boardSectionText` is both the text an agent
-sees and the key that decides whether it is woken, so today anything worth telling must also
-wake, and the two have to be split before a holder can be informed without being disturbed. It
-also rules out the obvious trigger: waking on the issuer's refusals would hand the holder the
-answer to the question the run is asking.
+**Fixed 2026-10-03** — `docs/task-holder-visibility.md` holds the design and the build notes.
+Widening the wake condition was the wrong move. `boardSectionText` was both the text an agent
+sees and the key deciding whether it is woken, so anything worth telling had to wake, and the
+two are now split: `composeBoard` returns `shown` and `wakeKey`, and `waitingOn` keys on the
+latter. Informational text may change freely without spending a turn.
+
+**§4.6ac is now enforced by construction rather than asserted.** `composeBoard` takes the
+agent's grant and drops from `wakeKey` any section whose tools it does not hold, against a
+`WAKE_SECTION_TOOLS` table beside the composition. The invariant caught a real case on its first
+run: `WORKER-EXTRACT` can hold and redeem a claim and holds no purchase tool at all, so a served
+FAIL is news it can do nothing with — it is shown and does not wake, while an overdue claim,
+which it can settle, still does.
+
+**The trigger is built only from the holder's own facts** — when it presented and when its claim
+expires, both returned by its own `redeem_claim`. Waking on the issuer's refusals would have
+been easy and would have handed the holder the answer to the question the run is asking.
+
+**Two honest limits, both recorded in the task doc.** The literal form of the invariant — a tool
+the agent *could not have used before* — cannot hold for either holder stage, because nothing is
+newly granted to a holder; what changes is that an action becomes worth taking. The implemented
+guarantee is affordance plus no-repetition. And the overdue warning fires on the holder's next
+turn, so a window that goes fully idle before the midpoint ends without it — correct behaviour,
+since spinning the roster on a clock is the busy loop the stall guard exists to stop, but it
+means the channel is available rather than guaranteed.
+
+**A claim minted in the last window is now disclosed rather than quietly swept.** Its holder is
+never offered a settlement at all (§4.6z-ii), and a holder never asked is indistinguishable from
+a holder declining — §4.6y repeated on the holder side. The run report carries
+`holdersNeverOfferedSettlement` and the sweep says so in words.
 
 ### 4.6af The final-window verdict cannot see the dollar route, and only the fSIU artefact hid it
 

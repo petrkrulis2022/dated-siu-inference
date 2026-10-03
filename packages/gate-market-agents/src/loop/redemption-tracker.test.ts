@@ -136,3 +136,88 @@ describe("RedemptionTracker", () => {
     expect(tracker.renderFor("ISSUER-A")).toContain("passed=true");
   });
 });
+
+describe("the holder's side of a presented claim (spec §4.6ae)", () => {
+  /** Presented at chain second 1000 with 400s of life left, so it expires at 1400 and the
+   *  midpoint — "waited longer than you have left" — falls at 1200. */
+  const presented = () => {
+    const t = new RedemptionTracker();
+    t.recordMint("77", "ISSUER-A", "10000");
+    t.recordPresented("WORKER-CODE", undefined, { atChainSeconds: 1000, secondsToExpiry: 400 });
+    return t;
+  };
+
+  it("says nothing to the holder while the issuer still legitimately owes the work", () => {
+    // Run 16's holder waited here, correctly. This stage is not the defect.
+    const t = presented();
+    expect(t.renderServedForHolder("WORKER-CODE")).toBe("");
+    expect(t.renderUnservedForHolder("WORKER-CODE", 1100)).toBe("");
+  });
+
+  it("tells the holder its claim was served, which nothing did before", () => {
+    // The hole: renderForHolder goes empty at presentation and never returns, and every other
+    // renderer is issuer-side. A served claim reached the holder through no channel at all.
+    const t = presented();
+    t.recordServed(true);
+    const text = t.renderServedForHolder("WORKER-CODE");
+    expect(text).toContain("YOUR CLAIM WAS SERVED");
+    expect(text).toContain("The work passed");
+    expect(text).toContain("77");
+  });
+
+  it("distinguishes a served FAIL from a served PASS — the holder's position is not the same", () => {
+    const t = presented();
+    t.recordServed(false);
+    const text = t.renderServedForHolder("WORKER-CODE");
+    expect(text).toContain("THE WORK DID NOT PASS");
+    expect(text).toContain("you would have to buy again");
+  });
+
+  it("tells no one but the holder", () => {
+    const t = presented();
+    t.recordServed(true);
+    expect(t.renderServedForHolder("ISSUER-A")).toBe("");
+    expect(t.renderServedForHolder("WORKER-EXTRACT")).toBe("");
+  });
+
+  it("warns about an unserved claim only once the holder has waited longer than it has left", () => {
+    const t = presented();
+    expect(t.renderUnservedForHolder("WORKER-CODE", 1001)).toBe("");
+    expect(t.renderUnservedForHolder("WORKER-CODE", 1199)).toBe("");
+    // 1201: waited 201s, 199s remain. The midpoint is crossed.
+    expect(t.renderUnservedForHolder("WORKER-CODE", 1201)).toContain("STILL UNSERVED");
+  });
+
+  it("shows the unserved warning once per claim, never once per round", () => {
+    // §4.6ac: a standing fact nobody acts on must not wake its holder on every cursor. This is
+    // the same bound `shownForwardOffers` already puts on the forward invitation.
+    const t = presented();
+    expect(t.renderUnservedForHolder("WORKER-CODE", 1300)).not.toBe("");
+    t.markUnservedWarningShown();
+    expect(t.renderUnservedForHolder("WORKER-CODE", 1300)).toBe("");
+    expect(t.renderUnservedForHolder("WORKER-CODE", 1399)).toBe("");
+  });
+
+  it("stops warning once the claim is actually served", () => {
+    const t = presented();
+    t.recordServed(true);
+    expect(t.renderUnservedForHolder("WORKER-CODE", 1300)).toBe("");
+  });
+
+  it("says nothing about the issuer, because the holder noticing is what the run measures", () => {
+    // NON_SERVING_ISSUER exists so that non-delivery is discovered rather than announced. A
+    // warning built from the issuer's refusals would hand the holder the answer; this one is
+    // built only from when the holder presented and when its own claim expires.
+    const t = presented();
+    const text = t.renderUnservedForHolder("WORKER-CODE", 1300);
+    expect(text).not.toContain("ISSUER-A");
+    expect(text).not.toMatch(/refus|cannot serve|not permitted|withheld/i);
+  });
+
+  it("gives no timed warning at all when redeem_claim returned no expiry — never an invented one", () => {
+    const t = new RedemptionTracker();
+    t.recordMint("77", "ISSUER-A", "10000");
+    t.recordPresented("WORKER-CODE");
+    expect(t.renderUnservedForHolder("WORKER-CODE", 9_999_999)).toBe("");
+  });
+});

@@ -918,6 +918,19 @@ async function main(): Promise<void> {
         nominalJobMilliSiu: NOMINAL_JOB_MILLI_SIU.toString(),
         startingHeadroom,
         finalWindowVerdict: classifyFinalWindow(outcomes),
+        // Not a count of holders who declined to settle — a count of holders who were never
+        // asked. See `claimsHolderWasNeverOfferedSettlement` and spec §4.6ae; reading the two
+        // as the same thing is §4.6y repeated on the holder side.
+        holdersNeverOfferedSettlement: claimsHolderWasNeverOfferedSettlement(outstandingClaims).map(
+          (c) => ({
+            tokenId: c.tokenId,
+            holder: c.holderAgentId ?? c.holder,
+            issuer: c.issuerAgentId,
+            quantityMilliSiu: c.quantityMilliSiu,
+            mintedInWindow: c.mintedInWindow,
+            why: "minted in the last window, so no later window existed in which its holder could be shown it",
+          }),
+        ),
         forwardQuotes: forwardBook.all(),
         windows: outcomes.map((o) => ({
           windowIndex: o.windowIndex,
@@ -1818,6 +1831,25 @@ function printRationaleCoverage(
  * close day; that is not something to improvise at run end, so it is reported in full detail
  * for a deliberate sweep rather than attempted blind.
  */
+/**
+ * Claims whose holder was never once offered the chance to settle them.
+ *
+ * `settleableText` is the only channel through which a holder ever learns its claim went
+ * undelivered, and it lists claims carried from an EARLIER window — so a claim minted in the
+ * last window reaches no holder at all before the run-end sweep takes it (§4.6z-ii, §4.6ae).
+ *
+ * Disclosed rather than quietly swept, because the two are indistinguishable from the outside:
+ * a holder never offered a settlement looks exactly like a holder that ignored one. That is
+ * §4.6y in a new place — the same mistake as reading an issuer's non-delivery as a choice when
+ * it could not see the obligation — and fulfilment statistics computed over these claims would
+ * be measuring the apparatus.
+ */
+export function claimsHolderWasNeverOfferedSettlement(
+  claims: readonly OutstandingClaim[],
+): readonly OutstandingClaim[] {
+  return claims.filter((c) => c.mintedInWindow === WINDOW_COUNT);
+}
+
 async function settleOutstandingAgentClaims(input: {
   claims: readonly OutstandingClaim[];
   deployment: ReturnType<typeof loadGateMarketDeployment>;
@@ -1833,6 +1865,22 @@ async function settleOutstandingAgentClaims(input: {
       "  window has no later window in which an agent could close it, so without this it stays\n" +
       "  consumed into the next run (spec §4.6z-ii).",
   );
+  const unoffered = claimsHolderWasNeverOfferedSettlement(input.claims);
+  if (unoffered.length > 0) {
+    console.log(
+      `  OF THESE, ${unoffered.length} WAS/WERE NEVER OFFERED TO THEIR HOLDER AT ALL. A holder only\n` +
+        "  ever learns a claim went undelivered through the next window's settleable list, and\n" +
+        "  these were minted in the last window, so no such turn exists. Do not read them as a\n" +
+        "  holder declining to settle — that distinction is not available here (spec §4.6ae):\n" +
+        unoffered
+          .map(
+            (c) =>
+              `    tokenId ${c.tokenId.slice(0, 18)}… held by ${c.holderAgentId ?? c.holder}` +
+              (c.quantityMilliSiu ? `, ${c.quantityMilliSiu} mSIU` : ""),
+          )
+          .join("\n"),
+    );
+  }
   try {
     const account = privateKeyToAccount(
       toHex(process.env.DEPLOYER_PRIVATE_KEY, "DEPLOYER_PRIVATE_KEY"),
