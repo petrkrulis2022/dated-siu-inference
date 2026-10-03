@@ -1524,12 +1524,28 @@ alongside `Defaulted`, and a fresh read at a later block returns 64,000. The run
 headroom from the same connection that wrote, inside the same window — the receipt was awaited
 and it still read stale.
 
-**All three understated the change** — +9,000 reported against +12,000, +0 against +8,000, and
-54,000 against 64,000. That is not a coincidence of direction: a lagging node serves the
+**All of them understated the change** — +9,000 reported against +12,000, +0 against +8,000,
+54,000 against 64,000, and 64,000 against 80,000. That is not a coincidence of direction: a lagging node serves the
 *pre-transaction* view, so the error is always toward "less happened than did". A
 post-write number smaller than expected is therefore the one to re-read, and a post-write number
 that looks like a partial success is the most likely of all to be a stale read rather than a
 partial success.
+
+**Fourth occurrence, 2026-10-02, and this one is not the network's fault.** Run 16's summary
+printed `code-class headroom remaining at the end: 64000 mSIU (A 32000, B 32000)`. An
+independent read from a fresh client after the process exited returns **80,000 — A 48,000/48,000,
+B 32,000/32,000, the pool whole**. No node lagged. The summary reports
+`outcomes[last].headroomAfter`, captured when window 3 closed, while the run's own close-out
+then returned 3,000 ×2 of external-buyer capacity and released a 10,000 reservation — 16,000 the
+printed figure predates. The sweeps run *before* the summary prints, so the number is not merely
+early; it is a cached value printed after the events that invalidate it.
+
+This is the same error in direction — understating by 20% — with a different cause, so it needs
+a different rule. The RPC rule above says *re-read from a fresh connection*. The reporting rule
+is: **a summary figure must be read at the moment it is printed, never carried forward from when
+it was captured.** A field named "remaining at the end" that holds a mid-run snapshot will be
+read as the end state by everyone including its author, and here it was the figure underpinning
+the run's scarcity narrative.
 
 **An incomplete ABI undercounts silently; it does not error.** A scan reconciling consumed
 capacity against live headroom omitted `TransferSingle` from its ABI, so every claim that had

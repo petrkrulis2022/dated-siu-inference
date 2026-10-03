@@ -352,5 +352,17 @@
   ],
   "runTotalUsd": "1.659714",
   "runCapUsd": "30",
-  "experimentTotalUsd": "7.669727"
+  "experimentTotalUsd": "7.669727",
+  "verdictAnnotations": [
+    {
+      "addedOn": "2026-10-02",
+      "field": "finalWindowVerdict",
+      "storedVerdict": "completed",
+      "correctVerdict": "scarcity",
+      "correctedBy": "re-scoring this run's own persisted windows against the current classifier",
+      "whyStoredIsWrong": "The stored detail reads \"ORCHESTRATOR had secured capacity in an earlier window (2 action(s)) — the instrument working as intended\". Those two actions were ordinary SAME-WINDOW payments, which are payment for the job in front of the buyer and not cover for a later window. The classifier was corrected to exclude them (see its `securedAhead` comment and the test \"does NOT treat an ordinary same-window payment as capacity secured ahead\"), but this report had already been written and was never re-scored. Window 3's largest single issuer held 4,000 mSIU against a 10,000 mSIU job, every one of ORCHESTRATOR's purchase attempts failed, and WORKER-CODE authored the gate anyway, unpaid — which is why `passed: true` appears beside a buyer that could not buy.",
+      "notCausedBy": "NOT the 2026-10-02 dollar-route fix (spec §4.6af). The pre-fix classifier already disagreed with this stored value; the artefact simply predates an earlier correction. Verified by running both the pre-fix and post-fix classifiers over the same reconstructed windows.",
+      "readTheStoredVerdictAs": "the strongest available example of why a verdict must be re-scored when its classifier changes: it reports the instrument succeeding in the run that is this project's clearest scarcity result."
+    }
+  ]
 }

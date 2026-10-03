@@ -230,6 +230,13 @@ directly**: a buyer that can wait at zero cost does not burn its allocation on a
 never changes, whether or not the claim is ever served. Gate-author redundancy was the secondary
 benefit, and one formatting slip costing one window across five runs is absorbable.
 
+**Amended 2026-10-02 (§4.6ae).** Run 16 confirmed the first half and broke the second. The
+buyer does stop burning its allocation. But it also stops learning: with no holder-facing board
+section after presentation, a waiting holder is never woken when the delivery fails to arrive,
+so "whether or not the claim is ever served" became "and it never finds out which". The
+decision to leave routing alone stands — this is the wake gate's gap, not routing's — but the
+reason given for it only holds once a holder can be woken by its own non-delivery.
+
 **So it becomes a disclosed scenario property, in the F1 caption where it cannot be missed:**
 every claim routes to the deliberately non-serving issuer, so the claim route defaults in every
 window and never delivers. That is a property of this scenario, **not a finding about fSIU**.
@@ -1637,6 +1644,12 @@ And the protocol no longer claims a turn comes only on an arrival, because it do
 says both things that are true: usually you are not asked, and if you are asked with nothing to
 do, you may say so once instead of paying a turn each time to re-check.
 
+**Corrected by run 16 — see §4.6ae.** The second bullet above ("woken by exactly the arrivals
+that would have woken it anyway and by nothing else") is accurate and is the defect: reusing
+`boardSectionText` as the wake key inherited every gap in what that text renders. A holder
+awaiting delivery has no board section at all, so it has no arrivals, so it is never woken.
+Read that bullet as a constraint on the wake key rather than a reassurance about it.
+
 **The general form.** A prompt that describes a guarantee the loop does not implement is not a
 wording problem — it is a defect that produces exactly the behaviour the guarantee was meant to
 prevent, and it reads as the agent being obtuse. Three runs were spent attributing to the agent
@@ -1683,6 +1696,161 @@ capabilities with equal syntax and a visible pipeline behind them, still unexerc
 something real about whether these agents value deferral at all — and it would be the first
 evidence on that question not confounded by the agent simply not knowing there was a later
 window worth reserving for.
+
+### 4.6ae The wait primitive inherited the board's blind spot, and silenced the one agent the run was testing
+
+Run 16 was the debugging run the protocol freeze depended on. The wait primitive (§4.6ac) did
+exactly what it was built to do, and that is how this was found.
+
+**What it fixed.** Window 2, turn 3, WORKER-CODE declared `{"wait": true}` with a rationale:
+*"Claim already presented via redeem_claim last turn; delivery is now the issuer's obligation.
+Nothing new has arrived to act on, so I'll wait rather than spend a turn on a read."* Three
+turns, where runs 13 and 15 each burned ten on `get_balances` and `check_delivery`. The halt
+reason `waiting` was recorded and is distinguishable from `nothing_to_act_on`. The idle burn is
+gone.
+
+**What it revealed.** WORKER-CODE was never woken again — not in the thirty-one minutes between
+declaring the wait and the window closing, and not when the claim it was waiting on failed to be
+delivered. ISSUER-A is this run's `NON_SERVING_ISSUER`: disclosed before the run, deliberately
+denied `serve_redemption`, so its claims default. Its own roster comment states the purpose —
+*"the holder noticing non-delivery and acting on it is precisely what the run is testing."*
+ISSUER-A played the condition correctly, authoring three passing gates and twice attempting to
+serve, refused both times by the allowlist. **The holder slept through all of it, and window 2's
+claim was ultimately settled by WORKER-EXTRACT, not by the holder whose claim it was.**
+
+**The mechanism, traced rather than inferred.** `buyerIdle` cannot be the suppressor:
+`hasPurchased` is set only by `settlesQuote(tool) || mint_claim`, and `redeem_claim` is neither,
+so WORKER-CODE remained unconditionally wakeable. The only suppressor was
+`waitingOn.get(agentId) === boardSectionText`, with both sides `""`. Its board section was empty
+when it waited and stayed empty, because **no board section is rendered to a holder at any stage
+after presentation**: `renderForHolder` returns `""` the moment `holder !== undefined`,
+`renderForIssuerAwaitingDelivery` and `renderFor` are issuer-side, and `settleableText` covers
+only claims carried from an earlier window.
+
+**So §4.6ac's own design note was right in a way that defeated it.** It recorded that a waiting
+agent is *"woken by exactly the arrivals that would have woken it anyway and by nothing else"* —
+and reusing `boardSectionText` as the wake key inherited every gap in what that text covers. For
+a holder awaiting delivery there are no arrivals at all, so the protocol's promise — *"you will
+be given a turn again the moment something you can act on changes"* — is false for precisely the
+agent this run existed to observe.
+
+**The only route by which a holder ever learns is a window too late.** `settleableText` does
+render an unsettled claim to anyone holding `settle_window_close`, which WORKER-CODE does — but
+it lists claims carried from an *earlier* window, so the earliest a holder can learn its claim
+went undelivered is the window after the one it paid in. By §4.6z-ii a claim minted in the last
+window has no later window at all, so for it the answer is never. Within the window in which a
+buyer actually decides, there is no signal of non-delivery at any time. In run 16 the
+cross-window route did fire, and it was **WORKER-EXTRACT** that acted on it, settling window 2's
+claim on its first turn of window 3; the holder was woken that window by an unrelated quote
+request and never by its own default.
+
+**The polling was the symptom of the same gap, not a separate defect.** Nine `get_balances` and
+eight `check_delivery` were WORKER-CODE *attempting* to notice something the board would never
+tell it. Unconditional waking masked the absence by handing it turns anyway. Removing the idle
+burn removed the workaround and left the gap exposed. `check_delivery` (2026-10-01) closed the
+*expression* half — the agent can now ask — and this is the *arrival* half: it never gets a turn
+in which to ask.
+
+**The general form, and it is §4.6-RULE again in a new place.** A wake key derived from "what
+can this agent act on" is only as complete as the renderers behind it, and a renderer written for
+one side of a two-sided obligation leaves the other side permanently unwakeable. Before reusing a
+wake key, establish what it renders for *every* role that can wait on it — not only the role it
+was written for.
+
+**Consequence for the block.** This is an affordance defect, so run 16 does not meet the bar and
+the protocol does not freeze on it. The five F1 runs do not start here.
+
+**The fix is designed, not built:** `docs/task-holder-visibility.md`. Its central point is that
+widening the wake condition is the wrong move — `boardSectionText` is both the text an agent
+sees and the key that decides whether it is woken, so today anything worth telling must also
+wake, and the two have to be split before a holder can be informed without being disturbed. It
+also rules out the obvious trigger: waking on the issuer's refusals would hand the holder the
+answer to the question the run is asking.
+
+### 4.6af The final-window verdict cannot see the dollar route, and only the fSIU artefact hid it
+
+Run 16 ended with `VERDICT: scarcity` and a detail line that refutes itself in its own sentence:
+
+> *"Window 3's buyer could not buy: 1 purchase attempt(s), every one of them failed, no single
+> issuer held the 10000 mSIU the job needs (largest: 32000 mSIU)"*
+
+32,000 is larger than 10,000, and the same report records window 3's purchase succeeding
+(`ORCHESTRATOR: 1 in USDC`), the seller committing capacity (`w3 turn 2 WORKER-CODE
+reserve_for_work — 10000 mSIU`), and the escrow settling (`w3 turn 5 release_on_settle`).
+
+**The cause.** In `classifyFinalWindow`, `purchaseAttempts` counts `pay`, `pay_with_claim` and
+`mint_claim` in the buyer's turn logs, but `purchaseSucceeded` is satisfied only by a
+`mint_claim` or `pay_with_claim` capacity event attributed to the buyer. **A successful USDC
+payment produces neither.** The dollar route's capacity event is `reserve_for_work`, and it is
+recorded against the *seller*, because the seller is who commits the capacity. So a USDC
+purchase is an attempt that can never be observed to succeed, `buyerWasShutOut` is true by
+construction, and the scarcity branch fires.
+
+**Any final window bought in dollars is reported as scarcity.** `hadCapacity` is computed two
+lines above and never consulted by that branch, which is why the detail text can assert a
+capacity shortage while printing the number that disproves it.
+
+**Why eleven runs did not catch it.** Of the nine recorded runs with a machine-readable report,
+every final-window purchase before run 16 settled in fSIU. Run 16 is the first in which
+ORCHESTRATOR paid dollars in the last window, and it is the only run ever to report `scarcity`.
+**The classifier was correct only because of the artefact §4.6f documents** — the "9 of 9 chose
+fSIU" bias kept every final window on the claim route and kept this blind spot covered. The
+mitigations that make the asset choice fairer are exactly what exposes it. A measurement
+apparatus validated only under a biased input distribution is validated for nothing, and
+correcting the bias is the event that breaks it.
+
+**Why it matters more than a mislabelled line.** `finalWindowVerdict` is the headline field of
+every run report and the thing a reader quotes. F1 compares USDC against fSIU. Under this
+defect, every run in which the buyer chooses dollars in the last window carries a verdict that
+reads as the instrument failing — a systematic penalty applied to one of the two arms by the
+scoring code rather than by anything the agents did. Running the five F1 runs on it would have
+produced a result biased against the dollar route and entirely spurious.
+
+**The fix, 2026-10-02.** `classifyFinalWindow` no longer re-derives the answer: it asks
+`summarisePurchases`, which already knows both routes, already attributes per buyer, and is what
+the report's own asset-choice line prints. Two readers of the same fact disagreeing is how this
+arose, so there is now one. The scarcity branch is additionally gated on `hadCapacity`, because
+"the capacity was gone" and "the largest issuer held 32,000" cannot both be true — a shut-out
+buyer facing available capacity is `failed_with_capacity`, which the taxonomy already defines as
+a defect to investigate.
+
+**The same mistake was live in the other direction, and fixing one without the other would have
+imported it.** `summarisePurchases` detected a dollar settlement with
+`log.parsed.includes('"pay"')`. On a failed call the loop writes `parsed` as
+`` `{"tool":"pay",…} -> tool call error: …` ``, which *contains* `"pay"` — so a reverted or
+refused payment was reported as a settled one, and every run report's asset-choice line
+over-counted the dollar route by its failures. One root cause, two opposite errors: **the dollar
+route's success was never observed from a fact, only guessed from the text of the model's own
+tool call.** `TurnLog` now carries `toolCall: {name, ok}` as a recorded fact, and the text is
+read only for records written before that field existed — then with the failure marker excluded,
+which is the part the old check was missing rather than a new guess.
+
+**Re-scored against every stored run, and two verdicts were wrong.** Running both the pre-fix and
+post-fix classifiers over the same reconstructed windows separates what this fix changed from
+what was already stale:
+
+| Run | Stored | Pre-fix code | Post-fix code | |
+|---|---|---|---|---|
+| 2026-09-28 (first three-window run) | `completed` | `scarcity` | `scarcity` | stored value was **already stale** |
+| 2026-10-02 (run 16) | `scarcity` | `scarcity` | `completed` | **changed by this fix** |
+| other seven | — | — | — | unchanged |
+
+Only run 16 is this defect. The 2026-09-28 record is worse and is a different lesson: its stored
+detail reads *"ORCHESTRATOR had secured capacity in an earlier window (2 action(s)) — the
+instrument working as intended"*, when those two actions were ordinary same-window payments, the
+largest issuer held 4,000 mSIU against a 10,000 mSIU job, every purchase attempt failed, and
+WORKER-CODE authored the gate unpaid. The classifier was corrected to exclude same-window
+payments shortly afterwards; **the report was never re-scored, so the published artefact still
+reports the instrument succeeding in this project's clearest scarcity result.** Both records now
+carry a `verdictAnnotations` entry stating the correct verdict, the reason, and — for 2026-09-28
+— that it is not attributable to this fix.
+
+**The general rule this forces.** A verdict is not a fact about a run; it is the output of the
+classifier that happened to be current when the run ended. Changing a classifier therefore
+invalidates every stored verdict it ever produced, and leaving them in place publishes
+conclusions no current code would reach. **Any change to scoring logic must be followed by
+re-scoring every stored run and annotating what moves** — and the re-score must run both the old
+and new logic, or a stale artefact and a genuine change are indistinguishable.
 
 ### 4.7 Forward terms: a stated price, not an instrument
 

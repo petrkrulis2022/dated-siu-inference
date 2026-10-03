@@ -1,5 +1,5 @@
 {
-  "totalProjectedInferenceUsd": "30.184341",
-  "totalRealizedInferenceUsd": "13.636603",
+  "totalProjectedInferenceUsd": "33.517815",
+  "totalRealizedInferenceUsd": "16.703452",
   "note": "Corrected 2026-09-29. Until this date the ledger held a single field, totalInferenceUsd, which accumulated the PRE-CALL PROJECTED cost of every turn and was then reported as though it were spend. It was not: projections are deliberate over-estimates made before the provider says what a call cost. P5 run 3 printed '$2.777609 of the $30 cap' having actually spent $1.132689. The prior single figure, 10.447337, is retained unchanged as totalProjectedInferenceUsd and remains what the experiment cap is enforced against, so nothing about cap safety changes. totalRealizedInferenceUsd is backfilled by summing totalRealizedUsd from each run's own metrics.json: 4.520046 across 21 window-runs. That is a LOWER BOUND, not an exact total — 10 further run directories (3 code-gate-authoring, 6 p5-window1, 1 p5-three-window-w1) crashed before writing metrics.json, and their real spend is not recoverable from the run records. Their projected spend is already included in the projected figure above. Real spend is therefore somewhat above 4.520046 and certainly below 10.447337."
 }
