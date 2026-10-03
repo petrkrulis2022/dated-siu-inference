@@ -515,6 +515,8 @@ export interface BoardSections {
   servedWasFailure: boolean;
   /** Holder-facing, added 2026-10-02 (spec §4.6ae). Fires once per claim. */
   unservedText: string;
+  /** Holder-facing, added 2026-10-03 (fsiu-design.md §4.3a). Fires once per claim. */
+  lapsingText: string;
   deliveredGateText: string;
   gateDefeatedText: string;
   forwardInvitation: string;
@@ -543,6 +545,10 @@ export const WAKE_SECTION_TOOLS: Record<string, readonly ToolName[]> = {
   servedText: ["request_quote", "pay", "mint_claim", "pay_with_claim", "settle_split"],
   // A holder told its claim is overdue can buy again, pass the claim on, or settle it later.
   unservedText: ["request_quote", "pay", "transfer_claim", "settle_window_close"],
+  // A holder told its unpresented claim is lapsing can present it or pass it on. Both are
+  // actions it could not usefully have taken a moment earlier, because it did not know the
+  // deadline was near — which is the whole of what this section supplies.
+  lapsingText: ["redeem_claim", "transfer_claim"],
   deliveredGateText: ["submit_attack"],
   gateDefeatedText: ["submit_job"],
   forwardInvitation: ["quote_forward"],
@@ -574,38 +580,52 @@ export function composeBoard(
    * forced choice returning, on the agent whose claim already went unredeemable twice (§4.6p).
    */
   availableTools: readonly ToolName[],
-): { shown: string; wakeKey: string } {
+): { shown: string; wakeKey: string; wakeKeyNext: string } {
   const holds = (section: keyof typeof WAKE_SECTION_TOOLS): boolean =>
     WAKE_SECTION_TOOLS[section].some((t) => availableTools.includes(t));
 
   // `wakes` is per SECTION, not per string value: comparing by text would blank any other
   // section that happened to render identically, and every section here is empty most turns.
-  const sections: { text: string; wakes: boolean }[] = [
+  //
+  // `oneShot` marks a section the loop SUPPRESSES once it has genuinely been shown — the
+  // overdue and lapsing warnings, a gate defeat the author has now seen, a forward invitation
+  // already extended. These need `wakeKeyNext`; see below.
+  const sections: { text: string; wakes: boolean; oneShot?: boolean }[] = [
     { text: s.marketBoardText, wakes: holds("marketBoardText") },
     { text: s.redemptionText, wakes: holds("redemptionText") },
     { text: s.transferText, wakes: holds("transferText") },
     { text: s.deliveryOwedText, wakes: holds("deliveryOwedText") },
     { text: s.settleableText, wakes: holds("settleableText") },
-    // The one section shown but never woken on for its own sake: a holder that got what it paid
+    // The one section shown but not woken on for its own sake: a holder that got what it paid
     // for has nothing new to do, and waking it would be exactly the turn-burn §4.6ac exists to
     // end. A FAIL is different — the rest of the window is its only chance to buy again, and
     // only for an agent that can actually buy.
     { text: s.servedText, wakes: s.servedWasFailure && holds("servedText") },
-    { text: s.unservedText, wakes: holds("unservedText") },
+    { text: s.unservedText, wakes: holds("unservedText"), oneShot: true },
+    { text: s.lapsingText, wakes: holds("lapsingText"), oneShot: true },
     { text: s.deliveredGateText, wakes: holds("deliveredGateText") },
-    { text: s.gateDefeatedText, wakes: holds("gateDefeatedText") },
-    { text: s.forwardInvitation, wakes: holds("forwardInvitation") },
+    { text: s.gateDefeatedText, wakes: holds("gateDefeatedText"), oneShot: true },
+    { text: s.forwardInvitation, wakes: holds("forwardInvitation"), oneShot: true },
   ];
+  const join = (keep: (x: (typeof sections)[number]) => boolean): string =>
+    sections
+      .filter(keep)
+      .map((x) => x.text)
+      .filter(Boolean)
+      .join("\n\n");
   return {
-    shown: sections
-      .map((x) => x.text)
-      .filter(Boolean)
-      .join("\n\n"),
-    wakeKey: sections
-      .filter((x) => x.wakes)
-      .map((x) => x.text)
-      .filter(Boolean)
-      .join("\n\n"),
+    shown: join(() => true),
+    wakeKey: join((x) => x.wakes),
+    // What the wake key will be on the NEXT evaluation, once every one-shot section shown this
+    // turn has been suppressed. An agent that waits must be parked against THIS, never against
+    // `wakeKey` — see spec §4.6ah. Storing the key as shown means the suppression itself
+    // changes it, and a changed key is a wake, so the agent is woken once by the fact arriving
+    // and once more by it disappearing. Observed in both windows of run 17, 22s and 68s after
+    // the warning it had just been given.
+    //
+    // The general rule: a wake key must be a function of state the agent will still see next
+    // turn, never of state the act of showing it destroys.
+    wakeKeyNext: join((x) => x.wakes && x.oneShot !== true),
   };
 }
 
@@ -1063,7 +1083,13 @@ export async function runFullRunWindow(
     const redemptionText = refusedTwice("serve_redemption")
       ? ""
       : redemption.renderFor(agent.agentId);
-    const transferText = redemption.renderForHolder(agent.agentId);
+    const transferText = redemption.renderForHolder(agent.agentId, chainNowSeconds);
+    // Held, never presented, window closing — the stage before `unservedText`, and the costlier
+    // one: an unpresented claim expires paying nothing (fsiu-design.md §4.3a).
+    const lapsingText = redemption.renderUnpresentedLapsingForHolder(
+      agent.agentId,
+      chainNowSeconds,
+    );
     const deliveryOwedText = refusedTwice("submit_job")
       ? ""
       : redemption.renderForIssuerAwaitingDelivery(agent.agentId);
@@ -1179,7 +1205,7 @@ export async function runFullRunWindow(
     const servedText = redemption.renderServedForHolder(agent.agentId);
     const unservedText = redemption.renderUnservedForHolder(agent.agentId, chainNowSeconds);
 
-    const { shown: boardSectionText, wakeKey } = composeBoard({
+    const { shown: boardSectionText, wakeKey, wakeKeyNext } = composeBoard({
       marketBoardText,
       redemptionText,
       transferText,
@@ -1188,6 +1214,7 @@ export async function runFullRunWindow(
       servedText,
       servedWasFailure: redemption.state().servedPassed === false,
       unservedText,
+      lapsingText,
       deliveredGateText,
       gateDefeatedText,
       forwardInvitation,
@@ -1308,6 +1335,7 @@ export async function runFullRunWindow(
     // would burn the one showing on an agent the wait-gate then skipped, and the holder would
     // never hear about its own undelivered claim at all.
     if (unservedText !== "") redemption.markUnservedWarningShown();
+    if (lapsingText !== "") redemption.markLapsingWarningShown();
 
     const prompt = buildTurnPrompt(
       context,
@@ -1529,7 +1557,11 @@ export async function runFullRunWindow(
       // were the same string, and the cost was that a holder could not be told anything without
       // also being woken — so it was told nothing, and run 16's holder slept through its own
       // undelivered claim. Informational text may now change freely without spending a turn.
-      waitingOn.set(agent.agentId, wakeKey);
+      // `wakeKeyNext`, never `wakeKey`: the one-shot sections in this turn's prompt are
+      // suppressed the moment it is built, so parking the agent against the key it was SHOWN
+      // means the suppression itself wakes it again on the next pass with an empty board
+      // (spec §4.6ah, observed twice in run 17).
+      waitingOn.set(agent.agentId, wakeKeyNext);
       haltedReason[agent.agentId] = "waiting";
       await friction.append(
         buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null, {
@@ -1649,6 +1681,16 @@ export async function runFullRunWindow(
             // figure beats dropping the event or inventing one.
           }
         }
+        // The same real figure, handed to the tracker so the holder can be told its own
+        // deadline. No extra RPC: this is the read above, reused. See fsiu-design.md §4.3a —
+        // the loop has held this number all along and the arrival notice never carried it.
+        if (fields.tokenId !== undefined && timeToExpirySeconds !== undefined) {
+          redemption.recordExpiry(
+            fields.tokenId,
+            chainNowSeconds + timeToExpirySeconds,
+            chainNowSeconds,
+          );
+        }
         capacityEvents.push({
           agentId: agent.agentId,
           turn,
@@ -1703,7 +1745,11 @@ export async function runFullRunWindow(
         const to = (args as { to?: unknown } | undefined)?.to;
         if (typeof to === "string") {
           const recipientAgentId = agentIdByAddress[to.toLowerCase()];
-          if (recipientAgentId) redemption.recordTransfer(recipientAgentId);
+          if (recipientAgentId)
+            redemption.recordTransfer(
+              recipientAgentId,
+              (args as { memo?: unknown } | undefined)?.memo as string | undefined,
+            );
         }
         const transferred = record.result as { txHash?: string };
         const tokenId = (args as { tokenId?: unknown } | undefined)?.tokenId;
@@ -1733,7 +1779,11 @@ export async function runFullRunWindow(
         const to = (args as { to?: unknown } | undefined)?.to;
         if (typeof to === "string") {
           const recipientAgentId = agentIdByAddress[to.toLowerCase()];
-          if (recipientAgentId) redemption.recordTransfer(recipientAgentId);
+          if (recipientAgentId)
+            redemption.recordTransfer(
+              recipientAgentId,
+              (args as { memo?: unknown } | undefined)?.memo as string | undefined,
+            );
         }
         await recordCapacityEvent("settle_split", {
           tokenId: split.claimTokenId,
@@ -1757,7 +1807,11 @@ export async function runFullRunWindow(
         const to = (args as { to?: unknown } | undefined)?.to;
         if (typeof to === "string") {
           const recipientAgentId = agentIdByAddress[to.toLowerCase()];
-          if (recipientAgentId) redemption.recordTransfer(recipientAgentId);
+          if (recipientAgentId)
+            redemption.recordTransfer(
+              recipientAgentId,
+              (args as { memo?: unknown } | undefined)?.memo as string | undefined,
+            );
         }
         // One tool call, two real transactions — both hashes kept, since a run record must never
         // show a payment that half-occurred as if it had completed.
@@ -2789,7 +2843,9 @@ export async function buildToolArgs(
       );
     }
     const raw =
-      (rawArgs as { to?: unknown; agentId?: unknown; quantity?: unknown } | undefined) ?? {};
+      (rawArgs as
+        | { to?: unknown; agentId?: unknown; quantity?: unknown; memo?: unknown }
+        | undefined) ?? {};
     let to = raw.to;
     if (typeof raw.agentId === "string") {
       const resolved = ctx.agentAddressByAgentId[raw.agentId as AgentId];
@@ -2832,12 +2888,17 @@ export async function buildToolArgs(
       nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu.toString(),
       validUntil: validUntil.toString(),
       signature,
+      // Passed through rather than dropped. This builder constructs an explicit object, so a
+      // field the model supplies and the builder does not name simply vanishes — which is how
+      // the memo would have been accepted by the schema, reported as sent, and never arrived.
+      ...(typeof raw.memo === "string" && raw.memo.trim() !== "" ? { memo: raw.memo.trim() } : {}),
     };
   }
 
   if (tool === "transfer_claim") {
     const raw = rawArgs as
-      { to?: unknown; agentId?: unknown; tokenId?: unknown; quantity?: unknown } | undefined;
+      | { to?: unknown; agentId?: unknown; tokenId?: unknown; quantity?: unknown; memo?: unknown }
+      | undefined;
     // A model may name the destination symbolically ({ agentId: "WORKER-CODE" }) rather than
     // risk mistyping a real hex address — resolved here against the roster's own real addresses,
     // never guessed. A literal "to" address is still honoured unchanged if given instead.
@@ -2849,7 +2910,14 @@ export async function buildToolArgs(
       }
       to = resolved;
     }
-    return { to, tokenId: asDecimalString(raw?.tokenId), quantity: asDecimalString(raw?.quantity) };
+    return {
+      to,
+      tokenId: asDecimalString(raw?.tokenId),
+      quantity: asDecimalString(raw?.quantity),
+      ...(typeof raw?.memo === "string" && raw.memo.trim() !== ""
+        ? { memo: raw.memo.trim() }
+        : {}),
+    };
   }
 
   if (tool === "settle_split") {

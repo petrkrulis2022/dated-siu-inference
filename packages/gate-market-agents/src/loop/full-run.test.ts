@@ -1111,6 +1111,44 @@ describe("buildToolArgs", () => {
     ).rejects.toThrow(/no attack context/);
   });
 
+  it("carries the memo through to the tool instead of silently dropping it", async () => {
+    // Found while building the memo, before it ever ran: this builder constructs an EXPLICIT
+    // object, so a field the model supplies and the builder does not name simply vanishes. The
+    // schema would have accepted it, the model would have believed it sent it, and the
+    // recipient would never have seen it — a silent drop, which is the worst shape of failure
+    // because nothing anywhere reports it.
+    const mintContext: MintContext = {
+      publisherPrivateKeyHex: PUBLISHER_PK,
+      printId: "2026-09-25",
+      series: SERIES_COMMODITY,
+      printDate: printDateToUnixDay("2026-09-25"),
+      nanoUsdPerSiu: 10_700_000n,
+      validitySeconds: 3600n,
+    };
+    const paid = (await buildToolArgs(
+      "pay_with_claim",
+      { to: "0x0000000000000000000000000000000000000002", quantity: "500", memo: " for the w1 gate " },
+      baseCtx({ mintContext }),
+    )) as { memo?: string };
+    expect(paid.memo).toBe("for the w1 gate");
+
+    const moved = (await buildToolArgs(
+      "transfer_claim",
+      { to: "0x0000000000000000000000000000000000000002", tokenId: "7", quantity: "500", memo: "attack testing" },
+      baseCtx(),
+    )) as { memo?: string };
+    expect(moved.memo).toBe("attack testing");
+  });
+
+  it("omits the memo entirely when none was given, rather than sending an empty one", async () => {
+    const moved = (await buildToolArgs(
+      "transfer_claim",
+      { to: "0x0000000000000000000000000000000000000002", tokenId: "7", quantity: "500", memo: "   " },
+      baseCtx(),
+    )) as { memo?: string };
+    expect(moved.memo).toBeUndefined();
+  });
+
   it("mint_claim: refuses when this window has no mintContext at all", async () => {
     await expect(buildToolArgs("mint_claim", { quantity: "500" }, baseCtx())).rejects.toThrow(
       /no mintContext/,
@@ -2704,6 +2742,7 @@ describe("composeBoard — what an agent is shown vs what wakes it (spec §4.6ae
     servedText: "",
     servedWasFailure: false,
     unservedText: "",
+    lapsingText: "",
     deliveredGateText: "",
     gateDefeatedText: "",
     forwardInvitation: "",
@@ -2786,6 +2825,41 @@ describe("composeBoard — what an agent is shown vs what wakes it (spec §4.6ae
       ["submit_attack", "redeem_claim", "settle_window_close"],
     );
     expect(wakeKey).toContain("STILL UNSERVED");
+  });
+
+  it("parks a waiting agent against the key it will SEE next turn, not the one it was shown", () => {
+    // Spec §4.6ah, observed twice in run 17. The overdue warning is suppressed the moment it is
+    // delivered, so an agent parked against the key it was SHOWN is woken again on the next
+    // pass — by the warning's disappearance — with nothing to act on. 22s and 68s after being
+    // told, in windows 2 and 3. This assertion is the one the old single-key version could not
+    // satisfy: wakeKey and wakeKeyNext were the same value.
+    const { wakeKey, wakeKeyNext } = composeBoard(
+      { ...empty, unservedText: "OVERDUE", marketBoardText: "A QUOTE" },
+      ALL_TOOLS,
+    );
+    expect(wakeKey).toContain("OVERDUE");
+    expect(wakeKeyNext).not.toContain("OVERDUE");
+    // The persistent section stays in both — only what the act of showing destroys is dropped.
+    expect(wakeKeyNext).toContain("A QUOTE");
+  });
+
+  it("applies that to EVERY one-shot section, not only the newest one", () => {
+    // gateDefeatedText is bounded by shownGateDefeats and the forward invitation by
+    // forwardInvitations; both are suppressed once shown and both had the same latent defect.
+    for (const key of ["unservedText", "lapsingText", "gateDefeatedText", "forwardInvitation"] as const) {
+      const { wakeKey, wakeKeyNext } = composeBoard({ ...empty, [key]: `TEXT-${key}` }, ALL_TOOLS);
+      expect(wakeKey, `${key} should wake`).toBe(`TEXT-${key}`);
+      expect(wakeKeyNext, `${key} is one-shot and must not park an agent`).toBe("");
+    }
+  });
+
+  it("keeps persistent sections in the parked key, or a waiting agent never wakes again", () => {
+    // The mirror risk: drop too much and an agent parked against "" sleeps through a real
+    // arrival, because the empty key keeps matching.
+    for (const key of ["marketBoardText", "redemptionText", "transferText", "deliveryOwedText", "settleableText", "deliveredGateText"] as const) {
+      const { wakeKeyNext } = composeBoard({ ...empty, [key]: `TEXT-${key}` }, ALL_TOOLS);
+      expect(wakeKeyNext, `${key} is persistent and must stay in the parked key`).toBe(`TEXT-${key}`);
+    }
   });
 
   it("§4.6ac invariant: every section that can wake names at least one tool it is about", () => {

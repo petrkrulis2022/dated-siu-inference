@@ -248,6 +248,88 @@ being settled, fixed by state, so any caller adds liveness without adding author
 callable at most once per `(tokenId, holder)` via the `settled` latch, and effects are applied
 before the USDC transfer so a reentrant call sees a zero balance and an already-settled position.
 
+### 4.3a Presentation is what makes a claim enforceable, and nothing says so
+
+The table above is correct and the rule behind it is deliberate: a holder who never asked for
+the work has not been failed by its issuer and is not owed the bond. **This section is not a
+proposal to change that.** It is about what the rule means for a holder, which no surface in the
+system states.
+
+**Presentation converts a claim from an option into an enforceable obligation.** Before
+`redeem_claim`, a claim is a position: it consumes the issuer's headroom and entitles its holder
+to ask for work, and it is worth exactly the work it can still be exchanged for. After
+presentation, `everPresented` latches and the claim becomes a debt — if the issuer does not
+deliver, the bond pays. At window close the two diverge completely:
+
+- presented and unserved → `Defaulted`, the bond pays the holder the attested print value;
+- never presented → `Expired`, the holder receives **nothing**, and the issuer's capacity is
+  returned to it.
+
+So the entire value of an fSIU position turns on one action taken before one deadline. **A
+holder that does nothing loses everything, and the issuer that was holding the capacity gets it
+back.**
+
+**The rule is stated; the deadline is not.** The shared claim facts every holder carries say it
+plainly — *"if you never presented it, it simply expires and pays nothing"*, and *"a claim
+carries the delivery window it was minted for. Holding it past that window does not move the
+window."* What no surface supplies is **when that window closes for the claim actually in
+hand**. The arrival notice reads, in full:
+
+```
+A WORK CLAIM WAS TRANSFERRED TO YOU
+  tokenId <id>, quantity <n>.
+  Confirm with get_balances (pass this tokenId), then call redeem_claim once ready.
+```
+
+No expiry, no remaining time, no window. The loop has the figure — `pay_with_claim` records
+`time_to_expiry` on its own capacity event — and does not pass it on. So a holder can know the
+rule perfectly, hold a plan that depends on the deadline, and have no way to evaluate it.
+
+**Run 17 is what this looks like in practice** (spec §4.6ag). WORKER-CODE was paid in fSIU and
+kept the claim rather than redeeming it — the first deliberate hold in this project's history,
+and the behaviour the instrument exists to make possible. Its reason was a real use: *"preserving
+the claim for later use (e.g. funding adversarial testing once I have a gate to defend, or
+settling a future quote)"* — and `transfer_claim` exists for exactly that, so the plan was sound
+in every respect except timing. The claim died at that window's close, roughly forty minutes
+later, and "later" was never available. At window close the claim was `Expired`. The holder received nothing, ISSUER-A — the issuer deliberately unable to deliver —
+got its 10,000 mSIU back, and the holder was never told: the board section naming the claim was
+present on one turn and simply absent on the next. In the same run, a claim the same agent *did*
+present paid it 14,240 micro-USDC on exactly the same call.
+
+**Two findings compounded, and the ordering is the point.** The seller could not tell it had been
+paid (§4.6ag, the memo gap), so it held; holding without presenting forfeits (this section), so
+it lost the lot. **The one agent that ever used fSIU as intended was the one it cost most.** A
+design that punishes its own intended behaviour will not be used that way twice.
+
+**Why this is an instrument property and not a testbed bug.** Nothing above depends on the
+harness. It follows from `everPresented` gating the bond draw, which is the right rule, plus a
+holder's reasonable belief that an asset it holds retains value while it holds it. A bearer
+instrument in which holding without a further, undisclosed action silently forfeits the whole
+position is a trap, and it is a trap that scales: build 2's `wSIU` is premised on claims moving
+between hops *without* being unwrapped at each one, which is precisely holding without
+presenting.
+
+**What must change, in this build.**
+
+1. **Put the deadline on the claim.** The arrival notice must carry the claim's own expiry, the
+   figure the loop already holds. Stating the rule in a static brief while withholding the one
+   number that makes it actionable is the §4.6-RULE shape: the agent is told what happens and
+   cannot tell when.
+2. **Warn before it is too late.** A holder still sitting on an unpresented claim as its window
+   runs down must be told so, once, under the §4.6ae discipline: facts the holder could
+   establish itself, no steer toward presenting, doing nothing left genuinely open. The point is
+   an informed choice, not that everyone presents — a holder that lets a claim lapse knowingly
+   is a result worth having.
+3. **Stop telling an fSIU-paid seller it has not been paid.** The brief's *"an absence of `YOU
+   HAVE BEEN PAID AND OWE THE WORK` means you have not been paid"* is true only of the dollar
+   route. It is what caused the hold.
+
+**What must change for build 2, recorded now rather than discovered later.** A transferable claim
+whose value depends on an action the bearer may never take cannot be passed hop to hop safely.
+Either the presentation latch has to travel with the claim, or `wSIU` must wrap only presented
+claims, or redemption must be automatic at window close. That is a fork in the design and it is
+better named here than met during the port.
+
 ### 4.4 What the bond pays, and the disclosed limitation
 
 `drawForDefault` transfers from the issuer's bonded USDC to the holder, at the claim's own grade's

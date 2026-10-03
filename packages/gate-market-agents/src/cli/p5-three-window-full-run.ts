@@ -1107,6 +1107,13 @@ YOUR JOB THIS WINDOW
     The dollar leg is whatever the quote's remaining value is, and the escrow opens for that.
     One call, one turn — the same turn cost as settling wholly in either asset.
 
+  SAYING WHAT A PAYMENT IS FOR. On pay_with_claim and transfer_claim you may add
+  "memo": "<one line>", and the recipient sees it with the claim. It
+  is optional, nothing checks it, and omitting it changes nothing about the payment. It exists
+  because Options A and C settle a quote the seller itself issued against a named request, so a
+  seller paid that way can already see what the money answers; a claim arrives with no such
+  context unless you supply it. Whether that matters is yours to judge.
+
   mint_claim and transfer_claim remain available if you want the steps separately:
     {"tool": "mint_claim", "args": {"quantity": "10000"}}
     {"tool": "transfer_claim", "args": {"agentId": "WORKER-CODE", "tokenId": "<tokenId>",
@@ -1153,7 +1160,8 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${WINDOW_COUNT})
 
   (a) PAID IN USDC. You will be told: "YOU HAVE BEEN PAID AND OWE THE WORK" appears on your
       market board, naming the request it answers and the amount in escrow. You do not need to
-      go looking for it, and an absence of it means you have not been paid.
+      go looking for it. That notice is specific to the dollar route: its absence means no USDC
+      payment is in escrow for you, and says nothing either way about (b).
       Before you deliver, commit the capacity the job will use:
       {"tool": "reserve_for_work", "args": {"classId": "${classIdFor("code")}"}}
       That draws on exactly the same finite issuer capacity a claim would, sized to your own
@@ -1162,8 +1170,9 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${WINDOW_COUNT})
       anyway.
       Then do the work yourself with submit_job, and settle with settle_escrow.
 
-  (b) A WORK CLAIM (fSIU) TRANSFERRED TO YOU. This is NOT the same as being paid to do the work —
-      it means you HOLD a dated claim on an issuer's bonded capacity. The claim's issuer, not
+  (b) A WORK CLAIM (fSIU) TRANSFERRED TO YOU. This IS payment, and it arrives by its own notice
+      ("A WORK CLAIM WAS TRANSFERRED TO YOU") rather than through (a)'s. What it is not is an
+      instruction to do the work: you HOLD a dated claim on an issuer's bonded capacity. The claim's issuer, not
       you, owes the delivery, and what you do with the claim is yours to decide: the full set of
       options and their exact calls is under "WHAT A WORK CLAIM IS" below. If you do present it,
       you are done for that claim — never call submit_job for one you hold.

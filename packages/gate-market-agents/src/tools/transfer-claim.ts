@@ -8,6 +8,24 @@ const argsSchema = z.object({
   to: z.string(),
   tokenId: z.string(),
   quantity: z.string(),
+  /**
+   * The payer's own one-line statement of what this payment is for, carried into the
+   * recipient's arrival notice.
+   *
+   * Added 2026-10-03 after run 17 (fsiu-design.md §4.3a). The dollar route cannot lose this:
+   * `pay` settles a quote the seller itself issued against a named request, so a USDC-paid
+   * seller always knows what it was paid for. The claim route needs no counterparty consent and
+   * carried no counterparty information either — a claim simply appeared, and run 17's holder
+   * asked, in its own friction log, "whether this claim was meant as payment for a
+   * gate-authoring job I'm expected to produce, or is simply an independent position I now
+   * hold".
+   *
+   * Optional, never required, never validated, and never prompted for — the same discipline as
+   * `rationale` (§4.6aa). A memo that an agent must write is a memo that gets written whether or
+   * not it means anything, and a required field would make the two routes differ in how much
+   * work paying takes, which is the §4.6f confound this tool exists to remove.
+   */
+  memo: z.string().optional(),
 });
 
 type Args = z.infer<typeof argsSchema>;

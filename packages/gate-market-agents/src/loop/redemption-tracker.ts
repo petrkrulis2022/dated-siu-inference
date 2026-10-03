@@ -61,6 +61,29 @@ export interface RedemptionState {
   expiresAtChainSeconds?: number;
   /** The unserved warning is shown once per claim, never once per round — see §4.6ac. */
   unservedWarningShown?: boolean;
+  /**
+   * When this claim first became visible to the loop, and when it expires — both from the real
+   * `holdTimeToExpiry` read `recordCapacityEvent` already performs, so neither costs an extra
+   * RPC and neither is a wall-clock guess.
+   *
+   * They exist because the arrival notice used to carry a tokenId and a quantity and nothing
+   * else. A holder could know the rule — the shared claim facts state plainly that an
+   * unpresented claim "simply expires and pays nothing" — and still have no way to tell how long
+   * it had. Run 17's holder planned to spend its claim on adversarial testing "later", which was
+   * a real use and a sound plan in every respect except that the claim died forty minutes after
+   * it arrived (`fsiu-design.md` §4.3a).
+   */
+  arrivedAtChainSeconds?: number;
+  /** Shown once, like the unserved warning, and for the same §4.6ac reason. */
+  lapsingWarningShown?: boolean;
+  /**
+   * What the payer said this claim was for, in its own words, if it said anything.
+   *
+   * Never synthesised. An absent memo renders as nothing at all rather than as a guess about
+   * the payer's intent: the point is to carry what was actually said, and inventing a purpose
+   * would be worse than the silence it replaces.
+   */
+  memo?: string;
 }
 
 export class RedemptionTracker {
@@ -75,8 +98,22 @@ export class RedemptionTracker {
   /** Called right after a real, successful `transfer_claim` — never invented. Lets the real
    * recipient discover the tokenId it now holds via `renderForHolder`, closing the gap
    * `get_balances` alone can't (see `RedemptionState.transferredTo`'s own doc comment). */
-  recordTransfer(to: AgentId): void {
+  recordTransfer(to: AgentId, memo?: string): void {
     this.#state.transferredTo = to;
+    if (typeof memo === "string" && memo.trim() !== "") this.#state.memo = memo.trim();
+  }
+
+  /**
+   * The claim's real expiry, from the chain read the capacity recorder already makes.
+   *
+   * Ignores a tokenId that is not the tracked claim's, so a second claim's event cannot
+   * overwrite the first's deadline. `arrivedAtChainSeconds` latches on the first call: it is
+   * when this claim became visible, which is the anchor the lapsing warning measures against.
+   */
+  recordExpiry(tokenId: string, expiresAtChainSeconds: number, nowChainSeconds: number): void {
+    if (this.#state.tokenId !== undefined && this.#state.tokenId !== tokenId) return;
+    this.#state.expiresAtChainSeconds = expiresAtChainSeconds;
+    this.#state.arrivedAtChainSeconds ??= nowChainSeconds;
   }
 
   /** The full minted quantity is assumed presented — this window's one real job never splits a
@@ -145,13 +182,64 @@ export class RedemptionTracker {
   /** Small, structured text for the real recipient of a transferred claim — empty once it has
    * actually been presented (recordPresented), so a holder isn't told to redeem something it
    * already redeemed. Empty for every agent that isn't the real transferredTo. */
-  renderForHolder(agentId: AgentId): string {
-    if (this.#state.transferredTo !== agentId || this.#state.holder !== undefined) return "";
+  renderForHolder(agentId: AgentId, nowChainSeconds?: number): string {
+    const s = this.#state;
+    if (s.transferredTo !== agentId || s.holder !== undefined) return "";
+    // The deadline, added 2026-10-03 (`fsiu-design.md` §4.3a). Without it this notice gave a
+    // tokenId and a quantity and left the one number that decides what the claim is worth — how
+    // long it has — unobtainable from any surface, while the loop held it all along.
+    const remaining =
+      nowChainSeconds !== undefined && s.expiresAtChainSeconds !== undefined
+        ? s.expiresAtChainSeconds - nowChainSeconds
+        : undefined;
     return [
       "A WORK CLAIM WAS TRANSFERRED TO YOU",
-      `  tokenId ${this.#state.tokenId}, quantity ${this.#state.quantity}.`,
+      `  tokenId ${s.tokenId}, quantity ${s.quantity}.` +
+        (remaining !== undefined ? ` Its delivery window closes in ${remaining}s.` : ""),
+      // The payer's own words, quoted and attributed, never paraphrased — and absent entirely
+      // when nothing was said, so silence stays legible as silence.
+      ...(s.memo !== undefined
+        ? [`  The sender said what it is for: "${s.memo}"`]
+        : []),
       "  Confirm with get_balances (pass this tokenId), then call redeem_claim once ready.",
     ].join("\n");
+  }
+
+  /**
+   * Held, never presented, and its window is running out.
+   *
+   * The counterpart of `renderUnservedForHolder`, for the stage before presentation, and the
+   * more consequential of the two: an unpresented claim at window close is `Expired` — the
+   * holder receives nothing and the issuer's capacity returns to it — whereas a presented one
+   * is `Defaulted` and the bond pays. Run 17 lost a holder 10,000 mSIU this way, silently.
+   *
+   * Same discipline as every other holder section (§4.6ae): built only from this claim's own
+   * arrival and expiry, says nothing about the issuer, names no tool, and leaves doing nothing
+   * genuinely open. A holder that lets a claim lapse knowingly is a result worth having; one
+   * that lets it lapse because nobody mentioned the deadline is not a result at all.
+   */
+  renderUnpresentedLapsingForHolder(agentId: AgentId, nowChainSeconds: number): string {
+    const s = this.#state;
+    if (s.transferredTo !== agentId || s.holder !== undefined || s.served) return "";
+    if (s.lapsingWarningShown) return "";
+    if (s.arrivedAtChainSeconds === undefined || s.expiresAtChainSeconds === undefined) return "";
+    const held = nowChainSeconds - s.arrivedAtChainSeconds;
+    const remaining = s.expiresAtChainSeconds - nowChainSeconds;
+    if (remaining <= 0 || held <= remaining) return "";
+    return [
+      "A CLAIM YOU HOLD HAS NOT BEEN PRESENTED, AND ITS WINDOW IS CLOSING",
+      `  tokenId ${s.tokenId}, quantity ${s.quantity}. You have held it ${held}s and it closes ` +
+        `in ${remaining}s.`,
+      "  Presenting it is what makes the work owed: a claim presented and then not served is",
+      "  claimable against the issuer's bond, and one that was never presented simply expires",
+      "  and pays nothing. After this window the claim cannot be presented, redeemed or passed",
+      "  on, whatever its balance says.",
+      "  You are told this once. What to do about it, including nothing, is yours to decide.",
+    ].join("\n");
+  }
+
+  markLapsingWarningShown(): void {
+    this.#state.lapsingWarningShown = true;
   }
 
   /**

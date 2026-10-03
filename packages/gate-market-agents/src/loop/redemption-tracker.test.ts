@@ -221,3 +221,78 @@ describe("the holder's side of a presented claim (spec §4.6ae)", () => {
     expect(t.renderUnservedForHolder("WORKER-CODE", 9_999_999)).toBe("");
   });
 });
+
+describe("an unpresented claim's deadline and the memo (fsiu-design.md §4.3a)", () => {
+  /** Arrives at chain second 1000 with 400s of life, so it expires at 1400 and the
+   *  held-longer-than-remaining midpoint falls at 1200. */
+  const arrived = (memo?: string) => {
+    const t = new RedemptionTracker();
+    t.recordMint("77", "ISSUER-A", "10000");
+    t.recordTransfer("WORKER-CODE", memo);
+    t.recordExpiry("77", 1400, 1000);
+    return t;
+  };
+
+  it("puts the claim's own deadline in the arrival notice", () => {
+    // Run 17's notice carried a tokenId and a quantity and nothing else. The holder knew the
+    // rule — the shared facts say an unpresented claim "expires and pays nothing" — and had no
+    // way to tell how long it had, so it planned to spend the claim "later" and lost it.
+    expect(arrived().renderForHolder("WORKER-CODE", 1100)).toContain("closes in 300s");
+  });
+
+  it("still renders without a clock rather than inventing a deadline", () => {
+    const text = arrived().renderForHolder("WORKER-CODE");
+    expect(text).toContain("A WORK CLAIM WAS TRANSFERRED TO YOU");
+    expect(text).not.toMatch(/closes in/);
+  });
+
+  it("quotes the payer's memo, and says nothing at all when there was none", () => {
+    expect(arrived("for the window-1 code gate").renderForHolder("WORKER-CODE", 1100)).toContain(
+      'The sender said what it is for: "for the window-1 code gate"',
+    );
+    expect(arrived().renderForHolder("WORKER-CODE", 1100)).not.toMatch(/sender said/);
+  });
+
+  it("treats a blank memo as no memo — never an empty quotation", () => {
+    expect(arrived("   ").renderForHolder("WORKER-CODE", 1100)).not.toMatch(/sender said/);
+  });
+
+  it("warns only once the holder has held it longer than it has left", () => {
+    const t = arrived();
+    expect(t.renderUnpresentedLapsingForHolder("WORKER-CODE", 1199)).toBe("");
+    expect(t.renderUnpresentedLapsingForHolder("WORKER-CODE", 1201)).toContain("ITS WINDOW IS CLOSING");
+  });
+
+  it("states the consequence that actually differs: expires paying nothing", () => {
+    const text = arrived().renderUnpresentedLapsingForHolder("WORKER-CODE", 1300);
+    expect(text).toMatch(/never presented simply expires/);
+    expect(text).toMatch(/pays nothing/);
+    // And leaves inaction genuinely open — the choice is the measurement.
+    expect(text).toMatch(/including nothing, is yours to decide/);
+  });
+
+  it("says nothing about the issuer, so the holder noticing stays the thing measured", () => {
+    const text = arrived().renderUnpresentedLapsingForHolder("WORKER-CODE", 1300);
+    expect(text).not.toContain("ISSUER-A");
+    expect(text).not.toMatch(/refus|cannot serve|withheld/i);
+  });
+
+  it("stops once the claim is presented — that stage has its own section", () => {
+    const t = arrived();
+    t.recordPresented("WORKER-CODE", undefined, { atChainSeconds: 1100, secondsToExpiry: 300 });
+    expect(t.renderUnpresentedLapsingForHolder("WORKER-CODE", 1300)).toBe("");
+  });
+
+  it("shows the lapsing warning once per claim", () => {
+    const t = arrived();
+    expect(t.renderUnpresentedLapsingForHolder("WORKER-CODE", 1300)).not.toBe("");
+    t.markLapsingWarningShown();
+    expect(t.renderUnpresentedLapsingForHolder("WORKER-CODE", 1300)).toBe("");
+  });
+
+  it("ignores another claim's expiry rather than overwriting this one's", () => {
+    const t = arrived();
+    t.recordExpiry("999", 9_999_999, 1100);
+    expect(t.renderForHolder("WORKER-CODE", 1100)).toContain("closes in 300s");
+  });
+});

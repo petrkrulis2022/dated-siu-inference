@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-03",
+  "action": "settleWindowClose",
+  "triggeredBy": "operator",
+  "notAnAgentDecision": true,
+  "why": "Run 17's window-3 claim was presented and never served, so the bond owed its holder. No agent settled it, and no agent could have been expected to: a claim minted in the last window has no later window in which settleableText would ever offer it (spec §4.6z-ii, §4.6ae), and the run-end sweep deliberately skips presented claims because a real bond draw needs a publisher-signed attestation dated the window's close day. The run's own report flagged it under holdersNeverOfferedSettlement. Settled here by hand so the holder is not left out of pocket for a gap in the harness.",
+  "claim": {
+    "tokenId": "43715314421880729052037981385992114201631888457570848809027364160149742721813",
+    "holder": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+    "holderAgentId": "WORKER-CODE",
+    "issuerAgentId": "ISSUER-A",
+    "quantityMilliSiu": "10000",
+    "mintedInWindow": 3,
+    "everPresented": true
+  },
+  "attestation": {
+    "printId": "2026-10-03-commodity",
+    "printDate": "1790985600",
+    "nanoUsdPerSiu": "1424000",
+    "note": "Signed from the real published commodity print for the day the window closed, via signRateAttestationForPrint — never assembled by hand."
+  },
+  "txHash": "0x1c2b28bbe87b1b4453c2357e7037d187c064f548a6fd6bbc9a15d16efc4b0566",
+  "result": {
+    "event": "Defaulted",
+    "amountUsdc": "14240",
+    "checkedBy": "simulateContract before sending, then the Defaulted event and a fresh read after",
+    "poolAfter": "80000/80000 — ISSUER-A 48000/48000, ISSUER-B 32000/32000"
+  },
+  "doNotCountAs": "agent behaviour. This settlement must not appear in any fulfilment, enforcement or holder-responsiveness statistic: it was performed by the operator precisely because the holder was never given a turn in which to perform it."
+}
