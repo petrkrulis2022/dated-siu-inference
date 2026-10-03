@@ -2083,12 +2083,28 @@ of their ideas sooner and leave. The window's span is unchanged, but the stall g
 much earlier. Anything that fires on **elapsed time rather than on an event** may therefore
 never become eligible.
 
-Observed the same day: WORKER-CODE presented a claim at 14:51:03 with 2,298s remaining, putting
-the overdue warning's midpoint at ~15:09Z. Every agent had finished by 14:51:58 and the window
-ended — **eighteen minutes before the warning could fire.** The overdue warning was simply the
-one being watched; the unpresented-expiry warning, late-stage forward invitations and any future
-elapsed-time mechanism are all squeezed the same way. **A debug run cannot evidence any of
-them.**
+**Measured across both windows of the 14:46 debug run**, and it is not marginal:
+
+| | presented | midpoint | last turn taken | span left unused |
+| --- | --- | --- | --- | --- |
+| w1 | 14:51:03 (2,298s left) | ~15:09Z | 14:51:58 | ~34 min |
+| w2 | 15:31:07 (2,184s left) | ~15:49Z | 15:33:43 | ~33 min |
+
+Window 2's entire agent activity lasted **under four minutes** against a forty-minute span. The
+warning was sixteen minutes out of reach, in a window that had thirty-three minutes left on the
+clock and nobody taking turns.
+
+**And the mechanism is worse than "fewer turns".** Cheaper models are also *faster*: a turn
+budget is spent in wall-clock seconds, and an elapsed-time threshold is measured in wall-clock
+seconds, so substituting quicker agents shrinks the overlap from both ends at once. Ten haiku
+turns are consumed in a couple of minutes where ten grok turns took the better part of twenty.
+A debug run is therefore structurally worse at reaching an elapsed-time threshold than its turn
+count alone would suggest.
+
+The overdue warning was simply the one being watched; the unpresented-expiry warning, late-stage
+forward invitations and any future elapsed-time mechanism are squeezed the same way. **A debug
+run cannot evidence any of them**, and the §4.6ah one-shot wake fix in particular remains
+unverified by live run after two attempts — only the full-cost run can reach it.
 
 This is independent of the roster collapse — it would hold even if every provider still ran —
 and it is recorded in the run's own banner and in `exercisesTimeGatedBehaviour` on the manifest

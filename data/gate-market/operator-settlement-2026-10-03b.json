@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-03",
+  "action": "settleWindowClose x2",
+  "triggeredBy": "operator",
+  "notAnAgentDecision": true,
+  "claims": [
+    {
+      "tokenId": "4895186787105297001883432137776349359367418988893652444777235935990819146907",
+      "holderAgentId": "WORKER-CODE",
+      "issuerAgentId": "ISSUER-A",
+      "quantityMilliSiu": "10000",
+      "everPresented": false,
+      "category": "settleable_pays_nobody",
+      "why": "Minted by the debug run that crashed at 14:28 before reaching any sweep. Never presented, so settling burns it and returns ISSUER-A's capacity while paying nobody — the shape a crashed run leaves behind (spec §4.6al). This is the claim that made the 14:46 run start at 70,000 of 80,000 without saying so.",
+      "txHash": "0x90cc86f8edfb78e29f01ece2c179e7d8096cd0b8f3803669558d055c83ac3ca8"
+    },
+    {
+      "tokenId": "68292724084154988209048721624641510209624401989797192230715184490749338082036",
+      "holderAgentId": "WORKER-CODE",
+      "issuerAgentId": "ISSUER-A",
+      "quantityMilliSiu": "10000",
+      "everPresented": true,
+      "category": "settleable_pays_holder",
+      "why": "The 14:46 debug run's window-3 claim: presented, never served, and minted in the last window so no later window existed in which its holder could be offered it (§4.6z-ii). The run's own report flagged it under holdersNeverOfferedSettlement. Settling draws on ISSUER-A's bond and pays WORKER-CODE.",
+      "txHash": "0x8687cfea8c1065a022fa5e944984474654f2c45c09b7d5864189dbadab313457"
+    }
+  ],
+  "method": "simulateContract before each send; attestation signed from the real 2026-10-03 commodity print via signRateAttestationForPrint, never assembled by hand.",
+  "poolAfter": "80000/80000 — ISSUER-A 48000/48000, ISSUER-B 32000/32000",
+  "readingNote": "The read taken immediately after the two sends returned 70,000. That was stale — the fifth instance of the pattern in docs/methodology.md. A fresh client at a later block returns 80,000. The rule held; the first figure was not reported as fact.",
+  "doNotCountAs": "agent behaviour. Neither settlement may appear in any fulfilment, enforcement or holder-responsiveness statistic."
+}

@@ -1,0 +1,21 @@
+
+> @touchstone/gate-market-agents@0.0.0 p5-three-window-full-run /home/petrunix/dated-siu-inference/packages/gate-market-agents
+> pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/p5-three-window-full-run.js
+
+
+> @touchstone/gate-market-agents@0.0.0 build /home/petrunix/dated-siu-inference/packages/gate-market-agents
+> tsc -p tsconfig.json && mkdir -p dist/skills && cp -r src/skills/*/ dist/skills/
+
+Model assignment validated (spec §12.2a): OK.
+
+=== PROVIDER PRE-FLIGHT ===
+  OK      openai     gpt-5.1 answered in 2493ms
+  OK      anthropic  claude-sonnet-5 answered in 3113ms  org "SoundFlow Finance"
+  FAILED  google     gemini-3.1-pro-preview — Google request failed: 402
+  OK      xai        grok-4.6 answered in 3223ms  key "siu-prints"
+  No provider exposes a credit balance to an API key (checked 2026-10-01), so this is a live call
+  through the run's own adapter rather than a balance figure — it fails on an exhausted account,
+  a revoked key, or a key billing to a different organization than the one that was topped up.
+
+ABORTING BEFORE SPENDING ANYTHING: google cannot answer. Nothing has been minted, reserved or paid.
+ ELIFECYCLE  Command failed with exit code 1.

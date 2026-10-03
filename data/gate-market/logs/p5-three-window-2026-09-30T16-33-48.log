@@ -1,0 +1,68 @@
+
+> @touchstone/gate-market-agents@0.0.0 p5-three-window-full-run /home/petrunix/dated-siu-inference/packages/gate-market-agents
+> pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/p5-three-window-full-run.js
+
+
+> @touchstone/gate-market-agents@0.0.0 build /home/petrunix/dated-siu-inference/packages/gate-market-agents
+> tsc -p tsconfig.json && mkdir -p dist/skills && cp -r src/skills/*/ dist/skills/
+
+Model assignment validated (spec §12.2a): OK.
+
+=== WP-7 P5 — THREE WINDOWS, ONE POOL ===
+Run p5-three-window-2026-09-30T16-34-08-795Z (label 1951053406); oracle trial seed 20260927 (pinned).
+Real Commodity SIU print 2026-09-30-commodity: $0.001417/SIU.
+Starting code-class headroom: 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 35000, 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 32000 (total 67000 mSIU).
+DISCLOSED BEFORE THE RUN, not after: a simulated external buyer (the deployer wallet — not an agent, no model, no decisions) takes 3000 mSIU after window 1 and 3000 mSIU after window 2. These figures are fixed here in source before the run and written into the manifest; no agent's behaviour changes them.
+ALSO DISCLOSED BEFORE THE RUN: window 3 is allowed to fail. If the pool is exhausted when it starts, the job does not get done and that is the result. Nothing in this script tops the pool back up, resizes a lot, or routes around the shortage.
+AND: an undelivered claim CAN be settled in this run. settle_window_close is permissionless on-chain and is granted to the claim's holder and to both issuers — including against an issuer's own bond. Whether anyone actually notices a non-delivery and triggers it is a result of the run, not a property of it; capacity is returned and the bond pays only if someone does.
+Window spans, fixed before the first turn (chain clock): w1 2026-09-30T16:34:08.000Z..2026-09-30T17:14:08.000Z; w2 2026-09-30T17:14:08.000Z..2026-09-30T17:54:08.000Z; w3 2026-09-30T17:54:08.000Z..2026-09-30T18:34:08.000Z. The runner waits for each to open; no inference is spent waiting.
+DISCLOSED BEFORE THE RUN: ISSUER-A will not serve any redemption this run. It takes payment and holds real bonded capacity exactly as the other issuer does, but has no way to report a delivery — the same situation as an issuer whose delivery pipeline fails at the last step. Fixed in source before the run, not chosen to fit a result. Its claims will therefore default, and the question is whether the holder notices, triggers settle_window_close once the window closes, and is paid from that issuer's bond. No other agent is told this.
+Default path REACHABLE in all 3 windows: every window closes on 2026-09-30, the day print 2026-09-30-commodity is dated. A claim left unserved can be settled and its issuer's bond drawn.
+Providers REACHABLE, verified before window 1 with one real call each: openai (gpt-5.1), anthropic (claude-sonnet-5), google (gemini-3.1-pro-preview), xai (grok-4.6). Four provider interruptions in two weeks made this a pre-flight check rather than something discovered mid-run.
+
+CAPACITY IS ONE POOL, AND THE TWO WAYS OF PAYING ARE NOT THE SAME INSTRUMENT
+  Every issuer bonds a finite amount of capacity per task class, shared between all buyers,
+  first-come-first-served. Both ways of paying draw on that same pool:
+    - A dated work claim (fSIU) consumes an issuer's headroom when it is minted. It reserves
+      capacity for a FUTURE delivery window, and it is TRANSFERABLE — it can be held, passed on,
+      and redeemed by whoever ends up holding it.
+    - A dollar payment consumes the same headroom when the seller commits capacity to the job.
+      That reservation is for IMMEDIATE work only: it is not transferable, not holdable, and ends
+      when the escrow does.
+  The issuer is paid for a claim. The issuer is not paid for a reservation on the dollar route —
+  a real gap in this testbed, disclosed rather than papered over with an invented fee.
+
+
+
+######## WINDOW 1 of 3 ########
+code-class headroom entering this window: 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 35000, 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 32000 (total 67000 mSIU).
+[w1][ORCHESTRATOR] Turn 1: projected=$0.03378375, realized=$0.0042275, 1286ms -> {"tool":"pay_with_claim","args":{"agentId":"WORKER-CODE","quantity":"10000"}}
+[w1][WORKER-CODE] Turn 1: projected=$0.054696, realized=$0.019102, 5710ms -> {"tool":"get_balances","args":{"account":"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560","tokenIds":["52821788527580664545155425971741653688207129263195513314348699401392578303969"]}}
+[w1][ISSUER-A] Turn 1: projected=$0.032332, realized=$0.006636, 19549ms -> {"tool":"whoami","args":{}}
+[w1][ISSUER-B] Turn 1: projected=$0.032444, realized=$0.006748, 21672ms -> {"tool":"whoami","args":{}}
+[w1][WORKER-CODE] Turn 2: projected=$0.054888, realized=$0.149488, 83117ms -> {"tool":"whoami","args":{},"friction":{"could_not_express":"Whether this claim transfer is meant to represent ORCHESTRATOR's fSIU-route payment for the gate-hardening job, or an unrelated asset — the 
+[w1][ISSUER-A] Turn 2: projected=$0.032554, realized=$0.007154, 27476ms -> {"tool":"get_print","args":{"printId":"2026-09-30-commodity"}}
+[w1][ISSUER-B] Turn 2: projected=$0.032668, realized=$0.007688, 19991ms -> {"tool":"get_print","args":{"printId":"2026-09-30-commodity"},"friction":{"could_not_express":null,"forced_conversion":false,"conversion_reason":null,"missing_information":"No claim has been presented
+[w1][WORKER-CODE] Turn 3: projected=$0.054972, realized=$0.167556, 96867ms -> {"tool":"get_balances","args":{"account":"0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560","tokenIds":["52821788527580664545155425971741653688207129263195513314348699401392578303969"]},"friction":{"could_n
+[w1][ISSUER-A] Turn 3: projected=$0.034044, realized=$0.009972, 39354ms -> {"tool":"quote_forward","args":{"forWindow":2,"rateUsdPerSiu":"0.001417","maxQuantityMilliSiu":"25000"},"friction":{"could_not_express":null,"forced_conversion":false,"conversion_reason":null,"missing
+[w1][ISSUER-B] Turn 3: projected=$0.034158, realized=$0.01008, 47028ms -> {"tool":"quote_forward","args":{"forWindow":2,"rateUsdPerSiu":"0.001417","maxQuantityMilliSiu":"16000"},"friction":{"could_not_express":null,"forced_conversion":false,"conversion_reason":null,"missing
+[w1][ORCHESTRATOR] Turn 2: projected=$0.03421375, realized=$0.00559125, 2663ms -> {"done":true,"summary":"I have already paid WORKER-CODE 10 mSIU via pay_with_claim for this window’s code gate-hardening job. There are no further actions needed from my side in window 1 to get the jo
+[w1][WORKER-CODE] Turn 4: projected=$0.055444, realized=$0.159924, 85454ms -> {"tool":"get_print","args":{"printId":"2026-09-30-commodity"},"friction":{"could_not_express":null,"forced_conversion":false,"conversion_reason":null,"missing_information":"no explicit market-board re
+[w1][WORKER-CODE] Turn 5: projected=$0.056934, realized=$0, 0ms -> billing_exhausted: Anthropic request failed: 400
+
+[EXTERNAL BUYER — not an agent, scheduled in source before the run] took 3000 mSIU of code-class capacity. tx 0xd5bc2ac712595ea6d343a1bc122ab2ca0014e37794f198c8394a9d97c7aa91ca
+
+=== WINDOW 1 RESULT ===
+passed: false
+turnsByAgent: {"ORCHESTRATOR":2,"WORKER-CODE":5,"WORKER-EXTRACT":0,"ISSUER-A":3,"ISSUER-B":3}
+haltedReason: {"ORCHESTRATOR":"voluntary_stop","WORKER-CODE":"adapter_error","WORKER-EXTRACT":"nothing_to_act_on","ISSUER-A":"nothing_to_act_on","ISSUER-B":"nothing_to_act_on"}
+realized inference spend: $0.554167
+code-class headroom: 67000 -> 57000 mSIU (0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 25000, 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 32000)
+asset choice, per buyer:
+  ORCHESTRATOR: 0 in USDC, 1 in fSIU
+  claims passed onward rather than redeemed: 0 — fSIU settled, it did not circulate
+capacity events (real, from the tools' own results):
+  turn 1 ORCHESTRATOR pay_with_claim — 10000 mSIU, issuer 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54, tokenId 52821788527580664545155425971741653688207129263195513314348699401392578303969, to 0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560, time_to_expiry 2380s, tx 0x1023bb1375723ab82db59b21ffbbc837999e6c7e1a0791b26db3f559106f0dd3 (mint) / 0xa1d893139dbd79c9b96e19a6d583925b370753092d4c1546688eb2a39ae73ef7 (transfer)
+attacks: none this window.
+
+Waiting 1328s for window 2 to open (chain clock). No inference is spent while waiting.

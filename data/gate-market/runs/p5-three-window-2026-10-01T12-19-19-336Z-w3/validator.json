@@ -1,0 +1,22 @@
+[
+  {
+    "agentId": "ORCHESTRATOR",
+    "turn": 1,
+    "passed": true
+  },
+  {
+    "agentId": "WORKER-CODE",
+    "turn": 1,
+    "passed": true
+  },
+  {
+    "agentId": "WORKER-EXTRACT",
+    "turn": 1,
+    "passed": true
+  },
+  {
+    "agentId": "ISSUER-A",
+    "turn": 1,
+    "passed": true
+  }
+]
