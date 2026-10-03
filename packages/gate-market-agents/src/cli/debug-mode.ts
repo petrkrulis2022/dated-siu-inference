@@ -125,6 +125,55 @@ export function runIdPrefix(cfg: DebugConfig, canonicalWindows = 3): string {
   return isCountable(cfg, canonicalWindows) ? "p5-three-window" : "DEBUG-p5-three-window";
 }
 
+/**
+ * Which providers a run actually exercises, and which the substitution removed.
+ *
+ * Substituting the non-decider seats onto one cheap model collapses the roster: a four-provider
+ * run becomes a two-provider one. That cuts both ways and both halves are worth stating.
+ *
+ * It is genuinely good for reliability — seven provider interruptions in two weeks, and a debug
+ * run simply cannot be killed by the two providers it no longer touches. But it means **a debug
+ * run does not exercise the roster the block will use.** Model-specific failures are exactly
+ * what has broken runs here before: grok truncating mid-JSON at a 1,500-token ceiling and again
+ * at 4,500, gemini spending 21,782 of 22,500 output tokens on reasoning and returning no text.
+ * Neither is reachable when neither model runs.
+ *
+ * So a green debug run proves the LOOP works. It does not prove the ROSTER works, and only a
+ * full-cost run does.
+ */
+export function rosterCollapse(
+  assigned: Readonly<Record<string, string>>,
+  actual: Readonly<Record<string, string>>,
+  providerOf: (model: string) => string,
+): { exercised: string[]; dropped: string[] } {
+  const all = new Set(Object.values(assigned).map(providerOf));
+  const exercised = new Set(Object.values(actual).map(providerOf));
+  return {
+    exercised: [...exercised].sort(),
+    dropped: [...all].filter((p) => !exercised.has(p)).sort(),
+  };
+}
+
+/** The warning itself, for the banner and for anyone reading the log later. */
+export function renderRosterCollapse(collapse: {
+  exercised: string[];
+  dropped: string[];
+}): string {
+  if (collapse.dropped.length === 0) return "";
+  return [
+    "  ROSTER COLLAPSE — THIS RUN DOES NOT VALIDATE THE BLOCK'S ROSTER.",
+    `    exercised:     ${collapse.exercised.join(", ")}`,
+    `    NOT exercised: ${collapse.dropped.join(", ")}`,
+    "    Substituting the non-decider seats removes whole providers from the run. That makes a",
+    "    debug run harder to kill — it cannot be stopped by a provider it never calls — and it",
+    "    also means model-specific failures are invisible to it: grok truncating mid-JSON at a",
+    "    token ceiling, gemini returning only reasoning tokens and no text. Both have broken",
+    "    real runs here.",
+    "    A green debug run proves the loop works. The full-cost run is what proves the roster",
+    "    works, and it is required before any freeze however clean the debug runs look.",
+  ].join("\n");
+}
+
 /** Printed before anything is spent, so the log says what this run was. */
 export function renderDebugBanner(cfg: DebugConfig, canonicalWindows = 3): string {
   const why = disqualification(cfg, canonicalWindows);

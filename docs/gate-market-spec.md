@@ -2059,6 +2059,69 @@ write another unit test: **re-score the real runs, with the old logic and the ne
 (§4.6af). That took one script and found two wrong verdicts, one of which no test would ever
 have questioned because it had been stored, published and believed for five days.
 
+### 4.6aj A cheap run tests the loop; only a full-cost run tests the roster
+
+`--debug` substitutes the non-decider seats onto one cheap model, which **collapses the roster
+from four providers to two** — Anthropic and OpenAI run, xAI and Google do not.
+
+Both consequences are real and they point opposite ways. A debug run is materially harder to
+kill: seven provider interruptions in two weeks, and a run cannot be stopped by a provider it
+never calls. But the failures that have actually ended runs here are **model-specific**, and all
+of them become unreachable: grok truncating mid-JSON at a 1,500-token ceiling and again at
+4,500, gemini returning `contentBlockTypes: ["thinking"]` with no text after 21,782 reasoning
+tokens. Neither can occur when neither model runs.
+
+**A green debug run is evidence that the loop works. It is not evidence that the roster works,
+and the two are routinely confused** — a clean run is a clean run, and nothing in the output
+used to say which claim it supported. So the run says it: the banner prints the collapse, and
+the manifest and report carry `providersExercised`, `providersNotExercised` and
+`validatesTheBlocksRoster`.
+
+**The freeze rule this implies.** A full-cost run on the block's real roster is required before
+the protocol freezes, however many clean debug runs precede it. Debug runs are for iterating on
+the loop; they cannot retire the risk that a model the block depends on behaves differently from
+the one that stood in for it.
+
+### 4.6ak The first debug run died of two defects in the debug mode itself
+
+Launched 2026-10-03T14:28Z, dead on window 1 after $0.38. Both causes were in the cost-saving
+machinery, not in anything it was built to test, and both are instructive.
+
+**The pinned gate did not parse.** It was stored in a TypeScript **template literal**, and the
+gate contains `].join('\n')` — a literal backslash-n inside a JS string. TypeScript read the
+escape and wrote a real newline, producing an unterminated string literal. Every grading
+returned `G1: SyntaxError: Invalid or unexpected token`.
+
+Two things made it slip through. The fixture was checked for backticks, `${` and backslashes
+before being embedded — and the backslash check was `grep -c '\\'` in bash, which after shell
+quoting searches for **two** backslashes and reported none in a file full of single ones. Then
+the stored file was syntax-checked and passed, because the corruption happens at TypeScript
+compile time, not at write time: **the artefact that was verified was not the artefact that
+ran.** It is now stored as a JSON string literal, which escapes by construction, and a test
+writes the compiled value to disk and runs `node --check` on it.
+
+**A substituted model had no price.** `--debug` moved three seats to `claude-haiku-4-5`, which
+had no entry in `PRICES`, so `prices` was `undefined` and `projectedTurnCostUsd` threw 256
+seconds into the first substituted agent's turn. TypeScript cannot see it: indexing a
+`Record<string, ModelPrices>` is typed as present. The price is now taken from this repo's own
+latest LiteLLM snapshot rather than estimated, because **the projection is what the run cap is
+enforced against** — a silently absent price is not a crash waiting to happen so much as a run
+with no ceiling at all. The real fix is the guard: every seat's model is checked against
+`PRICES` before anything is spent, and the run refuses to start otherwise.
+
+**And a consequence worth noting about fallbacks.** Because the pinned gate failed G1, the
+window did not stop — it fell through to an agent authoring a gate normally, which is why
+WORKER-CODE spent $0.377 on a run whose entire purpose was to avoid that. A degraded saving
+that silently reverts to the expensive path is worse than one that fails loudly: it costs full
+price and reports as debug. The gate is now verified to grade PASS before a run uses it.
+
+**What this says about §4.6ai.** Both defects are that rule again. The template-literal
+corruption was verified with a check built from the same assumption as the mistake (inspect the
+source file, when the damage happens downstream of it). The missing price was invisible to the
+type system for the same reason — the type asserted the belief rather than testing it. The
+tests that now exist assert properties of the compiled artefact and of the actual roster, not of
+the inputs that produced them.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make

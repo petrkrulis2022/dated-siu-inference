@@ -65,6 +65,8 @@ import {
   parseDebugFlags,
   renderDebugBanner,
   runIdPrefix,
+  rosterCollapse,
+  renderRosterCollapse,
   type DebugConfig,
 } from "./debug-mode.js";
 import { KNOWN_GOOD_GATE_PROVENANCE, KNOWN_GOOD_GATE_SOURCE } from "./known-good-gate.js";
@@ -483,6 +485,28 @@ async function main(): Promise<void> {
         : model,
     ]),
   ) as Record<keyof typeof assigned, string>;
+  // Every seat's model must have a price BEFORE anything is spent.
+  //
+  // Found the hard way on 2026-10-03: `--debug` substituted the non-decider seats onto
+  // claude-haiku-4-5, which had no entry in PRICES, so `prices` was undefined and
+  // `projectedTurnCostUsd` threw `Cannot read properties of undefined` — 256 seconds into the
+  // first substituted agent's turn, after $0.38 of real spend, killing the run. TypeScript
+  // cannot see it: indexing a `Record<string, ModelPrices>` is typed as present.
+  //
+  // A missing price is not a small bug. The projection is what the run cap is enforced against,
+  // so a silently absent one would mean a run spending with no ceiling at all.
+  const unpriced = Object.entries(models)
+    .filter(([, model]) => PRICES[model] === undefined)
+    .map(([agentId, model]) => `${agentId} -> ${model}`);
+  if (unpriced.length > 0) {
+    throw new Error(
+      `No PRICES entry for: ${unpriced.join(", ")}. Add it to p5-shared.ts from this repo's own ` +
+        `latest price snapshot under data/registry/ — never estimated, since the projection is ` +
+        `what the run cap is enforced against.`,
+    );
+  }
+
+  const collapse = rosterCollapse(assigned, models, (m) => registryEntry(m).provider);
   if (debug.cheapNonDeciders) {
     for (const [agentId, model] of Object.entries(models)) {
       if (model !== assigned[agentId as keyof typeof assigned]) {
@@ -491,6 +515,8 @@ async function main(): Promise<void> {
         );
       }
     }
+    const warning = renderRosterCollapse(collapse);
+    if (warning !== "") console.log(warning);
     console.log("");
   }
 
@@ -740,7 +766,10 @@ async function main(): Promise<void> {
       ...(debug.cheapNonDeciders ? { cheapModel: debug.cheapModel } : {}),
       countsTowardF1: isCountable(debug, WINDOW_COUNT),
       disqualifiedBecause: disqualification(debug, WINDOW_COUNT),
-    },
+          providersExercised: collapse.exercised,
+      providersNotExercised: collapse.dropped,
+      validatesTheBlocksRoster: collapse.dropped.length === 0,
+},
     windowBounds: Object.fromEntries(
       Object.entries(windowBoundsByIndex).map(([i, b]) => [
         i,
@@ -1015,7 +1044,10 @@ async function main(): Promise<void> {
           deciderSeats: DECIDER_SEATS,
           countsTowardF1: isCountable(debug, WINDOW_COUNT),
           disqualifiedBecause: disqualification(debug, WINDOW_COUNT),
-        },
+                  providersExercised: collapse.exercised,
+          providersNotExercised: collapse.dropped,
+          validatesTheBlocksRoster: collapse.dropped.length === 0,
+},
         finalWindowVerdict: classifyFinalWindow(outcomes, runWindows),
         // Not a count of holders who declined to settle — a count of holders who were never
         // asked. See `claimsHolderWasNeverOfferedSettlement` and spec §4.6ae; reading the two

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { PRICES } from "./p5-shared.js";
+import { DEFAULT_CHEAP_MODEL } from "./debug-mode.js";
 import {
   DECIDER_SEATS,
   assertCountableForF1,
@@ -7,6 +9,8 @@ import {
   parseDebugFlags,
   renderDebugBanner,
   runIdPrefix,
+  rosterCollapse,
+  renderRosterCollapse,
   PRODUCTION_RUN,
 } from "./debug-mode.js";
 
@@ -110,5 +114,93 @@ describe("--debug", () => {
     const banner = renderDebugBanner(parseDebugFlags([]));
     expect(banner).toMatch(/canonical/);
     expect(banner).not.toMatch(/CANNOT MEET THE BAR/);
+  });
+});
+
+describe("roster collapse — a debug run does not validate the block's roster", () => {
+  const PROVIDER: Record<string, string> = {
+    "claude-sonnet-5": "anthropic",
+    "gpt-5.1": "openai",
+    "gemini-3.1-pro-preview": "google",
+    "grok-4.6": "xai",
+    "claude-haiku-4-5": "anthropic",
+  };
+  const providerOf = (m: string) => PROVIDER[m] ?? "unknown";
+  const assigned = {
+    ORCHESTRATOR: "gpt-5.1",
+    "WORKER-CODE": "claude-sonnet-5",
+    "WORKER-EXTRACT": "gemini-3.1-pro-preview",
+    "ISSUER-A": "grok-4.6",
+    "ISSUER-B": "grok-4.6",
+  };
+
+  it("names exactly the providers a substituted run stops calling", () => {
+    const substituted = {
+      ...assigned,
+      "WORKER-EXTRACT": "claude-haiku-4-5",
+      "ISSUER-A": "claude-haiku-4-5",
+      "ISSUER-B": "claude-haiku-4-5",
+    };
+    const c = rosterCollapse(assigned, substituted, providerOf);
+    expect(c.exercised).toEqual(["anthropic", "openai"]);
+    expect(c.dropped).toEqual(["google", "xai"]);
+  });
+
+  it("reports no collapse when every provider still runs", () => {
+    const c = rosterCollapse(assigned, assigned, providerOf);
+    expect(c.dropped).toEqual([]);
+    expect(renderRosterCollapse(c)).toBe("");
+  });
+
+  it("reports no collapse when a substitution leaves another seat on the same provider", () => {
+    // Two seats share grok. Moving one of them does not remove xai from the run, and claiming
+    // it did would overstate the collapse as readily as missing it would understate it.
+    const c = rosterCollapse(assigned, { ...assigned, "ISSUER-A": "claude-haiku-4-5" }, providerOf);
+    expect(c.dropped).toEqual([]);
+    expect(c.exercised).toContain("xai");
+  });
+
+  it("says plainly that a green run here is not roster validation", () => {
+    // The failure this guards against is somebody reading a clean debug run as evidence the
+    // block's roster is sound. grok truncating mid-JSON and gemini returning only reasoning
+    // tokens both ended real runs, and neither is reachable when neither model is called.
+    // Both grok seats must move before xai leaves the run — substituting one of two changes
+    // nothing, which the previous version of this fixture got wrong.
+    const text = renderRosterCollapse(
+      rosterCollapse(
+        assigned,
+        { ...assigned, "ISSUER-A": "claude-haiku-4-5", "ISSUER-B": "claude-haiku-4-5" },
+        providerOf,
+      ),
+    );
+    expect(text).toMatch(/DOES NOT VALIDATE THE BLOCK'S ROSTER/);
+    expect(text).toMatch(/full-cost run is what proves the roster/);
+    expect(text).toMatch(/required before any freeze/);
+  });
+});
+
+
+describe("the cheap model is usable at all", () => {
+  it("has a price, or every substituted seat crashes mid-turn", () => {
+    // Run 2026-10-03T14-28 died exactly here: claude-haiku-4-5 had no PRICES entry, so
+    // projectedTurnCostUsd threw 256 seconds into the first substituted agent's turn, after
+    // $0.38 of real spend. TypeScript cannot catch it — indexing a Record<string, T> is typed
+    // as present — and the projection is what the run cap is enforced against, so an absent
+    // price means a run with no ceiling rather than a run that stops.
+    const price = PRICES[DEFAULT_CHEAP_MODEL];
+    expect(price, `no PRICES entry for ${DEFAULT_CHEAP_MODEL}`).toBeDefined();
+    expect(Number(price?.priceInUsdPer1M)).toBeGreaterThan(0);
+    expect(Number(price?.priceOutUsdPer1M)).toBeGreaterThan(0);
+  });
+
+  it("is actually cheaper than the frontier seats it replaces", () => {
+    // A "cheap" model that is not cheaper would make --debug a pure downside: same cost, worse
+    // behaviour, disqualified result.
+    const cheap = Number(PRICES[DEFAULT_CHEAP_MODEL]?.priceOutUsdPer1M);
+    for (const frontier of ["claude-sonnet-5", "gpt-5.1", "gemini-3.1-pro-preview", "grok-4.6"]) {
+      expect(cheap, `${DEFAULT_CHEAP_MODEL} is not cheaper than ${frontier}`).toBeLessThan(
+        Number(PRICES[frontier]?.priceOutUsdPer1M),
+      );
+    }
   });
 });

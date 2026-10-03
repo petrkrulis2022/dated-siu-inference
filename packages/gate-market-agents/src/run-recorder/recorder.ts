@@ -63,6 +63,20 @@ export interface RunManifest {
     cheapModel?: string;
     countsTowardF1: boolean;
     disqualifiedBecause: string | null;
+    /**
+     * Which providers this run actually called, and which the model substitution removed.
+     *
+     * Substituting the non-decider seats collapses a four-provider roster onto two. That makes
+     * a debug run harder to kill — it cannot be stopped by a provider it never calls — and it
+     * also makes model-specific failures invisible: grok truncating mid-JSON at a token
+     * ceiling, gemini returning only reasoning tokens. Both have ended real runs here.
+     *
+     * `validatesTheBlocksRoster` is the field to read before treating a clean run as evidence
+     * that the roster is sound. A green debug run proves the loop works, not the roster.
+     */
+    providersExercised: string[];
+    providersNotExercised: string[];
+    validatesTheBlocksRoster: boolean;
   };
   externalDepletionMilliSiu?: Record<number, number>;
   /** Every window's real, fixed span (Unix seconds), computed from the chain clock before the

@@ -29,6 +29,11 @@ export const PRICES: Record<string, ModelPrices> = {
   "claude-sonnet-5": { priceInUsdPer1M: "2", priceOutUsdPer1M: "10" },
   "gemini-3.1-pro-preview": { priceInUsdPer1M: "2", priceOutUsdPer1M: "12" },
   "grok-4.6": { priceInUsdPer1M: "2", priceOutUsdPer1M: "6" },
+  // Added 2026-10-03 for `--debug`'s cheap seats. Taken from this repo's own latest LiteLLM
+  // price snapshot (`data/registry/price-snapshot-litellm-2026-10-03T01-02-02.508Z.json`,
+  // entry `claude-haiku-4-5`: in 1, out 5), not from memory and not estimated — a wrong figure
+  // here silently mis-projects every budget ceiling the run enforces.
+  "claude-haiku-4-5": { priceInUsdPer1M: "1", priceOutUsdPer1M: "5" },
 };
 
 /**

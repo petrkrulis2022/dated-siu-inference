@@ -40,6 +40,20 @@ The gate is still graded for real, by the same grader, on the same inputs. Every
 purchase, claim, presentation, delivery, attack, settlement, enforcement — is real on a real
 chain. What is not real is who authored the work and what the seats cost.
 
+**A debug run does not validate the roster, and this is the trap to avoid.** Substituting the
+non-decider seats collapses four providers onto two: a debug run calls only Anthropic and
+OpenAI, never xAI or Google. That is genuinely good for reliability — seven provider
+interruptions in two weeks, and a run cannot be killed by a provider it never calls — but it
+also means **model-specific failures are unreachable**. grok truncating mid-JSON at a 1,500-token
+ceiling and again at 4,500, gemini spending 21,782 of 22,500 output tokens on reasoning and
+returning no text: both ended real runs here, and neither can happen when neither model runs.
+
+So a green debug run proves the **loop** works. It says nothing about the **roster**. The
+full-cost confirmation run is what validates the roster, and it is **required before any freeze
+however clean the debug runs look**. The run prints the collapse in its own banner, and the
+manifest and report both carry `providersExercised`, `providersNotExercised` and
+`validatesTheBlocksRoster`.
+
 ---
 
 `pnpm` and `forge`/`anvil` are often not on a non-interactive shell's PATH:
