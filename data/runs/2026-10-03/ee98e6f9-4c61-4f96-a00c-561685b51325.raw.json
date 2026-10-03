@@ -1,0 +1,39 @@
+{
+  "id": "f3dc3c6d-24bb-9dea-bb20-b939c7ba7dd4",
+  "object": "chat.completion",
+  "created": 1790989487,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "D95F60\n663D64\nC64E8F\nBA8948",
+        "reasoning_content": "I will scan the archive log for access codes and list each one in order.\n\nI found four access codes: D95F60 for the eastern annex, 663D64 for the coastal annex, C64E8F for the upper annex, and BA8948 for the western annex.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21797,
+    "completion_tokens": 18,
+    "total_tokens": 22154,
+    "prompt_tokens_details": {
+      "text_tokens": 21797,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 339,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 449680000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
