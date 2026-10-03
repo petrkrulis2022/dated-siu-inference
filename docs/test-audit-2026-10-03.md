@@ -41,7 +41,8 @@ not reachable at all: it was an expression inside a 1,500-line function, so ther
 seam at which to ask it a question. **Extracting it was the fix; the test was an afterthought.**
 The same is true of `composeBoard`, which did not exist until the wake key needed testing.
 
-**2. The test asserted the mechanism, not the guarantee.** Every §4.6ac test checked that a
+**2. The test asserted the mechanism, not the guarantee.** *(Now spec §4.6ai — the one of the
+three that generalises.)* Every §4.6ac test checked that a
 waiting agent stays asleep. None checked the property that matters — *an agent is woken only
 when it has something it can do* — so a section that woke an agent with nothing passed every
 test. The lifecycle-coverage and `WAKE_SECTION_TOOLS` tests added here assert the guarantee, and
