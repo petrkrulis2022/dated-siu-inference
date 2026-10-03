@@ -174,6 +174,44 @@ export function renderRosterCollapse(collapse: {
   ].join("\n");
 }
 
+/**
+ * The second thing a debug run cannot evidence, and it is not about providers at all.
+ *
+ * **Every cost saving shortens the active window.** A pinned gate means nobody spends turns
+ * authoring one; cheaper agents reach the end of their ideas sooner and leave. The window's
+ * SPAN is unchanged — it is fixed against the chain clock — but the agents stop acting much
+ * earlier, and the stall guard then ends the window.
+ *
+ * Anything that fires on **elapsed time rather than on an event** is squeezed by that, because
+ * it needs turns to still be happening when it becomes eligible. Observed 2026-10-03, window 1:
+ * WORKER-CODE presented at 14:51:03 with 2,298s left, putting the overdue warning's midpoint at
+ * ~15:09Z. Every agent was done by 14:51:58 and the window ended — **eighteen minutes before
+ * the warning could fire.**
+ *
+ * The overdue warning is simply the one that was being watched. The same applies to the
+ * unpresented-expiry warning, to late-stage forward invitations, and to any mechanism added
+ * later that measures elapsed time. **A debug run cannot evidence any of them**, and a clean
+ * one is not evidence that they work.
+ *
+ * This is independent of the roster collapse: it would hold even if every provider still ran.
+ * Both are reasons the full-cost confirmation run is required, and they are different reasons.
+ */
+export function renderTimeGatedBlindness(cfg: DebugConfig): string {
+  if (!cfg.preAuthoredGate && !cfg.cheapNonDeciders) return "";
+  return [
+    "  TIME-GATED BEHAVIOUR IS NOT EXERCISED BY THIS RUN.",
+    "    Every saving here shortens the span over which agents actually take turns: nobody",
+    "    authors a gate, and cheaper agents run out of things to do sooner. Anything that fires",
+    "    on ELAPSED TIME rather than on an event therefore may never become eligible before the",
+    "    stall guard ends the window — the overdue-claim warning, the unpresented-expiry",
+    "    warning, late-stage forward invitations.",
+    "    Seen on 2026-10-03: a claim presented with 2,298s left put its warning's midpoint 18",
+    "    minutes after the last turn anyone took.",
+    "    A clean run here is not evidence that any time-gated mechanism works. That is the",
+    "    second independent reason the full-cost run is required, separate from the roster.",
+  ].join("\n");
+}
+
 /** Printed before anything is spent, so the log says what this run was. */
 export function renderDebugBanner(cfg: DebugConfig, canonicalWindows = 3): string {
   const why = disqualification(cfg, canonicalWindows);

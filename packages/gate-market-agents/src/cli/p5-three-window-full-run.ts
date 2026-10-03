@@ -59,6 +59,11 @@ import {
 import type { RunManifest } from "../run-recorder/recorder.js";
 import { RUNS_ROOT } from "./runs-root.js";
 import {
+  reconcilePool,
+  renderPoolReconciliation,
+  type LotExpectation,
+} from "./pool-reconciliation.js";
+import {
   DECIDER_SEATS,
   disqualification,
   isCountable,
@@ -640,6 +645,31 @@ async function main(): Promise<void> {
   }
 
   const startingHeadroom = await headroomRows();
+
+  // Is the pool whole BEFORE anything is spent? A run that crashed before its own close-out
+  // leaves capacity consumed, and the next run inherits it silently — which is exactly what
+  // happened on 2026-10-03, when a run began at 70,000 of 80,000 and nobody noticed until the
+  // headroom line was read by hand afterwards. Scarcity is the thing this testbed measures, so
+  // starting short has to be a stated precondition rather than a discovery.
+  const ALLOW_PARTIAL_POOL = "--allow-partial-pool";
+  const lotExpectations: LotExpectation[] = (["ISSUER-A", "ISSUER-B"] as const).map((agentId) => ({
+    agentId,
+    address: addresses[agentId],
+    issuanceLimitMilliSiu: BigInt(deploymentRecord.capacityLots[agentId].issuanceLimitPerClass),
+  }));
+  const poolState = reconcilePool(
+    lotExpectations,
+    new Map(startingHeadroom.map((r) => [r.issuer.toLowerCase(), BigInt(r.headroom)])),
+  );
+  console.log(renderPoolReconciliation(poolState, ALLOW_PARTIAL_POOL));
+  if (!poolState.whole && !process.argv.includes(ALLOW_PARTIAL_POOL)) {
+    throw new Error(
+      `Pool is short by ${poolState.shortfallTotal} mSIU at launch. Settle or expire what is ` +
+        `outstanding, or pass ${ALLOW_PARTIAL_POOL} to run anyway.`,
+    );
+  }
+  console.log("");
+
   console.log("=== WP-7 P5 — THREE WINDOWS, ONE POOL ===");
   console.log(
     `Run ${runId} (label ${runSeed}); oracle trial seed ${F1_ORACLE_TRIAL_SEED} (pinned).`,
@@ -769,6 +799,7 @@ async function main(): Promise<void> {
           providersExercised: collapse.exercised,
       providersNotExercised: collapse.dropped,
       validatesTheBlocksRoster: collapse.dropped.length === 0,
+      exercisesTimeGatedBehaviour: !debug.preAuthoredGate && !debug.cheapNonDeciders,
 },
     windowBounds: Object.fromEntries(
       Object.entries(windowBoundsByIndex).map(([i, b]) => [
@@ -1047,7 +1078,17 @@ async function main(): Promise<void> {
                   providersExercised: collapse.exercised,
           providersNotExercised: collapse.dropped,
           validatesTheBlocksRoster: collapse.dropped.length === 0,
+          exercisesTimeGatedBehaviour: !debug.preAuthoredGate && !debug.cheapNonDeciders,
 },
+        // A run that started short is not comparable with one that started whole, so the fact
+        // travels with the artefact rather than only appearing in a log nobody re-reads.
+        poolAtLaunch: {
+          whole: poolState.whole,
+          expectedTotalMilliSiu: poolState.expectedTotal.toString(),
+          actualTotalMilliSiu: poolState.actualTotal.toString(),
+          shortfallMilliSiu: poolState.shortfallTotal.toString(),
+          proceededWithPartialPool: !poolState.whole,
+        },
         finalWindowVerdict: classifyFinalWindow(outcomes, runWindows),
         // Not a count of holders who declined to settle — a count of holders who were never
         // asked. See `claimsHolderWasNeverOfferedSettlement` and spec §4.6ae; reading the two

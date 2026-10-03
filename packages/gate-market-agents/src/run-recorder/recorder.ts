@@ -77,6 +77,15 @@ export interface RunManifest {
     providersExercised: string[];
     providersNotExercised: string[];
     validatesTheBlocksRoster: boolean;
+    /**
+     * Whether this run could exercise time-gated behaviour at all.
+     *
+     * False whenever a saving shortens the span over which agents take turns — a pinned gate
+     * means nobody authors, cheaper agents finish sooner — because anything firing on elapsed
+     * time may never become eligible before the stall guard ends the window. Independent of
+     * the roster collapse, and the second reason a full-cost run is required.
+     */
+    exercisesTimeGatedBehaviour: boolean;
   };
   externalDepletionMilliSiu?: Record<number, number>;
   /** Every window's real, fixed span (Unix seconds), computed from the chain clock before the

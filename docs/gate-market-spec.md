@@ -2077,8 +2077,26 @@ used to say which claim it supported. So the run says it: the banner prints the 
 the manifest and report carry `providersExercised`, `providersNotExercised` and
 `validatesTheBlocksRoster`.
 
+**And a second, independent blindness: time-gated behaviour.** Every saving shortens the span
+over which agents actually take turns — nobody authors a gate, and cheaper agents reach the end
+of their ideas sooner and leave. The window's span is unchanged, but the stall guard ends it
+much earlier. Anything that fires on **elapsed time rather than on an event** may therefore
+never become eligible.
+
+Observed the same day: WORKER-CODE presented a claim at 14:51:03 with 2,298s remaining, putting
+the overdue warning's midpoint at ~15:09Z. Every agent had finished by 14:51:58 and the window
+ended — **eighteen minutes before the warning could fire.** The overdue warning was simply the
+one being watched; the unpresented-expiry warning, late-stage forward invitations and any future
+elapsed-time mechanism are all squeezed the same way. **A debug run cannot evidence any of
+them.**
+
+This is independent of the roster collapse — it would hold even if every provider still ran —
+and it is recorded in the run's own banner and in `exercisesTimeGatedBehaviour` on the manifest
+and report.
+
 **The freeze rule this implies.** A full-cost run on the block's real roster is required before
-the protocol freezes, however many clean debug runs precede it. Debug runs are for iterating on
+the protocol freezes, however many clean debug runs precede it. There are now **two** reasons
+rather than one: the roster is not exercised, and neither is anything time-gated. Debug runs are for iterating on
 the loop; they cannot retire the risk that a model the block depends on behaves differently from
 the one that stood in for it.
 
@@ -2121,6 +2139,32 @@ source file, when the damage happens downstream of it). The missing price was in
 type system for the same reason — the type asserted the belief rather than testing it. The
 tests that now exist assert properties of the compiled artefact and of the actual roster, not of
 the inputs that produced them.
+
+### 4.6al A crashed run strands capacity into every run after it
+
+§4.6z closed three routes by which capacity leaked *within* a run, and every run's close-out
+sweeps what it consumed. **Nothing covered a run that never reaches its close-out.**
+
+On 2026-10-03 a debug run died on window 1, having already minted a 10,000 mSIU claim. Its
+sweeps never executed. The claim stayed outstanding, ISSUER-A stayed at 38,000 of 48,000, and
+**the next run began 12.5% short without saying so** — discovered only because its starting
+headroom line was read by hand afterwards. Left alone it would have propagated to every
+subsequent run, each one quietly scarcer than the last.
+
+That matters more here than it would elsewhere, because **scarcity is the thing this testbed
+measures.** A run that starts short is not comparable with one that starts whole, and the
+difference is invisible in every per-window figure the report prints.
+
+**The fix is a pre-flight, not a post-mortem** (`cli/pool-reconciliation.ts`). At launch the run
+reads live headroom per issuer, compares it against each lot's own `issuanceLimitPerClass`, and
+if they differ names the issuer and the amount. It then **refuses to start** unless
+`--allow-partial-pool` is passed, and either way the state travels into the report as
+`poolAtLaunch`. A post-run check would have found this too; a pre-flight finds it before the
+money is spent, which is the whole difference.
+
+Headroom *above* a lot's limit is reported as a separate and louder failure rather than as a
+negative shortfall: it means the deployment record and the chain disagree, and clamping it to
+zero with a `Math.max` would hide the worse of the two problems behind the lesser one.
 
 ### 4.7 Forward terms: a stated price, not an instrument
 

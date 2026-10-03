@@ -48,7 +48,14 @@ also means **model-specific failures are unreachable**. grok truncating mid-JSON
 ceiling and again at 4,500, gemini spending 21,782 of 22,500 output tokens on reasoning and
 returning no text: both ended real runs here, and neither can happen when neither model runs.
 
-So a green debug run proves the **loop** works. It says nothing about the **roster**. The
+**It is also blind to anything time-gated.** Every saving shortens the span over which agents
+take turns, so a warning that fires on elapsed time may never become eligible before the stall
+guard ends the window. Seen 2026-10-03: a claim presented with 2,298s left put its warning's
+midpoint eighteen minutes after the last turn anyone took. The overdue warning, the
+unpresented-expiry warning and late-stage forward invitations are all affected.
+
+So a green debug run proves the **loop** works. It says nothing about the **roster**, and
+nothing about time-gated behaviour. The
 full-cost confirmation run is what validates the roster, and it is **required before any freeze
 however clean the debug runs look**. The run prints the collapse in its own banner, and the
 manifest and report both carry `providersExercised`, `providersNotExercised` and
@@ -64,6 +71,12 @@ export PATH="$HOME/.local/share/pnpm:$HOME/.foundry/bin:$PATH"
 
 Without Foundry on PATH, 12 test files fail on `anvil and/or forge are not available` — an
 environment fault, not a regression.
+
+**The run now reconciles the pool for you at launch** and refuses to start if headroom does not
+match the lots' issuance limits, naming the issuer and the shortfall. A run that crashed before
+its own close-out leaves capacity consumed and the next run inherits it silently — that happened
+on 2026-10-03 and went unnoticed until the headroom line was read by hand. Settle what is
+outstanding, or pass `--allow-partial-pool` and have the shortfall recorded in the report.
 
 **Before launching, check three things.** A print dated *today* exists under `data/prints/`, or
 every window's default path is unreachable and the enforcement arm is dead for the whole run.
