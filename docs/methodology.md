@@ -1540,6 +1540,11 @@ then returned 3,000 ×2 of external-buyer capacity and released a 10,000 reserva
 printed figure predates. The sweeps run *before* the summary prints, so the number is not merely
 early; it is a cached value printed after the events that invalidate it.
 
+**It recurred the next day, unchanged.** Run 17 printed `64000 mSIU` and an independent read
+returns `70000` — the same 6,000 of external-buyer capacity returned by the close-out after the
+snapshot was taken. A documented cause reappearing identically is confirmation, not a new
+lesson: the field is still a cached value printed after the events that invalidate it.
+
 This is the same error in direction — understating by 20% — with a different cause, so it needs
 a different rule. The RPC rule above says *re-read from a fresh connection*. The reporting rule
 is: **a summary figure must be read at the moment it is printed, never carried forward from when

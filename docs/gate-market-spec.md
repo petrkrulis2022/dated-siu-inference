@@ -1875,6 +1875,149 @@ conclusions no current code would reach. **Any change to scoring logic must be f
 re-scoring every stored run and annotating what moves** — and the re-score must run both the old
 and new logic, or a stale artefact and a genuine change are indistinguishable.
 
+### 4.6ag Settling an unpresented claim pays nobody, and the board says it pays the holder
+
+Run 17, window 1, produced the first deliberate hold in this project's history. WORKER-CODE was
+paid 10,000 mSIU by `pay_with_claim`, and instead of redeeming it on the next turn as every
+holder in every previous run had done, it kept the claim:
+
+> *"Holding the 10000 mSIU code-class claim I received … preserving the claim for later use
+> (e.g. funding adversarial testing once I have a gate to defend, or settling a future quote)."*
+
+That is fSIU behaving as money rather than as a settlement rail — the property the instrument
+exists for and had never shown. It is also what exposed the defect, because **holding without
+presenting reaches a state no previous run could reach.**
+
+**Why the hold happened, which is a second defect and the cause of the first.** WORKER-CODE's
+brief tells it, verbatim:
+
+> *"`YOU HAVE BEEN PAID AND OWE THE WORK` appears on your market board, naming the request it
+> answers and the amount in escrow. You do not need to go looking for it, and **an absence of it
+> means you have not been paid**."*
+
+That board section is produced by the **dollar** route — it describes an escrowed quote.
+`pay_with_claim` produces no such entry. So an agent paid in fSIU is told by its own brief that
+it has not been paid, and WORKER-CODE's friction log is that guarantee being obeyed: *"it's
+unclear why it arrived absent any request on the board"*. It then reasoned, correctly per the
+spec, that holding a claim creates no work obligation, and kept it.
+
+**This is §4.6-RULE once more and the sharpest instance yet**, because the false guarantee is
+stated as a negative test — *absence means X* — which an agent cannot disconfirm by looking. The
+USDC route tells a seller what it was paid for and names the request; the fSIU route tells it
+nothing and its brief tells it that nothing means unpaid. §4.6ab recorded that the two routes
+differ in consent. They also differ in whether the seller can tell it has been paid at all.
+
+**What the board tells every agent**, in the `settleableText` section, with copy-pasteable
+syntax:
+
+> *"A claim that was never served defaults against its own issuer's bond, **paying the holder** —
+> that is what the bond is for, and it is permissionless: anyone may trigger it, including you."*
+
+**What `WorkClaim.settleWindowClose` actually does** is conditional on `everPresented`. The
+unconditional part burns the claim and restores the issuer's headroom; the bond draw lives
+inside `if (everPresented[tokenId][holder])`. For a claim that was never presented, control
+reaches `else { emit Expired(...) }` and **no payment is made to anyone**.
+
+**So in window 2, WORKER-EXTRACT settled WORKER-CODE's held claim** on its first turn, with the
+rationale *"Settling the defaulted claim from window 1 as instructed."* Verified on chain
+afterwards: holder balance `0`, `everPresented false`, `settled true`, ISSUER-A's 10,000 mSIU of
+headroom returned. The holder received nothing.
+
+Three things are wrong here and they are separable:
+
+1. **The text states a guarantee the contract does not implement** — §4.6-RULE, in its most
+   damaging form yet. Previous instances left an agent unable to act. This one actively invites
+   an action that destroys value, with worked syntax, and the agent that followed it reported it
+   was acting *as instructed*.
+2. **It is permissionless destruction of someone else's position.** For a presented claim,
+   permissionless settlement is a feature: anyone may trigger the default and the bond pays the
+   holder, so a third party can only help. For an unpresented claim the same call burns the
+   holder's asset for no compensation. The invitation "anyone may trigger it, including you"
+   is correct about the permission and wrong about the consequence.
+3. **The enforcement arm ran backwards.** The run's own disclosure said the question was
+   *"whether the holder notices, triggers settle_window_close once the window closes, and is paid
+   from that issuer's bond."* What happened: a non-holder triggered it, the holder was not paid,
+   and ISSUER-A — the issuer deliberately prevented from ever delivering — was made whole. The
+   mechanism built to penalise non-delivery returned the non-deliverer's capacity and
+   expropriated its counterparty.
+
+**And the holder was never told.** At its window-2 turn 1 WORKER-CODE's prompt carried the
+settleable notice naming its own claim; WORKER-EXTRACT burned it between turns; at turn 2 the
+section is simply absent, with no mention of the claim, the settlement, or the outcome. It lost
+10,000 mSIU silently between two consecutive turns. That is §4.6ae on the settlement side: the
+loop knew and the holder could not see.
+
+**What this says beyond the harness.** Holding fSIU is not safe. An unpresented claim can be
+burned by anyone, for nothing, at any time after its window closes, and its holder is not
+notified. Build 2's `wSIU` is premised on claims being held and passed between hops without
+unwrapping, so this is a property of the instrument's design and not only of this testbed's
+prompt text. A bearer instrument whose bearer can be zeroed by a stranger is not a bearer
+instrument.
+
+**A methodological note, because it nearly corrupted this entry.** The first draft of this
+section said the claim "arrives with no statement of what it is for". That was wrong, and it was
+wrong because a substring search for `YOU HAVE BEEN PAID` matched the phrase where the *brief*
+quotes it, not a rendered board section. Checking what the agent was actually shown, rather than
+what a grep said was present, turned a vague complaint into the precise defect above. This is the
+second time in two days that a substring match over prompt text produced a confident wrong
+reading (the first was parsing rationales out of a truncated console log). **A grep over a prompt
+finds the brief as readily as the board; locate the section, do not match the phrase.**
+
+**Not fixed in this run** — reported, per the standing rule that a defect found mid-run is
+recorded rather than patched while the run is live.
+
+### 4.6ah Suppressing a one-shot section is itself a wake
+
+The holder channel (§4.6ae) worked on its first live test. Run 17, window 2: WORKER-CODE
+presented a claim at 11:52:28Z with 2,286s to expiry, waited, and was woken at 12:12:43Z — 72
+seconds after the computed 12:11:31Z midpoint, which is one roster pass, the designed interval
+of the per-round chain-clock refresh.
+
+> *"A CLAIM YOU PRESENTED IS STILL UNSERVED … You presented it 1262s ago and it expires in
+> 1024s."*
+
+1262 > 1024: the waited-longer-than-remaining condition, correct, with no tuned constant. It had
+slept through sixteen minutes and many roster passes without a single spurious wake, and it read
+the warning and chose to keep waiting — *"nothing actionable until it's served or the window
+closes, so I wait rather than spend a turn re-polling."* Informed, unsteered, and free to do
+nothing, which is the whole design.
+
+**Then it was woken again 22 seconds later, with an empty board.**
+
+`markUnservedWarningShown()` blanks the section once it has genuinely been delivered — the
+§4.6ac bound, so a standing fact cannot wake its holder every cursor. But `waitingOn` stores the
+`wakeKey` **as it was when the agent waited**, and that key contained the warning. Blanking the
+warning changes the key. A changed key is the definition of a wake. So:
+
+**suppressing a one-shot section is itself a wake.** The agent is woken once by the arrival of
+the fact (correct) and once more by its disappearance (§4.6ac, exactly the defect this was built
+to fix).
+
+The cost here is one turn, and the agent handled it by waiting again. The general form is worse
+than the instance: every shown-once section has it. `gateDefeatedText` is bounded by
+`unseenDefeatsFor`, the forward invitation by `shownForwardOffers`, and both will do the same
+thing to any agent that waits on a turn where one of them was present.
+
+**The fix is to store the post-suppression key.** `composeBoard` is pure, so the wait branch can
+compose a second time with the one-shot sections blanked and store *that* — the key the next
+evaluation will actually compute. The agent then stays asleep across the suppression. Stated as a
+rule: **a wake key must be a function of state the agent will still see next turn, never of
+state the act of showing it destroys.**
+
+**Reproduced in the same run, both windows**, which is what makes it systematic rather than a
+one-off timing accident:
+
+| window | presented | midpoint | warning delivered | spurious wake |
+| --- | --- | --- | --- | --- |
+| 2 | 11:52:28Z | 12:11:31Z | 12:12:43Z (+72s) | 12:13:05Z (+22s) |
+| 3 | 12:32:35Z | 12:51:34Z | 12:52:20Z (+46s) | 12:53:28Z (+68s) |
+
+Both deliveries land within one roster pass of their midpoint, and both are followed by a wake
+with an empty board on the very next pass. The lag is the design; the second wake is the defect.
+
+Found live rather than in review, by watching the one agent the feature was built for, on the
+one turn after it worked.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make
