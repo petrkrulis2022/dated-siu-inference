@@ -293,6 +293,11 @@ export interface CapacityEvent {
   quoteHash?: string;
   /** Claim share of the quote, 0..1 as a decimal string — `settle_split` only. */
   claimShare?: string;
+  /** `settle_window_close` only: the terminal state, decoded from the tool's own receipt. Absent
+   *  means it could not be decoded, never that it was something in particular. */
+  settlementOutcome?: "Defaulted" | "Expired";
+  /** `settle_window_close` only, and only for a Default: USDC minor units the bond paid the holder. */
+  bondPaidMinorUnits?: string;
   counterparty?: string;
   txHash?: string;
   /** Seconds until the claim's own window closes at the moment of the decision — §7.1(a)'s own
@@ -2065,11 +2070,19 @@ export async function runFullRunWindow(
       }
 
       if (intent.tool === "settle_window_close") {
-        const settled = record.result as { txHash?: string };
+        const settled = record.result as {
+          txHash?: string;
+          outcome?: "Defaulted" | "Expired";
+          bondPaidMinorUnits?: string;
+        };
         const tokenId = (args as { tokenId?: unknown } | undefined)?.tokenId;
         await recordCapacityEvent("settle_window_close", {
           ...(typeof tokenId === "string" ? { tokenId } : {}),
           ...(settled.txHash ? { txHash: settled.txHash } : {}),
+          ...(settled.outcome !== undefined ? { settlementOutcome: settled.outcome } : {}),
+          ...(settled.bondPaidMinorUnits !== undefined
+            ? { bondPaidMinorUnits: settled.bondPaidMinorUnits }
+            : {}),
         });
       }
 

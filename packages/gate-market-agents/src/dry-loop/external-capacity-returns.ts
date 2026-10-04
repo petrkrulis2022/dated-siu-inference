@@ -12,6 +12,8 @@ export interface ExternalCapacityReturnsResult {
   headroomAfterRunEnd: bigint;
   quantity: bigint;
   settleBeforeRunEndError: string;
+  /** What the tool itself recorded about the run-end settlement, decoded from its own receipt. */
+  settleOutcome: unknown;
 }
 
 const RUN_SECONDS = 1200;
@@ -93,7 +95,7 @@ export async function runExternalCapacityReturns(
 
   // The run ends. Never presented, so this Expires: headroom back, nothing paid, no bond drawn.
   await advanceTime(devnet.rpcUrl, RUN_SECONDS + 60);
-  await buyer.callTool(
+  const settleRecord = await buyer.callTool(
     "settle_window_close",
     { tokenId: minted.tokenId, holder: devnet.agents.ORCHESTRATOR.address, ...rateAttestation },
     { turn: 5, jobId },
@@ -105,5 +107,6 @@ export async function runExternalCapacityReturns(
     headroomAfterRunEnd: await readHeadroom(6),
     quantity,
     settleBeforeRunEndError,
+    settleOutcome: (settleRecord.result as { outcome?: unknown }).outcome,
   };
 }

@@ -2302,6 +2302,30 @@ is how a report finds it and counts it apart from keyed payments (§4.6am).
 *Test (§4.6ai):* asserted on the real-bytecode loop's own recorded moment, not on a hand-built one;
 verified failing first (`expected undefined to be '1'`).
 
+### 4.6ap A settlement records which terminal state it reached
+
+Single-issuer instrument, apparatus change valid on either topology. Windows 2 and 3 exist to
+produce one number — how many claims **Defaulted**, the bond paying the holder — and a run's
+artefact could not state it. `settle_window_close` returned a transaction hash and nothing else; a
+Default and an Expiry are different events in the same function, and telling them apart meant
+re-reading the chain afterwards. That is how every enforcement figure to date was produced (and how
+the 11-versus-14 mix-up in the analysis happened: a settlement count compared against an
+enforcement count, because the artefact held only the first).
+
+The tool now decodes its **own receipt** and returns `outcome` — `Defaulted` or `Expired` — and, for
+a Default, `bondPaidMinorUnits`, an integer in USDC minor units. The loop copies both onto the
+recorded capacity event. If the receipt carries neither event the outcome is **absent**, never
+guessed, and a report counts those separately: a figure built from a guess is not a figure.
+
+*Tested on real bytecode in both directions* (§4.6ai): the presented-unserved claim reports
+`Defaulted` with the bond payout equal to the print-valued amount the scenario independently
+computes, and the never-presented claim reports `Expired`; both verified failing first
+(`expected undefined to be 'Defaulted'` / `'Expired'`). **Not yet verified end to end:** the loop's
+copy of those fields onto the capacity event is a pass-through checked by the typechecker and not
+by a loop-level test, because none of the loop tests drives a real settlement through
+`runFullRunWindow`. The first debug run is where it is confirmed, and the block report flags any
+settlement whose outcome is missing, so a gap there cannot pass as zero enforcements.
+
 ## 5. Identity, wallets and chain
 
 ### 5.1 Chain

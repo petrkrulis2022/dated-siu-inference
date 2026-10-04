@@ -14,6 +14,9 @@ export interface DefaultAndRerouteResult {
   holderUsdcDelta: string;
   expectedDefaultPayoutUsd: string;
   secondMintSucceeded: boolean;
+  /** What the tool itself recorded about the settlement, decoded from its own receipt. */
+  settleOutcome: unknown;
+  settleBondPaidMinorUnits: unknown;
 }
 
 /**
@@ -104,7 +107,7 @@ export async function runDefaultAndReroute(
       .integerMinorUnits,
   );
 
-  await buyer.callTool(
+  const settleRecord = await buyer.callTool(
     "settle_window_close",
     {
       tokenId: mintResult.tokenId,
@@ -113,6 +116,7 @@ export async function runDefaultAndReroute(
     },
     { turn: 6, jobId },
   );
+  const settled = settleRecord.result as { outcome?: unknown; bondPaidMinorUnits?: unknown };
 
   const holderUsdcAfterRecord = await holder.callTool(
     "get_balances",
@@ -170,5 +174,7 @@ export async function runDefaultAndReroute(
     holderUsdcDelta: minorUnitsToUsd((holderUsdcAfter - holderUsdcBefore).toString()),
     expectedDefaultPayoutUsd: minorUnitsToUsd(expectedDefaultPayoutMicroUsd.toString()),
     secondMintSucceeded,
+    settleOutcome: settled.outcome,
+    settleBondPaidMinorUnits: settled.bondPaidMinorUnits,
   };
 }

@@ -27,6 +27,17 @@ export const WORK_CLAIM_ABI = parseAbi([
   "event ReservationReleased(bytes32 indexed quoteHash, address indexed issuer, bytes32 classId, uint256 quantity, bool settled)",
 ]);
 
+/**
+ * The two terminal states `settleWindowClose` can end in, as events. Kept apart from
+ * `WORK_CLAIM_ABI` (functions) because it exists only so a tool can read its own receipt: a
+ * settlement that reports a transaction hash and nothing else cannot be counted as an enforcement
+ * without re-reading the chain afterwards.
+ */
+export const WORK_CLAIM_SETTLEMENT_EVENTS_ABI = parseAbi([
+  "event Defaulted(uint256 indexed tokenId, address indexed holder, uint256 quantity, uint256 amountUsdc)",
+  "event Expired(uint256 indexed tokenId, address indexed holder, uint256 quantity)",
+]);
+
 export const CAPACITY_BOND_ABI = parseAbi([
   "function headroom(address issuer, bytes32 classId) external view returns (uint256)",
   "function issuanceLimit(address issuer, bytes32 classId) external view returns (uint256)",

@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { Hex } from "viem";
-import { WORK_CLAIM_ABI } from "../chain/abi.js";
+import { parseEventLogs, type Hex } from "viem";
+import { WORK_CLAIM_ABI, WORK_CLAIM_SETTLEMENT_EVENTS_ABI } from "../chain/abi.js";
 import { writeAndConfirm } from "../chain/write.js";
 import type { ToolDefinition } from "./types.js";
 
@@ -30,7 +30,20 @@ type Args = z.infer<typeof argsSchema>;
  * bullet even though the loop cannot reach the Defaulted/Expired terminal states without it —
  * added for the same reason.
  */
-export const settleWindowCloseTool: ToolDefinition<Args, { txHash: string }> = {
+export interface SettleWindowCloseResult {
+  txHash: string;
+  /**
+   * Which terminal state the claim reached, decoded from this transaction's own receipt: a presented
+   * claim the issuer did not serve **Defaulted** (the bond paid the holder), one never presented
+   * **Expired** (nobody was paid). Absent only if the receipt carried neither event, which is
+   * recorded as absent and never guessed — a count built from a guess is not a count.
+   */
+  outcome?: "Defaulted" | "Expired";
+  /** Integer USDC minor units the bond paid the holder; present exactly when `outcome` is Defaulted. */
+  bondPaidMinorUnits?: string;
+}
+
+export const settleWindowCloseTool: ToolDefinition<Args, SettleWindowCloseResult> = {
   name: "settle_window_close",
   argsSchema,
   async handler(ctx, args) {
@@ -51,6 +64,19 @@ export const settleWindowCloseTool: ToolDefinition<Args, { txHash: string }> = {
         args.signature as Hex,
       ],
     });
-    return { txHash: receipt.transactionHash };
+    const workClaim = (ctx.deps.deployment.workClaim.address as string).toLowerCase();
+    const settlements = parseEventLogs({
+      abi: WORK_CLAIM_SETTLEMENT_EVENTS_ABI,
+      logs: receipt.logs.filter((l) => l.address.toLowerCase() === workClaim),
+    }).filter((e) => e.args.tokenId === BigInt(args.tokenId));
+    const reached = settlements[0];
+    return {
+      txHash: receipt.transactionHash,
+      ...(reached?.eventName === "Defaulted"
+        ? { outcome: "Defaulted" as const, bondPaidMinorUnits: reached.args.amountUsdc.toString() }
+        : reached?.eventName === "Expired"
+          ? { outcome: "Expired" as const }
+          : {}),
+    };
   },
 };

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { setupDevnet, type DevnetHandle } from "../devnet/deploy.js";
+import { minorUnitsToUsd } from "@touchstone/sdk";
 import { buildRunners } from "./context.js";
 import { runDefaultAndReroute } from "./default-and-reroute.js";
 import type { Runner } from "../runner.js";
@@ -25,5 +26,11 @@ describe("WP-5 §4.5 — default", () => {
     expect(result.headroomAfterSettle).toBe(result.headroomBeforeMint); // fully restored
     expect(result.holderUsdcDelta).toBe(result.expectedDefaultPayoutUsd); // bond paid exactly the print value
     expect(result.secondMintSucceeded).toBe(true); // the system isn't stuck afterward
+
+    // The run's own artefact must say WHICH terminal state this was. A settlement the tool
+    // reports only as a transaction hash cannot be counted as an enforcement without re-reading
+    // the chain afterwards, which is how every earlier enforcement figure was produced.
+    expect(result.settleOutcome).toBe("Defaulted");
+    expect(minorUnitsToUsd(String(result.settleBondPaidMinorUnits))).toBe(result.expectedDefaultPayoutUsd);
   }, 90_000);
 });

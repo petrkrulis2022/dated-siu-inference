@@ -28,5 +28,8 @@ describe("external-buyer capacity returns at run end — the depletion ratchet",
     expect(r.settleBeforeRunEndError).toMatch(/WindowNotClosedYet|window/i);
     // And exactly: this is the property "five comparable runs" depends on.
     expect(r.headroomAfterRunEnd).toBe(r.headroomBefore);
+    // Never presented, so nothing is owed: an Expired settlement, distinguishable in the artefact
+    // from a Default (which pays the holder from the issuer's bond).
+    expect(r.settleOutcome).toBe("Expired");
   }, 120_000);
 });
