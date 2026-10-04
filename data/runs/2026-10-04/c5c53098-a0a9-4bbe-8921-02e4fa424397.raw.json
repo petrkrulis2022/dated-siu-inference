@@ -1,0 +1,39 @@
+{
+  "id": "47a2b807-cdcd-98c8-9706-dd36cb222de9",
+  "object": "chat.completion",
+  "created": 1791077743,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```javascript\nexport function cappedRunningTotal(nums, cap) {\n  const result = [];\n  let total = 0;\n  for (const num of nums) {\n    total = Math.min(total + num, cap);\n    result.push(total);\n  }\n  return result;\n}\n```",
+        "reasoning_content": "I need to implement a JavaScript function that computes a running total of an array of non-negative numbers, capped at a given positive limit. Once the cumulative sum reaches that cap, all subsequent positions in the output array should remain fixed at the cap value.\n\nI considered two implementation approaches. One uses a boolean flag to freeze the total once the cap is reached. The simpler version uses `Math.min(total + num, cap)` on each iteration.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 778,
+    "completion_tokens": 62,
+    "total_tokens": 1302,
+    "prompt_tokens_details": {
+      "text_tokens": 778,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 462,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 39320000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

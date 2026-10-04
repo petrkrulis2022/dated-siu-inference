@@ -1,0 +1,38 @@
+{
+  "id": "ef34849a-6a92-9a8a-bb3a-831db23c85ca",
+  "object": "chat.completion",
+  "created": 1791077732,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"tracking_id\": \"SH-75179D\",\n  \"origin_city\": \"Denver\",\n  \"destination_city\": \"Gdansk\",\n  \"weight_kg\": 271,\n  \"status\": \"delivered\",\n  \"priority\": \"standard\"\n}",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1617,
+    "completion_tokens": 62,
+    "total_tokens": 1989,
+    "prompt_tokens_details": {
+      "text_tokens": 1617,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 310,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 46980000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

@@ -1,0 +1,32 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "```javascript\nexport function filterAboveThreshold(nums, threshold) {\n  return nums.filter(num => num > threshold);\n}\n```",
+            "thoughtSignature": "Eu4ICusIAWkUfRNxWa5y5b+vkdNarUsMOpMxAi2PDwWIgaxNJdPZLnucn6f11SZfiWqxCjwINUPFNgWrtc0Yzzu5zzQI1Kt+meYhFx3zBdADgGiOkCTSJABAXpB/+Ancf1LRe4/DuqcAaX+YpmujCKeNyhnk9KqLgPaY4alF5Kl+pPyPMrHtQj5JseKiea3GuV2YH4Tsaby/KvZp7mLeBai1AS5uQKZQZlOO9jiFpC78Nk0innrqR13k/IwkeBYas3tLP1X2BQH6//WS90aDbPfVkhODRstwRp3we/RPoZ8rn1QNVAVnZBSrNSbZftxJxsna8HYWik32wpJsf9JXvNisdhCOLyosaPNfCOoyvNXJZ3VPfGtB3v0V5Zhq7t7lak/UH+/nUWxFkwl8yJHAQSV3TMxxlu78JDYRuh95j+XyMtCcNut51Q2CtAqF54bEAVJbnFYhC5HWUc6Veqx9osHpGVfKePi80WabDUK6iw5X5FWpDbfqQE9mC1r5NI19N+emxA0VjDOelCkv0NJXtPGGXUppF6PbSU6R5Is8qrBWRFqfkZY7wG+EapeEDt5fm81AlsCVNYRaIMv+QYmbsnTpcUo7mdbDTsIwsVStfJgWiXsTg34TJjFf/RLo+stCCJR6DCD1+u7B1OVJLt6I35BLm/JNJgD2NEDTQ2Cq0z60UfIh6r8xGpSwkz0btqXtFBN4fixWNK3HP+agF1Z6nIpE5mpUrpwxiDiQoOfFqs2eakkY3vrelyAFQmbKvDGzR4dplBbTh2nZ+s+kiEd8PJWLujWIQPciNXi0RfAaQN/FO0OnrdU2ujZfDf8PJr9GbZSevU+JtVV54vkHBEoS1wGqgGijuKzb1dYnzQdVf82GgteKrj0lv9BfXeXBKty870Ef/Bq3y9V0/sXlBc2eWHMaUjoE1Sujb6UDd1YlbFxcFVzhA1Svl/XpB9IHulpwSXu0BTPXHeOIIgtCe8YIpwVMkTSJc8FnrE6slSFlu9yu2fan3tStMA/HtKDAK1qe14u/XvcpTMw3H3r+JpXPMHHP6EDMrUymfkJRhT2er+lf1brAGubxqjEkzBHvG0A+T3nkl4F2vP0y5/h6+1rxmcJINCfqzMrHLdLAznFDvQVXO5xo0Xpd4S5bomcfahSZ3/I68G1woRJ2+Fcyl2/WmNwG4KUg/6Eo3J/kiL1lujReCZjdG3lnt7Sl8I/BC4QR4kgT2eBmjqhman9y2GHNb3xuXT9JTQvnGyb5n5Z2rWMMHYdTh5BBeV0MMTxGY3Tw95EuWTUrMoRLkovjJ5l4I6Vm5KnK4KzgzTNRPj5jRuSH/Zhr8gSXDE4S6TAW6BLZy5lMtlYUXFe8oaT1NpYfVTrr8zNdYWAaZm3hzLDtAJT6ODkrBLCB/DqEZe65j8z7ihV/7mrqLvJUBD5D+1LuZBwVr1gPNOBFFn4KR3nu94YvKByriz0r0eb4TtL6RLv266LWVu5aYQ+HdBh5I2CL0HpjJkJOSi5Pv4NsWkXgZX/U"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 110,
+    "candidatesTokenCount": 31,
+    "totalTokenCount": 385,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 110
+      }
+    ],
+    "thoughtsTokenCount": 244,
+    "serviceTier": "standard"
+  },
+  "modelVersion": "gemini-3.1-pro-preview",
+  "responseId": "Uq3BavjMIpXL_PUP8cS7cQ"
+}
