@@ -87,6 +87,11 @@ Derived from every run report's capacity events:
 **67.8% of all fSIU ever minted was backed by the issuer that structurally cannot deliver**, and
 67.7% of mints. First-fit sends every mint to A while A has headroom, and A is registered first.
 
+**Scoped correctly for F1 (added the same day):** the table above covers every report, including
+the disqualified debug run, whose three mints were all A-backed. Over the ten **countable** runs it
+is **64.1%** — 168,000 of 262,000 mSIU, 18 of 28 agent mints. Use that figure; `methodology.md`
+does.
+
 This belongs in the methodology as stated: **F1 to date measured agents' preference for a claim
 that, two times in three, could not be redeemed for work.** It is not a small caveat on the
 25-of-29 figure; it is a different instrument from the one the number appears to describe.

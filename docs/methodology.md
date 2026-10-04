@@ -1561,6 +1561,34 @@ proved against — here, `sum(HeadroomConsumed) - sum(HeadroomRestored)` against
 which is what eventually exposed the gap. **A scan that cannot be reconciled to an independent
 total is not evidence of absence.**
 
+### What F1 measured before 2026-10-04: a claim that mostly could not be redeemed
+
+Across the ten countable runs, **64.1% of the fSIU agents minted (168,000 of 262,000 mSIU; 18 of
+28 mints) was backed by ISSUER-A**, the issuer that structurally cannot serve. `ClaimRouter.route`
+is first-fit over `issuersForClass` in registration order, and ISSUER-A was registered first, so
+every mint went to it while it had headroom.
+
+So the 25-of-29 fSIU preference recorded across those runs is a preference for a claim that,
+roughly two times in three, could not be redeemed for work — expressed by agents that were never
+told so, and (until 2026-10-03) never exposed to the cost of holding one. It is a different
+instrument from the one the number appears to describe, and it is not quoted as F1.
+
+*Derivation.* `pay_with_claim` and `mint_claim` capacity events, by `issuer`, from every
+non-`DEBUG` run report. An earlier figure of 67.8% included the disqualified 2026-10-03 debug run,
+whose three mints were all A-backed; it is superseded.
+
+### Enforcement count, derived from presentation
+
+**9 agent-triggered `Defaulted` events across the ten countable runs.** A `settle_window_close` is
+a `Defaulted` only if the claim was ever presented; otherwise it is an `Expired` that returns
+capacity and pays nobody (spec §4.6ag, `fsiu-design.md` §4.3a). Of 14 settlements in the reports,
+11 were `Defaulted` and 3 `Expired`; two of the 11 belong to the disqualified debug run.
+
+**Two further defaults on 2026-10-03 were operator-triggered**
+(`data/gate-market/operator-settlement-2026-10-03*.json`) and are excluded from every behavioural
+statistic. Any earlier count of "bond enforcements" predates the Defaulted/Expired distinction and
+is replaced by the figure above.
+
 ---
 
 ## Governance intention
