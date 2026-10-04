@@ -42,6 +42,9 @@ import { validateModelAssignment, type ModelAssignments } from "../pack/model-as
 import { erc8004IdFor, type AgentId } from "../identity/resolve.js";
 import type { RunnerDeps } from "../deps.js";
 import { loadGateMarketDeployment } from "../chain/deployment.js";
+import { buildF1Report } from "./instrument-report.js";
+import { instrumentOf, parseInstrumentFlags, type InstrumentSpec } from "./instrument.js";
+import { checkAfterDrain, planDrain, readUntilStable } from "./topology.js";
 import { ViemChainReader } from "../chain/reader.js";
 import { ForwardQuoteBook } from "../loop/forward-book.js";
 import { renderPurchaseSummary, summarisePurchases } from "../loop/purchases.js";
@@ -434,6 +437,30 @@ export function defaultReachability(
   });
 }
 
+/** Something the OPERATOR did to the market. Never an agent decision, and excluded from every
+ *  behavioural statistic by being recorded here rather than in any window's agent record. */
+export type OperatorAction =
+  | {
+      kind: "drain";
+      afterWindow: number;
+      issuer: string;
+      requestedMilliSiu: string;
+      txHash?: string;
+      tokenId?: string;
+      backedBy?: string;
+      failedBecause?: string;
+    }
+  | { kind: "drain_skipped"; afterWindow: number; issuer: string; reason: string }
+  | {
+      kind: "topology_check";
+      afterWindow: number;
+      drainIssuerHeadroomMilliSiu: string;
+      routedTo: string | null;
+      expectedRoute: string;
+      ok: boolean;
+      reason?: string;
+    };
+
 export interface WindowOutcome {
   windowIndex: number;
   result: FullRunWindowResult;
@@ -451,14 +478,20 @@ async function main(): Promise<void> {
   console.log("");
 
   const registry = JSON.parse(readFileSync(join(REPO_ROOT, "data/registry/models.json"), "utf-8"));
-  const deploymentRecord = JSON.parse(
-    readFileSync(join(REPO_ROOT, "data/deployments/base-sepolia-gate-market.json"), "utf-8"),
+  // Which deployment, and therefore which INSTRUMENT. The fifth trio stays the default and runs
+  // exactly as it always has; anything else is named on the command line and stamped into the
+  // manifest and report, so no run can be pooled with one that measured something different.
+  const { deploymentFile } = parseInstrumentFlags(process.argv.slice(2));
+  const deploymentRecord = JSON.parse(readFileSync(join(REPO_ROOT, deploymentFile), "utf-8"));
+  const instrument: InstrumentSpec = instrumentOf(deploymentRecord);
+  console.log(
+    `INSTRUMENT: ${instrument.id}\n  ${instrument.description}\n  deployment record: ${deploymentFile}\n`,
   );
   const modelAssignment: ModelAssignments = deploymentRecord.roster.modelAssignment;
   validateModelAssignment(modelAssignment, registry);
   console.log("Model assignment validated (spec §12.2a): OK.\n");
 
-  const deployment = loadGateMarketDeployment();
+  const deployment = loadGateMarketDeployment(deploymentFile);
   const apiKeys = loadApiKeysFromEnv();
   const rpcUrl = process.env.BASE_SEPOLIA_RPC_URL ?? "";
   const chainReader = new ViemChainReader(deployment, rpcUrl);
@@ -574,6 +607,13 @@ async function main(): Promise<void> {
     "ISSUER-A": toHex(process.env.ISSUER_A_ADDRESS, "ISSUER_A_ADDRESS"),
     "ISSUER-B": toHex(process.env.ISSUER_B_ADDRESS, "ISSUER_B_ADDRESS"),
   } as const;
+  // A topology may name any seat; a seat with no address is a malformed record, not a lookup that
+  // quietly yields `undefined`.
+  const addressOf = (seat: string): Hex => {
+    const found = (addresses as Record<string, Hex | undefined>)[seat];
+    if (found === undefined) throw new Error(`topology names ${seat}, which has no address in this run`);
+    return found;
+  };
   const keys = {
     ORCHESTRATOR: toHex(process.env.ORCHESTRATOR_PRIVATE_KEY, "ORCHESTRATOR_PRIVATE_KEY"),
     "WORKER-CODE": toHex(process.env.WORKER_CODE_PRIVATE_KEY, "WORKER_CODE_PRIVATE_KEY"),
@@ -820,6 +860,14 @@ async function main(): Promise<void> {
     oracleTrialSeed: F1_ORACLE_TRIAL_SEED,
     externalDepletionMilliSiu: EXTERNAL_DEPLETION_MILLI_SIU,
     windowCount: runWindows,
+    // Which instrument this run measured, stamped where it cannot be separated from the run. Runs
+    // on different instruments are never pooled: the block report refuses a mixed set.
+    instrument: {
+      id: instrument.id,
+      description: instrument.description,
+      deploymentFile,
+      ...(instrument.topology !== undefined ? { topology: { ...instrument.topology } } : {}),
+    },
     // Changes to what the instrument IS, as opposed to what a run happened to do. A run carrying
     // none of these predates them and is a different instrument from one that carries them.
     instrumentChanges: [
@@ -850,6 +898,13 @@ async function main(): Promise<void> {
   };
 
   const outcomes: WindowOutcome[] = [];
+  /** Everything the OPERATOR did to the market, as distinct from anything an agent did. Recorded
+   *  in the report so no behavioural statistic can silently include it. */
+  const operatorActions: OperatorAction[] = [];
+  /** Set when a topology precondition fails. The loop stops, and — deliberately — the close-out
+   *  sweeps below still run: aborting by throwing would skip them and strand capacity into the
+   *  next run, which is the §4.6al failure. */
+  let topologyAbort: string | undefined;
   // Claims minted in a window whose issuer never served them. Carried into later windows so the
   // default path is reachable at all — see runFullRunWindow's own `outstandingClaims` comment.
   const outstandingClaims: OutstandingClaim[] = [];
@@ -1061,8 +1116,113 @@ async function main(): Promise<void> {
       };
     }
 
+    const topology = instrument.topology;
+    const drainSpec = topology?.drain;
+    if (
+      topology !== undefined &&
+      drainSpec !== undefined &&
+      windowIndex === drainSpec.afterWindow &&
+      windowIndex < runWindows
+    ) {
+      if (topology.routeAfterDrain === undefined) {
+        throw new Error("topology.drain requires routeAfterDrain (instrumentOf should have refused this)");
+      }
+      const drainAddress = addressOf(drainSpec.issuer);
+      const expectedRoute = addressOf(topology.routeAfterDrain);
+      // A fresh client for every read, and stable across two of them (see `readUntilStable`): a
+      // stale-HIGH headroom would over-size the drain, and first-fit would then skip the drained
+      // issuer and mint against the next one instead.
+      const fresh = () => new ViemChainReader(deployment, rpcUrl);
+      const headroomNow = await readUntilStable(() => fresh().headroom(drainAddress, classId));
+      const plan = planDrain(drainSpec, windowIndex, headroomNow);
+      if (plan.action === "drain") {
+        const drained = await depleteExternally({
+          label: `OPERATOR DRAIN — ${drainSpec.issuer}, configured in the deployment record`,
+          quantityMilliSiu: plan.quantityMilliSiu,
+          classId,
+          deployment,
+          rpcUrl,
+          commodityPrint,
+          rateUsdPerSiu,
+          windowSeconds: WINDOW_SECONDS,
+          runEndsAtUnixSeconds: windowBoundsByIndex[runWindows].to,
+          chainReader,
+        });
+        // Swept at run end with the external buyer's claims, by the same path.
+        if (drained.tokenId !== undefined && drained.holder !== undefined) {
+          externalClaims.push({
+            tokenId: drained.tokenId,
+            holder: drained.holder,
+            quantityMilliSiu: Number(plan.quantityMilliSiu),
+          });
+        }
+        operatorActions.push({
+          kind: "drain",
+          afterWindow: windowIndex,
+          issuer: drainSpec.issuer,
+          requestedMilliSiu: plan.quantityMilliSiu.toString(),
+          ...(drained.txHash !== undefined ? { txHash: drained.txHash } : {}),
+          ...(drained.tokenId !== undefined ? { tokenId: drained.tokenId.toString() } : {}),
+          ...(drained.issuer !== undefined ? { backedBy: drained.issuer } : {}),
+          ...(drained.failedBecause !== undefined ? { failedBecause: drained.failedBecause } : {}),
+        });
+        if (drained.failedBecause !== undefined) {
+          topologyAbort = `the drain of ${drainSpec.issuer} failed: ${drained.failedBecause}`;
+        } else if (drained.issuer?.toLowerCase() !== drainAddress.toLowerCase()) {
+          // First-fit chose someone else, so the right issuer was NOT drained and the wrong one was.
+          topologyAbort =
+            `the drain was backed by ${drained.issuer ?? "an unknown issuer"}, not ` +
+            `${drainSpec.issuer} (${drainAddress})`;
+        }
+      } else {
+        operatorActions.push({
+          kind: "drain_skipped",
+          afterWindow: windowIndex,
+          issuer: drainSpec.issuer,
+          reason: plan.reason,
+        });
+      }
+
+      if (topologyAbort === undefined) {
+        // Both preconditions, read from a fresh client, retried until they hold or the attempts
+        // run out. A stale read understates a change, so a failure on the first attempt is
+        // expected to resolve; one that does not is real.
+        let verdict: ReturnType<typeof checkAfterDrain> = { ok: false, reason: "not read" };
+        let reading = { drainIssuerHeadroom: -1n, routedTo: null as string | null, expectedRoute };
+        for (let attempt = 0; attempt < 8 && !verdict.ok; attempt++) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, 3_000));
+          reading = {
+            drainIssuerHeadroom: await fresh().headroom(drainAddress, classId),
+            routedTo: await fresh().routeFor(classId, NOMINAL_JOB_MILLI_SIU),
+            expectedRoute,
+          };
+          verdict = checkAfterDrain(reading);
+        }
+        operatorActions.push({
+          kind: "topology_check",
+          afterWindow: windowIndex,
+          drainIssuerHeadroomMilliSiu: reading.drainIssuerHeadroom.toString(),
+          routedTo: reading.routedTo,
+          expectedRoute,
+          ok: verdict.ok,
+          ...(!verdict.ok ? { reason: verdict.reason } : {}),
+        });
+        if (!verdict.ok) topologyAbort = verdict.reason;
+      }
+      if (topologyAbort !== undefined) {
+        console.log(
+          `\n=== TOPOLOGY PRECONDITION FAILED — RUN ABORTED AFTER WINDOW ${windowIndex} ===\n` +
+            `  ${topologyAbort}\n` +
+            "  Not reported as scarcity or as a failed window: the instrument is not in the state " +
+            "it claims, so\n  a later window would measure nothing. The close-out sweeps still " +
+            "run, so no capacity is stranded.\n",
+        );
+      }
+    }
+
     outcomes.push(outcome);
     printWindowSummary(outcome, totalOf);
+    if (topologyAbort !== undefined) break;
   }
 
   await releaseExternalClaims({
@@ -1102,6 +1262,30 @@ async function main(): Promise<void> {
         printId,
         rateUsdPerSiu,
         windowCount: runWindows,
+        instrument: {
+          id: instrument.id,
+          description: instrument.description,
+          deploymentFile,
+          ...(instrument.topology !== undefined ? { topology: { ...instrument.topology } } : {}),
+        },
+        // Everything the operator did to the market, kept apart from every agent's record so no
+        // behavioural statistic can include it.
+        operatorActions,
+        // A run whose topology precondition failed measured nothing past that point. It is stated
+        // here and the block report excludes the run; it is never a scarcity or a failed window.
+        ...(topologyAbort !== undefined
+          ? { abortedBecause: topologyAbort, abortedAfterWindow: outcomes.length }
+          : {}),
+        f1: buildF1Report(
+          outcomes.map((o) => ({
+            windowIndex: o.windowIndex,
+            capacityEvents: o.result.capacityEvents,
+            paymentMoments: o.result.paymentMoments,
+          })),
+          instrument.topology?.expectedIssuerByWindow[1] !== undefined
+            ? addressOf(instrument.topology.expectedIssuerByWindow[1])
+            : undefined,
+        ),
         externalDepletionMilliSiu: EXTERNAL_DEPLETION_MILLI_SIU,
         nominalJobMilliSiu: NOMINAL_JOB_MILLI_SIU.toString(),
         startingHeadroom,
@@ -1160,6 +1344,7 @@ async function main(): Promise<void> {
             : {}),
           passedBy: o.result.passedBy,
           haltedReason: o.result.haltedReason,
+          paymentMoments: o.result.paymentMoments,
           headroomBefore: o.headroomBefore,
           headroomAfter: o.headroomAfter,
           externalDepletion: o.externalDepletion,
@@ -1822,6 +2007,8 @@ ${runShapeFacts}`;
  * the scheduled depletion, that is itself the finding — the agents got there first.
  */
 async function depleteExternally(input: {
+  /** Shown in the log so an operator action is never mistaken for the scheduled external buyer. */
+  label?: string;
   quantityMilliSiu: bigint;
   /** The last window's own close time — the external claim expires with the run. */
   runEndsAtUnixSeconds: bigint;
@@ -1838,8 +2025,11 @@ async function depleteExternally(input: {
   failedBecause?: string;
   tokenId?: bigint;
   holder?: Hex;
+  /** The issuer the router actually chose, decoded from the Minted event — never assumed. */
+  issuer?: Hex;
 }> {
   const requested = Number(input.quantityMilliSiu);
+  const label = input.label ?? "EXTERNAL BUYER — not an agent, scheduled in source before the run";
   try {
     const account = privateKeyToAccount(
       toHex(process.env.DEPLOYER_PRIVATE_KEY, "DEPLOYER_PRIVATE_KEY"),
@@ -1899,8 +2089,7 @@ async function depleteExternally(input: {
     });
     await publicClient.waitForTransactionReceipt({ hash: txHash });
     console.log(
-      `\n[EXTERNAL BUYER — not an agent, scheduled in source before the run] took ${requested} mSIU ` +
-        `of code-class capacity. tx ${txHash}`,
+      `\n[${label}] took ${requested} mSIU of code-class capacity. tx ${txHash}`,
     );
     // Decoded from the contract's own Minted event rather than guessed from a log position or
     // recomputed from a pre-read route — the router picks the issuer inside the mint, so any id
@@ -1912,11 +2101,17 @@ async function depleteExternally(input: {
       logs: receipt.logs,
     })[0];
     const tokenId = minted?.args.tokenId;
-    return { requestedMilliSiu: requested, txHash, tokenId, holder: account.address };
+    return {
+      requestedMilliSiu: requested,
+      txHash,
+      tokenId,
+      holder: account.address,
+      ...(minted?.args.issuer !== undefined ? { issuer: minted.args.issuer as Hex } : {}),
+    };
   } catch (err) {
     const failedBecause = err instanceof Error ? err.message : String(err);
     console.log(
-      `\n[EXTERNAL BUYER] scheduled depletion of ${requested} mSIU did NOT happen: ${failedBecause}\n` +
+      `\n[${label}] ${requested} mSIU did NOT happen: ${failedBecause}\n` +
         "  Reported, not retried smaller and not silently skipped — if the pool could not serve it, " +
         "the agents got there first, and that is a result rather than an error to work around.",
     );

@@ -50,6 +50,14 @@ export interface RunManifest {
   /** Changes to what the instrument IS rather than what a run did, so a run can never be pooled
    *  with one that predates them. Each entry is dated and says what moved. */
   instrumentChanges?: string[];
+  /** Which instrument the run measured — a deployment record's id and, where it has one, its
+   *  per-window topology. Runs on different instruments are never pooled. */
+  instrument?: {
+    id: string;
+    description: string;
+    deploymentFile: string;
+    topology?: Record<string, unknown>;
+  };
   /**
    * The run's shape, when it was not the canonical one. Present only on a run that cannot be
    * quoted — a pinned gate, substituted models, or a non-canonical window count — so that the

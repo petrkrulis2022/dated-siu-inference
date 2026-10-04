@@ -85,3 +85,37 @@ export function f1Clean(
   ).length;
   return { clean: backedByOthers === 0, mints: mints.length, backedByOthers };
 }
+
+/**
+ * Reads a value until two consecutive reads agree, and returns it.
+ *
+ * Why a plain read is not enough here: a load-balanced public endpoint can serve a pre-write view
+ * AFTER a transaction confirms (five documented instances), and a stale headroom is HIGH — it
+ * shows capacity that is already consumed. Sizing the drain from it would over-ask, and first-fit
+ * would then skip the drained issuer, which no longer has that much, and mint against the NEXT
+ * one instead: draining the wrong issuer and leaving the right one full.
+ *
+ * Throws rather than returning an unsettled value. A drain sized from a number the endpoint will
+ * not hold still is a drain nobody should trust.
+ */
+export async function readUntilStable<T>(
+  read: () => Promise<T>,
+  options: { attempts?: number; delayMs?: number; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<T> {
+  const attempts = options.attempts ?? 6;
+  const delayMs = options.delayMs ?? 2_000;
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  let previous: T | undefined;
+  let havePrevious = false;
+  for (let i = 0; i < attempts; i++) {
+    const current = await read();
+    if (havePrevious && current === previous) return current;
+    previous = current;
+    havePrevious = true;
+    if (i < attempts - 1) await sleep(delayMs);
+  }
+  throw new Error(
+    `the value did not settle across ${attempts} reads (last: ${String(previous)}); ` +
+      "refusing to act on a figure the endpoint will not hold still",
+  );
+}

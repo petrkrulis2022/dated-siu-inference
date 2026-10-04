@@ -10,7 +10,7 @@ export interface GateMarketDeployment {
   workClaim: { address: string };
 }
 
-function repoRoot(): string {
+export function repoRoot(): string {
   // packages/gate-market-agents/src/chain/deployment.ts -> repo root is four levels up.
   return path.resolve(fileURLToPath(import.meta.url), "../../../../..");
 }

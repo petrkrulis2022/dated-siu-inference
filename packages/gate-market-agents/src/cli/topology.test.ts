@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkAfterDrain, f1Clean, planDrain } from "./topology.js";
+import { checkAfterDrain, f1Clean, planDrain, readUntilStable } from "./topology.js";
 import { assertSameInstrument, instrumentOf, parseInstrumentFlags } from "./instrument.js";
 import { readFileSync } from "node:fs";
 
@@ -117,7 +117,8 @@ describe("instrument configuration", () => {
   });
 
   it("refuses a drain that asserts nothing afterwards", () => {
-    const { routeAfterDrain: _omit, ...noRoute } = GOOD;
+    const noRoute: Record<string, unknown> = { ...GOOD };
+    delete noRoute.routeAfterDrain;
     expect(() => instrumentOf(rec(noRoute))).toThrow(/requires routeAfterDrain/);
   });
 
@@ -181,5 +182,45 @@ describe("the multi-issuer path is intact", () => {
   it("token ids still carry the issuer", () => {
     const wc = readFileSync(new URL("../../../contracts/src/WorkClaim.sol", import.meta.url), "utf-8");
     expect(wc).toMatch(/function tokenIdFor\(\s*address issuer,/);
+  });
+});
+
+
+describe("readUntilStable", () => {
+  const noSleep = async () => {};
+
+  it("returns as soon as two consecutive reads agree", async () => {
+    const seen = [15_000n, 15_000n];
+    expect(await readUntilStable(async () => seen.shift() as bigint, { sleep: noSleep })).toBe(15_000n);
+  });
+
+  it("does NOT trust a stale-high read that is followed by a lower one", async () => {
+    // The failure it exists for: the first read shows capacity that is already consumed. Sizing a
+    // drain from 32,000 when the truth is 15,000 would make first-fit skip the drained issuer and
+    // mint against the other one.
+    const seen = [32_000n, 15_000n, 15_000n];
+    expect(await readUntilStable(async () => seen.shift() as bigint, { sleep: noSleep })).toBe(15_000n);
+  });
+
+  it("throws, rather than returning a figure, when it never settles", async () => {
+    let n = 0n;
+    await expect(
+      readUntilStable(async () => n++, { attempts: 4, sleep: noSleep }),
+    ).rejects.toThrow(/did not settle across 4 reads/);
+  });
+
+  it("waits between reads, but not after the last one", async () => {
+    const waits: number[] = [];
+    let n = 0n;
+    await expect(
+      readUntilStable(async () => n++, {
+        attempts: 3,
+        delayMs: 7,
+        sleep: async (ms) => {
+          waits.push(ms);
+        },
+      }),
+    ).rejects.toThrow();
+    expect(waits).toEqual([7, 7]);
   });
 });
