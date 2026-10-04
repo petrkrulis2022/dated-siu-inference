@@ -2283,6 +2283,25 @@ nothing; it exists only so that *taking* an offer and *ignoring* one are disting
 rather than the same silence.
 | **Default** | Disable an issuer's harness path for one window | Does that issuer's own bond pay the holder, at that claim's own grade's print? (No re-route to the other issuer — see §4.4's corrected DEFAULT row.) |
 
+### 4.6ao A payment records the terms of the quote it settled
+
+Single-issuer instrument, apparatus change valid on either topology. The block report is asked for
+cost per delivered SIU, and the run artefact could not answer. A payment moment recorded who paid,
+in which asset, on which turn and what they held — not what the payment bought, or at what stated
+price. The quote that knew was on a board that no longer exists once the window ends. Found by
+working out what the report needs *before* the freeze, which is the only moment the omission is
+cheap: every run of a frozen block would have carried it.
+
+A payment moment now carries the settled quote's own `siu`, `rate_usd_per_siu` and
+`amount_usd_max`, as decimal strings, read from the signed quote the payer named. They are the
+quote's **stated** terms, not a settlement: `amount_usd_max` is the ceiling the quote allows, a
+seller may settle for less, and no settled amount is recorded. A report built from these says
+*"quoted at"*, never *"paid"*. An unkeyed `transfer_claim` names no quote and carries none — which
+is how a report finds it and counts it apart from keyed payments (§4.6am).
+
+*Test (§4.6ai):* asserted on the real-bytecode loop's own recorded moment, not on a hand-built one;
+verified failing first (`expected undefined to be '1'`).
+
 ## 5. Identity, wallets and chain
 
 ### 5.1 Chain

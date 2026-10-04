@@ -18,7 +18,7 @@ import {
   runGateHardeningChecks,
   type GateHardeningResult,
 } from "@touchstone/task-pack-gate-hardening";
-import type { Print, QuoteBody } from "@touchstone/sdk";
+import { D, type Print, type QuoteBody } from "@touchstone/sdk";
 import type { RunnerDeps } from "../deps.js";
 import type { RunManifest } from "../run-recorder/recorder.js";
 import { BudgetCeiling } from "../budget/ceiling.js";
@@ -2452,6 +2452,15 @@ describe("runFullRunWindow — a held claim settles a quote, and the seller is t
     expect(moment?.heldReceivedMilliSiu).toBe("10");
     expect(moment?.asset).toBe("fsiu");
     expect(moment?.requestId).toMatch(/^qr-\d+$/);
+
+    // The quote's own terms travel with the payment, so a run's artefact can answer "what did this
+    // buy and at what stated price" without anyone re-deriving it from a board that no longer
+    // exists. They are the quote's STATED terms — `quotedUsdMax` is the ceiling the quote allows,
+    // not what was finally settled — and every one is a decimal string, never a float.
+    expect(moment?.quotedSiu).toBe("1");
+    expect(moment?.quoteRateUsdPerSiu).toBe("0.0100");
+    expect(moment?.quotedUsdMax).toBeDefined();
+    expect(new D(String(moment?.quotedUsdMax)).equals("0.01")).toBe(true);
   }, 180_000);
 });
 

@@ -456,6 +456,16 @@ export interface PaymentMoment {
   requestId?: string;
   /** mSIU of claims the agent had been GIVEN and still held, as a decimal string. */
   heldReceivedMilliSiu: string;
+  /**
+   * The settled quote's own STATED terms, read from the signed quote — so a run's artefact can say
+   * what a payment bought and at what price without a board that no longer exists. Decimal
+   * strings throughout. `quotedUsdMax` is the ceiling the quote allows, not what was finally
+   * settled: a seller may settle for less. Absent when the payment names no quote (an unkeyed
+   * `transfer_claim`), which is itself the fact worth reporting.
+   */
+  quotedSiu?: string;
+  quoteRateUsdPerSiu?: string;
+  quotedUsdMax?: string;
 }
 
 export interface FullRunWindowResult {
@@ -1876,6 +1886,8 @@ export async function runFullRunWindow(
         if (typeof requestId === "string") board.recordPaid(requestId, assetSettledBy(intent.tool));
         // BEFORE this payment's own capacity event reaches the ledger (that happens below, in
         // `recordCapacityEvent`), so a claim being passed on still counts as held while it is.
+        const settledQuote =
+          typeof requestId === "string" ? board.issuedQuoteById(requestId) : undefined;
         paymentMoments.push({
           agentId: agent.agentId,
           turn,
@@ -1883,6 +1895,13 @@ export async function runFullRunWindow(
           asset: assetSettledBy(intent.tool),
           ...(typeof requestId === "string" ? { requestId } : {}),
           heldReceivedMilliSiu: claimLedger.heldReceived(agent.agentId).toString(),
+          ...(settledQuote !== undefined
+            ? {
+                quotedSiu: settledQuote.siu,
+                quoteRateUsdPerSiu: settledQuote.rate_usd_per_siu,
+                quotedUsdMax: settledQuote.amount_usd_max,
+              }
+            : {}),
         });
       }
 
