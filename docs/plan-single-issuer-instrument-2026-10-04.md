@@ -1,7 +1,17 @@
 # Plan: the single-issuer instrument (sixth trio)
 
-**Status: plan only. Nothing built, nothing deployed.** Written 2026-10-04 per the working
-agreement (this touches well over two files). Five decisions are needed from you at the end.
+**Status, end of 2026-10-04: W1 and W2 built and tested; W3 built; nothing deployed.** Written the
+same day per the working agreement, and decisions D1–D5 settled (§6). Built: W1 on `main` (payment
+symmetry, testing as a purchase, asset text, the decision rule as code, payment moments and a
+claim ledger) plus two measurement additions found while specifying the report (a payment records
+the quote it settled, §4.6ao; a settlement records Defaulted or Expired, §4.6ap). W2 on branch
+`instrument/single-issuer` (topology as configuration, the drain and its two preconditions,
+`bond-lots`, `f1Clean`). W3: `block-report`. **Not done:** the sixth-trio deployment is simulated
+(deploy script succeeds; nothing broadcast), the lots are unbonded, and the issuers need funding
+first. Neither a debug run nor the full-cost confirmation run has happened on the new instrument,
+so the freeze clock has not started.
+
+*Originally:* plan only, five decisions requested.
 
 Accepted so far: the sixth-trio redeploy; a short-lived build branch; apparatus fixes on main; a
 `--deployment` flag with the fifth trio staying default and runnable; `instrument` stamped into

@@ -2326,6 +2326,40 @@ by a loop-level test, because none of the loop tests drives a real settlement th
 `runFullRunWindow`. The first debug run is where it is confirmed, and the block report flags any
 settlement whose outcome is missing, so a gap there cannot pass as zero enforcements.
 
+### 4.6aq One issuer per window is configuration, and the runner checks it
+
+Single-issuer instrument (plan: `docs/plan-single-issuer-instrument-2026-10-04.md`). The topology
+lives in the deployment record, never in code: `topology.lotCreationOrder`,
+`topology.expectedIssuerByWindow`, `topology.drain` (`afterWindow`, `issuer`, `classId`,
+`datedTo: run_end`) and `topology.routeAfterDrain`. `--deployment <record>` selects it, and the
+fifth trio stays the default, unchanged. `instrumentOf` validates the record before anything is
+spent, and a source-level test asserts that no instrument or topology module names an issuer.
+
+**The drain** reads the drained issuer's headroom from fresh clients until two consecutive reads
+agree, sizes the drain to exactly that, and refuses to continue unless the *Minted event* names the
+drained issuer: a stale-high figure would over-size the drain, first-fit would skip the drained
+issuer, and the wrong one would be emptied. No drain follows the last window. **Two preconditions**
+follow, each retried from a fresh client: the drained issuer's headroom is zero, and the real
+router (`eth_call`) returns `routeAfterDrain` for a job-sized mint. A failed precondition sets an
+abort reason and leaves the loop **without throwing**, so release, sweep and settle steps still
+run — a throw would have skipped them and stranded capacity into the next run (§4.6al). The
+report records `abortedBecause`, and such a run is never counted.
+
+**`f1Clean`** is computed from window 1's recorded mints only (a window-2 mint backed by the other
+issuer is the design) and an unrecorded backer counts as unclean. Every operator action is in
+`operatorActions`, apart from agent records.
+
+**`bond-lots`** executes the record's declared order, because registration order is routing
+priority and must not be inferred from transaction order. It defaults to a dry run; simulates
+before every send; sends sequentially; refuses a key that does not control the named address, a
+lot that exists with different figures, and a registration list already in the wrong order — each
+verified on real bytecode and mutation-checked. **The block report** takes an explicit set of runs
+and is described in the methodology entry.
+
+**Open at the time of writing:** the sixth trio is simulated but **not deployed**; the loop's copy of
+the settlement outcome (§4.6ap) awaits its first end-to-end confirmation; and the decision rule's
+reading of "the agent" with two payers is stated in the report and open to correction.
+
 ## 5. Identity, wallets and chain
 
 ### 5.1 Chain

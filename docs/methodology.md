@@ -1591,6 +1591,40 @@ is replaced by the figure above.
 
 ---
 
+### The single-issuer instrument (from 2026-10-04)
+
+**What changed.** Before this date the testbed registered the issuer that cannot serve first, so
+first-fit routed most agent mints to it (see above). The single-issuer instrument registers
+ISSUER-B first and ISSUER-A second, **both lots bonded at deploy**. Window 1 routes to B, which
+serves. After window 1 an operator drains B's remaining headroom, dated to the run's end, so
+windows 2 and 3 route to A, which cannot. **F1 is window 1 alone.** Windows 2 and 3 are the
+enforcement arm and are reported as *fSIU against an issuer that cannot serve*; they answer whether
+a bond pays a holder, not what an agent prefers.
+
+**Registration order, not absence, decides routing.** `createLot` has no removal and the issuer list
+is append-only, so "A has no lot until window 2" can be true of at most the first run of a block.
+B-then-A with both lots from deploy holds for all five. One issuer per window is **configuration**:
+the deployment record names the order, the drain and the issuer each window should route to, and
+the router, per-issuer token ids, lots and bonds are untouched, so a second serving issuer can be
+plugged back into the same windows when cross-issuer fungibility is designed.
+
+**Checked, not assumed.** Before window 2 the runner reads, from fresh clients, that the drained
+issuer's headroom is zero *and* that the real router returns the expected issuer for a job-sized
+mint; a failure aborts the run, and every close-out sweep still runs. Window-1 cleanliness (every
+agent mint backed by the expected issuer) is computed from the recorded mints, because first-fit
+falls through to the next issuer the moment the first one cannot cover a mint.
+
+**Not pooled.** Every manifest and report carries the instrument id. A block report refuses runs
+from different instruments, and excludes — listing each with its reason — debug runs, runs that
+aborted on a topology precondition, and reports that predate the window-1 block.
+
+**What a block of this instrument can and cannot say.** It is a pilot: five window-1 decisions per
+buyer tell you whether a larger block is worth running, not what agents prefer. It does not test
+cross-issuer fungibility or routing, and the caption says so and is scoped to window 1. Costs are
+reported as the **quoted** ceiling, never as an amount paid; fSIU is given no dollar cost because no
+quote states one. Holding time is recorded in turns, not wall-clock time. The operator's drain is
+recorded apart from every agent's record and is excluded from every behavioural statistic.
+
 ## Governance intention
 
 Touchstone Assay currently controls its own methodology and harness. That is appropriate while the index
