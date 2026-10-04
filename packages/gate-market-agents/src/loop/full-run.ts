@@ -39,6 +39,7 @@ import { RunRecorder, type RunManifest } from "../run-recorder/recorder.js";
 import { FrictionLogWriter, type FrictionLogEntry } from "../friction/log.js";
 import { QuoteBoard, type PaidAsset } from "./quote-board.js";
 import { decimalSiuToMilliSiu } from "./siu-units.js";
+import { ClaimLedger } from "./claim-ledger.js";
 import {
   submitAttackRefusalFor,
   testingEngaged,
@@ -439,12 +440,32 @@ export interface TurnLog {
   attack?: { gateVersion: number; classification: string; countsAsAdversaryYield: boolean };
 }
 
+/**
+ * One moment at which an agent settled a quote, with what it held when it did.
+ *
+ * Recorded so the decision rule (D5) can ask the only question that makes onward spending
+ * comparable across runs: did the agent hold fSIU it had RECEIVED at the moment it paid? Taken
+ * from the loop's own ledger BEFORE the payment's own effect is applied, so a claim being passed
+ * on is still counted as held when it is being passed.
+ */
+export interface PaymentMoment {
+  agentId: AgentId;
+  turn: number;
+  tool: ToolName;
+  asset: PaidAsset;
+  requestId?: string;
+  /** mSIU of claims the agent had been GIVEN and still held, as a decimal string. */
+  heldReceivedMilliSiu: string;
+}
+
 export interface FullRunWindowResult {
   /** Under `requireTestingPurchase` this is gate PASS ∧ testing paid for ∧ testing carried out;
    *  otherwise it is `gateDelivered`, exactly as before. */
   passed: boolean;
   /** A gate passed G1-G6 — the old meaning of `passed`, kept so the two can be told apart. */
   gateDelivered: boolean;
+  /** Every quote settlement this window, in order, with what the payer held at that moment. */
+  paymentMoments: PaymentMoment[];
   /** A quote sold by an attacker was settled, in either asset. */
   testingEngaged: boolean;
   /** Why `passed` is false when it is, so a decline is recorded rather than silent. */
@@ -791,6 +812,8 @@ export async function runFullRunWindow(
   const windowIndex = options.windowIndex ?? 1;
   const windowCount = options.windowCount ?? 1;
   const redemption = new RedemptionTracker();
+  const claimLedger = new ClaimLedger();
+  const paymentMoments: PaymentMoment[] = [];
   const testingPurchaseRequired = options.requireTestingPurchase === true;
   // Whoever can attack is who testing is bought FROM. Derived from the roster's own grants, so
   // adding or moving the adversary needs no edit here.
@@ -1817,13 +1840,15 @@ export async function runFullRunWindow(
             chainNowSeconds,
           );
         }
-        capacityEvents.push({
+        const recorded: CapacityEvent = {
           agentId: agent.agentId,
           turn,
           kind,
           ...(timeToExpirySeconds === undefined ? {} : { timeToExpirySeconds }),
           ...fields,
-        });
+        };
+        capacityEvents.push(recorded);
+        claimLedger.apply(recorded, (address) => agentIdByAddress[address.toLowerCase()]);
       };
 
       if (intent.tool === "request_quote") {
@@ -1849,6 +1874,16 @@ export async function runFullRunWindow(
       if (settlesQuote(intent.tool)) {
         const requestId = (intent.args as { requestId?: unknown } | undefined)?.requestId;
         if (typeof requestId === "string") board.recordPaid(requestId, assetSettledBy(intent.tool));
+        // BEFORE this payment's own capacity event reaches the ledger (that happens below, in
+        // `recordCapacityEvent`), so a claim being passed on still counts as held while it is.
+        paymentMoments.push({
+          agentId: agent.agentId,
+          turn,
+          tool: intent.tool,
+          asset: assetSettledBy(intent.tool),
+          ...(typeof requestId === "string" ? { requestId } : {}),
+          heldReceivedMilliSiu: claimLedger.heldReceived(agent.agentId).toString(),
+        });
       }
 
       if (intent.tool === "mint_claim") {
@@ -1922,6 +1957,9 @@ export async function runFullRunWindow(
           issuer: split.claimIssuer,
           quantityMilliSiu: split.claimQuantityMilliSiu,
           claimShare: split.claimShare,
+          // The claim leg goes to the quote's seller. Without this the event named a claim and
+          // nobody it went to, so a split could not be followed into anyone's holdings.
+          ...(typeof to === "string" ? { counterparty: to } : {}),
           ...(split.claimMintTxHash ? { txHash: split.claimMintTxHash } : {}),
         });
       }
@@ -2379,6 +2417,7 @@ export async function runFullRunWindow(
   const result: FullRunWindowResult = {
     passed: completion.passed,
     gateDelivered: passed,
+    paymentMoments,
     testingEngaged: testingIsEngaged(),
     ...(completion.incompleteBecause !== undefined
       ? { incompleteBecause: completion.incompleteBecause }

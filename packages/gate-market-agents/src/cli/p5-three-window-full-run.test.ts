@@ -119,7 +119,7 @@ describe("§4.6ac invariant, on the real roster", () => {
               [section]: `TEXT-${section}`,
               // Exercise the harder branch: a served FAIL is the only served state that wakes.
               servedWasFailure: true,
-            } as Parameters<typeof composeBoard>[0],
+            } as unknown as Parameters<typeof composeBoard>[0],
             agent.availableTools,
           );
           // Shown regardless — knowing is never gated on being able to act.
@@ -144,7 +144,7 @@ describe("§4.6ac invariant, on the real roster", () => {
     const agent = find(buildRoster(input(1)), "WORKER-EXTRACT");
     expect(agent.availableTools).toContain("redeem_claim");
     const { shown, wakeKey } = composeBoard(
-      { ...blank, servedText: "SERVED-FAIL", servedWasFailure: true } as Parameters<
+      { ...blank, servedText: "SERVED-FAIL", servedWasFailure: true } as unknown as Parameters<
         typeof composeBoard
       >[0],
       agent.availableTools,
@@ -156,7 +156,7 @@ describe("§4.6ac invariant, on the real roster", () => {
   it("WORKER-CODE, which can buy, IS woken by a served FAIL", () => {
     const agent = find(buildRoster(input(1)), "WORKER-CODE");
     const { wakeKey } = composeBoard(
-      { ...blank, servedText: "SERVED-FAIL", servedWasFailure: true } as Parameters<
+      { ...blank, servedText: "SERVED-FAIL", servedWasFailure: true } as unknown as Parameters<
         typeof composeBoard
       >[0],
       agent.availableTools,
@@ -168,7 +168,7 @@ describe("§4.6ac invariant, on the real roster", () => {
     for (const who of ["WORKER-CODE", "WORKER-EXTRACT"] as const) {
       const agent = find(buildRoster(input(1)), who);
       const { wakeKey } = composeBoard(
-        { ...blank, unservedText: "OVERDUE", servedWasFailure: false } as Parameters<
+        { ...blank, unservedText: "OVERDUE", servedWasFailure: false } as unknown as Parameters<
           typeof composeBoard
         >[0],
         agent.availableTools,
@@ -479,6 +479,7 @@ function windowResult(overrides: Partial<FullRunWindowResult> = {}): FullRunWind
   return {
     passed: false,
     gateDelivered: false,
+    paymentMoments: [],
     testingEngaged: false,
     totalRealizedUsd: "0",
     spendByProvider: {},

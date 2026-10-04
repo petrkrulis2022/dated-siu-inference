@@ -99,3 +99,38 @@ export function decisionRuleVerdict(runs: readonly RunOpportunity[]): RuleOutcom
       "fungibility is not built, and this is recorded as the result.",
   };
 }
+
+/** The slice of a recorded payment moment the rule needs; see `PaymentMoment` in the loop. */
+export interface MomentLike {
+  agentId: string;
+  tool: string;
+  /** mSIU of claims the agent had been GIVEN and still held when it paid, as a decimal string. */
+  heldReceivedMilliSiu: string;
+}
+
+/**
+ * Whether `agent` had the opportunity to spend fSIU onward in one run, and whether it did.
+ *
+ * `moments` must be the F1 window's own — the caller passes window 1's — because windows 2 and 3
+ * route to the non-serving issuer by design and answer a different question.
+ *
+ * **Eligible** means the agent held fSIU it had been GIVEN at the moment it made any payment, in
+ * any asset. Paying in dollars while holding a received claim counts: that is an opportunity
+ * declined, which is exactly what the rule is trying to observe. Paying while holding nothing is
+ * not an opportunity at all.
+ *
+ * **Spent onward** means it passed such a claim to a counterparty with `transfer_claim`. Minting
+ * a new claim (`pay_with_claim`, `settle_split`) is not onward spending: a claim that did not
+ * already exist cannot have moved.
+ */
+export function opportunityFromMoments(
+  moments: readonly MomentLike[],
+  agent: string,
+): { eligible: boolean; spentOnward: boolean } {
+  const mine = moments.filter((m) => m.agentId === agent);
+  const held = (m: MomentLike): boolean => BigInt(m.heldReceivedMilliSiu) > 0n;
+  return {
+    eligible: mine.some(held),
+    spentOnward: mine.some((m) => m.tool === "transfer_claim" && held(m)),
+  };
+}

@@ -126,7 +126,6 @@ describe("telling a recoverable carry-over from a leak", () => {
 describe("enumerating what is actually holding the capacity", () => {
   const now = Math.floor(Date.UTC(2026, 9, 3, 12, 0, 0) / 1000);
   const closed = BigInt(Math.floor(Date.UTC(2026, 9, 2, 18, 0, 0) / 1000));
-  const mk = (over: Partial<Parameters<typeof deps>[0]> = {}) => over;
   function deps(
     minted: { tokenId: bigint; issuer: string; buyer: string; quantity: bigint; windowTo: bigint }[],
     balances: Record<string, bigint> = {},

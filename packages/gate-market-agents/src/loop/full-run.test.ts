@@ -2440,6 +2440,18 @@ describe("runFullRunWindow — a held claim settles a quote, and the seller is t
     // And it is recorded as circulation, not as a fresh purchase.
     const journey = summarisePurchases(result).journeys.find((j) => j.tokenId === tokenId);
     expect(journey?.outcome).toBe("passed_onward");
+
+    // The decision rule (D5) is conditioned on whether the agent HELD fSIU it had been given at the
+    // moment it paid. The loop's own ledger must therefore show WORKER-CODE holding the claim
+    // ORCHESTRATOR handed it when it passed that claim on — recorded BEFORE the transfer's own
+    // effect, or the claim being spent would already read as gone.
+    const moment = result.paymentMoments.find(
+      (m) => m.agentId === "WORKER-CODE" && m.tool === "transfer_claim",
+    );
+    expect(moment, "the transfer must be recorded as a payment moment").toBeDefined();
+    expect(moment?.heldReceivedMilliSiu).toBe("10");
+    expect(moment?.asset).toBe("fsiu");
+    expect(moment?.requestId).toMatch(/^qr-\d+$/);
   }, 180_000);
 });
 

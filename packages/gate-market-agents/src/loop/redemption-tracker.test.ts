@@ -34,7 +34,7 @@ describe("RedemptionTracker", () => {
     tracker.recordGraded(true, "0xreceipt");
     expect(tracker.renderFor("ISSUER-A")).not.toBe("");
 
-    tracker.recordServed();
+    tracker.recordServed(true);
     expect(tracker.renderFor("ISSUER-A")).toBe("");
     expect(tracker.state().served).toBe(true);
   });
