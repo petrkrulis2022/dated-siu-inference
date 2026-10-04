@@ -195,7 +195,7 @@ export class QuoteBoard {
       for (const i of owedBySeller) {
         lines.push(
           `  answers ${i.requestId}: amount_usd_max ${i.quote.amount_usd_max}. Commit the capacity ` +
-            `first (reserve_for_work), then do the work (submit_job) until it passes, then ` +
+            `first (reserve_for_work), then do the work you quoted for, then ` +
             `settle_escrow.`,
         );
       }

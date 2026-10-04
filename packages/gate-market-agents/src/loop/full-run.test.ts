@@ -3029,3 +3029,319 @@ describe("renderSettleableText — what settling actually pays (fsiu-design.md �
     expect(renderSettleableText([], true)).toBe("");
   });
 });
+
+describe("adversarial testing is a service somebody buys (single-issuer plan, W1b)", () => {
+  let runsRoot: string;
+  let ledgerPath: string;
+
+  beforeEach(async () => {
+    runsRoot = await mkdtemp(path.join(tmpdir(), "testing-purchase-"));
+    ledgerPath = path.join(runsRoot, "ledger.json");
+  });
+
+  afterEach(async () => {
+    await rm(runsRoot, { recursive: true, force: true });
+  });
+
+  const KEY = "0xa715563de5d5c011627720140757574d96bcfc02bdf2e0ee1f68d64e171fe89a";
+  const reply = (obj: unknown): AdapterResult => ({
+    text: JSON.stringify(obj),
+    usage: { input: 100, output: 20, cached_input: 0, reasoning: 0 },
+    latency_ms: 1,
+    raw: {},
+    deviations: [],
+  });
+  const seat = (
+    agentId: AgentId,
+    n: number,
+    adapter: Adapter,
+    availableTools: RosterAgentConfig["availableTools"],
+    waitsFor?: RosterAgentConfig["waitsFor"],
+  ): RosterAgentConfig => ({
+    agentId,
+    adapter,
+    modelString: "test",
+    prices: PRICES,
+    skillPackText: CANONICAL_ASSET_DESCRIPTION,
+    availableTools,
+    ...(waitsFor ? { waitsFor } : {}),
+    privateKeyHex: KEY,
+    address: `0x000000000000000000000000000000000000000${n}`,
+    erc8004Id: `erc8004:0x000000000000000000000000000000000000000${n}`,
+    rpcUrl: "http://127.0.0.1:1",
+    maxOutputTokens: 3000,
+    temperature: 0.7,
+    provider: "openai",
+  });
+  const budget = () =>
+    new ExperimentBudget({
+      ceiling: new BudgetCeiling({
+        "ISSUER-A": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+        "ISSUER-B": { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+        ORCHESTRATOR: { maxUsdcSpend: "0", maxInferenceTurns: 12, maxInferenceUsd: "3" },
+        "WORKER-CODE": { maxUsdcSpend: "0", maxInferenceTurns: 12, maxInferenceUsd: "3" },
+        "WORKER-EXTRACT": { maxUsdcSpend: "0", maxInferenceTurns: 12, maxInferenceUsd: "3" },
+        HEDGER: { maxUsdcSpend: "0", maxInferenceTurns: 0, maxInferenceUsd: "0" },
+      }),
+      runCapUsd: "30",
+      experimentCapUsd: "150",
+      ledgerPath,
+    });
+
+  async function run(opts: { requireTestingPurchase?: boolean }) {
+    let wcCalls = 0;
+    const author: Adapter = async () =>
+      reply({
+        tool: "submit_job",
+        args: { source: "export async function gate(){ return {accept:true,reason:'v1'}; }" },
+      });
+    const adversary: Adapter = async () =>
+      reply({ tool: "submit_attack", args: { submissionSource: "export function f(){ return 1; }" } });
+    // The buyer of testing. It declines on its first turn — the point of the test is whether it
+    // is GIVEN that turn at all once a gate has passed, and what the window then counts as.
+    const buyer: Adapter = async () => {
+      wcCalls += 1;
+      return reply({ done: true, summary: "declined" });
+    };
+    const result = await runFullRunWindow({
+      windowId: "w-testing",
+      roster: [
+        seat("ORCHESTRATOR", 1, author, ["submit_job"]),
+        seat("WORKER-CODE", 3, buyer, ["request_quote", "get_balances"], "buyer"),
+        seat("WORKER-EXTRACT", 2, adversary, ["submit_attack"], "gate"),
+      ],
+      job: JOB,
+      maxTurnsPerAgent: 6,
+      budget: budget(),
+      deps: fakeDeps(async () => PASS),
+      runsRoot,
+      runId: "run-testing",
+      manifest: MANIFEST,
+      ...opts,
+    });
+    return { result, wcCalls };
+  }
+
+  it("refuses an attack nobody paid for, and does not count the window as passed", async () => {
+    // Before this, submit_attack had no payment check at all (its four throws were argument
+    // validation) and WORKER-EXTRACT woke the moment a gate existed. The 4,000 mSIU "attack
+    // testing" quote was a tip for a service rendered anyway, which is why WORKER-CODE has never
+    // bought in any run. A purchase that changes nothing is not a decision.
+    const { result } = await run({ requireTestingPurchase: true });
+    expect(result.attacks, "an unpaid attack must not execute").toHaveLength(0);
+    expect(result.gateDelivered).toBe(true);
+    expect(result.testingEngaged).toBe(false);
+    expect(result.passed).toBe(false);
+    expect(result.incompleteBecause).toBe("testing_never_purchased");
+  });
+
+  it("keeps the window open after a gate passes, so the buyer is actually given the chance to buy", async () => {
+    // The window breaks the instant a gate passes unless something else holds it open. Today
+    // that something is the free adversary (`canAttackNow`), so this passes against the old code
+    // too — it is a regression guard, not a fail-first test. Once testing must be bought,
+    // `canAttackNow` is false until it is, and without an explicit hold the window would end
+    // before the one agent able to buy had a turn, turning "declined" and "never asked" into the
+    // same silence: the §4.6y mistake on the buyer's side.
+    const { wcCalls } = await run({ requireTestingPurchase: true });
+    expect(wcCalls, "the buyer of testing must get a turn after the gate passes").toBeGreaterThanOrEqual(1);
+  });
+
+  it("changes nothing for a window that does not require the purchase", async () => {
+    // Every other caller — P4's single agent, the dry-loop tests — has no testing market and must
+    // keep exactly the old meaning of `passed`: the attack runs unpaid, and a delivered gate is a
+    // passed window with no reason attached.
+    //
+    // NB this once also asserted that the buyer gets NO turn when the option is off. That was a
+    // fixture built from an assumption about the code (§4.6ai): the old loop already held the
+    // window open for an untested gate, because the adversary was free, so the buyer did get a
+    // turn. The hold-open guard above passes against the old code for the same reason.
+    const { result } = await run({});
+    expect(result.attacks.length).toBeGreaterThan(0);
+    expect(result.gateDelivered).toBe(true);
+    expect(result.passed).toBe(true);
+    expect(result.incompleteBecause).toBeUndefined();
+  });
+});
+
+/**
+ * **The positive path of the testing purchase: a real quote, settled with a real claim, unlocks a
+ * real attack, and only then does the window pass.** Real anvil, real contracts, real board.
+ *
+ * The negative path (an unpaid attack is refused) and the pure pieces are tested without a chain.
+ * This is the one that needs one, because engagement is detected from `board.isPaid` after a real
+ * settlement, and the wake gate, the delivered-gate section and the hold-open all key off it.
+ * The asset is a held claim passed on with `transfer_claim` — deliberately not dollars, because
+ * the choice of asset staying free is part of the decision and one asset's path proves nothing
+ * about the other's.
+ */
+describe("runFullRunWindow — a settled testing quote unlocks the attack, and only then does the window pass", () => {
+  let devnet: DevnetHandle;
+  let runsRoot: string;
+  let ledgerPath: string;
+
+  beforeAll(async () => {
+    devnet = await setupDevnet();
+  }, 180_000);
+  afterAll(async () => {
+    await devnet.stop();
+  });
+  beforeEach(async () => {
+    runsRoot = await mkdtemp(path.join(tmpdir(), "full-run-testing-"));
+    ledgerPath = path.join(runsRoot, "ledger.json");
+  });
+  afterEach(async () => {
+    await rm(runsRoot, { recursive: true, force: true });
+  });
+
+  it("runs the attack after the quote is settled in claims, and counts the window as passed", async () => {
+    const cfg = (
+      agentId: AgentId,
+      adapter: Adapter,
+      availableTools: RosterAgentConfig["availableTools"],
+      waitsFor?: RosterAgentConfig["waitsFor"],
+    ): RosterAgentConfig => ({
+      agentId,
+      adapter,
+      modelString: "test",
+      prices: PRICES,
+      skillPackText: CANONICAL_ASSET_DESCRIPTION,
+      availableTools,
+      ...(waitsFor ? { waitsFor } : {}),
+      privateKeyHex: devnet.agents[agentId].privateKeyHex,
+      address: devnet.agents[agentId].address,
+      erc8004Id: erc8004IdFor(devnet.agents[agentId].address),
+      rpcUrl: devnet.rpcUrl,
+      maxOutputTokens: 3000,
+      temperature: 0.7,
+      provider: "openai",
+    });
+    const respond = (text: string): AdapterResult => ({
+      text,
+      usage: { input: 100, output: 50, cached_input: 0, reasoning: 0 },
+      latency_ms: 1,
+      raw: {},
+      deviations: [],
+    });
+
+    let tokenId: string | undefined;
+    let orchCall = 0;
+    // Funds the buyer with a claim, then authors the gate. Its role in this test is only to put a
+    // passing gate and a claim into the world; the decision under test is the buyer's.
+    const orchAdapter: Adapter = async (_m, prompt) => {
+      orchCall++;
+      if (orchCall === 1) return respond(JSON.stringify({ tool: "mint_claim", args: { quantity: "10" } }));
+      if (orchCall === 2) {
+        tokenId = prompt.match(/"tokenId":"(\d+)"/)?.[1];
+        return respond(
+          JSON.stringify({ tool: "transfer_claim", args: { agentId: "WORKER-CODE", tokenId, quantity: "10" } }),
+        );
+      }
+      if (orchCall === 3) {
+        return respond(
+          JSON.stringify({
+            tool: "submit_job",
+            args: { source: "export async function gate(){ return {accept:true,reason:'v1'}; }" },
+          }),
+        );
+      }
+      return respond(JSON.stringify({ done: true, summary: "gate delivered" }));
+    };
+
+    const sellerId = erc8004IdFor(devnet.agents["WORKER-EXTRACT"].address);
+    let buyerCall = 0;
+    const buyerAdapter: Adapter = async (_m, prompt) => {
+      buyerCall++;
+      if (buyerCall === 1) {
+        return respond(
+          JSON.stringify({
+            tool: "request_quote",
+            args: {
+              siu: "1", model: "test", rateUsdPerSiu: "0.0100", indexVersion: "SIU-2026a",
+              printId: "testing-test-print", printHash: `0x${"11".repeat(32)}`,
+              sellerId, chain: "base-sepolia", expiresInSeconds: 3600, pattern: "fixed",
+            },
+          }),
+        );
+      }
+      const requestId = prompt.match(/(qr-\d+)/)?.[1];
+      if (requestId !== undefined && tokenId !== undefined) {
+        return respond(
+          JSON.stringify({
+            tool: "transfer_claim",
+            args: { agentId: "WORKER-EXTRACT", tokenId, quantity: "4", requestId },
+          }),
+        );
+      }
+      return respond(JSON.stringify({ done: true, summary: "nothing to buy" }));
+    };
+
+    const sellerPrompts: string[] = [];
+    const sellerAdapter: Adapter = async (_m, prompt) => {
+      sellerPrompts.push(prompt);
+      const requestId = prompt.match(/(qr-\d+)/)?.[1];
+      // Answers a request when there is one, attacks only when it has been given a gate to
+      // attack, and otherwise waits — it must not be able to attack by guessing.
+      if (prompt.includes("A GATE HAS BEEN DELIVERED AND YOU HAVE NOT TESTED IT")) {
+        return respond(
+          JSON.stringify({ tool: "submit_attack", args: { submissionSource: "export function f(){ return 1; }" } }),
+        );
+      }
+      if (requestId && prompt.includes("Open quote requests addressed to you")) {
+        return respond(JSON.stringify({ tool: "issue_quote", args: { requestId } }));
+      }
+      return respond(JSON.stringify({ wait: true }));
+    };
+
+    const ceiling = new BudgetCeiling(
+      Object.fromEntries(
+        AGENT_IDS.map((id) => [id, { maxUsdcSpend: "1000000", maxInferenceTurns: 100, maxInferenceUsd: "1000000" }]),
+      ) as Record<AgentId, { maxUsdcSpend: string; maxInferenceTurns: number; maxInferenceUsd: string }>,
+    );
+
+    const result = await runFullRunWindow({
+      windowId: "w-testing-paid",
+      roster: [
+        cfg("ORCHESTRATOR", orchAdapter, ["mint_claim", "transfer_claim", "submit_job"]),
+        cfg("WORKER-CODE", buyerAdapter, ["get_balances", "request_quote", "transfer_claim"], "buyer"),
+        cfg("WORKER-EXTRACT", sellerAdapter, ["issue_quote", "submit_attack", "get_print"], "gate"),
+      ],
+      job: JOB,
+      maxTurnsPerAgent: 8,
+      requireTestingPurchase: true,
+      budget: new ExperimentBudget({ ceiling, runCapUsd: "1000000", experimentCapUsd: "1000000", ledgerPath }),
+      deps: {
+        chainReader: new ViemChainReader(devnet.deployment, devnet.rpcUrl),
+        deployment: devnet.deployment,
+        escrowAddress: "0x0000000000000000000000000000000000dead",
+        runGateHardeningChecks: async () => PASS,
+        loadPrint: async () => ({ print_id: "testing-test-print" }) as unknown as Print,
+        isReconciled: async () => false,
+      },
+      runsRoot,
+      runId: "run-testing-paid",
+      manifest: MANIFEST,
+      mintContext: {
+        publisherPrivateKeyHex: devnet.publisherPrivateKeyHex,
+        printId: "testing-test-print",
+        series: SERIES_COMMODITY,
+        printDate: printDateToUnixDay("2026-09-25"),
+        nanoUsdPerSiu: 10_000_000n,
+        validitySeconds: 3600n,
+      },
+    });
+
+    expect(result.testingEngaged, "the settled quote must count as engagement").toBe(true);
+    expect(result.attacks.length, "and the attack must then have run").toBeGreaterThan(0);
+    expect(result.gateDelivered).toBe(true);
+    expect(result.passed).toBe(true);
+    expect(result.incompleteBecause).toBeUndefined();
+    // The adversary was not shown a gate to attack until it had been paid — the section is gated
+    // on engagement, so it cannot be woken by a gate alone.
+    const firstGateShown = sellerPrompts.findIndex((p) =>
+      p.includes("A GATE HAS BEEN DELIVERED AND YOU HAVE NOT TESTED IT"),
+    );
+    const firstPaidShown = sellerPrompts.findIndex((p) => /It settles your quote qr-\d+/.test(p));
+    expect(firstGateShown).toBeGreaterThanOrEqual(0);
+    if (firstPaidShown >= 0) expect(firstPaidShown).toBeLessThanOrEqual(firstGateShown);
+  }, 180_000);
+});

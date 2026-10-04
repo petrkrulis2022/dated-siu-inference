@@ -820,6 +820,12 @@ async function main(): Promise<void> {
     oracleTrialSeed: F1_ORACLE_TRIAL_SEED,
     externalDepletionMilliSiu: EXTERNAL_DEPLETION_MILLI_SIU,
     windowCount: runWindows,
+    // Changes to what the instrument IS, as opposed to what a run happened to do. A run carrying
+    // none of these predates them and is a different instrument from one that carries them.
+    instrumentChanges: [
+      "payment_symmetry: pay_with_claim settles a seller-issued quote, like pay (2026-10-04)",
+      "passed_requires_testing_purchase: passed = gate passed AND testing paid for AND carried out (2026-10-04)",
+    ],
     debugMode: {
       enabled: debug.enabled,
       windows: debug.windows,
@@ -935,6 +941,10 @@ async function main(): Promise<void> {
       windowIndex,
       windowCount: runWindows,
       windowBoundsByIndex,
+      // Adversarial testing is bought, and `passed` includes it settling. An INSTRUMENT CHANGE of
+      // 2026-10-04 (single-issuer plan D4), stamped into the manifest and report below so no run
+      // under it can be pooled with one that predates it.
+      requireTestingPurchase: true,
       ...(debug.preAuthoredGate ? { preAuthoredGateSource: KNOWN_GOOD_GATE_SOURCE } : {}),
       onPreAuthoredGate: (ok, summary) => {
         console.log(
@@ -1141,6 +1151,13 @@ async function main(): Promise<void> {
         windows: outcomes.map((o) => ({
           windowIndex: o.windowIndex,
           passed: o.result.passed,
+          // `passed` now includes the testing purchase settling, so the old meaning and the reason
+          // a window did not pass are recorded beside it — a decline must be a recorded result.
+          gateDelivered: o.result.gateDelivered,
+          testingEngaged: o.result.testingEngaged,
+          ...(o.result.incompleteBecause !== undefined
+            ? { incompleteBecause: o.result.incompleteBecause }
+            : {}),
           passedBy: o.result.passedBy,
           haltedReason: o.result.haltedReason,
           headroomBefore: o.headroomBefore,
@@ -1278,6 +1295,13 @@ CAPACITY RIGHT NOW (real, read from chain at the start of this window)
   Other buyers exist and are not in this run. Capacity they take is gone before you see it.
 ${ONE_POOL_DISCLOSURE}
 
+WHEN THE WINDOW COUNTS AS PASSED
+  A window passes when a gate has passed its checks AND adversarial testing of it has been paid
+  for AND carried out. WORKER-EXTRACT sells that testing; nothing is tested unless a quote it
+  issued has been settled, in either asset. A gate that nobody paid to have tested does not
+  complete the window, whatever else was delivered, and the window is then recorded as not
+  passed together with the reason.
+
 ${windowBoundsByIndex ? scheduleFacts(windowIndex, windowBoundsByIndex, windowCount) : ""}`;
 
   const orchestratorBrief = `
@@ -1390,11 +1414,13 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${windowCount})
       options and their exact calls is under "WHAT A WORK CLAIM IS" below. If you do present it,
       you are done for that claim — never call submit_job for one you hold.
 
-  A SEPARATE DECISION OF YOUR OWN: BUYING THE ADVERSARIAL TESTING
-  A gate that nobody has tried to defeat is not worth much. WORKER-EXTRACT (seller_id
-  "${workerExtractErc8004Id}") tests a delivered gate and reports, for each submission it tries,
-  whether the gate accepted something an independent oracle rejects. Buying that testing is
-  yours to decide and to pay for. It is ${ATTACK_JOB_MILLI_SIU} mSIU — smaller than the gate's
+  THE ADVERSARIAL TESTING
+  A gate that nobody has tried to defeat is not worth much, and the window does not count as
+  passed until one has been tested (see WHEN THE WINDOW COUNTS AS PASSED). WORKER-EXTRACT
+  (seller_id "${workerExtractErc8004Id}") tests a delivered gate and reports, for each submission
+  it tries, whether the gate accepted something an independent oracle rejects. It sells that
+  testing; it does not do it for free. Whether to buy it, when, and in which asset is yours to
+  decide and to pay for. It is ${ATTACK_JOB_MILLI_SIU} mSIU — smaller than the gate's
   ${NOMINAL_JOB_MILLI_SIU} mSIU, because writing an adversarial submission is less work than
   authoring a hardened gate.
 
@@ -1417,8 +1443,6 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${windowCount})
     PARTLY IN EACH:  {"tool": "settle_split", "args": {"requestId": "<the requestId>",
       "claimQuantityMilliSiu": "<how much of it to settle in claims>",
       "settler": "0x0000000000000000000000000000000000000000"}}
-
-  Buying it is optional. Nothing here says to do it, or how to pay if you do.
 
   If you see an open request addressed to you on the market board, you may issue_quote to answer
   it ({"tool": "issue_quote", "args": {"requestId": "<the requestId shown>"}}) — this signs the
@@ -1473,14 +1497,17 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${windowCount})
     - Look for inputs a naive implementation gets wrong: empty arrays, single elements, all-equal
       arrays, long runs, negatives.
 
-  You may test up to three gate versions per window. If nothing has been delivered yet, or you
-  have genuinely run out of ideas, say so with {"done": true, "summary": "<why>"} — but do not
-  stop merely because your first submission failed.
+  Once you have been paid you may test up to three gate versions per window. If nothing has been
+  delivered yet, or you have genuinely run out of ideas, say so with
+  {"done": true, "summary": "<why>"} — but do not stop merely because your first submission
+  failed. If nobody has paid you, wait: {"wait": true}.
 
-  WORKER-CODE may buy this testing from you, in USDC or in a work claim — including a claim it
-  already holds, passed on to you rather than redeemed. That choice is WORKER-CODE's, not yours
-  to influence. If an open request addressed to you appears on the
-  market board, you may answer it with issue_quote. You will be told when it has been paid:
+  TESTING IS A SERVICE YOU SELL. submit_attack is refused until a quote you issued has been
+  settled, so there is nothing for you to do until somebody pays you; until then the useful thing
+  is to answer an open request addressed to you. A buyer may pay in USDC or in a work claim —
+  including a claim it already holds, passed on to you rather than redeemed. That choice is the
+  buyer's, not yours to influence. If an open request addressed to you appears on the market
+  board, you may answer it with issue_quote. You will be told when it has been paid:
   "YOU HAVE BEEN PAID AND OWE THE WORK" appears on your board, naming the amount in escrow.
   Before you do the work, commit the capacity it will use:
     {"tool": "reserve_for_work", "args": {"classId": "${classIdFor("code")}"}}
@@ -2367,7 +2394,7 @@ export function classifyFinalWindow(
    *  test keeps its meaning; a shortened run passes its own. */
   windowCount: number = WINDOW_COUNT,
 ): {
-  verdict: "scarcity" | "failed_with_capacity" | "completed" | "no_final_window";
+  verdict: "scarcity" | "failed_with_capacity" | "completed" | "untested" | "no_final_window";
   detail: string;
 } {
   const last = outcomes.find((o) => o.windowIndex === windowCount);
@@ -2459,6 +2486,19 @@ export function classifyFinalWindow(
         `${largestIssuer} mSIU against a ${NOMINAL_JOB_MILLI_SIU} mSIU job. Treat this as a defect ` +
         "to investigate, not as the scarcity result. Halted reasons: " +
         JSON.stringify(last.result.haltedReason),
+    };
+  }
+
+  // A gate passed its checks and nobody paid to have it tested. That is the buyer's decision,
+  // observed — not capacity, and not a defect to investigate — and must not be filed under either
+  // of the verdicts that would send someone looking for an apparatus fault.
+  if (last.result.incompleteBecause === "testing_never_purchased") {
+    return {
+      verdict: "untested",
+      detail:
+        `Window ${windowCount} delivered a gate that passed its checks, and nobody paid to have ` +
+        "it tested, so the window is recorded as not passed. This is a result about the buyer, " +
+        "not a failure of capacity or of the instrument.",
     };
   }
 

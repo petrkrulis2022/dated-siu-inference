@@ -39,6 +39,12 @@ import { RunRecorder, type RunManifest } from "../run-recorder/recorder.js";
 import { FrictionLogWriter, type FrictionLogEntry } from "../friction/log.js";
 import { QuoteBoard, type PaidAsset } from "./quote-board.js";
 import { decimalSiuToMilliSiu } from "./siu-units.js";
+import {
+  submitAttackRefusalFor,
+  testingEngaged,
+  windowCompletion,
+  type IncompleteBecause,
+} from "./testing-purchase.js";
 import { ForwardQuoteBook, type ForwardQuote } from "./forward-book.js";
 import { classIdFor } from "../tools/class-id.js";
 import { RedemptionTracker, type RedemptionState } from "./redemption-tracker.js";
@@ -240,6 +246,12 @@ export interface FullRunWindowOptions {
    * it — and it is attributed to `PRE_AUTHORED` rather than to any agent.
    */
   preAuthoredGateSource?: string;
+  /**
+   * Adversarial testing must be PAID FOR, and `passed` means a gate passed AND testing was
+   * purchased AND carried out. Off by default so every other caller keeps the old meaning.
+   * An instrument change, recorded as one (see `loop/testing-purchase.ts`).
+   */
+  requireTestingPurchase?: boolean;
   /** Reported so the log says the pinned gate was graded, and with what result, rather than a
    *  window silently starting out already passed. */
   onPreAuthoredGate?: (passed: boolean, summary: string) => void;
@@ -428,7 +440,15 @@ export interface TurnLog {
 }
 
 export interface FullRunWindowResult {
+  /** Under `requireTestingPurchase` this is gate PASS ∧ testing paid for ∧ testing carried out;
+   *  otherwise it is `gateDelivered`, exactly as before. */
   passed: boolean;
+  /** A gate passed G1-G6 — the old meaning of `passed`, kept so the two can be told apart. */
+  gateDelivered: boolean;
+  /** A quote sold by an attacker was settled, in either asset. */
+  testingEngaged: boolean;
+  /** Why `passed` is false when it is, so a decline is recorded rather than silent. */
+  incompleteBecause?: IncompleteBecause;
   passedBy?: AgentId | typeof PRE_AUTHORED;
   totalRealizedUsd: string;
   /** Real inference spend this run, per provider — decimal-string USD. Lands in metrics.json via
@@ -771,6 +791,13 @@ export async function runFullRunWindow(
   const windowIndex = options.windowIndex ?? 1;
   const windowCount = options.windowCount ?? 1;
   const redemption = new RedemptionTracker();
+  const testingPurchaseRequired = options.requireTestingPurchase === true;
+  // Whoever can attack is who testing is bought FROM. Derived from the roster's own grants, so
+  // adding or moving the adversary needs no edit here.
+  const attackerSellerIds = options.roster
+    .filter((a) => a.availableTools.includes("submit_attack"))
+    .map((a) => a.erc8004Id);
+  const testingIsEngaged = (): boolean => testingEngaged(board, attackerSellerIds);
   const agentIdByAddress = Object.fromEntries(
     options.roster.map((a) => [a.address.toLowerCase(), a.agentId]),
   ) as Record<string, AgentId>;
@@ -811,7 +838,9 @@ export async function runFullRunWindow(
         // Deliberately keyed on holding rather than on identity: an agent that holds no claim
         // may author freely, and the routed issuer may always author — it is the one being
         // graded. Refused only for the agent currently standing on a live claim for this job.
-        toolGuard: (toolName) => submitJobRefusalFor(toolName, agent.agentId, redemption.state()),
+        toolGuard: (toolName) =>
+          submitJobRefusalFor(toolName, agent.agentId, redemption.state()) ??
+          submitAttackRefusalFor(toolName, testingPurchaseRequired, testingIsEngaged()),
       }),
     ]),
   );
@@ -1043,6 +1072,9 @@ export async function runFullRunWindow(
    * attacks 1 and 2 both landed on v1.
    */
   const canAttackNow = (): boolean => {
+    // Testing that has not been paid for cannot happen, so it is not something anyone can act on
+    // and must not wake the adversary or hold the window open — the same blindness as the cap.
+    if (testingPurchaseRequired && !testingIsEngaged()) return false;
     const latest = attackContext.gateVersions.at(-1);
     if (latest === undefined) return false;
     if (attackContext.attackedVersions.has(latest.version)) return true;
@@ -1246,9 +1278,11 @@ export async function runFullRunWindow(
     //
     // Shown only to agents that can actually attack, and the source is deliberately NOT included:
     // the adversary's job is to find what a gate fails to check by probing it, not to read it.
-    const attackableGates = agent.availableTools.includes("submit_attack")
-      ? attackContext.gateVersions.filter((g) => !attackContext.attackedVersions.has(g.version))
-      : [];
+    const attackableGates =
+      agent.availableTools.includes("submit_attack") &&
+      (!testingPurchaseRequired || testingIsEngaged())
+        ? attackContext.gateVersions.filter((g) => !attackContext.attackedVersions.has(g.version))
+        : [];
     const deliveredGateText =
       attackableGates.length > 0
         ? `A GATE HAS BEEN DELIVERED AND YOU HAVE NOT TESTED IT\n` +
@@ -2227,7 +2261,15 @@ export async function runFullRunWindow(
         // newest version nobody may test is unattacked forever, so the old form held the window
         // open for work that could never happen — the same cap blindness as the wake gate.
         const untestedGate = someoneCanAttack && canAttackNow();
-        if (!claimOutstanding && !carriedStillUnsettled && !untestedGate) {
+        // Testing for sale and not yet bought holds the window open too, for the same reason an
+        // untested gate does: the buyer can only buy AFTER a gate exists, so breaking the instant
+        // one passes would end the window before the one agent able to buy had a turn, and
+        // "declined" would be indistinguishable from "never asked" (§4.6y, on the buyer's side).
+        // It ends when the buyer buys, declares it is done, or the stall guard finds nobody left
+        // who can act — all of which are recorded, none of which is silent.
+        const testingStillForSale =
+          testingPurchaseRequired && someoneCanAttack && !testingIsEngaged();
+        if (!claimOutstanding && !carriedStillUnsettled && !untestedGate && !testingStillForSale) {
           break turnLoop;
         }
       }
@@ -2328,8 +2370,19 @@ export async function runFullRunWindow(
     }
   }
 
+  const completion = windowCompletion({
+    required: testingPurchaseRequired,
+    gateDelivered: passed,
+    engaged: testingIsEngaged(),
+    attacked: attacks.length > 0,
+  });
   const result: FullRunWindowResult = {
-    passed,
+    passed: completion.passed,
+    gateDelivered: passed,
+    testingEngaged: testingIsEngaged(),
+    ...(completion.incompleteBecause !== undefined
+      ? { incompleteBecause: completion.incompleteBecause }
+      : {}),
     passedBy,
     totalRealizedUsd: totalRealizedUsd.toFixed(6),
     attacks,

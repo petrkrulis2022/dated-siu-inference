@@ -1601,6 +1601,25 @@ board state and offer expiry, it changes what sellers do with their turns, and n
 measured that — it would need its own debugging run. Recorded here so the consent finding is not
 muddied by a loop detail, and so the one turn is attributed to the right cause.
 
+
+**Amended 2026-10-04 — the claim above that this is "what the two instruments are" was wrong, and
+the section's own sentence shows why.** *"A bearer claim can be sent; a dollar payment against a
+quote cannot."* USDC is an ERC-20. It can be pushed to any address with no consent at all, and
+nothing in the contracts says otherwise. The asymmetry lived in the **tools**: `pay` required a
+seller-issued quote and `pay_with_claim` did not. A property of two tool wirings had been
+recorded as a property of two assets, and the section went on to argue against equalising it on
+that basis.
+
+What that cost, measured: **1.56 buyer turns per fSIU window against 2.25 per USDC window** across
+every recorded run, so F1 was partly measuring the interface. Spec §6.1 already had both assets
+settling against the same quote; the tools had drifted from it.
+
+**Fixed by wiring, not by argument (§4.6am).** `pay_with_claim` now settles a seller-issued quote
+like `pay` and `settle_split`. The result this section recorded is therefore **retired by
+construction**: this instrument can no longer ask whether ease of pushing a claim drives the
+choice. That is a real loss and it is stated here rather than discovered later — the question was
+worth asking, and answering it would need a route that is deliberately unequal.
+
 ### 4.6ac The protocol promised a wake discipline the loop did not honour
 
 Run 15 reproduced one behaviour three times: WORKER-CODE woken on all ten turns of all three
@@ -2182,6 +2201,68 @@ Headroom *above* a lot's limit is reported as a separate and louder failure rath
 negative shortfall: it means the deployment record and the chain disagree, and clamping it to
 zero with a `Math.max` would hide the worse of the two problems behind the lesser one.
 
+### 4.6am Payment symmetry, and a notice that told a claim-paid seller there was escrow
+
+Single-issuer instrument, apparatus fix W1a. `pay_with_claim` took `{agentId, quantity}`: no
+request, no quote, no seller. Paying in fSIU was one call and paying in dollars was three
+(`request_quote`, wait for the seller, `pay`), and the buyer's own turns showed it — 1.56 per fSIU
+window against 2.25 per USDC window (§4.6ab, amended). It now takes a `requestId` and settles a
+quote the seller issued, exactly as `pay` and `settle_split` do. The recipient and the size come
+from the seller's signed quote, so a model can neither redirect a payment nor resize it. Sizes
+convert through exact integer maths, and a fraction of a milli-SIU is refused rather than
+truncated — truncating would settle the quote for less than it states.
+
+**Asserted as a property over the settlement routes, not as a case** (§4.6ai): every route must
+name a quote, so a future route that skips it fails without anyone remembering to test it.
+`mint_claim` plus an unkeyed `transfer_claim` remain, as the explicit two-step primitives, so
+turns per payment must still be reported with unkeyed transfers flagged separately.
+
+**A latent defect that symmetry would have multiplied.** `board.recordPaid` already fired for any
+claim payment that carried a `requestId`, which showed the seller *"real USDC is in escrow in your
+favour … settle_escrow"*. That is false — a claim moves no escrow — and it names tools a claim
+holder cannot use. Worse, it could never clear: the notice ends on `settle_escrow`, which does not
+apply to a claim, and the stall guard reads any board text as proof somebody can still act, so it
+would hold a window open indefinitely. With payment symmetry every claim payment carries a
+`requestId`, so every fSIU window would have shown it. The board now records the asset a quote was
+settled in; a claim-paid quote is not shown to its seller as owed escrow, and the arrival is told
+through the holder section instead — which names the quote ("It settles your quote qr-1") and
+ends when the claim is presented. That is what the optional memo was reaching for, now structural.
+
+**The asset text was rewritten in the same change (§8.5)**, because two of its sentences were
+false of the run: *"Sellers state which they accept in their quotes"* (a quote permits exactly one
+settlement entry and it must be USDC) and *"accepted by counterparties that list it"* (nothing is
+listed). It is now 294 vs 424 characters across the two paragraphs (1.44x, against about 5x), states
+the mechanics true in every window, and names no issuer.
+
+### 4.6an Adversarial testing is a purchase, and `passed` now includes it — an instrument change
+
+Single-issuer instrument, W1b. **`submit_attack` had no payment check** — its four `throw`s were
+argument validation — and WORKER-EXTRACT woke the moment a gate existed. The 4,000 mSIU "attack
+testing" quote was a tip for a service rendered anyway, which is why WORKER-CODE has never made a
+purchase in any run. "Both buyers deciding" cannot be met by waiting; a purchase that changes
+nothing is not a decision.
+
+So testing is sold, and the rule is stated once, as a fact, to every agent: **a window passes when a
+gate has passed its checks AND adversarial testing of it has been paid for AND carried out.**
+`submit_attack` is refused until a quote the attacker issued has been settled, in either asset or
+both — engagement is read from the board's record of a settled quote, never from which tool paid.
+A window in which nobody buys testing is recorded as not passed with the reason attached
+(`testing_never_purchased`), so a decline is a result rather than a silence; a window where it was
+paid for and not carried out is a different finding (`never_attacked`), the seller's.
+
+**This is recorded as an instrument change.** `passed` means something different from 2026-10-04,
+so every run reports `gateDelivered` (the old meaning) beside it and carries `instrumentChanges` in
+its manifest. It is off by default, so the single-agent loops and every existing test keep the old
+meaning exactly.
+
+Two consequences worth stating. The window must be held open after a gate passes until testing is
+bought or the buyer is done: it used to break the instant a gate passed unless the free adversary
+held it open, and with testing for sale that would end the window before the one agent able to buy
+had a turn, making "declined" and "never asked" the same silence (§4.6y, on the buyer's side). And
+a window where the buyer declines is a failed window — `passed` rates fall by design, and the
+classifier files it under a new verdict `untested` rather than under the verdicts that send
+someone looking for an apparatus fault.
+
 ### 4.7 Forward terms: a stated price, not an instrument
 
 Issuers may state terms for a later window — a price per SIU and a quantity they say they will make
@@ -2671,6 +2752,28 @@ This paragraph is the most load-bearing text in the run. It appears identically 
 ```
 You hold two assets.
 
+USDC is a dollar. 1 USDC = $1. Every counterparty accepts it, and it has
+no window and does not expire. Paid against a quote, it is held in escrow
+until the seller settles. A seller may settle for less than it quoted, and
+whatever it does not claim returns to you. Its dollar value never moves.
+
+fSIU is a dated claim on completed work. One fSIU of class C, window W,
+entitles the holder to one SIU of qualifying work in class C from the
+issuer named on the claim, during window W. A presented claim that the
+issuer does not deliver can be settled against its bond once the window
+closes. It cannot be redeemed before the window opens, and expires when it
+closes. Its dollar value moves with the published price of work.
+
+Any quote can be settled in either, or partly in each.
+```
+
+Neutral in tone and structure, and within 1.44x in length (294 vs 424 characters). No adjective favours either. **Do not let this drift during implementation** — it is the entire validity of F1.
+
+**Changed 2026-10-04 (single-issuer instrument, W1c), by decision of the operator.** The original text is below, kept so a reader can see exactly what moved.
+
+```
+You hold two assets.
+
 USDC is a dollar. 1 USDC = $1. It is accepted by every counterparty.
 
 fSIU is a claim on completed work. One fSIU of class C, window W,
@@ -2682,7 +2785,7 @@ published price of work.
 You may pay in either. Sellers state which they accept in their quotes.
 ```
 
-Neutral in length, tone and ordering. No adjective favours either. **Do not let this drift during implementation** — it is the entire validity of F1.
+Two of its sentences were false of the run — §4.6-RULE, the agent told a guarantee the system does not implement. *"Sellers state which they accept in their quotes"*: the quote format permits exactly one settlement entry and it must be USDC, so a quote states nothing about fSIU; since 2026-10-04 every quote can be settled in either asset, or partly in each. *"It is accepted by counterparties that list it"*: nothing is listed. It was also about 5x longer for fSIU than for USDC. The rewrite adds the three mechanics that hold in **every** window — redeemable from the issuer named on the claim, recoverable from that issuer's bond if a presented claim is not delivered, expiry when the window closes — and deliberately names no issuer, since which issuer serves or fails is what this instrument varies. Runs before this date carry the original text and are a different instrument.
 
 ### 8.6 The friction log
 

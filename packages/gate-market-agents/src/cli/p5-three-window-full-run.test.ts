@@ -362,8 +362,46 @@ describe("p5 three-window roster", () => {
     expect(orchestrator).not.toContain("A SECOND PIECE OF WORK");
     expect(orchestrator).not.toContain("erc8004:0xextract");
 
-    expect(workerCode).toContain("BUYING THE ADVERSARIAL TESTING");
+    expect(workerCode).toContain("THE ADVERSARIAL TESTING");
     expect(workerCode).toContain("erc8004:0xextract");
+  });
+
+  it("states the rule that makes the testing purchase matter, to everyone, as a fact", () => {
+    // `passed` now includes the testing purchase settling (single-issuer plan D4). An agent that
+    // is not told would be penalised by a rule it could not know, and one told only in the
+    // buyer's brief would leave the seller and the orchestrator in a different world. It is
+    // stated once, in the description every agent receives, and says nothing about what to do.
+    const roster = buildRoster(input(1));
+    for (const id of ["ORCHESTRATOR", "WORKER-CODE", "WORKER-EXTRACT"]) {
+      const text = find(roster, id).skillPackText;
+      expect(text, id).toContain("WHEN THE WINDOW COUNTS AS PASSED");
+      expect(text, id).toMatch(/AND adversarial testing of it has been paid\s+for AND carried out/);
+    }
+  });
+
+  it("does not describe testing as free or optional to the agent that now sells it", () => {
+    // WORKER-EXTRACT used to be told to attack whenever a gate existed. A brief that still said so
+    // would describe a world it is no longer in — the same defect as the "wait" instruction for a
+    // protocol that offered no way to wait.
+    const extract = find(buildRoster(input(1)), "WORKER-EXTRACT").skillPackText;
+    expect(extract).toContain("TESTING IS A SERVICE YOU SELL");
+    expect(extract).toContain("submit_attack is refused until a quote you issued has been");
+    const code = find(buildRoster(input(1)), "WORKER-CODE").skillPackText;
+    expect(code).not.toContain("Buying it is optional");
+  });
+
+  it("never teaches a call the tools now reject", () => {
+    // Every pay_with_claim example in every brief must name a quote. The unkeyed
+    // recipient-and-quantity form is refused by the arg builder, so a brief still teaching it
+    // costs the agent a turn on an error — the §4.6-RULE defect.
+    const roster = buildRoster(input(1));
+    for (const a of roster) {
+      const examples = a.skillPackText.match(/\{"tool": "pay_with_claim"[^}]*\}/g) ?? [];
+      for (const ex of examples) {
+        expect(ex, `${a.agentId}: ${ex}`).toContain("requestId");
+        expect(ex, `${a.agentId}: ${ex}`).not.toMatch(/"quantity"|"agentId"/);
+      }
+    }
   });
 
   /**
@@ -440,6 +478,8 @@ import type { CapacityEvent, FullRunWindowResult } from "../loop/full-run.js";
 function windowResult(overrides: Partial<FullRunWindowResult> = {}): FullRunWindowResult {
   return {
     passed: false,
+    gateDelivered: false,
+    testingEngaged: false,
     totalRealizedUsd: "0",
     spendByProvider: {},
     attacks: [],
@@ -514,6 +554,53 @@ describe("window-3 outcome classification", () => {
     ]);
     expect(verdict.verdict).toBe("scarcity");
     expect(verdict.detail).toContain("scarcity finding");
+  });
+
+  it("calls a delivered-but-untested final window 'untested', not capacity and not a defect", () => {
+    // Testing is bought, and a window in which nobody bought it is recorded as not passed with
+    // the reason attached. Against a classifier that ignores the reason, that window falls
+    // through to `failed_with_capacity` — "a defect to investigate" — and sends someone looking
+    // for an apparatus fault in what is simply a buyer's decision.
+    const verdict = classifyFinalWindow([
+      outcome(1, ["38000", "32000"], windowResult({ passed: true })),
+      outcome(2, ["35000", "32000"], windowResult({ passed: true })),
+      outcome(
+        3,
+        ["22000", "32000"],
+        windowResult({
+          passed: false,
+          gateDelivered: true,
+          testingEngaged: false,
+          incompleteBecause: "testing_never_purchased",
+          turnLogsByAgent: { ORCHESTRATOR: [succeededDollarTurn] },
+          capacityEvents: [sellerReservation],
+        }),
+      ),
+    ]);
+    expect(verdict.verdict).toBe("untested");
+    expect(verdict.detail).toMatch(/nobody paid to have it tested/);
+    expect(verdict.detail).toMatch(/not a failure of capacity/);
+  });
+
+  it("does not file a window with NO gate under 'untested'", () => {
+    // `no_gate` is a different finding — nothing passed its checks at all — and must keep going
+    // to the verdicts that look for a cause.
+    const verdict = classifyFinalWindow([
+      outcome(1, ["38000", "32000"], windowResult({ passed: true })),
+      outcome(2, ["35000", "32000"], windowResult({ passed: true })),
+      outcome(
+        3,
+        ["22000", "32000"],
+        windowResult({
+          passed: false,
+          gateDelivered: false,
+          incompleteBecause: "no_gate",
+          turnLogsByAgent: { ORCHESTRATOR: [succeededDollarTurn] },
+          capacityEvents: [sellerReservation],
+        }),
+      ),
+    ]);
+    expect(verdict.verdict).not.toBe("untested");
   });
 
   it("scores a SUCCESSFUL USDC final-window purchase as a purchase, not as scarcity", () => {

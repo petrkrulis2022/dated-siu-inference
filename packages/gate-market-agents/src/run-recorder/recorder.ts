@@ -47,6 +47,9 @@ export interface RunManifest {
    * fixed in the runner's own source before the run starts and recorded here so that a reading of
    * the result can confirm the depletion was not tuned to it. */
   windowCount?: number;
+  /** Changes to what the instrument IS rather than what a run did, so a run can never be pooled
+   *  with one that predates them. Each entry is dated and says what moved. */
+  instrumentChanges?: string[];
   /**
    * The run's shape, when it was not the canonical one. Present only on a run that cannot be
    * quoted — a pinned gate, substituted models, or a non-canonical window count — so that the
