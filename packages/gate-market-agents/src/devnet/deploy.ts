@@ -115,10 +115,15 @@ const FIXED_BONDED_USDC = STARTING_USDC / 2n; // half of each issuer's starting 
  * `createLot` first is the issuer every claim routes to while it has headroom — reputation and
  * fulfilment history play no part (spec §4.6g).
  *
- * The sixth trio depends on ISSUER-A being first (spec §3.5a): its lot is deliberately smaller
- * than a standard job, so it takes the undersized window-1 job and can never win routing again.
- * Create ISSUER-B first and that inverts — ISSUER-B takes everything, every claim is served, and
- * the default path is never exercised.
+ * The fifth trio (the live default) depends on ISSUER-A being first: it takes every mint while it
+ * has headroom, and ISSUER-A is the non-serving issuer, so claims default and the enforcement arm
+ * is exercised. Create ISSUER-B first and that inverts — ISSUER-B takes everything, every claim is
+ * served, and the default path is never exercised.
+ *
+ * **That is the DEFAULT, not a law.** The single-issuer instrument (2026-10-04) puts ISSUER-B
+ * first and drains it after window 1, so window 1 routes to B and later windows to A. The order is
+ * therefore a parameter of `setupDevnet`, defaulting to this one so every existing test is
+ * unchanged — one issuer per window is configuration, never code.
  *
  * Declared here rather than reusing `AGENT_IDS`, which is a general-purpose list whose order is
  * incidental to several other callers and could be re-sorted by someone with no idea that
@@ -159,13 +164,23 @@ export interface DevnetHandle {
  * `Runner.callTool` — this function's job stops at "the devnet is ready to be used," not at
  * exercising any of the actual economic loop.
  */
-export async function setupDevnet(): Promise<DevnetHandle> {
+/** Overrides for the fixtures `setupDevnet` creates. Everything is optional and every default is
+ * the fifth trio's, so a caller that passes nothing gets exactly what it always got. */
+export interface DevnetOptions {
+  /** The order issuers create lots in, which is the order claims are routed (first-fit). */
+  lotCreationOrder?: readonly AgentId[];
+  /** `committedCapacityHours` per issuer and class. With the fixed devnet rate of 100 mSIU/hour
+   *  and the 0.5 issuance ratio, `issuanceLimit = hours * 100 * 0.5`, i.e. 50 mSIU per hour. */
+  lotHours?: Partial<Record<AgentId, { code: bigint; extract: bigint }>>;
+}
+
+export async function setupDevnet(options: DevnetOptions = {}): Promise<DevnetHandle> {
   await assertFoundryToolchainAvailable();
   await runForgeBuild();
 
   const devnet: LocalDevnet = await startAnvil();
   try {
-    return await provisionDevnet(devnet);
+    return await provisionDevnet(devnet, options);
   } catch (err) {
     // A failure anywhere in provisioning (a bad forge script run, a reverted funding tx) must
     // not leak the anvil child process — found live: a crashed concurrent run (the same race
@@ -175,7 +190,10 @@ export async function setupDevnet(): Promise<DevnetHandle> {
   }
 }
 
-async function provisionDevnet(devnet: LocalDevnet): Promise<DevnetHandle> {
+async function provisionDevnet(
+  devnet: LocalDevnet,
+  options: DevnetOptions,
+): Promise<DevnetHandle> {
   // Freshly generated per run, same as every agent's own key below — its matching address is
   // WorkClaim's immutable `publisher`, deployed by DeployGateMarketLocal.s.sol from the
   // TOUCHSTONE_PUBLISHER_ADDRESS env var runForgeScriptDeploy sets, not a fixed local constant,
@@ -235,8 +253,8 @@ async function provisionDevnet(devnet: LocalDevnet): Promise<DevnetHandle> {
   }
 
   // LOT_CREATION_ORDER, not AGENT_IDS: this loop sets routing priority for the whole run.
-  for (const agentId of LOT_CREATION_ORDER) {
-    const hours = LOT_HOURS[agentId];
+  for (const agentId of options.lotCreationOrder ?? LOT_CREATION_ORDER) {
+    const hours = options.lotHours?.[agentId] ?? LOT_HOURS[agentId];
     if (!hours) continue;
 
     const agent = agents[agentId];

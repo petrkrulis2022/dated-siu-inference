@@ -1,5 +1,11 @@
 import { createPublicClient, http, parseAbiItem, type Hex, type PublicClient } from "viem";
-import { CAPACITY_BOND_ABI, ESCROW_READ_ABI, USDC_BALANCE_ABI, WORK_CLAIM_ABI } from "./abi.js";
+import {
+  CAPACITY_BOND_ABI,
+  CLAIM_ROUTER_ABI,
+  ESCROW_READ_ABI,
+  USDC_BALANCE_ABI,
+  WORK_CLAIM_ABI,
+} from "./abi.js";
 import type { GateMarketDeployment } from "./deployment.js";
 
 /**
@@ -79,6 +85,34 @@ export class ViemChainReader implements ChainReader {
       functionName: "balanceOf",
       args: [account],
     });
+  }
+
+  /**
+   * Which issuer `ClaimRouter.route` would pick for a mint of `amount` in `classId` RIGHT NOW, or
+   * null when no issuer has the headroom (the router reverts `NoIssuerWithHeadroom`).
+   *
+   * An `eth_call`, so nothing is minted and nothing is spent. Deliberately NOT on the `ChainReader`
+   * interface: it is only needed by the runner's topology preconditions, and widening the
+   * interface would force every test double to grow a method it never uses.
+   *
+   * The null is part of the answer rather than an error, because "nobody can serve this" is a
+   * legitimate state the preconditions must be able to tell apart from "the call failed" —
+   * collapsing the two would let a dead RPC read as an empty pool.
+   */
+  async routeFor(classId: Hex, amount: bigint): Promise<Hex | null> {
+    try {
+      return await this.client.readContract({
+        address: this.deployment.claimRouter.address as Hex,
+        abi: CLAIM_ROUTER_ABI,
+        functionName: "route",
+        args: [classId, amount],
+      });
+    } catch (err) {
+      // viem wraps the revert; match on the error NAME so a different failure is not swallowed.
+      const text = err instanceof Error ? `${err.name} ${err.message}` : String(err);
+      if (text.includes("NoIssuerWithHeadroom")) return null;
+      throw err;
+    }
   }
 
   /** The chain's own head, for bounding a log scan. */

@@ -54,3 +54,14 @@ export const ESCROW_READ_ABI = parseAbi([
 export const USDC_BALANCE_ABI = parseAbi([
   "function balanceOf(address account) external view returns (uint256)",
 ]);
+
+/**
+ * `ClaimRouter.route`, the decision the whole single-issuer instrument turns on: first-fit over
+ * `CapacityBond.issuersForClass` in registration order, returning the first issuer whose headroom
+ * covers the amount, and reverting `NoIssuerWithHeadroom` when none does. Read-only, so it can be
+ * called with `eth_call` to learn WHERE a mint would route without minting anything.
+ */
+export const CLAIM_ROUTER_ABI = parseAbi([
+  "function route(bytes32 classId, uint256 amount) external view returns (address issuer)",
+  "error NoIssuerWithHeadroom(bytes32 classId, uint256 amount)",
+]);
