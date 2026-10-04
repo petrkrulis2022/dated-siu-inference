@@ -84,6 +84,14 @@ export interface RedemptionState {
    * would be worse than the silence it replaces.
    */
   memo?: string;
+  /**
+   * The quote this claim settled, when it settled one — so the recipient is told what it was paid
+   * FOR by the loop's own record, not by the payer's goodwill. This is what the optional memo was
+   * reaching for: run 17's holder asked, in its friction log, "whether this claim was meant as
+   * payment for a gate-authoring job I'm expected to produce, or is simply an independent
+   * position". Once every claim payment settles a quote, the answer is structural.
+   */
+  settledRequestId?: string;
 }
 
 export class RedemptionTracker {
@@ -98,9 +106,10 @@ export class RedemptionTracker {
   /** Called right after a real, successful `transfer_claim` — never invented. Lets the real
    * recipient discover the tokenId it now holds via `renderForHolder`, closing the gap
    * `get_balances` alone can't (see `RedemptionState.transferredTo`'s own doc comment). */
-  recordTransfer(to: AgentId, memo?: string): void {
+  recordTransfer(to: AgentId, memo?: string, requestId?: string): void {
     this.#state.transferredTo = to;
     if (typeof memo === "string" && memo.trim() !== "") this.#state.memo = memo.trim();
+    if (typeof requestId === "string" && requestId !== "") this.#state.settledRequestId = requestId;
   }
 
   /**
@@ -196,6 +205,10 @@ export class RedemptionTracker {
       "A WORK CLAIM WAS TRANSFERRED TO YOU",
       `  tokenId ${s.tokenId}, quantity ${s.quantity}.` +
         (remaining !== undefined ? ` Its delivery window closes in ${remaining}s.` : ""),
+      // What it settled, from the loop's own record rather than anyone's say-so.
+      ...(s.settledRequestId !== undefined
+        ? [`  It settles your quote ${s.settledRequestId}.`]
+        : []),
       // The payer's own words, quoted and attributed, never paraphrased — and absent entirely
       // when nothing was said, so silence stays legible as silence.
       ...(s.memo !== undefined

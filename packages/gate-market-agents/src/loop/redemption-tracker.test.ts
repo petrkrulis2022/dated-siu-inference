@@ -391,3 +391,32 @@ describe("every stage of a claim's life either addresses the holder or is delibe
     }
   });
 });
+
+describe("the arrival notice names the quote a claim settles", () => {
+  it("says which quote it settles, from the loop's own record", () => {
+    // Run 17's holder asked, in its friction log, "whether this claim was meant as payment for a
+    // gate-authoring job I'm expected to produce, or is simply an independent position". Once
+    // every claim payment settles a quote the answer is structural, so it is not left to the
+    // payer to volunteer it in a memo.
+    const t = new RedemptionTracker();
+    t.recordMint("77", "ISSUER-A", "10000");
+    t.recordTransfer("WORKER-CODE", undefined, "qr-3");
+    expect(t.renderForHolder("WORKER-CODE")).toContain("It settles your quote qr-3.");
+  });
+
+  it("says nothing about a quote when the claim was not settling one", () => {
+    const t = new RedemptionTracker();
+    t.recordMint("77", "ISSUER-A", "10000");
+    t.recordTransfer("WORKER-CODE");
+    expect(t.renderForHolder("WORKER-CODE")).not.toMatch(/settles your quote/);
+  });
+
+  it("keeps the memo and the quote independent", () => {
+    const t = new RedemptionTracker();
+    t.recordMint("77", "ISSUER-A", "10000");
+    t.recordTransfer("WORKER-CODE", "gate for window 3", "qr-1");
+    const text = t.renderForHolder("WORKER-CODE");
+    expect(text).toContain("It settles your quote qr-1.");
+    expect(text).toContain('The sender said what it is for: "gate for window 3"');
+  });
+});

@@ -924,6 +924,39 @@ describe("buildToolArgs", () => {
     };
   }
 
+  /** A board holding one ANSWERED quote — what every settlement route now needs. */
+  function boardWithQuote(sellerAddress = "0x00000000000000000000000000000000000000cd", siu = "10") {
+    const board = new QuoteBoard();
+    const body = {
+      schema_version: "2.0",
+      siu,
+      pattern: "fixed" as const,
+      model: "test",
+      rate_usd_per_siu: "0.05",
+      amount_usd_max: "0.5",
+      index_version: "SIU-2026a",
+      print_id: "2026-09-25",
+      print_hash: "0xabc",
+      seller_id: `erc8004:${sellerAddress}`,
+      expiry: "2099-01-01T00:00:00Z",
+      settlement: [
+        { asset: "usdc", chain: "base-sepolia", address: "0x0", amount_max: "500000" },
+      ] as QuoteBody["settlement"],
+    };
+    const request = board.postRequest("ORCHESTRATOR", body);
+    board.postIssuedQuote(request.requestId, { ...body, sig: "0xrealsignature" });
+    return { board, requestId: request.requestId };
+  }
+
+  const QUOTED_MINT: MintContext = {
+    publisherPrivateKeyHex: PUBLISHER_PK,
+    printId: "2026-09-25",
+    series: SERIES_COMMODITY,
+    printDate: printDateToUnixDay("2026-09-25"),
+    nanoUsdPerSiu: 10_700_000n,
+    validitySeconds: 3600n,
+  };
+
   it("mint_claim: splices a real EIP-712 attestation that recovers to the real publisher key", async () => {
     const mintContext: MintContext = {
       publisherPrivateKeyHex: PUBLISHER_PK,
@@ -1111,6 +1144,61 @@ describe("buildToolArgs", () => {
     ).rejects.toThrow(/no attack context/);
   });
 
+  it("every settlement route needs the seller's quote, so no route is cheaper in turns", async () => {
+    // The structural form of payment symmetry (spec §6.1: both assets settle against the same
+    // quote). `pay` and `settle_split` always required one; `pay_with_claim` did not, so fSIU was
+    // one call and dollars were three — and the buyer's turn count showed it, 1.56 per fSIU
+    // window against 2.25 per USDC window across every recorded run. An agent choosing the
+    // shorter path is choosing the shorter path (§4.6f).
+    //
+    // Asserted as a PROPERTY over the routes rather than as a case, per §4.6ai: a fourth route
+    // added later that skips the quote fails here without anyone remembering to write its test.
+    for (const tool of ["pay", "pay_with_claim", "settle_split"] as const) {
+      await expect(
+        buildToolArgs(tool, {}, baseCtx({ mintContext: QUOTED_MINT })),
+        `${tool} must name a quote`,
+      ).rejects.toThrow(/requestId/);
+    }
+  });
+
+  it("pay_with_claim: refuses the old recipient-and-quantity form, and says what replaced it", async () => {
+    await expect(
+      buildToolArgs(
+        "pay_with_claim",
+        { agentId: "WORKER-CODE", quantity: "500" },
+        baseCtx({ mintContext: QUOTED_MINT }),
+      ),
+    ).rejects.toThrow(/settles a quote/);
+  });
+
+  it("pay_with_claim: addresses the seller and sizes the claim from the quote itself", async () => {
+    const { board, requestId } = boardWithQuote("0x00000000000000000000000000000000000000cd", "10");
+    const args = (await buildToolArgs(
+      "pay_with_claim",
+      { requestId },
+      baseCtx({ mintContext: QUOTED_MINT, board }),
+    )) as { to: string; quantity: string };
+    expect(args.to).toBe("0x00000000000000000000000000000000000000cd");
+    expect(args.quantity).toBe("10000"); // 10 SIU, in milli-SIU
+  });
+
+  it("pay_with_claim: a model cannot redirect or resize the payment once a quote is named", async () => {
+    const { board, requestId } = boardWithQuote("0x00000000000000000000000000000000000000cd", "10");
+    const args = (await buildToolArgs(
+      "pay_with_claim",
+      { requestId, to: "0x000000000000000000000000000000000000dead", quantity: "1" },
+      baseCtx({ mintContext: QUOTED_MINT, board }),
+    )) as { to: string; quantity: string };
+    expect(args.to).toBe("0x00000000000000000000000000000000000000cd");
+    expect(args.quantity).toBe("10000");
+  });
+
+  it("pay_with_claim: refuses a quote nobody has issued", async () => {
+    await expect(
+      buildToolArgs("pay_with_claim", { requestId: "qr-nonexistent" }, baseCtx({ mintContext: QUOTED_MINT })),
+    ).rejects.toThrow(/no issued quote/);
+  });
+
   it("carries the memo through to the tool instead of silently dropping it", async () => {
     // Found while building the memo, before it ever ran: this builder constructs an EXPLICIT
     // object, so a field the model supplies and the builder does not name simply vanishes. The
@@ -1125,10 +1213,11 @@ describe("buildToolArgs", () => {
       nanoUsdPerSiu: 10_700_000n,
       validitySeconds: 3600n,
     };
+    const quoted = boardWithQuote();
     const paid = (await buildToolArgs(
       "pay_with_claim",
-      { to: "0x0000000000000000000000000000000000000002", quantity: "500", memo: " for the w1 gate " },
-      baseCtx({ mintContext }),
+      { requestId: quoted.requestId, memo: " for the w1 gate " },
+      baseCtx({ mintContext, board: quoted.board }),
     )) as { memo?: string };
     expect(paid.memo).toBe("for the w1 gate");
 
@@ -1340,8 +1429,9 @@ describe("buildToolArgs", () => {
     3: { from: 1_800_002_400n, to: 1_800_003_600n },
   };
 
-  function datedCtx(windowIndex: number): BuildToolArgsContext {
+  function datedCtx(windowIndex: number, board?: QuoteBoard): BuildToolArgsContext {
     return baseCtx({
+      ...(board ? { board } : {}),
       mintContext: {
         publisherPrivateKeyHex: PUBLISHER_PK,
         printId: "2026-09-27-commodity",
@@ -1384,10 +1474,11 @@ describe("buildToolArgs", () => {
   });
 
   it("pay_with_claim: carries the same dating, so paying a counterparty forward is possible too", async () => {
+    const quoted = boardWithQuote();
     const args = (await buildToolArgs(
       "pay_with_claim",
-      { agentId: "WORKER-CODE", quantity: "500", forWindow: 2 },
-      datedCtx(1),
+      { requestId: quoted.requestId, forWindow: 2 },
+      datedCtx(1, quoted.board),
     )) as { windowFrom: number; windowTo: number };
     expect(args.windowFrom).toBe(Number(WINDOW_BOUNDS[2].from));
     expect(args.windowTo).toBe(Number(WINDOW_BOUNDS[2].to));
@@ -2328,12 +2419,23 @@ describe("runFullRunWindow — a held claim settles a quote, and the seller is t
     );
     expect(buyerTransfer, "WORKER-CODE must have paid with the claim it held").toBeDefined();
 
-    // And the seller was TOLD — the assertion that fails without the recordPaid fix. Without it
-    // the claim arrives and the quote stays open forever.
+    // And the seller was TOLD which quote the claim settles, in words that are true. This used
+    // to assert "YOU HAVE BEEN PAID" — the dollar notice, "real USDC is in escrow in your favour
+    // ... settle_escrow" — which is false for a claim (nothing is held in escrow) and which, being
+    // un-clearable, would have held the stall guard open for the rest of the window (2026-10-04).
+    // The claim's arrival is now told through the holder section, which names the quote.
     expect(
-      sellerPrompts.some((p) => p.includes("YOU HAVE BEEN PAID")),
-      "the seller must learn its quote was settled by the transfer",
+      sellerPrompts.some((p) => p.includes("A WORK CLAIM WAS TRANSFERRED TO YOU")),
+      "the seller must learn a claim arrived",
     ).toBe(true);
+    expect(
+      sellerPrompts.some((p) => /It settles your quote qr-\d+/.test(p)),
+      "the seller must learn WHICH quote the transfer settled",
+    ).toBe(true);
+    expect(
+      sellerPrompts.some((p) => p.includes("real USDC is in escrow in your favour")),
+      "and must not be told money is in escrow when none is",
+    ).toBe(false);
 
     // And it is recorded as circulation, not as a fresh purchase.
     const journey = summarisePurchases(result).journeys.find((j) => j.tokenId === tokenId);

@@ -24,7 +24,7 @@ THE JOB
 WHAT YOU CAN DO
   request_quote(seller, task_spec)      receive a signed quote
   pay(requestId, settler)               pays the real, signed quote answering that request — USDC
-  pay_with_claim(agentId, quantity)     pays that counterparty in fSIU instead, in one call
+  pay_with_claim(requestId)             pays the same quote in fSIU instead — a dated work claim
   mint_claim(classId, quantity, window) buys a dated work claim from an issuer
   transfer_claim(agentId, tokenId, quantity) pays a seller by transferring a claim you hold — fSIU
   check_headroom(class)                 confirms an issuer can serve before you mint

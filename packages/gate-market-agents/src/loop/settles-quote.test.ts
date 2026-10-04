@@ -31,3 +31,18 @@ describe("settlesQuote", () => {
     }
   });
 });
+
+import { assetSettledBy } from "./full-run.js";
+
+describe("assetSettledBy — what a seller is told it was paid in", () => {
+  it("maps every settlement tool to exactly one asset, and the dollar route is the only escrow-only one", () => {
+    // Property over the settlement tools rather than a hand-picked case (§4.6ai): a fifth route
+    // added to settlesQuote without an asset would default to dollars and tell its seller that
+    // real USDC is in escrow, which is the defect this exists to prevent.
+    const expected = { pay: "usdc", pay_with_claim: "fsiu", transfer_claim: "fsiu", settle_split: "split" } as const;
+    for (const tool of ["pay", "pay_with_claim", "settle_split", "transfer_claim"] as const) {
+      expect(settlesQuote(tool)).toBe(true);
+      expect(assetSettledBy(tool), tool).toBe(expected[tool]);
+    }
+  });
+});

@@ -191,10 +191,11 @@ YOUR JOB THIS WINDOW
       you, or keep checking back — WORKER-CODE will call submit_job itself once paid and ready).
 
   OPTION B — settle in fSIU (a dated work claim, not a dollar): pay the counterparty in claims.
-    Step 1: {"tool": "pay_with_claim", "args": {"agentId": "WORKER-CODE", "quantity": "10000"}}
-      (quantity is in milli-SIU; 10000 = 10 SIU, matching Option A's own quote size. This mints a
-      claim against an issuer's bonded capacity and transfers it, in one call.)
-    Step 2: wait, same as Option A's step 3.
+    Step 1: request a quote exactly as in Option A.
+    Step 2 (once WORKER-CODE has issued a quote): {"tool": "pay_with_claim",
+      "args": {"requestId": "<the requestId from the board>"}} — this mints a claim against an
+      issuer's bonded capacity, sized and addressed from the quote, and transfers it.
+    Step 3: wait, same as Option A's step 3.
     mint_claim and transfer_claim remain available if you want the two steps separately.
 
   HOW CAPACITY WORKS HERE (facts, not advice)

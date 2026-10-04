@@ -28,6 +28,9 @@ export interface QuoteBoardIssuedQuote {
   quote: TouchstoneQuote;
 }
 
+/** What a quote was settled in: dollars through an escrow, a dated work claim, or both. */
+export type PaidAsset = "usdc" | "fsiu" | "split";
+
 export class QuoteBoard {
   #requests: QuoteBoardRequest[] = [];
   #issued: QuoteBoardIssuedQuote[] = [];
@@ -43,7 +46,7 @@ export class QuoteBoard {
    * Payment is the actionable event on both sides; until it was recorded here neither side could
    * be woken by it.
    */
-  #paid = new Set<string>();
+  #paid = new Map<string, PaidAsset>();
   #settled = new Set<string>();
   #nextId = 1;
 
@@ -68,9 +71,19 @@ export class QuoteBoard {
     this.#issued.push({ requestId, quote });
   }
 
-  /** Called by the loop right after a real, successful `pay` — never inferred from a balance. */
-  recordPaid(requestId: string): void {
-    this.#paid.add(requestId);
+  /**
+   * Called by the loop right after a real, successful settlement — never inferred from a balance.
+   *
+   * `asset` is what the quote was settled IN, and it decides what the seller is told. Only a
+   * payment that opened an escrow (`usdc`, or the dollar leg of a `split`) leaves the seller
+   * owing work against real money held for it. A claim payment moves no escrow: the claim is
+   * transferred outright and there is nothing to `settle_escrow`. Until 2026-10-04 this recorded
+   * no asset, so a quote settled in claims was shown to its seller as "real USDC is in escrow in
+   * your favour ... settle_escrow" — false, and naming tools a claim holder cannot use. Defaults
+   * to `usdc` so every existing caller keeps its meaning.
+   */
+  recordPaid(requestId: string, asset: PaidAsset = "usdc"): void {
+    this.#paid.set(requestId, asset);
   }
 
   /** Called by the loop right after a real, successful `settle_escrow`. */
@@ -89,12 +102,26 @@ export class QuoteBoard {
     return this.issuedQuotesFor(buyer).filter((i) => !this.#paid.has(i.requestId));
   }
 
-  /** Quotes this seller signed that have been paid and not yet settled — it owes the work, and
-   * on the dollar route this is how it finds out at all. */
+  /** Quotes this seller signed that have been paid IN ESCROW and not yet settled — it owes the
+   * work, and on the dollar route this is how it finds out at all.
+   *
+   * Excludes quotes settled wholly in claims, deliberately and for two reasons. The notice would
+   * be false (no escrow exists). And it could never clear: the dollar notice ends when the seller
+   * calls `settle_escrow`, which does not apply to a claim, so a standing line would keep every
+   * wake check and the stall guard believing somebody can still act, indefinitely. A claim's
+   * arrival is told through the holder's own section, which ends when the claim is presented. */
   paidUnsettledFor(sellerId: string): QuoteBoardIssuedQuote[] {
     return this.issuedQuotesBySeller(sellerId).filter(
-      (i) => this.#paid.has(i.requestId) && !this.#settled.has(i.requestId),
+      (i) =>
+        this.#paid.has(i.requestId) &&
+        this.#paid.get(i.requestId) !== "fsiu" &&
+        !this.#settled.has(i.requestId),
     );
+  }
+
+  /** What a paid quote was settled in, or undefined if it has not been paid. */
+  paidAsset(requestId: string): PaidAsset | undefined {
+    return this.#paid.get(requestId);
   }
 
   /** The exact, real, seller-signed `TouchstoneQuote` for one request — what `pay` must actually
@@ -175,7 +202,7 @@ export class QuoteBoard {
     }
     if (myQuotes.length > 0) {
       lines.push(
-        "Quotes you have received (pay against one with the real quote object, via get_balances/pay):",
+        "Quotes you have received (settle one by naming its requestId, in whichever asset you choose):",
       );
       for (const i of myQuotes) {
         lines.push(

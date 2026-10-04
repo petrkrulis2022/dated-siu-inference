@@ -154,8 +154,10 @@ WHAT A WORK CLAIM IS, AND EVERYTHING YOU CAN DO WITH ONE
       "quantity": "<mSIU>"}}
     A claim is divisible: transferring part of it leaves you holding the rest.
 
-  PAY WITH IT — settle something you are buying, without redeeming first:
-    {"tool": "pay_with_claim", "args": {"agentId": "<AGENT>", "quantity": "<mSIU>"}}
+  PAY WITH IT — settle a quote you were given, without redeeming first:
+    {"tool": "pay_with_claim", "args": {"requestId": "<the requestId from the board>"}}
+    This mints a new claim, sized and addressed from the quote. To pay with a claim you ALREADY
+    hold, use transfer_claim and name the quote with "requestId".
 
   CHECK WHETHER THE ISSUER HAS ACTUALLY SERVED IT:
     {"tool": "check_delivery", "args": {}}

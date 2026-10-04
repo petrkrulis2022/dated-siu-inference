@@ -156,3 +156,65 @@ describe("QuoteBoard", () => {
   );
 });
 
+
+
+describe("QuoteBoard — what each asset tells the seller it was paid in", () => {
+  const seller = "erc8004:0xWORKERCODE";
+  function paidBoard(asset?: "usdc" | "fsiu" | "split") {
+    const board = new QuoteBoard();
+    const request = board.postRequest("ORCHESTRATOR", fakeQuoteBody(seller));
+    board.postIssuedQuote(request.requestId, fakeQuote(seller));
+    // The second argument is the asset. Against a board that predates it the argument is
+    // ignored and the quote is treated as dollar-paid, which is exactly the defect.
+    (board.recordPaid as (id: string, asset?: string) => void)(request.requestId, asset);
+    return { board, requestId: request.requestId };
+  }
+
+  it("does not tell a seller paid in fSIU that real USDC is in escrow for it", () => {
+    // Payment by claim moves no escrow at all: the claim is transferred outright. The notice
+    // "real USDC is in escrow in your favour ... settle_escrow" is simply false there, and it
+    // names tools the claim holder cannot use (submit_job is refused to a holder, §4.6a). With
+    // payment symmetry every claim payment carries a requestId, so every fSIU window would have
+    // shown it.
+    const { board } = paidBoard("fsiu");
+    const view = board.renderFor("WORKER-CODE", seller);
+    expect(view).not.toContain("real USDC is in escrow");
+    expect(view).not.toContain("settle_escrow");
+    expect(view).not.toContain("YOU HAVE BEEN PAID AND OWE THE WORK");
+  });
+
+  it("shows an fSIU-paid quote to its seller as NOTHING, because nothing could ever clear it", () => {
+    // The dollar notice ends when the seller calls settle_escrow. There is no equivalent for a
+    // claim, so a standing notice would never go away — and the stall guard treats any board
+    // text as proof somebody can still act, so it would hold the window open indefinitely. The
+    // claim's arrival is told through the holder section, which ends when the claim is presented.
+    const { board } = paidBoard("fsiu");
+    expect(board.paidUnsettledFor(seller)).toHaveLength(0);
+    expect(board.renderFor("WORKER-CODE", seller)).toBe("");
+  });
+
+  it("still tells a USDC-paid seller, which is where the notice is true", () => {
+    const { board, requestId } = paidBoard("usdc");
+    const view = board.renderFor("WORKER-CODE", seller);
+    expect(view).toContain("YOU HAVE BEEN PAID AND OWE THE WORK");
+    expect(view).toContain(requestId);
+  });
+
+  it("treats an unstated asset as the dollar route, so every existing caller is unchanged", () => {
+    const { board } = paidBoard(undefined);
+    expect(board.renderFor("WORKER-CODE", seller)).toContain("YOU HAVE BEEN PAID AND OWE THE WORK");
+  });
+
+  it("tells a seller paid partly in each, because the dollar leg is real escrow", () => {
+    const { board } = paidBoard("split");
+    expect(board.renderFor("WORKER-CODE", seller)).toContain("YOU HAVE BEEN PAID AND OWE THE WORK");
+  });
+
+  it("resolves the quote for its buyer whichever asset paid it", () => {
+    for (const asset of ["usdc", "fsiu", "split"] as const) {
+      const { board } = paidBoard(asset);
+      expect(board.unpaidQuotesFor("ORCHESTRATOR"), asset).toHaveLength(0);
+      expect(board.isPaid(board.issuedQuotesFor("ORCHESTRATOR")[0]!.requestId), asset).toBe(true);
+    }
+  });
+});

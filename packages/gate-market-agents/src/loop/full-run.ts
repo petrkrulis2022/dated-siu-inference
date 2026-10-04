@@ -37,7 +37,8 @@ import type { ToolName } from "../tools/index.js";
 import type { AttackToolResult } from "../tools/submit-attack.js";
 import { RunRecorder, type RunManifest } from "../run-recorder/recorder.js";
 import { FrictionLogWriter, type FrictionLogEntry } from "../friction/log.js";
-import { QuoteBoard } from "./quote-board.js";
+import { QuoteBoard, type PaidAsset } from "./quote-board.js";
+import { decimalSiuToMilliSiu } from "./siu-units.js";
 import { ForwardQuoteBook, type ForwardQuote } from "./forward-book.js";
 import { classIdFor } from "../tools/class-id.js";
 import { RedemptionTracker, type RedemptionState } from "./redemption-tracker.js";
@@ -1813,7 +1814,7 @@ export async function runFullRunWindow(
       // and it is why WORKER-CODE could not have paid a quote in claims before this.
       if (settlesQuote(intent.tool)) {
         const requestId = (intent.args as { requestId?: unknown } | undefined)?.requestId;
-        if (typeof requestId === "string") board.recordPaid(requestId);
+        if (typeof requestId === "string") board.recordPaid(requestId, assetSettledBy(intent.tool));
       }
 
       if (intent.tool === "mint_claim") {
@@ -1840,6 +1841,9 @@ export async function runFullRunWindow(
             redemption.recordTransfer(
               recipientAgentId,
               (args as { memo?: unknown } | undefined)?.memo as string | undefined,
+              (intent.args as { requestId?: unknown } | undefined)?.requestId as
+                | string
+                | undefined,
             );
         }
         const transferred = record.result as { txHash?: string };
@@ -1874,6 +1878,9 @@ export async function runFullRunWindow(
             redemption.recordTransfer(
               recipientAgentId,
               (args as { memo?: unknown } | undefined)?.memo as string | undefined,
+              (intent.args as { requestId?: unknown } | undefined)?.requestId as
+                | string
+                | undefined,
             );
         }
         await recordCapacityEvent("settle_split", {
@@ -1902,6 +1909,9 @@ export async function runFullRunWindow(
             redemption.recordTransfer(
               recipientAgentId,
               (args as { memo?: unknown } | undefined)?.memo as string | undefined,
+              (intent.args as { requestId?: unknown } | undefined)?.requestId as
+                | string
+                | undefined,
             );
         }
         // One tool call, two real transactions — both hashes kept, since a run record must never
@@ -2423,6 +2433,17 @@ export interface BuildToolArgsContext {
  * one. That is what fSIU circulating means, no run has ever shown it, and without a quote link
  * it was not expressible.
  */
+/**
+ * What a settlement tool settles IN, which decides what the seller is told (see
+ * `QuoteBoard.recordPaid`). `transfer_claim` pays a quote with a claim already held, so it is a
+ * claim payment like `pay_with_claim`; `settle_split` opens a real escrow for its dollar leg.
+ */
+export function assetSettledBy(tool: ToolName): PaidAsset {
+  if (tool === "pay_with_claim" || tool === "transfer_claim") return "fsiu";
+  if (tool === "settle_split") return "split";
+  return "usdc";
+}
+
 export function settlesQuote(tool: ToolName): boolean {
   return (
     tool === "pay" ||
@@ -2942,26 +2963,28 @@ export async function buildToolArgs(
         "pay_with_claim: this window has no mintContext — no agent should have this tool.",
       );
     }
+    // Settles a QUOTE, exactly as `pay` and `settle_split` do (spec §6.1: both assets settle
+    // against the same quote). It used to take a recipient and a quantity directly, which made
+    // fSIU one call and dollars three — request_quote, wait for the seller, then pay — and the
+    // buyer's turn count showed it: 1.56 per fSIU window against 2.25 per USDC window across
+    // every recorded run. An agent choosing the shorter path is choosing the shorter path
+    // (§4.6f). The recipient and the size now come from the seller's own signed quote, so a model
+    // can neither redirect a payment nor resize it.
     const raw =
-      (rawArgs as
-        | { to?: unknown; agentId?: unknown; quantity?: unknown; memo?: unknown }
-        | undefined) ?? {};
-    let to = raw.to;
-    if (typeof raw.agentId === "string") {
-      const resolved = ctx.agentAddressByAgentId[raw.agentId as AgentId];
-      if (!resolved)
-        throw new Error(`pay_with_claim: no known address for agentId "${raw.agentId}".`);
-      to = resolved;
-    }
-    if (typeof to !== "string") {
+      (rawArgs as { requestId?: unknown; memo?: unknown } | undefined) ?? {};
+    if (typeof raw.requestId !== "string") {
       throw new Error(
-        'pay_with_claim: name the recipient as {"agentId": "WORKER-CODE"} or a literal "to" address.',
+        'pay_with_claim: expected a string "requestId". It settles a quote the seller issued, ' +
+          "like pay and settle_split do, and no longer takes a recipient and a quantity: the " +
+          "quote names both. Ask for a quote with request_quote first.",
       );
     }
-    const quantity = asDecimalString(raw.quantity);
-    if (typeof quantity !== "string") {
-      throw new Error('pay_with_claim: expected a string "quantity" in milli-SIU.');
+    const quote = ctx.board.issuedQuoteById(raw.requestId);
+    if (!quote) {
+      throw new Error(`pay_with_claim: no issued quote found for request "${raw.requestId}".`);
     }
+    const to = quote.seller_id.replace(/^erc8004:/, "");
+    const quantity = decimalSiuToMilliSiu(quote.siu);
     const validUntil = BigInt(Math.floor(Date.now() / 1000)) + ctx.mintContext.validitySeconds;
     const signature = await signRateAttestation(
       {
