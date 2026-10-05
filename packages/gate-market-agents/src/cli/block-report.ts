@@ -10,29 +10,35 @@
  * answer the enforcement question — so they are reported separately and never folded into a
  * preference figure. Every per-buyer quantity below is computed from window 1.
  *
- * **What it reports as stated, not settled.** Cost per SIU comes from payment moments' quote
- * terms, and `amount_usd_max` is the ceiling a quote allows, not what was finally settled. The
- * label says "quoted"; no figure here is called "paid". fSIU is never given a dollar cost,
- * because no quote states one.
+ * **Cost is what was SETTLED.** USDC is priced at the amount the seller actually settled, joined to
+ * the payment by the quote's request id, never at the quote's ceiling. fSIU is given a dollar
+ * figure too — what the claim cost to mint, read from the mint receipt — with its print-equivalent
+ * beside it (`cost-metric.ts`). A payment whose settlement or claim cannot be found is counted as
+ * unmatched, never priced at zero.
  *
  * Nothing is read from a chain. Everything below comes from fields the runs recorded, and where a
  * field is missing the report says so (`outcomeNotRecorded`, `paymentsWithoutQuote`) instead of
  * filling it in.
  */
 import { D } from "@touchstone/sdk";
+import { costOfRuns, type BlockCost } from "./cost-metric.js";
 import { decisionRuleVerdict, type RuleOutcome, type RunOpportunity } from "./decision-rule.js";
 import type { F1Report } from "./instrument-report.js";
 import { assertSameInstrument } from "./instrument.js";
 
 /**
- * Scoped to window 1 (plan F8): "always redeemable within its window" is false in windows 2 and 3,
- * where the single issuer is non-serving by design, so the caption may not claim it of them.
+ * Fixed text, 2026-10-05. Scoped to window 1 (plan F8): "always redeemable within its window" is
+ * false in windows 2 and 3, where the single issuer is non-serving by design. It also states that
+ * every issuer is Touchstone's own account and that lot sizes are scenario parameters, so nothing
+ * here can be read as a measurement of real issuers.
  */
 export const BLOCK_CAPTION =
-  "In window 1, fSIU is fungible because the window has a single issuer, and that issuer serves: " +
-  "no cross-issuer credit risk, redeemable within the window. That is the best case for fSIU. " +
-  "Windows 2 and 3 route to an issuer that cannot serve and measure enforcement, not preference. " +
-  "Cross-issuer fungibility and routing are not tested here.";
+  "Single issuer per window. In window 1, where F1 is measured, every fSIU is backed by one " +
+  "serving issuer, so claims are fully fungible and redeemable within the window — the best case " +
+  "for fSIU, with no cross-issuer credit risk. Windows 2 and 3 exercise enforcement against an " +
+  "issuer that cannot serve, representing one that measured well at bonding and failed " +
+  "afterwards. All issuers are Touchstone's own API accounts, and lot sizes are scenario " +
+  "parameters, not measured issuance. Cross-issuer fungibility and routing are not tested.";
 
 type Asset = "usdc" | "fsiu" | "split";
 const MINT_KINDS: ReadonlySet<string> = new Set(["mint_claim", "pay_with_claim", "settle_split"]);
@@ -42,6 +48,9 @@ export interface ReportEvent {
   agentId?: string;
   turn?: number;
   issuer?: string;
+  tokenId?: string;
+  mintCostMinorUnits?: string;
+  settlesRequestId?: string;
   quantityMilliSiu?: string;
   forwardDated?: boolean;
   settlementOutcome?: "Defaulted" | "Expired";
@@ -55,7 +64,6 @@ export interface ReportMoment {
   requestId?: string;
   heldReceivedMilliSiu: string;
   quotedSiu?: string;
-  quotedUsdMax?: string;
 }
 export interface ReportWindow {
   windowIndex: number;
@@ -67,6 +75,8 @@ export interface ReportWindow {
     journeys: { tokenId: string; hops: number; turnsHeld: number; outcome: string }[];
   };
   paymentMoments?: ReportMoment[];
+  /** What each USDC quote was actually settled for, keyed by the quote's request id. */
+  usdcSettlements?: { requestId: string; settledMinorUnits: string; quotedMinorUnits: string }[];
   capacityEvents: ReportEvent[];
   turnsByAgent: Record<string, number>;
 }
@@ -75,6 +85,8 @@ export interface RunReport {
   instrument?: { id: string };
   debugMode?: { disqualifiedBecause?: string | null };
   abortedBecause?: string;
+  /** The print the run used, decimal USD per SIU. */
+  rateUsdPerSiu?: string;
   f1?: F1Report;
   windows: ReportWindow[];
 }
@@ -121,7 +133,7 @@ export interface RunSummary {
   turnsHeld: number[];
   windows: WindowSummary[];
   forwardDated: number;
-  opportunity: { eligible: boolean; spentOnward: boolean };
+  opportunity: { eligible: boolean; spentOnward: boolean; paidInFsiuWhileHoldingReceived: boolean };
 }
 
 export interface BlockReport {
@@ -145,17 +157,16 @@ export interface BlockReport {
     >;
     hops: { distribution: Record<string, number>; median: string | null };
     turnsHeld: { n: number; median: string | null; min: number | null; max: number | null };
-    cost: {
-      /** Σ quoted ceilings ÷ Σ quoted SIU over USDC payments in windows where work was delivered. */
-      usdcQuoted: { payments: number; quotedSiu: string; quotedUsdMax: string; usdPerSiuCeiling: string | null };
-      fsiuQuoted: { payments: number; quotedSiu: string };
-      paymentsInUndeliveredWindows: number;
-      paymentsWithoutQuote: number;
-    };
+    cost: BlockCost;
   };
   laterWindows: { windowIndex: number; settlements: WindowSummary["settlements"]; bondPaidMinorUnits: string }[];
   forwardDated: number;
-  decisionRule: RuleOutcome & { assumption: string };
+  decisionRule: RuleOutcome & {
+    assumption: string;
+    /** The same rule under the LOOSER reading — paid in fSIU by any route while holding received
+     *  fSIU — beside the balance-level one, so a difference is visible and never substituted. */
+    looserReading: RuleOutcome;
+  };
 }
 
 const zeroCounts = (): Counts => ({ usdc: 0, fsiu: 0, split: 0, total: 0 });
@@ -186,6 +197,9 @@ function exclusionOf(run: RunReport): string | undefined {
   if (run.abortedBecause !== undefined) return `aborted on a topology precondition: ${run.abortedBecause}`;
   if (run.f1 === undefined) return "report predates the f1 block, so window-1 cleanliness was never recorded";
   if (!run.f1.reached) return "window 1 was not reached";
+  if (run.f1.countingErrors === undefined) {
+    return "f1 block predates the counting check and the balance-level decision rule";
+  }
   return undefined;
 }
 
@@ -261,7 +275,11 @@ function summariseRun(run: RunReport): RunSummary {
     turnsHeld: w1.purchases.journeys.map((j) => j.turnsHeld),
     windows: run.windows.map(summariseWindow),
     forwardDated: run.windows.flatMap((w) => w.capacityEvents).filter((e) => e.forwardDated === true).length,
-    opportunity: { eligible, spentOnward: opportunities.some((o) => o.eligible && o.spentOnward) },
+    opportunity: {
+      eligible,
+      spentOnward: opportunities.some((o) => o.eligible && o.spentOnward),
+      paidInFsiuWhileHoldingReceived: opportunities.some((o) => o.paidInFsiuWhileHoldingReceived),
+    },
   };
 }
 
@@ -272,6 +290,16 @@ export function buildBlockReport(reports: readonly RunReport[]): BlockReport {
     const why = exclusionOf(r);
     if (why === undefined) included.push(r);
     else excluded.push({ runId: r.runId, because: why });
+  }
+  // A miscount is not a result and is not silently set aside: the rule would be decided on nothing.
+  for (const r of included) {
+    const errors = r.f1?.countingErrors ?? [];
+    if (errors.length > 0) {
+      throw new Error(
+        `${r.runId}: counting error — ${errors.join("; ")}. The decision rule is not computed from a ` +
+          "run whose eligibility count is wrong.",
+      );
+    }
   }
   // After exclusions, so a debug run on another instrument is reported as a debug run and not as
   // the thing that made the block unpoolable.
@@ -309,35 +337,20 @@ export function buildBlockReport(reports: readonly RunReport[]): BlockReport {
   for (const h of allHops) distribution[String(h)] = (distribution[String(h)] ?? 0) + 1;
   const allHeld = runs.flatMap((r) => r.turnsHeld);
 
-  // Cost: window 1 only, and only where the work was actually delivered.
-  let usdcPayments = 0;
-  let fsiuPayments = 0;
-  let undelivered = 0;
-  let withoutQuote = 0;
-  let usdcSiu = new D(0);
-  let usdcUsd = new D(0);
-  let fsiuSiu = new D(0);
-  for (const r of included) {
-    const w1 = r.windows.find((w) => w.windowIndex === 1) as ReportWindow;
-    for (const m of w1.paymentMoments ?? []) {
-      if (m.quotedSiu === undefined) {
-        withoutQuote += 1;
-        continue;
-      }
-      if (w1.gateDelivered !== true) {
-        undelivered += 1;
-        continue;
-      }
-      if (m.asset === "usdc" && m.quotedUsdMax !== undefined) {
-        usdcPayments += 1;
-        usdcSiu = usdcSiu.plus(m.quotedSiu);
-        usdcUsd = usdcUsd.plus(m.quotedUsdMax);
-      } else if (m.asset === "fsiu") {
-        fsiuPayments += 1;
-        fsiuSiu = fsiuSiu.plus(m.quotedSiu);
-      }
-    }
-  }
+  // Cost: window 1 only, delivered work only, from what was settled (cost-metric.ts).
+  const cost = costOfRuns(
+    included.map((r) => {
+      const w1 = r.windows.find((w) => w.windowIndex === 1) as ReportWindow;
+      if (r.rateUsdPerSiu === undefined) throw new Error(`${r.runId}: the report states no print rate.`);
+      return {
+        gateDelivered: w1.gateDelivered,
+        paymentMoments: w1.paymentMoments,
+        usdcSettlements: w1.usdcSettlements,
+        capacityEvents: w1.capacityEvents,
+        printRateUsdPerSiu: r.rateUsdPerSiu,
+      };
+    }),
+  );
 
   const laterIndexes = [...new Set(runs.flatMap((r) => r.windows.map((w) => w.windowIndex)))]
     .filter((i) => i >= 2)
@@ -355,7 +368,16 @@ export function buildBlockReport(reports: readonly RunReport[]): BlockReport {
     return { windowIndex, settlements, bondPaidMinorUnits: bond.toFixed(0) };
   });
 
-  const opportunities: RunOpportunity[] = runs.map((r) => ({ runId: r.runId, ...r.opportunity }));
+  const opportunities: RunOpportunity[] = runs.map((r) => ({
+    runId: r.runId,
+    eligible: r.opportunity.eligible,
+    spentOnward: r.opportunity.spentOnward,
+  }));
+  const looserOpportunities: RunOpportunity[] = runs.map((r) => ({
+    runId: r.runId,
+    eligible: r.opportunity.eligible,
+    spentOnward: r.opportunity.paidInFsiuWhileHoldingReceived,
+  }));
   const incomplete: Record<string, number> = {};
   for (const r of runs) {
     const why = r.windowOne.incompleteBecause;
@@ -380,27 +402,21 @@ export function buildBlockReport(reports: readonly RunReport[]): BlockReport {
         min: allHeld.length ? Math.min(...allHeld) : null,
         max: allHeld.length ? Math.max(...allHeld) : null,
       },
-      cost: {
-        usdcQuoted: {
-          payments: usdcPayments,
-          quotedSiu: usdcSiu.toFixed(),
-          quotedUsdMax: usdcUsd.toFixed(),
-          usdPerSiuCeiling: usdcSiu.isZero() ? null : usdcUsd.dividedBy(usdcSiu).toFixed(6),
-        },
-        fsiuQuoted: { payments: fsiuPayments, quotedSiu: fsiuSiu.toFixed() },
-        paymentsInUndeliveredWindows: undelivered,
-        paymentsWithoutQuote: withoutQuote,
-      },
+      cost,
     },
     laterWindows,
     forwardDated: runs.reduce((n, r) => n + r.forwardDated, 0),
     decisionRule: {
       ...decisionRuleVerdict(opportunities),
       assumption:
-        "A run counts as eligible if ANY paying agent held fSIU it had been given at the moment it " +
-        "paid, and as spending onward if any such agent passed a held claim to a counterparty. " +
-        "The rule says 'the agent'; with two payers, this reads it per run. The per-agent " +
-        "opportunities are in each run's report (f1.opportunities).",
+        "Held fSIU means fSIU received as payment from another agent, never an opening balance or " +
+        "operator grant. Onward spending is read at the balance level: a transfer naming a quote " +
+        "left the agent's balance while it held received fSIU it had not all redeemed. A payment " +
+        "made by minting a new claim and forwarding it does not touch the balance and is not " +
+        "counted; the looser reading that does count it is reported beside this one. The rule " +
+        "says 'the agent'; with two payers, a run counts if ANY paying agent qualifies. " +
+        "Per-agent opportunities are in each run's report (f1.opportunities).",
+      looserReading: decisionRuleVerdict(looserOpportunities),
     },
   };
 }
@@ -440,9 +456,16 @@ export function renderBlockReport(r: BlockReport): string[] {
   out.push(
     `  hops before redemption: median ${r.f1.hops.median ?? "n/a"} (distribution ${JSON.stringify(r.f1.hops.distribution)})`,
     `  turns held: n ${r.f1.turnsHeld.n}, median ${r.f1.turnsHeld.median ?? "n/a"} (wall-clock is not recorded)`,
-    `  cost, QUOTED not paid: USDC ${r.f1.cost.usdcQuoted.quotedUsdMax} ceiling over ${r.f1.cost.usdcQuoted.quotedSiu} SIU` +
-      ` = ${r.f1.cost.usdcQuoted.usdPerSiuCeiling ?? "n/a"} USD/SIU; fSIU ${r.f1.cost.fsiuQuoted.quotedSiu} SIU quoted (no dollar cost is stated);` +
-      ` ${r.f1.cost.paymentsInUndeliveredWindows} payment(s) in undelivered windows and ${r.f1.cost.paymentsWithoutQuote} without a quote set aside`,
+    `  cost per delivered SIU, from what was SETTLED (window 1, delivered work):`,
+    `    USDC:  ${r.f1.cost.usdc.payments} payment(s), $${r.f1.cost.usdc.usd} over ${r.f1.cost.usdc.quotedSiu} SIU = ` +
+      `${r.f1.cost.usdc.usdPerSiu ?? "n/a"} USD/SIU; ${r.f1.cost.usdc.settledBelowQuoted} settled below the quote's ceiling, ` +
+      `${r.f1.cost.usdc.escrowNeverSettled} escrow(s) never settled (not priced)`,
+    `    fSIU:  ${r.f1.cost.fsiu.payments} payment(s), $${r.f1.cost.fsiu.usd} to mint over ${r.f1.cost.fsiu.quotedSiu} SIU = ` +
+      `${r.f1.cost.fsiu.usdPerSiu ?? "n/a"} USD/SIU; print-equivalent $${r.f1.cost.fsiu.printEquivalentUsd} = ` +
+      `${r.f1.cost.fsiu.printEquivalentUsdPerSiu ?? "n/a"} USD/SIU; ${r.f1.cost.fsiu.carriedAtOriginalMintCost} passed on and carried at original mint cost`,
+    `    split: ${r.f1.cost.split.payments} payment(s), $${r.f1.cost.split.usd} over ${r.f1.cost.split.quotedSiu} SIU`,
+    `    set aside: ${r.f1.cost.paymentsInUndeliveredWindows} in undelivered windows, ${r.f1.cost.paymentsWithoutQuote} without a quote, ` +
+      `${r.f1.cost.unmatched} UNMATCHED (claim or settlement not found in the record — not priced as free)`,
     "",
     "Windows 2 onward — fSIU against an issuer that cannot serve (enforcement, not preference):",
   );
@@ -458,6 +481,11 @@ export function renderBlockReport(r: BlockReport): string[] {
     `DECISION RULE: ${r.decisionRule.verdict} (${r.decisionRule.spentOnward} of ${r.decisionRule.eligible} eligible runs spent onward; ${r.decisionRule.runs} runs)`,
     `  ${r.decisionRule.reason}`,
     `  Reading: ${r.decisionRule.assumption}`,
+    `  Looser reading (paid in fSIU by ANY route while holding received fSIU): ${r.decisionRule.looserReading.verdict} ` +
+      `(${r.decisionRule.looserReading.spentOnward} of ${r.decisionRule.looserReading.eligible} eligible runs)` +
+      (r.decisionRule.looserReading.verdict !== r.decisionRule.verdict
+        ? " — DIFFERS from the balance-level verdict above; the difference is payments made by minting and forwarding a new claim"
+        : ""),
   );
   return out;
 }

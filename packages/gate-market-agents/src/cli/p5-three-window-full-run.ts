@@ -1281,10 +1281,15 @@ async function main(): Promise<void> {
             windowIndex: o.windowIndex,
             capacityEvents: o.result.capacityEvents,
             paymentMoments: o.result.paymentMoments,
+            claimFlows: o.result.claimFlows,
           })),
           instrument.topology?.expectedIssuerByWindow[1] !== undefined
             ? addressOf(instrument.topology.expectedIssuerByWindow[1])
             : undefined,
+          // So the count can be checked against the recorded events a second way.
+          Object.fromEntries(
+            Object.entries(addresses).map(([agent, address]) => [address.toLowerCase(), agent]),
+          ),
         ),
         externalDepletionMilliSiu: EXTERNAL_DEPLETION_MILLI_SIU,
         nominalJobMilliSiu: NOMINAL_JOB_MILLI_SIU.toString(),

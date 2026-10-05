@@ -1642,10 +1642,31 @@ aborted on a topology precondition, and reports that predate the window-1 block.
 
 **What a block of this instrument can and cannot say.** It is a pilot: five window-1 decisions per
 buyer tell you whether a larger block is worth running, not what agents prefer. It does not test
-cross-issuer fungibility or routing, and the caption says so and is scoped to window 1. Costs are
-reported as the **quoted** ceiling, never as an amount paid; fSIU is given no dollar cost because no
-quote states one. Holding time is recorded in turns, not wall-clock time. The operator's drain is
-recorded apart from every agent's record and is excluded from every behavioural statistic.
+cross-issuer fungibility or routing, and the caption says so and is scoped to window 1.
+
+**Two assets, one price.** Settling a quote in fSIU costs what settling it in USDC costs: a claim is
+sized so it is worth the quote's USDC price at the print in force (spec §4.6ar). Before 2026-10-05
+it was sized by the quote's SIU count, which differed from the price whenever the buyer quoted off
+the print, in either direction. The stored artefacts keep too little to say whether earlier runs
+were affected, which is one more reason the 25-of-29 is not quoted.
+
+**Cost is what was settled.** Cost per delivered SIU prices USDC at the amount the seller actually
+settled — not the quote's ceiling — and gives fSIU a dollar figure too: what the claim cost to mint,
+read from the mint receipt, with its print-equivalent beside it. A claim passed on is carried at its
+original mint cost and labelled so, because the payer did not mint it. A payment whose settlement or
+claim cannot be found is counted as unmatched and never priced as free. The dollar route also charges
+the *seller* a protocol fee the fSIU route does not; that is a seller-side difference and not a
+buyer's cost.
+
+**The decision rule's reading.** "Held" means fSIU received as payment from another agent, never an
+opening balance or an operator grant; "spent onward" is read at the balance level (a transfer naming
+a quote left the balance while received fSIU was not all redeemed), and the looser asset-level
+reading is reported beside it so a verdict cannot rest on agents taking the shortest fSIU route
+(spec §4.6at). A run whose eligibility count is wrong — ORCHESTRATOR eligible, or an agent eligible
+with no payment from an agent behind it — produces no verdict at all.
+
+Holding time is recorded in turns, not wall-clock time. The operator's drain is recorded apart from
+every agent's record and is excluded from every behavioural statistic.
 
 ## Governance intention
 

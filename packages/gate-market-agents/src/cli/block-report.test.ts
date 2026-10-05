@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildBlockReport, BLOCK_CAPTION, renderBlockReport, type ReportEvent, type ReportMoment, type ReportWindow, type RunReport } from "./block-report.js";
+import type { Opportunity } from "./decision-rule.js";
 
 const B = "0xB000000000000000000000000000000000000001";
 const A = "0xA000000000000000000000000000000000000001";
@@ -13,6 +14,7 @@ interface WindowSpec {
   events?: ReportEvent[];
   journeys?: { hops: number; turnsHeld: number }[];
   turns?: Record<string, number>;
+  settlements?: { requestId: string; settledMinorUnits: string; quotedMinorUnits: string }[];
   gateDelivered?: boolean;
   passed?: boolean;
   incompleteBecause?: string;
@@ -35,6 +37,7 @@ const window = (w: WindowSpec): ReportWindow => ({
     heldReceivedMilliSiu: "0",
     ...m,
   })),
+  usdcSettlements: w.settlements ?? [],
   capacityEvents: w.events ?? [],
   turnsByAgent: w.turns ?? {},
 });
@@ -42,11 +45,13 @@ const window = (w: WindowSpec): ReportWindow => ({
 const run = (runId: string, windows: WindowSpec[], extra: Partial<RunReport> = {}): RunReport => ({
   runId,
   instrument: { id: "single-issuer" },
+  rateUsdPerSiu: "0.0100",
   f1: {
     window: 1,
     reached: true,
     clean: { expectedIssuer: B, clean: true, mints: 1, backedByOthers: 0 },
     opportunities: {},
+    countingErrors: [],
   },
   windows: windows.map(window),
   ...extra,
@@ -84,8 +89,12 @@ describe("buildBlockReport — what counts", () => {
     expect(r.instrument).toBe("single-issuer");
   });
 
-  it("carries a caption scoped to window 1", () => {
-    expect(BLOCK_CAPTION).toMatch(/In window 1/);
+  it("carries the fixed caption: scoped to window 1, and honest that the issuers are Touchstone's own", () => {
+    expect(BLOCK_CAPTION).toMatch(/^Single issuer per window\. In window 1, where F1 is measured/);
+    expect(BLOCK_CAPTION).toContain("Windows 2 and 3 exercise enforcement against an issuer that cannot serve");
+    expect(BLOCK_CAPTION).toContain("All issuers are Touchstone's own API accounts");
+    expect(BLOCK_CAPTION).toContain("lot sizes are scenario parameters, not measured issuance");
+    expect(BLOCK_CAPTION).toMatch(/Cross-issuer fungibility and routing are not tested\.$/);
     expect(BLOCK_CAPTION).not.toMatch(/always redeemable/i);
     expect(buildBlockReport([]).caption).toBe(BLOCK_CAPTION);
   });
@@ -120,7 +129,7 @@ describe("buildBlockReport — F1 is window 1 alone", () => {
 
   it("aggregates cleanliness and names the runs that were not clean", () => {
     const dirty = run("dirty", [w1()]);
-    dirty.f1 = { window: 1, reached: true, clean: { expectedIssuer: B, clean: false, mints: 3, backedByOthers: 1 }, opportunities: {} };
+    dirty.f1 = { window: 1, reached: true, clean: { expectedIssuer: B, clean: false, mints: 3, backedByOthers: 1 }, opportunities: {}, countingErrors: [] };
     const r = buildBlockReport([run("clean", [w1()]), dirty]);
     expect(r.f1.cleanRuns).toBe(1);
     expect(r.f1.uncleanRuns).toEqual(["dirty"]);
@@ -186,33 +195,32 @@ describe("buildBlockReport — circulation", () => {
   });
 });
 
-describe("buildBlockReport — cost per SIU is quoted, never paid", () => {
-  const usdc = (siu: string, usd: string): Partial<ReportMoment> => ({ asset: "usdc", quotedSiu: siu, quotedUsdMax: usd });
-
-  it("divides the quoted ceilings by the quoted SIU, in decimals", () => {
-    const r = buildBlockReport([run("a", [w1({ moments: [usdc("1", "0.0100"), usdc("0.4", "0.0040")] })])]);
-    expect(r.f1.cost.usdcQuoted).toEqual({ payments: 2, quotedSiu: "1.4", quotedUsdMax: "0.014", usdPerSiuCeiling: "0.010000" });
-  });
-
-  it("counts only windows where the work was delivered, and says how many payments it set aside", () => {
+describe("buildBlockReport — cost per SIU comes from what was settled", () => {
+  // The metric's arithmetic is tested in cost-metric.test.ts; this checks that the block report
+  // feeds it window 1 of each run, with the run's own print, and surfaces both assets.
+  it("prices USDC at the settled amount and fSIU at its mint cost, window 1 only", () => {
     const r = buildBlockReport([
-      run("a", [w1({ gateDelivered: false, moments: [usdc("1", "0.0100")] })]),
-      run("b", [w1({ moments: [usdc("1", "0.0200")] })]),
+      run("a", [
+        w1({
+          moments: [
+            { agentId: "ORCHESTRATOR", turn: 2, tool: "pay", asset: "usdc", requestId: "qr-1", quotedSiu: "1" },
+            { agentId: "WORKER-CODE", turn: 3, tool: "pay_with_claim", asset: "fsiu", requestId: "qr-2", quotedSiu: "1" },
+          ],
+          settlements: [{ requestId: "qr-1", settledMinorUnits: "6000", quotedMinorUnits: "10000" }],
+          events: [{ kind: "pay_with_claim", agentId: "WORKER-CODE", turn: 3, tokenId: "7", quantityMilliSiu: "1000", mintCostMinorUnits: "10000", settlesRequestId: "qr-2" }],
+        }),
+        // a window-2 payment must not enter an F1 cost
+        { windowIndex: 2, moments: [{ agentId: "ORCHESTRATOR", turn: 2, tool: "pay", asset: "usdc", requestId: "qr-9", quotedSiu: "1" }], settlements: [{ requestId: "qr-9", settledMinorUnits: "99999", quotedMinorUnits: "99999" }] },
+      ]),
     ]);
-    expect(r.f1.cost.usdcQuoted.quotedUsdMax).toBe("0.02");
-    expect(r.f1.cost.paymentsInUndeliveredWindows).toBe(1);
+    expect(r.f1.cost.usdc).toMatchObject({ payments: 1, usd: "0.006000", usdPerSiu: "0.006000" });
+    expect(r.f1.cost.fsiu).toMatchObject({ payments: 1, usd: "0.010000", printEquivalentUsd: "0.010000" });
   });
 
-  it("gives fSIU no dollar cost — it reports the quoted SIU only", () => {
-    const r = buildBlockReport([run("a", [w1({ moments: [{ asset: "fsiu", tool: "pay_with_claim", quotedSiu: "1" }] })])]);
-    expect(r.f1.cost.fsiuQuoted).toEqual({ payments: 1, quotedSiu: "1" });
-    expect(JSON.stringify(r.f1.cost.fsiuQuoted)).not.toMatch(/usd/i);
-  });
-
-  it("counts a payment that carried no quote instead of pricing it", () => {
-    const r = buildBlockReport([run("a", [w1({ moments: [{ asset: "fsiu", tool: "transfer_claim" }] })])]);
-    expect(r.f1.cost.paymentsWithoutQuote).toBe(1);
-    expect(r.f1.cost.fsiuQuoted.payments).toBe(0);
+  it("refuses a report that states no print, rather than guessing the print-equivalent", () => {
+    const noPrint = run("a", [w1()]);
+    delete noPrint.rateUsdPerSiu;
+    expect(() => buildBlockReport([noPrint])).toThrow(/no print rate/);
   });
 });
 
@@ -250,26 +258,69 @@ describe("buildBlockReport — enforcement is windows 2 onward", () => {
 });
 
 describe("buildBlockReport — the decision rule", () => {
-  const withOpportunity = (id: string, eligible: boolean, spentOnward: boolean) => {
+  const opp = (over: Partial<Opportunity>): Opportunity => ({
+    eligible: false,
+    spentOnward: false,
+    basis: "none",
+    paidInFsiuWhileHoldingReceived: false,
+    ...over,
+  });
+  const withOpportunity = (id: string, o: Partial<Opportunity>) => {
     const r = run(id, [w1()]);
-    r.f1 = { window: 1, reached: true, clean: { expectedIssuer: B, clean: true, mints: 1, backedByOthers: 0 }, opportunities: { "WORKER-CODE": { eligible, spentOnward } } };
+    r.f1 = {
+      window: 1,
+      reached: true,
+      clean: { expectedIssuer: B, clean: true, mints: 1, backedByOthers: 0 },
+      opportunities: { "WORKER-CODE": opp(o) },
+      countingErrors: [],
+    };
     return r;
   };
+  const yes = { eligible: true, spentOnward: true, basis: "held_claim_left_the_balance" as const, paidInFsiuWhileHoldingReceived: true };
+  const declined = { eligible: true };
 
   it("is inconclusive, not negative, when fewer than three runs offered the opportunity", () => {
-    const r = buildBlockReport([withOpportunity("a", true, true), withOpportunity("b", true, false), withOpportunity("c", false, false)]);
+    const r = buildBlockReport([withOpportunity("a", yes), withOpportunity("b", declined), withOpportunity("c", {})]);
     expect(r.decisionRule.verdict).toBe("inconclusive");
   });
 
   it("builds on a majority of eligible runs, counting only eligible ones", () => {
     const r = buildBlockReport([
-      withOpportunity("a", true, true), withOpportunity("b", true, true), withOpportunity("c", true, false), withOpportunity("d", false, false), withOpportunity("e", false, false),
+      withOpportunity("a", yes), withOpportunity("b", yes), withOpportunity("c", declined), withOpportunity("d", {}), withOpportunity("e", {}),
     ]);
     expect(r.decisionRule).toMatchObject({ verdict: "build_cross_issuer_fungibility", eligible: 3, spentOnward: 2, runs: 5 });
   });
 
-  it("says plainly how it read 'the agent' when two agents pay", () => {
-    expect(buildBlockReport([]).decisionRule.assumption).toMatch(/ANY paying agent/);
+  it("reports the looser reading beside the balance-level one, and says when they differ", () => {
+    // Three eligible runs that only ever paid in fSIU by minting a new claim and forwarding it while
+    // holding received fSIU: the balance-level rule sees no onward spending; the looser one sees
+    // all three. Reporting both is what keeps a verdict from resting on the shortest fSIU route.
+    const mintOnly = { eligible: true, spentOnward: false, paidInFsiuWhileHoldingReceived: true };
+    const r = buildBlockReport([withOpportunity("a", mintOnly), withOpportunity("b", mintOnly), withOpportunity("c", mintOnly)]);
+    expect(r.decisionRule.verdict).toBe("do_not_build");
+    expect(r.decisionRule.looserReading.verdict).toBe("build_cross_issuer_fungibility");
+    const text = renderBlockReport(r).join("\n");
+    expect(text).toMatch(/Looser reading .*: build_cross_issuer_fungibility/);
+    expect(text).toMatch(/DIFFERS from the balance-level verdict/);
+  });
+
+  it("refuses to compute any verdict from a run whose eligibility count is wrong", () => {
+    const bad = withOpportunity("bad", yes);
+    bad.f1 = { ...(bad.f1 as NonNullable<RunReport["f1"]>), countingErrors: ["ORCHESTRATOR is marked eligible, but nothing in this roster pays ORCHESTRATOR in fSIU"] };
+    expect(() => buildBlockReport([withOpportunity("a", yes), bad])).toThrow(/bad: counting error — ORCHESTRATOR is marked eligible/);
+  });
+
+  it("excludes an f1 block that predates the counting check, with its reason", () => {
+    const old = withOpportunity("old", yes);
+    old.f1 = { ...(old.f1 as NonNullable<RunReport["f1"]>), countingErrors: undefined as unknown as string[] };
+    const r = buildBlockReport([old]);
+    expect(r.excluded[0].because).toMatch(/predates the counting check/);
+  });
+
+  it("states plainly how it read 'held' and 'spent onward'", () => {
+    const a = buildBlockReport([]).decisionRule.assumption;
+    expect(a).toMatch(/received as payment from another agent, never an opening balance or operator grant/);
+    expect(a).toMatch(/balance level/);
   });
 });
 
@@ -287,9 +338,10 @@ describe("renderBlockReport — nothing a reader could miss is left out", () => 
     expect(out).toMatch(/INCONCLUSIVE, not negative/);
   });
 
-  it("says cost is quoted and not paid, and that wall-clock holding time is not recorded", () => {
+  it("says cost is from what was SETTLED, flags claims it could not match, and that wall-clock holding time is not recorded", () => {
     const out = text([run("good", [w1()])]);
-    expect(out).toMatch(/QUOTED not paid/);
+    expect(out).toMatch(/from what was SETTLED/);
+    expect(out).toMatch(/UNMATCHED .*not priced as free/);
     expect(out).toMatch(/wall-clock is not recorded/);
   });
 
