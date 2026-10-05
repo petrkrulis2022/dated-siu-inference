@@ -1,0 +1,275 @@
+{
+  "runId": "DEBUG-p5-three-window-2026-10-05T11-59-05-930Z",
+  "runSeed": 2135687794,
+  "oracleTrialSeed": 20260927,
+  "printId": "2026-10-05-commodity",
+  "rateUsdPerSiu": "0.001437",
+  "windowCount": 3,
+  "instrument": {
+    "id": "single-issuer-per-window",
+    "description": "One serving issuer in window 1 (F1), enforcement against an issuer that cannot serve in windows 2 and 3. ISSUER-B is registered first and ISSUER-A second, both lots bonded at deploy; after window 1 the operator drains ISSUER-B so later windows route to ISSUER-A. One issuer per window is configuration in this record, never code.",
+    "deploymentFile": "data/deployments/base-sepolia-gate-market-single-issuer.json",
+    "topology": {
+      "lotCreationOrder": [
+        "ISSUER-B",
+        "ISSUER-A"
+      ],
+      "expectedIssuerByWindow": {
+        "1": "ISSUER-B",
+        "2": "ISSUER-A",
+        "3": "ISSUER-A"
+      },
+      "drain": {
+        "afterWindow": 1,
+        "issuer": "ISSUER-B",
+        "classId": "code",
+        "datedTo": "run_end"
+      },
+      "routeAfterDrain": "ISSUER-A"
+    }
+  },
+  "sellerFeeAsymmetry": {
+    "usdcRouteEscrowFeeBps": 50,
+    "fsiuRouteFeeBps": 0,
+    "chargedTo": "seller",
+    "sellersCanSteerAssetOfAQuote": false,
+    "note": "The dollar route's escrow fee comes out of the seller's proceeds and the fSIU route has none. That is a seller-side difference and not a buyer's cost: price parity is a statement about what the payer pays. Sellers cannot steer which asset a quote is settled in — a seller decides only whether to sign the buyer's own request — so the asymmetry cannot bias what buyers do, and it is recorded and not equalised."
+  },
+  "operatorActions": [
+    {
+      "kind": "drain",
+      "afterWindow": 1,
+      "issuer": "ISSUER-B",
+      "requestedMilliSiu": "22000",
+      "failedBecause": "The contract function \"mint\" reverted with the following reason:\nERC20: transfer amount exceeds allowance\n\nContract Call:\n  address:   0x667c3cc8a7bC55aF128a83BE560c9C0264B744B4\n  function:  mint(bytes32 classId, bytes32 series, uint256 quantity, uint64 windowFrom, uint64 windowTo, (string printId, bytes32 series, uint64 printDate, uint256 nanoUsdPerSiu, uint64 validUntil), bytes signature)\n  args:          (0x2dc081a8d6d4714c79b5abd2e9b08c3a33b4ef1dcf946ef8b8cf6c495014f47b, 0x28b9bd511509601dd60a2359acd77ace0051da8b8fd3a5d60e5ce73794ae0f82, 22000, 1791201892, 1791208746, {\"printId\":\"2026-10-05-commodity\",\"series\":\"0x28b9bd511509601dd60a2359acd77ace0051da8b8fd3a5d60e5ce73794ae0f82\",\"printDate\":\"1791158400\",\"nanoUsdPerSiu\":\"1437000\",\"validUntil\":\"1791205552\"}, 0xdd11ebc1842ee20b1ac101f7b53eac4caebeb92cadacac338cc13ba1ae579133642c7d9e1678f7e5a25a35b05213332c49febfbfe0efbd73dc25728d654336771c)\n  sender:    0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e\n\nDocs: https://viem.sh/docs/contract/writeContract\nDetails: execution reverted: ERC20: transfer amount exceeds allowance\nVersion: viem@2.55.16"
+    }
+  ],
+  "abortedBecause": "the drain of ISSUER-B failed: The contract function \"mint\" reverted with the following reason:\nERC20: transfer amount exceeds allowance\n\nContract Call:\n  address:   0x667c3cc8a7bC55aF128a83BE560c9C0264B744B4\n  function:  mint(bytes32 classId, bytes32 series, uint256 quantity, uint64 windowFrom, uint64 windowTo, (string printId, bytes32 series, uint64 printDate, uint256 nanoUsdPerSiu, uint64 validUntil), bytes signature)\n  args:          (0x2dc081a8d6d4714c79b5abd2e9b08c3a33b4ef1dcf946ef8b8cf6c495014f47b, 0x28b9bd511509601dd60a2359acd77ace0051da8b8fd3a5d60e5ce73794ae0f82, 22000, 1791201892, 1791208746, {\"printId\":\"2026-10-05-commodity\",\"series\":\"0x28b9bd511509601dd60a2359acd77ace0051da8b8fd3a5d60e5ce73794ae0f82\",\"printDate\":\"1791158400\",\"nanoUsdPerSiu\":\"1437000\",\"validUntil\":\"1791205552\"}, 0xdd11ebc1842ee20b1ac101f7b53eac4caebeb92cadacac338cc13ba1ae579133642c7d9e1678f7e5a25a35b05213332c49febfbfe0efbd73dc25728d654336771c)\n  sender:    0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e\n\nDocs: https://viem.sh/docs/contract/writeContract\nDetails: execution reverted: ERC20: transfer amount exceeds allowance\nVersion: viem@2.55.16",
+  "abortedAfterWindow": 1,
+  "f1": {
+    "window": 1,
+    "reached": true,
+    "opportunities": {
+      "ORCHESTRATOR": {
+        "eligible": false,
+        "spentOnward": false,
+        "basis": "none",
+        "paidInFsiuWhileHoldingReceived": false
+      }
+    },
+    "countingErrors": [],
+    "clean": {
+      "expectedIssuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "clean": true,
+      "mints": 0,
+      "backedByOthers": 0
+    }
+  },
+  "externalDepletionMilliSiu": {
+    "1": 3000,
+    "2": 3000
+  },
+  "nominalJobMilliSiu": "10000",
+  "startingHeadroom": [
+    {
+      "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "headroom": "32000"
+    },
+    {
+      "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+      "headroom": "48000"
+    }
+  ],
+  "debugMode": {
+    "enabled": true,
+    "windows": 3,
+    "canonicalWindows": 3,
+    "preAuthoredGate": true,
+    "gateProvenance": "run p5-three-window-2026-10-03T11-10-36-115Z, window 3, ISSUER-A turn 4 — graded PASS (G1-G6)",
+    "cheapNonDeciders": true,
+    "cheapModel": "claude-haiku-4-5",
+    "deciderSeats": [
+      "ORCHESTRATOR",
+      "WORKER-CODE"
+    ],
+    "countsTowardF1": false,
+    "disqualifiedBecause": "the gate was pinned rather than authored; non-decider seats ran on claude-haiku-4-5 rather than their assigned models",
+    "providersExercised": [
+      "anthropic",
+      "openai"
+    ],
+    "providersNotExercised": [
+      "google",
+      "xai"
+    ],
+    "validatesTheBlocksRoster": false,
+    "exercisesTimeGatedBehaviour": false
+  },
+  "poolAtLaunch": {
+    "whole": true,
+    "expectedTotalMilliSiu": "80000",
+    "actualTotalMilliSiu": "80000",
+    "shortfallMilliSiu": "0",
+    "proceededWithPartialPool": false
+  },
+  "finalWindowVerdict": {
+    "verdict": "no_final_window",
+    "detail": "The run did not reach its last window."
+  },
+  "holdersNeverOfferedSettlement": [],
+  "forwardQuotes": [],
+  "windows": [
+    {
+      "windowIndex": 1,
+      "passed": false,
+      "gateDelivered": true,
+      "testingEngaged": false,
+      "incompleteBecause": "testing_never_purchased",
+      "passedBy": "PRE-AUTHORED",
+      "haltedReason": {
+        "WORKER-EXTRACT": "validation_failed",
+        "WORKER-CODE": "no_text_emitted",
+        "ORCHESTRATOR": "nothing_to_act_on",
+        "ISSUER-A": "nothing_to_act_on",
+        "ISSUER-B": "nothing_to_act_on"
+      },
+      "paymentMoments": [
+        {
+          "agentId": "ORCHESTRATOR",
+          "turn": 2,
+          "tool": "pay",
+          "asset": "usdc",
+          "requestId": "qr-1",
+          "heldReceivedMilliSiu": "0",
+          "quotedSiu": "10",
+          "quoteRateUsdPerSiu": "0.001437",
+          "quotedUsdMax": "0.0144"
+        }
+      ],
+      "headroomBefore": [
+        {
+          "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+          "headroom": "32000"
+        },
+        {
+          "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "headroom": "48000"
+        }
+      ],
+      "headroomAfter": [
+        {
+          "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+          "headroom": "22000"
+        },
+        {
+          "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "headroom": "48000"
+        }
+      ],
+      "externalDepletion": {
+        "requestedMilliSiu": 3000,
+        "failedBecause": "The contract function \"mint\" reverted with the following reason:\nERC20: transfer amount exceeds allowance\n\nContract Call:\n  address:   0x667c3cc8a7bC55aF128a83BE560c9C0264B744B4\n  function:  mint(bytes32 classId, bytes32 series, uint256 quantity, uint64 windowFrom, uint64 windowTo, (string printId, bytes32 series, uint64 printDate, uint256 nanoUsdPerSiu, uint64 validUntil), bytes signature)\n  args:          (0x2dc081a8d6d4714c79b5abd2e9b08c3a33b4ef1dcf946ef8b8cf6c495014f47b, 0x28b9bd511509601dd60a2359acd77ace0051da8b8fd3a5d60e5ce73794ae0f82, 3000, 1791201890, 1791208746, {\"printId\":\"2026-10-05-commodity\",\"series\":\"0x28b9bd511509601dd60a2359acd77ace0051da8b8fd3a5d60e5ce73794ae0f82\",\"printDate\":\"1791158400\",\"nanoUsdPerSiu\":\"1437000\",\"validUntil\":\"1791205550\"}, 0x4d5ef639ec90cc27ab821d9d8753fc481cd61771081155014a371db8c45f220330d3335173d30f89215fffaa1793411a7857847477c4148b323a6a748008ad9b1b)\n  sender:    0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e\n\nDocs: https://viem.sh/docs/contract/writeContract\nDetails: execution reverted: ERC20: transfer amount exceeds allowance\nVersion: viem@2.55.16"
+      },
+      "assetChoice": "ORCHESTRATOR: 1 in USDC, 0 in fSIU\n  claims passed onward rather than redeemed: 0 — fSIU settled, it did not circulate",
+      "purchases": {
+        "decisions": [
+          {
+            "buyer": "ORCHESTRATOR",
+            "turn": 2,
+            "asset": "usdc"
+          }
+        ],
+        "journeys": []
+      },
+      "capacityEvents": [
+        {
+          "agentId": "WORKER-CODE",
+          "turn": 2,
+          "kind": "reserve_for_work",
+          "quoteHash": "0x8d1807662f0c6ec705b33e018b4f6b503aea75d451720774a547b5d702921a2a",
+          "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+          "quantityMilliSiu": "10000",
+          "txHash": "0xdf20456db91222708f536b533df633136308aa6c5bc0732d6408c037aa644050"
+        }
+      ],
+      "usdcSettlements": [],
+      "claimFlows": {
+        "ORCHESTRATOR": {
+          "receivedMilliSiu": "0",
+          "receivedKeyedMilliSiu": "0",
+          "receivedUnkeyedMilliSiu": "0",
+          "mintedMilliSiu": "0",
+          "transferredOutKeyedMilliSiu": "0",
+          "redeemedMilliSiu": "0"
+        },
+        "WORKER-CODE": {
+          "receivedMilliSiu": "0",
+          "receivedKeyedMilliSiu": "0",
+          "receivedUnkeyedMilliSiu": "0",
+          "mintedMilliSiu": "0",
+          "transferredOutKeyedMilliSiu": "0",
+          "redeemedMilliSiu": "0"
+        },
+        "WORKER-EXTRACT": {
+          "receivedMilliSiu": "0",
+          "receivedKeyedMilliSiu": "0",
+          "receivedUnkeyedMilliSiu": "0",
+          "mintedMilliSiu": "0",
+          "transferredOutKeyedMilliSiu": "0",
+          "redeemedMilliSiu": "0"
+        },
+        "ISSUER-A": {
+          "receivedMilliSiu": "0",
+          "receivedKeyedMilliSiu": "0",
+          "receivedUnkeyedMilliSiu": "0",
+          "mintedMilliSiu": "0",
+          "transferredOutKeyedMilliSiu": "0",
+          "redeemedMilliSiu": "0"
+        },
+        "ISSUER-B": {
+          "receivedMilliSiu": "0",
+          "receivedKeyedMilliSiu": "0",
+          "receivedUnkeyedMilliSiu": "0",
+          "mintedMilliSiu": "0",
+          "transferredOutKeyedMilliSiu": "0",
+          "redeemedMilliSiu": "0"
+        }
+      },
+      "forwardInvitations": [
+        {
+          "agentId": "ISSUER-A",
+          "turn": 1
+        },
+        {
+          "agentId": "ISSUER-B",
+          "turn": 1
+        }
+      ],
+      "attacks": [],
+      "gateVersions": [
+        {
+          "version": 1,
+          "submittedBy": "PRE-AUTHORED",
+          "turn": 0
+        }
+      ],
+      "spendByProvider": {
+        "anthropic": "0.485275",
+        "openai": "0.012696"
+      },
+      "turnsByAgent": {
+        "ORCHESTRATOR": 2,
+        "WORKER-CODE": 3,
+        "WORKER-EXTRACT": 0,
+        "ISSUER-A": 1,
+        "ISSUER-B": 1
+      },
+      "totalRealizedUsd": "0.497971"
+    }
+  ],
+  "runTotalUsd": "0.497971",
+  "runProjectedUsd": "0.397041",
+  "runCapUsd": "30",
+  "experimentTotalUsd": "20.864730",
+  "experimentProjectedUsd": "39.752192"
+}
