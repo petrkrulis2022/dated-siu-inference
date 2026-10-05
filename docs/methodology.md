@@ -1561,6 +1561,28 @@ proved against — here, `sum(HeadroomConsumed) - sum(HeadroomRestored)` against
 which is what eventually exposed the gap. **A scan that cannot be reconciled to an independent
 total is not evidence of absence.**
 
+**Sixth occurrence, 2026-10-05 — on a write path, and the first one reproduced in a test.**
+`bond-lots` simulated `createLot` straight after the approval's receipt; the node answering the
+simulation still served the pre-approval state and reported `transfer amount exceeds allowance`
+(allowance read as 0 against the 1,000,000 just approved). The tool refused rather than guessed,
+so nothing was wrongly created, but the live bonding stopped. Direction, once more: *less had
+happened than had*.
+
+The rule above, applied to writes: after every write, wait for that write's **effect** to be
+readable before depending on it. Waiting for two reads to *agree* is not that — two stale reads
+agree with each other and are still wrong. The tool's final check requires the **full** declared
+registration order, because a stale list that is missing the newest lot is a valid prefix, and a
+prefix-tolerant check accepts it. Both are reproduced on real bytecode behind a proxy that serves
+the pre-transaction block to the next few `eth_call`s, with a control test that shows the proxy
+really does lag (without it the fix test could pass against a proxy that never did), and the
+full-order claim has its own test and was mutation-checked.
+
+**A limit worth stating.** The instrument's drain sizes itself from headroom read until two
+consecutive fresh-connection reads agree. By the argument above that is not proof of freshness. It
+is backstopped, not relied on: the drain is refused unless the `Minted` event names the drained
+issuer, and the two preconditions (that issuer's headroom is zero, and the router's real answer
+for a job-sized mint) abort the run if the drain was mis-sized.
+
 ### What F1 measured before 2026-10-04: a claim that mostly could not be redeemed
 
 Across the ten countable runs, **64.1% of the fSIU agents minted (168,000 of 262,000 mSIU; 18 of

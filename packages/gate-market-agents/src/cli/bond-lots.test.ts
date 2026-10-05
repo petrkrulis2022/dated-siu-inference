@@ -1,5 +1,8 @@
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createPublicClient, http, type Hex } from "viem";
+import { createPublicClient, createWalletClient, erc20Abi, http, toFunctionSelector, type Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { CLASS_CODE, CLASS_EXTRACT, setupDevnet, type DevnetHandle } from "../devnet/deploy.js";
 import { ViemChainReader } from "../chain/reader.js";
 import type { AgentId } from "../identity/resolve.js";
@@ -279,5 +282,151 @@ describe("bondLots on real bytecode — a deployment already registered in the w
       devnet.agents["ISSUER-A"].address.toLowerCase(),
     ]);
     expect(await reader.headroom(devnet.agents["ISSUER-B"].address, CLASS_CODE as Hex)).toBe(0n);
+  }, SEQUENTIAL_BONDING_TIMEOUT_MS);
+});
+
+/**
+ * A JSON-RPC proxy that behaves like a lagging node behind a load balancer: for the next
+ * `staleCalls` `eth_call`s after every transaction it serves the state as of the block BEFORE that
+ * transaction. This is the sixth documented instance of the stale-read pattern, and the first one
+ * to be reproduced rather than only described — the receipt confirms, and the very next read still
+ * shows the old world.
+ */
+async function startStaleProxy(upstream: string, staleCalls: number, onlySelector?: string) {
+  let staleBlock: string | undefined;
+  let remaining = 0;
+  /** `eth_call`s whose calldata starts with `onlySelector`, since the last transaction. */
+  let matchingSinceWrite = 0;
+  const forward = async (body: unknown): Promise<{ result?: string }> =>
+    (
+      await fetch(upstream, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      })
+    ).json() as Promise<{ result?: string }>;
+  const server: Server = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (c: Buffer) => chunks.push(c));
+    req.on("end", async () => {
+      const body = JSON.parse(Buffer.concat(chunks).toString());
+      if (!Array.isArray(body)) {
+        if (body.method === "eth_sendRawTransaction") {
+          staleBlock = (await forward({ jsonrpc: "2.0", id: 0, method: "eth_blockNumber", params: [] })).result;
+          remaining = staleCalls;
+          matchingSinceWrite = 0;
+        } else if (body.method === "eth_call") {
+          const data: string = body.params[0].data ?? body.params[0].input ?? "";
+          const matches = onlySelector === undefined || data.startsWith(onlySelector);
+          if (matches) matchingSinceWrite += 1;
+          if (matches && remaining > 0 && staleBlock !== undefined) {
+            body.params = [body.params[0], staleBlock];
+            remaining -= 1;
+          }
+        }
+      }
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify(await forward(body)));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    url: `http://127.0.0.1:${port}`,
+    matchingSinceWrite: () => matchingSinceWrite,
+    close: () => new Promise<void>((r) => server.close(() => r())),
+  };
+}
+
+describe("bondLots against a node that serves a stale view after every write", () => {
+  let devnet: DevnetHandle;
+  let proxy: Awaited<ReturnType<typeof startStaleProxy>>;
+  let reader: ViemChainReader;
+
+  beforeAll(async () => {
+    devnet = await setupDevnet({ lotCreationOrder: [] });
+    proxy = await startStaleProxy(devnet.rpcUrl, 3);
+    reader = new ViemChainReader(devnet.deployment, devnet.rpcUrl); // the REAL node, bypassing the proxy
+  }, 180_000);
+
+  afterAll(async () => {
+    await proxy.close();
+    await devnet.stop();
+  });
+
+  it("the proxy really is stale: a read right after a confirmed write shows the old state, then catches up", async () => {
+    // Without this, the test below could pass against a proxy that never lagged at all.
+    const issuer = devnet.agents["ISSUER-A"];
+    const account = privateKeyToAccount(issuer.privateKeyHex);
+    const wallet = createWalletClient({ account, transport: http(proxy.url) });
+    const pc = createPublicClient({ transport: http(proxy.url) });
+    const usdc = devnet.deployment.usdc.address as Hex;
+    const spender = devnet.deployment.capacityBond.address as Hex;
+    const hash = await wallet.writeContract({ account, chain: undefined, address: usdc, abi: erc20Abi, functionName: "approve", args: [spender, 7n] });
+    await pc.waitForTransactionReceipt({ hash });
+    const read = () => pc.readContract({ address: usdc, abi: erc20Abi, functionName: "allowance", args: [account.address, spender] });
+    expect(await read()).toBe(0n); // confirmed, and still invisible
+    await read();
+    await read();
+    expect(await read()).toBe(7n); // caught up
+  }, 60_000);
+
+  it("waits for each effect to be visible instead of simulating against the pre-write state", async () => {
+    const record = recordFor({
+      "ISSUER-A": devnet.agents["ISSUER-A"].address,
+      "ISSUER-B": devnet.agents["ISSUER-B"].address,
+    });
+    const results = await bondLots({
+      plan: planLots(record),
+      capacityBond: devnet.deployment.capacityBond.address as Hex,
+      usdc: devnet.deployment.usdc.address as Hex,
+      rpcUrl: proxy.url,
+      keyFor: (issuer) => devnet.agents[issuer as AgentId].privateKeyHex,
+      dryRun: false,
+      pollMs: 25,
+    });
+    expect(results.every((r) => r.status === "created")).toBe(true);
+    expect((await reader.issuersForClass(CLASS_CODE as Hex)).map((a) => a.toLowerCase())).toEqual([
+      devnet.agents["ISSUER-B"].address.toLowerCase(),
+      devnet.agents["ISSUER-A"].address.toLowerCase(),
+    ]);
+  }, SEQUENTIAL_BONDING_TIMEOUT_MS);
+});
+
+describe("bondLots when only the registration list lags", () => {
+  let devnet: DevnetHandle;
+  let proxy: Awaited<ReturnType<typeof startStaleProxy>>;
+  const STALE_READS = 3;
+
+  beforeAll(async () => {
+    devnet = await setupDevnet({ lotCreationOrder: [] });
+    // Stale ONLY for `issuersForClass`, so every earlier wait sees a fresh node and reaches the
+    // final check with the proxy still lagging. The list a stale node serves is a valid PREFIX of
+    // the declared order — the one answer a prefix-tolerant check would accept as success.
+    proxy = await startStaleProxy(devnet.rpcUrl, STALE_READS, toFunctionSelector("issuersForClass(bytes32)"));
+  }, 180_000);
+
+  afterAll(async () => {
+    await proxy.close();
+    await devnet.stop();
+  });
+
+  it("does not report success on a stale prefix: it reads the list until the FULL declared order shows", async () => {
+    const record = recordFor({
+      "ISSUER-A": devnet.agents["ISSUER-A"].address,
+      "ISSUER-B": devnet.agents["ISSUER-B"].address,
+    });
+    await bondLots({
+      plan: planLots(record),
+      capacityBond: devnet.deployment.capacityBond.address as Hex,
+      usdc: devnet.deployment.usdc.address as Hex,
+      rpcUrl: proxy.url,
+      keyFor: (issuer) => devnet.agents[issuer as AgentId].privateKeyHex,
+      dryRun: false,
+      pollMs: 25,
+    });
+    // Since the LAST transaction the tool read the list at least STALE_READS + 1 times: the stale
+    // ones, then one that was fresh. A single read — accepted on sight — would show 1.
+    expect(proxy.matchingSinceWrite()).toBeGreaterThan(STALE_READS);
   }, SEQUENTIAL_BONDING_TIMEOUT_MS);
 });

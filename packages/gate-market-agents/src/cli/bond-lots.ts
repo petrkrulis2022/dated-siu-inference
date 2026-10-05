@@ -173,6 +173,35 @@ export interface BondInput {
   /** Default true. Nothing is sent unless the caller says so. */
   dryRun?: boolean;
   log?: (line: string) => void;
+  /** Delay between visibility polls. Default 2000 ms; tests shorten it. */
+  pollMs?: number;
+}
+
+/**
+ * Polls until `ok(value)` holds, then returns the value; throws if it never does.
+ *
+ * **Why a receipt is not enough.** A load-balanced public endpoint can serve a pre-write view AFTER
+ * a transaction's receipt confirms (the sixth documented instance of that pattern, found live: the
+ * `createLot` simulation ran straight after the approval's receipt and saw no allowance). So after
+ * every write the tool waits for the write's own EFFECT to be readable before depending on it.
+ * It waits for the effect and not for the value to stop changing — two consecutive stale reads
+ * agree with each other and are still wrong. A read that never shows the effect throws; it does
+ * not fall through to acting on what was last seen.
+ */
+async function untilVisible<T>(
+  read: () => Promise<T>,
+  ok: (value: T) => boolean,
+  what: string,
+  pollMs: number,
+  attempts = 30,
+): Promise<T> {
+  let last: T | undefined;
+  for (let i = 0; i < attempts; i++) {
+    last = await read();
+    if (ok(last)) return last;
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+  throw new Error(`${what} was not visible after ${attempts} reads (last read: ${String(last)})`);
 }
 
 /**
@@ -185,6 +214,7 @@ export interface BondInput {
 export async function bondLots(input: BondInput): Promise<BondResult[]> {
   const log = input.log ?? (() => {});
   const dryRun = input.dryRun ?? true;
+  const pollMs = input.pollMs ?? 2_000;
   const publicClient = createPublicClient({ transport: http(input.rpcUrl) });
   const results: BondResult[] = [];
 
@@ -282,6 +312,19 @@ export async function bondLots(input: BondInput): Promise<BondResult[]> {
       }
       result.approveTx = await wallet.writeContract({ ...sim.request, chain: undefined });
       await publicClient.waitForTransactionReceipt({ hash: result.approveTx as Hex });
+      // The simulation below depends on this allowance; see `untilVisible`.
+      await untilVisible(
+        () =>
+          publicClient.readContract({
+            address: input.usdc,
+            abi: erc20Abi,
+            functionName: "allowance",
+            args: [account.address, input.capacityBond],
+          }),
+        (a) => a >= lot.bondedUsdc,
+        `${lot.issuer}'s approval`,
+        pollMs,
+      );
     }
 
     const sim = await publicClient.simulateContract({
@@ -298,23 +341,56 @@ export async function bondLots(input: BondInput): Promise<BondResult[]> {
     }
     result.createLotTx = await wallet.writeContract({ ...sim.request, chain: undefined });
     await publicClient.waitForTransactionReceipt({ hash: result.createLotTx as Hex });
+    // The next step reads registration, and the order is the point — wait until this lot shows.
+    await untilVisible(
+      () =>
+        publicClient.readContract({
+          address: input.capacityBond,
+          abi: CAPACITY_BOND_LOT_ABI,
+          functionName: "lots",
+          args: [lot.address, lot.classId],
+        }),
+      (l) => l[4] === true,
+      `${lot.issuer}'s ${lot.classLabel} lot`,
+      pollMs,
+    );
     result.status = "created";
     log(`${lot.issuer} ${lot.classLabel}: created, ${result.createLotTx}`);
     results.push(result);
   }
 
   if (!dryRun) {
-    // Confirmed from the chain, not from the receipts: what must hold afterwards is the order.
+    // Confirmed from the chain, not from the receipts: what must hold afterwards is the order. It
+    // must be the FULL declared order — a stale read that is missing a new lot is a valid PREFIX,
+    // and would pass a prefix check, so the wait is for the complete list.
     for (const classId of new Set(input.plan.map((l) => l.classId))) {
-      const registered = await publicClient.readContract({
-        address: input.capacityBond,
-        abi: CAPACITY_BOND_LOT_ABI,
-        functionName: "issuersForClass",
-        args: [classId],
-        blockNumber: await publicClient.getBlockNumber(),
+      const registered = await untilVisible(
+        () =>
+          publicClient.readContract({
+            address: input.capacityBond,
+            abi: CAPACITY_BOND_LOT_ABI,
+            functionName: "issuersForClass",
+            args: [classId],
+          }),
+        (list) =>
+          list.length === declaredOrder.length &&
+          list.every((a, i) => a.toLowerCase() === declaredOrder[i].toLowerCase()),
+        `the full registration order for class ${classId}`,
+        pollMs,
+      ).catch(async (err) => {
+        // Say what was actually there, so a real ordering failure is reported as one.
+        const seen = await publicClient.readContract({
+          address: input.capacityBond,
+          abi: CAPACITY_BOND_LOT_ABI,
+          functionName: "issuersForClass",
+          args: [classId],
+        });
+        const verdict = verifyRegistrationOrder(seen, declaredOrder);
+        throw new Error(
+          `after bonding, class ${classId}: ${verdict.ok ? String(err instanceof Error ? err.message : err) : verdict.reason}`,
+        );
       });
-      const verdict = verifyRegistrationOrder(registered, declaredOrder);
-      if (!verdict.ok) throw new Error(`after bonding, class ${classId}: ${verdict.reason}`);
+      void registered;
     }
   }
   return results;

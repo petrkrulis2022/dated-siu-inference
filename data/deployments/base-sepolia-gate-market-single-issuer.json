@@ -1,0 +1,223 @@
+{
+  "instrument": {
+    "id": "single-issuer-per-window",
+    "description": "One serving issuer in window 1 (F1), enforcement against an issuer that cannot serve in windows 2 and 3. ISSUER-B is registered first and ISSUER-A second, both lots bonded at deploy; after window 1 the operator drains ISSUER-B so later windows route to ISSUER-A. One issuer per window is configuration in this record, never code."
+  },
+  "topology": {
+    "lotCreationOrder": [
+      "ISSUER-B",
+      "ISSUER-A"
+    ],
+    "expectedIssuerByWindow": {
+      "1": "ISSUER-B",
+      "2": "ISSUER-A",
+      "3": "ISSUER-A"
+    },
+    "drain": {
+      "afterWindow": 1,
+      "issuer": "ISSUER-B",
+      "classId": "code",
+      "datedTo": "run_end"
+    },
+    "routeAfterDrain": "ISSUER-A"
+  },
+  "network": {
+    "name": "Base Sepolia",
+    "chainId": 84532,
+    "explorer": "https://sepolia.basescan.org",
+    "note": "Testnet only, per WP-7's own standing instruction. No mainnet address, no real funds, no live API key in any agent-reachable code path."
+  },
+  "source": {
+    "gitCommit": "bc54bc75dd6210c4147ac18f7ce08fb277043e6f",
+    "gitCommitShort": "bc54bc7",
+    "treeCleanAtDeploy": true,
+    "path": "packages/contracts",
+    "note": "The commit that was checked out, clean and already pushed to origin, when the deploy ran. The contracts are unchanged from the fifth trio; the broadcast file records the same commit."
+  },
+  "compiler": {
+    "solc": "0.8.24+commit.e11b9ed9",
+    "evmVersion": "shanghai",
+    "optimizer": {
+      "enabled": true,
+      "runs": 200
+    },
+    "bytecodeHash": "none",
+    "evmVersionRationale": "Same pin as base-sepolia.json's own TouchstoneAttestation/TouchstoneEscrow deployment \u2014 shanghai keeps Arc a deployment target rather than a rewrite; also why RateAttestationVerifier.sol hand-rolls EIP-712 instead of using OZ's MCOPY-emitting EIP712 base."
+  },
+  "deployedAt": {
+    "unix": 1791190964,
+    "iso": "2026-10-05T09:02:44Z",
+    "note": "Block timestamp of block 47711338, which contains all three creation transactions."
+  },
+  "deployer": "0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e",
+  "usdc": {
+    "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    "symbol": "USDC",
+    "decimals": 6,
+    "source": "Same address base-sepolia.json already verified (Circle official documentation, Circle's MCP server, 2026-08-16) \u2014 reused, not re-resolved.",
+    "verifiedOnChain": "symbol() == 'USDC' and decimals() == 6, already established by the prior deployment on this same chain"
+  },
+  "escrow": {
+    "address": "0x3eC06FFe8d5250d5Edf8Fff26b163aaaD65c8a00",
+    "note": "The existing TouchstoneEscrow, read by WorkClaim and unaware of it \u2014 unchanged and shared with the fifth trio."
+  },
+  "capacityBond": {
+    "address": "0x174F2a18E5ac4C8C0B2e3567454f6885874BAF24"
+  },
+  "claimRouter": {
+    "address": "0xF77B877b9BfED0574c670d763e04EFEdebA7f1fE"
+  },
+  "workClaim": {
+    "address": "0x667c3cc8a7bC55aF128a83BE560c9C0264B744B4"
+  },
+  "contractsDetail": {
+    "note": "Documentary detail beyond what GateMarketDeployment reads (chain/deployment.ts parses the flat capacityBond/claimRouter/workClaim keys above). Generated from the forge broadcast file, not typed. The sixth trio: bytecode identical to the fifth; all three addresses are new.",
+    "CapacityBond": {
+      "address": "0x174F2a18E5ac4C8C0B2e3567454f6885874BAF24",
+      "deploymentTx": "0x0c553c544db73971747ec94f2ee7b9de01dcd8d32280d6131d13ba03870f1e90",
+      "blockNumber": 47711338,
+      "gasUsed": 683626,
+      "constructorArgs": {
+        "usdc_": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        "workClaim_": "0x667c3cc8a7bC55aF128a83BE560c9C0264B744B4"
+      },
+      "constructorArgOrder": [
+        "usdc_",
+        "workClaim_"
+      ],
+      "verified": "Verified on Basescan by `forge script --verify` at deploy time (2026-10-05).",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x174F2a18E5ac4C8C0B2e3567454f6885874BAF24",
+      "notes": "workClaim() read back on-chain and confirmed to equal the WorkClaim below."
+    },
+    "ClaimRouter": {
+      "address": "0xF77B877b9BfED0574c670d763e04EFEdebA7f1fE",
+      "deploymentTx": "0x32f52dd5ce94e739855fd833bea49200b836ed348fec60136c1ac94ade1d5355",
+      "blockNumber": 47711338,
+      "gasUsed": 250543,
+      "constructorArgs": {
+        "bond_": "0x174F2a18E5ac4C8C0B2e3567454f6885874BAF24"
+      },
+      "constructorArgOrder": [
+        "bond_"
+      ],
+      "verified": "Verified on Basescan by `forge script --verify` at deploy time (2026-10-05).",
+      "explorerUrl": "https://sepolia.basescan.org/address/0xF77B877b9BfED0574c670d763e04EFEdebA7f1fE",
+      "notes": "bond() read back on-chain and confirmed to equal the CapacityBond above."
+    },
+    "WorkClaim": {
+      "address": "0x667c3cc8a7bC55aF128a83BE560c9C0264B744B4",
+      "deploymentTx": "0x0740ec143401e780affa5ea0d64f6d236b370bdad3a95c158e15a1bbd0c64bd4",
+      "blockNumber": 47711338,
+      "gasUsed": 2938291,
+      "constructorArgs": {
+        "usdc_": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        "bond_": "0x174F2a18E5ac4C8C0B2e3567454f6885874BAF24",
+        "router_": "0xF77B877b9BfED0574c670d763e04EFEdebA7f1fE",
+        "publisher_": "0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a",
+        "escrow_": "0x3eC06FFe8d5250d5Edf8Fff26b163aaaD65c8a00"
+      },
+      "constructorArgOrder": [
+        "usdc_",
+        "bond_",
+        "router_",
+        "publisher_",
+        "escrow_"
+      ],
+      "verified": "Verified on Basescan by `forge script --verify` at deploy time (2026-10-05).",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x667c3cc8a7bC55aF128a83BE560c9C0264B744B4",
+      "notes": "bond(), router() and escrow() read back on-chain and confirmed to match."
+    }
+  },
+  "capacityLots": {
+    "note": "Fixtures identical to the fifth trio, by decision (plan D1): both classes per issuer, 1 USDC bonded per lot. issuanceLimit = committedCapacityHours * measuredRateMilliSiuPerHour * 0.5 (CapacityBond.ISSUANCE_RATIO_BPS); bondedUsdc plays no part in it. Bonded B first, then A, by cli/bond-lots.ts \u2014 registration order is routing priority \u2014 which writes each lot's transactions into bondTransactions below. Extract lots are bonded and unused by a code-class run; they are NOT available headroom for a code-class job.",
+    "rateFiguresAreFixtures": "Neither committedCapacityHours nor measuredRateMilliSiuPerHour is a measurement; they are scenario parameters chosen to give the issuance limits below while keeping the deliberate inequality between the two issuers.",
+    "classIds": {
+      "code": "0x2dc081a8d6d4714c79b5abd2e9b08c3a33b4ef1dcf946ef8b8cf6c495014f47b",
+      "extract": "0xc3a71ae87b7c3ebddac6a71a0769398904aa1c025ba79ce83e237d582b484491"
+    },
+    "ISSUER-B": {
+      "address": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "measuredRateMilliSiuPerHour": 80,
+      "committedCapacityHours": 800,
+      "bondedUsdcPerClass": 1000000,
+      "issuanceLimitPerClass": 32000,
+      "bondTransactions": {
+        "code": {
+          "createLot": "0x6e01516b128cd003f08ae2da2ec77e1333044a1cd8bb2f5150ac50856c6976ed"
+        },
+        "extract": {
+          "approve": "0xbc6ae2daf00478cf0da74c1b96fdd6efe889f506ab48717633d911f77132748f",
+          "createLot": "0x021253d9017084dd6e122b674c5c5381cfa8fa18346775db8d9bc6c68c4a42f1"
+        }
+      }
+    },
+    "ISSUER-A": {
+      "address": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+      "measuredRateMilliSiuPerHour": 120,
+      "committedCapacityHours": 800,
+      "bondedUsdcPerClass": 1000000,
+      "issuanceLimitPerClass": 48000,
+      "bondTransactions": {
+        "code": {
+          "approve": "0x6e72b13855eb46e5d2b70084247886fc6dee9bbd211417fc2a47db45a3c0d98a",
+          "createLot": "0x7f81203fb0691594d35d020dc46fdac02da420e3441d0a4c7ae15377d86b44b2"
+        },
+        "extract": {
+          "approve": "0x2d3c19b3bf51f51233a4eab5947faa5f85415462c43f52af0890a74de038625a",
+          "createLot": "0x34960960a088d9740b2b089badee70b9fd6f360e4eb3ebd7cf05b8424d78cbd4"
+        }
+      }
+    }
+  },
+  "roster": {
+    "note": "The same six keypairs as base-sepolia-gate-market.json (see its roster for the model assignment); only the three contracts and the lots are new.",
+    "addresses": {
+      "ISSUER-A": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+      "ISSUER-B": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "ORCHESTRATOR": "0x8Bf6De67D0B9705520Cdf5a348f5763e2175F363",
+      "WORKER-CODE": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+      "WORKER-EXTRACT": "0x2cd53E449F6cF45c51f600e167b4D2630128c8F3",
+      "HEDGER": "0xf1B22259b355434a3b84A381Ef5c8d96Eb6C1614"
+    }
+  },
+  "relationship": {
+    "supersedes": null,
+    "alongside": "data/deployments/base-sepolia-gate-market.json",
+    "note": "The fifth trio is untouched and remains the default under --deployment; this record is selected with --deployment data/deployments/base-sepolia-gate-market-single-issuer.json."
+  },
+  "mainnetRequirements": [
+    "Same as packages/contracts/README.md's own Gate Market mainnet preconditions: split the publisher key (print-signing vs rate-attestation-signing) before any real deployment, and the CapacityBond-goes-to-a-new-chain precondition (the daily print-publish automation must anchor to that chain's own TouchstoneAttestation first).",
+    "Generate a real publisher key on an air-gapped machine \u2014 the testnet key used here has passed through repository-adjacent files, same caveat as base-sepolia.json's TouchstoneAttestation entry."
+  ],
+  "verifiedOnChain": {
+    "when": "2026-10-05, immediately after bonding; read from the chain by the script that wrote this block, not typed",
+    "registrationOrder": {
+      "code": [
+        "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+        "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54"
+      ],
+      "extract": [
+        "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+        "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54"
+      ]
+    },
+    "headroomMilliSiu": {
+      "ISSUER-B": {
+        "code": 32000,
+        "extract": 32000
+      },
+      "ISSUER-A": {
+        "code": 48000,
+        "extract": 48000
+      }
+    },
+    "routerRoutesCodeMintTo": {
+      "4000": "ISSUER-B",
+      "10000": "ISSUER-B",
+      "32000": "ISSUER-B",
+      "32001": "ISSUER-A"
+    },
+    "usdcHeldByCapacityBondMinorUnits": 4000000,
+    "wiring": "CapacityBond.workClaim, ClaimRouter.bond, WorkClaim.bond/router/escrow read back and equal the addresses above."
+  }
+}
