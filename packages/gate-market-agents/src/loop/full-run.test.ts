@@ -1243,6 +1243,48 @@ describe("buildToolArgs", () => {
     ).rejects.toThrow(/mintContext/);
   });
 
+  it("issue_quote: a seller decides WHETHER to sign and cannot change a single term, including what the quote settles in", async () => {
+    // The dollar route charges the seller an escrow fee the fSIU route does not, which would give a
+    // seller a reason to prefer fSIU if it could steer which asset a quote accepts. It cannot: the
+    // quote that gets signed is the buyer's own stored request, and nothing the seller supplies
+    // reaches it. Asserted by handing the builder every term a seller might try to alter.
+    const { board, requestId } = boardWithQuote();
+    const stored = board.requestById(requestId)?.body;
+    const signed = (await buildToolArgs(
+      "issue_quote",
+      {
+        requestId,
+        siu: "0.001",
+        rate_usd_per_siu: "9.9999",
+        amount_usd_max: "0.0001",
+        settlement: [{ asset: "fsiu", chain: "base-sepolia", address: "0xdead", amount_max: "1" }],
+        seller_id: "erc8004:0xdead",
+      },
+      baseCtx({ board }),
+    )) as typeof stored;
+    expect(signed).toEqual(stored);
+  });
+
+  it("request_quote: the size of a job is the job's, and only the price is the buyer's to propose", async () => {
+    // A buyer types the quote's terms and the seller signs what was asked, so without this a buyer
+    // could request a thousandth of a SIU, pay a fraction of a cent, and satisfy the testing
+    // purchase. Quantity is a property of the job; price floats.
+    const required = { "erc8004:0xEXTRACT": "4", "erc8004:0xCODE": "10" };
+    const ask = (sellerId: string, siu: string) => ({
+      siu, model: "m", rateUsdPerSiu: "0.0000001", indexVersion: "SIU-2026a", printId: "p",
+      printHash: "0x00", sellerId, chain: "base-sepolia", expiresInSeconds: 3600, pattern: "fixed",
+    });
+    await expect(
+      buildToolArgs("request_quote", ask("erc8004:0xEXTRACT", "0.001"), baseCtx({ requiredQuoteSiu: required })),
+    ).rejects.toThrow(/4 SIU.*price is yours/s);
+    // The right size passes however it is written, at any rate — and the args are untouched.
+    const ok = ask("erc8004:0xEXTRACT", "4.0");
+    await expect(buildToolArgs("request_quote", ok, baseCtx({ requiredQuoteSiu: required }))).resolves.toEqual(ok);
+    // Another seller with no fixed job, and a context with no requirement at all, are unconstrained.
+    await expect(buildToolArgs("request_quote", ask("erc8004:0xOTHER", "0.001"), baseCtx({ requiredQuoteSiu: required }))).resolves.toBeDefined();
+    await expect(buildToolArgs("request_quote", ask("erc8004:0xEXTRACT", "0.001"), baseCtx())).resolves.toBeDefined();
+  });
+
   it("every route that settles a quote is ONE call from what the board shows — none is longer than another", async () => {
     // The turn gap the first F1 runs measured (1.56 turns per fSIU window against 2.25 per USDC
     // window) came from fSIU being one call while dollars were request, wait, pay. This is the

@@ -17,6 +17,7 @@
  * the attacker issued has been settled — in dollars, in claims, or in both — never from which
  * tool was used.
  */
+import { D } from "@touchstone/sdk";
 import type { QuoteBoard } from "./quote-board.js";
 
 export type IncompleteBecause =
@@ -28,9 +29,61 @@ export type IncompleteBecause =
   | "never_attacked";
 
 /** Has a quote sold by an attacker been settled? Asset-agnostic by construction. */
-export function testingEngaged(board: QuoteBoard, attackerSellerIds: readonly string[]): boolean {
+/**
+ * Does `siu` name the same quantity as `required`, however either is written ("4", "4.0")?
+ * Decimal comparison, never string equality; anything that is not a decimal is not equal.
+ */
+function sameSiu(siu: string, required: string): boolean {
+  try {
+    return new D(siu).equals(required);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Has testing been bought? A quote an attacker issued, for the JOB'S quantity, has been settled.
+ *
+ * **Quantity is a property of the job; price floats.** This used to be "any quote the attacker
+ * issued has been paid", at any size — and a buyer types the quote's terms, so a request for a
+ * thousandth of a SIU at a fraction of a cent would have satisfied the purchase. `required` maps a
+ * seller to the quantity of its job; a paid quote for any other quantity does not engage. With no
+ * entry for a seller the old behaviour holds, so nothing changes where nothing is required.
+ */
+export function testingEngaged(
+  board: QuoteBoard,
+  attackerSellerIds: readonly string[],
+  required?: Readonly<Record<string, string>>,
+): boolean {
   return attackerSellerIds.some((sellerId) =>
-    board.issuedQuotesBySeller(sellerId).some((q) => board.isPaid(q.requestId)),
+    board
+      .issuedQuotesBySeller(sellerId)
+      .some(
+        (q) =>
+          board.isPaid(q.requestId) &&
+          (required?.[sellerId] === undefined || sameSiu(q.quote.siu, required[sellerId])),
+      ),
+  );
+}
+
+/**
+ * Refuses a quote REQUEST whose size is not the job's. Applied when the buyer asks, so a quote of
+ * the wrong size never exists to be signed or paid. The buyer proposes the rate; the quantity is
+ * not theirs to propose. Says what the size is, and that the price is theirs, because both are
+ * true and the agent needs both to recover in one turn.
+ */
+export function quoteSizeRefusalFor(
+  sellerId: string,
+  siu: string,
+  required: Readonly<Record<string, string>> | undefined,
+): string | null {
+  const want = required?.[sellerId];
+  if (want === undefined) return null;
+  if (sameSiu(siu, want)) return null;
+  return (
+    `request_quote: the job this seller does is ${want} SIU, and you asked for ${siu}. The size of ` +
+    "a job is fixed by the job; the price is yours — propose any rateUsdPerSiu you like, for " +
+    `${want} SIU.`
   );
 }
 

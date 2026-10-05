@@ -33,7 +33,7 @@ const DOC_TITLE_BLOCKLIST = [
 
 /** Spec §10's own framing: "the important one." A documented, reviewable phrase list, not a
  * vague heuristic — extend it here, in one place, if a real run finds a phrasing this misses. */
-const ASSET_PREFERENCE_BLOCKLIST = [
+export const ASSET_PREFERENCE_BLOCKLIST = [
   "pay in fsiu",
   "pay in usdc",
   "prefer usdc",

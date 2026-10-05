@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { openAndFund } from "@touchstone/agents";
 import type { TouchstoneQuote } from "@touchstone/sdk";
-import { quoteHashHex } from "@touchstone/sdk";
+import { minorUnitsToUsd, quoteHashHex } from "@touchstone/sdk";
 import type { ToolDefinition } from "./types.js";
 import { payWithClaimTool } from "./pay-with-claim.js";
 
@@ -78,8 +78,7 @@ export const settleSplitTool: ToolDefinition<Args, SettleSplitResult> = {
   spendUsd: (args) => {
     const quoted = BigInt(args.quote.settlement[0].amount_max);
     const claimValue = claimValueMinorUnits(args.claimQuantityMilliSiu, args.nanoUsdPerSiu);
-    const usdcLeg = quoted > claimValue ? quoted - claimValue : 0n;
-    return (Number(usdcLeg) / 1_000_000).toFixed(6);
+    return usdcLegUsd(quoted, claimValue);
   },
   argsSchema,
   async handler(ctx, args, privateKeyHex) {
@@ -135,7 +134,7 @@ export const settleSplitTool: ToolDefinition<Args, SettleSplitResult> = {
       escrowTxHash,
       claimMintTxHash: claim.mintTxHash,
       claimMintCostMinorUnits: claim.mintCostMinorUnits,
-      claimShare: quoted === 0n ? "0" : (Number(claimValue) / Number(quoted)).toFixed(4),
+      claimShare: claimShareDecimal(claimValue, quoted),
     };
   },
 };
@@ -148,4 +147,25 @@ export const settleSplitTool: ToolDefinition<Args, SettleSplitResult> = {
  */
 export function claimValueMinorUnits(quantityMilliSiu: string, nanoUsdPerSiu: string): bigint {
   return (BigInt(quantityMilliSiu) * BigInt(nanoUsdPerSiu)) / 1_000_000n;
+}
+
+/**
+ * The claim leg's share of a quote's price, as a four-decimal string, in integers (invariant 4).
+ *
+ * Half-up on the EXACT ratio. This used to be `(Number(a) / Number(b)).toFixed(4)`, which stores
+ * a tie like 29/160 = 0.18125 a hair below itself and printed 0.1812. A share is a ratio and not
+ * money, but it is derived from money, it is the figure F1 reports per split, and a settlement
+ * path should not contain a float at all — so there is nothing to argue about later.
+ */
+export function claimShareDecimal(claimValueMinor: bigint, quotedMinor: bigint): string {
+  if (quotedMinor === 0n) return "0";
+  const scaled = (claimValueMinor * 10_000n * 2n + quotedMinor) / (2n * quotedMinor); // half-up
+  const digits = scaled.toString().padStart(5, "0");
+  return `${digits.slice(0, -4)}.${digits.slice(-4)}`;
+}
+
+/** The dollar leg's spend as an exact USD decimal string: the quote's price less the claim leg's
+ *  value, never below zero. */
+export function usdcLegUsd(quotedMinor: bigint, claimValueMinor: bigint): string {
+  return minorUnitsToUsd((quotedMinor > claimValueMinor ? quotedMinor - claimValueMinor : 0n).toString());
 }

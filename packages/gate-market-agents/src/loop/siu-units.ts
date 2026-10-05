@@ -20,3 +20,14 @@ export function decimalSiuToMilliSiu(siu: string): string {
   if (milli === 0n) throw new Error(`${siu} SIU is zero.`);
   return milli.toString();
 }
+
+/**
+ * Milli-SIU as a decimal SIU string, exactly — the inverse of `decimalSiuToMilliSiu`. 10000 -> "10",
+ * 4500 -> "4.5", 1 -> "0.001". Integers only; a quote states its size in SIU.
+ */
+export function milliSiuToDecimalSiu(milli: bigint): string {
+  if (milli < 0n) throw new Error("a quantity cannot be negative.");
+  const whole = milli / 1000n;
+  const frac = (milli % 1000n).toString().padStart(3, "0").replace(/0+$/, "");
+  return frac === "" ? whole.toString() : `${whole}.${frac}`;
+}

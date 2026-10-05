@@ -404,6 +404,23 @@ describe("p5 three-window roster", () => {
     }
   });
 
+  it("teaches the job sizes the loop enforces: each brief's example request is for exactly the required size", () => {
+    // The loop refuses a request_quote whose size is not the job's. A brief example that showed any
+    // other size would cost the agent a turn on an error — the §4.6-RULE defect — so the size in
+    // the example and the size that is enforced are asserted to be the same number.
+    const roster = buildRoster(input(1));
+    const sizeOf = (text: string, sellerFragment: string): string | undefined =>
+      [...text.matchAll(/"request_quote", "args": \{"siu": "([^"]+)"[^}]*"sellerId": "([^"]+)"/g)].find((m) =>
+        m[2].includes(sellerFragment),
+      )?.[1];
+    const orchestrator = find(roster, "ORCHESTRATOR").skillPackText;
+    const code = find(roster, "WORKER-CODE").skillPackText;
+    expect(sizeOf(orchestrator, "erc8004")).toBe("10");
+    expect(sizeOf(code, "erc8004")).toBe("4");
+    expect(orchestrator).toContain("a request for any other size is\n    refused");
+    expect(code).toContain("a request for any other size is refused, and\n  the rate is yours to propose");
+  });
+
   it("never shows a quantity on a transfer that names a quote, because the loop sets it from the quote", () => {
     // A transfer naming a quote is sized from the quote's price at the print (parity.ts) and any
     // quantity the model supplies is ignored. A brief example that still carried one would teach a
