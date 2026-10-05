@@ -1243,6 +1243,32 @@ describe("buildToolArgs", () => {
     ).rejects.toThrow(/mintContext/);
   });
 
+  it("every route that settles a quote is ONE call from what the board shows — none is longer than another", async () => {
+    // The turn gap the first F1 runs measured (1.56 turns per fSIU window against 2.25 per USDC
+    // window) came from fSIU being one call while dollars were request, wait, pay. This is the
+    // structural half of its removal: once a quote is on the board, settling it takes exactly one
+    // call in every asset, naming nothing but the quote and, where the route needs one, the choice
+    // that is genuinely the payer's (which claim to spend, how much to settle in claims). It is not
+    // the behavioural half — how many turns agents actually take per payment — which only a run
+    // can measure, and which the block report computes from the run.
+    const seller = "0x00000000000000000000000000000000000000cd";
+    const { board, requestId } = boardWithQuote(seller, "10", "500000");
+    const ctx = baseCtx({
+      mintContext: QUOTED_MINT,
+      board,
+      agentAddressByAgentId: { "WORKER-CODE": seller },
+    });
+    const wholeCall = [
+      ["pay", { requestId }],
+      ["pay_with_claim", { requestId }],
+      ["settle_split", { requestId, claimQuantityMilliSiu: "20000" }],
+      ["transfer_claim", { agentId: "WORKER-CODE", tokenId: "7", requestId }],
+    ] as const;
+    for (const [tool, args] of wholeCall) {
+      await expect(buildToolArgs(tool, args, ctx), `${tool} must be settleable in one call`).resolves.toBeDefined();
+    }
+  });
+
   it("parity holds across every fSIU route that names a quote, for any price — asserted as a property", async () => {
     // §4.6ai: a fixture built from the code's own assumption cannot see the defect, so this takes
     // quotes of many sizes and prices (none of them tied to the print) and checks the one fact
