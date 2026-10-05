@@ -1337,13 +1337,15 @@ YOUR JOB THIS WINDOW
     Step 1: request a quote exactly as in Option A.
     Step 2 (once WORKER-CODE has issued a quote — you will see it on the market board):
       {"tool": "pay_with_claim", "args": {"requestId": "<the requestId from the board>"}}
-      The claim is sized and addressed from the quote itself, so there is nothing else to supply.
+      The claim is addressed to the seller and sized so it is worth the quote's dollar price at the
+      print in force — the same dollars the USDC route costs — so there is nothing else to supply.
 
   OPTION C — settle one quote partly in each. Request a quote as in Option A, then:
     {"tool": "settle_split", "args": {"requestId": "<the requestId from the board>",
       "claimQuantityMilliSiu": "<how much of it to settle in claims>",
       "settler": "0x0000000000000000000000000000000000000000"}}
-    The dollar leg is whatever the quote's remaining value is, and the escrow opens for that.
+    Claims are valued at the print in force; the dollar leg is whatever remains of the quote's
+    price, and the escrow opens for that.
     One call, one turn — the same turn cost as settling wholly in either asset.
 
   SAYING MORE ABOUT A PAYMENT. On pay_with_claim and transfer_claim you may add
@@ -1354,7 +1356,12 @@ YOUR JOB THIS WINDOW
   mint_claim and transfer_claim remain available if you want the steps separately:
     {"tool": "mint_claim", "args": {"quantity": "10000"}}
     {"tool": "transfer_claim", "args": {"agentId": "WORKER-CODE", "tokenId": "<tokenId>",
-      "quantity": "10000", "requestId": "<the quote it settles, if any>"}}
+      "quantity": "10000"}}
+  A transfer like that settles no quote. To settle one with a claim you hold, name it:
+    {"tool": "transfer_claim", "args": {"agentId": "WORKER-CODE", "tokenId": "<tokenId>",
+      "requestId": "<the requestId from the board>"}}
+  Naming a quote sets the quantity for you — the amount of claim worth the quote's dollar price
+  at the print in force — and the recipient must be that quote's seller.
 
   HOW THE REST OF THE WINDOW WORKS, STATED AS A FACT
   The window does not end when you have paid. Delivery, forward offers from issuers, and failures
@@ -1438,8 +1445,8 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${windowCount})
       "args": {"requestId": "<the requestId from the board>"}}
     IN fSIU, using a claim you ALREADY HOLD — no new capacity is consumed, the claim simply
     changes hands:  {"tool": "transfer_claim", "args": {"agentId": "WORKER-EXTRACT",
-      "tokenId": "<the tokenId you hold>", "quantity": "${ATTACK_JOB_MILLI_SIU}",
-      "requestId": "<the requestId from the board>"}}
+      "tokenId": "<the tokenId you hold>", "requestId": "<the requestId from the board>"}}
+      (the quantity is set from the quote: the amount of claim worth its dollar price at the print)
     PARTLY IN EACH:  {"tool": "settle_split", "args": {"requestId": "<the requestId>",
       "claimQuantityMilliSiu": "<how much of it to settle in claims>",
       "settler": "0x0000000000000000000000000000000000000000"}}

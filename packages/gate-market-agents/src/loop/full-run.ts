@@ -38,7 +38,7 @@ import type { AttackToolResult } from "../tools/submit-attack.js";
 import { RunRecorder, type RunManifest } from "../run-recorder/recorder.js";
 import { FrictionLogWriter, type FrictionLogEntry } from "../friction/log.js";
 import { QuoteBoard, type PaidAsset } from "./quote-board.js";
-import { decimalSiuToMilliSiu } from "./siu-units.js";
+import { claimMilliSiuForQuote } from "./parity.js";
 import { ClaimLedger } from "./claim-ledger.js";
 import {
   submitAttackRefusalFor,
@@ -3108,7 +3108,12 @@ export async function buildToolArgs(
       throw new Error(`pay_with_claim: no issued quote found for request "${raw.requestId}".`);
     }
     const to = quote.seller_id.replace(/^erc8004:/, "");
-    const quantity = decimalSiuToMilliSiu(quote.siu);
+    // Sized from the quote's PRICE at the print in force, not from its SIU count — see parity.ts.
+    // The two are the same dollars only when the buyer happened to quote at the print.
+    const quantity = claimMilliSiuForQuote(quote, {
+      printId: ctx.mintContext.printId,
+      nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu,
+    }).toString();
     const validUntil = BigInt(Math.floor(Date.now() / 1000)) + ctx.mintContext.validitySeconds;
     const signature = await signRateAttestation(
       {
@@ -3157,10 +3162,38 @@ export async function buildToolArgs(
       }
       to = resolved;
     }
+    // A transfer that NAMES a quote settles it. It used to mark the quote paid for any quantity to
+    // any recipient — one milli-SIU to nobody counted — so a transfer that names a quote is now
+    // held to what a payment is: it goes to the quote's seller, in the amount worth the quote's
+    // price at the print (parity.ts). Which claim to spend stays the holder's choice.
+    const named = (rawArgs as { requestId?: unknown } | undefined)?.requestId;
+    let quantity = asDecimalString(raw?.quantity);
+    if (typeof named === "string") {
+      const quote = ctx.board.issuedQuoteById(named);
+      if (!quote) {
+        throw new Error(`transfer_claim: no issued quote found for request "${named}".`);
+      }
+      if (!ctx.mintContext) {
+        throw new Error(
+          "transfer_claim: this window has no mintContext, so a claim cannot be sized from a quote.",
+        );
+      }
+      const seller = quote.seller_id.replace(/^erc8004:/, "");
+      if (typeof to !== "string" || to.toLowerCase() !== seller.toLowerCase()) {
+        throw new Error(
+          `transfer_claim: quote ${named} is payable to ${seller}, not ${String(to)}. A transfer ` +
+            "that names a quote must go to that quote's seller.",
+        );
+      }
+      quantity = claimMilliSiuForQuote(quote, {
+        printId: ctx.mintContext.printId,
+        nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu,
+      }).toString();
+    }
     return {
       to,
       tokenId: asDecimalString(raw?.tokenId),
-      quantity: asDecimalString(raw?.quantity),
+      quantity,
       ...(typeof raw?.memo === "string" && raw.memo.trim() !== ""
         ? { memo: raw.memo.trim() }
         : {}),

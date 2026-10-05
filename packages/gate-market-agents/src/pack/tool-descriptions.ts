@@ -25,7 +25,7 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   mint_claim:
     "mint_claim(quantity, forWindow?) -> mints a dated work claim for the job/class at the published rate (the class id, window bounds and rate attestation are all supplied for you); routed to an issuer with headroom, returns tokenId + the routed issuer. forWindow names which delivery window the claim is for, and defaults to the one you are in; a claim for a later window consumes that issuer's headroom now and can only be presented once that window opens.",
   transfer_claim:
-    "transfer_claim(agentId, tokenId, quantity, requestId?) -> free ERC-1155 transfer to a named roster agent (or transfer_claim(to, tokenId, quantity) with a literal address). Pass requestId to settle a quote you have received with a claim you already hold, instead of paying in dollars or minting a new one; the seller is then told it has been paid and owes the work.",
+    "transfer_claim(agentId, tokenId, quantity, requestId?) -> free ERC-1155 transfer to a named roster agent (or transfer_claim(to, tokenId, quantity) with a literal address). Pass requestId to settle a quote you have received with a claim you already hold, instead of paying in dollars or minting a new one; the quantity is then set from the quote (the amount of claim worth its dollar price at the print in force) and the recipient must be the quote's seller — you choose which claim to spend. The seller is then told it has been paid and owes the work.",
   redeem_claim:
     "redeem_claim(tokenId, taskSpecHash) -> presents your claim for redemption inside its window",
   settle_window_close:
@@ -54,7 +54,7 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   submit_attack:
     'submit_attack(submissionSource) -> runs your candidate answer.mjs against the delivered gate AND against an independent oracle, and reports which of the two accepted it. Supply only the module source as a JSON string; the gate being tested, the reference files and the oracle seed are supplied for you. A result counts for you ONLY when the gate accepts a submission the oracle rejects (classification "false_accept"). A correct submission both accept scores nothing, and breaking the oracle scores nothing.',
   pay_with_claim:
-    "pay_with_claim(requestId, forWindow?) -> settles a quote the seller issued, in fSIU instead of USDC: mints a dated work claim against an issuer's bonded capacity, sized and addressed from the quote, and transfers it to the seller. The claim reserves that issuer's headroom, which is finite and shared. forWindow names which delivery window the claim is for, and defaults to the one you are in.",
+    "pay_with_claim(requestId, forWindow?) -> settles a quote the seller issued, in fSIU instead of USDC: mints a dated work claim against an issuer's bonded capacity, addressed to the seller and sized so it is worth the quote's dollar price at the print in force (the same dollars paying in USDC costs), and transfers it to the seller. The claim reserves that issuer's headroom, which is finite and shared. forWindow names which delivery window the claim is for, and defaults to the one you are in.",
   settle_split:
     "settle_split(requestId | quote, claimQuantityMilliSiu) -> settles ONE quote partly in fSIU and partly in USDC, in a single call. claimQuantityMilliSiu is how much of it to settle in claims; the dollar leg is whatever the quote's remaining value is, and the escrow opens for that. One call, one turn — the same turn cost as settling wholly in either asset.",
   settle_escrow:

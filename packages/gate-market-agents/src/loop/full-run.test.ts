@@ -18,7 +18,7 @@ import {
   runGateHardeningChecks,
   type GateHardeningResult,
 } from "@touchstone/task-pack-gate-hardening";
-import { D, type Print, type QuoteBody } from "@touchstone/sdk";
+import { D, minorUnitsToUsd, type Print, type QuoteBody } from "@touchstone/sdk";
 import type { RunnerDeps } from "../deps.js";
 import type { RunManifest } from "../run-recorder/recorder.js";
 import { BudgetCeiling } from "../budget/ceiling.js";
@@ -925,7 +925,12 @@ describe("buildToolArgs", () => {
   }
 
   /** A board holding one ANSWERED quote — what every settlement route now needs. */
-  function boardWithQuote(sellerAddress = "0x00000000000000000000000000000000000000cd", siu = "10") {
+  function boardWithQuote(
+    sellerAddress = "0x00000000000000000000000000000000000000cd",
+    siu = "10",
+    amountMaxMinorUnits = "500000",
+    printId = "2026-09-25",
+  ) {
     const board = new QuoteBoard();
     const body = {
       schema_version: "2.0",
@@ -933,14 +938,14 @@ describe("buildToolArgs", () => {
       pattern: "fixed" as const,
       model: "test",
       rate_usd_per_siu: "0.05",
-      amount_usd_max: "0.5",
+      amount_usd_max: minorUnitsToUsd(amountMaxMinorUnits),
       index_version: "SIU-2026a",
-      print_id: "2026-09-25",
+      print_id: printId,
       print_hash: "0xabc",
       seller_id: `erc8004:${sellerAddress}`,
       expiry: "2099-01-01T00:00:00Z",
       settlement: [
-        { asset: "usdc", chain: "base-sepolia", address: "0x0", amount_max: "500000" },
+        { asset: "usdc", chain: "base-sepolia", address: "0x0", amount_max: amountMaxMinorUnits },
       ] as QuoteBody["settlement"],
     };
     const request = board.postRequest("ORCHESTRATOR", body);
@@ -1179,7 +1184,12 @@ describe("buildToolArgs", () => {
       baseCtx({ mintContext: QUOTED_MINT, board }),
     )) as { to: string; quantity: string };
     expect(args.to).toBe("0x00000000000000000000000000000000000000cd");
-    expect(args.quantity).toBe("10000"); // 10 SIU, in milli-SIU
+    // The claim is sized from the quote's PRICE, not its SIU count. The quote is $0.50 (500,000
+    // minor units) and the print is 10,700,000 nanoUSD/SIU, so the claim must be worth $0.50:
+    // ceil(500,000 * 1e6 / 10,700,000) = 46,729 mSIU. Sizing it as the quote's 10 SIU (10,000 mSIU)
+    // made it worth ~$0.107 — the asset 79% cheaper for identical work, which turns F1 into a
+    // measurement of price rather than preference.
+    expect(args.quantity).toBe("46729");
   });
 
   it("pay_with_claim: a model cannot redirect or resize the payment once a quote is named", async () => {
@@ -1190,7 +1200,66 @@ describe("buildToolArgs", () => {
       baseCtx({ mintContext: QUOTED_MINT, board }),
     )) as { to: string; quantity: string };
     expect(args.to).toBe("0x00000000000000000000000000000000000000cd");
-    expect(args.quantity).toBe("10000");
+    expect(args.quantity).toBe("46729");
+  });
+
+  it("pay_with_claim: refuses a quote issued against a print other than the one in force", async () => {
+    const { board, requestId } = boardWithQuote();
+    await expect(
+      buildToolArgs(
+        "pay_with_claim",
+        { requestId },
+        baseCtx({ mintContext: { ...QUOTED_MINT, printId: "2026-09-26" }, board }),
+      ),
+    ).rejects.toThrow(/2026-09-25.*2026-09-26/s);
+  });
+
+  it("transfer_claim naming a quote: the quantity is set from the quote and the recipient must be its seller", async () => {
+    // Before this, a transfer that named a quote marked it PAID for ANY quantity to ANY recipient —
+    // one milli-SIU to nobody settled a quote, and a "settled" testing purchase passed a window.
+    const seller = "0x00000000000000000000000000000000000000cd";
+    const { board, requestId } = boardWithQuote(seller, "10");
+    const args = (await buildToolArgs(
+      "transfer_claim",
+      { to: seller, tokenId: "7", quantity: "1", requestId },
+      baseCtx({ mintContext: QUOTED_MINT, board }),
+    )) as { to: string; tokenId: string; quantity: string };
+    expect(args.quantity).toBe("46729"); // not the 1 the model offered
+    expect(args.to).toBe(seller);
+    expect(args.tokenId).toBe("7"); // which claim to spend stays the holder's choice
+
+    await expect(
+      buildToolArgs(
+        "transfer_claim",
+        { to: "0x000000000000000000000000000000000000dead", tokenId: "7", quantity: "46729", requestId },
+        baseCtx({ mintContext: QUOTED_MINT, board }),
+      ),
+    ).rejects.toThrow(/payable to 0x00000000000000000000000000000000000000cd/);
+    await expect(
+      buildToolArgs("transfer_claim", { to: seller, tokenId: "7", requestId: "qr-nonexistent" }, baseCtx({ mintContext: QUOTED_MINT })),
+    ).rejects.toThrow(/no issued quote/);
+    await expect(
+      buildToolArgs("transfer_claim", { to: seller, tokenId: "7", requestId }, baseCtx({ board })),
+    ).rejects.toThrow(/mintContext/);
+  });
+
+  it("parity holds across every fSIU route that names a quote, for any price — asserted as a property", async () => {
+    // §4.6ai: a fixture built from the code's own assumption cannot see the defect, so this takes
+    // quotes of many sizes and prices (none of them tied to the print) and checks the one fact
+    // that matters, from the claim's side: what the contract would charge to mint the quantity
+    // each route produces is at least the quote's dollar price, and short of it by under one mSIU.
+    const seller = "0x00000000000000000000000000000000000000cd";
+    for (const [siu, priceMinor] of [["10", "500000"], ["4", "5700"], ["0.5", "1"], ["120", "9999999"], ["10", "14200"]] as const) {
+      const { board, requestId } = boardWithQuote(seller, siu, priceMinor);
+      const ctx = baseCtx({ mintContext: QUOTED_MINT, board });
+      const viaMint = (await buildToolArgs("pay_with_claim", { requestId }, ctx)) as { quantity: string };
+      const viaTransfer = (await buildToolArgs("transfer_claim", { to: seller, tokenId: "1", requestId }, ctx)) as { quantity: string };
+      for (const q of [viaMint.quantity, viaTransfer.quantity]) {
+        const cost = (BigInt(q) * 10_700_000n) / 1_000_000n;
+        expect(cost, `${siu} SIU quoted at ${priceMinor}`).toBeGreaterThanOrEqual(BigInt(priceMinor));
+        expect((cost - BigInt(priceMinor)) * 1_000_000n, `${siu} SIU quoted at ${priceMinor}`).toBeLessThan(10_700_000n);
+      }
+    }
   });
 
   it("pay_with_claim: refuses a quote nobody has issued", async () => {
@@ -1474,7 +1543,8 @@ describe("buildToolArgs", () => {
   });
 
   it("pay_with_claim: carries the same dating, so paying a counterparty forward is possible too", async () => {
-    const quoted = boardWithQuote();
+    // Quoted against the print this window attests: a claim is sized at the print the quote names.
+    const quoted = boardWithQuote(undefined, "10", "500000", "2026-09-27-commodity");
     const args = (await buildToolArgs(
       "pay_with_claim",
       { requestId: quoted.requestId, forWindow: 2 },
@@ -2315,13 +2385,13 @@ describe("runFullRunWindow — a held claim settles a quote, and the seller is t
     let orchCall = 0;
     const orchAdapter: Adapter = async (_m, prompt) => {
       orchCall++;
-      if (orchCall === 1) return respond(JSON.stringify({ tool: "mint_claim", args: { quantity: "10" } }));
+      if (orchCall === 1) return respond(JSON.stringify({ tool: "mint_claim", args: { quantity: "1500" } }));
       if (orchCall === 2) {
         tokenId = prompt.match(/"tokenId":"(\d+)"/)?.[1];
         return respond(
           JSON.stringify({
             tool: "transfer_claim",
-            args: { agentId: "WORKER-CODE", tokenId, quantity: "10" },
+            args: { agentId: "WORKER-CODE", tokenId, quantity: "1500" },
           }),
         );
       }
@@ -2354,7 +2424,7 @@ describe("runFullRunWindow — a held claim settles a quote, and the seller is t
         return respond(
           JSON.stringify({
             tool: "transfer_claim",
-            args: { agentId: "WORKER-EXTRACT", tokenId, quantity: "4", requestId },
+            args: { agentId: "WORKER-EXTRACT", tokenId, requestId },
           }),
         );
       }
@@ -2449,7 +2519,12 @@ describe("runFullRunWindow — a held claim settles a quote, and the seller is t
       (m) => m.agentId === "WORKER-CODE" && m.tool === "transfer_claim",
     );
     expect(moment, "the transfer must be recorded as a payment moment").toBeDefined();
-    expect(moment?.heldReceivedMilliSiu).toBe("10");
+    // ORCHESTRATOR funded WORKER-CODE with 1,500 mSIU, enough to cover a $0.01 quote at the $0.01
+    // print (1,000 mSIU) — a transfer that names a quote now has to pay it.
+    expect(moment?.heldReceivedMilliSiu).toBe("1500");
+    // What WORKER-CODE paid is set by the quote, not by the model: the quote's $0.01 price at a
+    // $0.01 print is exactly 1,000 mSIU. (The script supplies no quantity at all.)
+    expect(buyerTransfer?.quantityMilliSiu).toBe("1000");
     expect(moment?.asset).toBe("fsiu");
     expect(moment?.requestId).toMatch(/^qr-\d+$/);
 
@@ -3250,11 +3325,11 @@ describe("runFullRunWindow — a settled testing quote unlocks the attack, and o
     // passing gate and a claim into the world; the decision under test is the buyer's.
     const orchAdapter: Adapter = async (_m, prompt) => {
       orchCall++;
-      if (orchCall === 1) return respond(JSON.stringify({ tool: "mint_claim", args: { quantity: "10" } }));
+      if (orchCall === 1) return respond(JSON.stringify({ tool: "mint_claim", args: { quantity: "1500" } }));
       if (orchCall === 2) {
         tokenId = prompt.match(/"tokenId":"(\d+)"/)?.[1];
         return respond(
-          JSON.stringify({ tool: "transfer_claim", args: { agentId: "WORKER-CODE", tokenId, quantity: "10" } }),
+          JSON.stringify({ tool: "transfer_claim", args: { agentId: "WORKER-CODE", tokenId, quantity: "1500" } }),
         );
       }
       if (orchCall === 3) {
@@ -3289,7 +3364,7 @@ describe("runFullRunWindow — a settled testing quote unlocks the attack, and o
         return respond(
           JSON.stringify({
             tool: "transfer_claim",
-            args: { agentId: "WORKER-EXTRACT", tokenId, quantity: "4", requestId },
+            args: { agentId: "WORKER-EXTRACT", tokenId, requestId },
           }),
         );
       }

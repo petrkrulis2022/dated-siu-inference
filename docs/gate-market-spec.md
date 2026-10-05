@@ -2326,6 +2326,58 @@ by a loop-level test, because none of the loop tests drives a real settlement th
 `runFullRunWindow`. The first debug run is where it is confirmed, and the block report flags any
 settlement whose outcome is missing, so a gap there cannot pass as zero enforcements.
 
+### 4.6ar Price parity: settling a quote in fSIU costs what settling it in USDC costs
+
+Single-issuer instrument, apparatus change valid on either topology, found before the freeze.
+A quote states a size (`siu`) and a price (`settlement[0].amount_max`). Paying in USDC paid the
+price. Paying in fSIU paid the **SIU count** — `quote.siu` converted to milli-SIU — which is the
+same dollars only if the quote's rate happened to equal the print, and nothing made it so: the
+buyer types `rateUsdPerSiu` into `request_quote` and the seller signs what was asked. If one asset
+is cheaper for identical work, F1 measures which is cheaper, not which agents prefer.
+
+**Observed, on real bytecode, with the old sizing** (`dry-loop/price-parity.test.ts`; an
+illustrative $0.01 print, identical quotes paid once in each asset, USDC minor units read from the
+payer's balance): 2 SIU quoted at $0.05 cost 100,000 in USDC and **20,000** in fSIU — 80% cheaper;
+4 SIU at $0.009 cost 36,000 and **40,000** — 11% dearer; 1 SIU at $0.003 cost 3,000 and
+**10,000** — 3.3× dearer. The gap runs both ways, so it could not have been a consistent bias in
+favour of fSIU. The test's own earlier fixture quoted $0.50 for 10 SIU against a $0.0107 print and
+asserted a claim of 10,000 mSIU — worth about $0.107: a fixture built from the code's assumption
+(§4.6ai) encoding the defect it was meant to catch.
+
+**What the stored runs can and cannot say.** The artefacts keep sparse snapshots of each agent's
+turns, not a quote ledger: across every stored run, six distinct signed quotes survive. All six
+are 10 SIU quoted at exactly the print (the brief hands the buyer the print rate to type), and the
+two assets' costs differ by at most 0.21%, which is the four-decimal rounding of the USDC price.
+That is an observation about what buyers typed, not a guarantee, and it says nothing about quotes
+that were not kept. It cannot be determined from the artefacts whether the 25-of-29 was affected;
+it is one more reason that figure is not quoted (methodology, 2026-10-04).
+
+**The rule.** An fSIU settlement is sized so the claim is worth the quote's USDC price at the
+print in force: `claim = ceil(price / print)`, in integers (invariant 4). Rounding up means the
+seller is never short; the payer overpays by strictly less than the dollar value of one milli-SIU
+at the print. The print in force is the one the quote names (`print_id`) and must equal the one
+the window attests; a quote against another print is refused, not converted. Parity is to the
+quote's **stated** price, itself rounded to four decimals by the quote format.
+
+**Every fSIU route that names a quote is held to it.** `pay_with_claim` mints that quantity.
+`transfer_claim` naming a `requestId` — which used to mark the quote paid for **any quantity to any
+recipient**, so one milli-SIU to nobody counted as a settled testing purchase and passed a window
+— now sets the quantity from the quote and requires the recipient to be the quote's seller; which
+claim to spend stays the holder's choice. `settle_split` already had parity by construction: its
+claim leg is valued at the print and its dollar leg is the remainder of the price. A transfer that
+names no quote settles none, and is reported separately.
+
+**Tested** three ways (§4.6ai): hand-worked examples; a property over 5,000 generated
+(price, print) pairs and over every route that names a quote; and the on-chain observation above,
+which takes its expectation from the chain's balances and not from the sizing formula. Each was
+verified failing against the old behaviour. The briefs and tool descriptions state the new sizing,
+and a pairing test fails any brief example that passes a quantity the loop ignores.
+
+**A residual asymmetry, not fixed here.** A USDC payer's escrow can settle for *less* than the
+quote — a seller may claim less and the rest returns to the payer — whereas a claim moves whole.
+Parity holds at the quoted price; the *settled* cost in USDC can fall below it. The block report
+therefore uses the amount actually settled (§4.6as).
+
 ## 5. Identity, wallets and chain
 
 ### 5.1 Chain
