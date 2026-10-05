@@ -1,0 +1,215 @@
+benchVersion: 0.0.0
+packVersion: gate-hardening/code@0.0.0
+agentConfigs:
+  ORCHESTRATOR:
+    reasoningModel: gpt-5.1
+  WORKER-CODE:
+    reasoningModel: claude-sonnet-5
+  WORKER-EXTRACT:
+    reasoningModel: gemini-3.1-pro-preview
+  ISSUER-A:
+    reasoningModel: grok-4.6
+    capacityModel: grok-4.6
+  ISSUER-B:
+    reasoningModel: grok-4.6
+    capacityModel: gemini-3.1-pro-preview
+  HEDGER:
+    reasoningModel: gpt-5.1
+  validated: packages/gate-market-agents/src/pack/model-assignment.ts's
+    validateModelAssignment — WORKER-CODE/WORKER-EXTRACT distinct families
+    (anthropic/google), ORCHESTRATOR+both workers span 3 families
+    (openai/anthropic/google), ISSUER-A/ISSUER-B capacityModel differ
+    (xai/google). Re-run and re-confirmed 2026-09-26 after restoring
+    ORCHESTRATOR to gpt-5.1 (see orchestratorReassignment below) — the
+    alternative, claude-sonnet-5, also validates (2 deciding families instead of
+    3) but was not used.
+  orchestratorReassignment:
+    history:
+      - date: 2026-09-26T06:00:00Z
+        from: gpt-5.1
+        to: mistral-small-3.2-24b-instruct
+        reason: P4 showed every authoring run finishing in one turn regardless of model
+          — a capable ORCHESTRATOR has no reason to subcontract, so P5 window 1
+          could never show emergent delegation with gpt-5.1 still assigned.
+          Reassigned to a weaker, cheaper, non-frontier model per the user's own
+          stated preference (make delegation rational, not scripted), verified
+          empirically first rather than assumed.
+        empiricalVerification:
+          runDir: data/gate-market/runs/orchestrator-weak-model-probe-2026-09-26T06-09-01-674Z/
+          finding: "Failed to solo the same P4-style gate-authoring job cleanly. Two real,
+            distinct signals, both disclosed rather than only citing the parse
+            failure: (1) the raw response was prose-wrapped with markdown fences
+            plus a separate trailing friction JSON block, breaking the simple
+            first-brace/last-brace parser; (2) its own attempted gate source
+            contained a genuine bug (execSync called with an argv-array second
+            argument — execSync takes a command string plus options, not argv
+            like execFile/spawn). Together: real evidence of lower capability,
+            not just a formatting quirk."
+          outcome: Used as the real ORCHESTRATOR model per the plan's own decision rule
+            (fails/struggles solo -> use it, delegation is rational).
+      - date: 2026-09-26T07:15:00Z
+        from: mistral-small-3.2-24b-instruct
+        to: gpt-5.1
+        reason: "The weak-model window
+          (data/gate-market/runs/p5-window1-2026-09-26T07-06-28-003Z/) showed a
+          second, more severe failure mode: on its second real turn (context now
+          including its own first failed attempt),
+          mistral-small-3.2-24b-instruct produced no parseable tool-call JSON at
+          all and was removed from the run before ever facing a
+          delegation/asset-choice decision. A weak enough model to guarantee it
+          can't solo the job is also too weak to reliably coordinate at all —
+          the two properties don't separate cleanly for this model. User's own
+          correction: pair a capable model with a structural constraint instead
+          (information asymmetry — see docs/gate-market-spec.md's own §8.3 vs
+          the ORCHESTRATOR-specific job description in
+          packages/gate-market-agents/src/cli/p5-window1-full-run.ts, which now
+          withholds the technical contract/reference materials from
+          ORCHESTRATOR's own prompt entirely, so it cannot author regardless of
+          model capability). Multi-hop/delegation is now a required, disclosed
+          structural property of this window, not an emergent one — but F1's own
+          question (which asset an agent pays in when it has a real, unbiased
+          choice) was never about whether delegation happens, so it stays a
+          genuine, unscripted measurement."
+seed: p5-three-window:140133540
+oracleTrialSeed: 20260927
+externalDepletionMilliSiu:
+  "1": 3000
+  "2": 3000
+windowCount: 3
+instrument:
+  id: single-issuer-per-window
+  description: One serving issuer in window 1 (F1), enforcement against an issuer
+    that cannot serve in windows 2 and 3. ISSUER-B is registered first and
+    ISSUER-A second, both lots bonded at deploy; after window 1 the operator
+    drains ISSUER-B so later windows route to ISSUER-A. One issuer per window is
+    configuration in this record, never code.
+  deploymentFile: data/deployments/base-sepolia-gate-market-single-issuer.json
+  topology:
+    lotCreationOrder:
+      - ISSUER-B
+      - ISSUER-A
+    expectedIssuerByWindow:
+      "1": ISSUER-B
+      "2": ISSUER-A
+      "3": ISSUER-A
+    drain:
+      afterWindow: 1
+      issuer: ISSUER-B
+      classId: code
+      datedTo: run_end
+    routeAfterDrain: ISSUER-A
+sellerFeeAsymmetry:
+  usdcRouteEscrowFeeBps: 50
+  fsiuRouteFeeBps: 0
+  chargedTo: seller
+  sellersCanSteerAssetOfAQuote: false
+  note: "The dollar route's escrow fee comes out of the seller's proceeds and the
+    fSIU route has none. That is a seller-side difference and not a buyer's
+    cost: price parity is a statement about what the payer pays. Sellers cannot
+    steer which asset a quote is settled in — a seller decides only whether to
+    sign the buyer's own request — so the asymmetry cannot bias what buyers do,
+    and it is recorded and not equalised."
+instrumentChanges:
+  - "payment_symmetry: pay_with_claim settles a seller-issued quote, like pay
+    (2026-10-04)"
+  - "passed_requires_testing_purchase: passed = gate passed AND testing paid for
+    AND carried out (2026-10-04)"
+  - "claims_have_positions: a claim is tracked per holder — what each holds,
+    presents and is served — so one passed on in part, or two in one window, are
+    no longer one slot overwritten (2026-10-05)"
+  - "drained_issuer_stays_drained: after every window later than the drain the
+    operator takes back capacity that returned to the drained issuer, before its
+    own scheduled mint (2026-10-05)"
+  - "empty_at_token_budget_is_retried_once: a completion that ends at the token
+    limit with no text is retried once and, if it recurs, the run is
+    infrastructure-failed and excluded (2026-10-05)"
+debugMode:
+  enabled: true
+  windows: 3
+  canonicalWindows: 3
+  preAuthoredGate: true
+  gateProvenance: run p5-three-window-2026-10-03T11-10-36-115Z, window 3, ISSUER-A
+    turn 4 — graded PASS (G1-G6)
+  cheapNonDeciders: true
+  cheapModel: claude-haiku-4-5
+  countsTowardF1: false
+  disqualifiedBecause: "the gate was pinned rather than authored; non-decider
+    seats ran on claude-haiku-4-5 rather than their assigned models; no model
+    was called: every seat followed a fixed script; windows lasted 180 seconds
+    rather than the canonical 2400"
+  providersExercised:
+    - scripted
+  providersNotExercised:
+    - anthropic
+    - google
+    - openai
+    - xai
+  validatesTheBlocksRoster: false
+  exercisesTimeGatedBehaviour: false
+  scripted: true
+  windowSeconds: 180
+windowBounds:
+  "1":
+    from: 1791223998
+    to: 1791224178
+  "2":
+    from: 1791224178
+    to: 1791224358
+  "3":
+    from: 1791224358
+    to: 1791224538
+toolOrderByAgent:
+  ORCHESTRATOR:
+    - mint_claim
+    - check_headroom
+    - settle_split
+    - get_balances
+    - pay
+    - take_forward
+    - request_quote
+    - get_print
+    - transfer_claim
+    - pay_with_claim
+  WORKER-CODE:
+    - settle_split
+    - redeem_claim
+    - transfer_claim
+    - issue_quote
+    - check_delivery
+    - whoami
+    - settle_escrow
+    - settle_window_close
+    - pay
+    - submit_job
+    - pay_with_claim
+    - get_print
+    - get_balances
+    - reserve_for_work
+    - request_quote
+  WORKER-EXTRACT:
+    - settle_escrow
+    - redeem_claim
+    - reserve_for_work
+    - get_print
+    - check_delivery
+    - issue_quote
+    - submit_attack
+    - settle_window_close
+    - get_balances
+  ISSUER-A:
+    - settle_window_close
+    - list_obligations
+    - mint_claim
+    - check_headroom
+    - get_print
+    - whoami
+    - submit_job
+  ISSUER-B:
+    - submit_job
+    - check_headroom
+    - whoami
+    - serve_redemption
+    - list_obligations
+    - mint_claim
+    - get_print
+    - settle_window_close

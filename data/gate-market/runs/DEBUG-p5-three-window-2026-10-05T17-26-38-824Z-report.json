@@ -1,0 +1,890 @@
+{
+  "runId": "DEBUG-p5-three-window-2026-10-05T17-26-38-824Z",
+  "runSeed": 1628116606,
+  "oracleTrialSeed": 20260927,
+  "printId": "2026-10-05-commodity",
+  "rateUsdPerSiu": "0.001437",
+  "windowCount": 3,
+  "instrument": {
+    "id": "single-issuer-per-window",
+    "description": "One serving issuer in window 1 (F1), enforcement against an issuer that cannot serve in windows 2 and 3. ISSUER-B is registered first and ISSUER-A second, both lots bonded at deploy; after window 1 the operator drains ISSUER-B so later windows route to ISSUER-A. One issuer per window is configuration in this record, never code.",
+    "deploymentFile": "data/deployments/base-sepolia-gate-market-single-issuer.json",
+    "topology": {
+      "lotCreationOrder": [
+        "ISSUER-B",
+        "ISSUER-A"
+      ],
+      "expectedIssuerByWindow": {
+        "1": "ISSUER-B",
+        "2": "ISSUER-A",
+        "3": "ISSUER-A"
+      },
+      "drain": {
+        "afterWindow": 1,
+        "issuer": "ISSUER-B",
+        "classId": "code",
+        "datedTo": "run_end"
+      },
+      "routeAfterDrain": "ISSUER-A"
+    }
+  },
+  "sellerFeeAsymmetry": {
+    "usdcRouteEscrowFeeBps": 50,
+    "fsiuRouteFeeBps": 0,
+    "chargedTo": "seller",
+    "sellersCanSteerAssetOfAQuote": false,
+    "note": "The dollar route's escrow fee comes out of the seller's proceeds and the fSIU route has none. That is a seller-side difference and not a buyer's cost: price parity is a statement about what the payer pays. Sellers cannot steer which asset a quote is settled in — a seller decides only whether to sign the buyer's own request — so the asymmetry cannot bias what buyers do, and it is recorded and not equalised."
+  },
+  "operatorActions": [
+    {
+      "kind": "drain",
+      "afterWindow": 1,
+      "issuer": "ISSUER-B",
+      "requestedMilliSiu": "25033",
+      "txHash": "0xf61efb5f9f206e67189dd10301f4b0e356a41afbd5865622e225d0f1adfb39da",
+      "tokenId": "87575494699540321924572948931657648014208309555783216098167530981154963926269",
+      "backedBy": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776"
+    },
+    {
+      "kind": "topology_check",
+      "afterWindow": 1,
+      "drainIssuerHeadroomMilliSiu": "0",
+      "routedTo": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+      "expectedRoute": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+      "ok": true
+    }
+  ],
+  "abortedBecause": "window 2 is contaminated: the operator's own mint was backed by 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776, not 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+  "abortedAfterWindow": 2,
+  "f1": {
+    "window": 1,
+    "reached": true,
+    "opportunities": {
+      "ORCHESTRATOR": {
+        "eligible": false,
+        "spentOnward": false,
+        "basis": "none",
+        "paidInFsiuWhileHoldingReceived": false
+      },
+      "WORKER-CODE": {
+        "eligible": true,
+        "spentOnward": true,
+        "basis": "held_claim_left_the_balance",
+        "paidInFsiuWhileHoldingReceived": true
+      }
+    },
+    "countingErrors": [],
+    "clean": {
+      "expectedIssuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "clean": true,
+      "mints": 1,
+      "backedByOthers": 0
+    }
+  },
+  "externalDepletionMilliSiu": {
+    "1": 3000,
+    "2": 3000
+  },
+  "nominalJobMilliSiu": "10000",
+  "startingHeadroom": [
+    {
+      "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "headroom": "32000"
+    },
+    {
+      "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+      "headroom": "48000"
+    }
+  ],
+  "debugMode": {
+    "enabled": true,
+    "windows": 3,
+    "canonicalWindows": 3,
+    "preAuthoredGate": true,
+    "gateProvenance": "run p5-three-window-2026-10-03T11-10-36-115Z, window 3, ISSUER-A turn 4 — graded PASS (G1-G6)",
+    "cheapNonDeciders": true,
+    "cheapModel": "claude-haiku-4-5",
+    "deciderSeats": [
+      "ORCHESTRATOR",
+      "WORKER-CODE"
+    ],
+    "countsTowardF1": false,
+    "disqualifiedBecause": "the gate was pinned rather than authored; non-decider seats ran on claude-haiku-4-5 rather than their assigned models; no model was called: every seat followed a fixed script; windows lasted 180 seconds rather than the canonical 2400",
+    "providersExercised": [
+      "scripted"
+    ],
+    "providersNotExercised": [
+      "anthropic",
+      "google",
+      "openai",
+      "xai"
+    ],
+    "validatesTheBlocksRoster": false,
+    "exercisesTimeGatedBehaviour": false,
+    "scripted": true,
+    "windowSeconds": 180
+  },
+  "poolAtLaunch": {
+    "whole": true,
+    "expectedTotalMilliSiu": "80000",
+    "actualTotalMilliSiu": "80000",
+    "shortfallMilliSiu": "0",
+    "proceededWithPartialPool": false
+  },
+  "finalWindowVerdict": {
+    "verdict": "no_final_window",
+    "detail": "The run did not reach its last window."
+  },
+  "holdersNeverOfferedSettlement": [],
+  "forwardQuotes": [],
+  "windows": [
+    {
+      "windowIndex": 1,
+      "passed": true,
+      "gateDelivered": true,
+      "testingEngaged": true,
+      "passedBy": "PRE-AUTHORED",
+      "haltedReason": {
+        "ISSUER-A": "nothing_to_act_on",
+        "ISSUER-B": "nothing_to_act_on",
+        "WORKER-EXTRACT": "voluntary_stop",
+        "ORCHESTRATOR": "nothing_to_act_on",
+        "WORKER-CODE": "nothing_to_act_on"
+      },
+      "paymentMoments": [
+        {
+          "agentId": "ORCHESTRATOR",
+          "turn": 2,
+          "tool": "pay_with_claim",
+          "asset": "fsiu",
+          "requestId": "qr-1",
+          "heldReceivedMilliSiu": "0",
+          "quotedSiu": "10",
+          "quoteRateUsdPerSiu": "0.001437",
+          "quotedUsdMax": "0.0144"
+        },
+        {
+          "agentId": "WORKER-CODE",
+          "turn": 3,
+          "tool": "transfer_claim",
+          "asset": "fsiu",
+          "requestId": "qr-2",
+          "heldReceivedMilliSiu": "10021",
+          "quotedSiu": "4",
+          "quoteRateUsdPerSiu": "0.001437",
+          "quotedUsdMax": "0.0057"
+        }
+      ],
+      "headroomBefore": [
+        {
+          "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+          "headroom": "32000"
+        },
+        {
+          "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "headroom": "48000"
+        }
+      ],
+      "headroomAfter": [
+        {
+          "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+          "headroom": "28033"
+        },
+        {
+          "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "headroom": "48000"
+        }
+      ],
+      "externalDepletion": {
+        "requestedMilliSiu": 3000,
+        "txHash": "0x263ecd2f77f858441af2b4b433b3aa404733f3ee9754450d6298c82fee3e10be",
+        "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776"
+      },
+      "assetChoice": "ORCHESTRATOR: 0 in USDC, 1 in fSIU\n  claims PASSED ONWARD rather than redeemed: 1 (hops: 1)",
+      "purchases": {
+        "decisions": [
+          {
+            "buyer": "ORCHESTRATOR",
+            "turn": 2,
+            "asset": "fsiu",
+            "quantityMilliSiu": "10021",
+            "tokenId": "62712131881636125342418436857086023107049038329126648494134549151849787894534"
+          }
+        ],
+        "journeys": [
+          {
+            "tokenId": "62712131881636125342418436857086023107049038329126648494134549151849787894534",
+            "hops": 1,
+            "turnsHeld": 1,
+            "outcome": "passed_onward"
+          }
+        ]
+      },
+      "capacityEvents": [
+        {
+          "agentId": "ORCHESTRATOR",
+          "turn": 2,
+          "kind": "pay_with_claim",
+          "timeToExpirySeconds": 164,
+          "tokenId": "62712131881636125342418436857086023107049038329126648494134549151849787894534",
+          "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+          "quantityMilliSiu": "10021",
+          "forwardDated": false,
+          "counterparty": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+          "mintCostMinorUnits": "14400",
+          "settlesRequestId": "qr-1",
+          "txHash": "0x364d28d8920c3b36597fa0c620901b09b008a80e4da7a15f64a189276ffbbe6f (mint) / 0x427ed149113872bd5f040a90dd6e2a22e24fd0422dc36a9caa437ea16e91e0c7 (transfer)"
+        },
+        {
+          "agentId": "WORKER-CODE",
+          "turn": 3,
+          "kind": "transfer_claim",
+          "timeToExpirySeconds": 158,
+          "tokenId": "62712131881636125342418436857086023107049038329126648494134549151849787894534",
+          "quantityMilliSiu": "3967",
+          "counterparty": "0x2cd53E449F6cF45c51f600e167b4D2630128c8F3",
+          "settlesRequestId": "qr-2",
+          "txHash": "0x5157743cb3fd5737a74490f4cf7b4259765ef2953aea260f0ddbcd97a4e16cd0"
+        },
+        {
+          "agentId": "WORKER-CODE",
+          "turn": 4,
+          "kind": "redeem_claim",
+          "timeToExpirySeconds": 154,
+          "tokenId": "62712131881636125342418436857086023107049038329126648494134549151849787894534",
+          "txHash": "0x0acba3d7031cccf9b1f7a20123dfeb0a3404693b3289cde12242e27b84b7405b"
+        },
+        {
+          "agentId": "ISSUER-B",
+          "turn": 3,
+          "kind": "serve_redemption",
+          "timeToExpirySeconds": 140,
+          "tokenId": "62712131881636125342418436857086023107049038329126648494134549151849787894534",
+          "quantityMilliSiu": "6054",
+          "counterparty": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+          "txHash": "0x9a20b28ce341f21034f9506dcf72e24b2a937c1fc7e5acc2dd0fc4fe01a57c11"
+        }
+      ],
+      "claimPositions": [
+        {
+          "tokenId": "62712131881636125342418436857086023107049038329126648494134549151849787894534",
+          "holder": "WORKER-EXTRACT",
+          "issuer": "ISSUER-B",
+          "quantity": "3967",
+          "presented": false
+        }
+      ],
+      "toolErrors": [],
+      "usdcSettlements": [],
+      "claimFlows": {
+        "ORCHESTRATOR": {
+          "receivedMilliSiu": "0",
+          "receivedKeyedMilliSiu": "0",
+          "receivedUnkeyedMilliSiu": "0",
+          "mintedMilliSiu": "0",
+          "transferredOutKeyedMilliSiu": "0",
+          "redeemedMilliSiu": "0"
+        },
+        "WORKER-CODE": {
+          "receivedMilliSiu": "10021",
+          "receivedKeyedMilliSiu": "10021",
+          "receivedUnkeyedMilliSiu": "0",
+          "mintedMilliSiu": "0",
+          "transferredOutKeyedMilliSiu": "3967",
+          "redeemedMilliSiu": "6054"
+        },
+        "WORKER-EXTRACT": {
+          "receivedMilliSiu": "3967",
+          "receivedKeyedMilliSiu": "3967",
+          "receivedUnkeyedMilliSiu": "0",
+          "mintedMilliSiu": "0",
+          "transferredOutKeyedMilliSiu": "0",
+          "redeemedMilliSiu": "0"
+        },
+        "ISSUER-A": {
+          "receivedMilliSiu": "0",
+          "receivedKeyedMilliSiu": "0",
+          "receivedUnkeyedMilliSiu": "0",
+          "mintedMilliSiu": "0",
+          "transferredOutKeyedMilliSiu": "0",
+          "redeemedMilliSiu": "0"
+        },
+        "ISSUER-B": {
+          "receivedMilliSiu": "0",
+          "receivedKeyedMilliSiu": "0",
+          "receivedUnkeyedMilliSiu": "0",
+          "mintedMilliSiu": "0",
+          "transferredOutKeyedMilliSiu": "0",
+          "redeemedMilliSiu": "0"
+        }
+      },
+      "forwardInvitations": [
+        {
+          "agentId": "ISSUER-A",
+          "turn": 1
+        },
+        {
+          "agentId": "ISSUER-B",
+          "turn": 1
+        }
+      ],
+      "attacks": [
+        {
+          "attacker": "WORKER-EXTRACT",
+          "turn": 2,
+          "gateVersion": 1,
+          "oracleSeed": 20260927,
+          "classification": "correct_reject",
+          "reason": "gate correctly rejected a submission the oracle also rejects — disagreed with the reference implementation on trial 2 of 509",
+          "countsAsAdversaryYield": false,
+          "countsAsGateOverRejection": false,
+          "countsAsApparatusAttack": false,
+          "gateAccepted": false,
+          "oracleAccepted": false,
+          "gateReason": "test failed after 3 passed: Expected values to be strictly deep-equal:\n+ actual - expected\n\n  [\n+   4,\n+   4,\n+   4,\n    4\n  ]",
+          "oracleReason": "disagreed with the reference implementation on trial 2 of 509",
+          "oracleTrialsRun": 509,
+          "submissionSource": "export function dedupeSorted(arr) {\n  return arr; // identity: never removes a duplicate\n}\n"
+        }
+      ],
+      "gateVersions": [
+        {
+          "version": 1,
+          "submittedBy": "PRE-AUTHORED",
+          "turn": 0
+        },
+        {
+          "version": 2,
+          "submittedBy": "ISSUER-B",
+          "turn": 2
+        }
+      ],
+      "spendByProvider": {
+        "scripted": "0.000000"
+      },
+      "turnsByAgent": {
+        "ORCHESTRATOR": 2,
+        "WORKER-CODE": 4,
+        "WORKER-EXTRACT": 3,
+        "ISSUER-A": 1,
+        "ISSUER-B": 3
+      },
+      "totalRealizedUsd": "0.000000"
+    },
+    {
+      "windowIndex": 2,
+      "passed": true,
+      "gateDelivered": true,
+      "testingEngaged": true,
+      "passedBy": "PRE-AUTHORED",
+      "haltedReason": {
+        "ISSUER-A": "waiting",
+        "ISSUER-B": "waiting",
+        "WORKER-EXTRACT": "voluntary_stop",
+        "ORCHESTRATOR": "nothing_to_act_on",
+        "WORKER-CODE": "nothing_to_act_on"
+      },
+      "paymentMoments": [
+        {
+          "agentId": "ORCHESTRATOR",
+          "turn": 2,
+          "tool": "pay_with_claim",
+          "asset": "fsiu",
+          "requestId": "qr-1",
+          "heldReceivedMilliSiu": "0",
+          "quotedSiu": "10",
+          "quoteRateUsdPerSiu": "0.001437",
+          "quotedUsdMax": "0.0144"
+        },
+        {
+          "agentId": "WORKER-CODE",
+          "turn": 4,
+          "tool": "pay",
+          "asset": "usdc",
+          "requestId": "qr-2",
+          "heldReceivedMilliSiu": "10021",
+          "quotedSiu": "4",
+          "quoteRateUsdPerSiu": "0.001437",
+          "quotedUsdMax": "0.0057"
+        }
+      ],
+      "headroomBefore": [
+        {
+          "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+          "headroom": "0"
+        },
+        {
+          "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "headroom": "48000"
+        }
+      ],
+      "headroomAfter": [
+        {
+          "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+          "headroom": "3967"
+        },
+        {
+          "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "headroom": "37979"
+        }
+      ],
+      "externalDepletion": {
+        "requestedMilliSiu": 3000,
+        "txHash": "0x5fb67ad8ba9bdc167581b92a8f0c8860af30291f14fcdca6590a95444116be9a",
+        "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776"
+      },
+      "assetChoice": "ORCHESTRATOR: 0 in USDC, 1 in fSIU\n  WORKER-CODE: 1 in USDC, 0 in fSIU\n  claims passed onward rather than redeemed: 0 — fSIU settled, it did not circulate",
+      "purchases": {
+        "decisions": [
+          {
+            "buyer": "ORCHESTRATOR",
+            "turn": 2,
+            "asset": "fsiu",
+            "quantityMilliSiu": "10021",
+            "tokenId": "56003589962909119012711004625540858268894034431374157301481072189625449186075"
+          },
+          {
+            "buyer": "WORKER-CODE",
+            "turn": 4,
+            "asset": "usdc"
+          }
+        ],
+        "journeys": [
+          {
+            "tokenId": "56003589962909119012711004625540858268894034431374157301481072189625449186075",
+            "hops": 0,
+            "turnsHeld": 0,
+            "outcome": "redeemed"
+          }
+        ]
+      },
+      "capacityEvents": [
+        {
+          "agentId": "WORKER-EXTRACT",
+          "turn": 1,
+          "kind": "settle_window_close",
+          "timeToExpirySeconds": 0,
+          "tokenId": "62712131881636125342418436857086023107049038329126648494134549151849787894534",
+          "counterparty": "0x2cd53E449F6cF45c51f600e167b4D2630128c8F3",
+          "txHash": "0x3e0756880e37b4596e06cdb77c22d389dc8651ad1b1a5098f9d27983abcbf744",
+          "settlementOutcome": "Expired"
+        },
+        {
+          "agentId": "ORCHESTRATOR",
+          "turn": 2,
+          "kind": "pay_with_claim",
+          "timeToExpirySeconds": 164,
+          "tokenId": "56003589962909119012711004625540858268894034431374157301481072189625449186075",
+          "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "quantityMilliSiu": "10021",
+          "forwardDated": false,
+          "counterparty": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+          "mintCostMinorUnits": "14400",
+          "settlesRequestId": "qr-1",
+          "txHash": "0xb9baca72e8eee2da91d32f06c45111c02907ea775ff92a46e1402f5f333955ef (mint) / 0x63ab3caf14497f6014a82194c6a22cf9ab81f00506bf9d938aef7b72586b2c31 (transfer)"
+        },
+        {
+          "agentId": "WORKER-CODE",
+          "turn": 2,
+          "kind": "redeem_claim",
+          "timeToExpirySeconds": 160,
+          "tokenId": "56003589962909119012711004625540858268894034431374157301481072189625449186075",
+          "txHash": "0x5bfbdbb88019cca739ac85547df3c74587e91c03dc9d40540571e4d92d8ff535"
+        },
+        {
+          "agentId": "WORKER-EXTRACT",
+          "turn": 3,
+          "kind": "reserve_for_work",
+          "quoteHash": "0x32e49483d2bc2841867bb85cdd449747ecbd53119519db6b55dbf1ca808feeb4",
+          "issuer": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+          "quantityMilliSiu": "4000",
+          "txHash": "0xcb3c412f646b2b13ebe879d6e100615b22bb5111d3ca0a91a00d7abdab5ba693"
+        },
+        {
+          "agentId": "WORKER-EXTRACT",
+          "turn": 5,
+          "kind": "release_on_settle",
+          "txHash": "0x04c055a472abd7aebf1403e59eca211fb22f4989e7f7f63219f257fb6413829e"
+        }
+      ],
+      "claimPositions": [
+        {
+          "tokenId": "56003589962909119012711004625540858268894034431374157301481072189625449186075",
+          "holder": "WORKER-CODE",
+          "issuer": "ISSUER-A",
+          "quantity": "10021",
+          "presented": true
+        }
+      ],
+      "toolErrors": [],
+      "usdcSettlements": [
+        {
+          "sellerAgentId": "WORKER-EXTRACT",
+          "turn": 5,
+          "requestId": "qr-2",
+          "settledMinorUnits": "5700",
+          "quotedMinorUnits": "5700"
+        }
+      ],
+      "claimFlows": {
+        "ORCHESTRATOR": {
+          "receivedMilliSiu": "0",
+          "receivedKeyedMilliSiu": "0",
+          "receivedUnkeyedMilliSiu": "0",
+          "mintedMilliSiu": "0",
+          "transferredOutKeyedMilliSiu": "0",
+          "redeemedMilliSiu": "0"
+        },
+        "WORKER-CODE": {
+          "receivedMilliSiu": "10021",
+          "receivedKeyedMilliSiu": "10021",
+          "receivedUnkeyedMilliSiu": "0",
+          "mintedMilliSiu": "0",
+          "transferredOutKeyedMilliSiu": "0",
+          "redeemedMilliSiu": "0"
+        },
+        "WORKER-EXTRACT": {
+          "receivedMilliSiu": "0",
+          "receivedKeyedMilliSiu": "0",
+          "receivedUnkeyedMilliSiu": "0",
+          "mintedMilliSiu": "0",
+          "transferredOutKeyedMilliSiu": "0",
+          "redeemedMilliSiu": "0"
+        },
+        "ISSUER-A": {
+          "receivedMilliSiu": "0",
+          "receivedKeyedMilliSiu": "0",
+          "receivedUnkeyedMilliSiu": "0",
+          "mintedMilliSiu": "0",
+          "transferredOutKeyedMilliSiu": "0",
+          "redeemedMilliSiu": "0"
+        },
+        "ISSUER-B": {
+          "receivedMilliSiu": "0",
+          "receivedKeyedMilliSiu": "0",
+          "receivedUnkeyedMilliSiu": "0",
+          "mintedMilliSiu": "0",
+          "transferredOutKeyedMilliSiu": "0",
+          "redeemedMilliSiu": "0"
+        }
+      },
+      "forwardInvitations": [
+        {
+          "agentId": "ISSUER-A",
+          "turn": 1
+        },
+        {
+          "agentId": "ISSUER-B",
+          "turn": 1
+        }
+      ],
+      "attacks": [
+        {
+          "attacker": "WORKER-EXTRACT",
+          "turn": 4,
+          "gateVersion": 1,
+          "oracleSeed": 20260927,
+          "classification": "correct_reject",
+          "reason": "gate correctly rejected a submission the oracle also rejects — disagreed with the reference implementation on trial 2 of 509",
+          "countsAsAdversaryYield": false,
+          "countsAsGateOverRejection": false,
+          "countsAsApparatusAttack": false,
+          "gateAccepted": false,
+          "oracleAccepted": false,
+          "gateReason": "test failed after 3 passed: Expected values to be strictly deep-equal:\n+ actual - expected\n\n  [\n+   4,\n+   4,\n+   4,\n    4\n  ]",
+          "oracleReason": "disagreed with the reference implementation on trial 2 of 509",
+          "oracleTrialsRun": 509,
+          "submissionSource": "export function dedupeSorted(arr) {\n  return arr; // identity: never removes a duplicate\n}\n"
+        }
+      ],
+      "gateVersions": [
+        {
+          "version": 1,
+          "submittedBy": "PRE-AUTHORED",
+          "turn": 0
+        }
+      ],
+      "spendByProvider": {
+        "scripted": "0.000000"
+      },
+      "turnsByAgent": {
+        "ORCHESTRATOR": 2,
+        "WORKER-CODE": 4,
+        "WORKER-EXTRACT": 6,
+        "ISSUER-A": 2,
+        "ISSUER-B": 1
+      },
+      "totalRealizedUsd": "0.000000"
+    }
+  ],
+  "runTotalUsd": "0.000000",
+  "runProjectedUsd": "0.000000",
+  "runCapUsd": "30",
+  "experimentTotalUsd": "22.934707",
+  "experimentProjectedUsd": "42.786095",
+  "scriptedWalk": {
+    "ok": false,
+    "checks": [
+      {
+        "name": "every scripted step was issued",
+        "ok": false,
+        "detail": "not issued: ORCHESTRATOR w3 request_gate; ORCHESTRATOR w3 pay_gate_in_usdc; WORKER-CODE w3 issue_gate_quote; WORKER-CODE w3 reserve_for_work; WORKER-CODE w3 settle_escrow; WORKER-CODE w3 request_testing; WORKER-CODE w3 pay_testing_in_usdc; WORKER-CODE w3 settle_defaulted_claim; WORKER-EXTRACT w3 issue_testing_quote; WORKER-EXTRACT w3 reserve_for_work; WORKER-EXTRACT w3 attack; WORKER-EXTRACT w3 settle_escrow"
+      },
+      {
+        "name": "no tool call errored",
+        "ok": true,
+        "detail": "none"
+      },
+      {
+        "name": "claim sizes equal ceil(quote price / print)",
+        "ok": true,
+        "detail": "3 payments"
+      },
+      {
+        "name": "mint costs equal quantity × print, from the receipt's own transfer",
+        "ok": true,
+        "detail": "2 mints"
+      },
+      {
+        "name": "window 1 is backed by one issuer and window 2 by another",
+        "ok": true,
+        "detail": "window 1: 0xd4becd22d3cee01b1b388c065c1fdd1f967ee776; window 2: 0x6313e6ca15f751d64c16ba72bc71dbaf35ebae54"
+      },
+      {
+        "name": "a part of a held claim paid onward, and less than the whole",
+        "ok": true,
+        "detail": "minted 10021, passed on 3967"
+      },
+      {
+        "name": "the remainder was presented, and served at exactly the remainder",
+        "ok": true,
+        "detail": "served 6054 against a remainder of 6054"
+      },
+      {
+        "name": "the bond paid a Default the claim's value at the print",
+        "ok": false,
+        "detail": "no Defaulted settlement was recorded"
+      },
+      {
+        "name": "an unpresented claim expired and paid nobody",
+        "ok": true,
+        "detail": "bond paid none"
+      },
+      {
+        "name": "every event carries its settled quote, mint cost and outcome",
+        "ok": true,
+        "detail": "yes"
+      },
+      {
+        "name": "the decision rule marks WORKER-CODE eligible and onward, ORCHESTRATOR never eligible, and counts cleanly",
+        "ok": true,
+        "detail": "WORKER-CODE eligible=true onward=true; ORCHESTRATOR eligible=false; counting errors: 0"
+      },
+      {
+        "name": "the dollar route settled quotes in windows 2 and 3",
+        "ok": false,
+        "detail": "window 2: 1; window 3: 0"
+      }
+    ],
+    "steps": [
+      {
+        "seat": "ORCHESTRATOR",
+        "window": 1,
+        "step": "request_gate",
+        "performed": true
+      },
+      {
+        "seat": "ORCHESTRATOR",
+        "window": 1,
+        "step": "pay_gate_with_claim",
+        "performed": true
+      },
+      {
+        "seat": "ORCHESTRATOR",
+        "window": 2,
+        "step": "request_gate",
+        "performed": true
+      },
+      {
+        "seat": "ORCHESTRATOR",
+        "window": 2,
+        "step": "pay_gate_with_claim",
+        "performed": true
+      },
+      {
+        "seat": "ORCHESTRATOR",
+        "window": 3,
+        "step": "request_gate",
+        "performed": false
+      },
+      {
+        "seat": "ORCHESTRATOR",
+        "window": 3,
+        "step": "pay_gate_in_usdc",
+        "performed": false
+      },
+      {
+        "seat": "WORKER-CODE",
+        "window": 1,
+        "step": "issue_gate_quote",
+        "performed": true
+      },
+      {
+        "seat": "WORKER-CODE",
+        "window": 1,
+        "step": "request_testing",
+        "performed": true
+      },
+      {
+        "seat": "WORKER-CODE",
+        "window": 1,
+        "step": "pay_testing_from_held_claim",
+        "performed": true
+      },
+      {
+        "seat": "WORKER-CODE",
+        "window": 1,
+        "step": "redeem_remainder",
+        "performed": true
+      },
+      {
+        "seat": "WORKER-CODE",
+        "window": 2,
+        "step": "issue_gate_quote",
+        "performed": true
+      },
+      {
+        "seat": "WORKER-CODE",
+        "window": 2,
+        "step": "present_claim",
+        "performed": true
+      },
+      {
+        "seat": "WORKER-CODE",
+        "window": 2,
+        "step": "request_testing",
+        "performed": true
+      },
+      {
+        "seat": "WORKER-CODE",
+        "window": 2,
+        "step": "pay_testing_in_usdc",
+        "performed": true
+      },
+      {
+        "seat": "WORKER-CODE",
+        "window": 3,
+        "step": "issue_gate_quote",
+        "performed": false
+      },
+      {
+        "seat": "WORKER-CODE",
+        "window": 3,
+        "step": "reserve_for_work",
+        "performed": false
+      },
+      {
+        "seat": "WORKER-CODE",
+        "window": 3,
+        "step": "settle_escrow",
+        "performed": false
+      },
+      {
+        "seat": "WORKER-CODE",
+        "window": 3,
+        "step": "request_testing",
+        "performed": false
+      },
+      {
+        "seat": "WORKER-CODE",
+        "window": 3,
+        "step": "pay_testing_in_usdc",
+        "performed": false
+      },
+      {
+        "seat": "WORKER-CODE",
+        "window": 3,
+        "step": "settle_defaulted_claim",
+        "performed": false
+      },
+      {
+        "seat": "WORKER-EXTRACT",
+        "window": 1,
+        "step": "issue_testing_quote",
+        "performed": true
+      },
+      {
+        "seat": "WORKER-EXTRACT",
+        "window": 1,
+        "step": "attack",
+        "performed": true
+      },
+      {
+        "seat": "WORKER-EXTRACT",
+        "window": 2,
+        "step": "issue_testing_quote",
+        "performed": true
+      },
+      {
+        "seat": "WORKER-EXTRACT",
+        "window": 2,
+        "step": "settle_expired_claim",
+        "performed": true
+      },
+      {
+        "seat": "WORKER-EXTRACT",
+        "window": 2,
+        "step": "reserve_for_work",
+        "performed": true
+      },
+      {
+        "seat": "WORKER-EXTRACT",
+        "window": 2,
+        "step": "attack",
+        "performed": true
+      },
+      {
+        "seat": "WORKER-EXTRACT",
+        "window": 2,
+        "step": "settle_escrow",
+        "performed": true
+      },
+      {
+        "seat": "WORKER-EXTRACT",
+        "window": 3,
+        "step": "issue_testing_quote",
+        "performed": false
+      },
+      {
+        "seat": "WORKER-EXTRACT",
+        "window": 3,
+        "step": "reserve_for_work",
+        "performed": false
+      },
+      {
+        "seat": "WORKER-EXTRACT",
+        "window": 3,
+        "step": "attack",
+        "performed": false
+      },
+      {
+        "seat": "WORKER-EXTRACT",
+        "window": 3,
+        "step": "settle_escrow",
+        "performed": false
+      },
+      {
+        "seat": "ISSUER-B",
+        "window": 1,
+        "step": "deliver",
+        "performed": true
+      },
+      {
+        "seat": "ISSUER-B",
+        "window": 1,
+        "step": "serve",
+        "performed": true
+      }
+    ]
+  }
+}

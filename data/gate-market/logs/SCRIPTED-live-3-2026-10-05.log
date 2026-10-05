@@ -1,0 +1,323 @@
+
+> @touchstone/gate-market-agents@0.0.0 p5-three-window-full-run /home/petrunix/dated-siu-inference/packages/gate-market-agents
+> pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/p5-three-window-full-run.js -- --debug --scripted --window-seconds 240 --deployment data/deployments/base-sepolia-gate-market-single-issuer.json
+
+
+> @touchstone/gate-market-agents@0.0.0 build /home/petrunix/dated-siu-inference/packages/gate-market-agents
+> tsc -p tsconfig.json && mkdir -p dist/skills && cp -r src/skills/*/ dist/skills/
+
+=== DEBUG RUN — THIS RUN CANNOT MEET THE BAR OR COUNT TOWARD F1 ===
+  Disqualified because: the gate was pinned rather than authored; non-decider seats ran on claude-haiku-4-5 rather than their assigned models; no model was called: every seat followed a fixed script; windows lasted 240 seconds rather than the canonical 2400.
+  windows                 3
+  window length           240s (production: 2400s)
+  seats                   SCRIPTED — every seat follows a fixed script; no model is called
+                          and nothing is spent on inference. The loop, the tools and the
+                          chain are the real ones; what is not real is that nothing decides.
+  gate                    PINNED (run p5-three-window-2026-10-03T11-10-36-115Z, window 3, ISSUER-A turn 4 — graded PASS (G1-G6))
+  non-decider seats       claude-haiku-4-5
+  decider seats           ORCHESTRATOR, WORKER-CODE — always their assigned models, so the
+                          behaviour being debugged is the behaviour that runs.
+  Every economic step is still real: real chain, real payments, real settlement.
+  What is not real is the price of the work and who authored it.
+
+INSTRUMENT: single-issuer-per-window
+  One serving issuer in window 1 (F1), enforcement against an issuer that cannot serve in windows 2 and 3. ISSUER-B is registered first and ISSUER-A second, both lots bonded at deploy; after window 1 the operator drains ISSUER-B so later windows route to ISSUER-A. One issuer per window is configuration in this record, never code.
+  deployment record: data/deployments/base-sepolia-gate-market-single-issuer.json
+
+Model assignment validated (spec §12.2a): OK.
+
+USDC allowances to this deployment's WorkClaim: OK for every minting wallet.
+
+  DEBUG substitution: ORCHESTRATOR gpt-5.1 -> scripted
+  DEBUG substitution: WORKER-CODE claude-sonnet-5 -> scripted
+  DEBUG substitution: WORKER-EXTRACT gemini-3.1-pro-preview -> scripted
+  DEBUG substitution: ISSUER-A grok-4.6 -> scripted
+  DEBUG substitution: ISSUER-B grok-4.6 -> scripted
+  ROSTER COLLAPSE — THIS RUN DOES NOT VALIDATE THE BLOCK'S ROSTER.
+    exercised:     scripted
+    NOT exercised: anthropic, google, openai, xai
+    Substituting the non-decider seats removes whole providers from the run. That makes a
+    debug run harder to kill — it cannot be stopped by a provider it never calls — and it
+    also means model-specific failures are invisible to it: grok truncating mid-JSON at a
+    token ceiling, gemini returning only reasoning tokens and no text. Both have broken
+    real runs here.
+    A green debug run proves the loop works. The full-cost run is what proves the roster
+    works, and it is required before any freeze however clean the debug runs look.
+
+SELLER-SIDE FEE: the dollar route's escrow takes 50 bps from the seller; the fSIU route takes none. Not a buyer's cost; sellers cannot steer the asset.
+
+Pool reconciled: 80000 mSIU, matching every lot's issuance limit.
+
+=== WP-7 P5 — THREE WINDOWS, ONE POOL ===
+Run DEBUG-p5-three-window-2026-10-05T18-55-26-808Z (label 1488739720); oracle trial seed 20260927 (pinned).
+Real Commodity SIU print 2026-10-05-commodity: $0.001437/SIU.
+Starting code-class headroom: 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 32000, 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 48000 (total 80000 mSIU).
+DISCLOSED BEFORE THE RUN, not after: a simulated external buyer (the deployer wallet — not an agent, no model, no decisions) takes 3000 mSIU after window 1 and 3000 mSIU after window 2. These figures are fixed here in source before the run and written into the manifest; no agent's behaviour changes them.
+ALSO DISCLOSED BEFORE THE RUN: window 3 is allowed to fail. If the pool is exhausted when it starts, the job does not get done and that is the result. Nothing in this script tops the pool back up, resizes a lot, or routes around the shortage.
+AND: an undelivered claim CAN be settled in this run. settle_window_close is permissionless on-chain and is granted to the claim's holder and to both issuers — including against an issuer's own bond. Whether anyone actually notices a non-delivery and triggers it is a result of the run, not a property of it; capacity is returned and the bond pays only if someone does.
+Window spans, fixed before the first turn (chain clock): w1 2026-10-05T18:55:26.000Z..2026-10-05T18:59:26.000Z; w2 2026-10-05T18:59:26.000Z..2026-10-05T19:03:26.000Z; w3 2026-10-05T19:03:26.000Z..2026-10-05T19:07:26.000Z. The runner waits for each to open; no inference is spent waiting.
+DISCLOSED BEFORE THE RUN: ISSUER-A will not serve any redemption this run. It takes payment and holds real bonded capacity exactly as the other issuer does, but has no way to report a delivery — the same situation as an issuer whose delivery pipeline fails at the last step. Fixed in source before the run, not chosen to fit a result. Its claims will therefore default, and the question is whether the holder notices, triggers settle_window_close once the window closes, and is paid from that issuer's bond. No other agent is told this.
+Default path REACHABLE in all 3 windows: every window closes on 2026-10-05, the day print 2026-10-05-commodity is dated. A claim left unserved can be settled and its issuer's bond drawn.
+Providers: none to check — a scripted run calls no model.
+
+CAPACITY IS ONE POOL, AND THE TWO WAYS OF PAYING ARE NOT THE SAME INSTRUMENT
+  Every issuer bonds a finite amount of capacity per task class, shared between all buyers,
+  first-come-first-served. Both ways of paying draw on that same pool:
+    - A dated work claim (fSIU) consumes an issuer's headroom when it is minted. It reserves
+      capacity for a FUTURE delivery window, and it is TRANSFERABLE — it can be held, passed on,
+      and redeemed by whoever ends up holding it.
+    - A dollar payment consumes the same headroom when the seller commits capacity to the job.
+      That reservation is for IMMEDIATE work only: it is not transferable, not holdable, and ends
+      when the escrow does.
+  The issuer is paid for a claim. The issuer is not paid for a reservation on the dollar route —
+  a real gap in this testbed, disclosed rather than papered over with an invented fee.
+
+
+
+######## WINDOW 1 of 3 ########
+code-class headroom entering this window: 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 32000, 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 48000 (total 80000 mSIU).
+  DEBUG: pinned gate injected as version 1 and graded for real — PASS (G1-G6 all passed). Author: run p5-three-window-2026-10-03T11-10-36-115Z, window 3, ISSUER-A turn 4 — graded PASS (G1-G6).
+[w1][ORCHESTRATOR] Turn 1: projected=$0, realized=$0, 0ms -> {"tool":"request_quote","args":{"siu":"10","model":"claude-sonnet-5","rateUsdPerSiu":"0.001437","indexVersion":"SIU-2026a","printId":"2026-10-05-commodity","printHash":"0x00","sellerId":"erc8004:0xee1
+[w1][WORKER-CODE] Turn 1: projected=$0, realized=$0, 0ms -> {"tool":"issue_quote","args":{"requestId":"qr-1"}}
+[w1][ISSUER-A] Turn 1: projected=$0, realized=$0, 0ms -> {"wait":true}
+[w1][ISSUER-B] Turn 1: projected=$0, realized=$0, 0ms -> {"wait":true}
+[w1][ORCHESTRATOR] Turn 2: projected=$0, realized=$0, 0ms -> {"tool":"pay_with_claim","args":{"requestId":"qr-1"}}
+[w1][WORKER-CODE] Turn 2: projected=$0, realized=$0, 0ms -> {"tool":"request_quote","args":{"siu":"4","model":"claude-haiku-4-5","rateUsdPerSiu":"0.001437","indexVersion":"SIU-2026a","printId":"2026-10-05-commodity","printHash":"0x00","sellerId":"erc8004:0x2cd
+[w1][WORKER-EXTRACT] Turn 1: projected=$0, realized=$0, 0ms -> {"tool":"issue_quote","args":{"requestId":"qr-2"}}
+[w1][WORKER-CODE] Turn 3: projected=$0, realized=$0, 0ms -> {"tool":"transfer_claim","args":{"agentId":"WORKER-EXTRACT","tokenId":"8768469788533658293652808497880894925612513108755337774497565401652149526724","requestId":"qr-2"}}
+[w1][WORKER-EXTRACT] Turn 2: projected=$0, realized=$0, 0ms -> {"tool":"submit_attack","args":{"submissionSource":"export function dedupeSorted(arr) {\n  return arr; // identity: never removes a duplicate\n}\n"}}
+[w1][WORKER-CODE] Turn 4: projected=$0, realized=$0, 0ms -> {"tool":"redeem_claim","args":{"tokenId":"8768469788533658293652808497880894925612513108755337774497565401652149526724","taskSpecHash":"0xc64e8c09306d982172806afa7d2dfd0c694721ce1ddedd168fbdd774d2a211
+[w1][WORKER-EXTRACT] Turn 3: projected=$0, realized=$0, 0ms -> {"done":true,"summary":"script complete for this window"}
+[w1][ISSUER-B] Turn 2: projected=$0, realized=$0, 0ms -> {"tool":"submit_job","args":{"source":"export async function gate({ referenceDir, submissionDir }) {\n  const fs = await import('node:fs');\n  const path = await import('node:path');\n  const { spawn  gate=PASS (G1-G6 all passed)
+[w1][ISSUER-B] Turn 3: projected=$0, realized=$0, 0ms -> {"tool":"serve_redemption","args":{"tokenId":"8768469788533658293652808497880894925612513108755337774497565401652149526724","holder":"WORKER-CODE","quantity":"6054","passed":true,"receiptRef":"0x3ccbf
+
+[EXTERNAL BUYER — not an agent, scheduled in source before the run] took 3000 mSIU of code-class capacity. tx 0x273b8a79763df36ea8ebf0a1cf26b78ada2e65a284878c922b0d74c5e0e9d6d8
+
+[OPERATOR DRAIN — ISSUER-B, configured in the deployment record] took 25033 mSIU of code-class capacity. tx 0x36b2bd8cd503f5464c7182590deca18739e149e1c21e0b4d27853b2e81f833ff
+
+=== WINDOW 1 RESULT ===
+passed: true (by PRE-AUTHORED)
+turnsByAgent: {"ORCHESTRATOR":2,"WORKER-CODE":4,"WORKER-EXTRACT":3,"ISSUER-A":1,"ISSUER-B":3}
+haltedReason: {"ISSUER-A":"nothing_to_act_on","ISSUER-B":"nothing_to_act_on","WORKER-EXTRACT":"voluntary_stop","ORCHESTRATOR":"nothing_to_act_on","WORKER-CODE":"nothing_to_act_on"}
+realized inference spend: $0.000000
+code-class headroom: 80000 -> 76033 mSIU (0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 28033, 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 48000)
+asset choice, per buyer:
+  ORCHESTRATOR: 0 in USDC, 1 in fSIU
+  claims PASSED ONWARD rather than redeemed: 1 (hops: 1)
+capacity events (real, from the tools' own results):
+  turn 2 ORCHESTRATOR pay_with_claim — 10021 mSIU, issuer 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776, tokenId 8768469788533658293652808497880894925612513108755337774497565401652149526724, to 0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560, time_to_expiry 230s, tx 0xe1a9895ae066a34f0e501303635daee993671f41d5b1046395fe5781b364f08f (mint) / 0x6eb0d1c37563e5efdc98e9c87c50d155d84d402777bd04f2e4d76318d40cd9f2 (transfer)
+  turn 3 WORKER-CODE transfer_claim — 3967 mSIU, tokenId 8768469788533658293652808497880894925612513108755337774497565401652149526724, to 0x2cd53E449F6cF45c51f600e167b4D2630128c8F3, time_to_expiry 228s, tx 0xf9cb211050475f58faa17d71867a5f06794b0293ebdeffbcd5ca2b0265dc7522
+  turn 4 WORKER-CODE redeem_claim — tokenId 8768469788533658293652808497880894925612513108755337774497565401652149526724, time_to_expiry 226s, tx 0x637e5ce716896f5e5c2d5e51b1f56f2912de26507f7701bbfafc9a1206ba6f1a
+  turn 3 ISSUER-B serve_redemption — 6054 mSIU, tokenId 8768469788533658293652808497880894925612513108755337774497565401652149526724, to 0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560, time_to_expiry 218s, tx 0x765f55d26062ba41c34bb727a9f8507b6007b607692f58b7f017e9c58eaa9536
+attacks: 1, of which 0 false accepts (the adversary's real yield).
+
+Waiting 204s for window 2 to open (chain clock). No inference is spent while waiting.
+
+
+######## WINDOW 2 of 3 ########
+code-class headroom entering this window: 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 0, 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 48000 (total 48000 mSIU).
+  DEBUG: pinned gate injected as version 1 and graded for real — PASS (G1-G6 all passed). Author: run p5-three-window-2026-10-03T11-10-36-115Z, window 3, ISSUER-A turn 4 — graded PASS (G1-G6).
+[w2][ORCHESTRATOR] Turn 1: projected=$0, realized=$0, 0ms -> {"tool":"request_quote","args":{"siu":"10","model":"claude-sonnet-5","rateUsdPerSiu":"0.001437","indexVersion":"SIU-2026a","printId":"2026-10-05-commodity","printHash":"0x00","sellerId":"erc8004:0xee1
+[w2][WORKER-CODE] Turn 1: projected=$0, realized=$0, 0ms -> {"tool":"issue_quote","args":{"requestId":"qr-1"}}
+[w2][WORKER-EXTRACT] Turn 1: projected=$0, realized=$0, 0ms -> {"tool":"settle_window_close","args":{"tokenId":"8768469788533658293652808497880894925612513108755337774497565401652149526724","holder":"WORKER-EXTRACT"}}
+[w2][ISSUER-A] Turn 1: projected=$0, realized=$0, 0ms -> {"wait":true}
+[w2][ISSUER-B] Turn 1: projected=$0, realized=$0, 0ms -> {"wait":true}
+[w2][ORCHESTRATOR] Turn 2: projected=$0, realized=$0, 0ms -> {"tool":"pay_with_claim","args":{"requestId":"qr-1"}}
+[w2][WORKER-CODE] Turn 2: projected=$0, realized=$0, 0ms -> {"tool":"redeem_claim","args":{"tokenId":"86380712490257752242520010262300104864592900065534303141937447994297259586726","taskSpecHash":"0xc3fbd765edc826bdd1e6fda12be7648a38ed4d0c922539fe8fa63461ae423
+[w2][ISSUER-A] Turn 2: projected=$0, realized=$0, 0ms -> {"wait":true}
+[w2][WORKER-CODE] Turn 3: projected=$0, realized=$0, 0ms -> {"tool":"request_quote","args":{"siu":"4","model":"claude-haiku-4-5","rateUsdPerSiu":"0.001437","indexVersion":"SIU-2026a","printId":"2026-10-05-commodity","printHash":"0x00","sellerId":"erc8004:0x2cd
+[w2][WORKER-EXTRACT] Turn 2: projected=$0, realized=$0, 0ms -> {"tool":"issue_quote","args":{"requestId":"qr-2"}}
+[w2][WORKER-CODE] Turn 4: projected=$0, realized=$0, 0ms -> {"tool":"pay","args":{"requestId":"qr-2","settler":"0x0000000000000000000000000000000000000000"}}
+[w2][WORKER-EXTRACT] Turn 3: projected=$0, realized=$0, 0ms -> {"tool":"reserve_for_work","args":{}}
+[w2][WORKER-EXTRACT] Turn 4: projected=$0, realized=$0, 0ms -> {"tool":"submit_attack","args":{"submissionSource":"export function dedupeSorted(arr) {\n  return arr; // identity: never removes a duplicate\n}\n"}}
+[w2][WORKER-EXTRACT] Turn 5: projected=$0, realized=$0, 0ms -> {"tool":"settle_escrow","args":{}}
+[w2][WORKER-EXTRACT] Turn 6: projected=$0, realized=$0, 0ms -> {"done":true,"summary":"script complete for this window"}
+
+[OPERATOR RE-DRAIN — ISSUER-B, capacity that came back to it] took 3967 mSIU of code-class capacity. tx 0x7f8551ff255c0dee50c49012f1467ed59ba70c20f911cecc5819152fd54a6877
+
+[EXTERNAL BUYER — not an agent, scheduled in source before the run] took 3000 mSIU of code-class capacity. tx 0x27231f51f85b0a98e8cd8e40a9e30ccb1b6a4c37e17accd35fef54f1365c7af0
+
+=== WINDOW 2 RESULT ===
+passed: true (by PRE-AUTHORED)
+turnsByAgent: {"ORCHESTRATOR":2,"WORKER-CODE":4,"WORKER-EXTRACT":6,"ISSUER-A":2,"ISSUER-B":1}
+haltedReason: {"ISSUER-A":"waiting","ISSUER-B":"waiting","WORKER-EXTRACT":"voluntary_stop","ORCHESTRATOR":"nothing_to_act_on","WORKER-CODE":"nothing_to_act_on"}
+realized inference spend: $0.000000
+code-class headroom: 48000 -> 37946 mSIU (0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 3967, 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 33979)
+asset choice, per buyer:
+  ORCHESTRATOR: 0 in USDC, 1 in fSIU
+  WORKER-CODE: 1 in USDC, 0 in fSIU
+  claims passed onward rather than redeemed: 0 — fSIU settled, it did not circulate
+capacity events (real, from the tools' own results):
+  turn 1 WORKER-EXTRACT settle_window_close — tokenId 8768469788533658293652808497880894925612513108755337774497565401652149526724, to 0x2cd53E449F6cF45c51f600e167b4D2630128c8F3, time_to_expiry 0s, tx 0x7fd07b2ba481bbce1594736908ee0470494e5028423083af92dd9a6d4af12412
+  turn 2 ORCHESTRATOR pay_with_claim — 10021 mSIU, issuer 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54, tokenId 86380712490257752242520010262300104864592900065534303141937447994297259586726, to 0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560, time_to_expiry 228s, tx 0xbc85fd128965edaeac9e2b7a11cb6c17af14971f7256d94820949b60a4207b91 (mint) / 0xd53cf1eb827ee3de0a983a308bf16448b15cbf9a2eb63d8683fdcfdba61da2e6 (transfer)
+  turn 2 WORKER-CODE redeem_claim — tokenId 86380712490257752242520010262300104864592900065534303141937447994297259586726, time_to_expiry 224s, tx 0x3cc86bb1fd130972acfd85001131995855c5b7f8e0520c7250b98fb811855898
+  turn 3 WORKER-EXTRACT reserve_for_work — 4000 mSIU, issuer 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54, quote 0x684936fd28b95e8f16737d6ad75e109de05c7ce8c0e256875706cf7f08ac7ef7, tx 0xccadb8b4de20be06803ad15d2287dfee0b782109edd1c329ace00de5aa80443f
+  turn 5 WORKER-EXTRACT release_on_settle — tx 0x2e68b161369119d041dec7a19cb6bdd2d29402af95aa834dee53efcc053ba824
+attacks: 1, of which 0 false accepts (the adversary's real yield).
+
+Waiting 200s for window 3 to open (chain clock). No inference is spent while waiting.
+
+
+######## WINDOW 3 of 3 ########
+code-class headroom entering this window: 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 0, 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 34979 (total 34979 mSIU).
+  DEBUG: pinned gate injected as version 1 and graded for real — PASS (G1-G6 all passed). Author: run p5-three-window-2026-10-03T11-10-36-115Z, window 3, ISSUER-A turn 4 — graded PASS (G1-G6).
+[w3][ORCHESTRATOR] Turn 1: projected=$0, realized=$0, 0ms -> {"tool":"request_quote","args":{"siu":"10","model":"claude-sonnet-5","rateUsdPerSiu":"0.001437","indexVersion":"SIU-2026a","printId":"2026-10-05-commodity","printHash":"0x00","sellerId":"erc8004:0xee1
+[w3][WORKER-CODE] Turn 1: projected=$0, realized=$0, 0ms -> {"tool":"settle_window_close","args":{"tokenId":"86380712490257752242520010262300104864592900065534303141937447994297259586726","holder":"WORKER-CODE"}}
+[w3][ORCHESTRATOR] Turn 2: projected=$0, realized=$0, 0ms -> {"wait":true}
+[w3][WORKER-CODE] Turn 2: projected=$0, realized=$0, 0ms -> {"tool":"issue_quote","args":{"requestId":"qr-1"}}
+[w3][ORCHESTRATOR] Turn 3: projected=$0, realized=$0, 0ms -> {"tool":"pay","args":{"requestId":"qr-1","settler":"0x0000000000000000000000000000000000000000"}}
+[w3][WORKER-CODE] Turn 3: projected=$0, realized=$0, 0ms -> {"tool":"reserve_for_work","args":{}}
+[w3][WORKER-CODE] Turn 4: projected=$0, realized=$0, 0ms -> {"tool":"settle_escrow","args":{}}
+[w3][WORKER-CODE] Turn 5: projected=$0, realized=$0, 0ms -> {"tool":"request_quote","args":{"siu":"4","model":"claude-haiku-4-5","rateUsdPerSiu":"0.001437","indexVersion":"SIU-2026a","printId":"2026-10-05-commodity","printHash":"0x00","sellerId":"erc8004:0x2cd
+[w3][WORKER-EXTRACT] Turn 1: projected=$0, realized=$0, 0ms -> {"tool":"issue_quote","args":{"requestId":"qr-2"}}
+[w3][WORKER-CODE] Turn 6: projected=$0, realized=$0, 0ms -> {"tool":"pay","args":{"requestId":"qr-2","settler":"0x0000000000000000000000000000000000000000"}}
+[w3][WORKER-EXTRACT] Turn 2: projected=$0, realized=$0, 0ms -> {"tool":"reserve_for_work","args":{}}
+[w3][WORKER-EXTRACT] Turn 3: projected=$0, realized=$0, 0ms -> {"tool":"submit_attack","args":{"submissionSource":"export function dedupeSorted(arr) {\n  return arr; // identity: never removes a duplicate\n}\n"}}
+[w3][WORKER-EXTRACT] Turn 4: projected=$0, realized=$0, 0ms -> {"tool":"settle_escrow","args":{}}
+[w3][WORKER-EXTRACT] Turn 5: projected=$0, realized=$0, 0ms -> {"done":true,"summary":"script complete for this window"}
+
+=== WINDOW 3 RESULT ===
+passed: true (by PRE-AUTHORED)
+turnsByAgent: {"ORCHESTRATOR":3,"WORKER-CODE":6,"WORKER-EXTRACT":5,"ISSUER-A":0,"ISSUER-B":0}
+haltedReason: {"ORCHESTRATOR":"nothing_to_act_on","WORKER-EXTRACT":"voluntary_stop","WORKER-CODE":"nothing_to_act_on","ISSUER-A":"nothing_to_act_on","ISSUER-B":"nothing_to_act_on"}
+realized inference spend: $0.000000
+code-class headroom: 34979 -> 41000 mSIU (0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 0, 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 41000)
+asset choice, per buyer:
+  ORCHESTRATOR: 1 in USDC, 0 in fSIU
+  WORKER-CODE: 1 in USDC, 0 in fSIU
+  claims passed onward rather than redeemed: 0 — fSIU settled, it did not circulate
+capacity events (real, from the tools' own results):
+  turn 1 WORKER-CODE settle_window_close — tokenId 86380712490257752242520010262300104864592900065534303141937447994297259586726, to 0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560, time_to_expiry 0s, tx 0x731c096bd5cbb6539c0bf2b3f83b12cb16a55ac95cd90b05fee7ada337c2b07f
+  turn 3 WORKER-CODE reserve_for_work — 10000 mSIU, issuer 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54, quote 0xf7310c58eaabc9e868a206c7c62a9502a5bf25abae72f37498d69ca1b980eb3d, tx 0xac3b56c8204d35eca592750f2bfea9091ed2a215a0ddbb3d385707f2b6dcdf7c
+  turn 4 WORKER-CODE release_on_settle — tx 0x61f513607f6db8f3a918384939f32abe6494bee97f0a5c90c5d18afe4692f8af
+  turn 2 WORKER-EXTRACT reserve_for_work — 4000 mSIU, issuer 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54, quote 0x0cfcb81f78aaa6e4f06ab2c768032c0d60937de1dadeb3d6ac053a0743fd676c, tx 0x3577621db343b7fc2e444c4918d86e99f936f1c59f1ce5eac32f9b81bd4ea0d4
+  turn 4 WORKER-EXTRACT release_on_settle — tx 0x8fd76c81a1020d497426565b1b2b4a8362e163cc2fb5aaba74edf338ff5f39c0
+attacks: 1, of which 0 false accepts (the adversary's real yield).
+
+=== RETURNING EXTERNAL-BUYER CAPACITY ===
+  waiting 208s for the run's own end before settling.
+  expired 3000 mSIU of external-buyer capacity back to its issuer. tx 0xf0452b67f2ae252092509d4528c642dfb93cf46f8e26e38e0e24ad3f5f2e90c5
+  expired 25033 mSIU of external-buyer capacity back to its issuer. tx 0xbee0da02e0d8808f9fb5fbabeb00e2caf3e5110111867f93f80bc9e68976c152
+  expired 3967 mSIU of external-buyer capacity back to its issuer. tx 0xd21c2867f5592b93d990bac421dec08494706aa97ecd4286108d535790a3052c
+  expired 3000 mSIU of external-buyer capacity back to its issuer. tx 0x7ca3c019cbd5ac3f2abe2e499495bb5b1db214697e6da8973a45c1c1438b18c0
+
+
+######## RUN SUMMARY — THREE WINDOWS ########
+
+CAPACITY IS ONE POOL, AND THE TWO WAYS OF PAYING ARE NOT THE SAME INSTRUMENT
+  Every issuer bonds a finite amount of capacity per task class, shared between all buyers,
+  first-come-first-served. Both ways of paying draw on that same pool:
+    - A dated work claim (fSIU) consumes an issuer's headroom when it is minted. It reserves
+      capacity for a FUTURE delivery window, and it is TRANSFERABLE — it can be held, passed on,
+      and redeemed by whoever ends up holding it.
+    - A dollar payment consumes the same headroom when the seller commits capacity to the job.
+      That reservation is for IMMEDIATE work only: it is not transferable, not holdable, and ends
+      when the escrow does.
+  The issuer is paid for a claim. The issuer is not paid for a reservation on the dollar route —
+  a real gap in this testbed, disclosed rather than papered over with an invented fee.
+
+=== PER WINDOW ===
+  window 1: passed=true by PRE-AUTHORED, headroom 80000 -> 76033 mSIU, then the external buyer took 3000 mSIU
+    asset choice, per buyer:
+    ORCHESTRATOR: 0 in USDC, 1 in fSIU
+    claims PASSED ONWARD rather than redeemed: 1 (hops: 1)
+  window 2: passed=true by PRE-AUTHORED, headroom 48000 -> 37946 mSIU, then the external buyer took 3000 mSIU
+    asset choice, per buyer:
+    ORCHESTRATOR: 0 in USDC, 1 in fSIU
+    WORKER-CODE: 1 in USDC, 0 in fSIU
+    claims passed onward rather than redeemed: 0 — fSIU settled, it did not circulate
+  window 3: passed=true by PRE-AUTHORED, headroom 34979 -> 41000 mSIU
+    asset choice, per buyer:
+    ORCHESTRATOR: 1 in USDC, 0 in fSIU
+    WORKER-CODE: 1 in USDC, 0 in fSIU
+    claims passed onward rather than redeemed: 0 — fSIU settled, it did not circulate
+
+=== SUBCONTRACTING AND ASSET CHOICE, PER PURCHASE ===
+  window 1 turn 2: fSIU — {"tool":"pay_with_claim","args":{"requestId":"qr-1"}}
+  window 2 turn 2: fSIU — {"tool":"pay_with_claim","args":{"requestId":"qr-1"}}
+  window 3 turn 3: USDC — {"tool":"pay","args":{"requestId":"qr-1","settler":"0x0000000000000000000000000000000000000000"}}
+
+=== RATIONALE COVERAGE (read this before reading any rationale) ===
+  offered on 0 of 42 turns overall; 0/5 purchase turns, 0/37 others.
+
+=== CAPACITY EVENTS (claims and reservations, with tx hashes) ===
+  w1 turn 2 ORCHESTRATOR pay_with_claim — 10021 mSIU, issuer 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776, tokenId 8768469788533658293652808497880894925612513108755337774497565401652149526724, to 0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560, time_to_expiry 230s, tx 0xe1a9895ae066a34f0e501303635daee993671f41d5b1046395fe5781b364f08f (mint) / 0x6eb0d1c37563e5efdc98e9c87c50d155d84d402777bd04f2e4d76318d40cd9f2 (transfer)
+  w1 turn 3 WORKER-CODE transfer_claim — 3967 mSIU, tokenId 8768469788533658293652808497880894925612513108755337774497565401652149526724, to 0x2cd53E449F6cF45c51f600e167b4D2630128c8F3, time_to_expiry 228s, tx 0xf9cb211050475f58faa17d71867a5f06794b0293ebdeffbcd5ca2b0265dc7522
+  w1 turn 4 WORKER-CODE redeem_claim — tokenId 8768469788533658293652808497880894925612513108755337774497565401652149526724, time_to_expiry 226s, tx 0x637e5ce716896f5e5c2d5e51b1f56f2912de26507f7701bbfafc9a1206ba6f1a
+  w1 turn 3 ISSUER-B serve_redemption — 6054 mSIU, tokenId 8768469788533658293652808497880894925612513108755337774497565401652149526724, to 0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560, time_to_expiry 218s, tx 0x765f55d26062ba41c34bb727a9f8507b6007b607692f58b7f017e9c58eaa9536
+  w1 [EXTERNAL BUYER, not an agent] mint 3000 mSIU — tx 0x273b8a79763df36ea8ebf0a1cf26b78ada2e65a284878c922b0d74c5e0e9d6d8
+  w2 turn 1 WORKER-EXTRACT settle_window_close — tokenId 8768469788533658293652808497880894925612513108755337774497565401652149526724, to 0x2cd53E449F6cF45c51f600e167b4D2630128c8F3, time_to_expiry 0s, tx 0x7fd07b2ba481bbce1594736908ee0470494e5028423083af92dd9a6d4af12412
+  w2 turn 2 ORCHESTRATOR pay_with_claim — 10021 mSIU, issuer 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54, tokenId 86380712490257752242520010262300104864592900065534303141937447994297259586726, to 0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560, time_to_expiry 228s, tx 0xbc85fd128965edaeac9e2b7a11cb6c17af14971f7256d94820949b60a4207b91 (mint) / 0xd53cf1eb827ee3de0a983a308bf16448b15cbf9a2eb63d8683fdcfdba61da2e6 (transfer)
+  w2 turn 2 WORKER-CODE redeem_claim — tokenId 86380712490257752242520010262300104864592900065534303141937447994297259586726, time_to_expiry 224s, tx 0x3cc86bb1fd130972acfd85001131995855c5b7f8e0520c7250b98fb811855898
+  w2 turn 3 WORKER-EXTRACT reserve_for_work — 4000 mSIU, issuer 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54, quote 0x684936fd28b95e8f16737d6ad75e109de05c7ce8c0e256875706cf7f08ac7ef7, tx 0xccadb8b4de20be06803ad15d2287dfee0b782109edd1c329ace00de5aa80443f
+  w2 turn 5 WORKER-EXTRACT release_on_settle — tx 0x2e68b161369119d041dec7a19cb6bdd2d29402af95aa834dee53efcc053ba824
+  w2 [EXTERNAL BUYER, not an agent] mint 3000 mSIU — tx 0x27231f51f85b0a98e8cd8e40a9e30ccb1b6a4c37e17accd35fef54f1365c7af0
+  w3 turn 1 WORKER-CODE settle_window_close — tokenId 86380712490257752242520010262300104864592900065534303141937447994297259586726, to 0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560, time_to_expiry 0s, tx 0x731c096bd5cbb6539c0bf2b3f83b12cb16a55ac95cd90b05fee7ada337c2b07f
+  w3 turn 3 WORKER-CODE reserve_for_work — 10000 mSIU, issuer 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54, quote 0xf7310c58eaabc9e868a206c7c62a9502a5bf25abae72f37498d69ca1b980eb3d, tx 0xac3b56c8204d35eca592750f2bfea9091ed2a215a0ddbb3d385707f2b6dcdf7c
+  w3 turn 4 WORKER-CODE release_on_settle — tx 0x61f513607f6db8f3a918384939f32abe6494bee97f0a5c90c5d18afe4692f8af
+  w3 turn 2 WORKER-EXTRACT reserve_for_work — 4000 mSIU, issuer 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54, quote 0x0cfcb81f78aaa6e4f06ab2c768032c0d60937de1dadeb3d6ac053a0743fd676c, tx 0x3577621db343b7fc2e444c4918d86e99f936f1c59f1ce5eac32f9b81bd4ea0d4
+  w3 turn 4 WORKER-EXTRACT release_on_settle — tx 0x8fd76c81a1020d497426565b1b2b4a8362e163cc2fb5aaba74edf338ff5f39c0
+
+=== ADVERSARY ===
+  window 1: gate versions delivered 2 (v1 by PRE-AUTHORED on turn 0; v2 by ISSUER-B on turn 2)
+    turn 2 by WORKER-EXTRACT vs gate v1: correct_reject (gate accepted=false, oracle accepted=false) — gate correctly rejected a submission the oracle also rejects — disagreed with the reference implementation on trial 2 of 509
+  window 2: gate versions delivered 1 (v1 by PRE-AUTHORED on turn 0)
+    turn 4 by WORKER-EXTRACT vs gate v1: correct_reject (gate accepted=false, oracle accepted=false) — gate correctly rejected a submission the oracle also rejects — disagreed with the reference implementation on trial 2 of 509
+  window 3: gate versions delivered 1 (v1 by PRE-AUTHORED on turn 0)
+    turn 3 by WORKER-EXTRACT vs gate v1: correct_reject (gate accepted=false, oracle accepted=false) — gate correctly rejected a submission the oracle also rejects — disagreed with the reference implementation on trial 2 of 509
+
+=== FORWARD TERMS (stated prices, not contracts — nothing enforces one) ===
+  ISSUER-A: shown the invitation on 2 turn(s), stated 0 offer(s) — PROMPTED AND DECLINED, not un-asked.
+  ISSUER-B: shown the invitation on 2 turn(s), stated 0 offer(s) — PROMPTED AND DECLINED, not un-asked.
+  No forward terms were stated in any window.
+
+=== SCARCITY, AND WHAT THE LAST WINDOW'S OUTCOME ACTUALLY MEANS ===
+  code-class headroom remaining at the end: 41000 mSIU
+  per issuer: 0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776 0, 0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54 41000
+  A claim routes to a single issuer with enough headroom by itself, so the per-issuer split above, not the total, is what a late buyer faces.
+  VERDICT: completed
+  Window 3 delivered its job. Capacity at the largest single issuer when it started: 34979 mSIU against a 10000 mSIU job. ORCHESTRATOR secured nothing ahead; the pool simply still had room, which is not evidence about the instrument.
+
+=== HALTS, REFUSALS AND FRICTION ===
+  window 1: ISSUER-A=nothing_to_act_on, ISSUER-B=nothing_to_act_on, WORKER-EXTRACT=voluntary_stop, ORCHESTRATOR=nothing_to_act_on, WORKER-CODE=nothing_to_act_on
+  window 2: ISSUER-A=waiting, ISSUER-B=waiting, WORKER-EXTRACT=voluntary_stop, ORCHESTRATOR=nothing_to_act_on, WORKER-CODE=nothing_to_act_on
+  window 3: ORCHESTRATOR=nothing_to_act_on, WORKER-EXTRACT=voluntary_stop, WORKER-CODE=nothing_to_act_on, ISSUER-A=nothing_to_act_on, ISSUER-B=nothing_to_act_on
+  Friction logs (self-reported, per turn, including time_to_expiry_seconds) are at /home/petrunix/dated-siu-inference/data/gate-market/runs/<runId>-w<N>/friction/friction-log.jsonl — every turn, not only the ones that acted.
+
+=== SPEND ===
+  scripted: $0.000000
+  run total (real): $0.000000
+  run total (projected, what the $30 cap is enforced against): $0.000000
+  experiment ledger, real spend: $22.934707
+  experiment ledger, projected: $42.786095
+
+Machine-readable report written to /home/petrunix/dated-siu-inference/data/gate-market/runs/DEBUG-p5-three-window-2026-10-05T18-55-26-808Z-report.json
+
+SCRIPTED WALK — ALL CHECKS PASSED
+  PASS  every scripted step was issued
+        33 of 33
+  PASS  no tool call errored
+        none
+  PASS  claim sizes equal ceil(quote price / print)
+        3 payments
+  PASS  mint costs equal quantity × print, from the receipt's own transfer
+        2 mints
+  PASS  window 1 is backed by one issuer and window 2 by another
+        window 1: 0xd4becd22d3cee01b1b388c065c1fdd1f967ee776; window 2: 0x6313e6ca15f751d64c16ba72bc71dbaf35ebae54
+  PASS  a part of a held claim paid onward, and less than the whole
+        minted 10021, passed on 3967
+  PASS  the remainder was presented, and served at exactly the remainder
+        served 6054 against a remainder of 6054
+  PASS  the bond paid a Default the claim's value at the print
+        bond paid 14400, expected 14400
+  PASS  an unpresented claim expired and paid nobody
+        bond paid none
+  PASS  every event carries its settled quote, mint cost and outcome
+        yes
+  PASS  every settler was shown what its settlement did
+        2 settlements
+  PASS  the decision rule marks WORKER-CODE eligible and onward, ORCHESTRATOR never eligible, and counts cleanly
+        WORKER-CODE eligible=true onward=true; ORCHESTRATOR eligible=false; counting errors: 0
+  PASS  the dollar route settled quotes in windows 2 and 3
+        window 2: 1; window 3: 2
+RUN_EXIT=0
