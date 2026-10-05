@@ -49,6 +49,7 @@ export const CAPACITY_BOND_ABI = parseAbi([
  * seller an unchanged wallet and no escrow at all, and it correctly refused to deliver. */
 export const ESCROW_READ_ABI = parseAbi([
   "function escrows(bytes32 quoteHash) external view returns (address buyer, uint64 expiry, uint8 status, address seller, address settler, uint256 maxAmount)",
+  "function feeBps() external view returns (uint16)",
 ]);
 
 export const USDC_BALANCE_ABI = parseAbi([

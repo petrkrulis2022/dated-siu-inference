@@ -244,6 +244,17 @@ export class ViemChainReader implements ChainReader {
     };
   }
 
+  /** The escrow's immutable protocol fee in basis points, taken from the SELLER's proceeds on the
+   *  dollar route. Read from the chain, so a report states what the contract charges and not what
+   *  anyone remembers it charging. */
+  async escrowFeeBps(escrowAddress: Hex): Promise<number> {
+    return this.client.readContract({
+      address: escrowAddress,
+      abi: ESCROW_READ_ABI,
+      functionName: "feeBps",
+    });
+  }
+
   async escrowState(escrowAddress: Hex, quoteHash: Hex): Promise<EscrowState> {
     const [buyer, expiry, status, seller, , maxAmount] = await this.client.readContract({
       address: escrowAddress,

@@ -1665,6 +1665,17 @@ reading is reported beside it so a verdict cannot rest on agents taking the shor
 (spec §4.6at). A run whose eligibility count is wrong — ORCHESTRATOR eligible, or an agent eligible
 with no payment from an agent behind it — produces no verdict at all.
 
+**F1's headline is the share of payments made from a held balance.** Window-1 payments are split by
+route: paid from a held fSIU balance (the headline), mint-and-forward (USDC out, a new claim to the
+seller), USDC, and split. Counting mint-and-forward as "paid in fSIU" would measure the delivery
+format and not whether agents use fSIU as money (spec §4.6ax).
+
+**A contaminated window aborts the run.** Every window-1 mint, including the operator's, must be
+backed by the issuer the topology expects; one that fell through to the other issuer ends the run
+as contaminated and excludes it (spec §4.6ay). Quote size is the job's and only the price is the
+buyer's (§4.6au). The dollar route's 50 bps escrow fee falls on the seller and not on the buyer, and
+sellers cannot steer which asset a quote is settled in, so it is recorded and not equalised (§4.6az).
+
 Holding time is recorded in turns, not wall-clock time. The operator's drain is recorded apart from
 every agent's record and is excluded from every behavioural statistic.
 

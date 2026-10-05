@@ -86,6 +86,49 @@ export function f1Clean(
   return { clean: backedByOthers === 0, mints: mints.length, backedByOthers };
 }
 
+const MINT_KINDS: ReadonlySet<string> = new Set(["mint_claim", "pay_with_claim", "settle_split"]);
+
+/**
+ * Is a window's capacity what the topology says it is? Returns an ABORT REASON, or undefined.
+ *
+ * Both lots exist from deploy, so first-fit is decided by headroom alone: a single mint larger than
+ * the serving issuer's remaining headroom is routed to the NEXT issuer, whose claims cannot be
+ * served. In F1's window that would put non-serving claims into the measurement without a word.
+ * Planned demand keeps a run clear of it — this is the net for the mint nobody planned.
+ *
+ * Checked after the window, by the same rule as the failed-drain check and for the same reason: an
+ * instrument that is not in the state it claims measures nothing, and the next window would be
+ * paid for to measure it. `operatorMintIssuers` is who backed the operator's own mints that window
+ * (the external buyer), which draw on the same capacity. An unrecorded backer is contamination,
+ * never a pass.
+ */
+export function windowContamination(
+  windowIndex: number,
+  capacityEvents: readonly { kind: string; issuer?: string }[],
+  operatorMintIssuers: readonly (string | undefined)[],
+  expectedIssuer: string,
+): string | undefined {
+  const isExpected = (issuer: string | undefined): boolean =>
+    issuer !== undefined && issuer.toLowerCase() === expectedIssuer.toLowerCase();
+  const mints = capacityEvents.filter((e) => MINT_KINDS.has(e.kind));
+  const wrong = mints.filter((m) => !isExpected(m.issuer));
+  const operatorWrong = operatorMintIssuers.filter((i) => !isExpected(i));
+  if (wrong.length === 0 && operatorWrong.length === 0) return undefined;
+  const who = (issuers: readonly (string | undefined)[]): string =>
+    [...new Set(issuers.map((i) => i ?? "an issuer that was not recorded"))].join(", ");
+  const parts: string[] = [];
+  if (wrong.length > 0) {
+    parts.push(
+      `${wrong.length} of ${mints.length} agent mints were not backed by the expected issuer ` +
+        `${expectedIssuer} (backed by ${who(wrong.map((m) => m.issuer))}; "not recorded" counts as wrong)`,
+    );
+  }
+  if (operatorWrong.length > 0) {
+    parts.push(`the operator's own mint was backed by ${who(operatorWrong)}, not ${expectedIssuer}`);
+  }
+  return `window ${windowIndex} is contaminated: ${parts.join("; ")}`;
+}
+
 /**
  * Reads a value until two consecutive reads agree, and returns it.
  *

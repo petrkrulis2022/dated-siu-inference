@@ -23,7 +23,7 @@
 import { D } from "@touchstone/sdk";
 import { costOfRuns, type BlockCost } from "./cost-metric.js";
 import { decisionRuleVerdict, type RuleOutcome, type RunOpportunity } from "./decision-rule.js";
-import type { F1Report } from "./instrument-report.js";
+import type { F1Report, SellerFeeAsymmetry } from "./instrument-report.js";
 import { assertSameInstrument } from "./instrument.js";
 
 /**
@@ -87,6 +87,8 @@ export interface RunReport {
   abortedBecause?: string;
   /** The print the run used, decimal USD per SIU. */
   rateUsdPerSiu?: string;
+  /** The escrow fee the dollar route charges the seller, as the run read it from the chain. */
+  sellerFeeAsymmetry?: SellerFeeAsymmetry;
   f1?: F1Report;
   windows: ReportWindow[];
 }
@@ -113,11 +115,36 @@ export interface WindowSummary {
   bondPaidMinorUnits: string;
 }
 
+/**
+ * How a buyer paid, by ROUTE rather than by asset. A mint-and-forward payment (`pay_with_claim`) is
+ * USDC leaving the payer and a freshly minted claim reaching the seller — it is not the payer
+ * spending fSIU it holds — so counting it as "paid in fSIU" would make F1 measure the delivery
+ * format and not whether agents use fSIU as money. Three routes, with the headline being the first:
+ *   - heldBalance:    a transfer naming a quote, out of a balance the payer holds;
+ *   - mintAndForward: a claim minted and sent to the seller in one call;
+ *   - usdc:           escrow.
+ * A split is both a mint-and-forward claim leg and a dollar leg in one call, so it keeps its own
+ * count rather than being split across the other two.
+ */
+export interface RouteCounts {
+  heldBalance: number;
+  mintAndForward: number;
+  usdc: number;
+  split: number;
+  total: number;
+  /** Of `heldBalance`: payments made while holding fSIU received from another agent. The rest were
+   *  paid from claims the payer minted for itself first, which is mint-and-forward in two steps. */
+  heldBalanceWhileHoldingReceived: number;
+}
+
 export interface BuyerRun {
   decisions: Counts;
-  /** fSIU's share of this buyer's window-1 decisions, in basis points, rounded down. Strict:
-   *  a `split` is reported as its own count and is not folded into either asset. */
-  fsiuShareBp: number | null;
+  routes: RouteCounts;
+  /** THE F1 HEADLINE: the share of this buyer's window-1 payments made from a held fSIU balance,
+   *  in basis points, rounded down. */
+  heldBalanceShareBp: number | null;
+  /** Beside it: held-balance plus mint-and-forward — fSIU by any route. Never the headline. */
+  fsiuAnyRouteShareBp: number | null;
   turns: number | null;
   settledIn: Asset | "mixed" | "none";
   /** `transfer_claim` pushes that settled no quote — a second route to fSIU, counted apart. */
@@ -150,7 +177,10 @@ export interface BlockReport {
       string,
       {
         decisions: Counts;
-        fsiuShareDispersionBp: Dispersion | null;
+        routes: RouteCounts;
+        /** The headline, across runs. */
+        heldBalanceShareDispersionBp: Dispersion | null;
+        fsiuAnyRouteShareDispersionBp: Dispersion | null;
         turnsPerPayment: Record<Asset | "mixed", { n: number; mean: string | null; samples: number[] }>;
         unkeyedTransfers: number;
       }
@@ -161,6 +191,8 @@ export interface BlockReport {
   };
   laterWindows: { windowIndex: number; settlements: WindowSummary["settlements"]; bondPaidMinorUnits: string }[];
   forwardDated: number;
+  /** Recorded either way. A run that did not record it is "not recorded", never zero. */
+  sellerFeeAsymmetry: SellerFeeAsymmetry | "not recorded" | "mixed across runs";
   decisionRule: RuleOutcome & {
     assumption: string;
     /** The same rule under the LOOSER reading — paid in fSIU by any route while holding received
@@ -239,24 +271,58 @@ function summariseWindow(w: ReportWindow): WindowSummary {
   };
 }
 
+function routeCountsOf(moments: readonly ReportMoment[]): RouteCounts {
+  const c: RouteCounts = {
+    heldBalance: 0,
+    mintAndForward: 0,
+    usdc: 0,
+    split: 0,
+    total: 0,
+    heldBalanceWhileHoldingReceived: 0,
+  };
+  for (const m of moments) {
+    if (m.tool === "pay") c.usdc += 1;
+    else if (m.tool === "pay_with_claim") c.mintAndForward += 1;
+    else if (m.tool === "settle_split") c.split += 1;
+    // Only a transfer that NAMED a quote is a payment; one that named none settled nothing and is
+    // counted as an unkeyed transfer instead.
+    else if (m.tool === "transfer_claim" && m.requestId !== undefined) {
+      c.heldBalance += 1;
+      if (BigInt(m.heldReceivedMilliSiu) > 0n) c.heldBalanceWhileHoldingReceived += 1;
+    } else continue;
+    c.total += 1;
+  }
+  return c;
+}
+
+const shareBp = (part: number, whole: number): number | null =>
+  whole === 0 ? null : Math.floor((part * 10_000) / whole);
+
 function summariseRun(run: RunReport): RunSummary {
   const w1 = run.windows.find((w) => w.windowIndex === 1);
   if (w1 === undefined) throw new Error(`${run.runId}: no window 1 in the report`);
   const moments = w1.paymentMoments ?? [];
   const buyers: Record<string, BuyerRun> = {};
-  for (const buyer of new Set(w1.purchases.decisions.map((d) => d.buyer))) {
+  const buyerNames = new Set([
+    ...w1.purchases.decisions.map((d) => d.buyer),
+    ...moments.map((m) => m.agentId),
+  ]);
+  for (const buyer of buyerNames) {
     const mine = w1.purchases.decisions.filter((d) => d.buyer === buyer);
     const assets = new Set(mine.map((d) => d.asset));
     const decisions = countsFor(mine);
-    const keyed = (turn: number | undefined) =>
-      moments.some((m) => m.agentId === buyer && m.tool === "transfer_claim" && m.turn === turn);
+    const routes = routeCountsOf(moments.filter((m) => m.agentId === buyer));
     buyers[buyer] = {
       decisions,
-      fsiuShareBp: decisions.total === 0 ? null : Math.floor((decisions.fsiu * 10_000) / decisions.total),
+      routes,
+      heldBalanceShareBp: shareBp(routes.heldBalance, routes.total),
+      fsiuAnyRouteShareBp: shareBp(routes.heldBalance + routes.mintAndForward, routes.total),
       turns: w1.turnsByAgent[buyer] ?? null,
       settledIn: assets.size === 0 ? "none" : assets.size === 1 ? [...assets][0] : "mixed",
+      // A transfer is unkeyed when its capacity event names no quote. (Payment moments cannot say:
+      // one is recorded for every transfer_claim, keyed or not.)
       unkeyedTransfers: w1.capacityEvents.filter(
-        (e) => e.kind === "transfer_claim" && e.agentId === buyer && !keyed(e.turn),
+        (e) => e.kind === "transfer_claim" && e.agentId === buyer && e.settlesRequestId === undefined,
       ).length,
     };
   }
@@ -321,7 +387,19 @@ export function buildBlockReport(reports: readonly RunReport[]): BlockReport {
     for (const m of mine) if (m.turns !== null && m.settledIn !== "none") samples[m.settledIn].push(m.turns);
     perBuyer[b] = {
       decisions,
-      fsiuShareDispersionBp: dispersion(mine.flatMap((m) => (m.fsiuShareBp === null ? [] : [m.fsiuShareBp]))),
+      routes: mine.reduce<RouteCounts>(
+        (sum, m) => ({
+          heldBalance: sum.heldBalance + m.routes.heldBalance,
+          mintAndForward: sum.mintAndForward + m.routes.mintAndForward,
+          usdc: sum.usdc + m.routes.usdc,
+          split: sum.split + m.routes.split,
+          total: sum.total + m.routes.total,
+          heldBalanceWhileHoldingReceived: sum.heldBalanceWhileHoldingReceived + m.routes.heldBalanceWhileHoldingReceived,
+        }),
+        { heldBalance: 0, mintAndForward: 0, usdc: 0, split: 0, total: 0, heldBalanceWhileHoldingReceived: 0 },
+      ),
+      heldBalanceShareDispersionBp: dispersion(mine.flatMap((m) => (m.heldBalanceShareBp === null ? [] : [m.heldBalanceShareBp]))),
+      fsiuAnyRouteShareDispersionBp: dispersion(mine.flatMap((m) => (m.fsiuAnyRouteShareBp === null ? [] : [m.fsiuAnyRouteShareBp]))),
       turnsPerPayment: Object.fromEntries(
         (Object.keys(samples) as (Asset | "mixed")[]).map((k) => [
           k,
@@ -406,6 +484,14 @@ export function buildBlockReport(reports: readonly RunReport[]): BlockReport {
     },
     laterWindows,
     forwardDated: runs.reduce((n, r) => n + r.forwardDated, 0),
+    sellerFeeAsymmetry: (() => {
+      const recorded = included.map((r) => r.sellerFeeAsymmetry);
+      if (recorded.length === 0 || recorded.some((f) => f === undefined)) return "not recorded" as const;
+      const first = JSON.stringify(recorded[0]);
+      return recorded.every((f) => JSON.stringify(f) === first)
+        ? (recorded[0] as SellerFeeAsymmetry)
+        : ("mixed across runs" as const);
+    })(),
     decisionRule: {
       ...decisionRuleVerdict(opportunities),
       assumption:
@@ -441,13 +527,16 @@ export function renderBlockReport(r: BlockReport): string[] {
         : ""),
   );
   for (const [buyer, b] of Object.entries(r.f1.perBuyer)) {
-    const d = b.decisions;
+    const k = b.routes;
+    const bp = (d: { min: number; median: string; max: number } | null): string =>
+      d ? `min ${d.min} median ${d.median} max ${d.max} bp` : "n/a";
     out.push(
-      `  ${buyer}: ${d.fsiu} fSIU / ${d.usdc} USDC / ${d.split} split of ${d.total} decisions` +
-        (b.fsiuShareDispersionBp
-          ? `; fSIU share (bp) min ${b.fsiuShareDispersionBp.min} median ${b.fsiuShareDispersionBp.median} max ${b.fsiuShareDispersionBp.max}`
-          : "") +
-        `; unkeyed transfers ${b.unkeyedTransfers}`,
+      `  ${buyer}: HEADLINE — paid from a held fSIU balance: ${k.heldBalance} of ${k.total} payments ` +
+        `(share across runs: ${bp(b.heldBalanceShareDispersionBp)})`,
+      `    beside it: ${k.mintAndForward} mint-and-forward (USDC out, a new claim to the seller), ` +
+        `${k.usdc} USDC, ${k.split} split; fSIU by any route ${bp(b.fsiuAnyRouteShareDispersionBp)}; ` +
+        `${k.heldBalanceWhileHoldingReceived} of the held-balance payments were made while holding fSIU received from another agent; ` +
+        `unkeyed transfers ${b.unkeyedTransfers}`,
     );
     for (const [asset, t] of Object.entries(b.turnsPerPayment)) {
       if (t.n > 0) out.push(`    turns per payment in ${asset}: mean ${t.mean} over ${t.n} window(s) [${t.samples.join(", ")}]`);
@@ -478,6 +567,10 @@ export function renderBlockReport(r: BlockReport): string[] {
   out.push(
     "",
     `forward-dated claims: ${r.forwardDated}`,
+    typeof r.sellerFeeAsymmetry === "string"
+      ? `seller-side fee: ${r.sellerFeeAsymmetry === "not recorded" ? "NOT recorded" : "MIXED across runs"} — the dollar route's escrow fee on sellers is not stated for this block`
+      : `seller-side fee: the dollar route charges the seller ${r.sellerFeeAsymmetry.usdcRouteEscrowFeeBps} bps; the fSIU route charges ${r.sellerFeeAsymmetry.fsiuRouteFeeBps}. ` +
+        "Not a buyer's cost, and sellers cannot steer which asset a quote is settled in.",
     `DECISION RULE: ${r.decisionRule.verdict} (${r.decisionRule.spentOnward} of ${r.decisionRule.eligible} eligible runs spent onward; ${r.decisionRule.runs} runs)`,
     `  ${r.decisionRule.reason}`,
     `  Reading: ${r.decisionRule.assumption}`,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkAfterDrain, f1Clean, planDrain, readUntilStable } from "./topology.js";
+import { checkAfterDrain, f1Clean, planDrain, readUntilStable, windowContamination } from "./topology.js";
 import { assertSameInstrument, instrumentOf, parseInstrumentFlags } from "./instrument.js";
 import { readFileSync } from "node:fs";
 
@@ -78,6 +78,68 @@ describe("f1Clean", () => {
     // A window paid entirely in dollars exposes nobody to fSIU. Clean, but uninformative, and the
     // count says so.
     expect(f1Clean([], "0xB")).toEqual({ clean: true, mints: 0, backedByOthers: 0 });
+  });
+});
+
+describe("windowContamination — a window's mints must be backed by the issuer the topology expects", () => {
+  const B = "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776";
+  const A = "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54";
+  const mint = (issuer?: string, kind = "mint_claim") => ({ kind, ...(issuer ? { issuer } : {}) });
+
+  it("is silent when every mint is backed by the expected issuer, of any kind", () => {
+    expect(windowContamination(1, [mint(B), mint(B, "pay_with_claim"), mint(B, "settle_split")], [], B)).toBeUndefined();
+  });
+
+  it("is silent for a window with no mints at all", () => {
+    expect(windowContamination(1, [{ kind: "transfer_claim" }], [], B)).toBeUndefined();
+  });
+
+  it("names the window, how many mints, and who backed them, when one mint fell through to the other issuer", () => {
+    // A's lot exists from deploy, so a single mint larger than B's remaining headroom is routed
+    // to A: non-serving claims inside F1's window, with nothing to say so. Planned demand keeps a
+    // run clear of it; this is for the unplanned large mint.
+    const why = windowContamination(1, [mint(B), mint(A), mint(A, "pay_with_claim")], [], B);
+    expect(why).toMatch(/window 1/);
+    expect(why).toMatch(/2 of 3 agent mints/);
+    expect(why).toContain(A);
+  });
+
+  it("compares addresses case-insensitively", () => {
+    expect(windowContamination(1, [mint(B.toLowerCase())], [], B.toUpperCase().replace("0X", "0x"))).toBeUndefined();
+  });
+
+  it("treats a mint whose backer was not recorded as contaminated, not as clean", () => {
+    expect(windowContamination(1, [mint(B), mint(undefined)], [], B)).toMatch(/not recorded/);
+  });
+
+  it("also catches the OPERATOR's own mint falling through, since it consumes the same capacity", () => {
+    expect(windowContamination(1, [mint(B)], [A], B)).toMatch(/operator/i);
+    expect(windowContamination(1, [mint(B)], [B], B)).toBeUndefined(); // the operator's mint was B-backed
+    expect(windowContamination(1, [mint(B)], [undefined], B)).toMatch(/not recorded/); // a mint with no recorded backer
+  });
+
+  it("is an abort reason in the same register as a failed drain check: the instrument is not what it claims", () => {
+    const why = windowContamination(1, [mint(A)], [], B) ?? "";
+    expect(why).toMatch(/contaminated/);
+  });
+});
+
+describe("the runner applies the contamination check where it matters", () => {
+  const runner = readFileSync(new URL("./p5-three-window-full-run.ts", import.meta.url).pathname.replace("/dist/", "/src/").replace(/\.js$/, ".ts"), "utf-8");
+
+  it("checks the window BEFORE the drain, and skips the drain once the run is aborted", () => {
+    // Draining a contaminated run is pointless, and a drain that ran first would have spent a
+    // transaction on an instrument already known not to be what it claims.
+    const check = runner.indexOf("windowContamination(\n");
+    const drain = runner.indexOf("planDrain(drainSpec");
+    expect(check, "the runner must call windowContamination").toBeGreaterThan(-1);
+    expect(drain, "the runner must call planDrain").toBeGreaterThan(-1);
+    expect(check).toBeLessThan(drain);
+    expect(runner).toMatch(/windowIndex < runWindows &&\s+topologyAbort === undefined/);
+  });
+
+  it("feeds it the operator's own mint, so the external buyer falling through is caught too", () => {
+    expect(runner).toMatch(/outcome\.externalDepletion\.issuer/);
   });
 });
 

@@ -52,6 +52,15 @@ export interface RunManifest {
   instrumentChanges?: string[];
   /** Which instrument the run measured — a deployment record's id and, where it has one, its
    *  per-window topology. Runs on different instruments are never pooled. */
+  /** The escrow fee the dollar route charges the seller and the claim route does not — recorded
+   *  either way; see `SellerFeeAsymmetry` in cli/instrument-report.ts. */
+  sellerFeeAsymmetry?: {
+    usdcRouteEscrowFeeBps: number;
+    fsiuRouteFeeBps: number;
+    chargedTo: "seller";
+    sellersCanSteerAssetOfAQuote: boolean;
+    note: string;
+  };
   instrument?: {
     id: string;
     description: string;

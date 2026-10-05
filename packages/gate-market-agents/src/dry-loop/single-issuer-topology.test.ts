@@ -5,7 +5,7 @@ import { ViemChainReader } from "../chain/reader.js";
 import { buildRunners, signDryLoopRateAttestation } from "./context.js";
 import type { Runner } from "../runner.js";
 import type { AgentId } from "../identity/resolve.js";
-import { checkAfterDrain, planDrain } from "../cli/topology.js";
+import { checkAfterDrain, planDrain, windowContamination } from "../cli/topology.js";
 import { instrumentOf } from "../cli/instrument.js";
 
 /**
@@ -128,5 +128,59 @@ describe("the single-issuer topology — B first, drained after window 1, then A
     const verdict = checkAfterDrain({ drainIssuerHeadroom: 0n, routedTo, expectedRoute: A() });
     expect(verdict.ok).toBe(false);
     if (!verdict.ok) expect(verdict.reason).toMatch(/must not be read as scarcity/);
+  }, 120_000);
+});
+
+describe("the window-1 fallback, on real bytecode — one oversized mint falls through to the non-serving issuer", () => {
+  let devnet: DevnetHandle;
+  let runners: Record<AgentId, Runner>;
+
+  beforeAll(async () => {
+    devnet = await setupDevnet({
+      lotCreationOrder: ["ISSUER-B", "ISSUER-A"],
+      lotHours: { "ISSUER-B": { code: 640n, extract: 1000n }, "ISSUER-A": { code: 960n, extract: 1000n } },
+    });
+    runners = buildRunners(devnet);
+  }, 180_000);
+
+  afterAll(async () => {
+    await devnet.stop();
+  });
+
+  async function mintIssuer(quantity: bigint, turn: number): Promise<Hex> {
+    const now = Math.floor(Date.now() / 1000);
+    const att = await signDryLoopRateAttestation(devnet, now + 3600);
+    const rec = await runners.ORCHESTRATOR.callTool(
+      "mint_claim",
+      { classId: CLASS_CODE, quantity: quantity.toString(), windowFrom: now - 60, windowTo: now + 3600, ...att },
+      { turn, jobId: "window-1-fallback" },
+    );
+    return (rec.result as { issuer: Hex }).issuer;
+  }
+
+  it("a mint within B's headroom is clean, and one larger than it routes to A and is caught", async () => {
+    const B = devnet.agents["ISSUER-B"].address;
+    const A = devnet.agents["ISSUER-A"].address;
+
+    // Planned demand: nothing to report.
+    const planned = await mintIssuer(10_000n, 1);
+    expect(planned.toLowerCase()).toBe(B.toLowerCase());
+    expect(windowContamination(1, [{ kind: "mint_claim", issuer: planned }], [], B)).toBeUndefined();
+
+    // The unplanned one: 22,000 mSIU remain on B, so 25,000 does not fit and the REAL router sends
+    // it to A. The event is built from what the chain actually returned, not from an assumption.
+    const fell = await mintIssuer(25_000n, 2);
+    expect(fell.toLowerCase(), "the real router must have fallen through to A").toBe(A.toLowerCase());
+    const why = windowContamination(
+      1,
+      [
+        { kind: "mint_claim", issuer: planned },
+        { kind: "mint_claim", issuer: fell },
+      ],
+      [],
+      B,
+    );
+    expect(why).toMatch(/window 1 is contaminated: 1 of 2 agent mints/);
+    expect(why).toContain(A);
   }, 120_000);
 });

@@ -130,3 +130,39 @@ function checkCount(
   }
   return errors;
 }
+
+/**
+ * The dollar route and the claim route are not the same to a SELLER, even though parity makes them
+ * the same to a buyer: the escrow takes a protocol fee out of what the seller is paid, and a claim
+ * moves whole. That would give a seller a reason to prefer fSIU if it could steer which asset a
+ * quote is settled in. It cannot — the quote a seller signs is the buyer's own stored request, and
+ * nothing the seller supplies reaches it — so the asymmetry is recorded and not equalised, and a
+ * report must carry it either way.
+ */
+export interface SellerFeeAsymmetry {
+  /** The live escrow's `feeBps`, read from the chain at launch — never assumed. */
+  usdcRouteEscrowFeeBps: number;
+  /** `WorkClaim` takes no fee: the mint pays the issuer in full and the transfer moves no value. */
+  fsiuRouteFeeBps: number;
+  chargedTo: "seller";
+  sellersCanSteerAssetOfAQuote: boolean;
+  note: string;
+}
+
+export function sellerFeeAsymmetry(escrowFeeBps: number): SellerFeeAsymmetry {
+  if (!Number.isInteger(escrowFeeBps) || escrowFeeBps < 0) {
+    throw new Error(`the escrow fee must be a whole number of basis points, got ${escrowFeeBps}.`);
+  }
+  return {
+    usdcRouteEscrowFeeBps: escrowFeeBps,
+    fsiuRouteFeeBps: 0,
+    chargedTo: "seller",
+    sellersCanSteerAssetOfAQuote: false,
+    note:
+      "The dollar route's escrow fee comes out of the seller's proceeds and the fSIU route has none. " +
+      "That is a seller-side difference and not a buyer's cost: price parity is a statement about what " +
+      "the payer pays. Sellers cannot steer which asset a quote is settled in — a seller decides only " +
+      "whether to sign the buyer's own request — so the asymmetry cannot bias what buyers do, and it " +
+      "is recorded and not equalised.",
+  };
+}

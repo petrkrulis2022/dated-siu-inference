@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildF1Report, type WindowFacts } from "./instrument-report.js";
+import { buildF1Report, sellerFeeAsymmetry, type WindowFacts } from "./instrument-report.js";
 
 const B = "0xB000000000000000000000000000000000000001";
 const A = "0xA000000000000000000000000000000000000001";
@@ -151,5 +151,24 @@ describe("buildF1Report", () => {
     const r = buildF1Report([w(1, [mint(A)])], undefined);
     expect(r.clean).toBeUndefined();
     expect(r.cleanNotComputedBecause).toMatch(/no expected issuer/);
+  });
+});
+
+describe("sellerFeeAsymmetry", () => {
+  it("records the escrow's fee on the dollar route, none on the claim route, charged to the seller", () => {
+    const a = sellerFeeAsymmetry(50);
+    expect(a).toMatchObject({
+      usdcRouteEscrowFeeBps: 50,
+      fsiuRouteFeeBps: 0,
+      chargedTo: "seller",
+      sellersCanSteerAssetOfAQuote: false,
+    });
+    expect(a.note).toMatch(/not a buyer's cost/);
+    expect(a.note).toMatch(/cannot steer/);
+  });
+
+  it("refuses a fee that is not a whole number of basis points, rather than recording nonsense", () => {
+    expect(() => sellerFeeAsymmetry(-1)).toThrow(/basis points/);
+    expect(() => sellerFeeAsymmetry(0.5)).toThrow(/basis points/);
   });
 });

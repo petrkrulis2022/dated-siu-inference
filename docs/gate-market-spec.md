@@ -2517,6 +2517,53 @@ is what the conservation checks must never see. The remaining floats in this pac
 **cost** accounting (`totalRealizedUsd`, per-provider spend) and a display sort — neither moves
 money between parties.
 
+### 4.6ax F1's headline is the share paid from a held balance, by route
+
+A mint-and-forward payment (`pay_with_claim`) is USDC out of the payer and a freshly minted claim
+into the seller. It is not the payer spending fSIU it holds, so counting it as "paid in fSIU" would
+make F1 measure the *delivery format* and not whether agents use fSIU as money. The block report
+therefore splits each buyer's window-1 payments by **route**, not by asset: **paid from a held
+balance** (a transfer naming a quote) is the headline; **mint-and-forward**, **USDC** and a
+**split** (a mint-and-forward claim leg plus a dollar leg in one call) sit beside it. A transfer
+naming no quote is not a payment and is counted as an unkeyed transfer. Of the held-balance
+payments the report says how many were made while holding fSIU *received from another agent*; the
+rest were paid from claims the payer minted for itself first, which is mint-and-forward in two
+steps. The share of fSIU by any route is printed beside the headline and never in place of it.
+
+*A defect found on the way, in a test I wrote:* the unkeyed-transfer count treated a transfer as
+keyed whenever a payment moment existed at its turn. Moments are recorded for **every**
+`transfer_claim`, keyed or not, so that count was always zero and its test, built on the same
+assumption, passed (§4.6ai). The discriminator is now the capacity event's own `settlesRequestId`,
+and the fixture is asymmetric so inverting the rule is visible. Mutation-checked.
+
+### 4.6ay Window contamination aborts the run, as a failed drain check does
+
+Both lots exist from deploy, so first-fit is decided by headroom alone: a single mint larger than
+the serving issuer's remaining headroom is routed to the *next* issuer, whose claims cannot be
+served. The deploy's read-back shows the boundary directly (32,000 routes to ISSUER-B, 32,001 to
+ISSUER-A). Planned demand keeps a run clear of it, but an unplanned large mint in window 1 would put
+non-serving claims into F1's measurement without a word.
+
+After each window the runner asserts every agent mint, **and the operator's own mint**, was backed
+by the issuer the topology expects for that window; an unrecorded backer counts as wrong. If not,
+the run aborts as contaminated — before the drain, which would be pointless — on the same path as a
+failed drain check: every close-out sweep still runs, the report records `abortedBecause`, and the
+block report excludes the run. It is a net, not a prevention: refusing the mint at the tool would
+mean telling an agent there is no capacity when there is, and would name the other issuer. Tested
+against the real router (a 25,000 mSIU mint with 22,000 left on B falls to A and is caught) and for
+its order in the runner.
+
+### 4.6az The seller-side fee asymmetry is recorded either way
+
+The escrow takes a protocol fee out of the *seller's* proceeds on the dollar route — 50 bps on the
+live escrow, read from the chain at launch (`feeBps` is immutable) — and the claim route charges
+nothing. Parity (§4.6ar) keeps the buyer's cost equal, but a seller would have a reason to prefer
+fSIU if it could steer which asset a quote is settled in. It cannot: the quote a seller signs is the
+buyer's own stored request (§4.6au). So the asymmetry is **recorded and not equalised**: the manifest
+and every report carry it, the block report prints it (or says it is not recorded, or that runs
+disagree — a gap is not a zero), and a loop test checks the recorded rate against what the contract
+actually deducted from a real seller.
+
 ## 5. Identity, wallets and chain
 
 ### 5.1 Chain

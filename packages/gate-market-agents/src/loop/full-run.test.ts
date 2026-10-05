@@ -2682,6 +2682,7 @@ describe("runFullRunWindow — a held claim settles a quote, and the seller is t
         args: [address],
       });
     const payerBefore = await usdcBalance(devnet.agents.ORCHESTRATOR.address);
+    const sellerBefore = await usdcBalance(devnet.agents["WORKER-CODE"].address);
 
     const ceiling = new BudgetCeiling(
       Object.fromEntries(
@@ -2725,6 +2726,14 @@ describe("runFullRunWindow — a held claim settles a quote, and the seller is t
     // charges the seller no such fee. That is a seller-side difference, and not a buyer's cost.)
     const payerSpent = payerBefore - (await usdcBalance(devnet.agents.ORCHESTRATOR.address));
     expect(payerSpent).toBe(6000n);
+
+    // The fee the report records is the one the contract actually charged: what the seller was paid
+    // short of the settled amount, as basis points of it, equals `feeBps` read from the escrow.
+    const sellerGained = (await usdcBalance(devnet.agents["WORKER-CODE"].address)) - sellerBefore;
+    const observedFeeBps = ((6000n - sellerGained) * 10_000n) / 6000n;
+    expect(await new ViemChainReader(devnet.deployment, devnet.rpcUrl).escrowFeeBps(devnet.escrowAddress as Hex)).toBe(
+      Number(observedFeeBps),
+    );
 
     expect(result.usdcSettlements).toHaveLength(1);
     const settlement = result.usdcSettlements[0];

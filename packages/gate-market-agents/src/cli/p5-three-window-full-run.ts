@@ -43,9 +43,9 @@ import { validateModelAssignment, type ModelAssignments } from "../pack/model-as
 import { erc8004IdFor, type AgentId } from "../identity/resolve.js";
 import type { RunnerDeps } from "../deps.js";
 import { loadGateMarketDeployment } from "../chain/deployment.js";
-import { buildF1Report } from "./instrument-report.js";
+import { buildF1Report, sellerFeeAsymmetry } from "./instrument-report.js";
 import { instrumentOf, parseInstrumentFlags, type InstrumentSpec } from "./instrument.js";
-import { checkAfterDrain, planDrain, readUntilStable } from "./topology.js";
+import { checkAfterDrain, planDrain, readUntilStable, windowContamination } from "./topology.js";
 import { ViemChainReader } from "../chain/reader.js";
 import { ForwardQuoteBook } from "../loop/forward-book.js";
 import { renderPurchaseSummary, summarisePurchases } from "../loop/purchases.js";
@@ -467,7 +467,13 @@ export interface WindowOutcome {
   result: FullRunWindowResult;
   headroomBefore: { issuer: string; headroom: string }[];
   headroomAfter: { issuer: string; headroom: string }[];
-  externalDepletion?: { requestedMilliSiu: number; txHash?: string; failedBecause?: string };
+  externalDepletion?: {
+    requestedMilliSiu: number;
+    txHash?: string;
+    failedBecause?: string;
+    /** Who backed the operator's own mint — read from the Minted event, never assumed. */
+    issuer?: string;
+  };
 }
 
 async function main(): Promise<void> {
@@ -657,6 +663,15 @@ async function main(): Promise<void> {
     loadPrint: async () => commodityPrint,
     isReconciled: async () => false,
   };
+
+  // The dollar route charges the SELLER an escrow fee the claim route does not. Read from the chain
+  // now, so the manifest and report state what the contract charges. Sellers cannot steer which
+  // asset a quote is settled in, so it is recorded and not equalised.
+  const feeAsymmetry = sellerFeeAsymmetry(await chainReader.escrowFeeBps(deps.escrowAddress as Hex));
+  console.log(
+    `SELLER-SIDE FEE: the dollar route's escrow takes ${feeAsymmetry.usdcRouteEscrowFeeBps} bps from the ` +
+      "seller; the fSIU route takes none. Not a buyer's cost; sellers cannot steer the asset.\n",
+  );
 
   const runSeed = Math.floor(Math.random() * 2_147_483_647);
   const runId = `${runIdPrefix(debug, WINDOW_COUNT)}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
@@ -869,6 +884,7 @@ async function main(): Promise<void> {
       deploymentFile,
       ...(instrument.topology !== undefined ? { topology: { ...instrument.topology } } : {}),
     },
+    sellerFeeAsymmetry: feeAsymmetry,
     // Changes to what the instrument IS, as opposed to what a run happened to do. A run carrying
     // none of these predates them and is a different instrument from one that carries them.
     instrumentChanges: [
@@ -1121,16 +1137,35 @@ async function main(): Promise<void> {
         requestedMilliSiu: depleted.requestedMilliSiu,
         txHash: depleted.txHash,
         failedBecause: depleted.failedBecause,
+        ...(depleted.issuer !== undefined ? { issuer: depleted.issuer } : {}),
       };
     }
 
     const topology = instrument.topology;
     const drainSpec = topology?.drain;
+
+    // Is this window's capacity what the topology says it is? A single mint larger than the serving
+    // issuer's remaining headroom falls through to the next issuer — A's lot exists from deploy — and
+    // in window 1 that is non-serving claims inside F1's measurement. Checked after the window, by
+    // the same rule as the drain check, and BEFORE the drain: draining a contaminated run is pointless.
+    const expectedIssuerId = topology?.expectedIssuerByWindow[windowIndex];
+    if (expectedIssuerId !== undefined && topologyAbort === undefined) {
+      topologyAbort = windowContamination(
+        windowIndex,
+        outcome.result.capacityEvents,
+        outcome.externalDepletion !== undefined && outcome.externalDepletion.failedBecause === undefined
+          ? [outcome.externalDepletion.issuer]
+          : [],
+        addressOf(expectedIssuerId),
+      );
+    }
+
     if (
       topology !== undefined &&
       drainSpec !== undefined &&
       windowIndex === drainSpec.afterWindow &&
-      windowIndex < runWindows
+      windowIndex < runWindows &&
+      topologyAbort === undefined
     ) {
       if (topology.routeAfterDrain === undefined) {
         throw new Error("topology.drain requires routeAfterDrain (instrumentOf should have refused this)");
@@ -1217,15 +1252,16 @@ async function main(): Promise<void> {
         });
         if (!verdict.ok) topologyAbort = verdict.reason;
       }
-      if (topologyAbort !== undefined) {
-        console.log(
-          `\n=== TOPOLOGY PRECONDITION FAILED — RUN ABORTED AFTER WINDOW ${windowIndex} ===\n` +
-            `  ${topologyAbort}\n` +
-            "  Not reported as scarcity or as a failed window: the instrument is not in the state " +
-            "it claims, so\n  a later window would measure nothing. The close-out sweeps still " +
-            "run, so no capacity is stranded.\n",
-        );
-      }
+    }
+
+    if (topologyAbort !== undefined) {
+      console.log(
+        `\n=== TOPOLOGY PRECONDITION FAILED — RUN ABORTED AFTER WINDOW ${windowIndex} ===\n` +
+          `  ${topologyAbort}\n` +
+          "  Not reported as scarcity or as a failed window: the instrument is not in the state " +
+          "it claims, so\n  a later window would measure nothing. The close-out sweeps still " +
+          "run, so no capacity is stranded.\n",
+      );
     }
 
     outcomes.push(outcome);
@@ -1276,6 +1312,7 @@ async function main(): Promise<void> {
           deploymentFile,
           ...(instrument.topology !== undefined ? { topology: { ...instrument.topology } } : {}),
         },
+        sellerFeeAsymmetry: feeAsymmetry,
         // Everything the operator did to the market, kept apart from every agent's record so no
         // behavioural statistic can include it.
         operatorActions,

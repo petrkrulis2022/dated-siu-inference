@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildBlockReport, BLOCK_CAPTION, renderBlockReport, type ReportEvent, type ReportMoment, type ReportWindow, type RunReport } from "./block-report.js";
 import type { Opportunity } from "./decision-rule.js";
+import { sellerFeeAsymmetry } from "./instrument-report.js";
 
 const B = "0xB000000000000000000000000000000000000001";
 const A = "0xA000000000000000000000000000000000000001";
@@ -114,17 +115,79 @@ describe("buildBlockReport — F1 is window 1 alone", () => {
     expect(r.runs[0].windows.find((w) => w.windowIndex === 2)?.decisions.fsiu).toBe(2);
   });
 
-  it("reports a split as its own count, folded into neither asset", () => {
-    const r = buildBlockReport([run("r1", [w1({ decisions: [{ buyer: "ORCHESTRATOR", asset: "split" }] })])]);
-    expect(r.f1.perBuyer.ORCHESTRATOR.decisions).toEqual({ usdc: 0, fsiu: 0, split: 1, total: 1 });
-    expect(r.runs[0].buyers.ORCHESTRATOR.fsiuShareBp).toBe(0);
+  // How a buyer paid, by route. Payment moments are recorded for every settling tool.
+  const pm = (buyer: string, tool: string, over: Partial<ReportMoment> = {}): Partial<ReportMoment> => ({
+    agentId: buyer,
+    tool,
+    asset: tool === "pay" ? "usdc" : tool === "settle_split" ? "split" : "fsiu",
+    requestId: "qr-1",
+    heldReceivedMilliSiu: "0",
+    ...over,
   });
 
-  it("states dispersion of fSIU share across runs, in basis points rounded down", () => {
-    const mk = (id: string, fsiu: number, usdc: number) =>
-      run(id, [w1({ decisions: [...Array(fsiu).fill({ buyer: "ORCHESTRATOR", asset: "fsiu" }), ...Array(usdc).fill({ buyer: "ORCHESTRATOR", asset: "usdc" })] })]);
-    const r = buildBlockReport([mk("a", 0, 1), mk("b", 1, 0), mk("c", 1, 2)]);
-    expect(r.f1.perBuyer.ORCHESTRATOR.fsiuShareDispersionBp).toEqual({ n: 3, min: 0, median: "3333", max: 10000 });
+  it("reports a split as its own count, in neither the held-balance nor the mint-and-forward route", () => {
+    const r = buildBlockReport([run("r1", [w1({ decisions: [{ buyer: "ORCHESTRATOR", asset: "split" }], moments: [pm("ORCHESTRATOR", "settle_split")] })])]);
+    expect(r.f1.perBuyer.ORCHESTRATOR.decisions).toEqual({ usdc: 0, fsiu: 0, split: 1, total: 1 });
+    expect(r.runs[0].buyers.ORCHESTRATOR.routes).toMatchObject({ split: 1, heldBalance: 0, mintAndForward: 0, total: 1 });
+    expect(r.runs[0].buyers.ORCHESTRATOR.heldBalanceShareBp).toBe(0);
+  });
+
+  it("makes paying from a held balance THE headline, with mint-and-forward and USDC beside it, not in it", () => {
+    // Mint-and-forward is USDC out of the payer and a new claim into the seller: not the payer
+    // spending fSIU it holds. Counting it as "paid in fSIU" would make F1 measure the delivery
+    // format. Two of these four payments mint-and-forward, one is USDC, one is from a balance.
+    const r = buildBlockReport([
+      run("r1", [
+        w1({
+          moments: [
+            pm("ORCHESTRATOR", "pay_with_claim", { requestId: "qr-1" }),
+            pm("ORCHESTRATOR", "pay_with_claim", { requestId: "qr-2" }),
+            pm("ORCHESTRATOR", "pay", { requestId: "qr-3" }),
+            pm("ORCHESTRATOR", "transfer_claim", { requestId: "qr-4" }),
+          ],
+        }),
+      ]),
+    ]);
+    const b = r.runs[0].buyers.ORCHESTRATOR;
+    expect(b.routes).toMatchObject({ heldBalance: 1, mintAndForward: 2, usdc: 1, split: 0, total: 4 });
+    expect(b.heldBalanceShareBp).toBe(2500); // the headline: 1 of 4
+    expect(b.fsiuAnyRouteShareBp).toBe(7500); // beside it, never instead of it
+  });
+
+  it("does not count a transfer that named no quote as a payment at all", () => {
+    const r = buildBlockReport([
+      run("r1", [
+        w1({
+          moments: [pm("WORKER-CODE", "transfer_claim", { requestId: undefined }), pm("WORKER-CODE", "pay")],
+          events: [{ kind: "transfer_claim", agentId: "WORKER-CODE", turn: 1 }],
+        }),
+      ]),
+    ]);
+    expect(r.runs[0].buyers["WORKER-CODE"].routes).toMatchObject({ heldBalance: 0, usdc: 1, total: 1 });
+  });
+
+  it("says how many held-balance payments were made while holding fSIU received from another agent", () => {
+    // The rest were paid from claims the payer minted for itself first — mint-and-forward in two
+    // steps — and a reader should be able to tell the two apart.
+    const r = buildBlockReport([
+      run("r1", [
+        w1({
+          moments: [
+            pm("WORKER-CODE", "transfer_claim", { requestId: "qr-1", heldReceivedMilliSiu: "5000" }),
+            pm("WORKER-CODE", "transfer_claim", { requestId: "qr-2", heldReceivedMilliSiu: "0" }),
+          ],
+        }),
+      ]),
+    ]);
+    expect(r.runs[0].buyers["WORKER-CODE"].routes).toMatchObject({ heldBalance: 2, heldBalanceWhileHoldingReceived: 1 });
+  });
+
+  it("states dispersion of the headline across runs, in basis points rounded down", () => {
+    const mk = (id: string, tools: string[]) =>
+      run(id, [w1({ moments: tools.map((t, i) => pm("ORCHESTRATOR", t, { requestId: `qr-${i}` })) })]);
+    const r = buildBlockReport([mk("a", ["pay"]), mk("b", ["transfer_claim"]), mk("c", ["transfer_claim", "pay", "pay"])]);
+    expect(r.f1.perBuyer.ORCHESTRATOR.heldBalanceShareDispersionBp).toEqual({ n: 3, min: 0, median: "3333", max: 10000 });
+    expect(r.f1.perBuyer.ORCHESTRATOR.routes).toMatchObject({ heldBalance: 2, usdc: 3, total: 5 });
   });
 
   it("aggregates cleanliness and names the runs that were not clean", () => {
@@ -165,16 +228,25 @@ describe("buildBlockReport — turns per payment", () => {
     expect(r.f1.perBuyer.ORCHESTRATOR.turnsPerPayment.mixed.samples).toEqual([4]);
   });
 
-  it("counts an unkeyed transfer apart: a transfer with no payment moment at its turn settled no quote", () => {
+  it("counts an unkeyed transfer apart: one whose event names no quote settled none", () => {
+    // Payment moments cannot tell the two apart — one is recorded for every transfer_claim, keyed or
+    // not — so the discriminator is the capacity event's own record of the quote it settled. (An
+    // earlier version of this test asserted the opposite and passed against a counter that was
+    // always zero: a fixture built from the code's own assumption.)
     const r = buildBlockReport([
       run("a", [
         w1({
           decisions: [{ buyer: "WORKER-CODE", asset: "fsiu" }],
           events: [
-            { kind: "transfer_claim", agentId: "WORKER-CODE", turn: 5 }, // keyed: a moment at turn 5
-            { kind: "transfer_claim", agentId: "WORKER-CODE", turn: 9 }, // unkeyed: nothing at turn 9
+            { kind: "transfer_claim", agentId: "WORKER-CODE", turn: 5, settlesRequestId: "qr-1" }, // keyed
+            { kind: "transfer_claim", agentId: "WORKER-CODE", turn: 7, settlesRequestId: "qr-2" }, // keyed
+            { kind: "transfer_claim", agentId: "WORKER-CODE", turn: 9 }, // names no quote
+            { kind: "transfer_claim", agentId: "ORCHESTRATOR", turn: 3 }, // someone else's, not counted
           ],
-          moments: [{ agentId: "WORKER-CODE", tool: "transfer_claim", turn: 5, asset: "fsiu", requestId: "qr-1" }],
+          moments: [
+            { agentId: "WORKER-CODE", tool: "transfer_claim", turn: 5, asset: "fsiu", requestId: "qr-1" },
+            { agentId: "WORKER-CODE", tool: "transfer_claim", turn: 9, asset: "fsiu" }, // a moment exists for it too
+          ],
         }),
       ]),
     ]);
@@ -324,6 +396,31 @@ describe("buildBlockReport — the decision rule", () => {
   });
 });
 
+describe("buildBlockReport — the seller-side fee asymmetry is recorded either way", () => {
+  it("carries the asymmetry the runs recorded, and prints it", () => {
+    const fee = sellerFeeAsymmetry(50);
+    const r = buildBlockReport([run("a", [w1()], { sellerFeeAsymmetry: fee }), run("b", [w1()], { sellerFeeAsymmetry: fee })]);
+    expect(r.sellerFeeAsymmetry).toEqual(fee);
+    const out = renderBlockReport(r).join("\n");
+    expect(out).toMatch(/seller-side fee: the dollar route charges the seller 50 bps; the fSIU route charges 0/);
+    expect(out).toMatch(/not a buyer's cost/i);
+  });
+
+  it("says plainly when no run recorded it — a gap is not a zero", () => {
+    const r = buildBlockReport([run("a", [w1()])]);
+    expect(r.sellerFeeAsymmetry).toBe("not recorded");
+    expect(renderBlockReport(r).join("\n")).toMatch(/seller-side fee: NOT recorded/);
+  });
+
+  it("says so when the runs disagree, instead of picking one", () => {
+    const r = buildBlockReport([
+      run("a", [w1()], { sellerFeeAsymmetry: sellerFeeAsymmetry(50) }),
+      run("b", [w1()], { sellerFeeAsymmetry: sellerFeeAsymmetry(0) }),
+    ]);
+    expect(r.sellerFeeAsymmetry).toBe("mixed across runs");
+  });
+});
+
 describe("renderBlockReport — nothing a reader could miss is left out", () => {
   const text = (reports: RunReport[]) => renderBlockReport(buildBlockReport(reports)).join("\n");
 
@@ -336,6 +433,12 @@ describe("renderBlockReport — nothing a reader could miss is left out", () => 
     expect(out).toMatch(/EXCLUDED dbg: debug run: pinned gate/);
     expect(out).toMatch(/DECISION RULE: inconclusive/);
     expect(out).toMatch(/INCONCLUSIVE, not negative/);
+  });
+
+  it("leads each buyer with the headline — paid from a held fSIU balance — and puts the other routes beside it", () => {
+    const out = text([run("good", [w1({ moments: [{ agentId: "WORKER-CODE", tool: "pay_with_claim", asset: "fsiu", requestId: "qr-1", heldReceivedMilliSiu: "0" }] })])]);
+    expect(out).toMatch(/WORKER-CODE: HEADLINE — paid from a held fSIU balance: 0 of 1 payments/);
+    expect(out).toMatch(/beside it: 1 mint-and-forward \(USDC out, a new claim to the seller\)/);
   });
 
   it("says cost is from what was SETTLED, flags claims it could not match, and that wall-clock holding time is not recorded", () => {
