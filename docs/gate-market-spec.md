@@ -2564,6 +2564,44 @@ and every report carry it, the block report prints it (or says it is not recorde
 disagree — a gap is not a zero), and a loop test checks the recorded rate against what the contract
 actually deducted from a real seller.
 
+### 4.6ba The first debug run on the sixth trio found three things that no test had
+
+Run `DEBUG-p5-three-window-2026-10-05T11-59-05-930Z`, $0.50, aborted after window 1 by design. It is
+a debug run and counts for nothing; what it was *for* is below.
+
+**1. The pre-turn validator benched WORKER-EXTRACT on turn one.** The brief written under D4 said
+"A buyer may pay in USDC or in a work claim", and the validator halts any seat whose pack contains
+the blocklisted phrase "pay in usdc". WORKER-EXTRACT was halted `validation_failed` before taking a
+single turn, with the cause printed nowhere. **Every run under D4 would have done the same**, so no
+window could ever have had its testing sold, and the whole block would have measured nothing. Nothing
+had ever run the briefs through the validator. A test now does, for every seat in every window; it
+fails against the old text naming the phrase. `validation_failed` appears once across every stored
+report, today.
+
+**2. A new WorkClaim starts with no USDC allowance from anyone.** ORCHESTRATOR's dollar payment
+worked (the escrow's allowance is set per call), then the operator's scheduled external buyer and
+the drain both reverted `transfer amount exceeds allowance`. The fifth trio's allowances were
+one-off hand approvals against the old address. `cli/allowances.ts` approves the mint-capable
+holders (the two buyers and the operator) for a deployment's WorkClaim — dry run by default,
+simulate before send, the key checked against its address, the write's effect awaited — and the
+runner now refuses to launch unless every minting wallet can cover a run, naming the command. The
+plan's "fund, approve, bond" had an approve step I did not carry out; this is the repeatable
+version. Found mid-run, it cost a window; found at launch it costs nothing.
+
+**3. What the abort path did on a real chain.** The failed drain was caught, the run stopped after
+window 1, `abortedBecause` and the failed drain were recorded under `operatorActions`, and the
+close-out ran — the first real exercise of that path. It also showed a limit: the run's own sweep
+could not release a dollar-route reservation, because a reservation is releasable only once its
+escrow settles or its deadline (the quote's expiry) passes, and the seller had been halted, so
+10,000 mSIU stayed consumed and the payer's 14,400 stayed escrowed for about twenty minutes after
+the run. Both were released by hand, permissionlessly, and recorded as operator actions
+(`data/gate-market/operator-cleanup-2026-10-05.json`).
+
+**Reported, not changed:** WORKER-CODE's turn 3 hit `max_tokens` with no text after 289 seconds and
+$0.44 of the run's $0.50, then halted `no_text_emitted`. It is a recurring model behaviour — twice
+on 2026-09-30, once today — and in a full run, where the seat must author the gate, a halt there
+fails the window as `no_gate`.
+
 ## 5. Identity, wallets and chain
 
 ### 5.1 Chain

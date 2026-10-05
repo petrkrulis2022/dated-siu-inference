@@ -404,6 +404,23 @@ describe("p5 three-window roster", () => {
     }
   });
 
+  it("every agent's brief, in every window, passes the pre-turn validator — a brief that trips it benches the seat before turn 1", () => {
+    // The validator guards the one behavioural finding (no asset steering, no doc leak, the asset
+    // text verbatim) and HALTS the turn rather than warning. Briefs are rewritten constantly, and
+    // nothing ran them through it: the first debug run on the sixth trio halted WORKER-EXTRACT with
+    // `validation_failed` on turn one, with the cause printed nowhere. Asserted for every seat and
+    // every window, so the cause is named here instead.
+    for (const windowIndex of [1, 2, 3]) {
+      for (const agent of buildRoster(input(windowIndex, { windowCount: 3 } as Partial<RosterInput>))) {
+        const context = { agentId: agent.agentId, skillPackText: agent.skillPackText, toolCalls: [] };
+        expect(
+          () => validateAgentContext(context as never),
+          `window ${windowIndex} ${agent.agentId}`,
+        ).not.toThrow();
+      }
+    }
+  });
+
   it("teaches the job sizes the loop enforces: each brief's example request is for exactly the required size", () => {
     // The loop refuses a request_quote whose size is not the job's. A brief example that showed any
     // other size would cost the agent a turn on an error — the §4.6-RULE defect — so the size in
@@ -508,6 +525,7 @@ import {
   type WindowOutcome,
 } from "./p5-three-window-full-run.js";
 import { composeBoard, WAKE_SECTION_TOOLS } from "../loop/full-run.js";
+import { validateAgentContext } from "../pack/validate.js";
 import type { CapacityEvent, FullRunWindowResult } from "../loop/full-run.js";
 
 function windowResult(overrides: Partial<FullRunWindowResult> = {}): FullRunWindowResult {

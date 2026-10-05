@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-05",
+  "kind": "operator actions after the first debug run on the sixth trio — NOT agent decisions; excluded from every behavioural statistic",
+  "run": "DEBUG-p5-three-window-2026-10-05T11-59-05-930Z",
+  "why": "The run aborted after window 1 (the operator's external buyer and drain both reverted `transfer amount exceeds allowance`: the new WorkClaim had no USDC allowance from the operator). WORKER-CODE had reserved 10,000 mSIU of ISSUER-B against a 14,400-minor-unit escrow that the halted seller never settled; the run's own close-out could not release it, because a reservation is releasable only once its escrow settles or its deadline passes, and the deadline was the quote's expiry, about 20 minutes after the run ended.",
+  "actions": [
+    {
+      "what": "TouchstoneEscrow.expire(0x8d18…921a2a) — returns the unsettled escrow to its payer",
+      "contract": "0x3eC06FFe8d5250d5Edf8Fff26b163aaaD65c8a00",
+      "tx": "0xd92fa426b47d5c9319219d745be8759b39b7ce50090ef3b5f2d1a45dcaa323df",
+      "effect": "ORCHESTRATOR's USDC back to 777,406 from 763,006 (14,400 returned); escrow status 3 (expired)"
+    },
+    {
+      "what": "WorkClaim.releaseReservation(0x8d18…921a2a) — permissionless once the deadline has passed",
+      "contract": "0x667c3cc8a7bC55aF128a83BE560c9C0264B744B4",
+      "tx": "0x631d8dc40dd089c420b3d3da23db2e29a114be9790da053da6b70ecc1fc0b607",
+      "effect": "ISSUER-B code headroom 22,000 -> 32,000; the pool is whole again (32,000 + 48,000). A first attempt a moment after the expiry failed with 'replacement transaction underpriced', a nonce clash and not a contract refusal, and was retried."
+    },
+    {
+      "what": "USDC.approve(new WorkClaim, 1,000,000) for ORCHESTRATOR",
+      "tx": "0x3ee12dba39309060ff9503144fad5dae29283c0de9b59cd3cec9d03713ecf0e4",
+      "note": "by cli/allowances.ts; a new WorkClaim starts with no allowance from anyone"
+    },
+    {
+      "what": "USDC.approve(new WorkClaim, 1,000,000) for WORKER-CODE",
+      "tx": "0x79c677da4784b57d6480ede36015084f8f29d89f2c0001f55081b9c39c6ac9ef"
+    },
+    {
+      "what": "USDC.approve(new WorkClaim, 2,000,000) for the operator wallet (external buyer and drain)",
+      "tx": "0xbd3a84ec77d87955ed48b5ee3d34d55f8f4d819b5bfd6ba2b930eb58fe6e1e8c"
+    }
+  ],
+  "verifiedFromFreshReads": "allowances 1,000,000 / 1,000,000 / 2,000,000; ISSUER-B code headroom 32,000; ISSUER-A 48,000; ORCHESTRATOR USDC 777,406"
+}

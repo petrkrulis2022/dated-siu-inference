@@ -43,6 +43,11 @@ import { validateModelAssignment, type ModelAssignments } from "../pack/model-as
 import { erc8004IdFor, type AgentId } from "../identity/resolve.js";
 import type { RunnerDeps } from "../deps.js";
 import { loadGateMarketDeployment } from "../chain/deployment.js";
+import {
+  assertAllowancesForRun,
+  readAllowances,
+  RUN_MINIMUM_ALLOWANCE_MINOR_UNITS,
+} from "./allowances.js";
 import { buildF1Report, sellerFeeAsymmetry } from "./instrument-report.js";
 import { instrumentOf, parseInstrumentFlags, type InstrumentSpec } from "./instrument.js";
 import { checkAfterDrain, planDrain, readUntilStable, windowContamination } from "./topology.js";
@@ -497,6 +502,27 @@ async function main(): Promise<void> {
   const modelAssignment: ModelAssignments = deploymentRecord.roster.modelAssignment;
   validateModelAssignment(modelAssignment, registry);
   console.log("Model assignment validated (spec §12.2a): OK.\n");
+
+  // Every wallet that mints must have approved THIS deployment's WorkClaim, and a new WorkClaim
+  // starts with no allowance from anyone. Refused here, before any money is spent, naming the
+  // command — the first debug run on the sixth trio found out mid-run instead, when the operator's
+  // external buyer and drain reverted `transfer amount exceeds allowance` after a window was paid for.
+  {
+    const operatorKey = process.env.DEPLOYER_PRIVATE_KEY;
+    if (!operatorKey) throw new Error("DEPLOYER_PRIVATE_KEY is not set (the operator's external buyer mints with it).");
+    const rows = await readAllowances({
+      usdc: deploymentRecord.usdc.address as Hex,
+      spender: deploymentRecord.workClaim.address as Hex,
+      rpcUrl: process.env.BASE_SEPOLIA_RPC_URL ?? "",
+      owners: [
+        { label: "ORCHESTRATOR", address: toHex(process.env.ORCHESTRATOR_ADDRESS, "ORCHESTRATOR_ADDRESS"), minimum: RUN_MINIMUM_ALLOWANCE_MINOR_UNITS.agent },
+        { label: "WORKER-CODE", address: toHex(process.env.WORKER_CODE_ADDRESS, "WORKER_CODE_ADDRESS"), minimum: RUN_MINIMUM_ALLOWANCE_MINOR_UNITS.agent },
+        { label: "operator", address: privateKeyToAccount(toHex(operatorKey, "DEPLOYER_PRIVATE_KEY")).address, minimum: RUN_MINIMUM_ALLOWANCE_MINOR_UNITS.operator },
+      ],
+    });
+    assertAllowancesForRun(rows, `pnpm run approve-roster -- --deployment ${deploymentFile} --execute`);
+    console.log("USDC allowances to this deployment's WorkClaim: OK for every minting wallet.\n");
+  }
 
   const deployment = loadGateMarketDeployment(deploymentFile);
   const apiKeys = loadApiKeysFromEnv();
@@ -1754,8 +1780,8 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${windowCount})
 
   TESTING IS A SERVICE YOU SELL. submit_attack is refused until a quote you issued has been
   settled, so there is nothing for you to do until somebody pays you; until then the useful thing
-  is to answer an open request addressed to you. A buyer may pay in USDC or in a work claim —
-  including a claim it already holds, passed on to you rather than redeemed. That choice is the
+  is to answer an open request addressed to you. A buyer may settle a quote in USDC or with a work
+  claim — including a claim it already holds, passed on to you rather than redeemed. That choice is the
   buyer's, not yours to influence. If an open request addressed to you appears on the market
   board, you may answer it with issue_quote. You will be told when it has been paid:
   "YOU HAVE BEEN PAID AND OWE THE WORK" appears on your board, naming the amount in escrow.
