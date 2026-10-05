@@ -33,6 +33,8 @@ export interface SettleSplitResult {
   usdcMinorUnits: string;
   escrowTxHash: string;
   claimMintTxHash: string;
+  /** USDC minor units the claim leg's mint cost — see `PayWithClaimResult.mintCostMinorUnits`. */
+  claimMintCostMinorUnits: string;
   /** Claim share of the quote, 0..1 as a decimal string — the figure F1 actually wants. */
   claimShare: string;
 }
@@ -132,6 +134,7 @@ export const settleSplitTool: ToolDefinition<Args, SettleSplitResult> = {
       usdcMinorUnits: usdcLeg.toString(),
       escrowTxHash,
       claimMintTxHash: claim.mintTxHash,
+      claimMintCostMinorUnits: claim.mintCostMinorUnits,
       claimShare: quoted === 0n ? "0" : (Number(claimValue) / Number(quoted)).toFixed(4),
     };
   },

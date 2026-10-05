@@ -23,4 +23,13 @@ describe("pay_with_claim — mint and transfer, end to end on real bytecode", ()
     expect(result.recipientBalanceAfter).toBe(500n);
     expect(result.callerBalanceAfter).toBe(0n);
   }, 120_000);
+
+  it("reports what the mint cost, and it matches what actually left the payer's USDC balance", async () => {
+    // The cost is read from the mint receipt's own USDC transfer — not recomputed from the
+    // contract's formula, which would only prove the formula agrees with itself. 500 mSIU at the
+    // dry loop's $0.01/SIU is $0.005 = 5,000 minor units, worked by hand.
+    const result = await runPayWithClaimScenario(devnet, runners);
+    expect(result.observedUsdcDeltaMinorUnits).toBe(5000n);
+    expect(result.reportedMintCostMinorUnits).toBe("5000");
+  }, 120_000);
 });

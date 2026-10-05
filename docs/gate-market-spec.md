@@ -2356,9 +2356,115 @@ lot that exists with different figures, and a registration list already in the w
 verified on real bytecode and mutation-checked. **The block report** takes an explicit set of runs
 and is described in the methodology entry.
 
-**Open at the time of writing:** the sixth trio is simulated but **not deployed**; the loop's copy of
-the settlement outcome (§4.6ap) awaits its first end-to-end confirmation; and the decision rule's
-reading of "the agent" with two payers is stated in the report and open to correction.
+**Open at the time of writing:** the sixth trio was deployed and bonded on 2026-10-05 (record:
+`data/deployments/base-sepolia-gate-market-single-issuer.json`); the loop's copy of the settlement
+outcome (§4.6ap) awaits its first end-to-end confirmation, on the first debug run; and the decision
+rule's reading of "held" and "spent onward" is §4.6at, flagged there for review.
+
+### 4.6ar Price parity: settling a quote in fSIU costs what settling it in USDC costs
+
+Single-issuer instrument, apparatus change valid on either topology, found before the freeze.
+A quote states a size (`siu`) and a price (`settlement[0].amount_max`). Paying in USDC paid the
+price. Paying in fSIU paid the **SIU count** — `quote.siu` converted to milli-SIU — which is the
+same dollars only if the quote's rate happened to equal the print, and nothing made it so: the
+buyer types `rateUsdPerSiu` into `request_quote` and the seller signs what was asked. If one asset
+is cheaper for identical work, F1 measures which is cheaper, not which agents prefer.
+
+**Observed, on real bytecode, with the old sizing** (`dry-loop/price-parity.test.ts`; an
+illustrative $0.01 print, identical quotes paid once in each asset, USDC minor units read from the
+payer's balance): 2 SIU quoted at $0.05 cost 100,000 in USDC and **20,000** in fSIU — 80% cheaper;
+4 SIU at $0.009 cost 36,000 and **40,000** — 11% dearer; 1 SIU at $0.003 cost 3,000 and
+**10,000** — 3.3× dearer. The gap runs both ways, so it could not have been a consistent bias in
+favour of fSIU. The test's own earlier fixture quoted $0.50 for 10 SIU against a $0.0107 print and
+asserted a claim of 10,000 mSIU — worth about $0.107: a fixture built from the code's assumption
+(§4.6ai) encoding the defect it was meant to catch.
+
+**What the stored runs can and cannot say.** The artefacts keep sparse snapshots of each agent's
+turns, not a quote ledger: across every stored run, six distinct signed quotes survive. All six
+are 10 SIU quoted at exactly the print (the brief hands the buyer the print rate to type), and the
+two assets' costs differ by at most 0.21%, which is the four-decimal rounding of the USDC price.
+That is an observation about what buyers typed, not a guarantee, and it says nothing about quotes
+that were not kept. It cannot be determined from the artefacts whether the 25-of-29 was affected;
+it is one more reason that figure is not quoted (methodology, 2026-10-04).
+
+**The rule.** An fSIU settlement is sized so the claim is worth the quote's USDC price at the
+print in force: `claim = ceil(price / print)`, in integers (invariant 4). Rounding up means the
+seller is never short; the payer overpays by strictly less than the dollar value of one milli-SIU
+at the print. The print in force is the one the quote names (`print_id`) and must equal the one
+the window attests; a quote against another print is refused, not converted. Parity is to the
+quote's **stated** price, itself rounded to four decimals by the quote format.
+
+**Every fSIU route that names a quote is held to it.** `pay_with_claim` mints that quantity.
+`transfer_claim` naming a `requestId` — which used to mark the quote paid for **any quantity to any
+recipient**, so one milli-SIU to nobody counted as a settled testing purchase and passed a window
+— now sets the quantity from the quote and requires the recipient to be the quote's seller; which
+claim to spend stays the holder's choice. `settle_split` already had parity by construction: its
+claim leg is valued at the print and its dollar leg is the remainder of the price. A transfer that
+names no quote settles none, and is reported separately.
+
+**Tested** three ways (§4.6ai): hand-worked examples; a property over 5,000 generated
+(price, print) pairs and over every route that names a quote; and the on-chain observation above,
+which takes its expectation from the chain's balances and not from the sizing formula. Each was
+verified failing against the old behaviour. The briefs and tool descriptions state the new sizing,
+and a pairing test fails any brief example that passes a quantity the loop ignores.
+
+**A residual asymmetry, not fixed here.** A USDC payer's escrow can settle for *less* than the
+quote — a seller may claim less and the rest returns to the payer — whereas a claim moves whole.
+Parity holds at the quoted price; the *settled* cost in USDC can fall below it. The block report
+therefore uses the amount actually settled (§4.6as).
+
+### 4.6as What a payment cost is built from: the amount settled, and what a claim cost to mint
+
+Single-issuer instrument, apparatus change valid on either topology. A cost per delivered SIU built
+from a quote's `amount_usd_max` overstates the dollar route (the ceiling is not what is paid), and
+one that gives fSIU no dollar figure describes only the minority asset. The run artefact had
+neither number, so both are now recorded, each read from the chain's own record and not
+recomputed from the formula under test (§4.6ai).
+
+- **USDC: the amount actually settled.** Each `settle_escrow` is recorded as a `usdcSettlement`
+  (`settledMinorUnits`, `quotedMinorUnits`, keyed by the quote's request id, which is also the key
+  of the payment that opened the escrow). A seller may settle for less than the ceiling and the rest
+  returns to the payer; the loop test settles $0.0060 of a $0.0100 quote and checks the **payer's
+  real net USDC outflow** is 6,000 minor units, not 10,000.
+- **fSIU: what the claim cost to mint.** Every `mint_claim`, `pay_with_claim` and `settle_split`
+  claim leg records `mintCostMinorUnits`, decoded from the mint receipt's own USDC `Transfer`
+  log. `WorkClaim.mint` charges `quantity × rate ÷ 1e6` and the `Minted` event does not say so; the
+  receipt is what actually moved. Checked against the payer's real USDC balance (5,000 reported,
+  5,000 observed) and, through the loop, 15,000 for 1,500 mSIU at the dry loop's illustrative
+  $0.01 per SIU.
+- **Which quote a movement settled.** The capacity event of a payment records `settlesRequestId`,
+  so a transfer that named a quote is told from one that named none, and a `serve_redemption`
+  records the **holder** whose claim it burned.
+
+**A finding the settled-amount test surfaced.** The seller received 5,970 of the 6,000 settled: the
+escrow's protocol fee (0.5% on the devnet escrow; the live escrow's rate is its own `feeBps`) comes
+out of the *seller's* proceeds, and the fSIU route charges the seller nothing. That is a
+seller-side asymmetry between the two assets and is **not** a buyer's cost — price parity (§4.6ar)
+is a statement about what the payer pays. It is recorded because a reader comparing what sellers
+receive would find the dollar route short by exactly that fee.
+
+### 4.6at The decision rule's reading of "held" and "spent onward", fixed before any result
+
+Revised 2026-10-05; the rule is in `cli/decision-rule.ts` and was fixed as code on 2026-10-04.
+**"Held fSIU it had been given"** means fSIU received **as payment from another agent** — never an
+opening balance, an operator grant, or a claim the agent minted for itself. The ledger credits
+only agent-to-agent movements; an external buyer and the operator's drain are not agents and are
+never tracked; and ORCHESTRATOR, which nothing in this roster pays in fSIU, cannot be eligible by
+any route it has (tested across all four). If a report ever marks it eligible that is a **counting
+error** and the block report refuses to compute a verdict.
+
+**"Spent onward"** is stated at the **balance** level, because fSIU units are fungible and which
+unit left is not knowable: the agent paid in fSIU **out of its balance** (a transfer naming a
+quote), at a moment it held received fSIU, and **did not redeem all of what it received**. A
+payment made by minting a fresh claim and forwarding it (`pay_with_claim`, `settle_split`) never
+touches the balance, so it is not spending the received stock. This reading is a judgement call
+worth reviewing: the looser asset-level reading — paid in fSIU by *any* route while holding
+received fSIU — is computed and reported beside it (`paidInFsiuWhileHoldingReceived`), never
+silently substituted, because the shortest fSIU route is `pay_with_claim`, and counting it would
+let the rule pass because agents take the shortest route and not because fSIU circulates. Unkeyed
+agent-to-agent transfers count as received (an agent has no other reason to move a claim to
+another agent) and are reported apart (`receivedUnkeyedMilliSiu`) so a reading can say whether
+eligibility depended on them.
 
 ## 5. Identity, wallets and chain
 

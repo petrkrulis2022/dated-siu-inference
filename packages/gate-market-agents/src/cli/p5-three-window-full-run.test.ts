@@ -404,6 +404,24 @@ describe("p5 three-window roster", () => {
     }
   });
 
+  it("never shows a quantity on a transfer that names a quote, because the loop sets it from the quote", () => {
+    // A transfer naming a quote is sized from the quote's price at the print (parity.ts) and any
+    // quantity the model supplies is ignored. A brief example that still carried one would teach a
+    // number that is silently discarded — a prompt describing a protocol the loop no longer
+    // implements (§4.6-RULE). The two-step form WITHOUT a requestId keeps its quantity.
+    const roster = buildRoster(input(1));
+    let named = 0;
+    for (const a of roster) {
+      const examples = a.skillPackText.match(/\{"tool": "transfer_claim"[^}]*\}/g) ?? [];
+      for (const ex of examples) {
+        if (!ex.includes("requestId")) continue;
+        named += 1;
+        expect(ex, `${a.agentId}: ${ex}`).not.toContain('"quantity"');
+      }
+    }
+    expect(named, "the briefs must still show how to settle a quote with a held claim").toBeGreaterThan(0);
+  });
+
   /**
    * Two F1 deciders facing different menus produce choices that cannot be compared with each
    * other — the comparison would measure the menus. They get the same payment routes.
@@ -480,6 +498,8 @@ function windowResult(overrides: Partial<FullRunWindowResult> = {}): FullRunWind
     passed: false,
     gateDelivered: false,
     paymentMoments: [],
+    usdcSettlements: [],
+    claimFlows: {},
     testingEngaged: false,
     totalRealizedUsd: "0",
     spendByProvider: {},

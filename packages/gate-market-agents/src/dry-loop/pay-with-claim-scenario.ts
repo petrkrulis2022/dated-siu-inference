@@ -10,6 +10,10 @@ export interface PayWithClaimScenarioResult {
   issuer: Hex;
   recipientBalanceAfter: bigint;
   callerBalanceAfter: bigint;
+  /** What the TOOL reported the mint cost, in USDC minor units. */
+  reportedMintCostMinorUnits: unknown;
+  /** What actually LEFT the payer's USDC balance across the call, read from the chain. */
+  observedUsdcDeltaMinorUnits: bigint;
 }
 
 /**
@@ -40,6 +44,16 @@ export async function runPayWithClaimScenario(
   const windowTo = now + 3600;
   const rateAttestation = await signDryLoopRateAttestation(devnet, windowTo);
 
+  const usdcOf = async (turn: number): Promise<bigint> => {
+    const rec = await buyer.callTool(
+      "get_balances",
+      { account: devnet.agents.ORCHESTRATOR.address },
+      { turn, jobId },
+    );
+    return BigInt((rec.result as { usdc: { integerMinorUnits: string } }).usdc.integerMinorUnits);
+  };
+  const usdcBefore = await usdcOf(0);
+
   const record = await buyer.callTool(
     "pay_with_claim",
     {
@@ -52,7 +66,8 @@ export async function runPayWithClaimScenario(
     },
     { turn: 1, jobId },
   );
-  const result = record.result as { tokenId: string; issuer: Hex };
+  const result = record.result as { tokenId: string; issuer: Hex; mintCostMinorUnits?: unknown };
+  const usdcAfter = await usdcOf(1);
 
   const balancesRecord = await buyer.callTool(
     "get_balances",
@@ -79,5 +94,7 @@ export async function runPayWithClaimScenario(
     issuer: result.issuer,
     recipientBalanceAfter,
     callerBalanceAfter,
+    reportedMintCostMinorUnits: result.mintCostMinorUnits,
+    observedUsdcDeltaMinorUnits: usdcBefore - usdcAfter,
   };
 }
