@@ -2602,6 +2602,23 @@ $0.44 of the run's $0.50, then halted `no_text_emitted`. It is a recurring model
 on 2026-09-30, once today — and in a full run, where the seat must author the gate, a halt there
 fails the window as `no_gate`.
 
+### 4.6bb fSIU has no dollar exit, and a window-1 sell-back would need a redeploy
+
+Asked whether a holder could sell a window-1 claim back to its issuer for USDC at the print in force.
+**It cannot, with the deployed contracts.** USDC leaves `WorkClaim` and `CapacityBond` in three
+places only: the minter's payment to the issuer at mint, the bond deposit, and `CapacityBond.draw`,
+reached solely from the Defaulted path of `settleWindowClose` — after the window has closed, for a
+presented claim the issuer did not serve. No function returns a claim to its issuer for dollars. A
+sell-back needs a new function and so a redeploy of the trio; a bilateral sale through existing
+tools needs the issuer agent to agree each time, is not a sale at the print in force, and would be an
+agent-facing capability that does not exist.
+
+So liquidity is a **confound that is recorded and not removed**: USDC can be spent anywhere, fSIU
+can be redeemed for work or passed on, and the only way a claim becomes dollars is by Defaulting. A
+reading of F1 must carry that. It is also why the second-market pack adds **no** dollar redemption at
+the print: with one, no one would sell below it and the discount could not appear
+(`plan-second-market-2026-10-05.md`).
+
 ## 5. Identity, wallets and chain
 
 ### 5.1 Chain
