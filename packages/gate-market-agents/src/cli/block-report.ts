@@ -85,6 +85,9 @@ export interface RunReport {
   instrument?: { id: string };
   debugMode?: { disqualifiedBecause?: string | null };
   abortedBecause?: string;
+  /** Set when a turn came back empty at the token budget twice running (loop/empty-completion.ts).
+   *  The harness failed, not an agent, so nothing the run recorded is a decision. */
+  infrastructureFailure?: { agentId: string; windowIndex: number; turn: number; attempts: number; detail: string };
   /** The print the run used, decimal USD per SIU. */
   rateUsdPerSiu?: string;
   /** The escrow fee the dollar route charges the seller, as the run read it from the chain. */
@@ -226,6 +229,9 @@ function mean(values: readonly number[]): string | null {
 /** Why a run cannot count toward the block, or undefined if it can. */
 function exclusionOf(run: RunReport): string | undefined {
   if (run.debugMode?.disqualifiedBecause) return `debug run: ${run.debugMode.disqualifiedBecause}`;
+  if (run.infrastructureFailure !== undefined) {
+    return `infrastructure failure in window ${run.infrastructureFailure.windowIndex}: ${run.infrastructureFailure.detail}`;
+  }
   if (run.abortedBecause !== undefined) return `aborted on a topology precondition: ${run.abortedBecause}`;
   if (run.f1 === undefined) return "report predates the f1 block, so window-1 cleanliness was never recorded";
   if (!run.f1.reached) return "window 1 was not reached";

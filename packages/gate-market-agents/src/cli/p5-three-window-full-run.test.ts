@@ -9,6 +9,8 @@ import {
   WINDOW_COUNT,
   buildRoster,
   scheduleFacts,
+  RUN_PURCHASES,
+  requiredQuoteSizes,
   reservedQuoteHashes,
   type RosterInput,
 } from "./p5-three-window-full-run.js";
@@ -1162,6 +1164,35 @@ describe("the run's schedule is shown as fact, never as advice (spec §4.6ad, §
     expect(text).toContain("window 3:");
     expect(text).toContain("10000 mSIU");
     expect(text).toMatch(/opens 2027-01-15T/);
+  });
+
+  it("lists EVERY purchase the run makes — WORKER-CODE's testing purchase as well as the gate", () => {
+    // "What follows is the whole schedule — no other work is bought in this run" was false for as long
+    // as the schedule named only gate authoring: WORKER-CODE buys 4 SIU of testing every window, and D4
+    // makes that purchase a condition of `passed`. A brief describing a world the agent is not in.
+    const text = scheduleFacts(1, BOUNDS, 3);
+    for (const p of RUN_PURCHASES) {
+      expect(text, p.job).toContain(p.job);
+      expect(text, p.job).toContain(`${p.milliSiu} mSIU`);
+      expect(text, p.job).toContain(`bought by ${p.buyer} from ${p.seller}`);
+    }
+    // Each remaining window lists both purchases.
+    for (const w of [2, 3]) {
+      const block = text.slice(text.indexOf(`window ${w}:`));
+      expect(block.split("\n").slice(0, 3).join("\n")).toContain("adversarial testing");
+    }
+  });
+
+  it("is built from the same list the loop enforces, so the two cannot disagree", () => {
+    // The schedule once described the run's purchases from one place and the loop enforced job sizes
+    // from another. One list now feeds both; this holds the enforcement to it.
+    const ids = { "WORKER-CODE": "erc8004:0xcode", "WORKER-EXTRACT": "erc8004:0xextract" };
+    const enforced = requiredQuoteSizes(ids);
+    for (const p of RUN_PURCHASES) {
+      const expected = String(p.milliSiu / 1000n);
+      expect(enforced[ids[p.seller as keyof typeof ids]], p.job).toBe(expected);
+    }
+    expect(Object.keys(enforced).length).toBe(RUN_PURCHASES.length);
   });
 
   it("names no window that has already opened — a schedule is what is still ahead", () => {

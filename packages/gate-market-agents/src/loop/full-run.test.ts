@@ -2612,6 +2612,70 @@ describe("runFullRunWindow — a held claim settles a quote, and the seller is t
     expect(new D(String(moment?.quotedUsdMax)).equals("0.01")).toBe(true);
   }, 180_000);
 
+  it("shows an agent a sentence, not a selector, when a call reverts on-chain", async () => {
+    // First debug run on the sixth trio: WORKER-EXTRACT reserved capacity twice and was handed
+    // "Unable to decode signature 0x73f18ad7" with a dump of the call. The history an agent reads
+    // next turn must say what happened instead. Driven through the real loop on a real revert.
+    const cfg = (agentId: AgentId, adapter: Adapter, availableTools: RosterAgentConfig["availableTools"]): RosterAgentConfig => ({
+      agentId, adapter, modelString: "test", prices: PRICES, skillPackText: CANONICAL_ASSET_DESCRIPTION, availableTools,
+      privateKeyHex: devnet.agents[agentId].privateKeyHex, address: devnet.agents[agentId].address,
+      erc8004Id: erc8004IdFor(devnet.agents[agentId].address), rpcUrl: devnet.rpcUrl, maxOutputTokens: 3000, temperature: 0.7, provider: "openai",
+    });
+    const respond = (text: string): AdapterResult => ({ text, usage: { input: 100, output: 50, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [] });
+    const quoteBody = buildQuoteBody({
+      siu: "1", model: "test", rateUsdPerSiu: "0.0100", indexVersion: "SIU-2026a", printId: "circulation-test-print",
+      printHash: `0x${"11".repeat(32)}`, sellerId: erc8004IdFor(devnet.agents["WORKER-CODE"].address), chain: "base-sepolia", expiresInSeconds: 3600, pattern: "fixed",
+    });
+    const signedQuote = await signQuote(
+      { ...quoteBody, settlement: [{ ...quoteBody.settlement[0], address: devnet.deployment.usdc.address }] },
+      devnet.agents["WORKER-CODE"].privateKeyHex,
+    );
+    const board = new QuoteBoard();
+    const posted = board.postRequest("ORCHESTRATOR", quoteBody);
+    board.postIssuedQuote(posted.requestId, signedQuote);
+
+    const buyer: Adapter = async (_m, prompt) => {
+      const requestId = prompt.match(/(qr-\d+)/)?.[1];
+      return respond(
+        requestId
+          ? JSON.stringify({ tool: "pay", args: { requestId, settler: "0x0000000000000000000000000000000000000000" } })
+          : JSON.stringify({ tool: "get_balances", args: { account: devnet.agents.ORCHESTRATOR.address } }),
+      );
+    };
+    const classId = "0x2dc081a8d6d4714c79b5abd2e9b08c3a33b4ef1dcf946ef8b8cf6c495014f47b";
+    const seller: Adapter = async (_m, prompt) =>
+      respond(
+        prompt.includes("YOU HAVE BEEN PAID")
+          ? JSON.stringify({ tool: "reserve_for_work", args: { classId } }) // every turn: the second one reverts
+          : JSON.stringify({ tool: "get_balances", args: { account: devnet.agents["WORKER-CODE"].address } }),
+      );
+    const ceiling = new BudgetCeiling(
+      Object.fromEntries(AGENT_IDS.map((id) => [id, { maxUsdcSpend: "1000000", maxInferenceTurns: 100, maxInferenceUsd: "1000000" }])) as Record<AgentId, { maxUsdcSpend: string; maxInferenceTurns: number; maxInferenceUsd: string }>,
+    );
+    const result = await runFullRunWindow({
+      windowId: "w-plain-errors",
+      roster: [cfg("ORCHESTRATOR", buyer, ["get_balances", "pay"]), cfg("WORKER-CODE", seller, ["get_balances", "reserve_for_work"])],
+      board, job: JOB, maxTurnsPerAgent: 6,
+      budget: new ExperimentBudget({ ceiling, runCapUsd: "1000000", experimentCapUsd: "1000000", ledgerPath }),
+      deps: {
+        chainReader: new ViemChainReader(devnet.deployment, devnet.rpcUrl), deployment: devnet.deployment,
+        escrowAddress: devnet.escrowAddress, runGateHardeningChecks,
+        loadPrint: async () => ({ print_id: "circulation-test-print" }) as unknown as Print, isReconciled: async () => false,
+      },
+      runsRoot, runId: "run-plain-errors", manifest: MANIFEST,
+      mintContext: {
+        publisherPrivateKeyHex: devnet.publisherPrivateKeyHex, printId: "circulation-test-print", series: SERIES_COMMODITY,
+        printDate: printDateToUnixDay("2026-09-25"), nanoUsdPerSiu: 10_000_000n, validitySeconds: 3600n,
+      },
+    });
+    const failed = result.turnLogsByAgent["WORKER-CODE"].filter((l) => l.toolCall?.name === "reserve_for_work" && l.toolCall.ok === false);
+    expect(failed.length, "the second reservation must have reverted").toBeGreaterThan(0);
+    for (const log of failed) {
+      expect(log.parsed).toContain("you have already reserved capacity for this quote.");
+      expect(log.parsed).not.toMatch(/0x73f18ad7|Unable to decode|Contract Call|args:/);
+    }
+  }, 180_000);
+
   it("records what a USDC quote was actually SETTLED for, joined to the payment by its request id", async () => {
     // The seller settles for LESS than the quote's ceiling — a seller may claim less and the rest
     // returns to the payer. A cost built from the quoted ceiling would overstate the dollar route,
@@ -3650,4 +3714,129 @@ describe("runFullRunWindow — a settled testing quote unlocks the attack, and o
     expect(firstGateShown).toBeGreaterThanOrEqual(0);
     if (firstPaidShown >= 0) expect(firstPaidShown).toBeLessThanOrEqual(firstGateShown);
   }, 180_000);
+});
+
+describe("runFullRunWindow — an empty completion at the token budget is the harness's, not the agent's", () => {
+  let runsRoot: string;
+  let ledgerPath: string;
+
+  beforeEach(async () => {
+    runsRoot = await mkdtemp(path.join(tmpdir(), "full-run-empty-completion-"));
+    ledgerPath = path.join(runsRoot, "ledger.json");
+  });
+
+  afterEach(async () => {
+    await rm(runsRoot, { recursive: true, force: true });
+  });
+
+  const EMPTY_AT_BUDGET = (): AdapterResult => ({
+    text: "",
+    stopReason: "max_tokens",
+    contentBlockTypes: ["thinking"],
+    usage: { input: 500, output: 3000, cached_input: 0, reasoning: 3000 },
+    latency_ms: 1,
+    raw: {},
+    deviations: [],
+  });
+  const VALID = (): AdapterResult => ({
+    text: JSON.stringify({
+      tool: "submit_job",
+      args: { source: "export async function gate(){ return {accept:true,reason:'ok'}; }" },
+    }),
+    stopReason: "end_turn",
+    usage: { input: 500, output: 300, cached_input: 0, reasoning: 0 },
+    latency_ms: 1,
+    raw: {},
+    deviations: [],
+  });
+
+  function sequenceAdapter(results: AdapterResult[]): { adapter: Adapter; calls: () => number } {
+    let n = 0;
+    return {
+      adapter: async () => results[Math.min(n++, results.length - 1)],
+      calls: () => n,
+    };
+  }
+
+  async function run(adapter: Adapter, runId: string, extra: { requireTestingPurchase?: boolean } = {}) {
+    return runFullRunWindow({
+      windowId: "w0",
+      roster: [orchestratorConfig(adapter)],
+      job: JOB,
+      maxTurnsPerAgent: 5,
+      budget: generousBudget(ledgerPath),
+      deps: fakeDeps(async () => PASS),
+      runsRoot,
+      runId,
+      manifest: MANIFEST,
+      ...extra,
+    });
+  }
+
+  it("retries the turn once, keeps it as the same turn, and records and costs both attempts", async () => {
+    const { adapter, calls } = sequenceAdapter([EMPTY_AT_BUDGET(), VALID()]);
+    const result = await run(adapter, "run-recovered");
+
+    expect(calls()).toBe(2);
+    expect(result.passed, "the retry's answer is the turn's answer").toBe(true);
+    expect(result.turnsByAgent.ORCHESTRATOR, "a retry is not a second turn").toBe(1);
+    expect(result.infrastructureFailure).toBeUndefined();
+    // 500 in + 3000 out and 500 in + 300 out at $2 / $12 per 1M: 0.037000 + 0.004600.
+    expect(result.totalRealizedUsd).toBe("0.041600");
+
+    const log = result.turnLogsByAgent.ORCHESTRATOR[0];
+    expect(log.infrastructureRetry).toMatchObject({
+      outcome: "recovered",
+      firstAttempt: { stopReason: "max_tokens", contentBlockTypes: ["thinking"] },
+    });
+    expect(log.infrastructureRetry?.firstAttempt.realizedUsd).toBe("0.037");
+
+    // Both calls are on disk, each marked as the attempt it was — the first is not overwritten.
+    const dir = path.join(runsRoot, "run-recovered", "messages", "ORCHESTRATOR");
+    const first = JSON.parse(await readFile(path.join(dir, "1.json"), "utf-8"));
+    const second = JSON.parse(await readFile(path.join(dir, "1.attempt-2.json"), "utf-8"));
+    expect(first).toMatchObject({ attempt: 1, stopReason: "max_tokens", rawText: "" });
+    expect(second).toMatchObject({ attempt: 2, stopReason: "end_turn" });
+  });
+
+  it("declares the run infrastructure-failed when the retry is empty too — and never as no_gate", async () => {
+    const { adapter, calls } = sequenceAdapter([EMPTY_AT_BUDGET(), EMPTY_AT_BUDGET()]);
+    const result = await run(adapter, "run-recurred", { requireTestingPurchase: true });
+
+    expect(calls(), "once, not forever").toBe(2);
+    expect(result.infrastructureFailure).toMatchObject({
+      agentId: "ORCHESTRATOR",
+      turn: 1,
+      attempts: 2,
+      stopReason: "max_tokens",
+    });
+    expect(result.haltedReason?.ORCHESTRATOR).toBe("run_infrastructure_failed");
+    expect(
+      result.incompleteBecause,
+      "the window has no verdict: no_gate would blame the agent for the harness",
+    ).toBeUndefined();
+    expect(result.passed).toBe(false);
+    expect(result.totalRealizedUsd, "both failed calls were paid for").toBe("0.074000");
+    expect(result.turnLogsByAgent.ORCHESTRATOR[0].infrastructureRetry?.outcome).toBe("recurred");
+  });
+
+  it("does not touch an empty completion that ended for another reason", async () => {
+    const { adapter, calls } = sequenceAdapter([{ ...EMPTY_AT_BUDGET(), stopReason: "end_turn" }]);
+    const result = await run(adapter, "run-other-stop");
+
+    expect(calls()).toBe(1);
+    expect(result.haltedReason?.ORCHESTRATOR).toBe("no_text_emitted");
+    expect(result.infrastructureFailure).toBeUndefined();
+  });
+
+  it("does not touch a reply that was truncated after it began — that is the model's own output", async () => {
+    const { adapter, calls } = sequenceAdapter([
+      { ...EMPTY_AT_BUDGET(), text: '{"tool": "submit_job", "args": {"source": "export', contentBlockTypes: ["text"] },
+    ]);
+    const result = await run(adapter, "run-truncated");
+
+    expect(calls()).toBe(1);
+    expect(result.haltedReason?.ORCHESTRATOR).toBe("parse_error");
+    expect(result.infrastructureFailure).toBeUndefined();
+  });
 });

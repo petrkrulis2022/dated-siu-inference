@@ -76,6 +76,28 @@ describe("buildBlockReport — what counts", () => {
     });
   });
 
+  it("excludes a run the harness failed, as that and not as anything the agents did — even with a full f1 block", () => {
+    const r = buildBlockReport([
+      run("good", [w1()]),
+      run("harness", [w1()], {
+        infrastructureFailure: {
+          agentId: "WORKER-CODE",
+          windowIndex: 1,
+          turn: 4,
+          attempts: 2,
+          detail: "agent WORKER-CODE, turn 4: two consecutive completions ended at the token budget with no text",
+        },
+      }),
+    ]);
+    expect(r.runs.map((x) => x.runId)).toEqual(["good"]);
+    expect(r.excluded).toEqual([
+      {
+        runId: "harness",
+        because: expect.stringMatching(/^infrastructure failure in window 1:.*token budget/),
+      },
+    ]);
+  });
+
   it("refuses to pool runs from different instruments", () => {
     expect(() =>
       buildBlockReport([run("a", [w1()]), run("b", [w1()], { instrument: { id: "fifth-trio-two-issuer" } })]),

@@ -5,6 +5,7 @@ import {
   isPolicyRefusalStopReason,
   type Adapter,
   type AdapterParams,
+  type AdapterResult,
   type FailureCategory,
 } from "@touchstone/harness";
 import { quoteHashHex, type QuoteBody, type TouchstoneQuote } from "@touchstone/sdk";
@@ -26,6 +27,7 @@ import {
 import { ExperimentBudget, ExperimentCapExceededError } from "../budget/experiment-budget.js";
 import { CeilingExceededError } from "../budget/ceiling.js";
 import { gateResultsMatch } from "../gate/determinism.js";
+import { isEmptyAtTokenBudget } from "./empty-completion.js";
 import { signRateAttestation } from "../chain/rate-attestation.js";
 import { Runner } from "../runner.js";
 import type { RunnerDeps } from "../deps.js";
@@ -39,6 +41,7 @@ import { RunRecorder, type RunManifest } from "../run-recorder/recorder.js";
 import { FrictionLogWriter, type FrictionLogEntry } from "../friction/log.js";
 import { QuoteBoard, type PaidAsset } from "./quote-board.js";
 import { claimMilliSiuForQuote } from "./parity.js";
+import { explainToolError } from "./plain-errors.js";
 import { ClaimLedger, type ClaimFlows } from "./claim-ledger.js";
 import {
   submitAttackRefusalFor,
@@ -463,6 +466,22 @@ export interface TurnLog {
   /** Set exactly when this turn ended because the provider failed or declined the call, rather
    * than because of anything the model produced — see the adapter-call guard in the loop. */
   providerFailure?: { category: FailureCategory; message: string };
+  /**
+   * Set exactly when this turn's first model call came back empty at the token budget and the
+   * turn was called again (loop/empty-completion.ts). The log's own fields describe the surviving
+   * call; `firstAttempt` is what the discarded one returned and cost. `recovered`: the retry
+   * produced text. `recurred`: it did not either, and the run was declared infrastructure-failed.
+   */
+  infrastructureRetry?: {
+    outcome: "recovered" | "recurred" | "retry_failed";
+    firstAttempt: {
+      stopReason?: string;
+      contentBlockTypes?: string[];
+      usage: { input: number; output: number; cached_input: number; reasoning: number };
+      realizedUsd: string;
+      latencyMs: number;
+    };
+  };
   /** Set exactly on a turn that ran `submit_attack`. */
   attack?: { gateVersion: number; classification: string; countsAsAdversaryYield: boolean };
 }
@@ -522,8 +541,18 @@ export interface FullRunWindowResult {
   claimFlows: Record<string, ClaimFlows>;
   /** A quote sold by an attacker was settled, in either asset. */
   testingEngaged: boolean;
-  /** Why `passed` is false when it is, so a decline is recorded rather than silent. */
+  /** Why `passed` is false when it is, so a decline is recorded rather than silent. Absent when
+   *  `infrastructureFailure` is set: a run the harness failed has no verdict about its agents. */
   incompleteBecause?: IncompleteBecause;
+  /** Set when a turn came back empty at the token budget twice running. The run cannot be read as
+   *  agent behaviour and is excluded from the block; `no_gate` and its kin are never assigned. */
+  infrastructureFailure?: {
+    agentId: AgentId;
+    turn: number;
+    attempts: number;
+    stopReason?: string;
+    detail: string;
+  };
   passedBy?: AgentId | typeof PRE_AUTHORED;
   totalRealizedUsd: string;
   /** Real inference spend this run, per provider — decimal-string USD. Lands in metrics.json via
@@ -571,6 +600,9 @@ export interface FullRunWindowResult {
     | "experiment_halt"
     | "policy_refusal"
     | "adapter_error"
+    /** Every agent still active when the run was declared infrastructure-failed (see
+     *  `FullRunWindowResult.infrastructureFailure`) — theirs is not a decision either. */
+    | "run_infrastructure_failed"
     | "nothing_to_act_on"
     /** The window's own span ran out while this agent was still active. Added 2026-09-30: turns
      * used to run past their window's end, so a slow window ate the next one's time — run 10's
@@ -927,6 +959,7 @@ export async function runFullRunWindow(
   const turnsByAgent: Record<string, number> = {};
   const haltedReason: FullRunWindowResult["haltedReason"] = {};
   const turnLogsByAgent: Record<string, TurnLog[]> = {};
+  let infrastructureFailure: FullRunWindowResult["infrastructureFailure"];
   let totalRealizedUsd = 0;
   const realizedUsdByProvider: Record<string, number> = {};
   const attacks: AttackRecord[] = [];
@@ -1583,60 +1616,174 @@ export async function runFullRunWindow(
     // agent behaviour, which for this roster — whose prompts legitimately discuss probing a
     // grader — is exactly the wrong attribution. Errors now halt only the agent they happened to,
     // classified, with a policy refusal distinguished from everything else.
-    let adapterResult;
-    try {
-      adapterResult = await agent.adapter(agent.modelString, prompt, adapterParams);
-    } catch (err) {
-      const category = classifyFailure(err);
-      const message = err instanceof Error ? err.message : String(err);
-      const log: TurnLog = {
-        turn,
-        promptChars: prompt.length,
-        projectedUsd,
-        realizedUsd: "0",
-        marketBoardText: marketBoardText || undefined,
-        latencyMs: 0,
-        parsed: `${category}: ${message}`,
-        providerFailure: { category, message },
+    //
+    // A function because a turn can now make this call twice (an empty completion at the token
+    // budget is retried once, below); everything one call involves — the failure guard, the cost
+    // it incurred, its record on disk — happens identically both times.
+    const callModel = async (
+      attempt: number,
+      firstAttempt?: NonNullable<TurnLog["infrastructureRetry"]>["firstAttempt"],
+    ): Promise<{ result: AdapterResult; realizedUsd: string } | "provider_failure"> => {
+      let result: AdapterResult;
+      try {
+        result = await agent.adapter(agent.modelString, prompt, adapterParams);
+      } catch (err) {
+        const category = classifyFailure(err);
+        const message = err instanceof Error ? err.message : String(err);
+        const log: TurnLog = {
+          turn,
+          promptChars: prompt.length,
+          projectedUsd,
+          realizedUsd: "0",
+          marketBoardText: marketBoardText || undefined,
+          latencyMs: 0,
+          parsed: `${category}: ${message}`,
+          providerFailure: { category, message },
+          ...(firstAttempt !== undefined
+            ? { infrastructureRetry: { outcome: "retry_failed" as const, firstAttempt } }
+            : {}),
+        };
+        turnLogsByAgent[agent.agentId].push(log);
+        options.onTurn?.(agent.agentId, log);
+        haltedReason[agent.agentId] =
+          category === "policy_refusal" ? "policy_refusal" : "adapter_error";
+        activeAgents.delete(agent.agentId);
+        await friction.append(
+          buildFrictionEntry(agent.agentId, turn, options.job.jobId, undefined, null, {
+            attempted: "model call",
+            outcome: `provider ${category}: ${message}`,
+          }),
+        );
+        return "provider_failure";
+      }
+
+      const callUsd = realizedTurnCostUsd(result.usage.input, result.usage.output, agent.prices);
+      totalRealizedUsd += Number(callUsd);
+      realizedUsdByProvider[agent.provider] =
+        (realizedUsdByProvider[agent.provider] ?? 0) + Number(callUsd);
+      // Recorded for the ledger and every report; gates nothing, since the call has already
+      // happened. The pre-call projection above is what the caps are enforced against.
+      options.budget.recordRealizedInferenceSpend(callUsd);
+
+      // Written here, before any branch inspects the response and before parsing is attempted, so
+      // that a turn which then fails to parse is recorded exactly as fully as one that succeeds. A
+      // parse failure re-writes this same file below with `parseError` filled in; if the process
+      // dies in between, the call itself is already on disk. See ModelCallRecord.
+      recorder.recordMessage(agent.agentId, turn, {
+        prompt,
+        rawText: result.text,
+        stopReason: result.stopReason,
+        usage: result.usage,
+        contentBlockTypes: result.contentBlockTypes,
+        latencyMs: result.latency_ms,
+        ...(attempt > 1 ? { attempt } : {}),
+      });
+      return { result, realizedUsd: callUsd };
+    };
+
+    const firstCall = await callModel(1);
+    if (firstCall === "provider_failure") continue;
+    let adapterResult = firstCall.result;
+    let realizedUsd = firstCall.realizedUsd;
+    // The turn's attempt number for anything written about it from here on: 1 unless retried.
+    let attemptNumber = 1;
+    let infrastructureRetry: TurnLog["infrastructureRetry"];
+
+    // An empty completion at the token budget is the harness's failure, not a decision (see
+    // loop/empty-completion.ts). The same prompt is sent once more, with the same parameters —
+    // widening the budget here would change what the agent was asked to do, and the adapters
+    // already make their own reasoning-budget accommodation before a result gets this far. Both
+    // calls are costed and written to disk; the discarded one is described on the turn's log.
+    if (isEmptyAtTokenBudget(adapterResult)) {
+      const firstAttempt = {
+        stopReason: adapterResult.stopReason,
+        contentBlockTypes: adapterResult.contentBlockTypes,
+        usage: adapterResult.usage,
+        realizedUsd,
+        latencyMs: adapterResult.latency_ms,
       };
-      turnLogsByAgent[agent.agentId].push(log);
-      options.onTurn?.(agent.agentId, log);
-      haltedReason[agent.agentId] =
-        category === "policy_refusal" ? "policy_refusal" : "adapter_error";
-      activeAgents.delete(agent.agentId);
-      await friction.append(
-        buildFrictionEntry(agent.agentId, turn, options.job.jobId, undefined, null, {
-          attempted: "model call",
-          outcome: `provider ${category}: ${message}`,
-        }),
-      );
-      continue;
+      recorder.recordMessage(agent.agentId, turn, {
+        prompt,
+        rawText: adapterResult.text,
+        stopReason: adapterResult.stopReason,
+        usage: adapterResult.usage,
+        contentBlockTypes: adapterResult.contentBlockTypes,
+        latencyMs: adapterResult.latency_ms,
+        attempt: 1,
+      });
+      try {
+        options.budget.recordInferenceSpend(agent.agentId, options.windowId, projectedUsd);
+      } catch (err) {
+        if (err instanceof ExperimentCapExceededError) {
+          for (const other of activeAgents) haltedReason[other] = "experiment_halt";
+          break turnLoop;
+        }
+        if (err instanceof CeilingExceededError) {
+          haltedReason[agent.agentId] = "ceiling";
+          activeAgents.delete(agent.agentId);
+          continue;
+        }
+        throw err;
+      }
+      const retried = await callModel(2, firstAttempt);
+      if (retried === "provider_failure") continue;
+      adapterResult = retried.result;
+      realizedUsd = retried.realizedUsd;
+      attemptNumber = 2;
+
+      if (isEmptyAtTokenBudget(adapterResult)) {
+        const detail =
+          `agent ${agent.agentId}, turn ${turn}: two consecutive completions ended at the token ` +
+          `budget (stop reason "${adapterResult.stopReason}") with no text`;
+        const log: TurnLog = {
+          turn,
+          promptChars: prompt.length,
+          projectedUsd,
+          realizedUsd,
+          marketBoardText: marketBoardText || undefined,
+          rawText: adapterResult.text,
+          promptText: prompt,
+          settleableText: settleableText || undefined,
+          forwardText: forwardText || undefined,
+          latencyMs: adapterResult.latency_ms,
+          stopReason: adapterResult.stopReason,
+          usage: adapterResult.usage,
+          contentBlockTypes: adapterResult.contentBlockTypes,
+          parsed: `infrastructure_failure: ${detail}`,
+          infrastructureRetry: { outcome: "recurred", firstAttempt },
+        };
+        turnLogsByAgent[agent.agentId].push(log);
+        options.onTurn?.(agent.agentId, log);
+        infrastructureFailure = {
+          agentId: agent.agentId,
+          turn,
+          attempts: 2,
+          stopReason: adapterResult.stopReason,
+          detail,
+        };
+        await friction.append(
+          buildFrictionEntry(agent.agentId, turn, options.job.jobId, undefined, null, {
+            attempted: "model call",
+            outcome: `infrastructure failure: ${detail}`,
+          }),
+        );
+        // The run is excluded whatever happens next, so nothing further is worth buying: every
+        // agent still in is stopped, this one included.
+        for (const other of activeAgents) haltedReason[other] = "run_infrastructure_failed";
+        break turnLoop;
+      }
+      infrastructureRetry = { outcome: "recovered", firstAttempt };
     }
 
-    const realizedUsd = realizedTurnCostUsd(
-      adapterResult.usage.input,
-      adapterResult.usage.output,
-      agent.prices,
-    );
-    totalRealizedUsd += Number(realizedUsd);
-    realizedUsdByProvider[agent.provider] =
-      (realizedUsdByProvider[agent.provider] ?? 0) + Number(realizedUsd);
-    // Recorded for the ledger and every report; gates nothing, since the call has already
-    // happened. The pre-call projection above is what the caps are enforced against.
-    options.budget.recordRealizedInferenceSpend(realizedUsd);
-
-    // Written here, before any branch inspects the response and before parsing is attempted, so
-    // that a turn which then fails to parse is recorded exactly as fully as one that succeeds. A
-    // parse failure re-writes this same file below with `parseError` filled in; if the process
-    // dies in between, the call itself is already on disk. See ModelCallRecord.
-    recorder.recordMessage(agent.agentId, turn, {
-      prompt,
-      rawText: adapterResult.text,
-      stopReason: adapterResult.stopReason,
-      usage: adapterResult.usage,
-      contentBlockTypes: adapterResult.contentBlockTypes,
-      latencyMs: adapterResult.latency_ms,
-    });
+    // Every log written from here on describes the surviving call; when that call was a retry,
+    // the log says so, so a reader of metrics.json never meets a turn that cost twice without
+    // being told why.
+    const pushLog = (log: TurnLog): void => {
+      if (infrastructureRetry !== undefined && log.infrastructureRetry === undefined) {
+        log.infrastructureRetry = infrastructureRetry;
+      }
+      turnLogsByAgent[agent.agentId].push(log);
+    };
 
     // A refusal that arrives on a 200 — the commoner shape, reported via the provider's own stop
     // reason. Caught before parsing, so it is never recorded as unparseable output.
@@ -1661,7 +1808,7 @@ export async function runFullRunWindow(
           message: `stop reason "${adapterResult.stopReason}"`,
         },
       };
-      turnLogsByAgent[agent.agentId].push(log);
+      pushLog(log);
       options.onTurn?.(agent.agentId, log);
       haltedReason[agent.agentId] = "policy_refusal";
       activeAgents.delete(agent.agentId);
@@ -1694,7 +1841,7 @@ export async function runFullRunWindow(
         contentBlockTypes: adapterResult.contentBlockTypes,
         parsed: err instanceof Error ? err.message : String(err),
       };
-      turnLogsByAgent[agent.agentId].push(log);
+      pushLog(log);
       options.onTurn?.(agent.agentId, log);
       recorder.recordMessage(agent.agentId, turn, {
         prompt,
@@ -1704,6 +1851,7 @@ export async function runFullRunWindow(
         contentBlockTypes: adapterResult.contentBlockTypes,
         latencyMs: adapterResult.latency_ms,
         parseError: err instanceof Error ? err.message : String(err),
+        ...(attemptNumber > 1 ? { attempt: attemptNumber } : {}),
       });
       if (err instanceof ModelResponseParseError) {
         // A response that contains no text block at all is not a model that emitted bad JSON —
@@ -1748,7 +1896,7 @@ export async function runFullRunWindow(
         usage: adapterResult.usage,
         contentBlockTypes: adapterResult.contentBlockTypes,
       };
-      turnLogsByAgent[agent.agentId].push(log);
+      pushLog(log);
       options.onTurn?.(agent.agentId, log);
       // NOT removed from activeAgents — the whole difference from `done`. The agent stays in
       // the window and is woken the moment its own actionable state differs from what it saw
@@ -1793,7 +1941,7 @@ export async function runFullRunWindow(
         usage: adapterResult.usage,
         contentBlockTypes: adapterResult.contentBlockTypes,
       };
-      turnLogsByAgent[agent.agentId].push(log);
+      pushLog(log);
       options.onTurn?.(agent.agentId, log);
       haltedReason[agent.agentId] = "voluntary_stop";
       activeAgents.delete(agent.agentId);
@@ -1846,7 +1994,7 @@ export async function runFullRunWindow(
         contentBlockTypes: adapterResult.contentBlockTypes,
         parsed: `${JSON.stringify(intent)} -> args error: ${err instanceof Error ? err.message : String(err)}`,
       };
-      turnLogsByAgent[agent.agentId].push(log);
+      pushLog(log);
       options.onTurn?.(agent.agentId, log);
       await friction.append(
         buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null, {
@@ -2363,7 +2511,7 @@ export async function runFullRunWindow(
           countsAsAdversaryYield: attackOutcome.countsAsAdversaryYield,
         };
       }
-      turnLogsByAgent[agent.agentId].push(log);
+      pushLog(log);
       options.onTurn?.(agent.agentId, log);
 
       const timeToExpiry = await holdTimeToExpiry(options.deps, null);
@@ -2459,7 +2607,7 @@ export async function runFullRunWindow(
           contentBlockTypes: adapterResult.contentBlockTypes,
           parsed: `${JSON.stringify(intent)} -> tool args validation error: ${err.message}`,
         };
-        turnLogsByAgent[agent.agentId].push(log);
+        pushLog(log);
         options.onTurn?.(agent.agentId, log);
         await friction.append(
           buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null, {
@@ -2511,10 +2659,11 @@ export async function runFullRunWindow(
           stopReason: adapterResult.stopReason,
           usage: adapterResult.usage,
           contentBlockTypes: adapterResult.contentBlockTypes,
-          parsed: `${JSON.stringify(intent)} -> tool call error: ${err instanceof Error ? err.message : String(err)}`,
+          // A chain revert is said in a sentence; the call dump and the selector never reach the agent.
+          parsed: `${JSON.stringify(intent)} -> tool call error: ${explainToolError(err)}`,
           toolCall: { name: intent.tool, ok: false },
         };
-        turnLogsByAgent[agent.agentId].push(log);
+        pushLog(log);
         options.onTurn?.(agent.agentId, log);
         await friction.append(
           buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null, {
@@ -2532,8 +2681,12 @@ export async function runFullRunWindow(
     engaged: testingIsEngaged(),
     attacked: attacks.length > 0,
   });
+  // A run the harness failed has no verdict about its agents. Whatever the completion rule would
+  // say — `no_gate`, `testing_never_purchased` — it would be blaming a decision for a missing one.
+  const verdict =
+    infrastructureFailure !== undefined ? { passed: false } : completion;
   const result: FullRunWindowResult = {
-    passed: completion.passed,
+    passed: verdict.passed,
     gateDelivered: passed,
     paymentMoments,
     usdcSettlements,
@@ -2541,9 +2694,10 @@ export async function runFullRunWindow(
       options.roster.map((a) => [a.agentId, claimLedger.flows(a.agentId)]),
     ),
     testingEngaged: testingIsEngaged(),
-    ...(completion.incompleteBecause !== undefined
-      ? { incompleteBecause: completion.incompleteBecause }
+    ...("incompleteBecause" in verdict && verdict.incompleteBecause !== undefined
+      ? { incompleteBecause: verdict.incompleteBecause }
       : {}),
+    ...(infrastructureFailure !== undefined ? { infrastructureFailure } : {}),
     passedBy,
     totalRealizedUsd: totalRealizedUsd.toFixed(6),
     attacks,

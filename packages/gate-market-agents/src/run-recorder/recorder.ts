@@ -21,6 +21,10 @@ export interface ModelCallRecord {
   contentBlockTypes?: string[];
   latencyMs: number;
   parseError?: string;
+  /** Present only when the turn was retried after an empty completion at the token budget (see
+   *  loop/empty-completion.ts): which call of the turn this record is. The first call stays in
+   *  `<turn>.json` and the retry in `<turn>.attempt-2.json`, so neither overwrites the other. */
+  attempt?: number;
 }
 
 /** Spec §14.4: "bench version, pack version, agent configs, seeds." `agentConfigs` is left as
@@ -178,7 +182,11 @@ export class RunRecorder {
   recordMessage(agentId: AgentId, turn: number, message: ModelCallRecord): void {
     const dir = join(this.runDir, "messages", agentId);
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, `${turn}.json`), JSON.stringify(message, null, 2), "utf-8");
+    const file =
+      message.attempt === undefined || message.attempt === 1
+        ? `${turn}.json`
+        : `${turn}.attempt-${message.attempt}.json`;
+    writeFileSync(join(dir, file), JSON.stringify(message, null, 2), "utf-8");
   }
 
   recordReceipt(receipt: GateMarketReceipt): void {

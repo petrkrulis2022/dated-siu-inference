@@ -2619,6 +2619,69 @@ reading of F1 must carry that. It is also why the second-market pack adds **no**
 the print: with one, no one would sell below it and the discount could not appear
 (`plan-second-market-2026-10-05.md`).
 
+### 4.6bc An agent is shown a sentence when a call reverts, never a selector
+
+A revert reached the agent as the harness's raw error: a four-byte selector, the call's arguments and
+a library stack. `ReservationExists()` arrived as `0x73f18ad7` followed by a dump of the call. An
+agent cannot act on that, and it is not a neutral thing to show one — the readable ones read as
+advice and the unreadable ones as noise. `loop/plain-errors.ts` decodes the contract errors of
+`WorkClaim`, `CapacityBond`, `ClaimRouter`, `TouchstoneEscrow` and `RateAttestationVerifier` into one
+plain sentence each, states what the chain refused and nothing about what to do next, and never
+shows the call dump. A revert it cannot decode says only that the chain refused the call and that no
+further explanation is available. Errors that did not come from a contract pass through unchanged.
+
+The table is checked, not trusted (§4.6ai): a test parses the Solidity sources for every declared
+custom error and fails if one has no sentence, and the decoding is exercised against real bytecode
+reverts, with the selector derived from the canonical signature rather than copied. A loop test shows
+that a seller who reserves the same quote twice is told, in words, that it already has.
+
+Also pinned: "headroom is finite and shared" no longer appears on any settlement tool. It sat on
+`pay_with_claim` alone, a scarcity cue on one asset's route and none on the other's. Capacity facts
+live in the brief, where both assets see them.
+
+### 4.6bd The schedule an agent is shown is the schedule the run makes
+
+The brief's list of "work you will buy" had been written by hand, was missing WORKER-CODE's testing
+purchase, and carried a sentence that was false of what the run does. A schedule that disagrees with
+the run is an instruction by another name, and a buyer that planned around it would be measured on
+the discrepancy. `RUN_PURCHASES` in the runner is now the single source: the facts every buyer is
+shown, and the quote sizes the loop fixes (`requiredQuoteSizes`, which `request_quote` builds into
+each request and `issue_quote` therefore signs as stored — §4.6au), are both read from it. Tests
+pin that the schedule lists every purchase the run makes — the testing purchase included, with its
+job, its size in mSIU, its buyer and its seller — and that the sizes the loop enforces are exactly
+the list's, one per purchase, so the two cannot drift apart.
+
+### 4.6be A turn that ends at the token budget with no text is retried once, and twice is the harness's failure
+
+Found three times in a week (2026-09-30 twice, 2026-10-05 once): WORKER-CODE's turn ends at
+`max_tokens` having spent its whole output budget reasoning and emitted no text. It was recorded as
+`no_text_emitted` and the seat was halted; in a run where that seat must author the gate, the window
+then failed as `no_gate`. That attributes a budget fact to a decision the agent never got to make,
+in an experiment whose only subject is what agents decide.
+
+`loop/empty-completion.ts` defines the case narrowly: the completion ended at the provider's own
+token limit (`max_tokens`, `length`, `MAX_TOKENS`) **and** contains no text. A reply truncated after
+it began is still the model's, and an empty completion that ended for any other reason is still the
+model's; both keep their old labels, and tests pin that.
+
+- **First occurrence:** the identical prompt is sent once more with identical parameters. The budget
+  is not widened — that would change what the agent was asked to do, and the adapters already make
+  their own reasoning-budget accommodation before a result gets this far. It is the same turn: the
+  turn count does not move. Both calls are costed, in the ledger and in `totalRealizedUsd`, and both
+  are on disk — the first in `messages/<agent>/<turn>.json`, the retry in
+  `<turn>.attempt-2.json`, each marked with its attempt. The turn's log carries
+  `infrastructureRetry` with what the discarded call returned and cost.
+- **Second occurrence:** the run is declared infrastructure-failed. Every agent still active is
+  stopped as `run_infrastructure_failed`, the window has **no verdict** (`incompleteBecause` is not
+  assigned, so it can never read `no_gate` or `testing_never_purchased`), the runner stops after
+  that window with its close-out sweeps still running, the run records `infrastructureFailure`, and
+  the block report excludes it with that reason even though its f1 block is otherwise complete.
+- **A provider error on the retry** is not this rule: it is classified as before (`adapter_error`),
+  and the turn's log keeps the first attempt so the history is not lost.
+
+The retry draws a second projected-spend reservation against the same caps, so a run at its ceiling
+halts there as it would for any other call.
+
 ## 5. Identity, wallets and chain
 
 ### 5.1 Chain

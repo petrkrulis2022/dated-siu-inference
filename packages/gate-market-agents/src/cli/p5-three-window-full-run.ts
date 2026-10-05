@@ -289,13 +289,16 @@ export function scheduleFacts(
   const lines = remaining
     .map(
       (w) =>
-        `    window ${w.index}: one code-class gate-authoring job, ${NOMINAL_JOB_MILLI_SIU} mSIU, ` +
-        `opens ${new Date(Number(w.from) * 1000).toISOString()}`,
+        `    window ${w.index}: opens ${new Date(Number(w.from) * 1000).toISOString()}\n` +
+        RUN_PURCHASES.map(
+          (p) =>
+            `      ${p.job} (${p.classId} class), ${p.milliSiu} mSIU, bought by ${p.buyer} from ${p.seller}`,
+        ).join("\n"),
     )
     .join("\n");
   return `THE REST OF THIS RUN
-  This run has ${windowCount} windows. This is window ${windowIndex}. What follows is the whole
-  schedule — no other work is bought in this run.
+  This run has ${windowCount} windows. This is window ${windowIndex}. What follows is every purchase
+  the run makes after this window — no other work is bought in this run.
 ${lines}
   Each job is priced at the print published for its own day. A window's job does not exist until
   that window opens.`;
@@ -311,6 +314,26 @@ ${lines}
  * comparable with every earlier run; this is a new job with no prior to preserve.
  */
 const ATTACK_JOB_MILLI_SIU = 4_000n;
+
+/**
+ * EVERY purchase this run makes, in one place. The schedule shown to buyers and the job sizes the
+ * loop enforces are both built from this list, so they cannot disagree — as they once did, when the
+ * schedule named only gate authoring and called itself "the whole schedule" while WORKER-CODE bought
+ * testing every window. Quantity is a property of the job; the price is the buyer's to propose.
+ */
+export const RUN_PURCHASES = [
+  { job: "gate authoring", classId: "code", buyer: "ORCHESTRATOR", seller: "WORKER-CODE", milliSiu: NOMINAL_JOB_MILLI_SIU },
+  { job: "adversarial testing", classId: "code", buyer: "WORKER-CODE", seller: "WORKER-EXTRACT", milliSiu: ATTACK_JOB_MILLI_SIU },
+] as const;
+
+/** The job size the loop enforces for each seller, in SIU, keyed by the seller's erc8004 id. */
+export function requiredQuoteSizes(
+  sellerIds: Readonly<Record<"WORKER-CODE" | "WORKER-EXTRACT", string>>,
+): Record<string, string> {
+  return Object.fromEntries(
+    RUN_PURCHASES.map((p) => [sellerIds[p.seller], milliSiuToDecimalSiu(p.milliSiu)]),
+  );
+}
 
 const SECONDS_PER_DAY = 86_400n;
 
@@ -948,6 +971,12 @@ async function main(): Promise<void> {
    *  sweeps below still run: aborting by throwing would skip them and strand capacity into the
    *  next run, which is the §4.6al failure. */
   let topologyAbort: string | undefined;
+  // A turn that came back empty at the token budget twice running (loop/empty-completion.ts). The
+  // harness failed, so the run is stopped, kept on disk, and excluded from the block with its own
+  // reason — never read as a window the agents failed.
+  let infrastructureFailure:
+    | { agentId: string; windowIndex: number; turn: number; attempts: number; detail: string }
+    | undefined;
   // Claims minted in a window whose issuer never served them. Carried into later windows so the
   // default path is reachable at all — see runFullRunWindow's own `outstandingClaims` comment.
   const outstandingClaims: OutstandingClaim[] = [];
@@ -1046,10 +1075,10 @@ async function main(): Promise<void> {
       // Quantity is a property of the job and price floats. The buyer types the quote's terms and
       // the seller signs what was asked, so without this a buyer could request a thousandth of a
       // SIU and satisfy the testing purchase for a fraction of a cent.
-      requiredQuoteSiu: {
-        [workerCodeErc8004Id]: milliSiuToDecimalSiu(NOMINAL_JOB_MILLI_SIU),
-        [workerExtractErc8004Id]: milliSiuToDecimalSiu(ATTACK_JOB_MILLI_SIU),
-      },
+      requiredQuoteSiu: requiredQuoteSizes({
+        "WORKER-CODE": workerCodeErc8004Id,
+        "WORKER-EXTRACT": workerExtractErc8004Id,
+      }),
       ...(debug.preAuthoredGate ? { preAuthoredGateSource: KNOWN_GOOD_GATE_SOURCE } : {}),
       onPreAuthoredGate: (ok, summary) => {
         console.log(
@@ -1174,8 +1203,15 @@ async function main(): Promise<void> {
     // issuer's remaining headroom falls through to the next issuer — A's lot exists from deploy — and
     // in window 1 that is non-serving claims inside F1's measurement. Checked after the window, by
     // the same rule as the drain check, and BEFORE the drain: draining a contaminated run is pointless.
+    if (outcome.result.infrastructureFailure !== undefined) {
+      infrastructureFailure = { ...outcome.result.infrastructureFailure, windowIndex };
+    }
     const expectedIssuerId = topology?.expectedIssuerByWindow[windowIndex];
-    if (expectedIssuerId !== undefined && topologyAbort === undefined) {
+    if (
+      expectedIssuerId !== undefined &&
+      topologyAbort === undefined &&
+      infrastructureFailure === undefined
+    ) {
       topologyAbort = windowContamination(
         windowIndex,
         outcome.result.capacityEvents,
@@ -1191,7 +1227,8 @@ async function main(): Promise<void> {
       drainSpec !== undefined &&
       windowIndex === drainSpec.afterWindow &&
       windowIndex < runWindows &&
-      topologyAbort === undefined
+      topologyAbort === undefined &&
+      infrastructureFailure === undefined
     ) {
       if (topology.routeAfterDrain === undefined) {
         throw new Error("topology.drain requires routeAfterDrain (instrumentOf should have refused this)");
@@ -1290,9 +1327,19 @@ async function main(): Promise<void> {
       );
     }
 
+    if (infrastructureFailure !== undefined) {
+      console.log(
+        `\n=== INFRASTRUCTURE FAILURE — RUN STOPPED IN WINDOW ${windowIndex} ===\n` +
+          `  ${infrastructureFailure.detail}\n` +
+          "  The harness failed, not an agent: the turn was retried once and came back empty at the " +
+          "token budget again.\n  Not reported as a failed window, and excluded from the block. The " +
+          "close-out sweeps still run, so no capacity is stranded.\n",
+      );
+    }
+
     outcomes.push(outcome);
     printWindowSummary(outcome, totalOf);
-    if (topologyAbort !== undefined) break;
+    if (topologyAbort !== undefined || infrastructureFailure !== undefined) break;
   }
 
   await releaseExternalClaims({
@@ -1347,6 +1394,8 @@ async function main(): Promise<void> {
         ...(topologyAbort !== undefined
           ? { abortedBecause: topologyAbort, abortedAfterWindow: outcomes.length }
           : {}),
+        // Likewise for a run the harness failed: stated here, excluded by the block report.
+        ...(infrastructureFailure !== undefined ? { infrastructureFailure } : {}),
         f1: buildF1Report(
           outcomes.map((o) => ({
             windowIndex: o.windowIndex,

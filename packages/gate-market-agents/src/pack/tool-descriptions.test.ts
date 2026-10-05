@@ -82,6 +82,14 @@ describe("the payment tools are described neutrally and in parallel", () => {
     expect(long / short).toBeLessThan(1.6);
   });
 
+  it("keeps capacity facts out of both settlement tools: they live in the brief, where both assets see them", () => {
+    // "headroom, which is finite and shared" once sat on pay_with_claim alone — a scarcity cue on one
+    // asset's route and none on the other's. The same fact is in the brief for everyone.
+    for (const tool of ["pay", "pay_with_claim", "settle_split", "transfer_claim"] as const) {
+      expect(TOOL_DESCRIPTIONS[tool], tool).not.toMatch(/headroom|finite|shared|first-come|scarce|capacity is/i);
+    }
+  });
+
   it("states price parity as a fact about fSIU's sizing, without ranking it against USDC", () => {
     expect(TOOL_DESCRIPTIONS.pay_with_claim).toContain("worth the quote's dollar price at the print in force");
     expect(TOOL_DESCRIPTIONS.transfer_claim).toContain("worth its dollar price at the print in force");
