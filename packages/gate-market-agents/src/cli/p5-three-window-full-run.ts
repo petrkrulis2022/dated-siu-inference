@@ -36,6 +36,7 @@ import {
 import { WORK_CLAIM_ABI } from "../chain/abi.js";
 import { loadSkill, renderTemplate } from "../skills/registry.js";
 import { CANONICAL_ASSET_DESCRIPTION } from "../skills/asset-description.js";
+import { milliSiuToDecimalSiu } from "../loop/siu-units.js";
 import { BudgetCeiling } from "../budget/ceiling.js";
 import { ExperimentBudget } from "../budget/experiment-budget.js";
 import { validateModelAssignment, type ModelAssignments } from "../pack/model-assignment.js";
@@ -1000,6 +1001,13 @@ async function main(): Promise<void> {
       // 2026-10-04 (single-issuer plan D4), stamped into the manifest and report below so no run
       // under it can be pooled with one that predates it.
       requireTestingPurchase: true,
+      // Quantity is a property of the job and price floats. The buyer types the quote's terms and
+      // the seller signs what was asked, so without this a buyer could request a thousandth of a
+      // SIU and satisfy the testing purchase for a fraction of a cent.
+      requiredQuoteSiu: {
+        [workerCodeErc8004Id]: milliSiuToDecimalSiu(NOMINAL_JOB_MILLI_SIU),
+        [workerExtractErc8004Id]: milliSiuToDecimalSiu(ATTACK_JOB_MILLI_SIU),
+      },
       ...(debug.preAuthoredGate ? { preAuthoredGateSource: KNOWN_GOOD_GATE_SOURCE } : {}),
       onPreAuthoredGate: (ok, summary) => {
         console.log(
@@ -1518,6 +1526,8 @@ YOUR JOB THIS WINDOW
   you which to prefer:
 
   OPTION A — settle in USDC: request a quote from WORKER-CODE, then pay the real quote it issues.
+    (This job is ${milliSiuToDecimalSiu(NOMINAL_JOB_MILLI_SIU)} SIU: a request for any other size is
+    refused. The rate is yours to propose.)
     Step 1: {"tool": "request_quote", "args": {"siu": "10", "model": "${models["WORKER-CODE"]}",
       "rateUsdPerSiu": "${rateUsdPerSiu}", "indexVersion": "SIU-2026a",
       "printId": "${printId}", "printHash": "0x00", "sellerId": "${workerCodeErc8004Id}",
@@ -1623,7 +1633,9 @@ YOUR SITUATION THIS WINDOW (window ${windowIndex} of ${windowCount})
   testing; it does not do it for free. Whether to buy it, when, and in which asset is yours to
   decide and to pay for. It is ${ATTACK_JOB_MILLI_SIU} mSIU — smaller than the gate's
   ${NOMINAL_JOB_MILLI_SIU} mSIU, because writing an adversarial submission is less work than
-  authoring a hardened gate.
+  authoring a hardened gate. A quote for it must be for exactly
+  ${milliSiuToDecimalSiu(ATTACK_JOB_MILLI_SIU)} SIU: a request for any other size is refused, and
+  the rate is yours to propose.
 
   Ask for a quote first:
     {"tool": "request_quote", "args": {"siu": "${Number(ATTACK_JOB_MILLI_SIU) / 1000}",

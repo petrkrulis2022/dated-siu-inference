@@ -42,6 +42,7 @@ import { claimMilliSiuForQuote } from "./parity.js";
 import { ClaimLedger, type ClaimFlows } from "./claim-ledger.js";
 import {
   submitAttackRefusalFor,
+  quoteSizeRefusalFor,
   testingEngaged,
   windowCompletion,
   type IncompleteBecause,
@@ -166,6 +167,13 @@ export interface JobEnvelope {
 
 export interface FullRunWindowOptions {
   windowId: string;
+  /**
+   * The quantity of each seller's job, in SIU as a decimal string, keyed by the seller's erc8004
+   * id. Quantity is a property of the job and price floats: a `request_quote` naming another size
+   * is refused, and a paid quote of another size does not count as the testing purchase. A seller
+   * with no entry is unconstrained.
+   */
+  requiredQuoteSiu?: Readonly<Record<string, string>>;
   /**
    * The quote board for this window. Defaults to a fresh one — which is what every real run uses.
    * It exists so a test can place a real, signed quote on the board beforehand: `request_quote`
@@ -867,7 +875,8 @@ export async function runFullRunWindow(
   const attackerSellerIds = options.roster
     .filter((a) => a.availableTools.includes("submit_attack"))
     .map((a) => a.erc8004Id);
-  const testingIsEngaged = (): boolean => testingEngaged(board, attackerSellerIds);
+  const testingIsEngaged = (): boolean =>
+    testingEngaged(board, attackerSellerIds, options.requiredQuoteSiu);
   const agentIdByAddress = Object.fromEntries(
     options.roster.map((a) => [a.address.toLowerCase(), a.agentId]),
   ) as Record<string, AgentId>;
@@ -1815,6 +1824,7 @@ export async function runFullRunWindow(
         obligationsFor: buildObligationsFor,
         deliveryFor: buildDeliveryFor,
         caller: { agentId: agent.agentId, erc8004Id: agent.erc8004Id },
+        requiredQuoteSiu: options.requiredQuoteSiu,
       });
     } catch (err) {
       // A real, disclosed failure (an unknown requestId, a missing address) — not a crash. The
@@ -2597,6 +2607,8 @@ export interface BuildToolArgsContext {
    * the quote object itself. */
   caller?: { agentId: AgentId; erc8004Id: string };
   mintContext?: MintContext;
+  /** See `FullRunWindowOptions.requiredQuoteSiu`. */
+  requiredQuoteSiu?: Readonly<Record<string, string>>;
   /** Live, mutated by the loop as gates are delivered and attacked — see `submit_attack`'s case
    * below for why an adversary may choose neither its own target nor its own oracle seed. */
   attackContext?: AttackContext;
@@ -3389,6 +3401,17 @@ export async function buildToolArgs(
       passed: raw?.passed,
       receiptRef: raw?.receiptRef,
     };
+  }
+
+  if (tool === "request_quote") {
+    // The buyer proposes the rate; the quantity belongs to the job. Refused here, when the buyer
+    // asks, so a quote of the wrong size never exists to be signed or paid.
+    const asked = rawArgs as { sellerId?: unknown; siu?: unknown } | undefined;
+    if (typeof asked?.sellerId === "string") {
+      const refusal = quoteSizeRefusalFor(asked.sellerId, String(asked.siu ?? ""), ctx.requiredQuoteSiu);
+      if (refusal !== null) throw new Error(refusal);
+    }
+    return rawArgs;
   }
 
   if (tool === "issue_quote") {

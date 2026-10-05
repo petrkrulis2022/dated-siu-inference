@@ -2466,6 +2466,57 @@ agent-to-agent transfers count as received (an agent has no other reason to move
 another agent) and are reported apart (`receivedUnkeyedMilliSiu`) so a reading can say whether
 eligibility depended on them.
 
+### 4.6au Quantity is a property of the job; the buyer sets the price, the seller only signs
+
+Single-issuer instrument, apparatus change valid on either topology. **Who decides a quote's
+terms.** A buyer types every term into `request_quote`, and `issue_quote` takes only a `requestId`
+and signs the buyer's own stored body: a seller decides *whether* to sign and can alter nothing,
+including what the quote settles in (asserted by handing the builder every term a seller might try
+to change). So price **and size** were buyer-set, and the D4 testing purchase counted any paid
+quote from the attacker at any size — a request for a thousandth of a SIU at a fraction of a cent
+satisfied it, the same class of hole as §4.6ar's transfer.
+
+**The rule: quantity is the job's, price floats.** The runner states each seller's job size — 10 SIU
+for the gate, 4 SIU for testing, from its own constants — and a `request_quote` naming another size
+is refused when the buyer asks, so a quote of the wrong size never exists to be signed or paid.
+Engagement is counted the same way: a paid quote of another quantity does not engage. The refusal
+says what the size is and that the rate is the buyer's, and the briefs say both before the refusal
+can happen; a pairing test asserts the size shown in each brief's example is the size enforced.
+A near-zero *price* is still possible and is left free by design; the cost metric reports what was
+actually settled, so it is visible.
+
+### 4.6av Tool descriptions are held to the same neutrality as the asset text
+
+The canonical asset text is byte-compared and the pre-turn validator's blocklist searches the pack
+and the tool-call history. **Neither covers `TOOL_DESCRIPTIONS`**, which every agent sees every turn
+and which now carries the price-parity statements. Found by reading them against each other:
+`pay` was 207 characters and `pay_with_claim` 494; `pay_with_claim` was framed "in fSIU instead of
+USDC" (making USDC the default), carried a one-sided scarcity note ("headroom, which is finite and
+shared") that `pay` had no counterpart for, and `transfer_claim` was sold as "free" and "instead of
+paying in dollars". None is a blocklisted phrase and each can lean an agent.
+
+They are rewritten to the same shape — `settles a quote the seller issued, in <asset>: …` — at 310
+and 382 characters. A test now runs the blocklist over **every** description, rejects comparative
+and loaded wording in the four payment tools, and asserts `pay` and `pay_with_claim` open alike,
+state how the amount is set from the quote, and stay within 1.6× of each other in length. The
+scarcity sentence was dropped rather than mirrored: the briefs do not otherwise state it next to
+the payment options, so this removes one cue and does not add one — reviewable. The asset text
+already states, and a test already pins, that a claim is redeemable from "the issuer named on the
+claim", settles "against its bond" if a presented claim is not delivered, and "expires when it
+closes", all true in every window.
+
+### 4.6aw No floating point in the settlement path
+
+`settle_split` computed `claimShare` as `(Number(a) / Number(b)).toFixed(4)` and its budget spend
+the same way. A share is a ratio and not money, but it is derived from money, it is what F1 reports
+per split, and it printed 0.1812 for 29/160 = 0.18125 exactly (a float stores the tie a hair
+low). Both are now integer arithmetic, half-up on the exact ratio, checked over 5,000 generated
+pairs against the SDK's decimal library as an independent reference. Changed before the first
+debug run because anything changed after it resets the freeze, and a rounding error in settlement
+is what the conservation checks must never see. The remaining floats in this package are inference
+**cost** accounting (`totalRealizedUsd`, per-provider spend) and a display sort — neither moves
+money between parties.
+
 ## 5. Identity, wallets and chain
 
 ### 5.1 Chain

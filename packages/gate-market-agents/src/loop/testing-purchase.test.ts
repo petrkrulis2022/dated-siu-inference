@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { QuoteBody, TouchstoneQuote } from "@touchstone/sdk";
 import { QuoteBoard } from "./quote-board.js";
-import { submitAttackRefusalFor, testingEngaged, windowCompletion } from "./testing-purchase.js";
+import { quoteSizeRefusalFor, submitAttackRefusalFor, testingEngaged, windowCompletion } from "./testing-purchase.js";
 
 const EXTRACT = "erc8004:0xEXTRACT";
 const CODE = "erc8004:0xCODE";
 
-function body(sellerId: string): QuoteBody {
+function body(sellerId: string, siu = "4"): QuoteBody {
   return {
     schema_version: "2.0",
-    siu: "4",
+    siu,
     pattern: "fixed",
     model: "m",
     rate_usd_per_siu: "0.001424",
@@ -55,6 +55,59 @@ describe("testingEngaged", () => {
     const { board, requestId } = answered(EXTRACT);
     board.recordPaid(requestId, "usdc");
     expect(testingEngaged(board, [])).toBe(false);
+  });
+});
+
+describe("testingEngaged — quantity is a property of the job, price floats", () => {
+  const REQUIRED = { [EXTRACT]: "4" };
+  const paidFor = (siu: string) => {
+    const board = new QuoteBoard();
+    const b = body(EXTRACT, siu);
+    const r = board.postRequest("WORKER-CODE", b);
+    board.postIssuedQuote(r.requestId, { ...b, sig: "0xsig" } as TouchstoneQuote);
+    board.recordPaid(r.requestId, "usdc");
+    return board;
+  };
+
+  it("does NOT count a paid quote for a different quantity than the job's — 0.001 SIU is not testing", () => {
+    // The hole: engagement used to be "any quote the attacker issued was paid", at any size. A
+    // buyer could request a thousandth of a SIU at a fraction of a cent and satisfy the purchase.
+    expect(testingEngaged(paidFor("0.001"), [EXTRACT], REQUIRED)).toBe(false);
+    expect(testingEngaged(paidFor("40"), [EXTRACT], REQUIRED)).toBe(false);
+  });
+
+  it("counts a paid quote for the job's quantity however it is written, at any price", () => {
+    for (const siu of ["4", "4.0", "4.000"]) {
+      expect(testingEngaged(paidFor(siu), [EXTRACT], REQUIRED), siu).toBe(true);
+    }
+  });
+
+  it("changes nothing when no quantity is required", () => {
+    expect(testingEngaged(paidFor("0.001"), [EXTRACT])).toBe(true);
+  });
+});
+
+describe("quoteSizeRefusalFor — a request must name the job's size", () => {
+  const REQUIRED = { "erc8004:0xCODE": "10", "erc8004:0xEXTRACT": "4" };
+
+  it("refuses a request for another size from a seller whose job has one, and says what the size is", () => {
+    const why = quoteSizeRefusalFor("erc8004:0xEXTRACT", "0.001", REQUIRED);
+    expect(why).toMatch(/4 SIU/);
+    expect(why).toMatch(/price is yours/i);
+  });
+
+  it("accepts the job's size however written", () => {
+    for (const siu of ["4", "4.0", "4.000"]) expect(quoteSizeRefusalFor("erc8004:0xEXTRACT", siu, REQUIRED), siu).toBeNull();
+    expect(quoteSizeRefusalFor("erc8004:0xCODE", "10", REQUIRED)).toBeNull();
+  });
+
+  it("is silent for a seller with no fixed job, and when nothing is required", () => {
+    expect(quoteSizeRefusalFor("erc8004:0xOTHER", "0.001", REQUIRED)).toBeNull();
+    expect(quoteSizeRefusalFor("erc8004:0xEXTRACT", "0.001", undefined)).toBeNull();
+  });
+
+  it("refuses a size that is not a decimal at all, rather than comparing garbage", () => {
+    expect(quoteSizeRefusalFor("erc8004:0xEXTRACT", "four", REQUIRED)).not.toBeNull();
   });
 });
 

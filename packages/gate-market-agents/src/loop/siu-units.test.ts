@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decimalSiuToMilliSiu } from "./siu-units.js";
+import { decimalSiuToMilliSiu, milliSiuToDecimalSiu } from "./siu-units.js";
 
 describe("decimalSiuToMilliSiu", () => {
   it("converts whole and fractional SIU exactly", () => {
@@ -33,6 +33,22 @@ describe("decimalSiuToMilliSiu", () => {
     expect(() => decimalSiuToMilliSiu("0.000")).toThrow(/zero/);
     for (const bad of ["", "abc", "-1", "1e3", "1,5", "1.", ".5"]) {
       expect(() => decimalSiuToMilliSiu(bad), JSON.stringify(bad)).toThrow();
+    }
+  });
+});
+
+describe("milliSiuToDecimalSiu", () => {
+  it("writes whole and fractional SIU exactly", () => {
+    expect(milliSiuToDecimalSiu(10_000n)).toBe("10");
+    expect(milliSiuToDecimalSiu(4_000n)).toBe("4");
+    expect(milliSiuToDecimalSiu(4_500n)).toBe("4.5");
+    expect(milliSiuToDecimalSiu(1n)).toBe("0.001");
+    expect(milliSiuToDecimalSiu(0n)).toBe("0");
+  });
+
+  it("round-trips with decimalSiuToMilliSiu for every whole milli-SIU tried", () => {
+    for (const m of [1n, 9n, 10n, 100n, 999n, 1_000n, 1_001n, 12_345n, 4_000n, 10_000n]) {
+      expect(decimalSiuToMilliSiu(milliSiuToDecimalSiu(m))).toBe(m.toString());
     }
   });
 });
