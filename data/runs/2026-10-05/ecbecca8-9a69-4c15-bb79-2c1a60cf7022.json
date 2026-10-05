@@ -1,0 +1,18 @@
+{
+  "run_id": "ecbecca8-9a69-4c15-bb79-2c1a60cf7022",
+  "model_id": "gpt-5.1",
+  "task_class": "T2",
+  "instance_id": "T2-03",
+  "seed": 3555230813,
+  "attempt": 1,
+  "usage": {
+    "input": 21751,
+    "output": 27,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 1459,
+  "gate_passed": true,
+  "raw_response_ref": "ecbecca8-9a69-4c15-bb79-2c1a60cf7022.raw.json",
+  "deviations": []
+}
