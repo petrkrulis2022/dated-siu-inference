@@ -50,7 +50,7 @@ import {
 } from "./allowances.js";
 import { buildF1Report, sellerFeeAsymmetry } from "./instrument-report.js";
 import { instrumentOf, parseInstrumentFlags, type InstrumentSpec } from "./instrument.js";
-import { checkAfterDrain, planDrain, readUntilStable, windowContamination } from "./topology.js";
+import { checkAfterDrain, planRedrain, planDrain, readUntilStable, windowContamination } from "./topology.js";
 import { ViemChainReader } from "../chain/reader.js";
 import { ForwardQuoteBook } from "../loop/forward-book.js";
 import { renderPurchaseSummary, summarisePurchases } from "../loop/purchases.js";
@@ -87,6 +87,11 @@ import {
   type DebugConfig,
 } from "./debug-mode.js";
 import { KNOWN_GOOD_GATE_PROVENANCE, KNOWN_GOOD_GATE_SOURCE } from "./known-good-gate.js";
+import { STUB_ATTACK_SOURCE, scriptedSeats, type ScriptedSeats } from "./scripted-policy.js";
+import { renderWalk, verifyWalk, type WalkReport } from "./scripted-verify.js";
+import { toolErrorsOf } from "./tool-errors.js";
+import { nextOutstanding } from "./outstanding.js";
+import { settlementCopyShown } from "./settlement-copy.js";
 import { capabilityGapFrictions, missingToolFrictions } from "../friction/missing-tool.js";
 import type { FrictionLogEntry } from "../friction/log.js";
 import {
@@ -193,6 +198,16 @@ function setRunWindows(n: number): void {
  */
 export const WINDOW_SECONDS = 2400n;
 
+/** The window length this process is actually running with: `WINDOW_SECONDS` unless `--window-seconds`
+ *  shortened it (a scripted run on a real chain would otherwise take two hours). Set once, in `main`,
+ *  before any window's bounds are computed. Any value but the production one disqualifies the run. */
+let windowSeconds = WINDOW_SECONDS;
+
+/** The name a scripted seat runs under, in place of a model: it is stated in the manifest and report
+ *  so no scripted run is mistaken for one in which a model decided. */
+const SCRIPTED_MODEL = "scripted";
+const FREE_OF_CHARGE = { priceInUsdPer1M: "0", priceOutUsdPer1M: "0" } as const;
+
 /**
  * The simulated external buyer's schedule, in mSIU of `code`-class capacity taken between
  * windows. It is a schedule, not a reaction: these numbers are fixed here before the run starts,
@@ -268,9 +283,15 @@ const NOMINAL_JOB_MILLI_SIU = 10_000n;
  * **A schedule, never advice.** The test applied to every line: could a buyer read this and
  * rationally decide to do nothing? Anything resembling "you will need capacity later",
  * "consider reserving", or "holding may be advantageous" is a steer and must not appear here.
- * It lists only what this run actually buys — naming work that never arrives would be a brief
+ * It lists only what this run actually schedules — naming work that never arrives would be a brief
  * describing a world the agent is not in, and capacity reserved against it is stranded on false
  * information.
+ *
+ * **It claims no exclusivity.** An earlier draft said "no other work is bought in this run". Nothing
+ * enforces that: `request_quote` fixes the size of a given seller's job, not which pairs may trade
+ * or how often, so a buyer can always request another quote. The window count and the opening times
+ * are fixed before the run starts, so those are stated flatly; everything else is stated as what is
+ * scheduled, which is true whatever else an agent chooses to do. Pinned by a test over every brief.
  */
 export function scheduleFacts(
   windowIndex: number,
@@ -283,8 +304,7 @@ export function scheduleFacts(
     .sort((a, b) => a.index - b.index);
   if (remaining.length === 0) {
     return `THE REST OF THIS RUN
-  This is window ${windowIndex} of ${windowCount}, the last one. No further windows open, and no
-  further work is bought in this run.`;
+  This is window ${windowIndex} of ${windowCount}, the last one. No window opens after it.`;
   }
   const lines = remaining
     .map(
@@ -297,8 +317,8 @@ export function scheduleFacts(
     )
     .join("\n");
   return `THE REST OF THIS RUN
-  This run has ${windowCount} windows. This is window ${windowIndex}. What follows is every purchase
-  the run makes after this window — no other work is bought in this run.
+  This run has ${windowCount} windows. This is window ${windowIndex}. The purchases scheduled for each
+  later window are:
 ${lines}
   Each job is priced at the print published for its own day. A window's job does not exist until
   that window opens.`;
@@ -470,7 +490,9 @@ export function defaultReachability(
  *  behavioural statistic by being recorded here rather than in any window's agent record. */
 export type OperatorAction =
   | {
-      kind: "drain";
+      /** `redrain`: the operator took back capacity that had returned to the drained issuer after a
+       *  later window (see `planRedrain`). */
+      kind: "drain" | "redrain";
       afterWindow: number;
       issuer: string;
       requestedMilliSiu: string;
@@ -479,7 +501,7 @@ export type OperatorAction =
       backedBy?: string;
       failedBecause?: string;
     }
-  | { kind: "drain_skipped"; afterWindow: number; issuer: string; reason: string }
+  | { kind: "drain_skipped" | "redrain_skipped"; afterWindow: number; issuer: string; reason: string }
   | {
       kind: "topology_check";
       afterWindow: number;
@@ -509,6 +531,7 @@ async function main(): Promise<void> {
   // first lines, not in a footnote after $3 of inference.
   const debug: DebugConfig = parseDebugFlags(process.argv.slice(2), WINDOW_COUNT);
   setRunWindows(debug.windows);
+  windowSeconds = BigInt(debug.windowSeconds);
   console.log(renderDebugBanner(debug, WINDOW_COUNT));
   console.log("");
 
@@ -548,7 +571,7 @@ async function main(): Promise<void> {
   }
 
   const deployment = loadGateMarketDeployment(deploymentFile);
-  const apiKeys = loadApiKeysFromEnv();
+  const apiKeys = debug.scripted ? {} : loadApiKeysFromEnv();
   const rpcUrl = process.env.BASE_SEPOLIA_RPC_URL ?? "";
   const chainReader = new ViemChainReader(deployment, rpcUrl);
 
@@ -558,6 +581,7 @@ async function main(): Promise<void> {
   const classId = classIdFor("code") as Hex;
 
   const registryEntry = (id: string): { provider: string; host: string } => {
+    if (debug.scripted && id === SCRIPTED_MODEL) return { provider: SCRIPTED_MODEL, host: "none" };
     const entry = registry.find((r: { id: string }) => r.id === id);
     if (!entry) throw new Error(`"${id}" is not a registered model.`);
     return { provider: entry.provider, host: entry.host };
@@ -577,9 +601,11 @@ async function main(): Promise<void> {
   const models = Object.fromEntries(
     Object.entries(assigned).map(([agentId, model]) => [
       agentId,
-      debug.cheapNonDeciders && !DECIDER_SEATS.includes(agentId as AgentId)
-        ? debug.cheapModel
-        : model,
+      debug.scripted
+        ? SCRIPTED_MODEL
+        : debug.cheapNonDeciders && !DECIDER_SEATS.includes(agentId as AgentId)
+          ? debug.cheapModel
+          : model,
     ]),
   ) as Record<keyof typeof assigned, string>;
   // Every seat's model must have a price BEFORE anything is spent.
@@ -593,7 +619,7 @@ async function main(): Promise<void> {
   // A missing price is not a small bug. The projection is what the run cap is enforced against,
   // so a silently absent one would mean a run spending with no ceiling at all.
   const unpriced = Object.entries(models)
-    .filter(([, model]) => PRICES[model] === undefined)
+    .filter(([, model]) => !debug.scripted && PRICES[model] === undefined)
     .map(([agentId, model]) => `${agentId} -> ${model}`);
   if (unpriced.length > 0) {
     throw new Error(
@@ -617,11 +643,17 @@ async function main(): Promise<void> {
     console.log("");
   }
 
-  const adapters = Object.fromEntries(
-    Object.entries(models).map(([agentId, model]) => [
-      agentId,
-      withRetry(createAdapterFor(registryEntry(model), apiKeys)),
-    ]),
+  // A scripted run calls no model, so there is no adapter to build and no key to need; the scripted
+  // seats are put in below, once the ids they quote have been derived.
+  const adapters = (
+    debug.scripted
+      ? {}
+      : Object.fromEntries(
+          Object.entries(models).map(([agentId, model]) => [
+            agentId,
+            withRetry(createAdapterFor(registryEntry(model), apiKeys)),
+          ]),
+        )
   ) as Record<keyof typeof models, ReturnType<typeof withRetry>>;
 
   // Before anything is spent or any claim is minted. Two runs in two days died mid-flight on an
@@ -632,7 +664,7 @@ async function main(): Promise<void> {
   //
   // Fatal, not advisory: a provider that cannot answer now will take the run down mid-window,
   // and §7.1a then costs the whole run anyway. Better to spend nothing.
-  {
+  if (!debug.scripted) {
     const byProvider = new Map<string, { model: string; adapter: Adapter }>();
     for (const [agentId, model] of Object.entries(models)) {
       const provider = registryEntry(model).provider;
@@ -680,6 +712,24 @@ async function main(): Promise<void> {
 
   const workerCodeErc8004Id = erc8004IdFor(addresses["WORKER-CODE"]);
   const workerExtractErc8004Id = erc8004IdFor(addresses["WORKER-EXTRACT"]);
+
+  // The walk's seats, built from the run's own constants — job sizes from RUN_PURCHASES, never
+  // retyped — and filled into `adapters` so that everything downstream sees an ordinary roster.
+  let scripted: ScriptedSeats | undefined;
+  if (debug.scripted) {
+    const sizeOf = (job: string): string =>
+      milliSiuToDecimalSiu(RUN_PURCHASES.find((p) => p.job === job)!.milliSiu);
+    scripted = scriptedSeats({
+      sellerIds: { "WORKER-CODE": workerCodeErc8004Id, "WORKER-EXTRACT": workerExtractErc8004Id },
+      print: { printId, printHash: "0x00", rateUsdPerSiu, indexVersion: "SIU-2026a" },
+      chain: "base-sepolia",
+      sizes: { gate: sizeOf("gate authoring"), testing: sizeOf("adversarial testing") },
+      quoteExpirySeconds: Number(windowSeconds),
+      pinnedGateSource: KNOWN_GOOD_GATE_SOURCE,
+      attackSource: STUB_ATTACK_SOURCE,
+    });
+    Object.assign(adapters, scripted.adapters);
+  }
 
   const referenceInstance = withPinnedTestSuite(CODE_REFERENCE);
   const heldOutInstances = CODE_HELD_OUT_INSTANCES.map(withPinnedTestSuiteHeldOut) as [
@@ -747,8 +797,8 @@ async function main(): Promise<void> {
   const windowBoundsByIndex: Record<number, { from: bigint; to: bigint }> = {};
   for (let i = 1; i <= runWindows; i++) {
     windowBoundsByIndex[i] = {
-      from: runStart + BigInt(i - 1) * WINDOW_SECONDS,
-      to: runStart + BigInt(i) * WINDOW_SECONDS,
+      from: runStart + BigInt(i - 1) * windowSeconds,
+      to: runStart + BigInt(i) * windowSeconds,
     };
   }
 
@@ -896,24 +946,30 @@ async function main(): Promise<void> {
 
   // Before anything else costs anything: one trivial call per provider. Throws and stops the run
   // if any cannot answer — see assertProvidersReachable for why this exists.
-  const providersChecked = await assertProvidersReachable(
-    adapters as unknown as Record<
-      string,
-      (
-        m: string,
-        p: string,
-        params: { temperature: number; max_tokens: number },
-      ) => Promise<unknown>
-    >,
-    models,
-    (model) => registryEntry(model).provider,
-  );
-  console.log(
-    `Providers REACHABLE, verified before window 1 with one real call each: ` +
-      providersChecked.map((c) => `${c.provider} (${c.model})`).join(", ") +
-      `. Four provider interruptions in two weeks made this a pre-flight check rather than something ` +
-      `discovered mid-run.`,
-  );
+  // Nothing to reach: a scripted run calls no model, and sending a one-token prompt through a
+  // scripted seat would only make it refuse a prompt it cannot place in a window.
+  if (debug.scripted) {
+    console.log("Providers: none to check — a scripted run calls no model.");
+  } else {
+    const providersChecked = await assertProvidersReachable(
+      adapters as unknown as Record<
+        string,
+        (
+          m: string,
+          p: string,
+          params: { temperature: number; max_tokens: number },
+        ) => Promise<unknown>
+      >,
+      models,
+      (model) => registryEntry(model).provider,
+    );
+    console.log(
+      `Providers REACHABLE, verified before window 1 with one real call each: ` +
+        providersChecked.map((c) => `${c.provider} (${c.model})`).join(", ") +
+        `. Four provider interruptions in two weeks made this a pre-flight check rather than something ` +
+        `discovered mid-run.`,
+    );
+  }
 
   console.log(ONE_POOL_DISCLOSURE);
 
@@ -939,6 +995,9 @@ async function main(): Promise<void> {
     instrumentChanges: [
       "payment_symmetry: pay_with_claim settles a seller-issued quote, like pay (2026-10-04)",
       "passed_requires_testing_purchase: passed = gate passed AND testing paid for AND carried out (2026-10-04)",
+      "claims_have_positions: a claim is tracked per holder — what each holds, presents and is served — so one passed on in part, or two in one window, are no longer one slot overwritten (2026-10-05)",
+      "drained_issuer_stays_drained: after every window later than the drain the operator takes back capacity that returned to the drained issuer, before its own scheduled mint (2026-10-05)",
+      "empty_at_token_budget_is_retried_once: a completion that ends at the token limit with no text is retried once and, if it recurs, the run is infrastructure-failed and excluded (2026-10-05)",
     ],
     debugMode: {
       enabled: debug.enabled,
@@ -953,7 +1012,9 @@ async function main(): Promise<void> {
           providersExercised: collapse.exercised,
       providersNotExercised: collapse.dropped,
       validatesTheBlocksRoster: collapse.dropped.length === 0,
-      exercisesTimeGatedBehaviour: !debug.preAuthoredGate && !debug.cheapNonDeciders,
+      exercisesTimeGatedBehaviour: !debug.preAuthoredGate && !debug.cheapNonDeciders && !debug.scripted,
+      scripted: debug.scripted,
+      windowSeconds: debug.windowSeconds,
 },
     windowBounds: Object.fromEntries(
       Object.entries(windowBoundsByIndex).map(([i, b]) => [
@@ -1016,7 +1077,7 @@ async function main(): Promise<void> {
         .join(", ")} (total ${totalOf(headroomBefore)} mSIU).`,
     );
 
-    const roster = buildRoster({
+    const builtRoster = buildRoster({
       windowIndex,
       windowBoundsByIndex,
       headroomBefore,
@@ -1036,6 +1097,11 @@ async function main(): Promise<void> {
       windowFrom,
       windowTo,
     });
+    // A scripted seat calls no model and so costs nothing: its projection is zero, which keeps a
+    // scripted run from spending the experiment cap on inference it never bought.
+    const roster = debug.scripted
+      ? builtRoster.map((agent) => ({ ...agent, prices: FREE_OF_CHARGE }))
+      : builtRoster;
 
     const mintContext: MintContext = {
       publisherPrivateKeyHex: toHex(
@@ -1123,46 +1189,142 @@ async function main(): Promise<void> {
     const headroomAfter = await headroomRows();
     const outcome: WindowOutcome = { windowIndex, result, headroomBefore, headroomAfter };
 
-    // What this window minted and nobody served. Read from the real capacity events rather than
-    // from any agent's account of what it did: a mint with no matching serve_redemption is an
-    // unserved claim, whatever anyone says about it. A claim settled this window drops off the
-    // list for every later one.
-    const servedThisWindow = new Set(
-      result.capacityEvents.filter((e) => e.kind === "serve_redemption").map((e) => e.tokenId),
+    // What this window leaves for the next one to settle: every position in a claim still held,
+    // PER HOLDER, from the loop's own record of every mint and transfer. This was one entry per mint
+    // with the payee as holder, which stopped being true the moment a claim was passed on in part —
+    // the share that left the payee was never listed, so it was never settled and the capacity it
+    // consumed stayed consumed (found by the first scripted walk on a fork, 2026-10-05; see
+    // outstanding.ts). Presentation decides whether settling pays the holder or nobody
+    // (fsiu-design.md §4.3a), and travels with each position into later windows.
+    const carried = nextOutstanding(
+      outstandingClaims,
+      {
+        windowIndex,
+        capacityEvents: result.capacityEvents,
+        claimPositions: result.claimPositions,
+      },
+      addresses,
     );
-    const settledThisWindow = new Set(
-      result.capacityEvents.filter((e) => e.kind === "settle_window_close").map((e) => e.tokenId),
-    );
-    // Presentation decides whether settling pays the holder or nobody, so it has to travel with
-    // the claim into later windows (fsiu-design.md §4.3a). Read from the run's own real
-    // redeem_claim events, never assumed: a claim this run never saw presented is reported as
-    // such rather than guessed either way.
-    const presentedThisWindow = new Set(
-      result.capacityEvents.filter((e) => e.kind === "redeem_claim").map((e) => e.tokenId),
-    );
-    for (const c of outstandingClaims) {
-      if (presentedThisWindow.has(c.tokenId)) c.everPresented = true;
+    outstandingClaims.length = 0;
+    outstandingClaims.push(...carried);
+
+    const topology = instrument.topology;
+    const drainSpec = topology?.drain;
+    if (outcome.result.infrastructureFailure !== undefined) {
+      infrastructureFailure = { ...outcome.result.infrastructureFailure, windowIndex };
     }
-    for (let i = outstandingClaims.length - 1; i >= 0; i--) {
-      if (settledThisWindow.has(outstandingClaims[i].tokenId)) outstandingClaims.splice(i, 1);
-    }
-    for (const e of result.capacityEvents) {
-      if (e.kind !== "mint_claim" && e.kind !== "pay_with_claim") continue;
-      if (!e.tokenId || servedThisWindow.has(e.tokenId)) continue;
-      outstandingClaims.push({
-        tokenId: e.tokenId,
-        holder: e.counterparty ?? addresses.ORCHESTRATOR,
-        holderAgentId: e.counterparty === addresses["WORKER-CODE"] ? "WORKER-CODE" : undefined,
-        issuerAgentId:
-          e.issuer === addresses["ISSUER-A"]
-            ? "ISSUER-A"
-            : e.issuer === addresses["ISSUER-B"]
-              ? "ISSUER-B"
-              : undefined,
-        quantityMilliSiu: e.quantityMilliSiu,
-        mintedInWindow: windowIndex,
-        everPresented: presentedThisWindow.has(e.tokenId),
+
+    // Mint the drained issuer's headroom away, dated to the run's end and never presented — an
+    // operator action, kept out of every behavioural statistic. Used for the drain after the
+    // configured window and for the re-drain after later ones; returns why the topology can no
+    // longer be trusted, or undefined.
+    const executeDrain = async (kind: "drain" | "redrain", quantity: bigint): Promise<string | undefined> => {
+      if (drainSpec === undefined) throw new Error("executeDrain without a drain configured");
+      const drainAddress = addressOf(drainSpec.issuer);
+      const drained = await depleteExternally({
+        label:
+          kind === "drain"
+            ? `OPERATOR DRAIN — ${drainSpec.issuer}, configured in the deployment record`
+            : `OPERATOR RE-DRAIN — ${drainSpec.issuer}, capacity that came back to it`,
+        quantityMilliSiu: quantity,
+        classId,
+        deployment,
+        rpcUrl,
+        commodityPrint,
+        rateUsdPerSiu,
+        windowSeconds,
+        runEndsAtUnixSeconds: windowBoundsByIndex[runWindows].to,
+        chainReader,
       });
+      // Swept at run end with the external buyer's claims, by the same path.
+      if (drained.tokenId !== undefined && drained.holder !== undefined) {
+        externalClaims.push({
+          tokenId: drained.tokenId,
+          holder: drained.holder,
+          quantityMilliSiu: Number(quantity),
+        });
+      }
+      operatorActions.push({
+        kind,
+        afterWindow: windowIndex,
+        issuer: drainSpec.issuer,
+        requestedMilliSiu: quantity.toString(),
+        ...(drained.txHash !== undefined ? { txHash: drained.txHash } : {}),
+        ...(drained.tokenId !== undefined ? { tokenId: drained.tokenId.toString() } : {}),
+        ...(drained.issuer !== undefined ? { backedBy: drained.issuer } : {}),
+        ...(drained.failedBecause !== undefined ? { failedBecause: drained.failedBecause } : {}),
+      });
+      if (drained.failedBecause !== undefined) {
+        return `the ${kind === "drain" ? "drain" : "re-drain"} of ${drainSpec.issuer} failed: ${drained.failedBecause}`;
+      }
+      if (drained.issuer?.toLowerCase() !== drainAddress.toLowerCase()) {
+        // First-fit chose someone else, so the right issuer was NOT drained and the wrong one was.
+        return (
+          `the ${kind === "drain" ? "drain" : "re-drain"} was backed by ${drained.issuer ?? "an unknown issuer"}, not ` +
+          `${drainSpec.issuer} (${drainAddress})`
+        );
+      }
+      return undefined;
+    };
+
+    // Both preconditions, read from a fresh client, retried until they hold or the attempts run
+    // out. A stale read understates a change, so a failure on the first attempt is expected to
+    // resolve; one that does not is real.
+    const verifyDrained = async (): Promise<string | undefined> => {
+      if (topology === undefined || drainSpec === undefined || topology.routeAfterDrain === undefined) {
+        throw new Error("verifyDrained needs a topology with a drain and routeAfterDrain");
+      }
+      const drainAddress = addressOf(drainSpec.issuer);
+      const expectedRoute = addressOf(topology.routeAfterDrain);
+      const fresh = () => new ViemChainReader(deployment, rpcUrl);
+      let verdict: ReturnType<typeof checkAfterDrain> = { ok: false, reason: "not read" };
+      let reading = { drainIssuerHeadroom: -1n, routedTo: null as string | null, expectedRoute };
+      for (let attempt = 0; attempt < 8 && !verdict.ok; attempt++) {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 3_000));
+        reading = {
+          drainIssuerHeadroom: await fresh().headroom(drainAddress, classId),
+          routedTo: await fresh().routeFor(classId, NOMINAL_JOB_MILLI_SIU),
+          expectedRoute,
+        };
+        verdict = checkAfterDrain(reading);
+      }
+      operatorActions.push({
+        kind: "topology_check",
+        afterWindow: windowIndex,
+        drainIssuerHeadroomMilliSiu: reading.drainIssuerHeadroom.toString(),
+        routedTo: reading.routedTo,
+        expectedRoute,
+        ok: verdict.ok,
+        ...(!verdict.ok ? { reason: verdict.reason } : {}),
+      });
+      return verdict.ok ? undefined : verdict.reason;
+    };
+
+    // KEEP THE DRAINED ISSUER DRAINED. The plan says it "stays at zero through every window after
+    // window 1" (D2), and it does not by itself: a window-1 claim nobody served is settled in a
+    // later window — the enforcement the instrument exists to exercise — and settling returns its
+    // capacity to the issuer that was drained. Found by the first scripted walk on a fork (an
+    // Expired settlement handed ISSUER-B 3,967 mSIU back in window 2, the operator's own mint after
+    // that window was backed by B, and the run — correctly — aborted). So after every later window
+    // the operator takes back whatever came back, and does it BEFORE the external buyer's scheduled
+    // mint below, so that mint cannot fall through to the drained issuer.
+    if (
+      topology !== undefined &&
+      drainSpec !== undefined &&
+      windowIndex > drainSpec.afterWindow &&
+      windowIndex < runWindows &&
+      topologyAbort === undefined &&
+      infrastructureFailure === undefined
+    ) {
+      const fresh = () => new ViemChainReader(deployment, rpcUrl);
+      const regained = await readUntilStable(() => fresh().headroom(addressOf(drainSpec.issuer), classId));
+      const plan = planRedrain(drainSpec, windowIndex, regained);
+      if (plan.action === "drain") {
+        topologyAbort = await executeDrain("redrain", plan.quantityMilliSiu);
+        if (topologyAbort === undefined) topologyAbort = await verifyDrained();
+      } else {
+        operatorActions.push({ kind: "redrain_skipped", afterWindow: windowIndex, issuer: drainSpec.issuer, reason: plan.reason });
+      }
     }
 
     const depletion = EXTERNAL_DEPLETION_MILLI_SIU[windowIndex];
@@ -1174,7 +1336,7 @@ async function main(): Promise<void> {
         rpcUrl,
         commodityPrint,
         rateUsdPerSiu,
-        windowSeconds: WINDOW_SECONDS,
+        windowSeconds,
         runEndsAtUnixSeconds: windowBoundsByIndex[runWindows].to,
         chainReader,
       });
@@ -1196,16 +1358,10 @@ async function main(): Promise<void> {
       };
     }
 
-    const topology = instrument.topology;
-    const drainSpec = topology?.drain;
-
     // Is this window's capacity what the topology says it is? A single mint larger than the serving
     // issuer's remaining headroom falls through to the next issuer — A's lot exists from deploy — and
     // in window 1 that is non-serving claims inside F1's measurement. Checked after the window, by
     // the same rule as the drain check, and BEFORE the drain: draining a contaminated run is pointless.
-    if (outcome.result.infrastructureFailure !== undefined) {
-      infrastructureFailure = { ...outcome.result.infrastructureFailure, windowIndex };
-    }
     const expectedIssuerId = topology?.expectedIssuerByWindow[windowIndex];
     if (
       expectedIssuerId !== undefined &&
@@ -1234,7 +1390,6 @@ async function main(): Promise<void> {
         throw new Error("topology.drain requires routeAfterDrain (instrumentOf should have refused this)");
       }
       const drainAddress = addressOf(drainSpec.issuer);
-      const expectedRoute = addressOf(topology.routeAfterDrain);
       // A fresh client for every read, and stable across two of them (see `readUntilStable`): a
       // stale-HIGH headroom would over-size the drain, and first-fit would then skip the drained
       // issuer and mint against the next one instead.
@@ -1242,44 +1397,7 @@ async function main(): Promise<void> {
       const headroomNow = await readUntilStable(() => fresh().headroom(drainAddress, classId));
       const plan = planDrain(drainSpec, windowIndex, headroomNow);
       if (plan.action === "drain") {
-        const drained = await depleteExternally({
-          label: `OPERATOR DRAIN — ${drainSpec.issuer}, configured in the deployment record`,
-          quantityMilliSiu: plan.quantityMilliSiu,
-          classId,
-          deployment,
-          rpcUrl,
-          commodityPrint,
-          rateUsdPerSiu,
-          windowSeconds: WINDOW_SECONDS,
-          runEndsAtUnixSeconds: windowBoundsByIndex[runWindows].to,
-          chainReader,
-        });
-        // Swept at run end with the external buyer's claims, by the same path.
-        if (drained.tokenId !== undefined && drained.holder !== undefined) {
-          externalClaims.push({
-            tokenId: drained.tokenId,
-            holder: drained.holder,
-            quantityMilliSiu: Number(plan.quantityMilliSiu),
-          });
-        }
-        operatorActions.push({
-          kind: "drain",
-          afterWindow: windowIndex,
-          issuer: drainSpec.issuer,
-          requestedMilliSiu: plan.quantityMilliSiu.toString(),
-          ...(drained.txHash !== undefined ? { txHash: drained.txHash } : {}),
-          ...(drained.tokenId !== undefined ? { tokenId: drained.tokenId.toString() } : {}),
-          ...(drained.issuer !== undefined ? { backedBy: drained.issuer } : {}),
-          ...(drained.failedBecause !== undefined ? { failedBecause: drained.failedBecause } : {}),
-        });
-        if (drained.failedBecause !== undefined) {
-          topologyAbort = `the drain of ${drainSpec.issuer} failed: ${drained.failedBecause}`;
-        } else if (drained.issuer?.toLowerCase() !== drainAddress.toLowerCase()) {
-          // First-fit chose someone else, so the right issuer was NOT drained and the wrong one was.
-          topologyAbort =
-            `the drain was backed by ${drained.issuer ?? "an unknown issuer"}, not ` +
-            `${drainSpec.issuer} (${drainAddress})`;
-        }
+        topologyAbort = await executeDrain("drain", plan.quantityMilliSiu);
       } else {
         operatorActions.push({
           kind: "drain_skipped",
@@ -1289,32 +1407,7 @@ async function main(): Promise<void> {
         });
       }
 
-      if (topologyAbort === undefined) {
-        // Both preconditions, read from a fresh client, retried until they hold or the attempts
-        // run out. A stale read understates a change, so a failure on the first attempt is
-        // expected to resolve; one that does not is real.
-        let verdict: ReturnType<typeof checkAfterDrain> = { ok: false, reason: "not read" };
-        let reading = { drainIssuerHeadroom: -1n, routedTo: null as string | null, expectedRoute };
-        for (let attempt = 0; attempt < 8 && !verdict.ok; attempt++) {
-          if (attempt > 0) await new Promise((r) => setTimeout(r, 3_000));
-          reading = {
-            drainIssuerHeadroom: await fresh().headroom(drainAddress, classId),
-            routedTo: await fresh().routeFor(classId, NOMINAL_JOB_MILLI_SIU),
-            expectedRoute,
-          };
-          verdict = checkAfterDrain(reading);
-        }
-        operatorActions.push({
-          kind: "topology_check",
-          afterWindow: windowIndex,
-          drainIssuerHeadroomMilliSiu: reading.drainIssuerHeadroom.toString(),
-          routedTo: reading.routedTo,
-          expectedRoute,
-          ok: verdict.ok,
-          ...(!verdict.ok ? { reason: verdict.reason } : {}),
-        });
-        if (!verdict.ok) topologyAbort = verdict.reason;
-      }
+      if (topologyAbort === undefined) topologyAbort = await verifyDrained();
     }
 
     if (topologyAbort !== undefined) {
@@ -1369,10 +1462,7 @@ async function main(): Promise<void> {
   // Written as well as printed: a report that exists only in terminal scrollback is not a record,
   // and this run is expensive enough that losing it to a closed window would be a real loss.
   const reportPath = join(RUNS_ROOT, `${runId}-report.json`);
-  writeFileSync(
-    reportPath,
-    `${JSON.stringify(
-      {
+  const report = {
         runId,
         runSeed,
         oracleTrialSeed: F1_ORACLE_TRIAL_SEED,
@@ -1431,7 +1521,9 @@ async function main(): Promise<void> {
                   providersExercised: collapse.exercised,
           providersNotExercised: collapse.dropped,
           validatesTheBlocksRoster: collapse.dropped.length === 0,
-          exercisesTimeGatedBehaviour: !debug.preAuthoredGate && !debug.cheapNonDeciders,
+          exercisesTimeGatedBehaviour: !debug.preAuthoredGate && !debug.cheapNonDeciders && !debug.scripted,
+          scripted: debug.scripted,
+          windowSeconds: debug.windowSeconds,
 },
         // A run that started short is not comparable with one that started whole, so the fact
         // travels with the artefact rather than only appearing in a log nobody re-reads.
@@ -1476,6 +1568,13 @@ async function main(): Promise<void> {
           assetChoice: renderPurchaseSummary(summarisePurchases(o.result)).join("\n").trim(),
           purchases: summarisePurchases(o.result),
           capacityEvents: o.result.capacityEvents,
+          // Every position in a claim still held when the window ended, per holder.
+          claimPositions: o.result.claimPositions,
+          // For each settlement, whether the settler read its outcome in its next prompt.
+          settlementCopy: settlementCopyShown(o.result.capacityEvents, o.result.turnLogsByAgent),
+          // Every tool call that errored, lifted out of the turn logs so a reader — and a scripted
+          // walk's own check — need not search them.
+          toolErrors: toolErrorsOf(o.result.turnLogsByAgent),
           // What each USDC quote was actually settled for, keyed by request id, and each seat's
           // cumulative claim flows — the facts a cost figure and the decision rule are built from.
           usdcSettlements: o.result.usdcSettlements,
@@ -1492,12 +1591,27 @@ async function main(): Promise<void> {
         runCapUsd: RUN_CAP_USD,
         experimentTotalUsd: budget.experimentTotalUsd(),
         experimentProjectedUsd: budget.experimentProjectedUsd(),
-      },
+  };
+  // A scripted run is only worth having if what it was for actually happened, and a script that
+  // issued its calls proves only that. The walk's own checks read the recorded events — see
+  // scripted-verify.ts — and a failed check fails the process, so it cannot scroll past unread.
+  const walk =
+    scripted !== undefined
+      ? verifyWalk(JSON.parse(JSON.stringify(report)) as WalkReport, scripted.status())
+      : undefined;
+  writeFileSync(
+    reportPath,
+    `${JSON.stringify(
+      walk !== undefined ? { ...report, scriptedWalk: { ...walk, steps: scripted!.status() } } : report,
       null,
       2,
     )}\n`,
   );
   console.log(`\nMachine-readable report written to ${reportPath}`);
+  if (walk !== undefined) {
+    console.log(`\n${renderWalk(walk)}`);
+    if (!walk.ok) process.exitCode = 1;
+  }
 }
 
 /**

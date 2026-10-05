@@ -420,3 +420,276 @@ describe("the arrival notice names the quote a claim settles", () => {
     expect(text).toContain('The sender said what it is for: "gate for window 3"');
   });
 });
+
+describe("more than one claim, and more than one holder of a claim", () => {
+  // Found by the first scripted walk on a fork of the real chain (2026-10-05). The tracker was a
+  // single slot: one claim, one holder, the quantity minted. A claim passed on in part left its first
+  // holder with a remainder nobody was told about — so it was never presented, never served — and
+  // the second holder's share was invisible to everything downstream. Two claims in one window, which
+  // is what two buyers paying in fSIU produce, overwrote each other outright.
+  const NOW = 1_000;
+
+  it("tells BOTH holders of a split claim what they hold, each its own quantity", () => {
+    const t = new RedemptionTracker();
+    t.recordMint("1", "ISSUER-B", "10021");
+    t.recordTransfer("WORKER-CODE", undefined, "qr-1", { tokenId: "1", quantity: "10021" });
+    t.recordTransfer("WORKER-EXTRACT", undefined, "qr-2", { tokenId: "1", quantity: "3967", from: "WORKER-CODE" });
+
+    expect(t.renderForHolder("WORKER-CODE", NOW)).toContain("tokenId 1, quantity 6054");
+    expect(t.renderForHolder("WORKER-CODE", NOW)).toContain("It settles your quote qr-1.");
+    expect(t.renderForHolder("WORKER-EXTRACT", NOW)).toContain("tokenId 1, quantity 3967");
+    expect(t.renderForHolder("WORKER-EXTRACT", NOW)).toContain("It settles your quote qr-2.");
+  });
+
+  it("stops telling a holder about a claim it has passed on in full", () => {
+    const t = new RedemptionTracker();
+    t.recordMint("1", "ISSUER-B", "5000");
+    t.recordTransfer("WORKER-CODE", undefined, undefined, { tokenId: "1", quantity: "5000" });
+    t.recordTransfer("WORKER-EXTRACT", undefined, undefined, { tokenId: "1", quantity: "5000", from: "WORKER-CODE" });
+    expect(t.renderForHolder("WORKER-CODE", NOW)).toBe("");
+    expect(t.renderForHolder("WORKER-EXTRACT", NOW)).toContain("quantity 5000");
+  });
+
+  it("tells an issuer to serve exactly what a holder PRESENTED — its balance then, not what was minted", () => {
+    const t = new RedemptionTracker();
+    t.recordMint("1", "ISSUER-B", "10021");
+    t.recordTransfer("WORKER-CODE", undefined, undefined, { tokenId: "1", quantity: "10021" });
+    t.recordTransfer("WORKER-EXTRACT", undefined, undefined, { tokenId: "1", quantity: "3967", from: "WORKER-CODE" });
+    t.recordPresented("WORKER-CODE", "the task", undefined, "1");
+
+    expect(t.renderForIssuerAwaitingDelivery("ISSUER-B")).toContain("tokenId 1, holder WORKER-CODE, quantity 6054.");
+    t.recordGraded(true, "0xreceipt", "ISSUER-B");
+    expect(t.renderFor("ISSUER-B")).toContain("tokenId 1, holder WORKER-CODE, quantity 6054, real graded result: passed=true");
+    // The other holder's share was never presented: nothing is owed on it.
+    expect(t.renderFor("ISSUER-B")).not.toContain("WORKER-EXTRACT");
+  });
+
+  it("serves one holder's position without touching the other's", () => {
+    const t = new RedemptionTracker();
+    t.recordMint("1", "ISSUER-B", "10021");
+    t.recordTransfer("WORKER-CODE", undefined, undefined, { tokenId: "1", quantity: "10021" });
+    t.recordTransfer("WORKER-EXTRACT", undefined, undefined, { tokenId: "1", quantity: "3967", from: "WORKER-CODE" });
+    t.recordPresented("WORKER-CODE", "spec", undefined, "1");
+    t.recordPresented("WORKER-EXTRACT", "spec", undefined, "1");
+    t.recordGraded(true, "0xr", "ISSUER-B");
+    t.recordServed(true, { tokenId: "1", holder: "WORKER-CODE", quantity: "6054" });
+
+    const pending = t.renderFor("ISSUER-B");
+    expect(pending).toContain("holder WORKER-EXTRACT, quantity 3967");
+    expect(pending).not.toContain("holder WORKER-CODE");
+    expect(t.renderServedForHolder("WORKER-CODE")).toContain("YOUR CLAIM WAS SERVED");
+    expect(t.renderServedForHolder("WORKER-EXTRACT")).toBe("");
+  });
+
+  it("keeps a part-served position owed for what is left", () => {
+    const t = new RedemptionTracker();
+    t.recordMint("1", "ISSUER-B", "1000");
+    t.recordTransfer("WORKER-CODE", undefined, undefined, { tokenId: "1", quantity: "1000" });
+    t.recordPresented("WORKER-CODE", "spec", undefined, "1");
+    t.recordGraded(true, "0xr", "ISSUER-B");
+    t.recordServed(true, { tokenId: "1", holder: "WORKER-CODE", quantity: "400" });
+    expect(t.renderFor("ISSUER-B")).toContain("quantity 600");
+    expect(t.anyUnserved()).toBe(true);
+    t.recordServed(true, { tokenId: "1", holder: "WORKER-CODE", quantity: "600" });
+    expect(t.renderFor("ISSUER-B")).toBe("");
+    expect(t.anyUnserved()).toBe(false);
+  });
+
+  it("keeps two claims apart: the second does not overwrite the first", () => {
+    const t = new RedemptionTracker();
+    t.recordMint("1", "ISSUER-B", "10021");
+    t.recordTransfer("WORKER-CODE", undefined, "qr-1", { tokenId: "1", quantity: "10021" });
+    t.recordMint("2", "ISSUER-B", "3967");
+    t.recordTransfer("WORKER-EXTRACT", undefined, "qr-2", { tokenId: "2", quantity: "3967" });
+
+    expect(t.renderForHolder("WORKER-CODE", NOW)).toContain("tokenId 1, quantity 10021");
+    expect(t.renderForHolder("WORKER-EXTRACT", NOW)).toContain("tokenId 2, quantity 3967");
+    t.recordPresented("WORKER-CODE", "spec", undefined, "1");
+    expect(t.renderForIssuerAwaitingDelivery("ISSUER-B")).toContain("tokenId 1, holder WORKER-CODE, quantity 10021");
+    expect(t.renderForIssuerAwaitingDelivery("ISSUER-B")).not.toContain("tokenId 2");
+  });
+
+  it("lets a holder who holds two claims present each by its own token", () => {
+    const t = new RedemptionTracker();
+    t.recordMint("1", "ISSUER-A", "100");
+    t.recordTransfer("WORKER-CODE", undefined, undefined, { tokenId: "1", quantity: "100" });
+    t.recordMint("2", "ISSUER-B", "200");
+    t.recordTransfer("WORKER-CODE", undefined, undefined, { tokenId: "2", quantity: "200" });
+    t.recordPresented("WORKER-CODE", "spec", undefined, "2");
+    expect(t.renderForIssuerAwaitingDelivery("ISSUER-B")).toContain("tokenId 2, holder WORKER-CODE, quantity 200");
+    expect(t.renderForIssuerAwaitingDelivery("ISSUER-A")).toBe("");
+    // The unpresented claim is still the holder's to be told about.
+    expect(t.renderForHolder("WORKER-CODE", NOW)).toContain("tokenId 1, quantity 100");
+    expect(t.renderForHolder("WORKER-CODE", NOW)).not.toContain("tokenId 2");
+  });
+
+  it("lists every position still owed to anyone, with whether it was presented, for settlement after close", () => {
+    const t = new RedemptionTracker();
+    t.recordMint("1", "ISSUER-B", "10021");
+    t.recordTransfer("WORKER-CODE", undefined, undefined, { tokenId: "1", quantity: "10021" });
+    t.recordTransfer("WORKER-EXTRACT", undefined, undefined, { tokenId: "1", quantity: "3967", from: "WORKER-CODE" });
+    t.recordPresented("WORKER-CODE", "spec", undefined, "1");
+    expect(t.positions()).toEqual([
+      { tokenId: "1", holder: "WORKER-CODE", issuer: "ISSUER-B", quantity: "6054", presented: true },
+      { tokenId: "1", holder: "WORKER-EXTRACT", issuer: "ISSUER-B", quantity: "3967", presented: false },
+    ]);
+  });
+
+  it("debits only what a holder has — a transfer larger than its position is a gap in the record, not a negative", () => {
+    const t = new RedemptionTracker();
+    t.recordMint("1", "ISSUER-B", "100");
+    t.recordTransfer("WORKER-CODE", undefined, undefined, { tokenId: "1", quantity: "100" });
+    t.recordTransfer("WORKER-EXTRACT", undefined, undefined, { tokenId: "1", quantity: "250", from: "WORKER-CODE" });
+    expect(t.positions().find((p) => p.holder === "WORKER-CODE")).toBeUndefined();
+  });
+
+  it("does not let a holder author the gate while it holds ANY live claim for the job, but lets the routed issuer", () => {
+    const t = new RedemptionTracker();
+    t.recordMint("1", "ISSUER-B", "100");
+    t.recordTransfer("WORKER-CODE", undefined, undefined, { tokenId: "1", quantity: "100" });
+    expect(t.viewFor("WORKER-CODE").tokenId).toBe("1");
+    expect(t.viewFor("WORKER-CODE").issuerAgentId).toBe("ISSUER-B");
+    expect(t.viewFor("ISSUER-B").issuerAgentId).toBe("ISSUER-B");
+    expect(t.viewFor("ORCHESTRATOR")).toEqual({ served: false });
+    t.recordTransfer("WORKER-EXTRACT", undefined, undefined, { tokenId: "1", quantity: "100", from: "WORKER-CODE" });
+    // WORKER-CODE passed all of it on: no longer standing on a live claim.
+    expect(t.viewFor("WORKER-CODE")).toEqual({ served: false });
+  });
+
+  it("reports a served FAIL to the holder it was served to, and only that holder", () => {
+    const t = new RedemptionTracker();
+    t.recordMint("1", "ISSUER-B", "100");
+    t.recordTransfer("WORKER-CODE", undefined, undefined, { tokenId: "1", quantity: "100" });
+    t.recordPresented("WORKER-CODE", "spec", undefined, "1");
+    t.recordServed(false, { tokenId: "1", holder: "WORKER-CODE", quantity: "100" });
+    expect(t.servedFailureFor("WORKER-CODE")).toBe(true);
+    expect(t.servedFailureFor("WORKER-EXTRACT")).toBe(false);
+  });
+
+  it("describes each position a holder has for the check_delivery tool", () => {
+    const t = new RedemptionTracker();
+    t.recordMint("1", "ISSUER-B", "10021");
+    t.recordTransfer("WORKER-CODE", undefined, undefined, { tokenId: "1", quantity: "10021" });
+    t.recordTransfer("WORKER-EXTRACT", undefined, undefined, { tokenId: "1", quantity: "3967", from: "WORKER-CODE" });
+    t.recordPresented("WORKER-CODE", "spec", undefined, "1");
+    expect(t.deliveryFor("WORKER-CODE")).toEqual([
+      { tokenId: "1", state: "presented_awaiting_issuer", issuer: "ISSUER-B", quantityMilliSiu: "6054" },
+    ]);
+    expect(t.deliveryFor("WORKER-EXTRACT")).toEqual([
+      { tokenId: "1", state: "not_presented", issuer: "ISSUER-B", quantityMilliSiu: "3967" },
+    ]);
+  });
+
+  it("lists what an issuer is owed, per presented position, graded or not", () => {
+    const t = new RedemptionTracker();
+    t.recordMint("1", "ISSUER-B", "10021");
+    t.recordTransfer("WORKER-CODE", undefined, undefined, { tokenId: "1", quantity: "10021" });
+    t.recordPresented("WORKER-CODE", "spec", undefined, "1");
+    expect(t.presentedAgainst("ISSUER-B")).toEqual([
+      { tokenId: "1", holder: "WORKER-CODE", quantity: "10021", graded: false },
+    ]);
+    t.recordGraded(true, "0xr", "ISSUER-B");
+    expect(t.presentedAgainst("ISSUER-B")[0].graded).toBe(true);
+    expect(t.presentedAgainst("ISSUER-A")).toEqual([]);
+  });
+});
+
+describe("the tracker and the claim ledger are two books of one set of events, and agree", () => {
+  // Two independent records of who holds what, built from the same events in the same order: the
+  // ledger the decision rule is stated in, and the tracker every notice an agent reads is built from.
+  // If they ever disagree, one of them is telling an agent something false.
+  const AGENTS = ["ORCHESTRATOR", "WORKER-CODE", "WORKER-EXTRACT"] as const;
+  const mulberry = (seed: number) => () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+
+  it.each([1, 2, 3, 4, 5, 6, 7, 8])("hold the same balances after a random run of mints and transfers (seed %i)", async (seed) => {
+    const { ClaimLedger } = await import("./claim-ledger.js");
+    const rand = mulberry(seed);
+    const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)];
+    const ledger = new ClaimLedger();
+    const tracker = new RedemptionTracker();
+    const address = (a: string): string => `0x${a}`;
+    const resolve = (addr: string): (typeof AGENTS)[number] | undefined => AGENTS.find((a) => address(a) === addr);
+    const held = new Map<string, bigint>(); // `${agent}|${token}` -> the test's own count
+    const key = (a: string, t: string): string => `${a}|${t}`;
+    const tokens = ["1", "2"];
+
+    for (let step = 0; step < 40; step++) {
+      const token = pick(tokens);
+      if (step < 4 || rand() < 0.3) {
+        // Mint and forward to another agent, as pay_with_claim does.
+        const to = pick(AGENTS);
+        const payer = pick(AGENTS.filter((a) => a !== to));
+        const q = BigInt(100 + Math.floor(rand() * 900));
+        tracker.recordMint(token, "ISSUER-B", q.toString());
+        tracker.recordTransfer(to, undefined, undefined, { tokenId: token, quantity: q.toString() });
+        ledger.apply(
+          { agentId: payer, turn: 1, kind: "pay_with_claim", tokenId: token, quantityMilliSiu: q.toString(), counterparty: address(to) } as never,
+          resolve,
+        );
+        held.set(key(to, token), (held.get(key(to, token)) ?? 0n) + q);
+      } else {
+        const from = pick(AGENTS);
+        const have = held.get(key(from, token)) ?? 0n;
+        if (have === 0n) continue;
+        const to = pick(AGENTS.filter((a) => a !== from));
+        const q = 1n + BigInt(Math.floor(rand() * Number(have)));
+        tracker.recordTransfer(to, undefined, undefined, { tokenId: token, quantity: q.toString(), from });
+        ledger.apply(
+          { agentId: from, turn: 1, kind: "transfer_claim", tokenId: token, quantityMilliSiu: q.toString(), counterparty: address(to), settlesRequestId: "qr-1" } as never,
+          resolve,
+        );
+        held.set(key(from, token), have - q);
+        held.set(key(to, token), (held.get(key(to, token)) ?? 0n) + q);
+      }
+    }
+
+    for (const agent of AGENTS) {
+      const fromTracker = tracker
+        .positions()
+        .filter((p) => p.holder === agent)
+        .reduce((sum, p) => sum + BigInt(p.quantity), 0n);
+      const fromTest = [...held.entries()]
+        .filter(([k]) => k.startsWith(`${agent}|`))
+        .reduce((sum, [, v]) => sum + v, 0n);
+      expect(fromTracker, `${agent}: tracker vs the test's own count`).toBe(fromTest);
+      expect(ledger.heldTotal(agent), `${agent}: ledger vs the test's own count`).toBe(fromTest);
+    }
+  });
+});
+
+describe("a transfer of a claim whose mint was never seen", () => {
+  // The loop records a mint only when it can name the issuer as one of the roster's agents. A claim
+  // whose issuer it cannot resolve is still a claim somebody was just paid with: its recipient must
+  // be told, with the figures the transfer itself carries — not with "tokenId undefined".
+  it("still tells its recipient what it holds, from the transfer's own figures", () => {
+    const t = new RedemptionTracker();
+    t.recordTransfer("WORKER-EXTRACT", undefined, "qr-2", { tokenId: "42", quantity: "3967", from: "WORKER-CODE" });
+    const text = t.renderForHolder("WORKER-EXTRACT", 0);
+    expect(text).toContain("tokenId 42, quantity 3967.");
+    expect(text).toContain("It settles your quote qr-2.");
+    expect(text).not.toContain("undefined");
+  });
+
+  it("has no issuer to tell anything to, and says so rather than naming one", () => {
+    const t = new RedemptionTracker();
+    t.recordTransfer("WORKER-EXTRACT", undefined, undefined, { tokenId: "42", quantity: "100" });
+    t.recordPresented("WORKER-EXTRACT", "spec", undefined, "42");
+    t.recordServed(true, { tokenId: "42", holder: "WORKER-EXTRACT", quantity: "100" });
+    expect(t.renderServedForHolder("WORKER-EXTRACT")).toContain("issuer (unknown)");
+    expect(t.renderForIssuerAwaitingDelivery("ISSUER-A")).toBe("");
+    expect(t.isIssuerOfAny("ISSUER-A")).toBe(false);
+  });
+
+  it("is still listed for settlement, with no issuer it can be attributed to", () => {
+    const t = new RedemptionTracker();
+    t.recordTransfer("WORKER-EXTRACT", undefined, undefined, { tokenId: "42", quantity: "100" });
+    expect(t.positions()).toEqual([
+      { tokenId: "42", holder: "WORKER-EXTRACT", issuer: undefined, quantity: "100", presented: false },
+    ]);
+  });
+});

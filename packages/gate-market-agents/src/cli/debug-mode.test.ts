@@ -117,6 +117,47 @@ describe("--debug", () => {
   });
 });
 
+describe("--scripted and --window-seconds — the walk that exercises fSIU without a model deciding", () => {
+  it("is off, and windows are the production 2400 seconds, unless asked otherwise", () => {
+    const cfg = parseDebugFlags(["--debug"]);
+    expect(cfg.scripted).toBe(false);
+    expect(cfg.windowSeconds).toBe(2400);
+    expect(PRODUCTION_RUN.scripted).toBe(false);
+    expect(PRODUCTION_RUN.windowSeconds).toBe(2400);
+  });
+
+  it("REQUIRES --debug: a run in which no model decides anything can never count", () => {
+    expect(() => parseDebugFlags(["--scripted"])).toThrow(/--scripted requires --debug/);
+    expect(parseDebugFlags(["--debug", "--scripted"]).scripted).toBe(true);
+  });
+
+  it("is disqualified in its own words — no model was called", () => {
+    const cfg = parseDebugFlags(["--debug", "--scripted"]);
+    expect(isCountable(cfg)).toBe(false);
+    expect(disqualification(cfg)).toMatch(/no model was called: every seat followed a fixed script/);
+    expect(renderDebugBanner(cfg)).toMatch(/SCRIPTED/);
+  });
+
+  it("takes a window length, and refuses one too short for a quote to live in", () => {
+    expect(parseDebugFlags(["--debug", "--scripted", "--window-seconds", "180"]).windowSeconds).toBe(180);
+    for (const bad of ["abc", "0", "-5", "29", "1.5", ""]) {
+      expect(() => parseDebugFlags(["--debug", "--window-seconds", bad]), bad).toThrow(/--window-seconds expects/);
+    }
+  });
+
+  it("disqualifies a run with shortened windows even without --debug — length is a comparability change too", () => {
+    const cfg = parseDebugFlags(["--window-seconds", "600"]);
+    expect(cfg.enabled).toBe(false);
+    expect(isCountable(cfg)).toBe(false);
+    expect(disqualification(cfg)).toMatch(/windows lasted 600 seconds rather than the canonical 2400/);
+    expect(runIdPrefix(cfg)).toBe("DEBUG-p5-three-window");
+  });
+
+  it("states the window length in a debug banner, so a short run cannot be read as a production one", () => {
+    expect(renderDebugBanner(parseDebugFlags(["--debug", "--window-seconds", "240"]))).toMatch(/window length\s+240s/);
+  });
+});
+
 describe("roster collapse — a debug run does not validate the block's roster", () => {
   const PROVIDER: Record<string, string> = {
     "claude-sonnet-5": "anthropic",

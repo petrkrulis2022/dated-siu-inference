@@ -13,5 +13,7 @@ export default defineConfig({
     // real external tooling with a shared filesystem side effect, not a bug in this package's
     // own logic.
     fileParallelism: false,
+    // Reverts are not retried under test — see vitest.setup.ts.
+    setupFiles: ["./vitest.setup.ts"],
   },
 });

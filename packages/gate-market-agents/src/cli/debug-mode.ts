@@ -30,6 +30,14 @@ export const DECIDER_SEATS: readonly AgentId[] = ["ORCHESTRATOR", "WORKER-CODE"]
  *  need frontier reasoning to do it. */
 export const DEFAULT_CHEAP_MODEL = "claude-haiku-4-5";
 
+/** The production window length, in seconds. `WINDOW_SECONDS` in the runner is this value; a run with
+ *  any other length is not comparable and is disqualified (`disqualification`). */
+export const CANONICAL_WINDOW_SECONDS = 2400;
+
+/** The shortest window `--window-seconds` accepts: a quote has to be requested, issued, paid and
+ *  served inside one, and a window shorter than a minute cannot hold that however fast the seats. */
+export const MIN_WINDOW_SECONDS = 30;
+
 export interface DebugConfig {
   enabled: boolean;
   /** Windows to run. **Three by default, debug or not** — see `parseDebugFlags`. */
@@ -39,6 +47,13 @@ export interface DebugConfig {
   /** Run the non-decider seats on `cheapModel`. Deciders are never affected. */
   cheapNonDeciders: boolean;
   cheapModel: string;
+  /** Every seat follows a fixed script instead of calling a model (`cli/scripted-policy.ts`). Only
+   *  ever with `enabled`: a run in which no model decides anything is a test of the instrument,
+   *  never a measurement of anyone's behaviour. */
+  scripted: boolean;
+  /** Seconds per window. Production is `CANONICAL_WINDOW_SECONDS`; a shorter window exists so a
+   *  scripted run on a real chain takes minutes rather than two hours. */
+  windowSeconds: number;
 }
 
 export const PRODUCTION_RUN: DebugConfig = {
@@ -47,10 +62,13 @@ export const PRODUCTION_RUN: DebugConfig = {
   preAuthoredGate: false,
   cheapNonDeciders: false,
   cheapModel: DEFAULT_CHEAP_MODEL,
+  scripted: false,
+  windowSeconds: CANONICAL_WINDOW_SECONDS,
 };
 
 /**
- * `--debug`, `--windows N`, `--no-pre-authored-gate`, `--no-cheap-models`.
+ * `--debug`, `--windows N`, `--no-pre-authored-gate`, `--no-cheap-models`, `--scripted` (requires
+ * `--debug`) and `--window-seconds N`.
  *
  * **`--windows` defaults to three whether or not `--debug` is set**, and that is deliberate
  * rather than an oversight: three of the last four findings came from window 2 or later — the
@@ -70,19 +88,45 @@ export function parseDebugFlags(argv: readonly string[], defaultWindows = 3): De
     }
     windows = n;
   }
+  const scripted = argv.includes("--scripted");
+  if (scripted && !enabled) {
+    throw new Error(
+      "--scripted requires --debug: a run in which no model decides anything can never count, " +
+        "and must say so everywhere a run says what it was.",
+    );
+  }
+  const secondsAt = argv.indexOf("--window-seconds");
+  let windowSeconds = CANONICAL_WINDOW_SECONDS;
+  if (secondsAt !== -1) {
+    const raw = argv[secondsAt + 1];
+    const n = Number(raw);
+    if (raw === undefined || raw.trim() === "" || !Number.isInteger(n) || n < MIN_WINDOW_SECONDS) {
+      throw new Error(
+        `--window-seconds expects an integer of at least ${MIN_WINDOW_SECONDS}, got ${JSON.stringify(raw)}.`,
+      );
+    }
+    windowSeconds = n;
+  }
   return {
     enabled,
     windows,
     preAuthoredGate: enabled && !argv.includes("--no-pre-authored-gate"),
     cheapNonDeciders: enabled && !argv.includes("--no-cheap-models"),
     cheapModel: DEFAULT_CHEAP_MODEL,
+    scripted,
+    windowSeconds,
   };
 }
 
-/** `--windows` applies to a production run too, so a shortened production run is still not a
- *  comparable one. Anything that is not the canonical three-window shape is disqualified. */
+/** `--windows` and `--window-seconds` apply to a production run too, so a shortened production run
+ *  is still not a comparable one. Anything that is not the canonical shape — three windows of 2400
+ *  seconds — is disqualified. */
 export function isCountable(cfg: DebugConfig, canonicalWindows = 3): boolean {
-  return !cfg.enabled && cfg.windows === canonicalWindows;
+  return (
+    !cfg.enabled &&
+    cfg.windows === canonicalWindows &&
+    cfg.windowSeconds === CANONICAL_WINDOW_SECONDS
+  );
 }
 
 /** Why this run cannot be quoted, in words, or null when it can. */
@@ -92,9 +136,15 @@ export function disqualification(cfg: DebugConfig, canonicalWindows = 3): string
   if (cfg.cheapNonDeciders) {
     reasons.push(`non-decider seats ran on ${cfg.cheapModel} rather than their assigned models`);
   }
+  if (cfg.scripted) reasons.push("no model was called: every seat followed a fixed script");
   if (cfg.enabled && reasons.length === 0) reasons.push("--debug was set");
   if (cfg.windows !== canonicalWindows) {
     reasons.push(`it ran ${cfg.windows} window(s) rather than the canonical ${canonicalWindows}`);
+  }
+  if (cfg.windowSeconds !== CANONICAL_WINDOW_SECONDS) {
+    reasons.push(
+      `windows lasted ${cfg.windowSeconds} seconds rather than the canonical ${CANONICAL_WINDOW_SECONDS}`,
+    );
   }
   return reasons.length === 0 ? null : reasons.join("; ");
 }
@@ -222,6 +272,14 @@ export function renderDebugBanner(cfg: DebugConfig, canonicalWindows = 3): strin
     "=== DEBUG RUN — THIS RUN CANNOT MEET THE BAR OR COUNT TOWARD F1 ===",
     `  Disqualified because: ${why}.`,
     `  windows                 ${cfg.windows}`,
+    `  window length           ${cfg.windowSeconds}s${cfg.windowSeconds === CANONICAL_WINDOW_SECONDS ? "" : ` (production: ${CANONICAL_WINDOW_SECONDS}s)`}`,
+    ...(cfg.scripted
+      ? [
+          "  seats                   SCRIPTED — every seat follows a fixed script; no model is called",
+          "                          and nothing is spent on inference. The loop, the tools and the",
+          "                          chain are the real ones; what is not real is that nothing decides.",
+        ]
+      : []),
     `  gate                    ${cfg.preAuthoredGate ? `PINNED (${KNOWN_GOOD_GATE_PROVENANCE})` : "authored live"}`,
     `  non-decider seats       ${cfg.cheapNonDeciders ? cfg.cheapModel : "assigned models"}`,
     `  decider seats           ${DECIDER_SEATS.join(", ")} — always their assigned models, so the`,

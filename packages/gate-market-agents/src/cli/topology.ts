@@ -28,6 +28,35 @@ export function planDrain(
   return { action: "drain", quantityMilliSiu: headroomMilliSiu };
 }
 
+/**
+ * What to do after a window LATER than the drain's, to keep the drained issuer at zero.
+ *
+ * The drain happens once, after `spec.afterWindow`. It is not permanent on its own: a claim from
+ * before it that nobody served is settled in a later window — which is what the enforcement windows
+ * are for — and settling returns that capacity to the issuer, handing a drained issuer headroom
+ * again. If the router then finds it first, the operator's own scheduled mint (and, in the worst
+ * case, an agent's) is backed by an issuer the topology says must not serve. So after every later
+ * window the operator takes back whatever has come back, BEFORE the external buyer's scheduled mint.
+ *
+ * Capacity that returns *during* a window, before an agent mints, is not something an operator can
+ * act on; if it is enough to route an agent's mint to the drained issuer the window is contaminated
+ * and `windowContamination` aborts the run, as it should.
+ */
+export function planRedrain(
+  spec: DrainSpec | undefined,
+  windowIndex: number,
+  headroomMilliSiu: bigint,
+): DrainPlan {
+  if (spec === undefined) return { action: "none", reason: "no drain configured" };
+  if (windowIndex <= spec.afterWindow) {
+    return { action: "none", reason: `the drain is after window ${spec.afterWindow}, not yet or not again` };
+  }
+  if (headroomMilliSiu <= 0n) {
+    return { action: "none", reason: "the drained issuer has regained no headroom" };
+  }
+  return { action: "drain", quantityMilliSiu: headroomMilliSiu };
+}
+
 export interface AfterDrainReading {
   /** The drained issuer's headroom, read from a fresh client at a block at or beyond the drain's. */
   drainIssuerHeadroom: bigint;

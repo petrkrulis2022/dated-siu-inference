@@ -15,6 +15,7 @@ import {
   type RosterInput,
 } from "./p5-three-window-full-run.js";
 import type { AdapterResult } from "@touchstone/harness";
+import { taskSpecHashIn, windowOf } from "./scripted-policy.js";
 
 const noopAdapter = async (): Promise<AdapterResult> => ({
   text: "",
@@ -534,6 +535,7 @@ function windowResult(overrides: Partial<FullRunWindowResult> = {}): FullRunWind
   return {
     passed: false,
     gateDelivered: false,
+    claimPositions: [],
     paymentMoments: [],
     usdcSettlements: [],
     claimFlows: {},
@@ -1205,7 +1207,48 @@ describe("the run's schedule is shown as fact, never as advice (spec §4.6ad, §
   it("says plainly there is nothing ahead in the last window, rather than going silent", () => {
     const text = scheduleFacts(3, BOUNDS, 3);
     expect(text).toMatch(/the last one/);
-    expect(text).toMatch(/no\s+further work is bought in this run/);
+    // True by construction: the window count is fixed before the run starts.
+    expect(text).toMatch(/No window opens after it/);
+  });
+
+  it("claims no exclusivity about work it cannot enforce — only what the run itself fixes", () => {
+    // "No other work is bought in this run" is a claim about every quote any agent might ever
+    // request, and nothing stops a buyer requesting another one: `request_quote` constrains the
+    // size a given SELLER's job may be, not which pairs trade or how often. A schedule is true of
+    // what the run schedules; it says nothing about what agents might also do. The window count
+    // and the opening times are fixed before the run, so those may be stated flatly.
+    const claims = [
+      /no\s+other\s+work/i,
+      /no\s+further\s+work/i,
+      /nothing\s+else\s+(is\s+)?(bought|purchased)/i,
+      /every\s+purchase\s+the\s+run\s+makes/i,
+      /the\s+whole\s+schedule/i,
+      /only\s+work/i,
+    ];
+    for (const count of [1, 2, 3, 5]) {
+      const bounds = Object.fromEntries(
+        Array.from({ length: count }, (_, i) => [
+          i + 1,
+          { from: BigInt(1_800_000_000 + i * 2400), to: BigInt(1_800_000_000 + (i + 1) * 2400) },
+        ]),
+      );
+      for (let w = 1; w <= count; w++) {
+        const text = scheduleFacts(w, bounds, count);
+        for (const claim of claims) expect(text, `window ${w} of ${count}`).not.toMatch(claim);
+      }
+    }
+  });
+
+  it("no brief claims exclusivity about work, in any window", () => {
+    // The same pin over the briefs as they are actually built, not only the helper that renders one
+    // section of them, so a claim added anywhere else in a brief is caught too.
+    const claims = [/no\s+other\s+work/i, /no\s+further\s+work/i, /every\s+purchase\s+the\s+run\s+makes/i];
+    for (const w of [1, 2, 3]) {
+      for (const id of ["ORCHESTRATOR", "WORKER-CODE", "WORKER-EXTRACT"]) {
+        const brief = find(buildRoster(input(w, { windowBoundsByIndex: BOUNDS })), id).skillPackText;
+        for (const claim of claims) expect(brief, `${id}, window ${w}`).not.toMatch(claim);
+      }
+    }
   });
 
   it("contains no steer — a buyer could read it and rationally do nothing", () => {
@@ -1279,5 +1322,25 @@ describe("the schedule renders the REAL window bounds, not anything stale", () =
     const a = scheduleFacts(1, mk(1_790_000_000n), 2);
     const b = scheduleFacts(1, mk(1_800_000_000n), 2);
     expect(a).not.toEqual(b);
+  });
+});
+
+describe("a scripted seat can read the brief the real roster is given", () => {
+  // The scripts place a prompt by the run-shape facts every brief carries, and a holder presents with
+  // the task-spec hash its own brief states. If either moves out of the brief, a scripted run stalls
+  // without a word — so the dependency is held here, against the briefs as they are really built.
+  it("carries the window marker in every seat's brief, for every window", () => {
+    for (const w of [1, 2, 3]) {
+      for (const seat of AGENTS) {
+        const brief = find(buildRoster(input(w)), seat).skillPackText;
+        expect(windowOf(brief), `${seat}, window ${w}`).toBe(w);
+      }
+    }
+  });
+
+  it("carries the task-spec hash WORKER-CODE presents a claim with", () => {
+    const hash = `0x${"ab".repeat(32)}` as Hex;
+    const brief = find(buildRoster(input(1, { taskSpecHash: hash })), "WORKER-CODE").skillPackText;
+    expect(taskSpecHashIn(brief)).toBe(hash);
   });
 });

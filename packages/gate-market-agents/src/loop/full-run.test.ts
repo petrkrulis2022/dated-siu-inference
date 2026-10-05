@@ -962,6 +962,41 @@ describe("buildToolArgs", () => {
     validitySeconds: 3600n,
   };
 
+  describe("settle_window_close names which HOLDER's position it closes", () => {
+    const TWO_HOLDERS = [
+      { tokenId: "77", holder: "0x00000000000000000000000000000000000000aa", holderAgentId: "WORKER-CODE" as const, issuerAgentId: "ISSUER-B" as const, quantityMilliSiu: "6054", mintedInWindow: 1, everPresented: true },
+      { tokenId: "77", holder: "0x00000000000000000000000000000000000000bb", holderAgentId: "WORKER-EXTRACT" as const, issuerAgentId: "ISSUER-B" as const, quantityMilliSiu: "3967", mintedInWindow: 1, everPresented: false },
+    ];
+    const ctx = (outstandingClaims = TWO_HOLDERS) =>
+      baseCtx({ mintContext: QUOTED_MINT, outstandingClaims });
+
+    it("refuses a bare token id that two holders share, naming both", async () => {
+      await expect(buildToolArgs("settle_window_close", { tokenId: "77" }, ctx())).rejects.toThrow(
+        /more than one holder.*WORKER-CODE.*WORKER-EXTRACT/s,
+      );
+    });
+
+    it("settles the named holder's position, by agent id", async () => {
+      const args = (await buildToolArgs("settle_window_close", { tokenId: "77", holder: "WORKER-EXTRACT" }, ctx())) as { tokenId: string; holder: string };
+      expect(args.tokenId).toBe("77");
+      expect(args.holder).toBe("0x00000000000000000000000000000000000000bb");
+    });
+
+    it("settles the named holder's position, by address in any case", async () => {
+      const args = (await buildToolArgs("settle_window_close", { tokenId: "77", holder: "0x00000000000000000000000000000000000000BB" }, ctx())) as { holder: string };
+      expect(args.holder).toBe("0x00000000000000000000000000000000000000bb");
+    });
+
+    it("refuses a holder the token does not have outstanding", async () => {
+      await expect(buildToolArgs("settle_window_close", { tokenId: "77", holder: "ORCHESTRATOR" }, ctx())).rejects.toThrow(/no outstanding position/);
+    });
+
+    it("still takes a bare token id when only one holder has it", async () => {
+      const args = (await buildToolArgs("settle_window_close", { tokenId: "77" }, ctx([TWO_HOLDERS[0]]))) as { holder: string };
+      expect(args.holder).toBe("0x00000000000000000000000000000000000000aa");
+    });
+  });
+
   it("mint_claim: splices a real EIP-712 attestation that recovers to the real publisher key", async () => {
     const mintContext: MintContext = {
       publisherPrivateKeyHex: PUBLISHER_PK,
@@ -2470,7 +2505,9 @@ describe("runFullRunWindow — a held claim settles a quote, and the seller is t
     // rather than redeeming it or paying dollars.
     const sellerId = erc8004IdFor(devnet.agents["WORKER-EXTRACT"].address);
     let buyerCall = 0;
+    const buyerPrompts: string[] = [];
     const buyerAdapter: Adapter = async (_m, prompt) => {
+      buyerPrompts.push(prompt);
       buyerCall++;
       if (buyerCall === 1) {
         return respond(
@@ -2574,6 +2611,22 @@ describe("runFullRunWindow — a held claim settles a quote, and the seller is t
       sellerPrompts.some((p) => p.includes("real USDC is in escrow in your favour")),
       "and must not be told money is in escrow when none is",
     ).toBe(false);
+
+    // A claim passed on in PART leaves each holder its own position, and each is told its own. The
+    // first scripted walk on a real chain found the first holder never learning it still held the
+    // remainder, and the second holder's share being invisible to settlement (spec §4.6bf).
+    expect(
+      buyerPrompts.some((p) => new RegExp(`tokenId ${tokenId}, quantity 500\\.`).test(p)),
+      "the buyer must be told it still holds the 500 it did not pay with",
+    ).toBe(true);
+    expect(
+      sellerPrompts.some((p) => new RegExp(`tokenId ${tokenId}, quantity 1000\\.`).test(p)),
+      "and the seller told it holds exactly the 1,000 it was paid, not what was minted",
+    ).toBe(true);
+    expect(result.claimPositions).toEqual([
+      { tokenId, holder: "WORKER-CODE", issuer: undefined, quantity: "500", presented: false },
+      { tokenId, holder: "WORKER-EXTRACT", issuer: undefined, quantity: "1000", presented: false },
+    ]);
 
     // And it is recorded as circulation, not as a fresh purchase.
     const journey = summarisePurchases(result).journeys.find((j) => j.tokenId === tokenId);
@@ -3397,6 +3450,37 @@ describe("renderSettleableText — what settling actually pays (fsiu-design.md �
   it("says nothing to an agent that cannot settle, and nothing when nothing is outstanding", () => {
     expect(renderSettleableText([claim(true)], false)).toBe("");
     expect(renderSettleableText([], true)).toBe("");
+  });
+
+  it("names the holder in the settle call when one token has more than one holder outstanding", () => {
+    // A claim passed on in part is two holders' positions in ONE token, so a token id alone no
+    // longer says which to settle — and a settlement closes one holder's position, not the token.
+    const text = renderSettleableText(
+      [
+        { ...claim(true), holderAgentId: "WORKER-CODE" as const, holder: "0xaa" },
+        { ...claim(false), holderAgentId: "WORKER-EXTRACT" as const, holder: "0xbb" },
+      ],
+      true,
+    );
+    expect(text).toContain('{"tool": "settle_window_close", "args": {"tokenId": "77", "holder": "WORKER-CODE"}}');
+    expect(text).toContain('{"tool": "settle_window_close", "args": {"tokenId": "77", "holder": "WORKER-EXTRACT"}}');
+  });
+
+  it("falls back to the holder's address when the holder is not an agent", () => {
+    const text = renderSettleableText(
+      [
+        { ...claim(true), holderAgentId: undefined, holder: "0xaa" },
+        { ...claim(true), holderAgentId: "WORKER-CODE" as const, holder: "0xbb" },
+      ],
+      true,
+    );
+    expect(text).toContain('"holder": "0xaa"');
+  });
+
+  it("leaves the settle call exactly as it was when a token has a single holder", () => {
+    const text = renderSettleableText([claim(true)], true);
+    expect(text).toContain('{"tool": "settle_window_close", "args": {"tokenId": "77"}}');
+    expect(text).not.toContain('"holder"');
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkAfterDrain, f1Clean, planDrain, readUntilStable, windowContamination } from "./topology.js";
+import { checkAfterDrain, f1Clean, planDrain, planRedrain, readUntilStable, windowContamination } from "./topology.js";
 import { assertSameInstrument, instrumentOf, parseInstrumentFlags } from "./instrument.js";
 import { readFileSync } from "node:fs";
 
@@ -21,6 +21,31 @@ describe("planDrain", () => {
 
   it("does nothing when no drain is configured — the fifth trio's behaviour, unchanged", () => {
     expect(planDrain(undefined, 1, 15_000n).action).toBe("none");
+  });
+});
+
+describe("planRedrain — the drained issuer stays drained", () => {
+  // The plan (D2) says the drained issuer "stays at zero through every window after window 1". It
+  // does not by itself: a window-1 claim nobody served is settled in a LATER window — that is the
+  // enforcement the instrument exists to exercise — and settling returns its capacity to the issuer
+  // that was drained. The first scripted walk on a fork saw exactly that: an Expired settlement
+  // handed 3,967 mSIU back to ISSUER-B during window 2, and the operator's own scheduled mint after
+  // that window was backed by B, not A, so the topology check (correctly) aborted the run.
+  it("takes whatever the drained issuer has regained, after a later window", () => {
+    expect(planRedrain(DRAIN, 2, 3_967n)).toEqual({ action: "drain", quantityMilliSiu: 3_967n });
+  });
+
+  it("does nothing when it regained nothing, and says so", () => {
+    expect(planRedrain(DRAIN, 2, 0n)).toEqual({ action: "none", reason: "the drained issuer has regained no headroom" });
+  });
+
+  it("is not the drain itself: nothing in the drain's own window, and nothing before it", () => {
+    expect(planRedrain(DRAIN, 1, 15_000n).action).toBe("none");
+    expect(planRedrain({ ...DRAIN, afterWindow: 2 }, 1, 15_000n).action).toBe("none");
+  });
+
+  it("does nothing when no drain is configured — the fifth trio's behaviour, unchanged", () => {
+    expect(planRedrain(undefined, 2, 15_000n).action).toBe("none");
   });
 });
 
@@ -136,6 +161,14 @@ describe("the runner applies the contamination check where it matters", () => {
     expect(drain, "the runner must call planDrain").toBeGreaterThan(-1);
     expect(check).toBeLessThan(drain);
     expect(runner).toMatch(/windowIndex < runWindows &&\s+topologyAbort === undefined/);
+  });
+
+  it("re-drains BEFORE the operator's external buyer, so that buyer's mint cannot fall through to the drained issuer", () => {
+    const redrain = runner.indexOf("planRedrain(drainSpec");
+    const external = runner.indexOf("const depleted = await depleteExternally(");
+    expect(redrain, "the runner must call planRedrain").toBeGreaterThan(-1);
+    expect(external, "and must schedule the external buyer").toBeGreaterThan(-1);
+    expect(redrain).toBeLessThan(external);
   });
 
   it("feeds it the operator's own mint, so the external buyer falling through is caught too", () => {

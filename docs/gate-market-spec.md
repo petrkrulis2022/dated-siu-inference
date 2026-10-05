@@ -2682,6 +2682,152 @@ model's; both keep their old labels, and tests pin that.
 The retry draws a second projected-spend reservation against the same caps, so a run at its ceiling
 halts there as it would for any other call.
 
+### 4.6bf A claim has a position per holder; it was a single slot
+
+**Found by the first scripted walk, on an anvil fork of Base Sepolia holding the real sixth-trio
+deployment (2026-10-05).** The redemption tracker was a single slot — one claim, one holder, the
+quantity minted — and the runner's carried-forward list was one entry per *mint*, with the payee as
+holder. That matched the one real job each window carries, and it stopped being true the moment fSIU
+circulated, which is the thing the testbed measures. Three consequences, each seen:
+
+1. **The remainder was invisible.** WORKER-CODE passed 3,967 of a 10,021 mSIU claim on to pay for
+   testing. The slot moved to the new holder, so WORKER-CODE was never told it still held 6,054: it
+   woke to nothing, halted `nothing_to_act_on`, and never presented it. ISSUER-B was never asked to
+   deliver. A model in the same position would have been blind in the same way.
+2. **The second holder's share leaked capacity.** WORKER-EXTRACT's 3,967 mSIU was never listed for
+   settlement, so it never Expired. Read from the chain afterwards: **ISSUER-B's headroom 28,033 of a
+   32,000 lot** — the 3,967 mSIU still consumed, ISSUER-A whole at 48,000. A run that passes a claim on
+   in part would have started the next one short.
+3. **Two claims overwrote each other.** Two buyers paying in fSIU in one window — what F1 is for —
+   `recordMint` twice into one slot. (A token is keyed on issuer, class, series and window, not on the
+   mint call, so two mints against one issuer are one token whose quantities add; that is now modelled.)
+
+A fourth was predicted from reading the contract and is closed by the same change: an issuer told to
+serve the *minted* quantity of a claim whose holder presented less would revert
+`InsufficientRedemption` — `serveRedemption` requires the quantity not exceed the holder's balance.
+
+**The fix.** `RedemptionTracker` holds claims keyed by token, each with a **position per holder**:
+what the holder holds, whether it presented, what it was served. Every notice an agent reads is built
+from that agent's own positions; an issuer is told to serve exactly what a holder *presented*, its
+balance then; a serve of part leaves the rest owed; one passing delivery grades the issuer, so it
+serves every position presented against it. The runner builds what a window leaves to settle from the
+loop's own record of positions, per holder, in `cli/outstanding.ts`, and `settle_window_close` names
+the holder where a token has more than one outstanding. **With one claim and one holder every notice is
+byte-identical to the single slot's** — the original 40 tracker tests still pass unchanged — so the
+fifth- and sixth-trio instruments' single-claim behaviour is intact. This is an instrument change and
+is recorded as one (`claims_have_positions`, manifest `instrumentChanges`).
+
+**Held to account two ways.** A randomised property test applies the same mints and transfers to the
+tracker and to the claim ledger the decision rule is stated in, and to the test's own count, and
+requires all three to agree. The scripted walk's verifier checks the serve against the *remainder*.
+
+### 4.6bh The drained issuer stays drained
+
+The single-issuer plan (D2) says the drained issuer "stays at zero through every window after window
+1". It does not by itself. A window-1 claim nobody served is settled in a **later** window — that is the
+enforcement the instrument exists to exercise — and settling returns its capacity to the issuer that was
+drained. The scripted walk's Expired settlement (an unpresented share, window 2) handed ISSUER-B 3,967
+mSIU back; first-fit then found B, the operator's own scheduled mint after window 2 was backed by B and
+not A, and the topology check — correctly — aborted the run.
+
+After every window later than the drain, the operator now takes back whatever has returned to the
+drained issuer (`planRedrain`, an operator action `redrain`, swept at run end with the drain), and does
+it **before** the external buyer's scheduled mint so that mint cannot fall through to B. The same
+two preconditions the drain checks (headroom zero; the router routes a job-sized mint to A) are read
+again after it. A test holds the ordering in the runner's source.
+
+**What it does not do.** Capacity that returns *during* a window, before an agent mints, is not
+something the operator can act on. If enough returns to route an agent's mint to the drained issuer, the
+window is contaminated and `windowContamination` aborts the run, as it should: B would have served, and
+the enforcement arm would not have been tested. That is a property of what agents chose to settle, and
+it is reported as the abort it is, never as scarcity.
+
+### 4.6bi A revert on simulation is retried, because a lagging node can say no to a call that is fine
+
+**The seventh stale-read, found by the first live scripted run (2026-10-05) and not reproducible on the
+fork.** Two tool calls were refused for a state that was already true: WORKER-CODE's `redeem_claim`,
+"you hold none of this claim", a moment after being handed one; and WORKER-EXTRACT's `reserve_for_work`,
+"the escrow for this quote is not open", a moment after it was paid. Both were gas estimations — the
+first thing `writeContract` does — run against whichever node the load-balanced public endpoint
+returned, which had not yet seen the transaction the call depends on. The same walk on a fork passed
+every time: a fork has one node and no lag. (This is the class the six earlier instances share; the
+fork finds logic errors fast and cannot find this one, which is why the live run is not optional.)
+
+`writeAndConfirm` now retries a write whose **estimation reverts** — nothing has been sent, so it
+cannot duplicate a transaction — eight tries a second apart, then throws the node's *real* revert, so a
+genuine error (`ReservationExists`, a bad argument) is reported as itself a few seconds later rather
+than hidden. It is the principle of `untilVisible`: wait for the write's effect, give up if it never
+shows. It retries nothing else: a nonce or funds error is not lag, and a transaction that was mined and
+reverted is final and is never re-sent. Tests run with the retry off (`vitest.setup.ts`) because a
+local chain has one node; `chain/write.test.ts` tests the retry itself and each of its limits, and each
+limit was mutation-checked.
+
+**The first version of this retry never fired in the real run.** It recognised a revert with
+`instanceof ContractFunctionRevertedError`, and the loop's clients come from `@touchstone/agents`, which
+resolves **its own copy of viem**: an error it raises is not an instance of this package's classes
+however much it is one. The second live run failed exactly as the first had, in about a second where
+eight retries take eight — which is how it was caught: the call's duration, not its message. It was
+reproduced by building the clients with the loop's own factory (`clientsFor`), after a diagnostic built
+from this package's viem had behaved correctly and hidden it. The revert is now recognised by `name`
+down the `cause` chain, tolerating a cycle; a test raises the error as plain objects from "another
+copy", and fails against the `instanceof` version. **Never `instanceof` a viem class across a package
+boundary here.**
+
+**The consequence of the first failure, for the record.** WORKER-CODE's window-2 claim was therefore
+never presented, so in window 3 it was listed as *never presented* and the scripted Default step — which
+settles a presented claim — never fired: no Default was recorded. Nothing else in the walk was affected.
+The live run's window 1 passed in full, including the remainder served at exactly the remainder and the
+Expired settlement; the failure was window 2's presentation.
+
+### 4.6bg The scripted-policy mode, and what it is and is not evidence of
+
+`--debug --scripted` runs the real loop, tools, board, validator and chain with each seat's decision
+read from a script (`cli/scripted-policy.ts`) instead of a model: nothing in any prompt changes and no
+instruction to use either asset exists anywhere an agent could read — the scripts are returned tool
+calls, the module is imported only by the flag path and its verifier (a test asserts the import
+graph), and the cue parsers are tested against the loop's own renderers so a change to what agents see
+that the scripts cannot read fails a test instead of stalling a run silently. `--window-seconds N`
+shortens windows for it. The run is disqualified like every debug run, **and** in its own words ("no
+model was called"); a run with any window length but 2400 seconds is never countable, with or without
+`--debug`.
+
+**What a green run proves.** Not that the script's calls returned — that proves only the script. The
+walk's checks (`cli/scripted-verify.ts`) are properties of the recorded events, each computed with its
+own arithmetic written apart from `loop/parity.ts` and `chain/` (§4.6ai): claim sizes equal
+ceil(quote price ÷ print); mint costs equal quantity × print, from the receipt's own transfer; window 1
+is backed by one issuer and window 2 by another; a *part* of a held claim paid onward; the *remainder*
+served at exactly the remainder; the bond paid a Default the claim's value at the print; an unpresented
+claim Expired and paid nobody; no tool call errored; the decision rule marks WORKER-CODE eligible and
+onward and ORCHESTRATOR never eligible. A failed check fails the process.
+
+**First rehearsal, on the fork** (`DEBUG-p5-three-window-2026-10-05T16-49-11-085Z`, three 180-second
+windows, no model, no spend): parity (3 payments), mint cost (2 mints), the topology, the partial onward
+payment, the **bond paying a Default of 14,400 minor units, exactly floor(10,021 × 1,437,000 ÷ 10⁶)**,
+the decision rule and the dollar-route control all held. The remainder was never presented and no
+Expired settlement was recorded — §4.6bf.
+
+**The live run** (`DEBUG-p5-three-window-2026-10-05T18-55-26-808Z`, three 240-second windows on Base
+Sepolia, no model, gas only) **passed every check**: 33 of 33 steps issued, no tool call errored, claim
+sizes equal ceil(price ÷ print) on three payments, mint costs equal quantity × print on two mints,
+window 1 backed by ISSUER-B and window 2 by ISSUER-A, 3,967 of a 10,021 mSIU claim paid onward and the
+remainder **served at exactly 6,054**, the **bond paying a Default of 14,400 minor units** — exactly
+floor(10,021 × 1,437,000 ÷ 10⁶) — an unpresented share **Expired and paying nobody**, both settlers
+shown their outcome in their next prompt, and the decision rule marking WORKER-CODE eligible and onward
+and ORCHESTRATOR never eligible. The pool read 32,000 / 48,000 on the chain afterwards: whole.
+
+It took three live runs to get there, and each failure was real. The first (stale simulation, §4.6bi)
+and the second (the retry that never fired, §4.6bi) were found only live. The fork — six runs — found
+§4.6bf, §4.6bh and the settler's missing turn, and could not have found those two.
+
+**What it is not.** A fork has no real latency and no real mempool, so it cannot reproduce the
+stale-read class that only the live chain has caught (six times). It finds logic errors fast and
+cheaply; the live scripted run is the one that settles whether the paths work, and is run regardless of
+what the fork finds. The hermetic regression coverage is at the unit and tool level (the tracker's
+position tests, the outstanding-claims derivation, the verifier's mutations); the walk itself is an
+operator procedure, not a CI test, because the sixth trio's topology cannot be stood up on the local
+devnet (its USDC is a mock, its issuers register A-first, and `request_quote` has no settlement-asset
+entry for a devnet chain).
+
 ## 5. Identity, wallets and chain
 
 ### 5.1 Chain

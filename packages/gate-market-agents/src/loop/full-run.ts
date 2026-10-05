@@ -52,7 +52,7 @@ import {
 } from "./testing-purchase.js";
 import { ForwardQuoteBook, type ForwardQuote } from "./forward-book.js";
 import { classIdFor } from "../tools/class-id.js";
-import { RedemptionTracker, type RedemptionState } from "./redemption-tracker.js";
+import { RedemptionTracker, type OpenPosition, type RedemptionState } from "./redemption-tracker.js";
 import { buildTurnPrompt } from "./prompt.js";
 import {
   ModelResponseParseError,
@@ -532,6 +532,10 @@ export interface FullRunWindowResult {
   passed: boolean;
   /** A gate passed G1-G6 — the old meaning of `passed`, kept so the two can be told apart. */
   gateDelivered: boolean;
+  /** Every position in a claim still held when the window ended — per holder, with what each holds
+   *  and whether it presented — from the loop's own record of every mint and transfer. What the next
+   *  window is carried to settle is built from this, not from the mints. */
+  claimPositions: OpenPosition[];
   /** Every quote settlement this window, in order, with what the payer held at that moment. */
   paymentMoments: PaymentMoment[];
   /** Every USDC quote settled this window, with the amount actually released. */
@@ -799,6 +803,14 @@ export function renderSettleableText(
   canSettle: boolean,
 ): string {
   if (claims.length === 0 || !canSettle) return "";
+  // A settlement closes one HOLDER's position in a token, and a claim passed on in part leaves
+  // several. Only where a token id is shared does the call need to say whose.
+  const holdersOf = new Map<string, number>();
+  for (const c of claims) holdersOf.set(c.tokenId, (holdersOf.get(c.tokenId) ?? 0) + 1);
+  const settleArgs = (c: OutstandingClaim): string =>
+    (holdersOf.get(c.tokenId) ?? 0) > 1
+      ? `{"tokenId": "${c.tokenId}", "holder": "${c.holderAgentId ?? c.holder}"}`
+      : `{"tokenId": "${c.tokenId}"}`;
   return (
     `CLAIMS LEFT UNSETTLED BY AN EARLIER WINDOW\n` +
     `  Their delivery windows have closed, so none of them can still be redeemed for work.\n` +
@@ -819,7 +831,7 @@ export function renderSettleableText(
             : c.everPresented
               ? " — PRESENTED, so settling it draws on the bond and pays its holder"
               : " — NEVER PRESENTED, so settling it pays nobody and returns the capacity") +
-          `\n    settle it with {"tool": "settle_window_close", "args": {"tokenId": "${c.tokenId}"}}`,
+          `\n    settle it with {"tool": "settle_window_close", "args": ${settleArgs(c)}}`,
       )
       .join("\n")
   );
@@ -950,7 +962,7 @@ export async function runFullRunWindow(
         // may author freely, and the routed issuer may always author — it is the one being
         // graded. Refused only for the agent currently standing on a live claim for this job.
         toolGuard: (toolName) =>
-          submitJobRefusalFor(toolName, agent.agentId, redemption.state()) ??
+          submitJobRefusalFor(toolName, agent.agentId, redemption.viewFor(agent.agentId)) ??
           submitAttackRefusalFor(toolName, testingPurchaseRequired, testingIsEngaged()),
       }),
     ]),
@@ -995,17 +1007,16 @@ export async function runFullRunWindow(
     // Presented against this issuer in THIS window. Read from the tracker's own state rather
     // than parsed back out of its rendered prompt text, which was the first draft here and is
     // exactly the kind of second source of truth that drifts.
-    const r = redemption.state();
     const presentedTokenIds = new Set<string>();
-    if (r.tokenId !== undefined && r.issuerAgentId === agentId && r.holder !== undefined && !r.served) {
-      presentedTokenIds.add(r.tokenId);
+    for (const presented of redemption.presentedAgainst(agentId)) {
+      presentedTokenIds.add(presented.tokenId);
       out.push({
-        tokenId: r.tokenId,
+        tokenId: presented.tokenId,
         // Graded means the issuer owes only the serve_redemption report; ungraded means it still
         // owes the work. An issuer acts differently on each, so the states are kept apart.
-        state: r.passed !== undefined ? "presented_graded_awaiting_service" : "presented_awaiting_delivery",
-        ...(r.quantity !== undefined ? { quantityMilliSiu: r.quantity } : {}),
-        holder: r.holder,
+        state: presented.graded ? "presented_graded_awaiting_service" : "presented_awaiting_delivery",
+        quantityMilliSiu: presented.quantity,
+        holder: presented.holder,
         mintedInWindow: windowIndex,
       });
     }
@@ -1043,27 +1054,7 @@ export async function runFullRunWindow(
    * mirror of `buildObligationsFor`, from the same tracker state, and exists for the same
    * reason: the loop knew and the agent could not ask.
    */
-  const buildDeliveryFor = (agentId: AgentId): DeliveryStatus[] => {
-    const r = redemption.state();
-    if (r.tokenId === undefined) return [];
-    // Held by having presented it, or by having been transferred it and not yet presented.
-    if (r.holder !== agentId && r.transferredTo !== agentId) return [];
-    const state: DeliveryStatus["state"] = r.served
-      ? r.passed === true
-        ? "served_passed"
-        : "served_failed"
-      : r.holder === undefined
-        ? "not_presented"
-        : "presented_awaiting_issuer";
-    return [
-      {
-        tokenId: r.tokenId,
-        state,
-        ...(r.issuerAgentId !== undefined ? { issuer: r.issuerAgentId } : {}),
-        ...(r.quantity !== undefined ? { quantityMilliSiu: r.quantity } : {}),
-      },
-    ];
-  };
+  const buildDeliveryFor = (agentId: AgentId): DeliveryStatus[] => redemption.deliveryFor(agentId);
   /** Agents that have completed at least one successful tool call this window — the "buyer" wake
    * gate's own definition of having acted. A call that threw does not count, so a buyer whose
    * purchase reverted is still awake to deal with it. */
@@ -1450,7 +1441,7 @@ export async function runFullRunWindow(
       deliveryOwedText,
       settleableText,
       servedText,
-      servedWasFailure: redemption.state().servedPassed === false,
+      servedWasFailure: redemption.servedFailureFor(agent.agentId),
       unservedText,
       lapsingText,
       deliveredGateText,
@@ -1572,8 +1563,8 @@ export async function runFullRunWindow(
     // only once it is genuinely in a prompt an agent received. Marking it when the text is built
     // would burn the one showing on an agent the wait-gate then skipped, and the holder would
     // never hear about its own undelivered claim at all.
-    if (unservedText !== "") redemption.markUnservedWarningShown();
-    if (lapsingText !== "") redemption.markLapsingWarningShown();
+    if (unservedText !== "") redemption.markUnservedWarningShown(agent.agentId);
+    if (lapsingText !== "") redemption.markLapsingWarningShown(agent.agentId);
 
     const prompt = buildTurnPrompt(
       context,
@@ -2115,7 +2106,7 @@ export async function runFullRunWindow(
         const issuerAgentId = agentIdByAddress[mintResult.issuer.toLowerCase()];
         const quantity = (args as { quantity?: unknown } | undefined)?.quantity;
         if (issuerAgentId && typeof quantity === "string") {
-          redemption.recordMint(mintResult.tokenId, issuerAgentId, quantity);
+          redemption.recordMint(mintResult.tokenId, issuerAgentId, quantity, agent.agentId);
         }
         await recordCapacityEvent("mint_claim", {
           tokenId: mintResult.tokenId,
@@ -2131,16 +2122,20 @@ export async function runFullRunWindow(
 
       if (intent.tool === "transfer_claim") {
         const to = (args as { to?: unknown } | undefined)?.to;
+        const movedTokenId = (args as { tokenId?: unknown } | undefined)?.tokenId;
+        const movedQuantity = (args as { quantity?: unknown } | undefined)?.quantity;
         if (typeof to === "string") {
-          const recipientAgentId = agentIdByAddress[to.toLowerCase()];
-          if (recipientAgentId)
-            redemption.recordTransfer(
-              recipientAgentId,
-              (args as { memo?: unknown } | undefined)?.memo as string | undefined,
-              (intent.args as { requestId?: unknown } | undefined)?.requestId as
-                | string
-                | undefined,
-            );
+          // Exact: this much of this token left THIS agent's position for the recipient's. A
+          // recipient that is not an agent is still a holder — it is recorded by address, so the
+          // claim is not lost from view the moment it leaves the roster.
+          redemption.recordTransfer(
+            agentIdByAddress[to.toLowerCase()] ?? to.toLowerCase(),
+            (args as { memo?: unknown } | undefined)?.memo as string | undefined,
+            (intent.args as { requestId?: unknown } | undefined)?.requestId as string | undefined,
+            typeof movedTokenId === "string" && typeof movedQuantity === "string"
+              ? { tokenId: movedTokenId, quantity: movedQuantity, from: agent.agentId }
+              : undefined,
+          );
         }
         const transferred = record.result as { txHash?: string };
         const tokenId = (args as { tokenId?: unknown } | undefined)?.tokenId;
@@ -2171,15 +2166,12 @@ export async function runFullRunWindow(
         }
         const to = (args as { to?: unknown } | undefined)?.to;
         if (typeof to === "string") {
-          const recipientAgentId = agentIdByAddress[to.toLowerCase()];
-          if (recipientAgentId)
-            redemption.recordTransfer(
-              recipientAgentId,
-              (args as { memo?: unknown } | undefined)?.memo as string | undefined,
-              (intent.args as { requestId?: unknown } | undefined)?.requestId as
-                | string
-                | undefined,
-            );
+          redemption.recordTransfer(
+            agentIdByAddress[to.toLowerCase()] ?? to.toLowerCase(),
+            (args as { memo?: unknown } | undefined)?.memo as string | undefined,
+            (intent.args as { requestId?: unknown } | undefined)?.requestId as string | undefined,
+            { tokenId: split.claimTokenId, quantity: split.claimQuantityMilliSiu },
+          );
         }
         await recordCapacityEvent("settle_split", {
           tokenId: split.claimTokenId,
@@ -2210,15 +2202,12 @@ export async function runFullRunWindow(
         if (issuerAgentId) redemption.recordMint(paid.tokenId, issuerAgentId, paid.quantity);
         const to = (args as { to?: unknown } | undefined)?.to;
         if (typeof to === "string") {
-          const recipientAgentId = agentIdByAddress[to.toLowerCase()];
-          if (recipientAgentId)
-            redemption.recordTransfer(
-              recipientAgentId,
-              (args as { memo?: unknown } | undefined)?.memo as string | undefined,
-              (intent.args as { requestId?: unknown } | undefined)?.requestId as
-                | string
-                | undefined,
-            );
+          redemption.recordTransfer(
+            agentIdByAddress[to.toLowerCase()] ?? to.toLowerCase(),
+            (args as { memo?: unknown } | undefined)?.memo as string | undefined,
+            (intent.args as { requestId?: unknown } | undefined)?.requestId as string | undefined,
+            { tokenId: paid.tokenId, quantity: paid.quantity },
+          );
         }
         // One tool call, two real transactions — both hashes kept, since a run record must never
         // show a payment that half-occurred as if it had completed.
@@ -2310,8 +2299,11 @@ export async function runFullRunWindow(
           bondPaidMinorUnits?: string;
         };
         const tokenId = (args as { tokenId?: unknown } | undefined)?.tokenId;
+        const settledHolder = (args as { holder?: unknown } | undefined)?.holder;
         await recordCapacityEvent("settle_window_close", {
           ...(typeof tokenId === "string" ? { tokenId } : {}),
+          // Whose position this closed: a settlement closes one holder's, never the whole token's.
+          ...(typeof settledHolder === "string" ? { counterparty: settledHolder } : {}),
           ...(settled.txHash ? { txHash: settled.txHash } : {}),
           ...(settled.outcome !== undefined ? { settlementOutcome: settled.outcome } : {}),
           ...(settled.bondPaidMinorUnits !== undefined
@@ -2362,6 +2354,7 @@ export async function runFullRunWindow(
         // presenting the job it holds a claim against, so the spec comes from the job itself,
         // exactly as `buildToolArgs` already sources every other job-owned field.
         const presented = record.result as { txHash?: string; timeToExpirySeconds?: number };
+        const tokenId = (args as { tokenId?: unknown } | undefined)?.tokenId;
         redemption.recordPresented(
           agent.agentId,
           options.taskSpecText,
@@ -2373,8 +2366,8 @@ export async function runFullRunWindow(
                 secondsToExpiry: presented.timeToExpirySeconds,
               }
             : undefined,
+          typeof tokenId === "string" ? tokenId : undefined,
         );
-        const tokenId = (args as { tokenId?: unknown } | undefined)?.tokenId;
         await recordCapacityEvent("redeem_claim", {
           ...(typeof tokenId === "string" ? { tokenId } : {}),
           // `redeem_claim` already measures this at the instant of the decision, against the same
@@ -2390,7 +2383,16 @@ export async function runFullRunWindow(
         // The issuer's own reported verdict, read from the args it actually sent rather than
         // from the grading result the loop observed — they can differ, and which one the HOLDER
         // is told about is the one that was reported on chain.
-        redemption.recordServed((args as { passed?: unknown } | undefined)?.passed !== false);
+        const servedArgs = args as
+          | { tokenId?: unknown; holder?: unknown; quantity?: unknown; passed?: unknown }
+          | undefined;
+        redemption.recordServed(servedArgs?.passed !== false, {
+          ...(typeof servedArgs?.tokenId === "string" ? { tokenId: servedArgs.tokenId } : {}),
+          ...(typeof servedArgs?.holder === "string"
+            ? { holder: agentIdByAddress[servedArgs.holder.toLowerCase()] ?? servedArgs.holder.toLowerCase() }
+            : {}),
+          ...(typeof servedArgs?.quantity === "string" ? { quantity: servedArgs.quantity } : {}),
+        });
       }
 
       if (intent.tool === "submit_job") {
@@ -2476,10 +2478,11 @@ export async function runFullRunWindow(
       // supplies only a task spec; the gate grades the issuer's own served output
       // (WorkClaim.sol's own top doc comment). A submit_job call from any agent OTHER than the
       // routed issuer for this claim must never reach the tracker, whatever its own verdict.
-      if (gateResult && agent.agentId === redemption.state().issuerAgentId) {
+      if (gateResult && redemption.isIssuerOfAny(agent.agentId)) {
         redemption.recordGraded(
           gateResult.passed,
           keccak256(stringToBytes(`receipt:${options.job.jobId}`)),
+          agent.agentId,
         );
       }
 
@@ -2533,8 +2536,7 @@ export async function runFullRunWindow(
           passed = true;
           passedBy = agent.agentId;
         }
-        const claimOutstanding =
-          redemption.state().tokenId !== undefined && !redemption.state().served;
+        const claimOutstanding = redemption.anyUnserved();
         // A carried-forward default keeps the window open too. A claim cannot be settled inside
         // its own window — `settleWindowClose` reverts `WindowNotClosedYet` — so the only turns
         // anyone ever gets to settle window N's default are in window N+1. Breaking the moment a
@@ -2688,6 +2690,7 @@ export async function runFullRunWindow(
   const result: FullRunWindowResult = {
     passed: verdict.passed,
     gateDelivered: passed,
+    claimPositions: redemption.positions(),
     paymentMoments,
     usdcSettlements,
     claimFlows: Object.fromEntries(
@@ -3113,15 +3116,37 @@ export async function buildToolArgs(
         "settle_window_close: this window has no mintContext, so no attestation can be signed.",
       );
     }
-    const raw = (rawArgs ?? {}) as { tokenId?: unknown };
+    const raw = (rawArgs ?? {}) as { tokenId?: unknown; holder?: unknown };
     const outstanding = ctx.outstandingClaims ?? [];
     // A model names which claim by its tokenId, exactly as it appears in the outstanding list it
     // was shown; everything else — the holder whose balance pays out, and the whole rate
     // attestation — is resolved or signed here. A model cannot produce a real publisher
     // signature, which is precisely why this tool was unreachable before.
     const named = typeof raw.tokenId === "string" ? raw.tokenId : undefined;
+    // A token can have several holders outstanding — a claim passed on in part — and a settlement
+    // closes one holder's position. The holder is named by agent id or by address; it is only
+    // required where the token id alone would not say which.
+    const namedHolder = typeof raw.holder === "string" ? raw.holder : undefined;
+    const sameToken = named ? outstanding.filter((c) => c.tokenId === named) : [];
+    const isHolder = (c: OutstandingClaim, who: string): boolean =>
+      c.holderAgentId === who || c.holder.toLowerCase() === who.toLowerCase();
+    if (named && namedHolder !== undefined && sameToken.length > 0 && !sameToken.some((c) => isHolder(c, namedHolder))) {
+      throw new Error(
+        `settle_window_close: no outstanding position of token ${named} is held by "${namedHolder}" — held by: ` +
+          `${sameToken.map((c) => c.holderAgentId ?? c.holder).join(", ")}.`,
+      );
+    }
+    if (named && namedHolder === undefined && sameToken.length > 1) {
+      throw new Error(
+        `settle_window_close: token ${named} has more than one holder outstanding — name which with ` +
+          `{"tokenId": "${named}", "holder": "<agent or address>"}: ` +
+          `${sameToken.map((c) => c.holderAgentId ?? c.holder).join(", ")}.`,
+      );
+    }
     const claim = named
-      ? outstanding.find((c) => c.tokenId === named)
+      ? namedHolder !== undefined
+        ? sameToken.find((c) => isHolder(c, namedHolder))
+        : sameToken[0]
       : outstanding.length === 1
         ? outstanding[0]
         : undefined;

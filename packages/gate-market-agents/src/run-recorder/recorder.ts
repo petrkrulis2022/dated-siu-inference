@@ -110,6 +110,10 @@ export interface RunManifest {
      * the roster collapse, and the second reason a full-cost run is required.
      */
     exercisesTimeGatedBehaviour: boolean;
+    /** Every seat followed a fixed script and no model was called (`cli/scripted-policy.ts`). */
+    scripted: boolean;
+    /** Seconds per window; production is 2400. Anything else is not comparable. */
+    windowSeconds: number;
   };
   externalDepletionMilliSiu?: Record<number, number>;
   /** Every window's real, fixed span (Unix seconds), computed from the chain clock before the
