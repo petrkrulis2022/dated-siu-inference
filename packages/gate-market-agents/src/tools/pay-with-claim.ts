@@ -5,6 +5,7 @@ import { WORK_CLAIM_ABI } from "../chain/abi.js";
 import { writeAndConfirm } from "../chain/write.js";
 import type { ToolDefinition } from "./types.js";
 import { resolveClassId } from "./class-id.js";
+import { usdcPaidBy } from "../chain/usdc-paid.js";
 
 /**
  * `pay_with_claim` — paying a counterparty in fSIU in a single tool call.
@@ -75,6 +76,8 @@ export interface PayWithClaimResult {
   tokenId: string;
   issuer: string;
   quantity: string;
+  /** USDC minor units the payer's mint cost, read from the mint receipt's own transfer log. */
+  mintCostMinorUnits: string;
 }
 
 /** Same formula as `mint_claim`'s, and the same reason: the budget ceiling must see the number
@@ -157,6 +160,11 @@ export const payWithClaimTool: ToolDefinition<Args, PayWithClaimResult> = {
       tokenId,
       issuer,
       quantity: args.quantity,
+      mintCostMinorUnits: usdcPaidBy(
+        mintReceipt,
+        ctx.deps.deployment.usdc.address,
+        ctx.clients.account.address,
+      ).toString(),
     };
   },
 };

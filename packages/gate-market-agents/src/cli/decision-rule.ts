@@ -28,6 +28,24 @@
  *   - otherwise -> **do not build**, recorded as agents not carrying fSIU between hands even where
  *     they could.
  *
+ * ## Revised 2026-10-05, still before any result exists
+ *
+ * "Held fSIU it had been given" means fSIU received as PAYMENT FROM ANOTHER AGENT — never an
+ * opening balance, never an operator grant, never a claim the agent minted for itself. The ledger
+ * credits only agent-to-agent movements (an external buyer or the operator's drain is not an agent
+ * and is never tracked), and the rule's own tests pin that ORCHESTRATOR, which nothing in this
+ * roster pays in fSIU, can never be eligible. If a report ever marks it so, that is a counting
+ * error and the block report refuses to compute a verdict.
+ *
+ * "Spent onward" is defined at the BALANCE level, because fSIU units are fungible and which unit
+ * left is not knowable: the agent paid in fSIU **out of its balance** — a transfer that named a
+ * quote — while holding fSIU it had received, and **did not redeem all of what it received**. A
+ * payment made by minting a fresh claim and forwarding it (`pay_with_claim`, `settle_split`) never
+ * touches the balance, so it is not spending the received stock; an agent paying that way while
+ * holding received fSIU has declined to spend it, which is what the rule is trying to observe. The
+ * looser asset-level reading — paid in fSIU at all while holding received fSIU — is computed and
+ * reported beside it (`paidInFsiuWhileHoldingReceived`), never silently substituted for it.
+ *
  * This block is a PILOT. F1 is measured in window 1 only, so five runs give five decisions per
  * buyer, and even a perfect 5 of 5 has a 95% Wilson lower bound of n/(n+z²) = 5/8.84, about 0.57.
  * It tells us whether a larger block is worth running. It is not the answer.
@@ -104,33 +122,62 @@ export function decisionRuleVerdict(runs: readonly RunOpportunity[]): RuleOutcom
 export interface MomentLike {
   agentId: string;
   tool: string;
-  /** mSIU of claims the agent had been GIVEN and still held when it paid, as a decimal string. */
+  /** What the payment was settled in. A `split` includes a claim leg. */
+  asset: string;
+  /** mSIU of claims the agent had been GIVEN by another agent and still held when it paid. */
   heldReceivedMilliSiu: string;
+}
+
+/** The agent's cumulative claim flows over the window; see `ClaimFlows` in the ledger. */
+export interface FlowsLike {
+  receivedMilliSiu: string;
+  redeemedMilliSiu: string;
+  transferredOutKeyedMilliSiu: string;
+}
+
+export type OnwardBasis = "none" | "held_claim_left_the_balance";
+
+export interface Opportunity {
+  eligible: boolean;
+  spentOnward: boolean;
+  basis: OnwardBasis;
+  /** The LOOSER reading: paid in fSIU at all, by any route, while holding received fSIU it had not
+   *  all redeemed. Reported so a difference from `spentOnward` is visible, never substituted. */
+  paidInFsiuWhileHoldingReceived: boolean;
 }
 
 /**
  * Whether `agent` had the opportunity to spend fSIU onward in one run, and whether it did.
  *
- * `moments` must be the F1 window's own — the caller passes window 1's — because windows 2 and 3
- * route to the non-serving issuer by design and answer a different question.
+ * `moments` and `flows` must be the F1 window's own — the caller passes window 1's — because
+ * windows 2 and 3 route to the non-serving issuer by design and answer a different question.
  *
- * **Eligible** means the agent held fSIU it had been GIVEN at the moment it made any payment, in
- * any asset. Paying in dollars while holding a received claim counts: that is an opportunity
- * declined, which is exactly what the rule is trying to observe. Paying while holding nothing is
- * not an opportunity at all.
+ * **Eligible**: at the moment of ANY payment, in any asset, the agent held fSIU it had received
+ * from another agent. Paying in dollars while holding a received claim counts — that is an
+ * opportunity declined. Paying while holding nothing is not an opportunity at all.
  *
- * **Spent onward** means it passed such a claim to a counterparty with `transfer_claim`. Minting
- * a new claim (`pay_with_claim`, `settle_split`) is not onward spending: a claim that did not
- * already exist cannot have moved.
+ * **Spent onward**, at the balance level (see the header): a claim LEFT the agent's balance in a
+ * payment that named a quote, at a moment it held received fSIU, and it did not redeem all of what
+ * it received. Condition on redemption is what separates spending from the fungible units that
+ * left being the agent's own.
  */
-export function opportunityFromMoments(
+export function opportunityOf(
   moments: readonly MomentLike[],
   agent: string,
-): { eligible: boolean; spentOnward: boolean } {
+  flows: FlowsLike,
+): Opportunity {
   const mine = moments.filter((m) => m.agentId === agent);
   const held = (m: MomentLike): boolean => BigInt(m.heldReceivedMilliSiu) > 0n;
+  const notAllRedeemed = BigInt(flows.receivedMilliSiu) > BigInt(flows.redeemedMilliSiu);
+  const leftTheBalance =
+    BigInt(flows.transferredOutKeyedMilliSiu) > 0n &&
+    mine.some((m) => m.tool === "transfer_claim" && held(m));
+  const spentOnward = leftTheBalance && notAllRedeemed;
   return {
     eligible: mine.some(held),
-    spentOnward: mine.some((m) => m.tool === "transfer_claim" && held(m)),
+    spentOnward,
+    basis: spentOnward ? "held_claim_left_the_balance" : "none",
+    paidInFsiuWhileHoldingReceived:
+      notAllRedeemed && mine.some((m) => (m.asset === "fsiu" || m.asset === "split") && held(m)),
   };
 }

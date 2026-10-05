@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MIN_ELIGIBLE_RUNS,
   decisionRuleVerdict,
-  opportunityFromMoments,
+  opportunityOf,
   type RunOpportunity,
 } from "./decision-rule.js";
 
@@ -90,60 +90,104 @@ describe("the decision rule, fixed before any result exists", () => {
 });
 
 
-describe("opportunityFromMoments — did the agent hold what it could have spent?", () => {
-  const m = (agentId: string, tool: string, held: string) => ({
+describe("opportunityOf — did the agent hold what it could have spent, and did it spend it?", () => {
+  const m = (agentId: string, tool: string, held: string, asset = tool === "pay" ? "usdc" : "fsiu") => ({
     agentId,
     tool,
+    asset,
     heldReceivedMilliSiu: held,
+  });
+  /** An agent's cumulative flows over the window, in mSIU. */
+  const flows = (over: Partial<{ received: string; redeemed: string; out: string }> = {}) => ({
+    receivedMilliSiu: over.received ?? "10000",
+    redeemedMilliSiu: over.redeemed ?? "0",
+    transferredOutKeyedMilliSiu: over.out ?? "0",
   });
 
   it("is not an opportunity when the agent held nothing it had been given", () => {
     // ORCHESTRATOR paid in dollars, so WORKER-CODE was never handed any fSIU. Counting that run
     // as a "no" is the error the conditioning exists to prevent.
-    const r = opportunityFromMoments([m("WORKER-CODE", "pay", "0")], "WORKER-CODE");
-    expect(r).toEqual({ eligible: false, spentOnward: false });
+    const r = opportunityOf([m("WORKER-CODE", "pay", "0")], "WORKER-CODE", flows({ received: "0" }));
+    expect(r.eligible).toBe(false);
+    expect(r.spentOnward).toBe(false);
   });
 
   it("IS an opportunity declined when it paid in dollars while holding a received claim", () => {
-    const r = opportunityFromMoments([m("WORKER-CODE", "pay", "10000")], "WORKER-CODE");
-    expect(r).toEqual({ eligible: true, spentOnward: false });
+    const r = opportunityOf([m("WORKER-CODE", "pay", "10000")], "WORKER-CODE", flows());
+    expect(r).toMatchObject({ eligible: true, spentOnward: false });
   });
 
-  it("counts passing a held claim on with transfer_claim as onward spending", () => {
-    const r = opportunityFromMoments([m("WORKER-CODE", "transfer_claim", "10000")], "WORKER-CODE");
-    expect(r).toEqual({ eligible: true, spentOnward: true });
+  it("counts a claim leaving the balance in a payment, while received fSIU is not all redeemed, as onward spending", () => {
+    const r = opportunityOf(
+      [m("WORKER-CODE", "transfer_claim", "10000")],
+      "WORKER-CODE",
+      flows({ out: "4000" }),
+    );
+    expect(r).toMatchObject({ eligible: true, spentOnward: true, basis: "held_claim_left_the_balance" });
   });
 
-  it("does NOT count minting a new claim as onward spending, even while holding one", () => {
-    // pay_with_claim and settle_split create a claim that did not exist. A claim that did not
-    // already exist cannot have moved.
+  it("does NOT count it once the agent redeemed everything it had received — the units that left may be its own", () => {
+    // Received 10,000, redeemed all 10,000, and paid 4,000 out of what it minted for itself. Units
+    // are fungible, so nothing says a received unit went onward; "did not redeem all of what it
+    // received" is the condition that separates this from spending.
+    const r = opportunityOf(
+      [m("WORKER-CODE", "transfer_claim", "10000")],
+      "WORKER-CODE",
+      flows({ out: "4000", redeemed: "10000" }),
+    );
+    expect(r.spentOnward).toBe(false);
+  });
+
+  it("is balance-level: minting a new claim and forwarding it does not reduce the balance, so it is not onward spending", () => {
+    // pay_with_claim and settle_split mint to the seller; the payer's stock of received claims is
+    // untouched. An agent that pays this way while holding received fSIU declined to spend it,
+    // which is exactly the observation the rule exists to make — counting it as spending would
+    // let the rule pass because agents take the shortest fSIU route, not because fSIU circulates.
     for (const tool of ["pay_with_claim", "settle_split"]) {
-      const r = opportunityFromMoments([m("WORKER-CODE", tool, "10000")], "WORKER-CODE");
-      expect(r, tool).toEqual({ eligible: true, spentOnward: false });
+      const r = opportunityOf([m("WORKER-CODE", tool, "10000", "fsiu")], "WORKER-CODE", flows());
+      expect(r, tool).toMatchObject({ eligible: true, spentOnward: false });
+      // …but the looser, asset-level reading is reported beside it, so a reader can see it.
+      expect(r.paidInFsiuWhileHoldingReceived, tool).toBe(true);
     }
   });
 
   it("looks only at the named agent", () => {
-    const r = opportunityFromMoments(
+    const r = opportunityOf(
       [m("ORCHESTRATOR", "transfer_claim", "10000"), m("WORKER-CODE", "pay", "0")],
       "WORKER-CODE",
+      flows({ received: "0" }),
     );
-    expect(r).toEqual({ eligible: false, spentOnward: false });
+    expect(r.eligible).toBe(false);
   });
 
   it("is eligible if ANY payment found it holding something", () => {
-    const r = opportunityFromMoments(
+    const r = opportunityOf(
       [m("WORKER-CODE", "pay", "0"), m("WORKER-CODE", "pay", "4000")],
       "WORKER-CODE",
+      flows(),
     );
     expect(r.eligible).toBe(true);
+  });
+
+  it("never marks an agent that was never paid in fSIU as eligible — the ORCHESTRATOR property", () => {
+    // Nothing in this roster pays ORCHESTRATOR in fSIU, so every payment it makes finds it holding
+    // no received claim. Whatever it pays with, it can only ever be a "not an opportunity".
+    for (const tool of ["pay", "pay_with_claim", "settle_split", "transfer_claim"]) {
+      const r = opportunityOf([m("ORCHESTRATOR", tool, "0")], "ORCHESTRATOR", flows({ received: "0", out: "1000" }));
+      expect(r.eligible, tool).toBe(false);
+      expect(r.spentOnward, tool).toBe(false);
+    }
   });
 
   it("feeds the rule without ever producing the impossible combination it refuses", () => {
     // spentOnward implies eligible by construction, so a run built from real moments can never
     // trip the rule's measurement-error guard.
     for (const held of ["0", "1", "10000"]) {
-      const r = opportunityFromMoments([m("WORKER-CODE", "transfer_claim", held)], "WORKER-CODE");
+      const r = opportunityOf(
+        [m("WORKER-CODE", "transfer_claim", held)],
+        "WORKER-CODE",
+        flows({ out: "4000" }),
+      );
       expect(r.spentOnward && !r.eligible).toBe(false);
     }
   });

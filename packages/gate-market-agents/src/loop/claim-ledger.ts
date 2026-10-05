@@ -19,9 +19,54 @@ import type { AgentId } from "../identity/resolve.js";
 
 type Holdings = Map<string, bigint>;
 
+/**
+ * Cumulative quantities for one agent over the window, in mSIU as decimal strings. Kept apart from
+ * the held balances above because the decision rule is stated at the BALANCE level — fSIU units are
+ * fungible, so which unit left is not knowable — and it needs totals, not token identities.
+ */
+export interface ClaimFlows {
+  /** Claims another agent handed this agent, keyed or not. A self-transfer is not "received". */
+  receivedMilliSiu: string;
+  /** …of which a payment that named a quote it settles. */
+  receivedKeyedMilliSiu: string;
+  /** …of which a transfer that named none. Reported apart so a reading can say whether it mattered. */
+  receivedUnkeyedMilliSiu: string;
+  /** Claims the agent minted for itself with `mint_claim`. */
+  mintedMilliSiu: string;
+  /** Claims that LEFT the agent's balance in a transfer settling a quote. A payment made by
+   *  minting and forwarding (`pay_with_claim`) never touches the balance and is not counted here. */
+  transferredOutKeyedMilliSiu: string;
+  /** Claims of the agent's that an issuer served and burned. Credited to the HOLDER. */
+  redeemedMilliSiu: string;
+}
+
 export class ClaimLedger {
   #received = new Map<AgentId, Holdings>();
   #minted = new Map<AgentId, Holdings>();
+  #cumulative = new Map<AgentId, Record<keyof ClaimFlows, bigint>>();
+
+  #flow(agent: AgentId): Record<keyof ClaimFlows, bigint> {
+    let f = this.#cumulative.get(agent);
+    if (!f) {
+      f = {
+        receivedMilliSiu: 0n,
+        receivedKeyedMilliSiu: 0n,
+        receivedUnkeyedMilliSiu: 0n,
+        mintedMilliSiu: 0n,
+        transferredOutKeyedMilliSiu: 0n,
+        redeemedMilliSiu: 0n,
+      };
+      this.#cumulative.set(agent, f);
+    }
+    return f;
+  }
+
+  /** The agent's cumulative flows, as decimal strings (a bigint does not survive JSON). */
+  flows(agent: AgentId): ClaimFlows {
+    return Object.fromEntries(
+      Object.entries(this.#flow(agent)).map(([k, v]) => [k, v.toString()]),
+    ) as unknown as ClaimFlows;
+  }
 
   /** Claims `agent` was GIVEN: a payment in claims, or a transfer. */
   receive(agent: AgentId, tokenId: string, quantity: bigint): void {
@@ -39,7 +84,7 @@ export class ClaimLedger {
    * Never goes negative — a transfer larger than the ledger knows of is a gap in the record, and
    * the chain, which would have reverted, is the authority.
    */
-  transfer(from: AgentId, to: AgentId | undefined, tokenId: string, quantity: bigint): void {
+  transfer(from: AgentId, to: AgentId | undefined, tokenId: string, quantity: bigint): bigint {
     let remaining = quantity;
     for (const book of [this.#received, this.#minted]) {
       const held = book.get(from)?.get(tokenId) ?? 0n;
@@ -50,6 +95,7 @@ export class ClaimLedger {
       }
     }
     if (to !== undefined) this.receive(to, tokenId, quantity - remaining);
+    return quantity - remaining;
   }
 
   /** Total mSIU of claims `agent` was GIVEN and still holds. */
@@ -70,18 +116,42 @@ export class ClaimLedger {
     if (event.tokenId === undefined || event.quantityMilliSiu === undefined) return;
     const qty = BigInt(event.quantityMilliSiu);
     const to = event.counterparty !== undefined ? resolve(event.counterparty) : undefined;
+    const keyed = event.settlesRequestId !== undefined;
     switch (event.kind) {
       case "mint_claim":
         this.mint(event.agentId, event.tokenId, qty);
+        this.#flow(event.agentId).mintedMilliSiu += qty;
         break;
       case "pay_with_claim":
       case "settle_split":
         // Minted fresh and delivered to the counterparty in one call: the payer never holds it.
-        if (to !== undefined) this.receive(to, event.tokenId, qty);
+        if (to !== undefined && to !== event.agentId) {
+          this.receive(to, event.tokenId, qty);
+          this.#flow(to).receivedMilliSiu += qty;
+          this.#flow(to).receivedKeyedMilliSiu += qty;
+        }
         break;
-      case "transfer_claim":
-        this.transfer(event.agentId, to, event.tokenId, qty);
+      case "transfer_claim": {
+        // To oneself is not a receipt, and moves nothing the rule is about.
+        const recipient = to === event.agentId ? undefined : to;
+        const moved = this.transfer(event.agentId, recipient, event.tokenId, qty);
+        if (keyed) this.#flow(event.agentId).transferredOutKeyedMilliSiu += moved;
+        if (recipient !== undefined) {
+          this.#flow(recipient).receivedMilliSiu += moved;
+          if (keyed) this.#flow(recipient).receivedKeyedMilliSiu += moved;
+          else this.#flow(recipient).receivedUnkeyedMilliSiu += moved;
+        }
         break;
+      }
+      case "serve_redemption": {
+        // The ISSUER's event; the claim burned is the HOLDER's, named in `counterparty`. An issuer
+        // is not an agent of this ledger, so only the holder's side is touched.
+        if (to !== undefined) {
+          const burned = this.transfer(to, undefined, event.tokenId, qty);
+          this.#flow(to).redeemedMilliSiu += burned;
+        }
+        break;
+      }
       default:
         // redeem_claim presents without moving the balance; settle_window_close burns, but only
         // after the window, and this ledger is scoped to one window.

@@ -3,6 +3,7 @@ import { decodeEventLog, type Hex } from "viem";
 import { minorUnitsToUsd } from "@touchstone/sdk";
 import { WORK_CLAIM_ABI } from "../chain/abi.js";
 import { writeAndConfirm } from "../chain/write.js";
+import { usdcPaidBy } from "../chain/usdc-paid.js";
 import type { ToolDefinition } from "./types.js";
 import { resolveClassId } from "./class-id.js";
 
@@ -40,7 +41,7 @@ function estimatedSpendUsd(args: Args): string {
 
 export const mintClaimTool: ToolDefinition<
   Args,
-  { txHash: string; tokenId: string; issuer: string }
+  { txHash: string; tokenId: string; issuer: string; mintCostMinorUnits: string }
 > = {
   name: "mint_claim",
   argsSchema,
@@ -75,6 +76,12 @@ export const mintClaimTool: ToolDefinition<
             txHash: receipt.transactionHash,
             tokenId: decoded.args.tokenId.toString(),
             issuer: decoded.args.issuer,
+            // Read from the receipt's own USDC transfer, not recomputed from the contract's formula.
+            mintCostMinorUnits: usdcPaidBy(
+              receipt,
+              ctx.deps.deployment.usdc.address,
+              ctx.clients.account.address,
+            ).toString(),
           };
         }
       } catch {

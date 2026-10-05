@@ -80,4 +80,50 @@ describe("ClaimLedger", () => {
     l.apply(ev({ agentId: "WORKER-CODE", kind: "redeem_claim", tokenId: "7", quantityMilliSiu: "10000" }), resolve);
     expect(l.heldReceived("WORKER-CODE")).toBe(10000n);
   });
+
+  describe("flows — what the decision rule is conditioned on", () => {
+    it("counts keyed and unkeyed receipts apart, and neither for a self-transfer", () => {
+      const l = new ClaimLedger();
+      l.apply(ev({ agentId: "ORCHESTRATOR", kind: "pay_with_claim", tokenId: "7", quantityMilliSiu: "1000", counterparty: "0xcode", settlesRequestId: "qr-1" }), resolve);
+      l.apply(ev({ agentId: "ORCHESTRATOR", kind: "mint_claim", tokenId: "8", quantityMilliSiu: "500" }), resolve);
+      l.apply(ev({ agentId: "ORCHESTRATOR", kind: "transfer_claim", tokenId: "8", quantityMilliSiu: "500", counterparty: "0xcode" }), resolve); // unkeyed
+      l.apply(ev({ agentId: "WORKER-CODE", kind: "transfer_claim", tokenId: "7", quantityMilliSiu: "200", counterparty: "0xcode" }), resolve); // to itself
+      const f = l.flows("WORKER-CODE");
+      expect(f.receivedKeyedMilliSiu).toBe("1000");
+      expect(f.receivedUnkeyedMilliSiu).toBe("500");
+      expect(f.receivedMilliSiu).toBe("1500"); // the self-transfer added nothing
+    });
+
+    it("records a keyed transfer OUT as a payment made from the balance, and an unkeyed one as none", () => {
+      const l = new ClaimLedger();
+      l.apply(ev({ agentId: "ORCHESTRATOR", kind: "pay_with_claim", tokenId: "7", quantityMilliSiu: "2000", counterparty: "0xcode", settlesRequestId: "qr-1" }), resolve);
+      l.apply(ev({ agentId: "WORKER-CODE", kind: "transfer_claim", tokenId: "7", quantityMilliSiu: "700", counterparty: "0xextract", settlesRequestId: "qr-2" }), resolve);
+      l.apply(ev({ agentId: "WORKER-CODE", kind: "transfer_claim", tokenId: "7", quantityMilliSiu: "100", counterparty: "0xextract" }), resolve);
+      expect(l.flows("WORKER-CODE").transferredOutKeyedMilliSiu).toBe("700");
+    });
+
+    it("a redemption burns the holder's claim and counts as redeemed — credited to the HOLDER, not the issuer who served it", () => {
+      const l = new ClaimLedger();
+      l.apply(ev({ agentId: "ORCHESTRATOR", kind: "pay_with_claim", tokenId: "7", quantityMilliSiu: "1000", counterparty: "0xcode", settlesRequestId: "qr-1" }), resolve);
+      // The issuer's event names the holder it served; the issuer is not an agent of this ledger.
+      l.apply(ev({ agentId: "ISSUER-A", kind: "serve_redemption", tokenId: "7", quantityMilliSiu: "600", counterparty: "0xcode" }), resolve);
+      const f = l.flows("WORKER-CODE");
+      expect(f.redeemedMilliSiu).toBe("600");
+      expect(l.heldReceived("WORKER-CODE")).toBe(400n);
+      expect(l.flows("ISSUER-A").redeemedMilliSiu).toBe("0");
+    });
+
+    it("ORCHESTRATOR is never given an fSIU payment by this roster's own routes, so it never holds a received claim", () => {
+      // The roster property behind "if the report marks ORCHESTRATOR eligible, that is a counting
+      // error": ORCHESTRATOR buys, and the only agent-to-agent claim movements are payments TO the
+      // seller of a quote. Played through every route ORCHESTRATOR can use, none credits it.
+      const l = new ClaimLedger();
+      l.apply(ev({ agentId: "ORCHESTRATOR", kind: "mint_claim", tokenId: "8", quantityMilliSiu: "3000" }), resolve);
+      l.apply(ev({ agentId: "ORCHESTRATOR", kind: "pay_with_claim", tokenId: "9", quantityMilliSiu: "1000", counterparty: "0xcode", settlesRequestId: "qr-1" }), resolve);
+      l.apply(ev({ agentId: "ORCHESTRATOR", kind: "settle_split", tokenId: "10", quantityMilliSiu: "500", counterparty: "0xcode", settlesRequestId: "qr-2" }), resolve);
+      l.apply(ev({ agentId: "ORCHESTRATOR", kind: "transfer_claim", tokenId: "8", quantityMilliSiu: "1000", counterparty: "0xcode", settlesRequestId: "qr-3" }), resolve);
+      expect(l.heldReceived("ORCHESTRATOR")).toBe(0n);
+      expect(l.flows("ORCHESTRATOR").receivedMilliSiu).toBe("0");
+    });
+  });
 });

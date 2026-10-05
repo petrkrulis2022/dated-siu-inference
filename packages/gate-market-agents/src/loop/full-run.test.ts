@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { privateKeyToAccount } from "viem/accounts";
-import { getAddress, keccak256, recoverTypedDataAddress, stringToBytes, type Hex } from "viem";
+import { createPublicClient, erc20Abi, getAddress, http, keccak256, recoverTypedDataAddress, stringToBytes, type Hex } from "viem";
 import type { Adapter, AdapterResult } from "@touchstone/harness";
 import {
   CODE_ADVERSARIAL_EXCEPTION_SWALLOWING,
@@ -18,7 +18,7 @@ import {
   runGateHardeningChecks,
   type GateHardeningResult,
 } from "@touchstone/task-pack-gate-hardening";
-import { D, minorUnitsToUsd, type Print, type QuoteBody } from "@touchstone/sdk";
+import { buildQuoteBody, D, minorUnitsToUsd, signQuote, type Print, type QuoteBody } from "@touchstone/sdk";
 import type { RunnerDeps } from "../deps.js";
 import type { RunManifest } from "../run-recorder/recorder.js";
 import { BudgetCeiling } from "../budget/ceiling.js";
@@ -2525,6 +2525,12 @@ describe("runFullRunWindow — a held claim settles a quote, and the seller is t
     // What WORKER-CODE paid is set by the quote, not by the model: the quote's $0.01 price at a
     // $0.01 print is exactly 1,000 mSIU. (The script supplies no quantity at all.)
     expect(buyerTransfer?.quantityMilliSiu).toBe("1000");
+    // The transfer says which quote it settled, so a report can tell it from an unkeyed push.
+    expect(buyerTransfer?.settlesRequestId).toMatch(/^qr-\d+$/);
+    // ORCHESTRATOR's mint cost is recorded from the mint receipt's own USDC transfer: 1,500 mSIU at
+    // $0.01/SIU is $0.015 = 15,000 minor units, worked by hand.
+    const orchMint = result.capacityEvents.find((e) => e.kind === "mint_claim" && e.agentId === "ORCHESTRATOR");
+    expect(orchMint?.mintCostMinorUnits).toBe("15000");
     expect(moment?.asset).toBe("fsiu");
     expect(moment?.requestId).toMatch(/^qr-\d+$/);
 
@@ -2536,6 +2542,133 @@ describe("runFullRunWindow — a held claim settles a quote, and the seller is t
     expect(moment?.quoteRateUsdPerSiu).toBe("0.0100");
     expect(moment?.quotedUsdMax).toBeDefined();
     expect(new D(String(moment?.quotedUsdMax)).equals("0.01")).toBe(true);
+  }, 180_000);
+
+  it("records what a USDC quote was actually SETTLED for, joined to the payment by its request id", async () => {
+    // The seller settles for LESS than the quote's ceiling — a seller may claim less and the rest
+    // returns to the payer. A cost built from the quoted ceiling would overstate the dollar route,
+    // so the settled amount is recorded, keyed to the quote the payer named.
+    const cfg = (
+      agentId: AgentId,
+      adapter: Adapter,
+      availableTools: RosterAgentConfig["availableTools"],
+    ): RosterAgentConfig => ({
+      agentId,
+      adapter,
+      modelString: "test",
+      prices: PRICES,
+      skillPackText: CANONICAL_ASSET_DESCRIPTION,
+      availableTools,
+      privateKeyHex: devnet.agents[agentId].privateKeyHex,
+      address: devnet.agents[agentId].address,
+      erc8004Id: erc8004IdFor(devnet.agents[agentId].address),
+      rpcUrl: devnet.rpcUrl,
+      maxOutputTokens: 3000,
+      temperature: 0.7,
+      provider: "openai",
+    });
+    const respond = (text: string): AdapterResult => ({
+      text,
+      usage: { input: 100, output: 50, cached_input: 0, reasoning: 0 },
+      latency_ms: 1,
+      raw: {},
+      deviations: [],
+    });
+    // A real, seller-signed quote naming the devnet's own USDC, placed on the board beforehand —
+    // `request_quote` can only name the canonical Base Sepolia token, which has no code here.
+    const quoteBody = buildQuoteBody({
+      siu: "1", model: "test", rateUsdPerSiu: "0.0100", indexVersion: "SIU-2026a",
+      printId: "circulation-test-print", printHash: `0x${"11".repeat(32)}`,
+      sellerId: erc8004IdFor(devnet.agents["WORKER-CODE"].address),
+      chain: "base-sepolia", expiresInSeconds: 3600, pattern: "fixed",
+    });
+    const signedQuote = await signQuote(
+      { ...quoteBody, settlement: [{ ...quoteBody.settlement[0], address: devnet.deployment.usdc.address }] },
+      devnet.agents["WORKER-CODE"].privateKeyHex,
+    );
+    const board = new QuoteBoard();
+    const posted = board.postRequest("ORCHESTRATOR", quoteBody);
+    board.postIssuedQuote(posted.requestId, signedQuote);
+
+    const buyerAdapter: Adapter = async (_m, prompt) => {
+      const requestId = prompt.match(/(qr-\d+)/)?.[1];
+      if (requestId !== undefined) {
+        return respond(
+          JSON.stringify({ tool: "pay", args: { requestId, settler: "0x0000000000000000000000000000000000000000" } }),
+        );
+      }
+      return respond(JSON.stringify({ tool: "get_balances", args: { account: devnet.agents.ORCHESTRATOR.address } }));
+    };
+    const sellerAdapter: Adapter = async (_m, prompt) => {
+      if (prompt.includes("YOU HAVE BEEN PAID")) {
+        return respond(JSON.stringify({ tool: "settle_escrow", args: { actualAmountUsd: "0.0060" } }));
+      }
+      return respond(JSON.stringify({ tool: "get_balances", args: { account: devnet.agents["WORKER-CODE"].address } }));
+    };
+
+    const usdcBalance = async (address: Hex): Promise<bigint> =>
+      createPublicClient({ transport: http(devnet.rpcUrl) }).readContract({
+        address: devnet.deployment.usdc.address as Hex,
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        args: [address],
+      });
+    const payerBefore = await usdcBalance(devnet.agents.ORCHESTRATOR.address);
+
+    const ceiling = new BudgetCeiling(
+      Object.fromEntries(
+        AGENT_IDS.map((id) => [id, { maxUsdcSpend: "1000000", maxInferenceTurns: 100, maxInferenceUsd: "1000000" }]),
+      ) as Record<AgentId, { maxUsdcSpend: string; maxInferenceTurns: number; maxInferenceUsd: string }>,
+    );
+    const result = await runFullRunWindow({
+      windowId: "w-usdc-settled",
+      roster: [
+        cfg("ORCHESTRATOR", buyerAdapter, ["get_balances", "pay"]),
+        cfg("WORKER-CODE", sellerAdapter, ["get_balances", "settle_escrow"]),
+      ],
+      board,
+      job: JOB,
+      maxTurnsPerAgent: 6,
+      budget: new ExperimentBudget({ ceiling, runCapUsd: "1000000", experimentCapUsd: "1000000", ledgerPath }),
+      deps: {
+        chainReader: new ViemChainReader(devnet.deployment, devnet.rpcUrl),
+        deployment: devnet.deployment,
+        escrowAddress: devnet.escrowAddress,
+        runGateHardeningChecks,
+        loadPrint: async () => ({ print_id: "circulation-test-print" }) as unknown as Print,
+        isReconciled: async () => false,
+      },
+      runsRoot,
+      runId: "run-usdc-settled",
+      manifest: MANIFEST,
+      mintContext: {
+        publisherPrivateKeyHex: devnet.publisherPrivateKeyHex,
+        printId: "circulation-test-print",
+        series: SERIES_COMMODITY,
+        printDate: printDateToUnixDay("2026-09-25"),
+        nanoUsdPerSiu: 10_000_000n,
+        validitySeconds: 3600n,
+      },
+    });
+
+    // Independent of anything the loop recorded: the PAYER's real net USDC outflow is the settled
+    // amount, not the ceiling — it escrowed 10,000 and got 4,000 back. (The seller receives less,
+    // 5,970, because the escrow's 0.5% protocol fee comes out of its proceeds; the fSIU route
+    // charges the seller no such fee. That is a seller-side difference, and not a buyer's cost.)
+    const payerSpent = payerBefore - (await usdcBalance(devnet.agents.ORCHESTRATOR.address));
+    expect(payerSpent).toBe(6000n);
+
+    expect(result.usdcSettlements).toHaveLength(1);
+    const settlement = result.usdcSettlements[0];
+    expect(settlement).toMatchObject({
+      sellerAgentId: "WORKER-CODE",
+      settledMinorUnits: "6000",
+      quotedMinorUnits: "10000",
+    });
+    // …and it joins to the payment that opened the escrow by the quote's request id.
+    const payment = result.paymentMoments.find((m) => m.tool === "pay");
+    expect(payment?.requestId).toBeDefined();
+    expect(settlement.requestId).toBe(payment?.requestId);
   }, 180_000);
 });
 

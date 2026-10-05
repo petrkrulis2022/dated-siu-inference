@@ -39,7 +39,7 @@ import { RunRecorder, type RunManifest } from "../run-recorder/recorder.js";
 import { FrictionLogWriter, type FrictionLogEntry } from "../friction/log.js";
 import { QuoteBoard, type PaidAsset } from "./quote-board.js";
 import { claimMilliSiuForQuote } from "./parity.js";
-import { ClaimLedger } from "./claim-ledger.js";
+import { ClaimLedger, type ClaimFlows } from "./claim-ledger.js";
 import {
   submitAttackRefusalFor,
   testingEngaged,
@@ -166,6 +166,13 @@ export interface JobEnvelope {
 
 export interface FullRunWindowOptions {
   windowId: string;
+  /**
+   * The quote board for this window. Defaults to a fresh one — which is what every real run uses.
+   * It exists so a test can place a real, signed quote on the board beforehand: `request_quote`
+   * builds its settlement asset from a fixed table keyed by chain name, which has no entry for a
+   * local devnet's token, so a loop test of a dollar settlement could not otherwise run.
+   */
+  board?: QuoteBoard;
   roster: readonly RosterAgentConfig[];
   /** One job at a time for now (P4: exactly one) — the roster takes turns against it until it
    * passes, a maxTurnsPerAgent ceiling is hit for everyone active, or the budget halts the run.
@@ -298,6 +305,13 @@ export interface CapacityEvent {
   settlementOutcome?: "Defaulted" | "Expired";
   /** `settle_window_close` only, and only for a Default: USDC minor units the bond paid the holder. */
   bondPaidMinorUnits?: string;
+  /** A claim's mint: USDC minor units the minter paid, read from the mint receipt's own transfer
+   *  log (`usdc-paid.ts`) — what an fSIU payment cost the payer, as distinct from the claim's
+   *  print-equivalent value. Absent for a transfer, which mints nothing. */
+  mintCostMinorUnits?: string;
+  /** The quote this movement of claims settled, when it named one. A transfer that names none
+   *  settles nothing, and a report counts it apart. */
+  settlesRequestId?: string;
   counterparty?: string;
   txHash?: string;
   /** Seconds until the claim's own window closes at the moment of the decision — §7.1(a)'s own
@@ -473,6 +487,18 @@ export interface PaymentMoment {
   quotedUsdMax?: string;
 }
 
+/** A USDC quote settled by its seller, with what was actually settled. */
+export interface UsdcSettlement {
+  sellerAgentId: AgentId;
+  turn: number;
+  /** The quote it settles — the key that joins it to the payment that opened the escrow. */
+  requestId: string;
+  /** USDC minor units actually released to the seller. */
+  settledMinorUnits: string;
+  /** The quote's ceiling, in minor units; `settledMinorUnits` may be below it. */
+  quotedMinorUnits: string;
+}
+
 export interface FullRunWindowResult {
   /** Under `requireTestingPurchase` this is gate PASS ∧ testing paid for ∧ testing carried out;
    *  otherwise it is `gateDelivered`, exactly as before. */
@@ -481,6 +507,11 @@ export interface FullRunWindowResult {
   gateDelivered: boolean;
   /** Every quote settlement this window, in order, with what the payer held at that moment. */
   paymentMoments: PaymentMoment[];
+  /** Every USDC quote settled this window, with the amount actually released. */
+  usdcSettlements: UsdcSettlement[];
+  /** Each seat's cumulative claim flows over the window — received, minted, paid out of balance,
+   *  redeemed — the totals the decision rule is stated in. */
+  claimFlows: Record<string, ClaimFlows>;
   /** A quote sold by an attacker was settled, in either asset. */
   testingEngaged: boolean;
   /** Why `passed` is false when it is, so a decline is recorded rather than silent. */
@@ -822,13 +853,14 @@ export async function runFullRunWindow(
   const manifestWithToolOrder: RunManifest = { ...options.manifest, toolOrderByAgent };
   const recorder = new RunRecorder(options.runsRoot, options.runId, manifestWithToolOrder);
   const friction = new FrictionLogWriter(options.runsRoot, options.runId);
-  const board = new QuoteBoard();
+  const board = options.board ?? new QuoteBoard();
   const forwardBook = options.forwardBook ?? new ForwardQuoteBook();
   const windowIndex = options.windowIndex ?? 1;
   const windowCount = options.windowCount ?? 1;
   const redemption = new RedemptionTracker();
   const claimLedger = new ClaimLedger();
   const paymentMoments: PaymentMoment[] = [];
+  const usdcSettlements: UsdcSettlement[] = [];
   const testingPurchaseRequired = options.requireTestingPurchase === true;
   // Whoever can attack is who testing is bought FROM. Derived from the roster's own grants, so
   // adding or moving the adversary needs no edit here.
@@ -1910,8 +1942,18 @@ export async function runFullRunWindow(
         });
       }
 
+      const settlesRequestId =
+        typeof (intent.args as { requestId?: unknown } | undefined)?.requestId === "string"
+          ? ((intent.args as { requestId: string }).requestId)
+          : undefined;
+
       if (intent.tool === "mint_claim") {
-        const mintResult = record.result as { tokenId: string; issuer: string; txHash?: string };
+        const mintResult = record.result as {
+          tokenId: string;
+          issuer: string;
+          txHash?: string;
+          mintCostMinorUnits?: string;
+        };
         const issuerAgentId = agentIdByAddress[mintResult.issuer.toLowerCase()];
         const quantity = (args as { quantity?: unknown } | undefined)?.quantity;
         if (issuerAgentId && typeof quantity === "string") {
@@ -1922,6 +1964,9 @@ export async function runFullRunWindow(
           issuer: mintResult.issuer,
           ...(typeof quantity === "string" ? { quantityMilliSiu: quantity } : {}),
           ...(mintResult.txHash ? { txHash: mintResult.txHash } : {}),
+          ...(mintResult.mintCostMinorUnits !== undefined
+            ? { mintCostMinorUnits: mintResult.mintCostMinorUnits }
+            : {}),
           forwardDated: isForwardDated(args, windowTo),
         });
       }
@@ -1946,6 +1991,7 @@ export async function runFullRunWindow(
           ...(typeof tokenId === "string" ? { tokenId } : {}),
           ...(typeof quantity === "string" ? { quantityMilliSiu: quantity } : {}),
           ...(typeof to === "string" ? { counterparty: to } : {}),
+          ...(settlesRequestId !== undefined ? { settlesRequestId } : {}),
           ...(transferred.txHash ? { txHash: transferred.txHash } : {}),
         });
       }
@@ -1954,6 +2000,7 @@ export async function runFullRunWindow(
       // so the redemption tracker sees an fSIU payment identically whichever tool made it.
       if (intent.tool === "settle_split") {
         const split = record.result as {
+          claimMintCostMinorUnits?: string;
           claimTokenId: string;
           claimIssuer: string;
           claimQuantityMilliSiu: string;
@@ -1984,12 +2031,17 @@ export async function runFullRunWindow(
           // The claim leg goes to the quote's seller. Without this the event named a claim and
           // nobody it went to, so a split could not be followed into anyone's holdings.
           ...(typeof to === "string" ? { counterparty: to } : {}),
+          ...(split.claimMintCostMinorUnits !== undefined
+            ? { mintCostMinorUnits: split.claimMintCostMinorUnits }
+            : {}),
+          ...(settlesRequestId !== undefined ? { settlesRequestId } : {}),
           ...(split.claimMintTxHash ? { txHash: split.claimMintTxHash } : {}),
         });
       }
 
       if (intent.tool === "pay_with_claim") {
         const paid = record.result as {
+          mintCostMinorUnits?: string;
           tokenId: string;
           issuer: string;
           quantity: string;
@@ -2018,6 +2070,8 @@ export async function runFullRunWindow(
           quantityMilliSiu: paid.quantity,
           forwardDated: isForwardDated(args, windowTo),
           ...(typeof to === "string" ? { counterparty: to } : {}),
+          ...(paid.mintCostMinorUnits !== undefined ? { mintCostMinorUnits: paid.mintCostMinorUnits } : {}),
+          ...(settlesRequestId !== undefined ? { settlesRequestId } : {}),
           ...(paid.mintTxHash
             ? { txHash: `${paid.mintTxHash} (mint) / ${paid.transferTxHash ?? "?"} (transfer)` }
             : {}),
@@ -2041,7 +2095,11 @@ export async function runFullRunWindow(
       }
 
       if (intent.tool === "settle_escrow") {
-        const settled = record.result as { txHash: string; releaseTxHash?: string };
+        const settled = record.result as {
+          txHash: string;
+          releaseTxHash?: string;
+          settledMinorUnits?: string;
+        };
         if (settled.releaseTxHash) {
           await recordCapacityEvent("release_on_settle", { txHash: settled.releaseTxHash });
         }
@@ -2051,7 +2109,21 @@ export async function runFullRunWindow(
         if (settledQuote !== undefined) {
           const mine = board.issuedQuotesBySeller(agent.erc8004Id);
           const match = mine.find((i) => i.quote === settledQuote) ?? mine.at(-1);
-          if (match) board.recordSettled(match.requestId);
+          if (match) {
+            board.recordSettled(match.requestId);
+            // What was actually SETTLED, which can be less than the quote's ceiling: a seller may
+            // claim less and the rest returns to the payer. A cost built from the ceiling would
+            // overstate the dollar route.
+            if (settled.settledMinorUnits !== undefined) {
+              usdcSettlements.push({
+                sellerAgentId: agent.agentId,
+                turn,
+                requestId: match.requestId,
+                settledMinorUnits: settled.settledMinorUnits,
+                quotedMinorUnits: match.quote.settlement[0].amount_max,
+              });
+            }
+          }
         }
       }
 
@@ -2060,10 +2132,14 @@ export async function runFullRunWindow(
         const tokenId = (args as { tokenId?: unknown } | undefined)?.tokenId;
         const quantity = (args as { quantity?: unknown } | undefined)?.quantity;
         const passed = (args as { passed?: unknown } | undefined)?.passed;
+        const holderAddress = (args as { holder?: unknown } | undefined)?.holder;
         if (passed === true) {
           await recordCapacityEvent("serve_redemption", {
             ...(typeof tokenId === "string" ? { tokenId } : {}),
             ...(typeof quantity === "string" ? { quantityMilliSiu: quantity } : {}),
+            // Whose claim was burned. Without it a redemption could not be followed into anyone's
+            // holdings, so "did this agent redeem what it received" had no answer.
+            ...(typeof holderAddress === "string" ? { counterparty: holderAddress } : {}),
             ...(served.txHash ? { txHash: served.txHash } : {}),
           });
         }
@@ -2450,6 +2526,10 @@ export async function runFullRunWindow(
     passed: completion.passed,
     gateDelivered: passed,
     paymentMoments,
+    usdcSettlements,
+    claimFlows: Object.fromEntries(
+      options.roster.map((a) => [a.agentId, claimLedger.flows(a.agentId)]),
+    ),
     testingEngaged: testingIsEngaged(),
     ...(completion.incompleteBecause !== undefined
       ? { incompleteBecause: completion.incompleteBecause }

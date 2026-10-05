@@ -1166,6 +1166,10 @@ async function main(): Promise<void> {
           assetChoice: renderPurchaseSummary(summarisePurchases(o.result)).join("\n").trim(),
           purchases: summarisePurchases(o.result),
           capacityEvents: o.result.capacityEvents,
+          // What each USDC quote was actually settled for, keyed by request id, and each seat's
+          // cumulative claim flows — the facts a cost figure and the decision rule are built from.
+          usdcSettlements: o.result.usdcSettlements,
+          claimFlows: o.result.claimFlows,
           forwardInvitations: o.result.forwardInvitations,
           attacks: o.result.attacks,
           gateVersions: o.result.gateVersions,

@@ -498,6 +498,8 @@ function windowResult(overrides: Partial<FullRunWindowResult> = {}): FullRunWind
     passed: false,
     gateDelivered: false,
     paymentMoments: [],
+    usdcSettlements: [],
+    claimFlows: {},
     testingEngaged: false,
     totalRealizedUsd: "0",
     spendByProvider: {},

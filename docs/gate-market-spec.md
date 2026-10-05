@@ -2378,6 +2378,59 @@ quote — a seller may claim less and the rest returns to the payer — whereas 
 Parity holds at the quoted price; the *settled* cost in USDC can fall below it. The block report
 therefore uses the amount actually settled (§4.6as).
 
+### 4.6as What a payment cost is built from: the amount settled, and what a claim cost to mint
+
+Single-issuer instrument, apparatus change valid on either topology. A cost per delivered SIU built
+from a quote's `amount_usd_max` overstates the dollar route (the ceiling is not what is paid), and
+one that gives fSIU no dollar figure describes only the minority asset. The run artefact had
+neither number, so both are now recorded, each read from the chain's own record and not
+recomputed from the formula under test (§4.6ai).
+
+- **USDC: the amount actually settled.** Each `settle_escrow` is recorded as a `usdcSettlement`
+  (`settledMinorUnits`, `quotedMinorUnits`, keyed by the quote's request id, which is also the key
+  of the payment that opened the escrow). A seller may settle for less than the ceiling and the rest
+  returns to the payer; the loop test settles $0.0060 of a $0.0100 quote and checks the **payer's
+  real net USDC outflow** is 6,000 minor units, not 10,000.
+- **fSIU: what the claim cost to mint.** Every `mint_claim`, `pay_with_claim` and `settle_split`
+  claim leg records `mintCostMinorUnits`, decoded from the mint receipt's own USDC `Transfer`
+  log. `WorkClaim.mint` charges `quantity × rate ÷ 1e6` and the `Minted` event does not say so; the
+  receipt is what actually moved. Checked against the payer's real USDC balance (5,000 reported,
+  5,000 observed) and, through the loop, 15,000 for 1,500 mSIU at the dry loop's illustrative
+  $0.01 per SIU.
+- **Which quote a movement settled.** The capacity event of a payment records `settlesRequestId`,
+  so a transfer that named a quote is told from one that named none, and a `serve_redemption`
+  records the **holder** whose claim it burned.
+
+**A finding the settled-amount test surfaced.** The seller received 5,970 of the 6,000 settled: the
+escrow's protocol fee (0.5% on the devnet escrow; the live escrow's rate is its own `feeBps`) comes
+out of the *seller's* proceeds, and the fSIU route charges the seller nothing. That is a
+seller-side asymmetry between the two assets and is **not** a buyer's cost — price parity (§4.6ar)
+is a statement about what the payer pays. It is recorded because a reader comparing what sellers
+receive would find the dollar route short by exactly that fee.
+
+### 4.6at The decision rule's reading of "held" and "spent onward", fixed before any result
+
+Revised 2026-10-05; the rule is in `cli/decision-rule.ts` and was fixed as code on 2026-10-04.
+**"Held fSIU it had been given"** means fSIU received **as payment from another agent** — never an
+opening balance, an operator grant, or a claim the agent minted for itself. The ledger credits
+only agent-to-agent movements; an external buyer and the operator's drain are not agents and are
+never tracked; and ORCHESTRATOR, which nothing in this roster pays in fSIU, cannot be eligible by
+any route it has (tested across all four). If a report ever marks it eligible that is a **counting
+error** and the block report refuses to compute a verdict.
+
+**"Spent onward"** is stated at the **balance** level, because fSIU units are fungible and which
+unit left is not knowable: the agent paid in fSIU **out of its balance** (a transfer naming a
+quote), at a moment it held received fSIU, and **did not redeem all of what it received**. A
+payment made by minting a fresh claim and forwarding it (`pay_with_claim`, `settle_split`) never
+touches the balance, so it is not spending the received stock. This reading is a judgement call
+worth reviewing: the looser asset-level reading — paid in fSIU by *any* route while holding
+received fSIU — is computed and reported beside it (`paidInFsiuWhileHoldingReceived`), never
+silently substituted, because the shortest fSIU route is `pay_with_claim`, and counting it would
+let the rule pass because agents take the shortest route and not because fSIU circulates. Unkeyed
+agent-to-agent transfers count as received (an agent has no other reason to move a claim to
+another agent) and are reported apart (`receivedUnkeyedMilliSiu`) so a reading can say whether
+eligibility depended on them.
+
 ## 5. Identity, wallets and chain
 
 ### 5.1 Chain
