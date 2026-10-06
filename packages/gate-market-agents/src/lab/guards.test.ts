@@ -122,8 +122,59 @@ describe("guardLabCall", () => {
     });
   });
 
-  it("leaves every other tool alone", () => {
-    for (const tool of ["pay", "pay_with_claim", "transfer_claim", "settle_split", "get_balances", "issue_quote"] as const) {
+  describe("paying a quote — by the trader who asked for it, once", () => {
+    // Found by the first model run (2026-10-06): a seller called pay_with_claim on a quote it had issued, which its
+    // buyer had already paid, and it went through: a claim minted to itself, recorded against the wrong trader.
+    const PAYING = ["pay", "pay_with_claim", "settle_split", "transfer_claim"] as const;
+    const quoted = () => {
+      const need = economy.needs.find((n) => n.round === 1)!;
+      books.requestPosted("qr-1", need.buyer, need.seller);
+      books.quoteIssued("qr-1");
+      return need;
+    };
+
+    it("lets the buyer pay its own quote, by every route", () => {
+      const need = quoted();
+      for (const tool of PAYING) expect(guardLabCall(books, cfg, need.buyer, tool, { requestId: "qr-1" }), tool).toBeNull();
+    });
+
+    it("refuses the seller, and anyone else, paying a quote that is not theirs — by every route", () => {
+      const need = quoted();
+      const stranger = LAB_TRADERS.find((t) => t !== need.buyer && t !== need.seller)!;
+      for (const tool of PAYING) {
+        expect(guardLabCall(books, cfg, need.seller, tool, { requestId: "qr-1" }), `${tool} by the seller`).toBe(
+          `qr-1 is not yours to pay: it was asked for by ${need.buyer}.`,
+        );
+        expect(guardLabCall(books, cfg, stranger, tool, { requestId: "qr-1" }), `${tool} by a stranger`).toContain("not yours to pay");
+      }
+    });
+
+    it("refuses a second payment of a quote that has been paid, by every route — the chain stops only a second dollar payment", () => {
+      const need = quoted();
+      books.paid("qr-1", "usdc");
+      for (const tool of PAYING) expect(guardLabCall(books, cfg, need.buyer, tool, { requestId: "qr-1" }), tool).toBe("qr-1 has already been paid.");
+    });
+
+    it("refuses a quote that has not been answered yet", () => {
+      const need = economy.needs.find((n) => n.round === 1)!;
+      books.requestPosted("qr-1", need.buyer, need.seller);
+      expect(guardLabCall(books, cfg, need.buyer, "pay", { requestId: "qr-1" })).toBe("qr-1 has not been quoted yet.");
+    });
+
+    it("never lets the issuer pay", () => {
+      books.requestPosted("qr-raw", "TRADER-1", "ISSUER");
+      books.quoteIssued("qr-raw");
+      expect(guardLabCall(books, cfg, "ISSUER", "pay", { requestId: "qr-raw" })).toBe("the issuer does not pay quotes.");
+    });
+
+    it("leaves a transfer that names no quote alone — it settles nothing — and a quote this lab does not know to the loop's own refusal", () => {
+      expect(guardLabCall(books, cfg, "TRADER-1", "transfer_claim", { agentId: "TRADER-2", tokenId: "7", quantity: "100" })).toBeNull();
+      expect(guardLabCall(books, cfg, "TRADER-1", "pay", { requestId: "answers qr-9" })).toBeNull();
+    });
+  });
+
+  it("leaves the tools that pay nothing alone", () => {
+    for (const tool of ["get_balances", "issue_quote", "get_print", "deliver_job"] as const) {
       expect(guardLabCall(books, cfg, "TRADER-1", tool, { requestId: "qr-1" })).toBeNull();
     }
   });
@@ -135,6 +186,16 @@ describe("guardLabCall", () => {
       guardLabCall(books, cfg, buyer, "request_quote", req(sellerId, "1", "0.001")),
       guardLabCall(books, cfg, buyer, "request_quote", req(sellerId, "2")),
       guardLabCall(books, cfg, "TRADER-1", "request_quote", req(ids.issuer, "1", "0.001437")),
+      (() => {
+        const need = economy.needs.find((n) => n.round === 1)!;
+        books.requestPosted("qr-p", need.buyer, need.seller);
+        books.quoteIssued("qr-p");
+        books.paid("qr-p", "usdc");
+        return [
+          guardLabCall(books, cfg, need.seller, "pay_with_claim", { requestId: "qr-p" }),
+          guardLabCall(books, cfg, need.buyer, "pay", { requestId: "qr-p" }),
+        ].join(" ");
+      })(),
     ].filter((s): s is string => s !== null);
     for (const s of sentences) expect(s).not.toMatch(/usdc|fsiu|dollar|claim|should|better|cheaper|prefer/i);
   });

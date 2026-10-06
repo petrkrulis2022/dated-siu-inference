@@ -33,6 +33,7 @@ import { QuoteBoard } from "../loop/quote-board.js";
 import type { RunManifest } from "../run-recorder/recorder.js";
 import { setWriteRetryListener, type WriteRetryEvent } from "../chain/write.js";
 import { windowContamination } from "../cli/topology.js";
+import { LAB_INSTRUMENT_CHANGES, LAB_INSTRUMENT_VERSION } from "./instrument.js";
 import { labDisqualification, type MeasureReport } from "./measure.js";
 import { toolErrorsOf } from "../cli/tool-errors.js";
 import { LabBooks } from "./books.js";
@@ -177,6 +178,8 @@ export interface LabReport {
   claimFlows: unknown;
   capacityEvents: unknown;
   claimPositions: unknown;
+  /** Which lab this was (`lab/instrument.ts`): runs under different versions are never pooled. */
+  instrument: { version: number; changes: readonly string[] };
   /** Every write that needed the node to catch up (a stale simulation) and how it ended — the lag, made visible. */
   lag: { writesRetried: number; events: WriteRetryEvent[] };
   /** The shape the existing `assertCountableForF1` guard reads: why this run cannot be counted, or null. */
@@ -546,6 +549,7 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
     capacityEvents: result?.capacityEvents ?? [],
     claimPositions: result?.claimPositions ?? [],
     lag: { writesRetried: lag.length, events: lag },
+    instrument: { version: LAB_INSTRUMENT_VERSION, changes: LAB_INSTRUMENT_CHANGES },
   };
   // Stamped where it cannot be separated from the run, and recomputed by the aggregator from the facts.
   return { ...report, debugMode: { disqualifiedBecause: labDisqualification(report as unknown as MeasureReport) } };

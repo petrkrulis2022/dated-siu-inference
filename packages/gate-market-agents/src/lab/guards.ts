@@ -25,6 +25,9 @@ const sameDecimal = (a: unknown, b: string): boolean => {
   }
 };
 
+/** Every call that settles a quote — the ways of paying. */
+const PAYING_TOOLS: ReadonlySet<ToolName> = new Set<ToolName>(["pay", "pay_with_claim", "settle_split", "transfer_claim"]);
+
 export function guardLabCall(
   books: LabBooks,
   cfg: GuardConfig,
@@ -34,6 +37,29 @@ export function guardLabCall(
 ): string | null {
   if (tool === "request_quote") return guardRequestQuote(books, cfg, caller, rawArgs);
   if (tool === "settle_escrow") return guardSettleEscrow(books, caller, rawArgs);
+  if (PAYING_TOOLS.has(tool)) return guardPayment(books, caller, rawArgs);
+  return null;
+}
+
+/**
+ * A quote is paid by the trader who asked for it, once. Found by the first model run (2026-10-06): a seller
+ * called `pay_with_claim` on a quote it had itself issued, which its buyer had already paid in dollars, and it
+ * went through — it minted a claim and sent it to itself, and the payment was recorded against the wrong trader.
+ * The chain stops a second `pay` (the escrow exists) but nothing stops a second claim payment, and nothing in the
+ * tools asks who the payer is. The sentences say only what is so.
+ *
+ * A transfer that names no quote settles nothing and is passed on to be a plain transfer. A request id this lab
+ * does not know is left to the loop's own refusal, which says there is no such quote.
+ */
+function guardPayment(books: LabBooks, caller: TraderLabel | "ISSUER", rawArgs: unknown): string | null {
+  const id = (rawArgs as { requestId?: unknown } | undefined)?.requestId;
+  if (typeof id !== "string") return null;
+  const sale = books.sale(id);
+  if (sale === undefined) return null;
+  if (caller === "ISSUER") return "the issuer does not pay quotes.";
+  if (sale.buyer !== caller) return `${id} is not yours to pay: it was asked for by ${sale.buyer}.`;
+  if (!sale.quoted) return `${id} has not been quoted yet.`;
+  if (sale.paid) return `${id} has already been paid.`;
   return null;
 }
 

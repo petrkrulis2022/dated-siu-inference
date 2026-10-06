@@ -21,6 +21,7 @@ import { D } from "@touchstone/sdk";
 import { assertCountableForF1 } from "../cli/debug-mode.js";
 import { LAB_TRADERS, type LabParams, type TraderLabel } from "./economy.js";
 import { mulberry32 } from "@touchstone/basket";
+import { LAB_INSTRUMENT_VERSION } from "./instrument.js";
 import { claimForUsd, jobSiu, printNano, quotedPrice, tradeRateUsdPerSiu } from "./money.js";
 
 /** The parts of a report this reads. Structural, so a test can build one by hand. */
@@ -47,6 +48,8 @@ export interface MeasureReport {
   contamination?: string;
   infrastructureFailure?: unknown;
   pool: { whole: boolean; restored?: boolean };
+  /** Which lab the run was made in (`lab/instrument.ts`). A report with none predates the stamp. */
+  instrument?: { version: number };
   /** The shape `assertCountableForF1` reads. Set by the runner; recomputed here and never trusted alone. */
   debugMode?: { disqualifiedBecause?: string | null };
 }
@@ -57,6 +60,13 @@ export interface MeasureReport {
  */
 export function labDisqualification(r: MeasureReport): string | null {
   if (r.scripted) return "a scripted walk: no model was called, so there is no behaviour to count";
+  // A change to what the lab is makes an earlier run a different instrument, which is never pooled with this one.
+  if (r.instrument?.version !== LAB_INSTRUMENT_VERSION) {
+    return (
+      `made in lab instrument ${r.instrument?.version === undefined ? "before versions were stamped" : `version ${r.instrument.version}`}, ` +
+      `not the current version ${LAB_INSTRUMENT_VERSION}: a rule an agent meets has changed since (lab/instrument.ts)`
+    );
+  }
   if (r.abortedBecause !== undefined) return `the run aborted: ${r.abortedBecause}`;
   if (r.contamination !== undefined) return `the run was contaminated: ${r.contamination}`;
   if (r.infrastructureFailure !== undefined) return "the harness failed (an empty completion at the token budget, twice)";

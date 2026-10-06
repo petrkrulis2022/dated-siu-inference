@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PARAMS } from "./economy.js";
+import { LAB_INSTRUMENT_VERSION } from "./instrument.js";
 import {
   CIRCULATES_LOWER_BOUND,
   assertCountableForLab,
@@ -45,6 +46,7 @@ function base(over: Partial<MeasureReport> = {}): MeasureReport {
     workCostUsd: "0.030000",
     labErrors: [],
     pool: { whole: true, restored: true },
+    instrument: { version: LAB_INSTRUMENT_VERSION },
     ...over,
   };
 }
@@ -156,6 +158,8 @@ describe("which runs may be counted", () => {
 
   const cases: [string, Partial<MeasureReport>, RegExp][] = [
     ["a scripted walk", { scripted: true }, /scripted walk/],
+    ["a run made before versions were stamped", { instrument: undefined }, /before versions were stamped.*current version/],
+    ["a run made under an earlier version of the lab", { instrument: { version: LAB_INSTRUMENT_VERSION - 1 } }, /version 1, not the current version 2/],
     ["an aborted run", { abortedBecause: "the endowment was backed by ISSUER-A" }, /aborted: the endowment/],
     ["a contaminated run", { contamination: "a mint was backed by TRADER-4" }, /contaminated/],
     ["a harness failure", { infrastructureFailure: {} }, /harness failed/],
