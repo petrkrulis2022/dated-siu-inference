@@ -996,6 +996,7 @@ async function main(): Promise<void> {
       "payment_symmetry: pay_with_claim settles a seller-issued quote, like pay (2026-10-04)",
       "passed_requires_testing_purchase: passed = gate passed AND testing paid for AND carried out (2026-10-04)",
       "claims_have_positions: a claim is tracked per holder — what each holds, presents and is served — so one passed on in part, or two in one window, are no longer one slot overwritten (2026-10-05)",
+      "failed_calls_are_shown_to_the_agent: a call that was refused or reverted now appears in the agent's history with its sentence; before, it left no trace (2026-10-06)",
       "drained_issuer_stays_drained: after every window later than the drain the operator takes back capacity that returned to the drained issuer, before its own scheduled mint (2026-10-05)",
       "empty_at_token_budget_is_retried_once: a completion that ends at the token limit with no text is retried once and, if it recurs, the run is infrastructure-failed and excluded (2026-10-05)",
     ],

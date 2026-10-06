@@ -252,6 +252,7 @@ third party, never the Assay.
 | D10 | 2026-10-06 | Cost and turn targets are estimates until the first model run measures them. | Claude Code |
 | D11 | 2026-10-06 | **Observed asymmetry, recorded not removed.** A dollar payment sits in escrow until the seller settles; a claim transfer lands at once. So a buyer carries delivery risk on the claim route and not on the dollar route. It is a property of the instrument, not of the lab. `settle_escrow` is refused until the seller has delivered, so the escrow protects the buyer as designed. | Claude Code |
 | D12 | 2026-10-06 | **Quote amounts are quantised to $0.0001.** The quote format rounds `amount_usd_max` half-up to four decimals (`QUOTE_AMOUNT_DP`), which I will not change. At an illustrative print of 0.001437 USD/SIU a 1-SIU job at 1.2 × print quotes **0.0017** (nominal 0.0017244) and a unit of raw work at the print quotes **0.0014** (nominal 0.001437), so prices are off their nominal by up to about 3% and the seller's margin is 0.0003 against a nominal 0.000287. Parity between the two routes is unaffected (both are sized from the same quote). The board states the amounts the quotes carry, taken from the SDK's own builder. A larger job would shrink the error but multiplies headroom use; the choice of 1 SIU stands. | Claude Code |
+| D13 | 2026-10-06 | **Engine defect, found by the first loop-level test of the lab hooks and fixed for every configuration.** The history an agent reads was built only from calls that *succeeded*, so a call that was refused or reverted left no trace in its next prompt: the agent saw "no turns yet" or a gap, and could only retry blind. The code's own comment said it "sees this in its tool-call history exactly like any other tool error"; no agent in any run ever has, and a real prompt from the live scripted run confirms it. The plain-error work reached the logs, not the agent. Every guard refusal in the lab would have been invisible. Failed calls now enter the history with the sentence, in order. This is an instrument change for the gate configuration too, recorded in its manifest. | Claude Code |
 
 ---
 
@@ -291,7 +292,7 @@ Items from the stopped step c, for completeness:
 - [x] P1 — economy module: config, seeded schedule and needs, one list
 - [x] P2 — job source and work executor (T1 variants, grader, cost accounting)
 - [x] P3 — `deliver_job` and the lab guards (quote rate, size, type, round, raw-work credit)
-- [ ] P4 — loop lab hooks: board section, rounds, fee rebate, scoring snapshot (hooks and service written and unit-tested; loop-level test and scoring snapshot to do)
+- [x] P4 — loop lab hooks: board section, rounds, fee rebate (loop-level tests pass; the scoring snapshot is built with the runner, P7)
 - [ ] P5 — issuer service policy seat (quotes, settles escrow, serves redemptions)
 - [ ] P6 — briefs, roster, model assignment, validator
 - [ ] P7 — lab runner: opening balances, endowment mints, launch checks, rounds, run-end settlement

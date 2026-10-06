@@ -17,7 +17,7 @@ import type {
   Submission,
   TaskClass,
 } from "@touchstone/task-pack-gate-hardening";
-import { assembleContext } from "../context/assemble.js";
+import { assembleContext, type ToolCallRecord } from "../context/assemble.js";
 import { computeTimeToExpirySeconds } from "../context/expiry.js";
 import {
   projectedTurnCostUsd,
@@ -706,6 +706,9 @@ export interface BoardSections {
  * read by a buyer whose asset choice F1 is measuring. The mapping is structural; the prose stays
  * free to name no action at all.
  */
+/** Sections that are shown and by construction never wake an agent, so they name no tool. */
+export const NEVER_WAKING_SECTIONS: readonly string[] = ["labInfoText"];
+
 export const WAKE_SECTION_TOOLS: Record<string, readonly ToolName[]> = {
   marketBoardText: ["request_quote", "issue_quote", "pay", "pay_with_claim", "settle_split"],
   redemptionText: ["serve_redemption"],
@@ -998,6 +1001,23 @@ export async function runFullRunWindow(
   const capacityEvents: CapacityEvent[] = [];
   /** Currency lab only: failures of the lab's own bookkeeping, which are the harness's, not an agent's. */
   const labErrors: { agentId: AgentId; turn: number; tool: string; message: string }[] = [];
+  /**
+   * Calls an agent made that FAILED — refused for their arguments, refused by a guard, or reverted — kept
+   * so the agent is told. The history an agent reads is built from `runner.toolCallRecords()`, which holds
+   * only calls that succeeded, so before this a failed call left no trace in the next prompt: the agent saw
+   * "no turns yet" or a history with a gap, and could only retry blind. The comment on the args-error path
+   * said it "sees this in its tool-call history exactly like any other tool error"; it did not, and no
+   * agent in any run ever has. The sentence is the one the plain-error table already produced for the log.
+   */
+  const failedCallsByAgent = new Map<AgentId, ToolCallRecord[]>();
+  const recordFailedCall = (agentId: AgentId, turn: number, tool: string, args: unknown, sentence: string): void => {
+    const list = failedCallsByAgent.get(agentId) ?? [];
+    list.push({ turn, jobId: options.job.jobId, toolName: tool, args, result: { error: sentence } });
+    failedCallsByAgent.set(agentId, list);
+  };
+  /** The agent's successful and failed calls together, in the order they were made. */
+  const historyFor = (agentId: AgentId, successes: readonly ToolCallRecord[]): ToolCallRecord[] =>
+    [...successes, ...(failedCallsByAgent.get(agentId) ?? [])].sort((a, b) => a.turn - b.turn);
 
   /**
    * Everything this issuer owes, or may come to owe, from the three places the loop keeps it.
@@ -1324,7 +1344,11 @@ export async function runFullRunWindow(
       continue;
     }
 
-    const context = assembleContext(agent.agentId, agent.skillPackText, runner.toolCallRecords());
+    const context = assembleContext(
+      agent.agentId,
+      agent.skillPackText,
+      historyFor(agent.agentId, runner.toolCallRecords()),
+    );
     recorder.recordContext(agent.agentId, turn, context);
 
     try {
@@ -2032,6 +2056,7 @@ export async function runFullRunWindow(
         contentBlockTypes: adapterResult.contentBlockTypes,
         parsed: `${JSON.stringify(intent)} -> args error: ${err instanceof Error ? err.message : String(err)}`,
       };
+      recordFailedCall(agent.agentId, turn, intent.tool, intent.args, err instanceof Error ? err.message : String(err));
       pushLog(log);
       options.onTurn?.(agent.agentId, log);
       await friction.append(
@@ -2739,6 +2764,7 @@ export async function runFullRunWindow(
           parsed: `${JSON.stringify(intent)} -> tool call error: ${explainToolError(err)}`,
           toolCall: { name: intent.tool, ok: false },
         };
+        recordFailedCall(agent.agentId, turn, intent.tool, intent.args, explainToolError(err));
         pushLog(log);
         options.onTurn?.(agent.agentId, log);
         await friction.append(

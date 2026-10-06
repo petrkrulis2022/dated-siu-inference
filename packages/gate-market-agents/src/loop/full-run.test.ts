@@ -43,7 +43,7 @@ import {
   type RosterAgentConfig,
 } from "./full-run.js";
 import { MAX_ATTACK_ROUNDS } from "./full-run.js";
-import { composeBoard, WAKE_SECTION_TOOLS, renderSettleableText, type BoardSections } from "./full-run.js";
+import { composeBoard, NEVER_WAKING_SECTIONS, WAKE_SECTION_TOOLS, renderSettleableText, type BoardSections } from "./full-run.js";
 
 const PRICES = { priceInUsdPer1M: "2", priceOutUsdPer1M: "12" };
 
@@ -3271,6 +3271,8 @@ describe("composeBoard — what an agent is shown vs what wakes it (spec §4.6ae
     deliveredGateText: "",
     gateDefeatedText: "",
     forwardInvitation: "",
+    labInfoText: "",
+    labActionText: "",
   };
 
   it("shows a served PASS without waking on it — the assertion the old single string could not satisfy", () => {
@@ -3393,7 +3395,9 @@ describe("composeBoard — what an agent is shown vs what wakes it (spec §4.6ae
     // choice returning. Asserted structurally rather than by looking for tool names in the
     // prose — §4.6q, worked syntax for one option is a steer, and the holder's sections are read
     // by a buyer whose asset choice F1 is measuring.
-    const wakingSections = Object.keys(empty).filter((k) => k !== "servedWasFailure");
+    const wakingSections = Object.keys(empty).filter(
+      (k) => k !== "servedWasFailure" && !NEVER_WAKING_SECTIONS.includes(k),
+    );
     for (const section of wakingSections) {
       const tools = WAKE_SECTION_TOOLS[section];
       expect(tools, `${section} has no entry in WAKE_SECTION_TOOLS`).toBeDefined();
@@ -3402,7 +3406,11 @@ describe("composeBoard — what an agent is shown vs what wakes it (spec §4.6ae
   });
 
   it("§4.6ac invariant: the mapping covers every section and invents none", () => {
-    const sections = new Set(Object.keys(empty).filter((k) => k !== "servedWasFailure"));
+    // `labInfoText` is shown and by construction never wakes, so it names no tool and has no entry — the
+    // lab-hooks test holds that it cannot wake an agent. Every section that CAN wake must be mapped.
+    const sections = new Set(
+      Object.keys(empty).filter((k) => k !== "servedWasFailure" && !NEVER_WAKING_SECTIONS.includes(k)),
+    );
     expect(new Set(Object.keys(WAKE_SECTION_TOOLS))).toEqual(sections);
   });
 });

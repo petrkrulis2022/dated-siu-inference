@@ -2828,6 +2828,24 @@ operator procedure, not a CI test, because the sixth trio's topology cannot be s
 devnet (its USDC is a mock, its issuers register A-first, and `request_quote` has no settlement-asset
 entry for a devnet chain).
 
+### 4.6bj An agent is told when a call it made failed
+
+**Found 2026-10-06 by the first loop-level test of the currency lab's hooks; true of every run until now.**
+The history in an agent's prompt ("WHAT HAS HAPPENED SO FAR") is built from the runner's records, which
+hold only calls that **succeeded**. A call refused for its arguments, refused by a guard, or reverted left
+no trace: the agent's next prompt read "(no turns yet)" or had a gap where the call had been, and it could
+only retry blind. The comment on the loop's args-error path said the agent "sees this in its tool-call
+history exactly like any other tool error"; it did not, in any run, and the plain-error table of §4.6bc
+reached the turn log and never the agent. Observed behaviours that fit — a model repeating a known-failing
+call four times, an issuer burning its turn budget on refused calls — were read at the time as agent choices.
+
+Failed calls are now recorded in the agent's history, in the order they happened, with the sentence the
+plain-error table produces (an argument refusal's own message otherwise): `Turn 3 — called pay({...}) ->
+{"error":"…"}`. Held by loop-level tests that read the *next prompt*, and mutation-checked: leaving failures
+out of the history fails all three. It changes what agents see in every configuration; it is recorded in the
+gate runner's `instrumentChanges`. It makes the §4.6-RULE obligation stricter, not looser: an error sentence
+shown to an agent must be true and must say only what is so.
+
 ## 5. Identity, wallets and chain
 
 ### 5.1 Chain
