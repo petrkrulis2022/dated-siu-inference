@@ -36,7 +36,8 @@ export function openRequests(prompt: string): { requestId: string; from: string;
 /** `YOU HAVE BEEN PAID AND OWE THE WORK` — dollar-route quotes this seller must now deliver. */
 export function owedInUsdc(prompt: string): string[] {
   return sectionLines(prompt, /^YOU HAVE BEEN PAID AND OWE THE WORK/)
-    .map((l) => /^\s+answers (qr-\d+):/.exec(l))
+    // `answers qr-3:` in the gate configuration, `qr-3:` in the lab (QuoteBoardOptions.requestIdFirst).
+    .map((l) => /^\s+(?:answers )?(qr-\d+):/.exec(l))
     .filter((m): m is RegExpExecArray => m !== null)
     .map((m) => m[1]);
 }

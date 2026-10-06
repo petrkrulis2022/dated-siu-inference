@@ -38,12 +38,13 @@ import {
 } from "./p5-shared.js";
 
 /**
- * The run's spending cap is enforced against PROJECTED spend: each turn is projected at its worst case (the full
- * output budget at the model's price), about five times what it realizes. The first model run, capped at 3, was
- * stopped by it after about 125 turns having realized $0.69, and round 3 never opened. A full run is about 200
- * turns at a projected $0.024, so the cap sits well above that; what is spent is the realized figure, reported.
+ * The run's spending cap is enforced against PROJECTED spend, so the projection has to mean something. The first
+ * model run projected every turn at the full 4,500-token output allowance, about five times what a turn realizes,
+ * and a $3 cap stopped it after about 125 turns having realized $0.69. Traders now project at 600 output tokens (twice
+ * the observed maximum; `lab/roster.ts`), about 1.5 times realized, so a cap of 3 allows several hundred turns — more
+ * than a full run — and stops a runaway at roughly two real dollars.
  */
-const RUN_CAP_USD = "10";
+const RUN_CAP_USD = "3";
 const EXPERIMENT_CAP_USD = "150";
 const DEFAULT_DEPLOYMENT = "data/deployments/base-sepolia-gate-market-single-issuer.json";
 /** Enough gas for a run's transactions at any gas price Base Sepolia has shown. */

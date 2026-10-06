@@ -61,7 +61,7 @@ export function unitsHeld(prompt: string): number | undefined {
 /** `Quotes you have received` with the amount each carries — what a buyer may now pay. */
 export function receivedQuotes(prompt: string): { requestId: string; sellerId: string; amountUsd: string }[] {
   return sectionLines(prompt, /^Quotes you have received/)
-    .map((l) => /^\s+answers (qr-\d+): seller (\S+?), amount_usd_max (\S+?),/.exec(l))
+    .map((l) => /^\s+(qr-\d+): quote from seller (\S+?), amount_usd_max (\S+?),/.exec(l))
     .filter((m): m is RegExpExecArray => m !== null)
     .map((m) => ({ requestId: m[1], sellerId: m[2], amountUsd: m[3] }));
 }

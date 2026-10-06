@@ -258,3 +258,30 @@ describe("QuoteBoard — how a requester is named to the seller", () => {
     expect(text).not.toContain("ORCHESTRATOR");
   });
 });
+
+describe("QuoteBoard — the line that names a quote", () => {
+  // The first lab run: a trader read "answers qr-2" as the id and called pay with it in 28 of its 40 turns.
+  const board = (options?: { requestIdFirst?: boolean }) => {
+    const b = new QuoteBoard(options);
+    const r = b.postRequest("ORCHESTRATOR", fakeQuoteBody("erc8004:0xWORKERCODE"));
+    b.postIssuedQuote(r.requestId, fakeQuote("erc8004:0xWORKERCODE"));
+    return b;
+  };
+
+  it("leads with 'answers' by default, as the gate configuration's readers and history expect", () => {
+    expect(board().renderFor("ORCHESTRATOR", "erc8004:0xORCH")).toContain("  answers qr-1: seller erc8004:0xWORKERCODE, amount_usd_max");
+  });
+
+  it("leads with the request id alone when asked, as the lines for open requests do — no phrase for a model to take as the id", () => {
+    const text = board({ requestIdFirst: true }).renderFor("ORCHESTRATOR", "erc8004:0xORCH");
+    expect(text).toContain("  qr-1: quote from seller erc8004:0xWORKERCODE, amount_usd_max");
+    expect(text).not.toContain("answers");
+  });
+
+  it("does the same for the line that says a seller has been paid", () => {
+    const b = board({ requestIdFirst: true });
+    b.recordPaid("qr-1", "usdc");
+    expect(b.renderFor("WORKER-CODE", "erc8004:0xWORKERCODE")).toMatch(/^ {2}qr-1: amount_usd_max /m);
+    expect(b.renderFor("WORKER-CODE", "erc8004:0xWORKERCODE")).not.toContain("answers qr-1");
+  });
+});

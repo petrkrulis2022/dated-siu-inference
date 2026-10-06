@@ -45,6 +45,13 @@ export interface QuoteBoardOptions {
    * agent has never been told exists.
    */
   displayName?: (buyer: AgentId) => string;
+  /**
+   * Lead each quote line with the request id alone — `qr-2: quote from seller …` — as the lines for open requests
+   * already do, instead of `answers qr-2: …`. The first lab run found the second form ambiguous: a trader read
+   * "answers qr-2" as the id and called `pay` with it in 28 of its 40 turns, never realizing the id was "qr-2". Off in
+   * the gate configuration, which its scripted readers and its history are written against.
+   */
+  requestIdFirst?: boolean;
 }
 
 export class QuoteBoard {
@@ -211,10 +218,11 @@ export class QuoteBoard {
           "yours until you deliver and settle:",
       );
       for (const i of owedBySeller) {
+        const lead = this.options.requestIdFirst === true ? `  ${i.requestId}:` : `  answers ${i.requestId}:`;
         lines.push(
           this.options.reservationStep === false
-            ? `  answers ${i.requestId}: amount_usd_max ${i.quote.amount_usd_max}.`
-            : `  answers ${i.requestId}: amount_usd_max ${i.quote.amount_usd_max}. Commit the capacity ` +
+            ? `${lead} amount_usd_max ${i.quote.amount_usd_max}.`
+            : `${lead} amount_usd_max ${i.quote.amount_usd_max}. Commit the capacity ` +
                 `first (reserve_for_work), then do the work you quoted for, then ` +
                 `settle_escrow.`,
         );
@@ -225,10 +233,9 @@ export class QuoteBoard {
         "Quotes you have received (settle one by naming its requestId, in whichever asset you choose):",
       );
       for (const i of myQuotes) {
-        lines.push(
-          `  answers ${i.requestId}: seller ${i.quote.seller_id}, amount_usd_max ${i.quote.amount_usd_max}, ` +
-            `expires ${i.quote.expiry}`,
-        );
+        const lead =
+          this.options.requestIdFirst === true ? `  ${i.requestId}: quote from seller` : `  answers ${i.requestId}: seller`;
+        lines.push(`${lead} ${i.quote.seller_id}, amount_usd_max ${i.quote.amount_usd_max}, expires ${i.quote.expiry}`);
       }
     }
     return lines.join("\n");

@@ -7,6 +7,7 @@ import { TOOLS, type ToolName } from "../tools/index.js";
 import { buildLabBrief, sharedPartOf, type LabBriefInput } from "./briefs.js";
 import { LAB_TRADERS, SEAT_OF, buildEconomy, type TraderLabel } from "./economy.js";
 import { LAB_TRADER_TOOLS } from "./roster.js";
+import { LAB_TOOL_NAMES } from "./tools.js";
 
 const economy = buildEconomy(9);
 const directory = {
@@ -134,13 +135,13 @@ describe("lab briefs — no steering, and nothing the system would refuse", () =
     }
   });
 
-  it("names, in its worked syntax, only tools the traders hold — and each example is valid JSON", () => {
+  it("names, in its worked syntax, only tools the traders were given, by the names they were given — and each example is valid JSON", () => {
+    const shown = new Set(LAB_TRADER_TOOLS.map((t) => LAB_TOOL_NAMES[t] ?? t));
     const examples = toolExamples(text);
     expect(examples.length).toBeGreaterThan(8);
-    for (const e of examples) {
-      expect(LAB_TRADER_TOOLS, `${e.tool} is in a worked example but not in the grant`).toContain(e.tool as ToolName);
-      expect(Object.keys(TOOLS)).toContain(e.tool);
-    }
+    for (const e of examples) expect(shown, `${e.tool} is in a worked example but is not a name a trader was given`).toContain(e.tool);
+    // The loop's own names for the renamed tools never appear: a trader that read one would call a tool it does not have.
+    for (const internal of Object.keys(LAB_TOOL_NAMES)) expect(examples.map((e) => e.tool)).not.toContain(internal);
   });
 
   it("gives a request_quote example the tool itself accepts", () => {
@@ -148,10 +149,17 @@ describe("lab briefs — no steering, and nothing the system would refuse", () =
     expect(requestQuoteTool.argsSchema.safeParse(example.args).success).toBe(true);
   });
 
-  it("gives the same worked settlement calls for a job and for raw work — one list, not two", () => {
+  it("gives every payment route one worked example of the same shape, named by what it does (D26)", () => {
     const section = briefs["TRADER-1"].slice(briefs["TRADER-1"].indexOf("Step 3"), briefs["TRADER-1"].indexOf("IF YOU ARE THE SELLER"));
-    expect(section).toContain("for a job and for a unit of raw work alike");
-    for (const tool of ["pay", "pay_with_claim", "transfer_claim", "settle_split"]) expect(section).toContain(`"tool": "${tool}"`);
+    expect(section.replace(/\s+/g, " ")).toContain("each works for a job and for a unit of raw work alike");
+    const routes = toolExamples(section).filter((e) => e.tool.startsWith("pay_"));
+    expect(routes.map((e) => e.tool)).toEqual(["pay_with_usdc", "pay_with_new_claim", "pay_with_held_claim", "pay_split"]);
+    // The same one-argument shape for every route; the split alone has to say how much of it is claim.
+    for (const e of routes) expect(Object.keys(e.args)).toContain("requestId");
+    expect(Object.keys(routes[0].args)).toEqual(["requestId"]);
+    expect(Object.keys(routes[1].args)).toEqual(["requestId"]);
+    expect(Object.keys(routes[2].args)).toEqual(["requestId"]);
+    expect(Object.keys(routes[3].args)).toEqual(["requestId", "claimQuantityMilliSiu"]);
   });
 
   it("is refused by the validator if an asset is recommended — the guard is live on these briefs", () => {

@@ -39,7 +39,7 @@ import {
 
 const economy = buildEconomy(9);
 /** The board exactly as the runner builds it: a requester is shown by its label, never its seat. */
-const PRODUCTION_BOARD = { reservationStep: false, displayName: labDisplayName } as const;
+const PRODUCTION_BOARD = { reservationStep: false, displayName: labDisplayName, requestIdFirst: true } as const;
 const PRINT = "0.001437"; // illustrative
 const p = printNano(PRINT);
 const ids = {
@@ -224,31 +224,31 @@ describe("a scripted trader's decisions", () => {
       }
     });
 
-    it("usdc: pay, with the zero settler", () => {
+    it("usdc: pay_with_usdc, by the quote alone", () => {
       const s = quoted("usdc");
-      expect(pays(s, 10_000, 5_000)).toEqual({ tool: "pay", args: { requestId: s.requestId, settler: ZERO } });
+      expect(pays(s, 10_000, 5_000)).toEqual({ tool: "pay_with_usdc", args: { requestId: s.requestId } });
       expect(s.mem.status.fellBack).toEqual([]);
     });
 
-    it("mint_forward: pay_with_claim", () => {
+    it("mint_forward: pay_with_new_claim", () => {
       const s = quoted("mint_forward");
-      expect(pays(s, 10_000, 5_000)).toEqual({ tool: "pay_with_claim", args: { requestId: s.requestId } });
+      expect(pays(s, 10_000, 5_000)).toEqual({ tool: "pay_with_new_claim", args: { requestId: s.requestId } });
     });
 
     it("split: half of the quote's claim, the rest in dollars", () => {
       const s = quoted("split");
-      expect(pays(s, 10_000, 5_000)).toEqual({ tool: "settle_split", args: { requestId: s.requestId, claimQuantityMilliSiu: "592", settler: ZERO } });
+      expect(pays(s, 10_000, 5_000)).toEqual({ tool: "pay_split", args: { requestId: s.requestId, claimQuantityMilliSiu: "592" } });
     });
 
-    it("held: passes the claim on by name, in the seller's label, once its balance covers the quote", () => {
+    it("held: pay_with_held_claim, by the quote alone, once its balance covers the quote", () => {
       const s = quoted("held");
-      expect(pays(s, 10_000, 2_000)).toEqual({ tool: "transfer_claim", args: { agentId: s.need.seller, tokenId: "777", requestId: s.requestId } });
+      expect(pays(s, 10_000, 2_000)).toEqual({ tool: "pay_with_held_claim", args: { requestId: s.requestId } });
       expect(s.mem.status.fellBack).toEqual([]);
     });
 
     it("falls back to dollars when the planned route's price is in fSIU it does not hold, and says so", () => {
       const s = quoted("held");
-      expect(pays(s, 10_000, 100)).toEqual({ tool: "pay", args: { requestId: s.requestId, settler: ZERO } });
+      expect(pays(s, 10_000, 100)).toEqual({ tool: "pay_with_usdc", args: { requestId: s.requestId } });
       expect(s.mem.status.fellBack).toEqual([
         { trader: s.me, requestId: s.requestId, planned: "held", because: "holds 10000 USDC minor units and 100 mSIU; the quote is 1700 and 1184 mSIU" },
       ]);
@@ -257,12 +257,12 @@ describe("a scripted trader's decisions", () => {
     it("falls back to a held claim when the planned mint would cost more dollars than it holds — minting is paid for in USDC", () => {
       // 1,184 mSIU costs 1,701 minor units to mint at this print, more than the 1,200 held.
       const s = quoted("mint_forward");
-      expect(pays(s, 1_200, 5_000)).toEqual({ tool: "transfer_claim", args: { agentId: s.need.seller, tokenId: "777", requestId: s.requestId } });
+      expect(pays(s, 1_200, 5_000)).toEqual({ tool: "pay_with_held_claim", args: { requestId: s.requestId } });
     });
 
     it("pays in claims it holds when it has no dollars for the quote", () => {
       const s = quoted("usdc");
-      expect(pays(s, 500, 2_000)).toMatchObject({ tool: "transfer_claim" });
+      expect(pays(s, 500, 2_000)).toMatchObject({ tool: "pay_with_held_claim" });
     });
 
     it("prefers a route the walk has used least over the planned one when it can afford both — coverage is the aim", () => {
@@ -270,8 +270,8 @@ describe("a scripted trader's decisions", () => {
       // Two jobs have already gone by dollars; nothing by the other routes.
       for (const id of ["qr-90", "qr-91"]) s.mem.status.decided.push({ trader: "TRADER-9" as never, requestId: id, kind: "job", planned: "usdc", used: "usdc" });
       const intent = pays(s, 10_000, 5_000) as { tool: string };
-      expect(intent.tool).not.toBe("pay");
-      expect(["pay_with_claim", "transfer_claim", "settle_split"]).toContain(intent.tool);
+      expect(intent.tool).not.toBe("pay_with_usdc");
+      expect(["pay_with_new_claim", "pay_with_held_claim", "pay_split"]).toContain(intent.tool);
       // Dollars were affordable, so this is a choice for coverage and not a fall back.
       expect(s.mem.status.fellBack).toEqual([]);
     });
@@ -286,13 +286,13 @@ describe("a scripted trader's decisions", () => {
 
     it("sets a route aside once it has failed and reads the balances again — a failed payment is not repeated", () => {
       const s = quoted("usdc");
-      expect(pays(s, 10_000, 5_000)).toMatchObject({ tool: "pay" });
-      // The payment reverted (history: a failed `pay` after the read), and the quote is still on the board.
-      const failed = call(3, "pay", {}, { error: "the paying wallet does not hold enough USDC." });
+      expect(pays(s, 10_000, 5_000)).toMatchObject({ tool: "pay_with_usdc" });
+      // The payment reverted (history: a failed `pay_with_usdc` after the read), and the quote is still on the board.
+      const failed = call(3, "pay_with_usdc", {}, { error: "the paying wallet does not hold enough USDC." });
       const again = decide(promptFor(s.me, s.books, s.board, [read(1, 10_000, 5_000), failed]), env, s.mem).intent;
       expect(again).toEqual(READ);
       const next = decide(promptFor(s.me, s.books, s.board, [read(1, 10_000, 5_000), failed, read(5, 10_000, 5_000)]), env, s.mem).intent;
-      expect(next).toMatchObject({ tool: "transfer_claim" }); // dollars are set aside; the next affordable route is the held claim
+      expect(next).toMatchObject({ tool: "pay_with_held_claim" }); // dollars are set aside; the next affordable route is the held claim
       expect(s.mem.status.decided).toHaveLength(1);
       expect(s.mem.status.decided[0]).toMatchObject({ planned: "usdc", used: "held" });
     });
@@ -339,7 +339,7 @@ describe("a scripted trader's decisions", () => {
       expect(decide(promptFor(s.need.seller, s.books, s.board), env, s.mem).intent).toMatchObject({ tool: "get_balances" });
       const funds = call(1, "get_balances", {}, { usdc: { integerMinorUnits: "10000" }, claims: [{ tokenId: "777", balance: "5000" }], escrows: [] });
       const { intent } = decide(promptFor(s.need.seller, s.books, s.board, [funds]), env, s.mem);
-      const expectedTool = { usdc: "pay", mint_forward: "pay_with_claim", held: "transfer_claim", split: "settle_split" }[route];
+      const expectedTool = { usdc: "pay_with_usdc", mint_forward: "pay_with_new_claim", held: "pay_with_held_claim", split: "pay_split" }[route];
       expect(intent).toMatchObject({ tool: expectedTool });
     });
 

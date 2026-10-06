@@ -16,13 +16,13 @@ const decide = async (prompt: string) => JSON.parse((await issuerServiceAdapter(
 
 describe("the issuer service", () => {
   it("answers an open request for raw work", async () => {
-    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName });
+    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName, requestIdFirst: true });
     board.postRequest("ORCHESTRATOR", body(ISSUER));
     expect(await decide(board.renderFor("ISSUER-B", ISSUER))).toEqual({ tool: "issue_quote", args: { requestId: "qr-1" } });
   });
 
   it("releases the escrow of a quote that has been paid in dollars", async () => {
-    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName });
+    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName, requestIdFirst: true });
     const r = board.postRequest("ORCHESTRATOR", body(ISSUER));
     board.postIssuedQuote(r.requestId, signed(ISSUER));
     board.recordPaid(r.requestId, "usdc");
@@ -30,7 +30,7 @@ describe("the issuer service", () => {
   });
 
   it("answers requests before releasing escrows, one action a turn, and the rest stays on the board", async () => {
-    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName });
+    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName, requestIdFirst: true });
     const first = board.postRequest("ORCHESTRATOR", body(ISSUER));
     board.postIssuedQuote(first.requestId, signed(ISSUER));
     board.recordPaid(first.requestId, "usdc");
@@ -40,7 +40,7 @@ describe("the issuer service", () => {
   });
 
   it("does nothing about a quote paid in claims: there is no escrow, and the issuer simply holds the claim", async () => {
-    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName });
+    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName, requestIdFirst: true });
     const r = board.postRequest("ORCHESTRATOR", body(ISSUER));
     board.postIssuedQuote(r.requestId, signed(ISSUER));
     board.recordPaid(r.requestId, "fsiu");
@@ -48,7 +48,7 @@ describe("the issuer service", () => {
   });
 
   it("stops retrying a release the chain keeps refusing, and goes on to the next one", async () => {
-    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName });
+    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName, requestIdFirst: true });
     for (const buyer of ["ORCHESTRATOR", "WORKER-CODE"] as const) {
       const r = board.postRequest(buyer, body(ISSUER));
       board.postIssuedQuote(r.requestId, signed(ISSUER));

@@ -255,6 +255,103 @@ describe("runFullRunWindow with the currency lab's hooks", () => {
     }
   });
 
+  describe("the names the lab gives its tools", () => {
+    // `ask_for_quote` stands in for a renamed payment tool: request_quote needs no chain, so the seam can be tested whole.
+    const NAMES = { request_quote: "ask_for_quote" } as const;
+    const hooks = (events: LabToolEvent[] = []): LabHooks => ({
+      infoTextFor: () => "",
+      actionTextFor: () => "",
+      guard: async () => null,
+      afterToolCall: async (e) => void events.push(e),
+      advanceRound: async () => false,
+      toolDescription: (t) => (t === "request_quote" ? "ask_for_quote(siu, rateUsdPerSiu, sellerId, ...) -> asks a seller for a quote." : undefined),
+      resolveCall: (_agent, name, args) => {
+        if (name === "request_quote") return { refuse: "request_quote is not one of your tools." };
+        if (name === NAMES.request_quote) return { tool: "request_quote", args };
+        return undefined;
+      },
+      rewriteText: (t) => t.replace(/request_quote/g, "ask_for_quote"),
+    });
+    const runWith = (adapter: Adapter, lab: LabHooks, runId: string) =>
+      run([cfg("ORCHESTRATOR", adapter, ["request_quote"], "buyer"), cfg("WORKER-CODE", async () => respond({ done: true, summary: "x" }), ["issue_quote"])], lab, runId);
+
+    it("shows the description the lab gives a tool in place of the loop's own", async () => {
+      const prompts: string[] = [];
+      await runWith(async (_m, p) => (prompts.push(p), respond({ done: true, summary: "x" })), hooks(), "run-names-1");
+      expect(prompts[0]).toContain("ask_for_quote(siu, rateUsdPerSiu, sellerId, ...) -> asks a seller for a quote.");
+      expect(prompts[0]).not.toContain("request_quote(siu, model, rateUsdPerSiu");
+    });
+
+    it("runs the loop's tool for a call by the lab's name, and shows the history as the agent made the call", async () => {
+      const prompts: string[] = [];
+      const events: LabToolEvent[] = [];
+      let n = 0;
+      const adapter: Adapter = async (_m, p) => {
+        prompts.push(p);
+        return ++n === 1 ? respond({ ...REQUEST("0.0017244"), tool: "ask_for_quote" }) : respond({ done: true, summary: "x" });
+      };
+      const result = await runWith(adapter, hooks(events), "run-names-2");
+      // The loop ran request_quote, and told the lab so under that name.
+      expect(events.map((e) => e.tool)).toEqual(["request_quote"]);
+      expect(result.turnLogsByAgent.ORCHESTRATOR[0].toolCall).toEqual({ name: "request_quote", ok: true });
+      // The agent's next prompt shows the call it made, by the name it used, and never the loop's.
+      expect(prompts[1]).toContain("Turn 1 — called ask_for_quote(");
+      expect(prompts[1]).not.toContain("called request_quote(");
+    });
+
+    it("refuses the loop's own name for a renamed tool, in the agent's next prompt, in the lab's words", async () => {
+      const prompts: string[] = [];
+      let n = 0;
+      const adapter: Adapter = async (_m, p) => {
+        prompts.push(p);
+        return ++n === 1 ? respond(REQUEST("0.0017244")) : respond({ done: true, summary: "x" });
+      };
+      const events: LabToolEvent[] = [];
+      await runWith(adapter, hooks(events), "run-names-3");
+      expect(events).toEqual([]); // nothing ran
+      expect(prompts[1]).toContain("Turn 1 — called request_quote(");
+      expect(prompts[1]).toContain('"error":"request_quote is not one of your tools."');
+    });
+
+    it("writes the loop's tool name in an error sentence as the agent knows it", async () => {
+      const prompts: string[] = [];
+      let n = 0;
+      const adapter: Adapter = async (_m, p) => {
+        prompts.push(p);
+        // pattern "estimate" with no siuMax: the tool's own error names request_quote.
+        return ++n === 1
+          ? respond({ tool: "ask_for_quote", args: { siu: "1", model: "m", rateUsdPerSiu: "0.001", indexVersion: "i", printId: "p", printHash: "0x0", sellerId: "erc8004:0xabc", chain: "base-sepolia", expiresInSeconds: 60, pattern: "estimate" } })
+          : respond({ done: true, summary: "x" });
+      };
+      await runWith(adapter, hooks(), "run-names-4");
+      expect(prompts[1]).toContain("Turn 1 — called ask_for_quote(");
+      expect(prompts[1]).toContain('ask_for_quote: pattern \\"estimate\\" requires siuMax');
+      expect(prompts[1]).not.toContain("request_quote: pattern");
+    });
+  });
+
+  it("refuses a call by a guard that has to read the chain first, and the agent is told", async () => {
+    const prompts: string[] = [];
+    let n = 0;
+    const adapter: Adapter = async (_m, p) => {
+      prompts.push(p);
+      return ++n === 1 ? respond(REQUEST("0.0017244")) : respond({ done: true, summary: "x" });
+    };
+    const lab: LabHooks = {
+      infoTextFor: () => "",
+      actionTextFor: () => "",
+      // Asynchronous: it has to read a balance before it can say no.
+      guard: async () => {
+        await new Promise((r) => setTimeout(r, 5));
+        return "This payment costs 1700 USDC minor units; the wallet holds 100 USDC minor units.";
+      },
+      afterToolCall: async () => {},
+      advanceRound: async () => false,
+    };
+    await run([cfg("ORCHESTRATOR", adapter, ["request_quote"], "buyer"), cfg("WORKER-CODE", async () => respond({ done: true, summary: "x" }), ["issue_quote"])], lab, "run-async-guard");
+    expect(prompts[1]).toContain("This payment costs 1700 USDC minor units; the wallet holds 100 USDC minor units.");
+  });
+
   it("does nothing different when no hooks are given", async () => {
     let aCall = 0;
     const adapterA: Adapter = async () => (++aCall === 1 ? respond(REQUEST("0.0017244")) : respond({ done: true, summary: "x" }));

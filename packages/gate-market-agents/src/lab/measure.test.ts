@@ -161,7 +161,7 @@ describe("which runs may be counted", () => {
     ["a run stopped by a spending cap", { haltedReason: { ORCHESTRATOR: "experiment_halt", "WORKER-CODE": "max_turns" } }, /stopped by a spending cap, not by its agents \(ORCHESTRATOR: experiment_halt\)/],
     ["a run stopped by an agent's own ceiling", { haltedReason: { "WORKER-EXTRACT": "ceiling" } }, /spending cap/],
     ["a run made before versions were stamped", { instrument: undefined }, /before versions were stamped.*current version/],
-    ["a run made under an earlier version of the lab", { instrument: { version: LAB_INSTRUMENT_VERSION - 1 } }, /version 1, not the current version 2/],
+    ["a run made under an earlier version of the lab", { instrument: { version: LAB_INSTRUMENT_VERSION - 1 } }, /version 2, not the current version 3/],
     ["an aborted run", { abortedBecause: "the endowment was backed by ISSUER-A" }, /aborted: the endowment/],
     ["a contaminated run", { contamination: "a mint was backed by TRADER-4" }, /contaminated/],
     ["a harness failure", { infrastructureFailure: {} }, /harness failed/],

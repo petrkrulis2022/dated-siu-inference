@@ -388,6 +388,12 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
         workCostUsd = workCostUsd.plus(new D(usd));
         input.budget.recordRealizedInferenceSpend(usd);
       },
+      tokenId: tokenId.toString(),
+      // Confirmed reads, so a payment the trader cannot afford is refused before it is sent (spec: D27).
+      holdings: async (t) => ({
+        usdcMinor: await input.chain.usdcBalance(traderAddress[t]),
+        fsiuMilliSiu: await input.chain.claimBalance(tokenId!, traderAddress[t]),
+      }),
       onRoundOpened: async (round) => {
         snapshots.push(await snap(`round ${round} opened`));
       },
@@ -440,7 +446,7 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
       windowTo,
       mintContext: input.mintContext,
       lab: service,
-      board: new QuoteBoard({ reservationStep: false, displayName: labDisplayName }),
+      board: new QuoteBoard({ reservationStep: false, displayName: labDisplayName, requestIdFirst: true }),
       openingClaims,
       ...(input.onTurn !== undefined ? { onTurn: input.onTurn as never } : {}),
     });

@@ -96,6 +96,13 @@ export interface RosterAgentConfig {
   erc8004Id: string;
   rpcUrl: string;
   maxOutputTokens: number;
+  /**
+   * What a turn is PROJECTED to produce, for the spending cap only; `maxOutputTokens` is still what the model is
+   * allowed. Projecting every turn at the full allowance made the cap fire at five times realized spend: the first
+   * lab run, projected at 4,500 output tokens a turn, was stopped having realized $0.69 of a $3 cap, when its turns
+   * produced about 100 to 300 tokens. Absent, the allowance is the projection, as before.
+   */
+  projectedOutputTokens?: number;
   /** Deciding agents (ORCHESTRATOR, the workers, HEDGER) run at 0.7 so five F1 runs are genuinely
    * distinct attempts rather than near-copies of one another; issuers stay at 0, where variation
    * is noise rather than the thing being measured. Per-agent rather than per-run because those
@@ -1029,14 +1036,35 @@ export async function runFullRunWindow(
    * agent in any run ever has. The sentence is the one the plain-error table already produced for the log.
    */
   const failedCallsByAgent = new Map<AgentId, ToolCallRecord[]>();
-  const recordFailedCall = (agentId: AgentId, turn: number, tool: string, args: unknown, sentence: string): void => {
+  /**
+   * Currency lab only: what each agent actually called, by the name and arguments it used, keyed by agent and turn.
+   * The loop runs the internal tool; the agent's history shows the call it made, so a renamed tool is never
+   * called by two names in one prompt.
+   */
+  const callsAsMade = new Map<string, { name: string; args: unknown }>();
+  const callKey = (agentId: AgentId, turn: number): string => `${agentId}#${turn}`;
+  const recordFailedCall = (agentId: AgentId, turn: number, tool: string, args: unknown, sentence: string, rewrite = true): void => {
     const list = failedCallsByAgent.get(agentId) ?? [];
-    list.push({ turn, jobId: options.job.jobId, toolName: tool, args, result: { error: sentence } });
+    const made = callsAsMade.get(callKey(agentId, turn));
+    list.push({
+      turn,
+      jobId: options.job.jobId,
+      toolName: made?.name ?? tool,
+      args: made?.args ?? args,
+      // A sentence about a tool the agent was not given names the loop's own tool on purpose, so it is not rewritten.
+      result: { error: (rewrite ? options.lab?.rewriteText?.(sentence) : undefined) ?? sentence },
+    });
     failedCallsByAgent.set(agentId, list);
   };
   /** The agent's successful and failed calls together, in the order they were made. */
   const historyFor = (agentId: AgentId, successes: readonly ToolCallRecord[]): ToolCallRecord[] =>
-    [...successes, ...(failedCallsByAgent.get(agentId) ?? [])].sort((a, b) => a.turn - b.turn);
+    [
+      ...successes.map((r) => {
+        const made = callsAsMade.get(callKey(agentId, r.turn));
+        return made === undefined ? r : { ...r, toolName: made.name, args: made.args };
+      }),
+      ...(failedCallsByAgent.get(agentId) ?? []),
+    ].sort((a, b) => a.turn - b.turn);
 
   /**
    * Everything this issuer owes, or may come to owe, from the three places the loop keeps it.
@@ -1657,10 +1685,11 @@ export async function runFullRunWindow(
       context,
       toolOrderByAgent[agent.agentId],
       [boardSectionText, forwardText].filter(Boolean).join("\n\n"),
+      options.lab?.toolDescription?.bind(options.lab),
     );
     const projectedUsd = projectedTurnCostUsd(
       Math.ceil(prompt.length / 4),
-      agent.maxOutputTokens,
+      agent.projectedOutputTokens ?? agent.maxOutputTokens,
       agent.prices,
     );
 
@@ -2029,6 +2058,43 @@ export async function runFullRunWindow(
         }),
       );
       continue;
+    }
+
+    // Currency lab: the agent calls a tool by the name it was shown. Resolve it to the tool the loop runs, and remember
+    // the call as the agent made it, for its history. A renamed tool called by its old internal name is refused.
+    if (options.lab?.resolveCall !== undefined) {
+      const resolved = options.lab.resolveCall(agent.agentId, intent.tool, intent.args);
+      if (resolved !== undefined) {
+        callsAsMade.set(callKey(agent.agentId, turn), { name: intent.tool, args: intent.args });
+        if ("refuse" in resolved) {
+          const log: TurnLog = {
+            turn,
+            promptChars: prompt.length,
+            projectedUsd,
+            realizedUsd,
+            marketBoardText: marketBoardText || undefined,
+            rawText: adapterResult.text,
+            promptText: prompt,
+            settleableText: settleableText || undefined,
+            forwardText: forwardText || undefined,
+            latencyMs: adapterResult.latency_ms,
+            stopReason: adapterResult.stopReason,
+            usage: adapterResult.usage,
+            contentBlockTypes: adapterResult.contentBlockTypes,
+            parsed: `${JSON.stringify(intent)} -> tool call error: ${resolved.refuse}`,
+          };
+          recordFailedCall(agent.agentId, turn, intent.tool, intent.args, resolved.refuse, false);
+          pushLog(log);
+          options.onTurn?.(agent.agentId, log);
+          await friction.append(
+            buildFrictionEntry(agent.agentId, turn, options.job.jobId, intent.friction, null, {
+              ...(intent.rationale !== undefined ? { rationale: intent.rationale } : {}),
+            }),
+          );
+          continue;
+        }
+        intent = { ...intent, tool: resolved.tool, args: resolved.args };
+      }
     }
 
     let args: unknown;
@@ -2895,7 +2961,7 @@ export interface BuildToolArgsContext {
   board: QuoteBoard;
   /** Currency lab only: vets a call's own arguments (price, size, which need) and returns a true
    *  sentence to refuse it with, or null. See `LabHooks.guard`. */
-  labGuard?: (tool: ToolName, rawArgs: unknown) => string | null;
+  labGuard?: (tool: ToolName, rawArgs: unknown) => string | null | Promise<string | null>;
   agentAddressByAgentId: Partial<Record<AgentId, string>>;
   deployment: RunnerDeps["deployment"];
   windowFrom: bigint;
@@ -3077,7 +3143,7 @@ export async function buildToolArgs(
   rawArgs: unknown,
   ctx: BuildToolArgsContext,
 ): Promise<unknown> {
-  const labRefusal = ctx.labGuard?.(tool, rawArgs) ?? null;
+  const labRefusal = (await ctx.labGuard?.(tool, rawArgs)) ?? null;
   if (labRefusal !== null) throw new Error(labRefusal);
   if (tool === "submit_job") {
     const rawSource = (rawArgs as { source?: unknown } | undefined)?.source;

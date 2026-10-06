@@ -40,8 +40,6 @@ import { openRequests, owedInUsdc } from "../cues/prompt-cues.js";
 import { claimMintCostMinorUnits } from "../loop/parity.js";
 import { claimForUsd, decimalToUnits } from "./money.js";
 
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-
 export type JobRoute = "usdc" | "mint_forward" | "held" | "split";
 export type RawRoute = JobRoute;
 export const JOB_ROUTES: readonly JobRoute[] = ["usdc", "mint_forward", "held", "split"];
@@ -142,7 +140,7 @@ export function decide(prompt: string, env: ScriptedLabEnv, mem: Memory): { inte
   // 4. Pay the issuer's quote for a unit of raw work.
   const rawQuote = issuerId === undefined ? undefined : quotes.find((q) => q.sellerId === issuerId);
   if (rawQuote !== undefined && tokenId !== undefined) {
-    return pay(me, "raw", rawQuote, plannedRawRoute(me, confirmed("raw")), prompt, history, turn, tokenId, env, mem, "ISSUER-B");
+    return pay(me, "raw", rawQuote, plannedRawRoute(me, confirmed("raw")), prompt, history, turn, tokenId, env, mem);
   }
 
   // 5. Ask the issuer for a unit when I owe more deliveries than I hold or have ordered units for.
@@ -157,7 +155,7 @@ export function decide(prompt: string, env: ScriptedLabEnv, mem: Memory): { inte
   if (jobQuote !== undefined && tokenId !== undefined) {
     const seller = sellerLabelOf(jobQuote.sellerId);
     if (seller !== undefined) {
-      return pay(me, "job", jobQuote, plannedJobRoute(me, confirmed("job")), prompt, history, turn, tokenId, env, mem, seller);
+      return pay(me, "job", jobQuote, plannedJobRoute(me, confirmed("job")), prompt, history, turn, tokenId, env, mem);
     }
   }
 
@@ -194,7 +192,13 @@ export const newMemory = (): Memory => ({
   status: { decided: [], fellBack: [], unaffordable: [] },
 });
 
-const TOOL_OF_ROUTE: Record<string, string> = { usdc: "pay", mint_forward: "pay_with_claim", held: "transfer_claim", split: "settle_split" };
+/** The names the lab gives a trader for each route (`lab/tools.ts`): a script calls them as a model does. */
+const TOOL_OF_ROUTE: Record<string, string> = {
+  usdc: "pay_with_usdc",
+  mint_forward: "pay_with_new_claim",
+  held: "pay_with_held_claim",
+  split: "pay_split",
+};
 /** Where a trader turns when it cannot afford the planned route. Dollars first: they are the plainest. */
 const FALLBACK_ORDER: readonly string[] = ["usdc", "held", "mint_forward", "split"];
 
@@ -227,7 +231,6 @@ function pay(
   tokenId: string,
   env: ScriptedLabEnv,
   mem: Memory,
-  sellerName: string,
 ): { intent: Intent; note?: string } {
   const id = quote.requestId;
   const amountMinor = decimalToUnits(quote.amountUsd, 6);
@@ -316,13 +319,9 @@ function pay(
   }
 
   const intent: Intent =
-    route === "usdc"
-      ? { tool: "pay", args: { requestId: id, settler: ZERO_ADDRESS } }
-      : route === "mint_forward"
-        ? { tool: "pay_with_claim", args: { requestId: id } }
-        : route === "held"
-          ? { tool: "transfer_claim", args: { agentId: sellerName, tokenId, requestId: id } }
-          : { tool: "settle_split", args: { requestId: id, claimQuantityMilliSiu: (claimQty / 2n).toString(), settler: ZERO_ADDRESS } };
+    route === "split"
+      ? { tool: TOOL_OF_ROUTE.split, args: { requestId: id, claimQuantityMilliSiu: (claimQty / 2n).toString() } }
+      : { tool: TOOL_OF_ROUTE[route], args: { requestId: id } };
   return { intent, note: `${kind} ${id}: ${route}` };
 }
 

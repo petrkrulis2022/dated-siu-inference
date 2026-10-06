@@ -115,6 +115,9 @@ export function buildLabRoster(input: LabRosterInput): RosterAgentConfig[] {
       erc8004Id: erc8004IdFor(addressOf(seat)),
       rpcUrl: input.rpcUrl,
       maxOutputTokens: 4500,
+      // Measured on the first run: input about 6,000 tokens a turn, output 100 to 300 (maximum 305). Projecting the
+      // full 4,500 made the spending cap fire at five times realized spend; 600 is about twice the observed maximum.
+      projectedOutputTokens: 600,
       temperature: 0.7,
       provider: input.providerOf(modelString),
     };

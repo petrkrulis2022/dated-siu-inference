@@ -48,7 +48,6 @@ export interface LabBriefInput {
 }
 
 const INDEX_VERSION = "SIU-2026a";
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 /** Who the reader is, and the three things that differ between traders: skill, needs, address. */
 function personalBlock(i: LabBriefInput): string {
@@ -112,23 +111,15 @@ HOW TO BUY
       "printHash": "0x00", "sellerId": "<sellerId>", "chain": "${i.chain}",
       "expiresInSeconds": 3600, "pattern": "fixed"}}
   Step 2 — the seller answers; the quote appears on your board as "Quotes you have received".
-  Step 3 — settle it. These are the ways, for a job and for a unit of raw work alike:
-    in USDC:
-      {"tool": "pay", "args": {"requestId": "<the requestId>", "settler": "${ZERO_ADDRESS}"}}
-    in fSIU, minting a new claim worth the quote's price at the print:
-      {"tool": "pay_with_claim", "args": {"requestId": "<the requestId>"}}
-    in fSIU, passing on a claim you already hold:
-      {"tool": "transfer_claim", "args": {"agentId": "<the seller's name>", "tokenId": "${i.claim.tokenId}",
-        "requestId": "<the requestId>"}}
-      (the quantity is set from the quote: the amount of claim worth its price at the print)
-    partly in each (the claim part is a newly minted claim):
-      {"tool": "settle_split", "args": {"requestId": "<the requestId>",
-        "claimQuantityMilliSiu": "<how much of it to settle in claims>", "settler": "${ZERO_ADDRESS}"}}
+  Step 3 — settle it, by any of these. Each names the quote by its requestId, and each works for a job and for a
+  unit of raw work alike:
+    {"tool": "pay_with_usdc", "args": {"requestId": "<the requestId>"}}
+    {"tool": "pay_with_new_claim", "args": {"requestId": "<the requestId>"}}
+    {"tool": "pay_with_held_claim", "args": {"requestId": "<the requestId>"}}
+    {"tool": "pay_split", "args": {"requestId": "<the requestId>", "claimQuantityMilliSiu": "<mSIU of the claim part>"}}
   WHAT EACH COSTS
     Paying in USDC costs USDC. Paying with fSIU you hold costs that fSIU. Minting new fSIU costs USDC, at the
     print, paid to the issuer.
-  A transfer_claim may also pass fSIU to a trader with no quote: {"tool": "transfer_claim",
-    "args": {"agentId": "<name>", "tokenId": "${i.claim.tokenId}", "quantity": "<mSIU>"}}.
 
 IF YOU ARE THE SELLER OF A JOB
   A request addressed to you appears on your board. {"tool": "issue_quote", "args": {"requestId": "<id>"}}

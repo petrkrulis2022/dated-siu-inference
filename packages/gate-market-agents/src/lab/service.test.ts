@@ -32,6 +32,7 @@ describe("LabService", () => {
         return { txHash: "0xrebate" };
       },
       escrowFeeBps: 50,
+      tokenId: "777",
       recordWorkCost: (usd) => costs.push(usd),
       onRoundOpened: async (r) => void rounds.push(r),
     };
@@ -128,6 +129,7 @@ describe("LabService", () => {
         seed: 4,
         executorFor: () => executor,
         escrowFeeBps: 50,
+        tokenId: "777",
         rebate: async () => {
           throw new Error("operator out of funds");
         },
@@ -204,12 +206,135 @@ describe("LabService", () => {
   });
 
   describe("the hooks the loop calls", () => {
-    it("shows a trader the board and the issuer nothing, and refuses by the guard", () => {
+    it("shows a trader the board and the issuer nothing, and refuses by the guard", async () => {
       expect(svc.infoTextFor("ORCHESTRATOR")).toContain("THE LAB");
       expect(svc.infoTextFor(ISSUER_SEAT)).toBe("");
       expect(svc.actionTextFor(ISSUER_SEAT)).toBe("");
-      expect(svc.guard("ORCHESTRATOR", "request_quote", { siu: "1" })).toBe("request_quote needs a sellerId.");
-      expect(svc.guard("HEDGER", "request_quote", { siu: "1" })).toBeNull();
+      expect(await svc.guard("ORCHESTRATOR", "request_quote", { siu: "1" })).toBe("request_quote needs a sellerId.");
+      expect(await svc.guard("HEDGER", "request_quote", { siu: "1" })).toBeNull();
+    });
+  });
+
+  describe("the lab's names for its payment tools (D26)", () => {
+    const need = () => economy.needs.find((n) => n.round === 1)!;
+    const quoted = () => {
+      const n = need();
+      books.requestPosted("qr-1", n.buyer, n.seller);
+      books.quoteIssued("qr-1");
+      return n;
+    };
+
+    it("describes the four routes in one shape, each ending in what it costs", () => {
+      const d = (["pay", "pay_with_claim", "transfer_claim", "settle_split"] as const).map((t) => svc.toolDescription(t)!);
+      expect(d.map((x) => x.split("(")[0])).toEqual(["pay_with_usdc", "pay_with_new_claim", "pay_with_held_claim", "pay_split"]);
+      for (const line of d) expect(line).toMatch(/-> settles a quote you were sent .* Costs: /);
+      expect(svc.toolDescription("get_print")).toBeUndefined(); // everything else keeps its own
+    });
+
+    it("turns a call by the name the trader knows into the call the loop runs", () => {
+      const n = quoted();
+      const ZERO = "0x0000000000000000000000000000000000000000";
+      expect(svc.resolveCall("ORCHESTRATOR", "pay_with_usdc", { requestId: "qr-1" })).toEqual({ tool: "pay", args: { requestId: "qr-1", settler: ZERO } });
+      expect(svc.resolveCall("ORCHESTRATOR", "pay_with_new_claim", { requestId: "qr-1" })).toEqual({ tool: "pay_with_claim", args: { requestId: "qr-1" } });
+      expect(svc.resolveCall("ORCHESTRATOR", "pay_split", { requestId: "qr-1", claimQuantityMilliSiu: "592" })).toEqual({
+        tool: "settle_split",
+        args: { requestId: "qr-1", claimQuantityMilliSiu: "592", settler: ZERO },
+      });
+      // Paying with a held claim names only the quote: the seller and the token are the lab's to supply.
+      expect(svc.resolveCall("ORCHESTRATOR", "pay_with_held_claim", { requestId: "qr-1" })).toEqual({
+        tool: "transfer_claim",
+        args: { agentId: n.seller, tokenId: "777", requestId: "qr-1" },
+      });
+      expect(svc.resolveCall("ORCHESTRATOR", "pay_with_held_claim", { requestId: "qr-9" })).toEqual({ refuse: "there is no quote qr-9." });
+    });
+
+    it("refuses the loop's own names for the renamed tools, and leaves every other tool alone", () => {
+      for (const internal of ["pay", "pay_with_claim", "transfer_claim", "settle_split"]) {
+        expect(svc.resolveCall("ORCHESTRATOR", internal, { requestId: "qr-1" })).toEqual({ refuse: `${internal} is not one of your tools.` });
+      }
+      for (const other of ["request_quote", "issue_quote", "settle_escrow", "deliver_job", "get_balances", "wait"]) {
+        expect(svc.resolveCall("ORCHESTRATOR", other, {})).toBeUndefined();
+      }
+    });
+
+    it("writes an internal tool name inside a sentence as the trader knows it", () => {
+      expect(svc.rewriteText("pay_with_claim: \"forWindow\" must be a number. transfer_claim: no. settle_split: no. pay: no quote.")).toBe(
+        'pay_with_new_claim: "forWindow" must be a number. pay_with_held_claim: no. pay_split: no. pay_with_usdc: no quote.',
+      );
+      expect(svc.rewriteText("you will pay the seller")).toBe("you will pay the seller"); // the word alone is left
+    });
+  });
+
+  describe("a payment the trader cannot afford is refused in one sentence, whichever asset it is in", () => {
+    const withHoldings = (usdcMinor: bigint, fsiuMilliSiu: bigint): LabService =>
+      new LabService({
+        books,
+        guard: { printNano: 1_437_000n, params: DEFAULT_PARAMS },
+        seed: 4,
+        executorFor: () => executor,
+        rebate: async () => ({}),
+        escrowFeeBps: 50,
+        tokenId: "777",
+        holdings: async () => ({ usdcMinor, fsiuMilliSiu }),
+      });
+    const quotedTrade = () => {
+      const n = economy.needs.find((x) => x.round === 1)!;
+      books.requestPosted("qr-1", n.buyer, n.seller);
+      books.quoteIssued("qr-1");
+      return SEAT_OF[n.buyer];
+    };
+    // At the illustrative print a job quote is 1,700 minor units, its claim 1,184 mSIU, and minting that claim 1,701.
+
+    it("states cost against holdings in the same form for dollars, a new claim, a split and a held claim", async () => {
+      const buyer = quotedTrade();
+      const poor = withHoldings(100n, 100n);
+      expect(await poor.guard(buyer, "pay", { requestId: "qr-1" })).toBe("This payment costs 1700 USDC minor units; the wallet holds 100 USDC minor units.");
+      expect(await poor.guard(buyer, "pay_with_claim", { requestId: "qr-1" })).toBe("This payment costs 1701 USDC minor units; the wallet holds 100 USDC minor units.");
+      expect(await poor.guard(buyer, "settle_split", { requestId: "qr-1", claimQuantityMilliSiu: "592" })).toBe(
+        "This payment costs 1700 USDC minor units; the wallet holds 100 USDC minor units.",
+      );
+      expect(await poor.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toBe("This payment costs 1184 mSIU of fSIU; the wallet holds 100 mSIU of fSIU.");
+    });
+
+    it("lets a payment through when the wallet holds enough, and judges each route by the asset it spends", async () => {
+      const buyer = quotedTrade();
+      const dollarsOnly = withHoldings(5_000n, 0n);
+      expect(await dollarsOnly.guard(buyer, "pay", { requestId: "qr-1" })).toBeNull();
+      expect(await dollarsOnly.guard(buyer, "pay_with_claim", { requestId: "qr-1" })).toBeNull();
+      expect(await dollarsOnly.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toContain("costs 1184 mSIU of fSIU; the wallet holds 0");
+      const claimsOnly = withHoldings(0n, 5_000n);
+      expect(await claimsOnly.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toBeNull();
+      expect(await claimsOnly.guard(buyer, "pay", { requestId: "qr-1" })).toContain("USDC minor units");
+    });
+
+    it("never advises, and names no asset beyond the units it counts", async () => {
+      const buyer = quotedTrade();
+      const poor = withHoldings(0n, 0n);
+      for (const tool of ["pay", "pay_with_claim", "settle_split", "transfer_claim"] as const) {
+        const s = (await poor.guard(buyer, tool, { requestId: "qr-1", claimQuantityMilliSiu: "592" }))!;
+        expect(s).not.toMatch(/should|better|cheaper|prefer|instead|try/i);
+      }
+    });
+
+    it("does not ask the chain at all for a call the lab's own rules already refuse", async () => {
+      quotedTrade();
+      let reads = 0;
+      const svc2 = new LabService({
+        books,
+        guard: { printNano: 1_437_000n, params: DEFAULT_PARAMS },
+        seed: 4,
+        executorFor: () => executor,
+        rebate: async () => ({}),
+        escrowFeeBps: 50,
+        tokenId: "777",
+        holdings: async () => {
+          reads++;
+          return { usdcMinor: 0n, fsiuMilliSiu: 0n };
+        },
+      });
+      const stranger = (["ORCHESTRATOR", "WORKER-CODE", "WORKER-EXTRACT", "ISSUER-A"] as const).find((s) => s !== quotedTrade() && SEAT_OF[economy.needs[0].seller] !== s)!;
+      expect(await svc2.guard(stranger, "pay", { requestId: "qr-1" })).toContain("not yours to pay");
+      expect(reads).toBe(0);
     });
   });
 });

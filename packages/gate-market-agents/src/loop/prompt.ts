@@ -55,8 +55,10 @@ export function buildTurnPrompt(
    * prompt entirely when empty, so a turn with no open market activity isn't padded with a
    * hollow section header. */
   marketBoardText = "",
+  /** The currency lab renames its payment tools for the agent; where it gives a description, that is shown instead. */
+  describeTool: (name: ToolName) => string | undefined = () => undefined,
 ): string {
-  const toolList = availableTools.map((name) => TOOL_DESCRIPTIONS[name]).join("\n");
+  const toolList = availableTools.map((name) => describeTool(name) ?? TOOL_DESCRIPTIONS[name]).join("\n");
 
   const history =
     context.toolCalls.length === 0

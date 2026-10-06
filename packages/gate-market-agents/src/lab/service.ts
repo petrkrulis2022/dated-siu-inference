@@ -14,7 +14,9 @@ import { LabBooks, MAX_DELIVERY_ATTEMPTS, type Asset } from "./books.js";
 import { ISSUER_SEAT, LAB_ALIASES, traderForSeat, type TraderLabel } from "./economy.js";
 import { guardLabCall, type GuardConfig } from "./guards.js";
 import { renderLabAction, renderLabInfo } from "./board.js";
-import { escrowFeeMinor } from "./money.js";
+import { claimForUsd, escrowFeeMinor, quotedPrice, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu, jobSiu } from "./money.js";
+import { claimMintCostMinorUnits } from "../loop/parity.js";
+import { LAB_TOOL_DESCRIPTIONS, resolveLabCall, rewriteLabText } from "./tools.js";
 import { jobFor, type WorkExecutor } from "./jobs.js";
 
 export interface LabServiceDeps {
@@ -30,6 +32,13 @@ export interface LabServiceDeps {
   recordWorkCost?: (usd: string) => void;
   /** Called after a round opens, e.g. to take a snapshot of every trader's holdings. */
   onRoundOpened?: (round: number) => Promise<void>;
+  /** The one token every trader holds: what a payment from a held balance gives. */
+  tokenId: string;
+  /**
+   * A trader's confirmed holdings, read from the chain. With it, a payment the trader cannot afford is refused before
+   * anything is sent, in one sentence whichever asset it is in. Without it (a test) every payment goes to the chain.
+   */
+  holdings?: (trader: TraderLabel) => Promise<{ usdcMinor: bigint; fsiuMilliSiu: bigint }>;
 }
 
 export type LabOperatorAction =
@@ -78,9 +87,77 @@ export class LabService implements LabHooks, DeliverService {
     return me === undefined ? "" : renderLabAction(this.d.books, me);
   }
 
-  guard(agentId: AgentId, tool: ToolName, rawArgs: unknown): string | null {
+  async guard(agentId: AgentId, tool: ToolName, rawArgs: unknown): Promise<string | null> {
     const who = this.#who(agentId);
-    return who === undefined ? null : guardLabCall(this.d.books, this.d.guard, who, tool, rawArgs);
+    if (who === undefined) return null;
+    const refusal = guardLabCall(this.d.books, this.d.guard, who, tool, rawArgs);
+    if (refusal !== null) return refusal;
+    if (who === "ISSUER" || this.d.holdings === undefined) return null;
+    return this.#affordability(who, tool, rawArgs);
+  }
+
+  // ---- the lab's names for its tools ---------------------------------------------------------
+
+  toolDescription(tool: ToolName): string | undefined {
+    return LAB_TOOL_DESCRIPTIONS[tool];
+  }
+
+  resolveCall(_agentId: AgentId, name: string, args: unknown) {
+    return resolveLabCall(
+      {
+        sellerNameOf: (id) => {
+          const sale = this.d.books.sale(id);
+          return sale === undefined ? undefined : sale.seller === "ISSUER" ? ISSUER_SEAT : sale.seller;
+        },
+        tokenId: this.d.tokenId,
+      },
+      name,
+      args,
+    );
+  }
+
+  rewriteText(text: string): string {
+    return rewriteLabText(text);
+  }
+
+  /**
+   * What a payment costs against what the wallet holds — confirmed reads, one sentence, the same form whichever asset it
+   * is paid in. A payment the trader cannot afford is refused here, before it is sent, so it neither reaches the chain
+   * nor is retried as though the node were lagging; a payment this lets through that the chain then refuses is a
+   * stale balance, and the loop's own retry is the right answer to that.
+   */
+  async #affordability(me: TraderLabel, tool: ToolName, rawArgs: unknown): Promise<string | null> {
+    const id = (rawArgs as { requestId?: unknown } | undefined)?.requestId;
+    if (typeof id !== "string") return null;
+    const sale = this.d.books.sale(id);
+    if (sale === undefined) return null;
+    const p = this.d.guard.printNano;
+    const size = jobSiu(this.d.guard.params);
+    const price = quotedPrice(
+      size,
+      sale.kind === "trade" ? tradeRateUsdPerSiu(p, this.d.guard.params) : rawWorkRateUsdPerSiu(p),
+    ).minorUnits;
+    const claim = claimForUsd(quotedPrice(size, sale.kind === "trade" ? tradeRateUsdPerSiu(p, this.d.guard.params) : rawWorkRateUsdPerSiu(p)).usd, p);
+    let cost: bigint;
+    let asset: "usdc" | "fsiu";
+    if (tool === "pay" || tool === "settle_split") {
+      // A split is a minted part and a dollar part that together come to the whole price.
+      cost = price;
+      asset = "usdc";
+    } else if (tool === "pay_with_claim") {
+      cost = claimMintCostMinorUnits(claim, p);
+      asset = "usdc";
+    } else if (tool === "transfer_claim") {
+      cost = claim;
+      asset = "fsiu";
+    } else {
+      return null;
+    }
+    const held = await this.d.holdings!(me);
+    const have = asset === "usdc" ? held.usdcMinor : held.fsiuMilliSiu;
+    if (have >= cost) return null;
+    const unit = asset === "usdc" ? "USDC minor units" : "mSIU of fSIU";
+    return `This payment costs ${cost} ${unit}; the wallet holds ${have} ${unit}.`;
   }
 
   async afterToolCall(e: LabToolEvent): Promise<void> {
