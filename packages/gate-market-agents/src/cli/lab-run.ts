@@ -19,7 +19,10 @@ import type { RunnerDeps } from "../deps.js";
 import { AGENT_IDS, type AgentId } from "../identity/resolve.js";
 import { classIdFor, type MintContext } from "../loop/full-run.js";
 import { assertAllowancesForRun, readAllowances, RUN_MINIMUM_ALLOWANCE_MINOR_UNITS } from "./allowances.js";
-import { LAB_TRADERS, SEAT_OF, type TraderLabel } from "../lab/economy.js";
+import { DEFAULT_PARAMS, LAB_TRADERS, SEAT_OF, type TraderLabel } from "../lab/economy.js";
+import { jobSiu, printNano, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu } from "../lab/money.js";
+import { scriptedLabTraders, type ScriptedLabTraders } from "../lab/scripted-traders.js";
+import { renderWalk, verifyLabWalk, type WalkReport } from "../lab/verify-walk.js";
 import { modelExecutor, referenceExecutor, type WorkExecutor } from "../lab/jobs.js";
 import { viemLabChain } from "../lab/operator-chain.js";
 import { LAB_MODELS } from "../lab/roster.js";
@@ -121,6 +124,10 @@ async function main(): Promise<void> {
   assertAllowancesForRun(rows, `pnpm run approve-roster -- --deployment ${deploymentFile} --lab --execute`);
   console.log("USDC allowances to this deployment's WorkClaim: OK for all four traders and the operator.\n");
 
+  const commodityPrint = loadLatestCommodityPrint();
+  const rateUsdPerSiu = commodityPrint.dated_siu;
+  console.log(`Real Commodity SIU print ${commodityPrint.print_id}: $${rateUsdPerSiu}/SIU.\n`);
+
   const apiKeys = scripted ? {} : loadApiKeysFromEnv();
   const models = LAB_MODELS;
   const unpriced = Object.values(models).filter((m) => PRICES[m] === undefined);
@@ -129,10 +136,23 @@ async function main(): Promise<void> {
   }
 
   let adapters: Record<TraderLabel, Adapter>;
-  let issuerAdapter: Adapter | undefined;
+  const issuerAdapter: Adapter | undefined = undefined; // the production issuer service, in every mode
   let executorFor: (t: TraderLabel) => WorkExecutor;
+  let scriptedTraders: ScriptedLabTraders | undefined;
   if (scripted) {
-    throw new Error("--scripted needs the lab's scripted traders (piece P10, not built yet).");
+    const p = printNano(rateUsdPerSiu);
+    scriptedTraders = scriptedLabTraders({
+      print: { printId: commodityPrint.print_id, printHash: "0x00", rateUsdPerSiu, indexVersion: "SIU-2026a" },
+      rates: { trade: tradeRateUsdPerSiu(p, DEFAULT_PARAMS), raw: rawWorkRateUsdPerSiu(p) },
+      sizeSiu: jobSiu(DEFAULT_PARAMS),
+      chain: "base-sepolia",
+      quoteExpirySeconds: windowSeconds,
+      printNano: p,
+    });
+    adapters = scriptedTraders.adapters;
+    // A scripted job passes: the walk is about the plumbing, not the extraction.
+    executorFor = () => referenceExecutor;
+    console.log("Providers: none to check — a scripted run calls no model.\n");
   } else {
     adapters = Object.fromEntries(LAB_TRADERS.map((t) => [t, withRetry(createAdapterFor(registryEntry(models[t]), apiKeys))])) as Record<TraderLabel, Adapter>;
     // One real call per provider, through the run's own adapter: key, organisation and balance together.
@@ -151,10 +171,6 @@ async function main(): Promise<void> {
     console.log("");
     executorFor = (t) => modelExecutor({ adapter: adapters[t], modelString: models[t], prices: PRICES[models[t]] });
   }
-
-  const commodityPrint = loadLatestCommodityPrint();
-  const rateUsdPerSiu = commodityPrint.dated_siu;
-  console.log(`Real Commodity SIU print ${commodityPrint.print_id}: $${rateUsdPerSiu}/SIU.\n`);
 
   const chainReader = new ViemChainReader(deployment, rpcUrl);
   const escrowFromRecord = deploymentRecord.escrow.address as string;
@@ -226,7 +242,10 @@ async function main(): Promise<void> {
       rpcUrl,
       adapters,
       models,
-      prices: PRICES,
+      // A scripted seat costs nothing, and projecting a model's price for it would spend the cap on a call never made.
+      prices: scripted
+        ? Object.fromEntries(Object.values(models).map((m) => [m, { priceInUsdPer1M: "0", priceOutUsdPer1M: "0" }]))
+        : PRICES,
       providerOf: (m) => registryEntry(m).provider,
       executorFor,
       ...(issuerAdapter !== undefined ? { issuerAdapter } : {}),
@@ -253,9 +272,22 @@ async function main(): Promise<void> {
   }
 
   const reportPath = join(LAB_RUNS_ROOT, `${runId}-report.json`);
-  writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+  // A scripted walk is only worth having if what it was for actually happened, and a script that issued its
+  // calls proves only that. The verifier reads the recorded events; a failed check fails the process.
+  const walk =
+    scriptedTraders !== undefined
+      ? verifyLabWalk(JSON.parse(JSON.stringify(report)) as unknown as WalkReport, scriptedTraders.status())
+      : undefined;
+  writeFileSync(
+    reportPath,
+    `${JSON.stringify(walk !== undefined ? { ...report, scriptedWalk: { ...walk, steps: scriptedTraders!.status() } } : report, null, 2)}\n`,
+  );
   console.log(`\nMachine-readable report written to ${reportPath}`);
   printSummary(report);
+  if (walk !== undefined) {
+    console.log(`\n${renderWalk(walk)}`);
+    if (!walk.ok) process.exitCode = 1;
+  }
   if (report.abortedBecause !== undefined || report.pool.restored === false) process.exitCode = 1;
 }
 

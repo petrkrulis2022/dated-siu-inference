@@ -138,6 +138,10 @@ export interface LabReport {
   final?: unknown;
   measuredBeforeClose?: boolean;
   needsMet: Record<string, number>;
+  /** Every sale the books saw: a job bought from a trader, or a unit of raw work bought from the issuer. */
+  sales: unknown[];
+  /** What the escrow kept per dollar settlement, in basis points, and so what the operator gave back. */
+  escrowFeeBps: number;
   workLog: unknown[];
   workCostUsd: string;
   operatorActions: OperatorRecord[];
@@ -460,6 +464,8 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
     snapshots: snapshots.map(snapshotToJson),
     ...(final !== undefined ? { final: snapshotToJson(final), measuredBeforeClose: final.atChainSeconds < windowTo } : {}),
     needsMet: Object.fromEntries(LAB_TRADERS.map((t) => [t, books?.needsMet(t) ?? 0])),
+    sales: books?.allSales().map((x) => ({ ...x })) ?? [],
+    escrowFeeBps: input.escrowFeeBps,
     workLog: service?.workLog ?? [],
     workCostUsd: workCostUsd.toFixed(6),
     operatorActions: [...operatorActions, ...(service?.operatorActions ?? [])],
