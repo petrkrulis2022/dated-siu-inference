@@ -53,6 +53,7 @@ import {
 import { ForwardQuoteBook, type ForwardQuote } from "./forward-book.js";
 import { classIdFor } from "../tools/class-id.js";
 import { RedemptionTracker, type OpenPosition, type RedemptionState } from "./redemption-tracker.js";
+import type { LabHooks } from "./lab-hooks.js";
 import { buildTurnPrompt } from "./prompt.js";
 import {
   ModelResponseParseError,
@@ -271,6 +272,13 @@ export interface FullRunWindowOptions {
    * An instrument change, recorded as one (see `loop/testing-purchase.ts`).
    */
   requireTestingPurchase?: boolean;
+  /**
+   * The currency lab's hooks (`loop/lab-hooks.ts`). Absent in every other run, which then behaves
+   * exactly as before. Present, the loop adds the lab's board text, asks it to vet each call's
+   * arguments, tells it what each call did, lets it open the next round when nobody can act — and
+   * stops showing the claim-presentation notices, which name tools a lab trader does not hold.
+   */
+  lab?: LabHooks;
   /** Reported so the log says the pinned gate was graded, and with what result, rather than a
    *  window silently starting out already passed. */
   onPreAuthoredGate?: (passed: boolean, summary: string) => void;
@@ -536,6 +544,8 @@ export interface FullRunWindowResult {
    *  and whether it presented — from the loop's own record of every mint and transfer. What the next
    *  window is carried to settle is built from this, not from the mints. */
   claimPositions: OpenPosition[];
+  /** Currency lab only: failures of the lab's own bookkeeping — operator-side, never an agent's. */
+  labErrors: { agentId: AgentId; turn: number; tool: string; message: string }[];
   /** Every quote settlement this window, in order, with what the payer held at that moment. */
   paymentMoments: PaymentMoment[];
   /** Every USDC quote settled this window, with the amount actually released. */
@@ -677,6 +687,10 @@ export interface BoardSections {
   deliveredGateText: string;
   gateDefeatedText: string;
   forwardInvitation: string;
+  /** Currency lab only. Shown, never wakes. */
+  labInfoText?: string;
+  /** Currency lab only. Shown, and wakes an agent that holds a tool to act on it. */
+  labActionText?: string;
 }
 
 /**
@@ -709,6 +723,9 @@ export const WAKE_SECTION_TOOLS: Record<string, readonly ToolName[]> = {
   deliveredGateText: ["submit_attack"],
   gateDefeatedText: ["submit_job"],
   forwardInvitation: ["quote_forward"],
+  // The currency lab's own actionable section: a purchasable need, a paid job to deliver, a unit of
+  // raw work to buy. The informational section is deliberately absent — it never wakes.
+  labActionText: ["request_quote", "issue_quote", "pay", "pay_with_claim", "transfer_claim", "settle_split", "settle_escrow", "deliver_job"],
 };
 
 /**
@@ -763,6 +780,8 @@ export function composeBoard(
     { text: s.deliveredGateText, wakes: holds("deliveredGateText") },
     { text: s.gateDefeatedText, wakes: holds("gateDefeatedText"), oneShot: true },
     { text: s.forwardInvitation, wakes: holds("forwardInvitation"), oneShot: true },
+    { text: s.labInfoText ?? "", wakes: false },
+    { text: s.labActionText ?? "", wakes: holds("labActionText") },
   ];
   const join = (keep: (x: (typeof sections)[number]) => boolean): string =>
     sections
@@ -977,6 +996,8 @@ export async function runFullRunWindow(
   const attacks: AttackRecord[] = [];
   const forwardInvitations: { agentId: AgentId; turn: number }[] = [];
   const capacityEvents: CapacityEvent[] = [];
+  /** Currency lab only: failures of the lab's own bookkeeping, which are the harness's, not an agent's. */
+  const labErrors: { agentId: AgentId; turn: number; tool: string; message: string }[] = [];
 
   /**
    * Everything this issuer owes, or may come to owe, from the three places the loop keeps it.
@@ -1265,6 +1286,10 @@ export async function runFullRunWindow(
       cursorsSinceProgress = 0;
     }
     if (++cursorsSinceProgress > options.roster.length * 2) {
+      if (options.lab !== undefined && (await options.lab.advanceRound())) {
+        cursorsSinceProgress = 0;
+        continue;
+      }
       for (const waiting of activeAgents) {
         haltedReason[waiting] ??= "nothing_to_act_on";
       }
@@ -1320,19 +1345,26 @@ export async function runFullRunWindow(
     // itself is unaffected — it stays outstanding, still defaults, and its holder or anyone else
     // can still settle it; only this agent stops being told to do the impossible.
     const refusedTwice = (tool: ToolName): boolean => refusedTwiceFor(agent.agentId, tool);
-    const redemptionText = refusedTwice("serve_redemption")
-      ? ""
-      : redemption.renderFor(agent.agentId);
-    const transferText = redemption.renderForHolder(agent.agentId, chainNowSeconds);
+    // The claim-presentation notices tell a holder to "call redeem_claim" and an issuer to "call
+    // submit_job" / "serve_redemption". A currency-lab trader holds none of those tools, so in a lab
+    // run they are not shown at all: a notice that names an action the system will refuse is the
+    // defect §4.6-RULE exists to prevent. The lab's own board text carries what a trader needs.
+    const redemptionText =
+      options.lab !== undefined || refusedTwice("serve_redemption")
+        ? ""
+        : redemption.renderFor(agent.agentId);
+    const transferText =
+      options.lab !== undefined ? "" : redemption.renderForHolder(agent.agentId, chainNowSeconds);
     // Held, never presented, window closing — the stage before `unservedText`, and the costlier
     // one: an unpresented claim expires paying nothing (fsiu-design.md §4.3a).
-    const lapsingText = redemption.renderUnpresentedLapsingForHolder(
-      agent.agentId,
-      chainNowSeconds,
-    );
-    const deliveryOwedText = refusedTwice("submit_job")
-      ? ""
-      : redemption.renderForIssuerAwaitingDelivery(agent.agentId);
+    const lapsingText =
+      options.lab !== undefined
+        ? ""
+        : redemption.renderUnpresentedLapsingForHolder(agent.agentId, chainNowSeconds);
+    const deliveryOwedText =
+      options.lab !== undefined || refusedTwice("submit_job")
+        ? ""
+        : redemption.renderForIssuerAwaitingDelivery(agent.agentId);
     const canQuoteForward = agent.availableTools.includes("quote_forward");
     // An issuer's own standing offers are NOT an inbox item: they are not an arrival, and an
     // issuer whose only reason to wake is its own earlier quote would spin turns re-reading it.
@@ -1431,8 +1463,11 @@ export async function runFullRunWindow(
     // The holder's own two sections (spec §4.6ae). `servedText` is informational on a PASS and
     // actionable on a FAIL; `unservedText` fires once, when the holder has waited longer than it
     // has left. Both are built only from facts the holder's own `redeem_claim` result returned.
-    const servedText = redemption.renderServedForHolder(agent.agentId);
-    const unservedText = redemption.renderUnservedForHolder(agent.agentId, chainNowSeconds);
+    const servedText = options.lab !== undefined ? "" : redemption.renderServedForHolder(agent.agentId);
+    const unservedText =
+      options.lab !== undefined ? "" : redemption.renderUnservedForHolder(agent.agentId, chainNowSeconds);
+    const labInfoText = options.lab?.infoTextFor(agent.agentId) ?? "";
+    const labActionText = options.lab?.actionTextFor(agent.agentId) ?? "";
 
     const { shown: boardSectionText, wakeKey, wakeKeyNext } = composeBoard({
       marketBoardText,
@@ -1447,6 +1482,8 @@ export async function runFullRunWindow(
       deliveredGateText,
       gateDefeatedText,
       forwardInvitation,
+      labInfoText,
+      labActionText,
     }, agent.availableTools);
 
     // Skipped before the model is called and before the turn counter moves, so waiting costs
@@ -1492,6 +1529,7 @@ export async function runFullRunWindow(
         if (other.waitsFor === "gate" && canAttackNow()) return true;
         if (other.waitsFor === "buyer" && !hasPurchased.has(other.agentId)) return true;
         return (
+          (options.lab?.actionTextFor(other.agentId) ?? "") !== "" ||
           board.renderFor(other.agentId, other.erc8004Id) !== "" ||
           // Both of these are gated by the same retry cap that blanks the agent's own wake text
           // above. Asking the unsuppressed renderer here is what deadlocked the 17:06 run: a
@@ -1522,6 +1560,12 @@ export async function runFullRunWindow(
         );
       });
       if (someoneCanAct) continue;
+      // Nobody can act. In a lab run that is the end of a ROUND, not of the window: open the next one
+      // and let everyone be re-evaluated against its text.
+      if (options.lab !== undefined && (await options.lab.advanceRound())) {
+        cursorsSinceProgress = 0;
+        continue;
+      }
       for (const waiting of activeAgents) {
         if (options.roster.find((r) => r.agentId === waiting)?.waitsFor) {
           haltedReason[waiting] = "nothing_to_act_on";
@@ -1964,6 +2008,9 @@ export async function runFullRunWindow(
         deliveryFor: buildDeliveryFor,
         caller: { agentId: agent.agentId, erc8004Id: agent.erc8004Id },
         requiredQuoteSiu: options.requiredQuoteSiu,
+        ...(options.lab !== undefined
+          ? { labGuard: (t: ToolName, a: unknown) => options.lab!.guard(agent.agentId, t, a) }
+          : {}),
       });
     } catch (err) {
       // A real, disclosed failure (an unknown requestId, a missing address) — not a crash. The
@@ -2047,8 +2094,10 @@ export async function runFullRunWindow(
         claimLedger.apply(recorded, (address) => agentIdByAddress[address.toLowerCase()]);
       };
 
+      let postedRequestId: string | undefined;
+      let settledRequestIdForLab: string | undefined;
       if (intent.tool === "request_quote") {
-        board.postRequest(agent.agentId, record.result as QuoteBody);
+        postedRequestId = board.postRequest(agent.agentId, record.result as QuoteBody).requestId;
       }
       if (intent.tool === "issue_quote") {
         const requestId = (intent.args as { requestId?: unknown } | undefined)?.requestId;
@@ -2258,6 +2307,7 @@ export async function runFullRunWindow(
           const match = mine.find((i) => i.quote === settledQuote) ?? mine.at(-1);
           if (match) {
             board.recordSettled(match.requestId);
+            settledRequestIdForLab = match.requestId;
             // What was actually SETTLED, which can be less than the quote's ceiling: a seller may
             // claim less and the rest returns to the payer. A cost built from the ceiling would
             // overstate the dollar route.
@@ -2486,6 +2536,30 @@ export async function runFullRunWindow(
         );
       }
 
+      // The currency lab learns what the call did. Operator-side, so a failure here is the harness's and
+      // never the agent's: it is recorded and the run goes on, not shown to the agent as its error.
+      if (options.lab !== undefined) {
+        try {
+          await options.lab.afterToolCall({
+            agentId: agent.agentId,
+            turn,
+            tool: intent.tool,
+            intentArgs: intent.args,
+            builtArgs: args,
+            result: record.result,
+            ...(postedRequestId !== undefined ? { requestId: postedRequestId } : {}),
+            ...(settledRequestIdForLab !== undefined ? { settledRequestId: settledRequestIdForLab } : {}),
+          });
+        } catch (labErr) {
+          labErrors.push({
+            agentId: agent.agentId,
+            turn,
+            tool: intent.tool,
+            message: labErr instanceof Error ? labErr.message : String(labErr),
+          });
+        }
+      }
+
       const log: TurnLog = {
         turn,
         promptChars: prompt.length,
@@ -2691,6 +2765,7 @@ export async function runFullRunWindow(
     passed: verdict.passed,
     gateDelivered: passed,
     claimPositions: redemption.positions(),
+    labErrors,
     paymentMoments,
     usdcSettlements,
     claimFlows: Object.fromEntries(
@@ -2755,6 +2830,9 @@ function buildFrictionEntry(
 export interface BuildToolArgsContext {
   job: JobEnvelope;
   board: QuoteBoard;
+  /** Currency lab only: vets a call's own arguments (price, size, which need) and returns a true
+   *  sentence to refuse it with, or null. See `LabHooks.guard`. */
+  labGuard?: (tool: ToolName, rawArgs: unknown) => string | null;
   agentAddressByAgentId: Partial<Record<AgentId, string>>;
   deployment: RunnerDeps["deployment"];
   windowFrom: bigint;
@@ -2936,6 +3014,8 @@ export async function buildToolArgs(
   rawArgs: unknown,
   ctx: BuildToolArgsContext,
 ): Promise<unknown> {
+  const labRefusal = ctx.labGuard?.(tool, rawArgs) ?? null;
+  if (labRefusal !== null) throw new Error(labRefusal);
   if (tool === "submit_job") {
     const rawSource = (rawArgs as { source?: unknown } | undefined)?.source;
     // Found live, 2026-09-29 (P5 run 3): this used to substitute `""` for a missing/non-string
@@ -3096,7 +3176,19 @@ export async function buildToolArgs(
     // unpaid caller still gets the honest "no escrow to settle" error below.
     const paidUnsettled = ctx.board.paidUnsettledFor(erc8004Id);
     const mine = ctx.board.issuedQuotesBySeller(erc8004Id);
-    const latest = paidUnsettled.at(0) ?? mine.at(-1);
+    // A seller with several paid quotes at once (the currency lab: every trader both sells and buys)
+    // names which to settle with `requestId`; without it the first paid one is settled, as before.
+    const wanted = (rawArgs as { requestId?: unknown } | undefined)?.requestId;
+    if (typeof wanted === "string" && !paidUnsettled.some((i) => i.requestId === wanted)) {
+      throw new Error(
+        `settle_escrow: ${wanted} is not one of your paid, unsettled quotes` +
+          (paidUnsettled.length > 0 ? ` (they are: ${paidUnsettled.map((i) => i.requestId).join(", ")}).` : "."),
+      );
+    }
+    const latest =
+      (typeof wanted === "string" ? paidUnsettled.find((i) => i.requestId === wanted) : undefined) ??
+      paidUnsettled.at(0) ??
+      mine.at(-1);
     if (!latest) {
       throw new Error(
         "settle_escrow: you have not issued any quote this window, so there is no escrow to settle.",

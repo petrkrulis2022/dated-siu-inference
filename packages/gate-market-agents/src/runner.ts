@@ -170,6 +170,7 @@ export class Runner {
     }
 
     const ctx: ToolContext = {
+      agentId: this.agentId,
       deps: this.#deps,
       clients: this.#clients,
       dualRenderer: this.#dualRenderer,

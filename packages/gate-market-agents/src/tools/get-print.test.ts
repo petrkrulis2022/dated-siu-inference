@@ -49,6 +49,7 @@ function fakeCtx(overrides: { isReconciled?: (id: string) => Promise<boolean> } 
       isReconciled: overrides.isReconciled ?? (async () => false),
     },
     clients: {} as ToolContext["clients"],
+    agentId: "ORCHESTRATOR",
     dualRenderer: {} as ToolContext["dualRenderer"],
   };
 }

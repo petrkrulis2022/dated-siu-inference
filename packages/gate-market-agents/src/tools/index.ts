@@ -20,6 +20,7 @@ import { getPrintTool } from "./get-print.js";
 import { checkHeadroomTool } from "./check-headroom.js";
 import { listObligationsTool } from "./list-obligations.js";
 import { checkDeliveryTool } from "./check-delivery.js";
+import { deliverJobTool } from "./deliver-job.js";
 export type { ToolDefinition } from "./types.js";
 
 /** Spec §10's WP-4 tool list, dispatched by name — plus `submit_attack` (2026-09-27), the
@@ -56,6 +57,7 @@ export const TOOLS = {
   check_headroom: checkHeadroomTool,
   list_obligations: listObligationsTool,
   check_delivery: checkDeliveryTool,
+  deliver_job: deliverJobTool,
 } as const;
 
 export type ToolName = keyof typeof TOOLS;

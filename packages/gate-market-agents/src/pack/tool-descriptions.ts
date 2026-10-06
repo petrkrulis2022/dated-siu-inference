@@ -81,6 +81,12 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
     "check_delivery() -> for each claim you hold or have presented: whether the issuer has " +
     "actually served it, and with a pass or a fail. Takes no arguments — it answers only about " +
     "your own claims. Read-only.",
+  // The currency lab's seller step. Says nothing about either asset: it moves no payment, and the
+  // settlement of the quote is a separate act in whichever asset the buyer chose.
+  deliver_job:
+    "deliver_job(requestId) -> as the SELLER of a quote that has been paid: spends one unit of raw " +
+    "work you hold and delivers the job with your skill. A grader then checks the result; if it " +
+    "passes, the buyer's need is met. It moves no payment.",
 };
 
 export function formatToolList(): string {

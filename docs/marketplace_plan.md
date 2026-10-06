@@ -249,8 +249,9 @@ third party, never the Assay.
 | D7 | 2026-10-06 | Fee rebated per dollar settlement as an operator action. | user |
 | D8 | 2026-10-06 | **Redemption route (supersedes the first draft of this row).** The first draft had traders call `redeem_claim` for raw work. Mapping it onto the contract showed `presentForRedemption` presents the holder's *whole* balance, and any presented balance left at window close *defaults at face value from ISSUER-B's bond* instead of expiring (`settleWindowClose`). That would draw on the bond and pay USDC after every run. Instead raw work is sold as a **quote from the issuer, paid in USDC (`pay`) or in fSIU (a keyed `transfer_claim` or `pay_with_claim`)**; the claim returns to the issuer that owes the work, which is a redemption in effect. `redeem_claim` stays in the engine but is **not granted to lab traders**, so nothing is presented, every leftover claim expires, and the pool is restored with no attestation. The canonical asset text is unchanged and still true. Departs from "redeeming fSIU" in your wording; reversible — if you want literal `redeem_claim`, the cost is the default-at-close consequence above. | Claude Code |
 | D9 | 2026-10-06 | Raw-work accounting. One unit is 1 SIU at 1.0 × print. A unit is credited to the buyer when its quote is **paid** (either asset); `deliver_job` consumes one. A trader may buy a unit only while it owes a paid job it holds no unit for, so units are never stockpiled and none are left over to score. | Claude Code |
-| D11 | 2026-10-06 | **Observed asymmetry, recorded not removed.** A dollar payment sits in escrow until the seller settles; a claim transfer lands at once. So a buyer carries delivery risk on the claim route and not on the dollar route. It is a property of the instrument, not of the lab. `settle_escrow` is refused until the seller has delivered, so the escrow protects the buyer as designed. | Claude Code |
 | D10 | 2026-10-06 | Cost and turn targets are estimates until the first model run measures them. | Claude Code |
+| D11 | 2026-10-06 | **Observed asymmetry, recorded not removed.** A dollar payment sits in escrow until the seller settles; a claim transfer lands at once. So a buyer carries delivery risk on the claim route and not on the dollar route. It is a property of the instrument, not of the lab. `settle_escrow` is refused until the seller has delivered, so the escrow protects the buyer as designed. | Claude Code |
+| D12 | 2026-10-06 | **Quote amounts are quantised to $0.0001.** The quote format rounds `amount_usd_max` half-up to four decimals (`QUOTE_AMOUNT_DP`), which I will not change. At an illustrative print of 0.001437 USD/SIU a 1-SIU job at 1.2 × print quotes **0.0017** (nominal 0.0017244) and a unit of raw work at the print quotes **0.0014** (nominal 0.001437), so prices are off their nominal by up to about 3% and the seller's margin is 0.0003 against a nominal 0.000287. Parity between the two routes is unaffected (both are sized from the same quote). The board states the amounts the quotes carry, taken from the SDK's own builder. A larger job would shrink the error but multiplies headroom use; the choice of 1 SIU stands. | Claude Code |
 
 ---
 
@@ -287,10 +288,10 @@ Items from the stopped step c, for completeness:
 ### 12.2 Phase 1 build
 
 - [x] P0 — this plan, committed
-- [ ] P1 — economy module: config, seeded schedule and needs, one list
-- [ ] P2 — job source and work executor (T1 variants, grader, cost accounting)
-- [ ] P3 — `deliver_job` and the lab guards (quote rate, size, type, round, raw-work credit)
-- [ ] P4 — loop lab hooks: board section, rounds, fee rebate, scoring snapshot
+- [x] P1 — economy module: config, seeded schedule and needs, one list
+- [x] P2 — job source and work executor (T1 variants, grader, cost accounting)
+- [x] P3 — `deliver_job` and the lab guards (quote rate, size, type, round, raw-work credit)
+- [ ] P4 — loop lab hooks: board section, rounds, fee rebate, scoring snapshot (hooks and service written and unit-tested; loop-level test and scoring snapshot to do)
 - [ ] P5 — issuer service policy seat (quotes, settles escrow, serves redemptions)
 - [ ] P6 — briefs, roster, model assignment, validator
 - [ ] P7 — lab runner: opening balances, endowment mints, launch checks, rounds, run-end settlement

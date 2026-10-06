@@ -536,6 +536,7 @@ function windowResult(overrides: Partial<FullRunWindowResult> = {}): FullRunWind
     passed: false,
     gateDelivered: false,
     claimPositions: [],
+    labErrors: [],
     paymentMoments: [],
     usdcSettlements: [],
     claimFlows: {},
