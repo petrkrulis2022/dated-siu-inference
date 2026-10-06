@@ -35,7 +35,7 @@ import { setWriteRetryListener, type WriteRetryEvent } from "../chain/write.js";
 import { windowContamination } from "../cli/topology.js";
 import { LAB_INSTRUMENT_CHANGES, LAB_INSTRUMENT_VERSION } from "./instrument.js";
 import { labDisqualification, type MeasureReport } from "./measure.js";
-import { toolErrorsOf } from "../cli/tool-errors.js";
+import { refusalsOf, toolErrorsOf } from "../cli/tool-errors.js";
 import { LabBooks } from "./books.js";
 import {
   DEFAULT_PARAMS,
@@ -169,6 +169,8 @@ export interface LabReport {
   infrastructureFailure?: unknown;
   labErrors: FullRunWindowResult["labErrors"];
   toolErrors: unknown;
+  /** Calls refused before they ran: `format` (malformed) apart from `refused` (well formed, declined by a lab rule). */
+  refusals: unknown;
   turnsByAgent: Record<string, number>;
   haltedReason: unknown;
   totalRealizedUsd: string;
@@ -545,6 +547,7 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
     ...(result?.infrastructureFailure !== undefined ? { infrastructureFailure: result.infrastructureFailure } : {}),
     labErrors: result?.labErrors ?? [],
     toolErrors: result !== undefined ? toolErrorsOf(result.turnLogsByAgent) : [],
+    refusals: result !== undefined ? refusalsOf(result.turnLogsByAgent) : [],
     turnsByAgent: result?.turnsByAgent ?? {},
     haltedReason: result?.haltedReason ?? {},
     totalRealizedUsd: result?.totalRealizedUsd ?? "0.000000",
