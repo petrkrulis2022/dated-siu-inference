@@ -1,0 +1,39 @@
+{
+  "id": "04c71cf1-797f-92c4-a351-b5f4c06f4300",
+  "object": "chat.completion",
+  "created": 1791248813,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "88CD56\nE9313B\n8946A6\n2F821A",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes for the western and northern annexes. I am checking for any additional ones.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21890,
+    "completion_tokens": 18,
+    "total_tokens": 22260,
+    "prompt_tokens_details": {
+      "text_tokens": 21890,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 352,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 452320000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

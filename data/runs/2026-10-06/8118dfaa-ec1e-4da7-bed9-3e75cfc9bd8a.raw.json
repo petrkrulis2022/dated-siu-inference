@@ -1,0 +1,39 @@
+{
+  "id": "76e52150-f990-9dbd-924f-8d8e738e6da2",
+  "object": "chat.completion",
+  "created": 1791248820,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "9FEDD7\n613B21\nB2E2C9\nEA6A46",
+        "reasoning_content": "I am scanning the archive log for internal notes that list archival access codes for named annexes.\n\nI found four access codes for named annexes: 9FEDD7, 613B21, B2E2C9, and EA6A46. I am now verifying that no additional codes remain in the document.\n\nI have verified that no additional access codes appear in the document.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21466,
+    "completion_tokens": 20,
+    "total_tokens": 21983,
+    "prompt_tokens_details": {
+      "text_tokens": 21466,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 497,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 452660000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
