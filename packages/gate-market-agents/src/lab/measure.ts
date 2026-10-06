@@ -41,6 +41,8 @@ export interface MeasureReport {
   final?: { traders: { trader: string; usdcMinor: string; fsiuMilliSiu: string; needsMet: number; resultNano: string }[] };
   measuredBeforeClose?: boolean;
   needsMet: Record<string, number>;
+  /** Why each agent stopped taking turns. */
+  haltedReason?: Record<string, string>;
   totalRealizedUsd: string;
   workCostUsd: string;
   labErrors: unknown[];
@@ -71,6 +73,10 @@ export function labDisqualification(r: MeasureReport): string | null {
   if (r.contamination !== undefined) return `the run was contaminated: ${r.contamination}`;
   if (r.infrastructureFailure !== undefined) return "the harness failed (an empty completion at the token budget, twice)";
   if (r.labErrors.length > 0) return `${r.labErrors.length} failure(s) of the lab's own bookkeeping`;
+  // A spending cap that stops the loop ends the run for reasons that are not its agents'. The first model run was
+  // cut after about 125 turns by a cap set too low, and round 3 never opened.
+  const capped = Object.entries(r.haltedReason ?? {}).filter(([, why]) => why === "experiment_halt" || why === "ceiling");
+  if (capped.length > 0) return `the run was stopped by a spending cap, not by its agents (${capped.map(([a, w]) => `${a}: ${w}`).join(", ")})`;
   if (!r.pool.whole) return "the run started from a pool that was not whole, so it is not comparable with one that did";
   if (r.pool.restored !== true) return "the pool was not restored after the run";
   if (r.final === undefined) return "no scoring snapshot was taken";

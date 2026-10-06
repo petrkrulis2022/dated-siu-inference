@@ -181,7 +181,7 @@ export interface LabReport {
   /** Which lab this was (`lab/instrument.ts`): runs under different versions are never pooled. */
   instrument: { version: number; changes: readonly string[] };
   /** Every write that needed the node to catch up (a stale simulation) and how it ended — the lag, made visible. */
-  lag: { writesRetried: number; events: WriteRetryEvent[] };
+  lag: { writesRetried: number; recovered: number; gaveUp: number; events: WriteRetryEvent[] };
   /** The shape the existing `assertCountableForF1` guard reads: why this run cannot be counted, or null. */
   debugMode: { disqualifiedBecause: string | null };
 }
@@ -548,7 +548,14 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
     claimFlows: result?.claimFlows ?? {},
     capacityEvents: result?.capacityEvents ?? [],
     claimPositions: result?.claimPositions ?? [],
-    lag: { writesRetried: lag.length, events: lag },
+    // `recovered` is the lag: a write that went through once the node caught up. `gaveUp` is a write that never did,
+    // which is usually a genuine refusal (a mint with too few dollars reverts the same way a stale read does).
+    lag: {
+      writesRetried: lag.length,
+      recovered: lag.filter((e) => e.outcome === "recovered").length,
+      gaveUp: lag.filter((e) => e.outcome === "gave_up").length,
+      events: lag,
+    },
     instrument: { version: LAB_INSTRUMENT_VERSION, changes: LAB_INSTRUMENT_CHANGES },
   };
   // Stamped where it cannot be separated from the run, and recomputed by the aggregator from the facts.

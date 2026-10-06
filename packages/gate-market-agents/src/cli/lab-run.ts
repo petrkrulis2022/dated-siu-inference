@@ -37,7 +37,13 @@ import {
   withRetry,
 } from "./p5-shared.js";
 
-const RUN_CAP_USD = "3";
+/**
+ * The run's spending cap is enforced against PROJECTED spend: each turn is projected at its worst case (the full
+ * output budget at the model's price), about five times what it realizes. The first model run, capped at 3, was
+ * stopped by it after about 125 turns having realized $0.69, and round 3 never opened. A full run is about 200
+ * turns at a projected $0.024, so the cap sits well above that; what is spent is the realized figure, reported.
+ */
+const RUN_CAP_USD = "10";
 const EXPERIMENT_CAP_USD = "150";
 const DEFAULT_DEPLOYMENT = "data/deployments/base-sepolia-gate-market-single-issuer.json";
 /** Enough gas for a run's transactions at any gas price Base Sepolia has shown. */

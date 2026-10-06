@@ -1,0 +1,1164 @@
+{
+  "runId": "lab-2026-10-06T15-41-54-035Z",
+  "seed": 1,
+  "scripted": false,
+  "print": {
+    "printId": "2026-10-05-commodity",
+    "rateUsdPerSiu": "0.001437"
+  },
+  "params": {
+    "rounds": 3,
+    "needsPerTrader": 2,
+    "jobMilliSiu": 1000,
+    "tradeMultiplierBps": 12000,
+    "creditMultiplierBps": 15000,
+    "openingMilliSiu": 2000
+  },
+  "economy": {
+    "skillOf": {
+      "TRADER-1": "TYPE-4",
+      "TRADER-2": "TYPE-3",
+      "TRADER-3": "TYPE-2",
+      "TRADER-4": "TYPE-1"
+    },
+    "needs": [
+      {
+        "id": "TRADER-1#1",
+        "buyer": "TRADER-1",
+        "type": "TYPE-3",
+        "seller": "TRADER-2",
+        "round": 1
+      },
+      {
+        "id": "TRADER-1#2",
+        "buyer": "TRADER-1",
+        "type": "TYPE-2",
+        "seller": "TRADER-3",
+        "round": 2
+      },
+      {
+        "id": "TRADER-2#1",
+        "buyer": "TRADER-2",
+        "type": "TYPE-2",
+        "seller": "TRADER-3",
+        "round": 1
+      },
+      {
+        "id": "TRADER-2#2",
+        "buyer": "TRADER-2",
+        "type": "TYPE-1",
+        "seller": "TRADER-4",
+        "round": 2
+      },
+      {
+        "id": "TRADER-3#1",
+        "buyer": "TRADER-3",
+        "type": "TYPE-1",
+        "seller": "TRADER-4",
+        "round": 1
+      },
+      {
+        "id": "TRADER-3#2",
+        "buyer": "TRADER-3",
+        "type": "TYPE-4",
+        "seller": "TRADER-1",
+        "round": 3
+      },
+      {
+        "id": "TRADER-4#1",
+        "buyer": "TRADER-4",
+        "type": "TYPE-4",
+        "seller": "TRADER-1",
+        "round": 1
+      },
+      {
+        "id": "TRADER-4#2",
+        "buyer": "TRADER-4",
+        "type": "TYPE-3",
+        "seller": "TRADER-2",
+        "round": 2
+      }
+    ]
+  },
+  "seats": {
+    "TRADER-1": "ORCHESTRATOR",
+    "TRADER-2": "WORKER-CODE",
+    "TRADER-3": "WORKER-EXTRACT",
+    "TRADER-4": "ISSUER-A"
+  },
+  "models": {
+    "TRADER-1": "claude-haiku-4-5",
+    "TRADER-2": "gpt-5.4-mini",
+    "TRADER-3": "claude-haiku-4-5",
+    "TRADER-4": "gpt-5.4-mini"
+  },
+  "window": {
+    "fromChainSeconds": "1791301276",
+    "toChainSeconds": "1791303136"
+  },
+  "mintBound": {
+    "openingMilliSiu": "8000",
+    "jobClaimMilliSiu": "1184",
+    "rawClaimMilliSiu": "975",
+    "needs": 8,
+    "worstCaseMilliSiu": "25272",
+    "allowanceMilliSiu": "25600"
+  },
+  "pool": {
+    "startingHeadroomMilliSiu": "32000",
+    "limitMilliSiu": "32000",
+    "whole": true,
+    "endingHeadroomMilliSiu": "32000",
+    "restored": true
+  },
+  "opening": {
+    "usdcMinorPerTrader": "2874",
+    "fsiuMilliSiuPerTrader": "2000",
+    "tokenId": "62199542089490424644897890702496922822571219390443066299452822263375797543793"
+  },
+  "snapshots": [
+    {
+      "label": "opening",
+      "round": 1,
+      "atChainSeconds": "1791301350",
+      "traders": [
+        {
+          "trader": "TRADER-1",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-2",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-3",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-4",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        }
+      ]
+    },
+    {
+      "label": "round 2 opened",
+      "round": 2,
+      "atChainSeconds": "1791301540",
+      "traders": [
+        {
+          "trader": "TRADER-1",
+          "usdcMinor": "1174",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "4048000"
+        },
+        {
+          "trader": "TRADER-2",
+          "usdcMinor": "1173",
+          "fsiuMilliSiu": "3184",
+          "needsMet": 0,
+          "resultNano": "5748408"
+        },
+        {
+          "trader": "TRADER-3",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-4",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        }
+      ]
+    }
+  ],
+  "final": {
+    "label": "final",
+    "round": 2,
+    "atChainSeconds": "1791302200",
+    "traders": [
+      {
+        "trader": "TRADER-1",
+        "usdcMinor": "1174",
+        "fsiuMilliSiu": "3184",
+        "needsMet": 0,
+        "resultNano": "5749408"
+      },
+      {
+        "trader": "TRADER-2",
+        "usdcMinor": "1173",
+        "fsiuMilliSiu": "3184",
+        "needsMet": 0,
+        "resultNano": "5748408"
+      },
+      {
+        "trader": "TRADER-3",
+        "usdcMinor": "2874",
+        "fsiuMilliSiu": "2000",
+        "needsMet": 0,
+        "resultNano": "5748000"
+      },
+      {
+        "trader": "TRADER-4",
+        "usdcMinor": "1173",
+        "fsiuMilliSiu": "2000",
+        "needsMet": 0,
+        "resultNano": "4047000"
+      }
+    ]
+  },
+  "measuredBeforeClose": true,
+  "needsMet": {
+    "TRADER-1": 0,
+    "TRADER-2": 0,
+    "TRADER-3": 0,
+    "TRADER-4": 0
+  },
+  "sales": [
+    {
+      "requestId": "qr-1",
+      "kind": "trade",
+      "buyer": "TRADER-2",
+      "seller": "TRADER-3",
+      "quoted": true,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-2#1"
+    },
+    {
+      "requestId": "qr-2",
+      "kind": "trade",
+      "buyer": "TRADER-3",
+      "seller": "TRADER-4",
+      "quoted": true,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-3#1"
+    },
+    {
+      "requestId": "qr-3",
+      "kind": "trade",
+      "buyer": "TRADER-1",
+      "seller": "TRADER-2",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-1#1",
+      "paidAsset": "usdc"
+    },
+    {
+      "requestId": "qr-4",
+      "kind": "trade",
+      "buyer": "TRADER-4",
+      "seller": "TRADER-1",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-4#1",
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-5",
+      "kind": "rawwork",
+      "buyer": "TRADER-2",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0
+    },
+    {
+      "requestId": "qr-6",
+      "kind": "trade",
+      "buyer": "TRADER-1",
+      "seller": "TRADER-3",
+      "quoted": false,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-1#2"
+    },
+    {
+      "requestId": "qr-7",
+      "kind": "trade",
+      "buyer": "TRADER-2",
+      "seller": "TRADER-4",
+      "quoted": true,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-2#2"
+    },
+    {
+      "requestId": "qr-8",
+      "kind": "trade",
+      "buyer": "TRADER-4",
+      "seller": "TRADER-2",
+      "quoted": true,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-4#2"
+    },
+    {
+      "requestId": "qr-9",
+      "kind": "rawwork",
+      "buyer": "TRADER-1",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0
+    }
+  ],
+  "escrowFeeBps": 50,
+  "workLog": [],
+  "workCostUsd": "0.000000",
+  "operatorActions": [
+    {
+      "kind": "usdc_reset",
+      "seat": "ORCHESTRATOR",
+      "move": "top_up",
+      "minorUnits": "2803",
+      "txHash": "0xbd370d07fb9fbb77acd5eb101059e9e42526eec16d1db042f2a833f37d57d7ff"
+    },
+    {
+      "kind": "usdc_reset",
+      "seat": "WORKER-CODE",
+      "move": "top_up",
+      "minorUnits": "2800",
+      "txHash": "0x199b315d139cedf1e6eb83905e38fb2bfe33a578dcde3e4abd7e5abb569b1b17"
+    },
+    {
+      "kind": "usdc_reset",
+      "seat": "WORKER-EXTRACT",
+      "move": "top_up",
+      "minorUnits": "2800",
+      "txHash": "0x622a2bd6037af4bb8b221eb9292d44708cbf95153ccf0f71e39554207532855f"
+    },
+    {
+      "kind": "usdc_reset",
+      "seat": "ISSUER-A",
+      "move": "top_up",
+      "minorUnits": "1700",
+      "txHash": "0x7129aeb412a1610de45c7f24ac6c6e76910bd8a3bfb7a8b80b011f1f94cb4766"
+    },
+    {
+      "kind": "endowment_mint",
+      "quantityMilliSiu": "8000",
+      "tokenId": "62199542089490424644897890702496922822571219390443066299452822263375797543793",
+      "backedBy": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "txHash": "0x7d45940242b611090171bedb22c9ca0215329a4a4dcabea05d6d53c768888303"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "ORCHESTRATOR",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x182faa027cd276e198aa74fd3386c27e41561b21f50458be24c0422369c505bc"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "WORKER-CODE",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x6fe48d9ef6b37e0b3f12c737df75c02b1b2efcb03d335db8391f784ce446b51b"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "WORKER-EXTRACT",
+      "quantityMilliSiu": "2000",
+      "txHash": "0xe7564c1eaed6c0d4b26902f23b03ccb84ec99410d4209a419153ef63b55ed5c5"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "ISSUER-A",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x0aa4ef4405c0626fdac8f88d360f7be58993c6c0e61a8ec65ac76fa2b6510b74"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-1",
+      "quantityMilliSiu": "3184",
+      "txHash": "0x5b1c7ca340ea98685ffe516075b26e49d4f61caa260b6fdef13602cc4c9abaeb"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-2",
+      "quantityMilliSiu": "3184",
+      "txHash": "0x5e2dbb1f3d0476936f84f22728858e987de45cc3ff4be85422f191da45d41436"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-3",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x0a9579aa189f6f262146fc37f97683796feb759f0b46c4bfde40d90dac3d69e5"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-4",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x0aed7b236ebb650c64feaed6e0c0f4e0b830de7ad7e02d8d94f58f14ba4798b8"
+    },
+    {
+      "kind": "round_opened",
+      "round": 2
+    }
+  ],
+  "labErrors": [],
+  "toolErrors": [
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 7,
+      "tool": "pay",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 8,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 9,
+      "tool": "deliver_job",
+      "error": "deliver_job: you hold no unit of raw work, and delivering uses one."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 11,
+      "tool": "pay",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 3,
+      "tool": "wait",
+      "error": "WORKER-CODE is not permitted to call \"wait\" — not declared in its skill's tools.yaml."
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 5,
+      "tool": "pay",
+      "error": "an escrow already exists for this quote."
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 7,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 8,
+      "tool": "pay",
+      "error": "an escrow already exists for this quote."
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 9,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 13,
+      "tool": "wait",
+      "error": "WORKER-CODE is not permitted to call \"wait\" — not declared in its skill's tools.yaml."
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 14,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 15,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 16,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 17,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 19,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 20,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 22,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 23,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 24,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 25,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 26,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 27,
+      "tool": "deliver_job",
+      "error": "deliver_job: you hold no unit of raw work, and delivering uses one."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 11,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 12,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 14,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 15,
+      "tool": "wait",
+      "error": "ISSUER-A is not permitted to call \"wait\" — not declared in its skill's tools.yaml."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 16,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 17,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 18,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 19,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 20,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 21,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 22,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 23,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 24,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 25,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 26,
+      "tool": "wait",
+      "error": "ISSUER-A is not permitted to call \"wait\" — not declared in its skill's tools.yaml."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 27,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 28,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 29,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 31,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 32,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 33,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 34,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 35,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 36,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 37,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 38,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    }
+  ],
+  "turnsByAgent": {
+    "ORCHESTRATOR": 12,
+    "WORKER-CODE": 29,
+    "WORKER-EXTRACT": 40,
+    "ISSUER-A": 38,
+    "ISSUER-B": 2
+  },
+  "haltedReason": {
+    "ISSUER-A": "experiment_halt",
+    "WORKER-CODE": "experiment_halt",
+    "WORKER-EXTRACT": "max_turns",
+    "ORCHESTRATOR": "experiment_halt",
+    "ISSUER-B": "experiment_halt"
+  },
+  "totalRealizedUsd": "0.692936",
+  "spendByProvider": {
+    "anthropic": "0.357126",
+    "lab-service": "0.000000",
+    "openai": "0.335809"
+  },
+  "paymentMoments": [
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 3,
+      "tool": "pay",
+      "asset": "usdc",
+      "requestId": "qr-3",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 6,
+      "tool": "pay_with_claim",
+      "asset": "fsiu",
+      "requestId": "qr-3",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 9,
+      "tool": "pay_with_claim",
+      "asset": "fsiu",
+      "requestId": "qr-4",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    }
+  ],
+  "usdcSettlements": [],
+  "claimFlows": {
+    "ORCHESTRATOR": {
+      "receivedMilliSiu": "1184",
+      "receivedKeyedMilliSiu": "1184",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    },
+    "WORKER-CODE": {
+      "receivedMilliSiu": "0",
+      "receivedKeyedMilliSiu": "0",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    },
+    "WORKER-EXTRACT": {
+      "receivedMilliSiu": "0",
+      "receivedKeyedMilliSiu": "0",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    },
+    "ISSUER-A": {
+      "receivedMilliSiu": "0",
+      "receivedKeyedMilliSiu": "0",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    },
+    "ISSUER-B": {
+      "receivedMilliSiu": "0",
+      "receivedKeyedMilliSiu": "0",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    }
+  },
+  "capacityEvents": [
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 6,
+      "kind": "pay_with_claim",
+      "timeToExpirySeconds": 1728,
+      "tokenId": "62199542089490424644897890702496922822571219390443066299452822263375797543793",
+      "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "quantityMilliSiu": "1184",
+      "forwardDated": false,
+      "counterparty": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+      "mintCostMinorUnits": "1701",
+      "settlesRequestId": "qr-3",
+      "txHash": "0xbf7baf0ab6b5913be4ccda7add4e01a894bcde2f3e5f3efcbe28de7bb90dceb4 (mint) / 0xf6ceab04cc2d6a196956d5145cf56e3f0a816130b6cbb37c76928333ef15b851 (transfer)"
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 9,
+      "kind": "pay_with_claim",
+      "timeToExpirySeconds": 1470,
+      "tokenId": "62199542089490424644897890702496922822571219390443066299452822263375797543793",
+      "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "quantityMilliSiu": "1184",
+      "forwardDated": false,
+      "counterparty": "0x8Bf6De67D0B9705520Cdf5a348f5763e2175F363",
+      "mintCostMinorUnits": "1701",
+      "settlesRequestId": "qr-4",
+      "txHash": "0x3a1a73dba6d3ca75f441ceeb9c2ece1c0121d052d6447bb9a28f59e66bb6e6a5 (mint) / 0x7e1b81a7358966700389df018b2e89066f2c8e381c25e2892a49db06d013a56c (transfer)"
+    }
+  ],
+  "claimPositions": [
+    {
+      "tokenId": "62199542089490424644897890702496922822571219390443066299452822263375797543793",
+      "holder": "ORCHESTRATOR",
+      "issuer": "ISSUER-B",
+      "quantity": "3184",
+      "presented": false
+    },
+    {
+      "tokenId": "62199542089490424644897890702496922822571219390443066299452822263375797543793",
+      "holder": "WORKER-CODE",
+      "issuer": "ISSUER-B",
+      "quantity": "3184",
+      "presented": false
+    },
+    {
+      "tokenId": "62199542089490424644897890702496922822571219390443066299452822263375797543793",
+      "holder": "WORKER-EXTRACT",
+      "issuer": "ISSUER-B",
+      "quantity": "2000",
+      "presented": false
+    },
+    {
+      "tokenId": "62199542089490424644897890702496922822571219390443066299452822263375797543793",
+      "holder": "ISSUER-A",
+      "issuer": "ISSUER-B",
+      "quantity": "2000",
+      "presented": false
+    }
+  ],
+  "lag": {
+    "writesRetried": 39,
+    "events": [
+      {
+        "functionName": "safeTransferFrom",
+        "account": "0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e",
+        "retries": 1,
+        "outcome": "recovered"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0x8Bf6De67D0B9705520Cdf5a348f5763e2175F363",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      },
+      {
+        "functionName": "mint",
+        "account": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+        "retries": 8,
+        "outcome": "gave_up",
+        "lastError": "The contract function \"mint\" reverted with the following reason:"
+      }
+    ]
+  },
+  "debugMode": {
+    "disqualifiedBecause": null
+  }
+}

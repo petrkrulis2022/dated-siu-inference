@@ -158,6 +158,8 @@ describe("which runs may be counted", () => {
 
   const cases: [string, Partial<MeasureReport>, RegExp][] = [
     ["a scripted walk", { scripted: true }, /scripted walk/],
+    ["a run stopped by a spending cap", { haltedReason: { ORCHESTRATOR: "experiment_halt", "WORKER-CODE": "max_turns" } }, /stopped by a spending cap, not by its agents \(ORCHESTRATOR: experiment_halt\)/],
+    ["a run stopped by an agent's own ceiling", { haltedReason: { "WORKER-EXTRACT": "ceiling" } }, /spending cap/],
     ["a run made before versions were stamped", { instrument: undefined }, /before versions were stamped.*current version/],
     ["a run made under an earlier version of the lab", { instrument: { version: LAB_INSTRUMENT_VERSION - 1 } }, /version 1, not the current version 2/],
     ["an aborted run", { abortedBecause: "the endowment was backed by ISSUER-A" }, /aborted: the endowment/],
@@ -176,6 +178,11 @@ describe("which runs may be counted", () => {
       expect(() => assertCountableForLab(r)).toThrow(why);
     });
   }
+
+  it("does not disqualify a run in which agents simply used their turns, or stopped on their own", () => {
+    const r = base({ haltedReason: { ORCHESTRATOR: "voluntary_stop", "WORKER-CODE": "max_turns", "ISSUER-B": "waiting", "ISSUER-A": "window_span_elapsed" } });
+    expect(labDisqualification(r)).toBeNull();
+  });
 
   it("honours a disqualification the runner stamped, even if the facts look clean", () => {
     const r = base({ debugMode: { disqualifiedBecause: "stamped by the runner" } });

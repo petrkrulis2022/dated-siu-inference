@@ -395,12 +395,12 @@ describe("runLab", () => {
     } finally {
       setRevertRetryPolicy({ attempts: 0 });
     }
-    expect(report.lag.writesRetried).toBe(1);
+    expect(report.lag).toMatchObject({ writesRetried: 1, recovered: 1, gaveUp: 0 });
     expect(report.lag.events[0]).toMatchObject({ functionName: "f", retries: 1, outcome: "recovered" });
     // A quiet run reports none — and a later run in the same process is not handed this one's events.
     chain.lagOnMint = false;
     const quiet = await runLab(input({ runId: "lab-test-run-2" }));
-    expect(quiet.lag).toEqual({ writesRetried: 0, events: [] });
+    expect(quiet.lag).toEqual({ writesRetried: 0, recovered: 0, gaveUp: 0, events: [] });
   });
 
   it("states what it ran: seats, models, the schedule and whether it was scripted", async () => {
