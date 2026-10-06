@@ -1,0 +1,325 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import type { Adapter, AdapterResult } from "@touchstone/harness";
+import type { Print } from "@touchstone/sdk";
+import type { GateHardeningResult } from "@touchstone/task-pack-gate-hardening";
+import { BudgetCeiling } from "../budget/ceiling.js";
+import { ExperimentBudget } from "../budget/experiment-budget.js";
+import type { RunnerDeps } from "../deps.js";
+import { AGENT_IDS, type AgentId } from "../identity/resolve.js";
+import type { MintContext } from "../loop/full-run.js";
+import { DEFAULT_PARAMS, ISSUER_SEAT, LAB_TRADERS, SEAT_OF, type TraderLabel } from "./economy.js";
+import { referenceExecutor } from "./jobs.js";
+import type { EndowmentMint, LabChain, Signer } from "./operator.js";
+import { LaunchRefused, runLab, type LabRunInput } from "./run.js";
+
+// Anvil's public development keys: real, valid, and worth nothing.
+const KEYS: Record<string, Hex> = {
+  ORCHESTRATOR: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+  "WORKER-CODE": "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
+  "WORKER-EXTRACT": "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
+  "ISSUER-A": "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
+  "ISSUER-B": "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a",
+  operator: "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
+};
+const addressOfKey = (k: Hex): Hex => privateKeyToAccount(k).address;
+const ADDRESSES = Object.fromEntries(Object.entries(KEYS).map(([seat, k]) => [seat, addressOfKey(k)])) as Record<string, Hex>;
+const CLASS_ID = `0x${"ee".repeat(32)}` as Hex;
+const OPERATOR: Signer = { label: "operator", address: ADDRESSES.operator, privateKeyHex: KEYS.operator };
+const LIMIT = 32_000n;
+
+/** An in-memory chain with one clock, USDC balances, one claim token and ISSUER-B's headroom. */
+class FakeChain implements LabChain {
+  clock = 1_800_000_000n;
+  usdc = new Map<string, bigint>();
+  claims = new Map<string, bigint>();
+  eth = new Map<string, bigint>();
+  headroomNow = LIMIT;
+  mintBackedBy: Hex = ADDRESSES["ISSUER-B"];
+  /** If set, a claim transfer delivers this much less than asked — to test the opening check. */
+  shortChange = 0n;
+  calls: string[] = [];
+  failExpiryFor: Hex | undefined;
+  #token = 777n;
+
+  constructor() {
+    for (const a of Object.values(ADDRESSES)) this.eth.set(a.toLowerCase(), 10n ** 18n);
+    this.usdc.set(ADDRESSES.operator.toLowerCase(), 1_000_000n);
+  }
+  #u = (a: Hex) => this.usdc.get(a.toLowerCase()) ?? 0n;
+  #c = (a: Hex) => this.claims.get(a.toLowerCase()) ?? 0n;
+  async now() {
+    return this.clock;
+  }
+  async usdcBalance(a: Hex) {
+    return this.#u(a);
+  }
+  async claimBalance(_t: bigint, a: Hex) {
+    return this.#c(a);
+  }
+  async headroom() {
+    return this.headroomNow;
+  }
+  async ethBalance(a: Hex) {
+    return this.eth.get(a.toLowerCase()) ?? 0n;
+  }
+  async transferUsdc(from: Signer, to: Hex, n: bigint) {
+    this.calls.push(`usdc ${from.label} -> ${to.slice(0, 8)} ${n}`);
+    this.usdc.set(from.address.toLowerCase(), this.#u(from.address) - n);
+    this.usdc.set(to.toLowerCase(), this.#u(to) + n);
+    return `0xusdc${this.calls.length}`;
+  }
+  async mintEndowment(m: EndowmentMint) {
+    this.calls.push(`mint ${m.quantityMilliSiu}`);
+    this.headroomNow -= m.quantityMilliSiu;
+    this.claims.set(OPERATOR.address.toLowerCase(), this.#c(OPERATOR.address) + m.quantityMilliSiu);
+    return { tokenId: this.#token, issuer: this.mintBackedBy, txHash: "0xmint" };
+  }
+  async transferClaim(to: Hex, _t: bigint, q: bigint) {
+    this.calls.push(`claim -> ${to.slice(0, 8)} ${q}`);
+    // A short delivery leaves the difference with the operator, where the expiry sweep will find it.
+    const delivered = q - this.shortChange;
+    this.claims.set(OPERATOR.address.toLowerCase(), this.#c(OPERATOR.address) - delivered);
+    this.claims.set(to.toLowerCase(), this.#c(to) + delivered);
+    return `0xclaim${this.calls.length}`;
+  }
+  async settleExpired(_t: bigint, holder: Hex) {
+    this.calls.push(`expire ${holder.slice(0, 8)}`);
+    if (this.failExpiryFor?.toLowerCase() === holder.toLowerCase()) throw new Error("WindowNotClosedYet\nmore detail");
+    const held = this.#c(holder);
+    this.claims.set(holder.toLowerCase(), 0n);
+    this.headroomNow += held;
+    return `0xexpire${this.calls.length}`;
+  }
+}
+
+const respond = (intent: unknown): AdapterResult => ({
+  text: JSON.stringify(intent),
+  usage: { input: 10, output: 5, cached_input: 0, reasoning: 0 },
+  latency_ms: 1,
+  raw: {},
+  deviations: [],
+});
+const noGate = async (): Promise<GateHardeningResult> => {
+  throw new Error("a lab run has no gate");
+};
+
+describe("runLab", () => {
+  let runsRoot: string;
+  let chain: FakeChain;
+  beforeEach(async () => {
+    runsRoot = await mkdtemp(path.join(tmpdir(), "lab-run-"));
+    chain = new FakeChain();
+  });
+  afterEach(async () => {
+    await rm(runsRoot, { recursive: true, force: true });
+  });
+
+  const loopDeps = (): RunnerDeps =>
+    ({
+      chainReader: {
+        usdcBalance: async () => 0n,
+        claimBalance: async () => 0n,
+        headroom: async () => 0n,
+        issuanceLimit: async () => 0n,
+        claimWindow: async () => ({ windowFrom: 0n, windowTo: 0n }),
+        currentBlockTimestamp: async () => chain.clock,
+        escrowState: async () => ({ status: "none" as const, buyer: `0x${"00".repeat(20)}`, seller: `0x${"00".repeat(20)}`, maxAmountMinorUnits: 0n, expiryUnix: 0n }),
+        reservation: async () => ({ exists: false, released: false, issuer: `0x${"00".repeat(20)}`, classId: `0x${"00".repeat(32)}`, quantityMilliSiu: 0n, deadlineUnix: 0n }),
+        issuersForClass: async () => [],
+      },
+      deployment: { network: { name: "test", chainId: 0 }, usdc: { address: "0x0" }, capacityBond: { address: "0x0" }, claimRouter: { address: "0x0" }, workClaim: { address: "0x0" } },
+      escrowAddress: "0x0",
+      runGateHardeningChecks: noGate,
+      loadPrint: async () => ({ print_id: "print-illustrative" }) as unknown as Print,
+      isReconciled: async () => false,
+    }) as unknown as RunnerDeps;
+
+  const budget = () =>
+    new ExperimentBudget({
+      ceiling: new BudgetCeiling(
+        Object.fromEntries(AGENT_IDS.map((id) => [id, { maxUsdcSpend: "0", maxInferenceTurns: 40, maxInferenceUsd: "5" }])) as never,
+      ),
+      runCapUsd: "30",
+      experimentCapUsd: "150",
+      ledgerPath: path.join(runsRoot, "ledger.json"),
+    });
+
+  const leaves: Adapter = async () => respond({ done: true, summary: "nothing to do" });
+  const adapters = Object.fromEntries(LAB_TRADERS.map((t) => [t, leaves])) as Record<TraderLabel, Adapter>;
+  const models = { "TRADER-1": "claude-haiku-4-5", "TRADER-2": "gpt-5.4-mini", "TRADER-3": "claude-haiku-4-5", "TRADER-4": "gpt-5.4-mini" } as const;
+
+  const input = (over: Partial<LabRunInput> = {}): LabRunInput => ({
+    seed: 9,
+    runId: "lab-test-run",
+    scripted: true,
+    print: { printId: "print-illustrative", rateUsdPerSiu: "0.001437" }, // illustrative
+    chain,
+    classId: CLASS_ID,
+    addresses: ADDRESSES as Partial<Record<AgentId, Hex>>,
+    keys: KEYS as Partial<Record<AgentId, string>>,
+    operator: OPERATOR,
+    issuerLimitMilliSiu: LIMIT,
+    windowSeconds: 600,
+    closeMarginSeconds: 90,
+    escrowFeeBps: 50,
+    maxTurns: 12,
+    chainName: "base-sepolia",
+    rpcUrl: "http://127.0.0.1:1",
+    adapters,
+    models,
+    prices: {
+      "claude-haiku-4-5": { priceInUsdPer1M: "1", priceOutUsdPer1M: "5" },
+      "gpt-5.4-mini": { priceInUsdPer1M: "0.75", priceOutUsdPer1M: "4.5" },
+    },
+    providerOf: (m) => (m.startsWith("claude") ? "anthropic" : "openai"),
+    executorFor: () => referenceExecutor,
+    loopDeps: loopDeps(),
+    budget: budget(),
+    runsRoot,
+    mintContext: { publisherPrivateKeyHex: KEYS.operator, printId: "print-illustrative", series: `0x${"11".repeat(32)}`, printDate: 0n, nanoUsdPerSiu: 1_437_000n, validitySeconds: 3600n } as MintContext,
+    minEthWei: 10n ** 14n,
+    sleep: async (ms) => {
+      chain.clock += BigInt(Math.ceil(ms / 1000));
+    },
+    ...over,
+  });
+
+  // ---- the launch ---------------------------------------------------------------------------
+
+  it("refuses to start from a pool that is not whole, before anything is spent", async () => {
+    chain.headroomNow = LIMIT - 3_000n;
+    await expect(runLab(input())).rejects.toThrow(LaunchRefused);
+    await expect(runLab(input())).rejects.toThrow(/headroom is 29000 mSIU, not its whole 32000/);
+    expect(chain.calls).toEqual([]);
+  });
+
+  it("starts from a slightly short pool only when told to, and says so in the report", async () => {
+    chain.headroomNow = LIMIT - 200n; // 31,800: 80% of it, 25,440, still covers the worst case of 25,272
+    await expect(runLab(input())).rejects.toThrow(LaunchRefused);
+    const report = await runLab(input({ allowPartialPool: true }));
+    expect(report.pool).toMatchObject({ whole: false, startingHeadroomMilliSiu: "31800" });
+    expect(report.abortedBecause).toBeUndefined();
+  });
+
+  it("does not let permission to start short override the mint bound: a pool too short for the worst case is refused anyway", async () => {
+    chain.headroomNow = LIMIT - 3_000n;
+    await expect(runLab(input({ allowPartialPool: true }))).rejects.toThrow(/ISSUER-B can back 23200/);
+    expect(chain.calls).toEqual([]);
+  });
+
+  it("refuses an economy whose worst-case mint does not fit, naming the figure", async () => {
+    await expect(runLab(input({ params: { ...DEFAULT_PARAMS, openingMilliSiu: 4000 } }))).rejects.toThrow(/33272 mSIU/);
+    expect(chain.calls).toEqual([]);
+  });
+
+  it("refuses a wallet without gas, and an operator without enough USDC", async () => {
+    chain.eth.set(ADDRESSES["WORKER-CODE"].toLowerCase(), 5n);
+    await expect(runLab(input())).rejects.toThrow(/TRADER-2 holds 5 wei/);
+    chain.eth.set(ADDRESSES["WORKER-CODE"].toLowerCase(), 10n ** 18n);
+    chain.usdc.set(ADDRESSES.operator.toLowerCase(), 10n);
+    await expect(runLab(input())).rejects.toThrow(/the operator holds 10 USDC minor units and needs/);
+    expect(chain.calls).toEqual([]);
+  });
+
+  // ---- the run ------------------------------------------------------------------------------
+
+  it("sets every trader to the same opening, endows them from one mint, and records both as operator action", async () => {
+    // Different starting USDC: one short, one over, one exact, one empty.
+    chain.usdc.set(ADDRESSES.ORCHESTRATOR.toLowerCase(), 10_000n);
+    chain.usdc.set(ADDRESSES["WORKER-CODE"].toLowerCase(), 2_874n);
+    chain.usdc.set(ADDRESSES["WORKER-EXTRACT"].toLowerCase(), 100n);
+    const report = await runLab(input());
+
+    expect(report.abortedBecause).toBeUndefined();
+    expect(report.opening).toMatchObject({ usdcMinorPerTrader: "2874", fsiuMilliSiuPerTrader: "2000", tokenId: "777" });
+    const resets = report.operatorActions.filter((a) => a.kind === "usdc_reset");
+    expect(resets.map((a) => (a as { move: string }).move)).toEqual(["return", "top_up", "top_up"]); // returns first; the exact one moves nothing
+    // One mint for all four, then each trader's share.
+    expect(chain.calls.filter((c) => c.startsWith("mint"))).toEqual(["mint 8000"]);
+    expect(report.operatorActions.filter((a) => a.kind === "endowment_transfer")).toHaveLength(4);
+    const opening = report.snapshots[0] as { label: string; traders: { usdcMinor: string; fsiuMilliSiu: string }[] };
+    expect(opening.label).toBe("opening");
+    for (const t of opening.traders) expect(t).toMatchObject({ usdcMinor: "2874", fsiuMilliSiu: "2000" });
+  });
+
+  it("takes a snapshot when each round opens and one more before the window closes", async () => {
+    const report = await runLab(input());
+    const labels = (report.snapshots as { label: string }[]).map((s) => s.label);
+    expect(labels).toEqual(["opening", "round 2 opened", "round 3 opened"]);
+    expect((report.final as { label: string }).label).toBe("final");
+    expect(report.measuredBeforeClose).toBe(true);
+    // Nobody traded, so every result is the opening's value and no need is met.
+    const final = report.final as { traders: { resultNano: string; needsMet: number }[] };
+    for (const t of final.traders) {
+      expect(t.needsMet).toBe(0);
+      expect(t.resultNano).toBe((2_874n * 1000n + (2000n * 1_437_000n) / 1000n).toString());
+    }
+  });
+
+  it("waits for the window to close, expires what is left, and leaves the pool as it found it", async () => {
+    const report = await runLab(input());
+    const expiries = report.operatorActions.filter((a) => a.kind === "expiry") as { holder: string; quantityMilliSiu: string }[];
+    expect(expiries.map((e) => e.holder).sort()).toEqual(["TRADER-1", "TRADER-2", "TRADER-3", "TRADER-4"]);
+    for (const e of expiries) expect(e.quantityMilliSiu).toBe("2000");
+    expect(report.pool).toMatchObject({ startingHeadroomMilliSiu: "32000", endingHeadroomMilliSiu: "32000", restored: true });
+    // The clock was taken past the window's close before the first expiry (the fake sleep advances it).
+    expect(chain.clock).toBeGreaterThanOrEqual(BigInt(report.window.toChainSeconds));
+    const lastWork = chain.calls.findIndex((c) => c.startsWith("expire"));
+    expect(lastWork).toBeGreaterThan(chain.calls.findIndex((c) => c.startsWith("claim ->")));
+  });
+
+  it("reports an expiry that failed rather than hiding it, and says the pool was not restored", async () => {
+    chain.failExpiryFor = ADDRESSES["WORKER-EXTRACT"];
+    const report = await runLab(input());
+    const failed = report.operatorActions.filter((a) => a.kind === "expiry_failed") as { holder: string; reason: string }[];
+    expect(failed).toEqual([{ kind: "expiry_failed", holder: "TRADER-3", quantityMilliSiu: "2000", reason: "WindowNotClosedYet" }]);
+    expect(report.pool).toMatchObject({ endingHeadroomMilliSiu: "30000", restored: false });
+  });
+
+  // ---- aborts -------------------------------------------------------------------------------
+
+  it("aborts before the loop when the endowment is backed by anyone but ISSUER-B, and still returns the capacity", async () => {
+    chain.mintBackedBy = ADDRESSES["ISSUER-A"];
+    const report = await runLab(input());
+    expect(report.abortedBecause).toMatch(/backed by .*not ISSUER-B/);
+    expect(report.final).toBeUndefined();
+    expect(report.turnsByAgent).toEqual({});
+    expect(chain.calls.some((c) => c.startsWith("expire"))).toBe(true);
+    expect(report.pool.restored).toBe(true);
+  });
+
+  it("aborts when what the traders hold is not what was handed out", async () => {
+    chain.shortChange = 1n;
+    const report = await runLab(input());
+    expect(report.abortedBecause).toMatch(/the opening is not what was handed out/);
+    expect(report.final).toBeUndefined();
+    expect(report.pool.restored).toBe(true);
+  });
+
+  it("still closes out when the loop itself throws", async () => {
+    const report = await runLab(
+      input({
+        onTurn: () => {
+          throw new Error("the log pipe broke");
+        },
+        adapters: Object.fromEntries(LAB_TRADERS.map((t) => [t, async () => respond({ wait: true })])) as Record<TraderLabel, Adapter>,
+      }),
+    );
+    expect(report.abortedBecause).toBe("the log pipe broke");
+    expect(report.pool.restored).toBe(true);
+  });
+
+  it("states what it ran: seats, models, the schedule and whether it was scripted", async () => {
+    const report = await runLab(input());
+    expect(report.scripted).toBe(true);
+    expect(report.seats).toEqual({ "TRADER-1": "ORCHESTRATOR", "TRADER-2": "WORKER-CODE", "TRADER-3": "WORKER-EXTRACT", "TRADER-4": SEAT_OF["TRADER-4"] });
+    expect(report.economy.needs).toHaveLength(8);
+    expect(report.mintBound).toMatchObject({ worstCaseMilliSiu: "25272", allowanceMilliSiu: "25600" });
+    expect(ISSUER_SEAT).toBe("ISSUER-B");
+  });
+});

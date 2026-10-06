@@ -52,6 +52,12 @@ export const ESCROW_READ_ABI = parseAbi([
   "function feeBps() external view returns (uint16)",
 ]);
 
+/** A plain ERC-20 transfer. Used by the currency lab's operator to set opening balances and to give an
+ * escrow fee back; no agent tool transfers USDC outright. */
+export const USDC_TRANSFER_ABI = parseAbi([
+  "function transfer(address to, uint256 amount) external returns (bool)",
+]);
+
 export const USDC_BALANCE_ABI = parseAbi([
   "function balanceOf(address account) external view returns (uint256)",
 ]);

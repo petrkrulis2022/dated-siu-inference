@@ -302,7 +302,7 @@ Items from the stopped step c, for completeness:
 - [x] P4 — loop lab hooks: board section, rounds, fee rebate (loop-level tests pass; the scoring snapshot is built with the runner, P7)
 - [x] P5 — issuer service policy seat (answers quote requests, settles USDC-paid escrows; raw-work units are credited when its quote is paid, so no separate redemption path)
 - [x] P6 — briefs, roster, model assignment, validator (lab/briefs.ts, lab/roster.ts; shared text byte-identical across traders, validator passes, no steering words, every tool in a worked example is granted; gpt-5.4-mini price added)
-- [ ] P7 — lab runner: opening balances, endowment mints, launch checks, rounds, run-end settlement
+- [x] P7 — lab runner: opening balances, endowment mint, launch checks, rounds, expiry sweep (lab/run.ts, lab/operator.ts, lab/operator-chain.ts, lab/scoring.ts, cli/lab-run.ts; orchestration tested against an in-memory chain, 13 tests. **The real-chain paths — operator-chain.ts and the CLI — are untested until the scripted walk (P10)**; `--scripted` is not wired until P10)
 - [ ] P8 — measurement, scoring, report, aggregator with Wilson intervals, countable assertion
 - [ ] P9 — lag telemetry
 - [ ] P10 — scripted lab walk and verifier; fork, then live

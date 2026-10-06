@@ -11,7 +11,7 @@ import type { LabService as DeliverService } from "../deps.js";
 import type { AgentId } from "../identity/resolve.js";
 import type { ToolName } from "../tools/index.js";
 import { LabBooks, MAX_DELIVERY_ATTEMPTS, type Asset } from "./books.js";
-import { ISSUER_SEAT, traderForSeat, type TraderLabel } from "./economy.js";
+import { ISSUER_SEAT, LAB_ALIASES, traderForSeat, type TraderLabel } from "./economy.js";
 import { guardLabCall, type GuardConfig } from "./guards.js";
 import { renderLabAction, renderLabInfo } from "./board.js";
 import { escrowFeeMinor } from "./money.js";
@@ -56,6 +56,8 @@ const PAYMENT_ASSET: Partial<Record<ToolName, Asset>> = {
 export class LabService implements LabHooks, DeliverService {
   readonly operatorActions: LabOperatorAction[] = [];
   readonly workLog: WorkLogEntry[] = [];
+  /** Trader labels an agent may use in a call's own arguments (`LabHooks.aliases`). */
+  readonly aliases = LAB_ALIASES;
 
   constructor(private readonly d: LabServiceDeps) {}
 

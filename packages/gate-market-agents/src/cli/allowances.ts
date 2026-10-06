@@ -160,6 +160,33 @@ export function rosterTargets(env: NodeJS.ProcessEnv): AllowanceTarget[] {
   ];
 }
 
+/**
+ * The currency lab's holders. All four traders can pay by minting a claim (`pay_with_claim`), so all four
+ * need the WorkClaim approved — the gate configuration's list stops at the two buyers because nobody else
+ * mints there. TRADER-3 and TRADER-4 stand on WORKER-EXTRACT's and ISSUER-A's wallets (plan D4).
+ */
+export function labRosterTargets(env: NodeJS.ProcessEnv): AllowanceTarget[] {
+  const need = (name: string): string => {
+    const v = env[name];
+    if (!v) throw new Error(`${name} is not set.`);
+    return v;
+  };
+  const operatorKey = asPrefixedKey(need("DEPLOYER_PRIVATE_KEY"));
+  const trader = (label: string, variable: string): AllowanceTarget => ({
+    label,
+    address: need(variable) as Hex,
+    minimum: 500_000n,
+    target: 1_000_000n,
+  });
+  return [
+    trader("ORCHESTRATOR", "ORCHESTRATOR_ADDRESS"),
+    trader("WORKER-CODE", "WORKER_CODE_ADDRESS"),
+    trader("WORKER-EXTRACT", "WORKER_EXTRACT_ADDRESS"),
+    trader("ISSUER-A", "ISSUER_A_ADDRESS"),
+    { label: "operator", address: privateKeyToAccount(operatorKey).address, minimum: 1_000_000n, target: 2_000_000n },
+  ];
+}
+
 /** `.env` stores private keys without the 0x prefix; viem wants it. */
 function asPrefixedKey(key: string): Hex {
   return (key.startsWith("0x") ? key : `0x${key}`) as Hex;
@@ -189,7 +216,7 @@ function main(): void {
       `${record.workClaim.address} (the WorkClaim in ${file}):`,
   );
   approveForSpender({
-    targets: rosterTargets(process.env),
+    targets: argv.includes("--lab") ? labRosterTargets(process.env) : rosterTargets(process.env),
     usdc: record.usdc.address as Hex,
     spender: record.workClaim.address as Hex,
     rpcUrl,

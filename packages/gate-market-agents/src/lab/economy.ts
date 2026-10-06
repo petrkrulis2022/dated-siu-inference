@@ -27,6 +27,16 @@ export const SEAT_OF: Readonly<Record<TraderLabel, AgentId>> = {
 
 export const ISSUER_SEAT: AgentId = "ISSUER-B";
 
+/** The label an agent may use for a trader in a call's own arguments, and the seat it stands for. */
+export const LAB_ALIASES: Readonly<Record<string, AgentId>> = Object.fromEntries(
+  LAB_TRADERS.map((t) => [t, SEAT_OF[t]]),
+);
+
+/** What the quote board prints for a buyer: its label if it is a trader's seat, else the seat as it is. */
+export function labDisplayName(seat: AgentId): string {
+  return LAB_TRADERS.find((t) => SEAT_OF[t] === seat) ?? seat;
+}
+
 export const JOB_TYPES = ["TYPE-1", "TYPE-2", "TYPE-3", "TYPE-4"] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 

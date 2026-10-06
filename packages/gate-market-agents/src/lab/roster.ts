@@ -46,15 +46,7 @@ export const LAB_TRADER_TOOLS: readonly ToolName[] = [
   "get_print",
 ];
 
-/** The label an agent may use for a trader in a call's own arguments, and the seat it stands for. */
-export const LAB_ALIASES: Readonly<Record<string, AgentId>> = Object.fromEntries(
-  LAB_TRADERS.map((t) => [t, SEAT_OF[t]]),
-);
-
-/** What the quote board prints for a buyer: its label if it is a trader's seat, else the seat as is. */
-export function labDisplayName(seat: AgentId): string {
-  return LAB_TRADERS.find((t) => SEAT_OF[t] === seat) ?? seat;
-}
+export { LAB_ALIASES, labDisplayName } from "./economy.js";
 
 export interface LabRosterInput {
   economy: Economy;

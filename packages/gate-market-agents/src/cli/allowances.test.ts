@@ -3,7 +3,7 @@ import { createPublicClient, createWalletClient, erc20Abi, http, type Hex } from
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { setupDevnet, type DevnetHandle } from "../devnet/deploy.js";
 import type { AgentId } from "../identity/resolve.js";
-import { allowanceShortfalls, approveForSpender, assertAllowancesForRun, rosterKey, rosterTargets } from "./allowances.js";
+import { allowanceShortfalls, approveForSpender, assertAllowancesForRun, labRosterTargets, rosterKey, rosterTargets } from "./allowances.js";
 
 describe("allowanceShortfalls", () => {
   it("names every holder whose allowance is below its minimum, and only those", () => {
@@ -62,6 +62,14 @@ describe("reading the roster's keys from the environment", () => {
 
   it("approves only the mint-capable holders: the two buyers and the operator", () => {
     expect(rosterTargets(env(raw)).map((t) => t.label)).toEqual(["ORCHESTRATOR", "WORKER-CODE", "operator"]);
+  });
+
+  it("for the currency lab, approves all four traders and the operator — every one of them can mint", () => {
+    const e = { ...env(raw), WORKER_EXTRACT_ADDRESS: "0x3", ISSUER_A_ADDRESS: "0x4" };
+    expect(labRosterTargets(e).map((t) => t.label)).toEqual(["ORCHESTRATOR", "WORKER-CODE", "WORKER-EXTRACT", "ISSUER-A", "operator"]);
+    // The gate configuration's list is untouched.
+    expect(rosterTargets(e).map((t) => t.label)).toEqual(["ORCHESTRATOR", "WORKER-CODE", "operator"]);
+    expect(() => labRosterTargets(env(raw))).toThrow(/WORKER_EXTRACT_ADDRESS is not set/);
   });
 
   it("names a missing variable rather than failing somewhere inside viem", () => {
