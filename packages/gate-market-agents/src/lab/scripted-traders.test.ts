@@ -210,7 +210,6 @@ describe("a scripted trader's decisions", () => {
     const read = (turn: number, usdcMinor: number, fsiu: number): ToolCallRecord =>
       call(turn, "get_balances", {}, { usdc: { decimalUsd: "x", integerMinorUnits: String(usdcMinor), liveArm: "decimal" }, claims: [{ tokenId: "777", balance: String(fsiu) }], escrows: [] });
     const READ = { tool: "get_balances", args: { account: `0x${"ab".repeat(20)}`, tokenIds: ["777"] } };
-    const ZERO = "0x0000000000000000000000000000000000000000";
     /** Reads, is shown the funds, and decides. */
     const pays = (s: ReturnType<typeof quoted>, usdc: number, fsiu: number) => {
       expect(decide(promptFor(s.me, s.books, s.board), env, s.mem).intent).toEqual(READ);

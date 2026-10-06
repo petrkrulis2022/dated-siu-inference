@@ -3,7 +3,6 @@ import { assembleContext } from "../context/assemble.js";
 import { ContextValidationError, validateAgentContext } from "../pack/validate.js";
 import { CANONICAL_ASSET_DESCRIPTION } from "../skills/asset-description.js";
 import { requestQuoteTool } from "../tools/request-quote.js";
-import { TOOLS, type ToolName } from "../tools/index.js";
 import { buildLabBrief, sharedPartOf, type LabBriefInput } from "./briefs.js";
 import { LAB_TRADERS, SEAT_OF, buildEconomy, type TraderLabel } from "./economy.js";
 import { LAB_TRADER_TOOLS } from "./roster.js";

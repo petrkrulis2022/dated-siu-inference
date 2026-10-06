@@ -1,0 +1,1475 @@
+{
+  "runId": "lab-scripted-2026-10-06T17-51-04-458Z",
+  "seed": 9,
+  "scripted": true,
+  "print": {
+    "printId": "2026-10-05-commodity",
+    "rateUsdPerSiu": "0.001437"
+  },
+  "params": {
+    "rounds": 3,
+    "needsPerTrader": 2,
+    "jobMilliSiu": 1000,
+    "tradeMultiplierBps": 12000,
+    "creditMultiplierBps": 15000,
+    "openingMilliSiu": 2000
+  },
+  "economy": {
+    "skillOf": {
+      "TRADER-1": "TYPE-4",
+      "TRADER-2": "TYPE-3",
+      "TRADER-3": "TYPE-1",
+      "TRADER-4": "TYPE-2"
+    },
+    "needs": [
+      {
+        "id": "TRADER-1#1",
+        "buyer": "TRADER-1",
+        "type": "TYPE-3",
+        "seller": "TRADER-2",
+        "round": 2
+      },
+      {
+        "id": "TRADER-1#2",
+        "buyer": "TRADER-1",
+        "type": "TYPE-1",
+        "seller": "TRADER-3",
+        "round": 3
+      },
+      {
+        "id": "TRADER-2#1",
+        "buyer": "TRADER-2",
+        "type": "TYPE-1",
+        "seller": "TRADER-3",
+        "round": 1
+      },
+      {
+        "id": "TRADER-2#2",
+        "buyer": "TRADER-2",
+        "type": "TYPE-2",
+        "seller": "TRADER-4",
+        "round": 2
+      },
+      {
+        "id": "TRADER-3#1",
+        "buyer": "TRADER-3",
+        "type": "TYPE-2",
+        "seller": "TRADER-4",
+        "round": 1
+      },
+      {
+        "id": "TRADER-3#2",
+        "buyer": "TRADER-3",
+        "type": "TYPE-4",
+        "seller": "TRADER-1",
+        "round": 3
+      },
+      {
+        "id": "TRADER-4#1",
+        "buyer": "TRADER-4",
+        "type": "TYPE-4",
+        "seller": "TRADER-1",
+        "round": 1
+      },
+      {
+        "id": "TRADER-4#2",
+        "buyer": "TRADER-4",
+        "type": "TYPE-3",
+        "seller": "TRADER-2",
+        "round": 2
+      }
+    ]
+  },
+  "seats": {
+    "TRADER-1": "ORCHESTRATOR",
+    "TRADER-2": "WORKER-CODE",
+    "TRADER-3": "WORKER-EXTRACT",
+    "TRADER-4": "ISSUER-A"
+  },
+  "models": {
+    "TRADER-1": "claude-haiku-4-5",
+    "TRADER-2": "gpt-5.4-mini",
+    "TRADER-3": "claude-haiku-4-5",
+    "TRADER-4": "gpt-5.4-mini"
+  },
+  "window": {
+    "fromChainSeconds": "1791309018",
+    "toChainSeconds": "1791309498"
+  },
+  "mintBound": {
+    "openingMilliSiu": "8000",
+    "jobClaimMilliSiu": "1184",
+    "rawClaimMilliSiu": "975",
+    "needs": 8,
+    "worstCaseMilliSiu": "25272",
+    "allowanceMilliSiu": "25600"
+  },
+  "pool": {
+    "startingHeadroomMilliSiu": "32000",
+    "limitMilliSiu": "32000",
+    "whole": true,
+    "endingHeadroomMilliSiu": "32000",
+    "restored": true
+  },
+  "opening": {
+    "usdcMinorPerTrader": "2874",
+    "fsiuMilliSiuPerTrader": "2000",
+    "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959"
+  },
+  "snapshots": [
+    {
+      "label": "opening",
+      "round": 1,
+      "atChainSeconds": "1791309090",
+      "traders": [
+        {
+          "trader": "TRADER-1",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-2",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-3",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-4",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        }
+      ]
+    },
+    {
+      "label": "round 2 opened",
+      "round": 2,
+      "atChainSeconds": "1791309156",
+      "traders": [
+        {
+          "trader": "TRADER-1",
+          "usdcMinor": "3173",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "6047000"
+        },
+        {
+          "trader": "TRADER-2",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "816",
+          "needsMet": 1,
+          "resultNano": "6202092"
+        },
+        {
+          "trader": "TRADER-3",
+          "usdcMinor": "1474",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 1,
+          "resultNano": "6503500"
+        },
+        {
+          "trader": "TRADER-4",
+          "usdcMinor": "1174",
+          "fsiuMilliSiu": "2209",
+          "needsMet": 1,
+          "resultNano": "6503833"
+        }
+      ]
+    },
+    {
+      "label": "round 3 opened",
+      "round": 3,
+      "atChainSeconds": "1791309224",
+      "traders": [
+        {
+          "trader": "TRADER-1",
+          "usdcMinor": "1472",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 1,
+          "resultNano": "6501500"
+        },
+        {
+          "trader": "TRADER-2",
+          "usdcMinor": "74",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 2,
+          "resultNano": "7259000"
+        },
+        {
+          "trader": "TRADER-3",
+          "usdcMinor": "1474",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 1,
+          "resultNano": "6503500"
+        },
+        {
+          "trader": "TRADER-4",
+          "usdcMinor": "1174",
+          "fsiuMilliSiu": "1234",
+          "needsMet": 2,
+          "resultNano": "7258258"
+        }
+      ]
+    }
+  ],
+  "final": {
+    "label": "final",
+    "round": 3,
+    "atChainSeconds": "1791309268",
+    "traders": [
+      {
+        "trader": "TRADER-1",
+        "usdcMinor": "71",
+        "fsiuMilliSiu": "2000",
+        "needsMet": 2,
+        "resultNano": "7256000"
+      },
+      {
+        "trader": "TRADER-2",
+        "usdcMinor": "74",
+        "fsiuMilliSiu": "2000",
+        "needsMet": 2,
+        "resultNano": "7259000"
+      },
+      {
+        "trader": "TRADER-3",
+        "usdcMinor": "74",
+        "fsiuMilliSiu": "2000",
+        "needsMet": 2,
+        "resultNano": "7259000"
+      },
+      {
+        "trader": "TRADER-4",
+        "usdcMinor": "1174",
+        "fsiuMilliSiu": "1234",
+        "needsMet": 2,
+        "resultNano": "7258258"
+      }
+    ]
+  },
+  "measuredBeforeClose": true,
+  "needsMet": {
+    "TRADER-1": 2,
+    "TRADER-2": 2,
+    "TRADER-3": 2,
+    "TRADER-4": 2
+  },
+  "sales": [
+    {
+      "requestId": "qr-1",
+      "kind": "trade",
+      "buyer": "TRADER-2",
+      "seller": "TRADER-3",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": true,
+      "attempts": 1,
+      "needId": "TRADER-2#1",
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-2",
+      "kind": "trade",
+      "buyer": "TRADER-4",
+      "seller": "TRADER-1",
+      "quoted": true,
+      "paid": true,
+      "settled": true,
+      "delivered": true,
+      "attempts": 1,
+      "needId": "TRADER-4#1",
+      "paidAsset": "usdc"
+    },
+    {
+      "requestId": "qr-3",
+      "kind": "trade",
+      "buyer": "TRADER-3",
+      "seller": "TRADER-4",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": true,
+      "attempts": 1,
+      "needId": "TRADER-3#1",
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-4",
+      "kind": "rawwork",
+      "buyer": "TRADER-3",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": true,
+      "settled": true,
+      "delivered": false,
+      "attempts": 0,
+      "paidAsset": "split"
+    },
+    {
+      "requestId": "qr-5",
+      "kind": "rawwork",
+      "buyer": "TRADER-1",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-6",
+      "kind": "rawwork",
+      "buyer": "TRADER-4",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-7",
+      "kind": "trade",
+      "buyer": "TRADER-1",
+      "seller": "TRADER-2",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": true,
+      "attempts": 1,
+      "needId": "TRADER-1#1",
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-8",
+      "kind": "trade",
+      "buyer": "TRADER-4",
+      "seller": "TRADER-2",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": true,
+      "attempts": 1,
+      "needId": "TRADER-4#2",
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-9",
+      "kind": "rawwork",
+      "buyer": "TRADER-2",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": true,
+      "settled": true,
+      "delivered": false,
+      "attempts": 0,
+      "paidAsset": "usdc"
+    },
+    {
+      "requestId": "qr-10",
+      "kind": "rawwork",
+      "buyer": "TRADER-2",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": true,
+      "settled": true,
+      "delivered": false,
+      "attempts": 0,
+      "paidAsset": "split"
+    },
+    {
+      "requestId": "qr-11",
+      "kind": "trade",
+      "buyer": "TRADER-2",
+      "seller": "TRADER-4",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": true,
+      "attempts": 1,
+      "needId": "TRADER-2#2",
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-12",
+      "kind": "rawwork",
+      "buyer": "TRADER-4",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-13",
+      "kind": "trade",
+      "buyer": "TRADER-1",
+      "seller": "TRADER-3",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": true,
+      "attempts": 1,
+      "needId": "TRADER-1#2",
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-14",
+      "kind": "trade",
+      "buyer": "TRADER-3",
+      "seller": "TRADER-1",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": true,
+      "attempts": 1,
+      "needId": "TRADER-3#2",
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-15",
+      "kind": "rawwork",
+      "buyer": "TRADER-3",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": true,
+      "settled": true,
+      "delivered": false,
+      "attempts": 0,
+      "paidAsset": "usdc"
+    },
+    {
+      "requestId": "qr-16",
+      "kind": "rawwork",
+      "buyer": "TRADER-1",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "paidAsset": "fsiu"
+    }
+  ],
+  "escrowFeeBps": 50,
+  "workLog": [
+    {
+      "requestId": "qr-1",
+      "seller": "TRADER-3",
+      "buyer": "TRADER-2",
+      "attempt": 1,
+      "passed": true,
+      "costUsd": "0"
+    },
+    {
+      "requestId": "qr-2",
+      "seller": "TRADER-1",
+      "buyer": "TRADER-4",
+      "attempt": 1,
+      "passed": true,
+      "costUsd": "0"
+    },
+    {
+      "requestId": "qr-3",
+      "seller": "TRADER-4",
+      "buyer": "TRADER-3",
+      "attempt": 1,
+      "passed": true,
+      "costUsd": "0"
+    },
+    {
+      "requestId": "qr-7",
+      "seller": "TRADER-2",
+      "buyer": "TRADER-1",
+      "attempt": 1,
+      "passed": true,
+      "costUsd": "0"
+    },
+    {
+      "requestId": "qr-8",
+      "seller": "TRADER-2",
+      "buyer": "TRADER-4",
+      "attempt": 1,
+      "passed": true,
+      "costUsd": "0"
+    },
+    {
+      "requestId": "qr-11",
+      "seller": "TRADER-4",
+      "buyer": "TRADER-2",
+      "attempt": 1,
+      "passed": true,
+      "costUsd": "0"
+    },
+    {
+      "requestId": "qr-13",
+      "seller": "TRADER-3",
+      "buyer": "TRADER-1",
+      "attempt": 1,
+      "passed": true,
+      "costUsd": "0"
+    },
+    {
+      "requestId": "qr-14",
+      "seller": "TRADER-1",
+      "buyer": "TRADER-3",
+      "attempt": 1,
+      "passed": true,
+      "costUsd": "0"
+    }
+  ],
+  "workCostUsd": "0.000000",
+  "operatorActions": [
+    {
+      "kind": "usdc_reset",
+      "seat": "ORCHESTRATOR",
+      "move": "top_up",
+      "minorUnits": "1700",
+      "txHash": "0x8a238bfa9f8d3385957806e3f516fc18ecc86d7aac0f9266b34321996b102dee"
+    },
+    {
+      "kind": "usdc_reset",
+      "seat": "WORKER-CODE",
+      "move": "top_up",
+      "minorUnits": "1701",
+      "txHash": "0xe6281c7163d5f31938d4e73f1777ab2f2454ce28c95a476d43b45f63c38ec88c"
+    },
+    {
+      "kind": "usdc_reset",
+      "seat": "ISSUER-A",
+      "move": "top_up",
+      "minorUnits": "1701",
+      "txHash": "0x4a443d3836ca64f205520a47c501ccb0df62fa8f5b3c68fa0e8eb060aa6f8453"
+    },
+    {
+      "kind": "endowment_mint",
+      "quantityMilliSiu": "8000",
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "backedBy": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "txHash": "0x58c4e004f297fa66635957a5ecc522975889ef2abaf0628f1cf4283740c22d69"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "ORCHESTRATOR",
+      "quantityMilliSiu": "2000",
+      "txHash": "0xa2f00782220156b569c6210cadb8cae17269f16238f246b8331a633cd1d9f82d"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "WORKER-CODE",
+      "quantityMilliSiu": "2000",
+      "txHash": "0xe4ff61bf3c1cce49e2456ad92c188105f151a07c09c5ff93c13701eb6c511237"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "WORKER-EXTRACT",
+      "quantityMilliSiu": "2000",
+      "txHash": "0xf69077f2755bfbd64cafda1cbd6a6092417e828d6c303349e8e03153d0f9ab10"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "ISSUER-A",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x2c1acdb4e44d72895d078fae3957f2aaf47398d8c9f12ceeeb770d31179da376"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-1",
+      "quantityMilliSiu": "2000",
+      "txHash": "0xd6627e4731e9245219f10a02203899c97aca6a1ffab9aacff1cd1ea7e8ecf74f"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-2",
+      "quantityMilliSiu": "2000",
+      "txHash": "0xdf14fae3999a1ee5a11e0ed2a76baf6eb26e7d1e0b296f73d0b5f46fc7cfa882"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-3",
+      "quantityMilliSiu": "2000",
+      "txHash": "0xfd5311ba127bc33d12aca8785db5cf9748a97022be5310ee7c70563db151de0d"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-4",
+      "quantityMilliSiu": "1234",
+      "txHash": "0x748f18d8096295af8ee317e96656d12d67aacbb4861ee73562fdc18e5e803c26"
+    },
+    {
+      "kind": "expiry",
+      "holder": "ISSUER-B",
+      "quantityMilliSiu": "4874",
+      "txHash": "0x652af433374dea2c1c542f7e88ca5db2116cab1b72079efe6005289078f548ff"
+    },
+    {
+      "kind": "fee_rebate",
+      "seller": "ISSUER-B",
+      "requestId": "qr-4",
+      "settledMinorUnits": "701",
+      "rebatedMinorUnits": "3",
+      "txHash": "0xc2cb59eb10c78556f8f0858b3d21e251f0f2ce3ca05df969ebab226ab196badf"
+    },
+    {
+      "kind": "fee_rebate",
+      "seller": "ORCHESTRATOR",
+      "requestId": "qr-2",
+      "settledMinorUnits": "1700",
+      "rebatedMinorUnits": "8",
+      "txHash": "0x0309731cfc03ee26627c592d3160c811ad65f59509535116e5ac507c92ea3cf7"
+    },
+    {
+      "kind": "round_opened",
+      "round": 2
+    },
+    {
+      "kind": "fee_rebate",
+      "seller": "ISSUER-B",
+      "requestId": "qr-9",
+      "settledMinorUnits": "1400",
+      "rebatedMinorUnits": "7",
+      "txHash": "0x1f580a41bee9185be1ce8a220747247b0b1e9206660220644cafee1dcd1527a2"
+    },
+    {
+      "kind": "fee_rebate",
+      "seller": "ISSUER-B",
+      "requestId": "qr-10",
+      "settledMinorUnits": "701",
+      "rebatedMinorUnits": "3",
+      "txHash": "0xc16d6621ee02a92322b55ab309f05c8507f885f2dfddf039ffb2c9ba9e78381e"
+    },
+    {
+      "kind": "round_opened",
+      "round": 3
+    },
+    {
+      "kind": "fee_rebate",
+      "seller": "ISSUER-B",
+      "requestId": "qr-15",
+      "settledMinorUnits": "1400",
+      "rebatedMinorUnits": "7",
+      "txHash": "0x8bf24b5aef697ca471e5135968808838a1848b9ce76e912b5d9ee51ee0abe77e"
+    }
+  ],
+  "labErrors": [],
+  "toolErrors": [],
+  "turnsByAgent": {
+    "ORCHESTRATOR": 17,
+    "WORKER-CODE": 16,
+    "WORKER-EXTRACT": 16,
+    "ISSUER-A": 16,
+    "ISSUER-B": 12
+  },
+  "haltedReason": {
+    "ORCHESTRATOR": "nothing_to_act_on",
+    "WORKER-CODE": "nothing_to_act_on",
+    "WORKER-EXTRACT": "nothing_to_act_on",
+    "ISSUER-A": "nothing_to_act_on",
+    "ISSUER-B": "nothing_to_act_on"
+  },
+  "totalRealizedUsd": "0.000000",
+  "spendByProvider": {
+    "anthropic": "0.000000",
+    "lab-service": "0.000000",
+    "openai": "0.000000"
+  },
+  "paymentMoments": [
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 3,
+      "tool": "transfer_claim",
+      "asset": "fsiu",
+      "requestId": "qr-1",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 4,
+      "tool": "pay",
+      "asset": "usdc",
+      "requestId": "qr-2",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 5,
+      "tool": "settle_split",
+      "asset": "split",
+      "requestId": "qr-4",
+      "heldReceivedMilliSiu": "1184",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.001437",
+      "quotedUsdMax": "0.0014"
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 4,
+      "tool": "pay_with_claim",
+      "asset": "fsiu",
+      "requestId": "qr-5",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.001437",
+      "quotedUsdMax": "0.0014"
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 8,
+      "tool": "transfer_claim",
+      "asset": "fsiu",
+      "requestId": "qr-3",
+      "heldReceivedMilliSiu": "1184",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 7,
+      "tool": "transfer_claim",
+      "asset": "fsiu",
+      "requestId": "qr-6",
+      "heldReceivedMilliSiu": "1184",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.001437",
+      "quotedUsdMax": "0.0014"
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 9,
+      "tool": "pay_with_claim",
+      "asset": "fsiu",
+      "requestId": "qr-7",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 11,
+      "tool": "transfer_claim",
+      "asset": "fsiu",
+      "requestId": "qr-8",
+      "heldReceivedMilliSiu": "209",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 8,
+      "tool": "pay",
+      "asset": "usdc",
+      "requestId": "qr-9",
+      "heldReceivedMilliSiu": "2368",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.001437",
+      "quotedUsdMax": "0.0014"
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 12,
+      "tool": "settle_split",
+      "asset": "split",
+      "requestId": "qr-10",
+      "heldReceivedMilliSiu": "2368",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.001437",
+      "quotedUsdMax": "0.0014"
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 16,
+      "tool": "transfer_claim",
+      "asset": "fsiu",
+      "requestId": "qr-11",
+      "heldReceivedMilliSiu": "2368",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 15,
+      "tool": "transfer_claim",
+      "asset": "fsiu",
+      "requestId": "qr-12",
+      "heldReceivedMilliSiu": "1184",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.001437",
+      "quotedUsdMax": "0.0014"
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 13,
+      "tool": "transfer_claim",
+      "asset": "fsiu",
+      "requestId": "qr-13",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 14,
+      "tool": "pay",
+      "asset": "usdc",
+      "requestId": "qr-15",
+      "heldReceivedMilliSiu": "1184",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.001437",
+      "quotedUsdMax": "0.0014"
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 16,
+      "tool": "transfer_claim",
+      "asset": "fsiu",
+      "requestId": "qr-14",
+      "heldReceivedMilliSiu": "1184",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 16,
+      "tool": "pay_with_claim",
+      "asset": "fsiu",
+      "requestId": "qr-16",
+      "heldReceivedMilliSiu": "1184",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.001437",
+      "quotedUsdMax": "0.0014"
+    }
+  ],
+  "usdcSettlements": [
+    {
+      "sellerAgentId": "ISSUER-B",
+      "turn": 3,
+      "requestId": "qr-4",
+      "settledMinorUnits": "701",
+      "quotedMinorUnits": "1400"
+    },
+    {
+      "sellerAgentId": "ORCHESTRATOR",
+      "turn": 6,
+      "requestId": "qr-2",
+      "settledMinorUnits": "1700",
+      "quotedMinorUnits": "1700"
+    },
+    {
+      "sellerAgentId": "ISSUER-B",
+      "turn": 6,
+      "requestId": "qr-9",
+      "settledMinorUnits": "1400",
+      "quotedMinorUnits": "1400"
+    },
+    {
+      "sellerAgentId": "ISSUER-B",
+      "turn": 8,
+      "requestId": "qr-10",
+      "settledMinorUnits": "701",
+      "quotedMinorUnits": "1400"
+    },
+    {
+      "sellerAgentId": "ISSUER-B",
+      "turn": 11,
+      "requestId": "qr-15",
+      "settledMinorUnits": "1400",
+      "quotedMinorUnits": "1400"
+    }
+  ],
+  "claimFlows": {
+    "ORCHESTRATOR": {
+      "receivedMilliSiu": "1184",
+      "receivedKeyedMilliSiu": "1184",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "1184",
+      "redeemedMilliSiu": "0"
+    },
+    "WORKER-CODE": {
+      "receivedMilliSiu": "2368",
+      "receivedKeyedMilliSiu": "2368",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "2368",
+      "redeemedMilliSiu": "0"
+    },
+    "WORKER-EXTRACT": {
+      "receivedMilliSiu": "2368",
+      "receivedKeyedMilliSiu": "2368",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "2368",
+      "redeemedMilliSiu": "0"
+    },
+    "ISSUER-A": {
+      "receivedMilliSiu": "2368",
+      "receivedKeyedMilliSiu": "2368",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "3134",
+      "redeemedMilliSiu": "0"
+    },
+    "ISSUER-B": {
+      "receivedMilliSiu": "4874",
+      "receivedKeyedMilliSiu": "4874",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    }
+  },
+  "capacityEvents": [
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 3,
+      "kind": "transfer_claim",
+      "timeToExpirySeconds": 396,
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "quantityMilliSiu": "1184",
+      "counterparty": "0x2cd53E449F6cF45c51f600e167b4D2630128c8F3",
+      "settlesRequestId": "qr-1",
+      "txHash": "0x1209b34afd43dac8e0e0d1b144ba01ad0ba5f66c6aa34009dd5b7ad9460feed0"
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 5,
+      "kind": "settle_split",
+      "timeToExpirySeconds": 374,
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "quantityMilliSiu": "487",
+      "claimShare": "0.4993",
+      "counterparty": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "mintCostMinorUnits": "699",
+      "settlesRequestId": "qr-4",
+      "txHash": "0xe9d194b8adfc165fb6cd17cd44361cf7601e6b18cfe4c7206f825bf0447b6cab"
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 4,
+      "kind": "pay_with_claim",
+      "timeToExpirySeconds": 360,
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "quantityMilliSiu": "975",
+      "forwardDated": false,
+      "counterparty": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "mintCostMinorUnits": "1401",
+      "settlesRequestId": "qr-5",
+      "txHash": "0x2f850229b21c064da79a4f3d1359873ec66c8565c5c7997bacdff011fa65658e (mint) / 0xb09f361ae3b1e30a8d1ec4b1d8c258064d7123a6d72858722f649737de3a558e (transfer)"
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 8,
+      "kind": "transfer_claim",
+      "timeToExpirySeconds": 354,
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "quantityMilliSiu": "1184",
+      "counterparty": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+      "settlesRequestId": "qr-3",
+      "txHash": "0x21dc582512cc70302ef3570f1fec4896fd626852a25931b2fd50b08de4041965"
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 7,
+      "kind": "transfer_claim",
+      "timeToExpirySeconds": 342,
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "quantityMilliSiu": "975",
+      "counterparty": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "settlesRequestId": "qr-6",
+      "txHash": "0x956ad0c5d51dba56beefea116ac036e4fa162145769b322371f3eb717928193e"
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 9,
+      "kind": "pay_with_claim",
+      "timeToExpirySeconds": 328,
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "quantityMilliSiu": "1184",
+      "forwardDated": false,
+      "counterparty": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+      "mintCostMinorUnits": "1701",
+      "settlesRequestId": "qr-7",
+      "txHash": "0x2a33f546cb91aff984126e4109beedf18dbae915e792bd478a70677c64b8d432 (mint) / 0xb7e5e4b2fe2dc062e00e0217e3fc1c93370ecb7e1daa850c4b561bef1f263ab5 (transfer)"
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 11,
+      "kind": "transfer_claim",
+      "timeToExpirySeconds": 322,
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "quantityMilliSiu": "1184",
+      "counterparty": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+      "settlesRequestId": "qr-8",
+      "txHash": "0x31fe4ee2ce600f52b05ba1d8b202091df9645fe74ab10750c279d5882dd0b828"
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 12,
+      "kind": "settle_split",
+      "timeToExpirySeconds": 296,
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "quantityMilliSiu": "487",
+      "claimShare": "0.4993",
+      "counterparty": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "mintCostMinorUnits": "699",
+      "settlesRequestId": "qr-10",
+      "txHash": "0x2c40afbdd59b9f268edabf34c8e83f65fe3772fe32e72684ba79ea87c5946ff6"
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 16,
+      "kind": "transfer_claim",
+      "timeToExpirySeconds": 282,
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "quantityMilliSiu": "1184",
+      "counterparty": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86",
+      "settlesRequestId": "qr-11",
+      "txHash": "0x11b88743953ed0e7073b3075e7a7836de74f2bcf71e86c012efd773f3042e595"
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 15,
+      "kind": "transfer_claim",
+      "timeToExpirySeconds": 276,
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "quantityMilliSiu": "975",
+      "counterparty": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "settlesRequestId": "qr-12",
+      "txHash": "0x87381a92a38f5d8522335723fbb11a34686e917b14513ff8f37e2511e5c49cab"
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 13,
+      "kind": "transfer_claim",
+      "timeToExpirySeconds": 262,
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "quantityMilliSiu": "1184",
+      "counterparty": "0x2cd53E449F6cF45c51f600e167b4D2630128c8F3",
+      "settlesRequestId": "qr-13",
+      "txHash": "0x3d607b500d108f0390c1e9552e7964b56177937b954ec8d1bdb7b8fd8e704e1a"
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 16,
+      "kind": "transfer_claim",
+      "timeToExpirySeconds": 238,
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "quantityMilliSiu": "1184",
+      "counterparty": "0x8Bf6De67D0B9705520Cdf5a348f5763e2175F363",
+      "settlesRequestId": "qr-14",
+      "txHash": "0x9ccc9c84b263e25327ebe8b50dcd44f9bc9c93af34dc517959c9c2c0d0634ab0"
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 16,
+      "kind": "pay_with_claim",
+      "timeToExpirySeconds": 230,
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "quantityMilliSiu": "975",
+      "forwardDated": false,
+      "counterparty": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "mintCostMinorUnits": "1401",
+      "settlesRequestId": "qr-16",
+      "txHash": "0x4b308674e42c0a0e5395445306012c215688d8e97966164842375c8207eb37cb (mint) / 0x2c7e206e28f5b1802f8be800a8c5575e0b33626474febb50da2a7e61b5775a83 (transfer)"
+    }
+  ],
+  "claimPositions": [
+    {
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "holder": "ORCHESTRATOR",
+      "issuer": "ISSUER-B",
+      "quantity": "2000",
+      "presented": false
+    },
+    {
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "holder": "WORKER-CODE",
+      "issuer": "ISSUER-B",
+      "quantity": "2000",
+      "presented": false
+    },
+    {
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "holder": "WORKER-EXTRACT",
+      "issuer": "ISSUER-B",
+      "quantity": "2000",
+      "presented": false
+    },
+    {
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "holder": "ISSUER-A",
+      "issuer": "ISSUER-B",
+      "quantity": "1234",
+      "presented": false
+    },
+    {
+      "tokenId": "103561354230120585025352896894742662109930371168341514621486253343791221459959",
+      "holder": "ISSUER-B",
+      "issuer": "ISSUER-B",
+      "quantity": "4874",
+      "presented": false
+    }
+  ],
+  "lag": {
+    "writesRetried": 1,
+    "recovered": 1,
+    "gaveUp": 0,
+    "events": [
+      {
+        "functionName": "safeTransferFrom",
+        "account": "0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e",
+        "retries": 1,
+        "outcome": "recovered"
+      }
+    ]
+  },
+  "instrument": {
+    "version": 3,
+    "changes": [
+      "v1 2026-10-06: phase 1 as first built — T1 jobs, four traders, raw work from ISSUER-B, opening 2,000 mSIU and equal USDC, price parity with the dollar-route fee rebated.",
+      "v2 2026-10-06: a quote may be paid only by the trader who asked for it, and once (lab/guards.ts). Before it a seller could pay its own quote by minting a claim for itself, and a quote could be paid twice by claim; found by the first model run, which therefore predates this and is not pooled.",
+      "v3 2026-10-06: what a trader meets changed in four ways, all from the first model run (D26 to D28): the payment tools are named by what they do — pay_with_usdc, pay_with_new_claim, pay_with_held_claim, pay_split — with descriptions of one shape and one worked example each, and the loop's own names refused; a quote line leads with its request id alone (`qr-2: quote from seller …`); a payment the wallet cannot afford is refused before it is sent, in one sentence whichever asset it is in; and the spend projection uses measured output so the cap means what it says."
+    ]
+  },
+  "debugMode": {
+    "disqualifiedBecause": "a scripted walk: no model was called, so there is no behaviour to count"
+  },
+  "scriptedWalk": {
+    "ok": true,
+    "checks": [
+      {
+        "id": "is_marked_scripted",
+        "ok": true,
+        "detail": "the report says no model was called"
+      },
+      {
+        "id": "ran_clean",
+        "ok": true,
+        "detail": "no abort, no contamination"
+      },
+      {
+        "id": "no_bookkeeping_errors",
+        "ok": true,
+        "detail": "0 errors in the lab's own bookkeeping"
+      },
+      {
+        "id": "no_tool_call_errored",
+        "ok": true,
+        "detail": "none"
+      },
+      {
+        "id": "every_need_met",
+        "ok": true,
+        "detail": "8 of 8 needs met"
+      },
+      {
+        "id": "jobs_paid_every_route",
+        "ok": true,
+        "detail": "used held, usdc, mint_forward"
+      },
+      {
+        "id": "raw_work_paid_every_route",
+        "ok": true,
+        "detail": "used split, mint_forward, held, usdc"
+      },
+      {
+        "id": "some_purchase_paid_by_split",
+        "ok": true,
+        "detail": "a quote was settled partly in each asset"
+      },
+      {
+        "id": "received_fsiu_passed_on",
+        "ok": true,
+        "detail": "6 held-balance payment(s) made by a payer holding fSIU it had been given"
+      },
+      {
+        "id": "fee_rebated_after_every_dollar_settlement",
+        "ok": true,
+        "detail": "5 dollar settlements, 5 rebates"
+      },
+      {
+        "id": "dollar_settlements_in_full",
+        "ok": true,
+        "detail": "0 dollar settlement(s) not for the amount the escrow held (the whole quote, or the dollar leg of a split)"
+      },
+      {
+        "id": "leftover_fsiu_expired_at_close",
+        "ok": true,
+        "detail": "5 positions expired, 0 failed, pool restored"
+      },
+      {
+        "id": "fsiu_conserved",
+        "ok": true,
+        "detail": "expired 12108 = endowment 8000 + minted 4108"
+      },
+      {
+        "id": "opening_equal_for_every_trader",
+        "ok": true,
+        "detail": "each 2874 USDC minor and 2000 mSIU"
+      },
+      {
+        "id": "every_round_opened",
+        "ok": true,
+        "detail": "snapshots: opening, round 2 opened, round 3 opened"
+      },
+      {
+        "id": "score_recomputes_from_balances",
+        "ok": true,
+        "detail": "each result equals USDC + fSIU at the print + credit"
+      },
+      {
+        "id": "scored_before_the_window_closed",
+        "ok": true,
+        "detail": "the snapshot fell inside the window"
+      },
+      {
+        "id": "no_payment_was_unaffordable",
+        "ok": true,
+        "detail": "every quote could be paid by some route"
+      },
+      {
+        "id": "no_paid_job_left_undelivered",
+        "ok": true,
+        "detail": "0 jobs sold and not delivered"
+      }
+    ],
+    "fellBack": [
+      {
+        "trader": "TRADER-3",
+        "requestId": "qr-3",
+        "planned": "split",
+        "because": "holds 1474 USDC minor units and 3184 mSIU; the quote is 1700 and 1184 mSIU"
+      },
+      {
+        "trader": "TRADER-4",
+        "requestId": "qr-6",
+        "planned": "usdc",
+        "because": "holds 1174 USDC minor units and 3184 mSIU; the quote is 1400 and 975 mSIU"
+      },
+      {
+        "trader": "TRADER-4",
+        "requestId": "qr-8",
+        "planned": "mint_forward",
+        "because": "holds 1174 USDC minor units and 2209 mSIU; the quote is 1700 and 1184 mSIU"
+      },
+      {
+        "trader": "TRADER-2",
+        "requestId": "qr-11",
+        "planned": "split",
+        "because": "holds 74 USDC minor units and 3184 mSIU; the quote is 1700 and 1184 mSIU"
+      },
+      {
+        "trader": "TRADER-4",
+        "requestId": "qr-12",
+        "planned": "mint_forward",
+        "because": "holds 1174 USDC minor units and 1025 mSIU; the quote is 1400 and 975 mSIU"
+      },
+      {
+        "trader": "TRADER-3",
+        "requestId": "qr-14",
+        "planned": "usdc",
+        "because": "holds 1474 USDC minor units and 2000 mSIU; the quote is 1700 and 1184 mSIU"
+      },
+      {
+        "trader": "TRADER-1",
+        "requestId": "qr-16",
+        "planned": "held",
+        "because": "holds 1472 USDC minor units and 816 mSIU; the quote is 1400 and 975 mSIU"
+      }
+    ],
+    "steps": {
+      "decided": [
+        {
+          "trader": "TRADER-2",
+          "requestId": "qr-1",
+          "kind": "job",
+          "planned": "held",
+          "used": "held"
+        },
+        {
+          "trader": "TRADER-4",
+          "requestId": "qr-2",
+          "kind": "job",
+          "planned": "usdc",
+          "used": "usdc"
+        },
+        {
+          "trader": "TRADER-3",
+          "requestId": "qr-4",
+          "kind": "raw",
+          "planned": "split",
+          "used": "split"
+        },
+        {
+          "trader": "TRADER-1",
+          "requestId": "qr-5",
+          "kind": "raw",
+          "planned": "mint_forward",
+          "used": "mint_forward"
+        },
+        {
+          "trader": "TRADER-3",
+          "requestId": "qr-3",
+          "kind": "job",
+          "planned": "split",
+          "used": "held"
+        },
+        {
+          "trader": "TRADER-4",
+          "requestId": "qr-6",
+          "kind": "raw",
+          "planned": "usdc",
+          "used": "held"
+        },
+        {
+          "trader": "TRADER-1",
+          "requestId": "qr-7",
+          "kind": "job",
+          "planned": "mint_forward",
+          "used": "mint_forward"
+        },
+        {
+          "trader": "TRADER-4",
+          "requestId": "qr-8",
+          "kind": "job",
+          "planned": "mint_forward",
+          "used": "held"
+        },
+        {
+          "trader": "TRADER-2",
+          "requestId": "qr-9",
+          "kind": "raw",
+          "planned": "held",
+          "used": "usdc"
+        },
+        {
+          "trader": "TRADER-2",
+          "requestId": "qr-10",
+          "kind": "raw",
+          "planned": "split",
+          "used": "split"
+        },
+        {
+          "trader": "TRADER-2",
+          "requestId": "qr-11",
+          "kind": "job",
+          "planned": "split",
+          "used": "held"
+        },
+        {
+          "trader": "TRADER-4",
+          "requestId": "qr-12",
+          "kind": "raw",
+          "planned": "mint_forward",
+          "used": "held"
+        },
+        {
+          "trader": "TRADER-1",
+          "requestId": "qr-13",
+          "kind": "job",
+          "planned": "held",
+          "used": "held"
+        },
+        {
+          "trader": "TRADER-3",
+          "requestId": "qr-15",
+          "kind": "raw",
+          "planned": "usdc",
+          "used": "usdc"
+        },
+        {
+          "trader": "TRADER-3",
+          "requestId": "qr-14",
+          "kind": "job",
+          "planned": "usdc",
+          "used": "held"
+        },
+        {
+          "trader": "TRADER-1",
+          "requestId": "qr-16",
+          "kind": "raw",
+          "planned": "held",
+          "used": "mint_forward"
+        }
+      ],
+      "fellBack": [
+        {
+          "trader": "TRADER-3",
+          "requestId": "qr-3",
+          "planned": "split",
+          "because": "holds 1474 USDC minor units and 3184 mSIU; the quote is 1700 and 1184 mSIU"
+        },
+        {
+          "trader": "TRADER-4",
+          "requestId": "qr-6",
+          "planned": "usdc",
+          "because": "holds 1174 USDC minor units and 3184 mSIU; the quote is 1400 and 975 mSIU"
+        },
+        {
+          "trader": "TRADER-4",
+          "requestId": "qr-8",
+          "planned": "mint_forward",
+          "because": "holds 1174 USDC minor units and 2209 mSIU; the quote is 1700 and 1184 mSIU"
+        },
+        {
+          "trader": "TRADER-2",
+          "requestId": "qr-11",
+          "planned": "split",
+          "because": "holds 74 USDC minor units and 3184 mSIU; the quote is 1700 and 1184 mSIU"
+        },
+        {
+          "trader": "TRADER-4",
+          "requestId": "qr-12",
+          "planned": "mint_forward",
+          "because": "holds 1174 USDC minor units and 1025 mSIU; the quote is 1400 and 975 mSIU"
+        },
+        {
+          "trader": "TRADER-3",
+          "requestId": "qr-14",
+          "planned": "usdc",
+          "because": "holds 1474 USDC minor units and 2000 mSIU; the quote is 1700 and 1184 mSIU"
+        },
+        {
+          "trader": "TRADER-1",
+          "requestId": "qr-16",
+          "planned": "held",
+          "because": "holds 1472 USDC minor units and 816 mSIU; the quote is 1400 and 975 mSIU"
+        }
+      ],
+      "unaffordable": []
+    }
+  }
+}
