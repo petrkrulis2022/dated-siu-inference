@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { QuoteBody, TouchstoneQuote } from "@touchstone/sdk";
+import type { AgentId } from "../identity/resolve.js";
 import { QuoteBoard } from "./quote-board.js";
 
 function fakeQuoteBody(sellerId: string, overrides: Partial<QuoteBody> = {}): QuoteBody {
@@ -237,5 +238,23 @@ describe("QuoteBoard — the 'you have been paid' line names only tools the rost
     expect(text).not.toContain("reserve_for_work");
     expect(text).toContain("YOU HAVE BEEN PAID AND OWE THE WORK");
     expect(text).toContain("answers qr-1: amount_usd_max");
+  });
+});
+
+describe("QuoteBoard — how a requester is named to the seller", () => {
+  const openBoard = (options?: { displayName?: (buyer: AgentId) => string }) => {
+    const board = new QuoteBoard(options);
+    board.postRequest("ORCHESTRATOR", fakeQuoteBody("erc8004:0xWORKERCODE"));
+    return board.renderFor("WORKER-CODE", "erc8004:0xWORKERCODE");
+  };
+
+  it("uses the seat name by default", () => {
+    expect(openBoard()).toContain("from ORCHESTRATOR,");
+  });
+
+  it("uses the name it is given where the run shows its agents under other names, and never the seat's", () => {
+    const text = openBoard({ displayName: (b) => (b === "ORCHESTRATOR" ? "TRADER-1" : b) });
+    expect(text).toContain("from TRADER-1,");
+    expect(text).not.toContain("ORCHESTRATOR");
   });
 });

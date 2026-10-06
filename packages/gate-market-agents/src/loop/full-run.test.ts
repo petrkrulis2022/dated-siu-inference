@@ -33,6 +33,7 @@ import { QuoteBoard } from "./quote-board.js";
 import { summarisePurchases } from "./purchases.js";
 import { ForwardQuoteBook } from "./forward-book.js";
 import {
+  addressDirectory,
   buildToolArgs,
   runFullRunWindow,
   shuffledToolOrder,
@@ -1276,6 +1277,31 @@ describe("buildToolArgs", () => {
     await expect(
       buildToolArgs("transfer_claim", { to: seller, tokenId: "7", requestId }, baseCtx({ board })),
     ).rejects.toThrow(/mintContext/);
+  });
+
+  it("transfer_claim by a name the run gives an agent: the alias resolves to the seat's address, an unknown name still fails", async () => {
+    // The currency lab shows traders as TRADER-n. A brief that says "pass a claim to TRADER-2" is a
+    // brief whose syntax must work, so the lab's labels are aliases for the seats underneath.
+    const sellerAddress = "0x00000000000000000000000000000000000000cd";
+    const directory = addressDirectory(
+      [
+        { agentId: "ORCHESTRATOR", address: "0x00000000000000000000000000000000000000ab" },
+        { agentId: "WORKER-CODE", address: sellerAddress },
+      ],
+      { "TRADER-2": "WORKER-CODE", "TRADER-9": "HEDGER" },
+    );
+    expect(directory["WORKER-CODE"]).toBe(sellerAddress);
+    expect(directory["TRADER-2" as AgentId]).toBe(sellerAddress);
+    expect(directory["TRADER-9" as AgentId]).toBeUndefined(); // an alias for a seat not in the roster
+    const args = (await buildToolArgs(
+      "transfer_claim",
+      { agentId: "TRADER-2", tokenId: "7", quantity: "1" },
+      baseCtx({ agentAddressByAgentId: directory }),
+    )) as { to: string };
+    expect(args.to).toBe(sellerAddress);
+    await expect(
+      buildToolArgs("transfer_claim", { agentId: "TRADER-3", tokenId: "7", quantity: "1" }, baseCtx({ agentAddressByAgentId: directory })),
+    ).rejects.toThrow(/no known address for agentId "TRADER-3"/);
   });
 
   it("issue_quote: a seller decides WHETHER to sign and cannot change a single term, including what the quote settles in", async () => {

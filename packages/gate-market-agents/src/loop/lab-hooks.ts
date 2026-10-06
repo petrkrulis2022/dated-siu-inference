@@ -25,6 +25,12 @@ export interface LabToolEvent {
 }
 
 export interface LabHooks {
+  /**
+   * Names an agent may use for another in a call's own arguments, mapped to the seat they stand for —
+   * `transfer_claim`'s `agentId` is looked up here as well as among the seats. The lab shows its traders
+   * as TRADER-n, so a trader that is told to pass a claim to TRADER-2 must be able to say so.
+   */
+  aliases?: Readonly<Record<string, AgentId>>;
   /** Shown to the agent every turn and never a reason to wake it: the schedule, its standing. */
   infoTextFor(agentId: AgentId): string;
   /** Shown, and a reason to wake the agent if it holds a tool it could act with: what it can do now. */

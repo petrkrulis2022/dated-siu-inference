@@ -39,6 +39,12 @@ export interface QuoteBoardOptions {
    * refuse is the defect §4.6-RULE exists to prevent.
    */
   reservationStep?: boolean;
+  /**
+   * How a buyer is named in what a seller is shown. The loop's own ids are seat names; the currency lab
+   * shows its traders under labels, and a board that printed "from WORKER-CODE" would name a seat the
+   * agent has never been told exists.
+   */
+  displayName?: (buyer: AgentId) => string;
 }
 
 export class QuoteBoard {
@@ -194,7 +200,7 @@ export class QuoteBoard {
       );
       for (const r of openRequests) {
         lines.push(
-          `  ${r.requestId}: from ${r.buyer}, ${r.body.siu} SIU, model ${r.body.model}, ` +
+          `  ${r.requestId}: from ${this.options.displayName?.(r.buyer) ?? r.buyer}, ${r.body.siu} SIU, model ${r.body.model}, ` +
             `rate ${r.body.rate_usd_per_siu} USD/SIU, pattern ${r.body.pattern}`,
         );
       }

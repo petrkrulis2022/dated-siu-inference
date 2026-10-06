@@ -84,9 +84,10 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   // The currency lab's seller step. Says nothing about either asset: it moves no payment, and the
   // settlement of the quote is a separate act in whichever asset the buyer chose.
   deliver_job:
-    "deliver_job(requestId) -> as the SELLER of a quote that has been paid: spends one unit of raw " +
-    "work you hold and delivers the job with your skill. A grader then checks the result; if it " +
-    "passes, the buyer's need is met. It moves no payment.",
+    "deliver_job(requestId) -> as the SELLER of a quote that has been paid: delivers the job with " +
+    "your skill, using one unit of raw work you hold. A grader checks the result. If it passes, " +
+    "the unit is used up and the buyer's need is met; an attempt that does not pass leaves the " +
+    "unit with you, and a job has at most 3 attempts. It moves no payment.",
 };
 
 export function formatToolList(): string {

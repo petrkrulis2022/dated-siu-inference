@@ -34,6 +34,10 @@ export const PRICES: Record<string, ModelPrices> = {
   // entry `claude-haiku-4-5`: in 1, out 5), not from memory and not estimated — a wrong figure
   // here silently mis-projects every budget ceiling the run enforces.
   "claude-haiku-4-5": { priceInUsdPer1M: "1", priceOutUsdPer1M: "5" },
+  // Added 2026-10-06 for the currency lab's two OpenAI traders. From this repo's own latest LiteLLM
+  // snapshot (`data/registry/price-snapshot-litellm-2026-10-05T01-09-49.027Z.json`, entry
+  // `gpt-5.4-mini`: in 0.75, out 4.5), read directly, not remembered.
+  "gpt-5.4-mini": { priceInUsdPer1M: "0.75", priceOutUsdPer1M: "4.5" },
 };
 
 /**

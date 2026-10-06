@@ -957,9 +957,7 @@ export async function runFullRunWindow(
   const windowFrom = options.windowFrom ?? nowSeconds;
   const windowTo = options.windowTo ?? nowSeconds + 7n * 24n * 3600n;
 
-  const agentAddressByAgentId = Object.fromEntries(
-    options.roster.map((a) => [a.agentId, a.address]),
-  ) as Partial<Record<AgentId, string>>;
+  const agentAddressByAgentId = addressDirectory(options.roster, options.lab?.aliases);
 
   const runners = new Map(
     options.roster.map((agent) => [
@@ -2851,6 +2849,24 @@ function buildFrictionEntry(
     // becoming `null` — the same encoding friction's own optional fields use.
     ...(overrides?.rationale !== undefined ? { rationale: overrides.rationale } : {}),
   };
+}
+
+/**
+ * Every name a call's own arguments may use for an address: the seats, and any alias the run gives them.
+ * An alias is not an `AgentId` — the lab's trader labels are shown to agents and never exist as seats —
+ * which is why the key type is widened here, in one place, rather than at each lookup.
+ */
+export function addressDirectory(
+  roster: readonly { agentId: AgentId; address: string }[],
+  aliases: Readonly<Record<string, AgentId>> = {},
+): Partial<Record<AgentId, string>> {
+  const bySeat = new Map(roster.map((a) => [a.agentId, a.address]));
+  const entries: Array<[string, string]> = roster.map((a) => [a.agentId, a.address]);
+  for (const [alias, seat] of Object.entries(aliases)) {
+    const address = bySeat.get(seat);
+    if (address !== undefined) entries.push([alias, address]);
+  }
+  return Object.fromEntries(entries) as Partial<Record<AgentId, string>>;
 }
 
 export interface BuildToolArgsContext {
