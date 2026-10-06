@@ -226,6 +226,35 @@ describe("runFullRunWindow with the currency lab's hooks", () => {
     expect(result.turnLogsByAgent.ORCHESTRATOR[0].toolCall).toEqual({ name: "request_quote", ok: true });
   });
 
+  it("knows the opening endowment as held, not received and not as flows", async () => {
+    const lab: LabHooks = { infoTextFor: () => "", actionTextFor: () => "", guard: () => null, afterToolCall: async () => {}, advanceRound: async () => false };
+    const adapter: Adapter = async () => respond({ done: true, summary: "x" });
+    const result = await runFullRunWindow({
+      windowId: "w-opening",
+      roster: [cfg("ORCHESTRATOR", adapter, ["request_quote"], "buyer"), cfg("WORKER-CODE", adapter, ["issue_quote"])],
+      job: JOB,
+      maxTurnsPerAgent: 12,
+      budget: budget(),
+      deps: fakeDeps(),
+      runsRoot,
+      runId: "run-opening",
+      manifest: MANIFEST,
+      lab,
+      openingClaims: [
+        { agentId: "ORCHESTRATOR", tokenId: "777", quantityMilliSiu: "2000", issuerAgentId: "ISSUER-B" },
+        { agentId: "WORKER-CODE", tokenId: "777", quantityMilliSiu: "2000", issuerAgentId: "ISSUER-B" },
+      ],
+    });
+    expect(result.claimPositions).toEqual([
+      { tokenId: "777", holder: "ORCHESTRATOR", issuer: "ISSUER-B", quantity: "2000", presented: false },
+      { tokenId: "777", holder: "WORKER-CODE", issuer: "ISSUER-B", quantity: "2000", presented: false },
+    ]);
+    // Neither a payment received nor an agent's own mint: the endowment is the operator's, and the report states it.
+    for (const seat of ["ORCHESTRATOR", "WORKER-CODE"]) {
+      expect(result.claimFlows[seat]).toMatchObject({ receivedMilliSiu: "0", mintedMilliSiu: "0", transferredOutKeyedMilliSiu: "0" });
+    }
+  });
+
   it("does nothing different when no hooks are given", async () => {
     let aCall = 0;
     const adapterA: Adapter = async () => (++aCall === 1 ? respond(REQUEST("0.0017244")) : respond({ done: true, summary: "x" }));

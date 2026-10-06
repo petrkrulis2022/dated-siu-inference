@@ -56,15 +56,15 @@ describe("the lab's prices at an illustrative print", () => {
   });
 
   it("opens each trader with USDC and fSIU of equal value", () => {
-    expect(openingUsdcMinor(P, DEFAULT_PARAMS)).toBe(5_748n);
-    expect(usdcValueNano(5_748n)).toBe(fsiuValueNano(4000n, P));
+    expect(openingUsdcMinor(P, DEFAULT_PARAMS)).toBe(2_874n);
+    expect(usdcValueNano(2_874n)).toBe(fsiuValueNano(2000n, P));
   });
 
   it("rounds opening USDC UP when the print does not divide evenly, so USDC is never worth less", () => {
     const odd = 1_437_001n;
     const usdc = openingUsdcMinor(odd, DEFAULT_PARAMS);
-    expect(usdcValueNano(usdc)).toBeGreaterThanOrEqual(fsiuValueNano(4000n, odd));
-    expect(usdcValueNano(usdc - 1n)).toBeLessThan(fsiuValueNano(4000n, odd));
+    expect(usdcValueNano(usdc)).toBeGreaterThanOrEqual(fsiuValueNano(2000n, odd));
+    expect(usdcValueNano(usdc - 1n)).toBeLessThan(fsiuValueNano(2000n, odd));
   });
 });
 

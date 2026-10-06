@@ -93,12 +93,16 @@ issuer service; briefs and roster; a lab runner; scoring and measurement; a scri
 | traders | 4 | |
 | rounds | 3 | |
 | needs per trader | 2 (8 jobs per run) | |
-| opening per trader | 4 SIU of USDC and 4,000 mSIU of fSIU | |
+| opening per trader | 2 SIU of USDC and 2,000 mSIU of fSIU (**changed from 4 SIU, D16**) | 2 SIU: 2,000 mSIU of fSIU and 2,874 USDC minor units at the illustrative print |
 | decision turns per run | about 50 | |
 
-*Worst-case mint check (to be enforced at launch, §5):* opening mints 16,000 mSIU plus up to eight
-payments each minted fresh (about 1,201 mSIU each) is about 25,600 mSIU, which is 80% of ISSUER-B's
-32,000 mSIU extract headroom. Opening figures must not rise without recomputing this.
+*Worst-case mint check (enforced at launch, §5; `lab/launch.ts`):* the endowment, then every need paid by
+minting both its job claim and its raw-work claim. At the illustrative print of 0.001437 USD/SIU a job quote
+is 1,700 minor units, so a job claim is 1,184 mSIU, and a raw-work quote is 1,400, so its claim is 975. With
+eight needs and four endowments of 2,000 that is 8,000 + 8 × (1,184 + 975) = **25,272 mSIU, 79% of ISSUER-B's
+32,000 mSIU headroom** (the bound is 80%, 25,600). **The first draft of this note said 25,600 for a 4,000 mSIU
+endowment and left the raw-work claims out; with them the draft's figure was 33,272, more than the whole
+headroom (D16).**
 
 ---
 
@@ -156,7 +160,7 @@ e. **On your go: 20 runs**, same seeds per comparison, around 40–50 decision t
 - **Fee rebate.** The escrow takes 50 bps from the seller's proceeds on the dollar route and nothing on
   the claim route. After each dollar settlement the operator rebates the fee to the seller (the issuer
   included), logged as an operator action, so neither route carries a fee and no brief mentions one.
-- **Headroom.** Worst-case mints stay well under ISSUER-B's extract headroom (§2.11), checked at launch.
+- **Headroom.** The worst-case mint (the endowment, then every need paid by minting its job and its raw-work claim) is held to 80% of ISSUER-B's extract headroom (§2.11, D16), checked at launch against the headroom actually read; a run that would exceed it does not start. The contamination check (a mint backed by anyone but ISSUER-B aborts the run) stays as the backstop.
   The contamination check from the gate configuration stays as a backstop: a mint backed by any other
   issuer aborts the run.
 - **Countable assertion.** `assertCountableForF1` is wired into every run the report admits; debug and
@@ -255,6 +259,7 @@ third party, never the Assay.
 | D13 | 2026-10-06 | **Engine defect, found by the first loop-level test of the lab hooks and fixed for every configuration.** The history an agent reads was built only from calls that *succeeded*, so a call that was refused or reverted left no trace in its next prompt: the agent saw "no turns yet" or a gap, and could only retry blind. The code's own comment said it "sees this in its tool-call history exactly like any other tool error"; no agent in any run ever has, and a real prompt from the live scripted run confirms it. The plain-error work reached the logs, not the agent. Every guard refusal in the lab would have been invisible. Failed calls now enter the history with the sentence, in order. This is an instrument change for the gate configuration too, recorded in its manifest. | Claude Code |
 | D14 | 2026-10-06 | **Names the traders see.** Traders are shown as TRADER-1..4 and the issuer as ISSUER-B (its own seat name). Two small engine seams carry the labels: the loop's address directory accepts the labels as aliases for the seats (`LabHooks.aliases`, so `transfer_claim` to "TRADER-2" resolves), and the quote board prints a requester by its label (`QuoteBoardOptions.displayName`; it printed the seat, which would have told a trader which seat it was). No brief or board line names a seat; a test checks it. The issuer's `model` field in a quote request is the label "raw-work": the quote format needs a string and nothing reads it. | Claude Code |
 | D15 | 2026-10-06 | **Brief contents.** Shared text is identical for all four traders and takes nothing about its reader; only label, address, skill and needs differ. It states: the lab's shape; the directory (sellerId and model per counterparty); job and raw-work sizes, rates and the quoted amounts; worked syntax for a quote request and for the four settlement calls (one list, used for a job and for raw work alike); the seller's steps; the fSIU token and the opening balances; the canonical asset text; and how a result is counted. It does not mention the escrow fee (rebated), says nothing about which route leaves more dollars or what either asset is worth, and uses none of: prefer, should, better, cheaper, advantage, recommend, convert, cash out. Models: two haiku-4-5 and two gpt-5.4-mini, alternating by seat, temperature 0.7, 4,500 output tokens. | Claude Code |
+| D16 | 2026-10-06 | **Plan error found building the launch check, and the figure changed.** §2.11 bounded the worst-case mint at 25,600 mSIU for a 4,000 mSIU endowment per trader. That sum counted only the eight job payments; each delivery also needs a unit of raw work, and a unit paid for by minting a claim consumes ISSUER-B headroom too. Counted properly the draft's worst case was 16,000 + 8 × (1,184 + 975) = 33,272 mSIU against 32,000 of headroom, so a run could have exhausted ISSUER-B and routed a mint to TRADER-4's wallet. **Opening endowment lowered to 2,000 mSIU per trader** (4 × 2,000 + 8 × 2,159 = 25,272, 79%); opening USDC stays equal in value (2,874 minor units at the illustrative print). A trader's whole opening is then about 2 SIU of each asset against about 4.3 SIU of purchases, with about 2.4 SIU coming back as sales, so a trader can complete its schedule from its opening and its takings without minting. `checkMintsFit` refuses to launch any economy whose worst case exceeds 80% of the headroom it reads, and a test pins the old figure as refused. This is a tunable default (D5), changed here before it is used. | Claude Code |
 
 ---
 

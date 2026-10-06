@@ -50,7 +50,7 @@ export const DEFAULT_PARAMS: LabParams = {
   jobMilliSiu: 1000,
   tradeMultiplierBps: 12_000,
   creditMultiplierBps: 15_000,
-  openingMilliSiu: 4000,
+  openingMilliSiu: 2000,
 };
 
 export interface Need {

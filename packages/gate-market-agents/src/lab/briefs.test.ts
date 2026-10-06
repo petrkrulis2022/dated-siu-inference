@@ -86,7 +86,7 @@ describe("lab briefs — what they state", () => {
     expect(text).toContain("0.0017244 USD per SIU, a quote of 0.0017 USD");
     expect(text).toContain("0.001437 USD per SIU, a quote of 0.0014 USD");
     expect(text).toContain("150% of the print per SIU of the job: 0.0021555 USD for a job of 1 SIU");
-    expect(text).toContain("4 SIU of it (4000 mSIU) and 0.005748 USD in USDC");
+    expect(text).toContain("2 SIU of it (2000 mSIU) and 0.002874 USD in USDC");
     expect(text).toContain("print-illustrative, 0.001437 USD per SIU");
   });
 

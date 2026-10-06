@@ -279,6 +279,14 @@ export interface FullRunWindowOptions {
    * stops showing the claim-presentation notices, which name tools a lab trader does not hold.
    */
   lab?: LabHooks;
+  /**
+   * Currency lab only: claims the operator put into traders' hands before the first turn (the opening
+   * endowment). The loop's trackers learn only what its own calls do, so without this a trader holding the
+   * endowment would be a holder of nothing as far as the claim ledger and the redemption tracker can see —
+   * and a `transfer_claim` of it would be a gap in the record. Seeded as held, not received and not as
+   * flows: the endowment is neither a payment nor an agent's own mint, and the report states it apart.
+   */
+  openingClaims?: readonly OpeningClaim[];
   /** Reported so the log says the pinned gate was graded, and with what result, rather than a
    *  window silently starting out already passed. */
   onPreAuthoredGate?: (passed: boolean, summary: string) => void;
@@ -349,6 +357,15 @@ export interface CapacityEvent {
    * intended". Both those mints were ordinary same-window payments. A claim is only forward
    * cover if it is dated forward. */
   forwardDated?: boolean;
+}
+
+/** Claims placed in an agent's hands by the operator before the loop starts. */
+export interface OpeningClaim {
+  agentId: AgentId;
+  tokenId: string;
+  /** mSIU, as a decimal string. */
+  quantityMilliSiu: string;
+  issuerAgentId: AgentId;
 }
 
 /** A claim an earlier window minted and nobody ever served. */
@@ -933,6 +950,10 @@ export async function runFullRunWindow(
   const windowCount = options.windowCount ?? 1;
   const redemption = new RedemptionTracker();
   const claimLedger = new ClaimLedger();
+  for (const c of options.openingClaims ?? []) {
+    redemption.recordMint(c.tokenId, c.issuerAgentId, c.quantityMilliSiu, c.agentId);
+    claimLedger.mint(c.agentId, c.tokenId, BigInt(c.quantityMilliSiu));
+  }
   const paymentMoments: PaymentMoment[] = [];
   const usdcSettlements: UsdcSettlement[] = [];
   const testingPurchaseRequired = options.requireTestingPurchase === true;
