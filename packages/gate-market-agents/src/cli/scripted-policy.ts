@@ -34,6 +34,8 @@
  * | 3, ISSUER-A | the window-2 claim settled by its holder (Defaulted, the bond pays); the dollar route as a control |
  */
 import { keccak256, stringToBytes } from "viem";
+import { openRequests, owedInUsdc, sectionLines } from "../cues/prompt-cues.js";
+export { openRequests, owedInUsdc } from "../cues/prompt-cues.js";
 import type { Adapter, AdapterResult } from "@touchstone/harness";
 
 export type ScriptedSeat = "ORCHESTRATOR" | "WORKER-CODE" | "WORKER-EXTRACT" | "ISSUER-A" | "ISSUER-B";
@@ -81,46 +83,12 @@ export function windowOf(prompt: string): number | undefined {
   return m ? Number(m[1]) : undefined;
 }
 
-/**
- * The lines of one prompt section: everything after `header` up to a blank line or the next line
- * that starts in column 0. The second stop matters — the board renders its sections back to back
- * with no blank line between, so a section that ran to the blank line would swallow the next one's
- * items (the quotes a buyer has RECEIVED would be read as work a seller is OWED).
- */
-function sectionLines(prompt: string, header: RegExp): string[] {
-  const lines = prompt.split("\n");
-  const at = lines.findIndex((l) => header.test(l));
-  if (at === -1) return [];
-  const out: string[] = [];
-  for (let i = at + 1; i < lines.length; i++) {
-    if (lines[i].trim() === "" || /^\S/.test(lines[i])) break;
-    out.push(lines[i]);
-  }
-  return out;
-}
-
-/** `Open quote requests addressed to you` — what a seller is asked to quote. */
-export function openRequests(prompt: string): { requestId: string; from: string; siu: string }[] {
-  return sectionLines(prompt, /^Open quote requests addressed to you/)
-    .map((l) => /^\s+(qr-\d+): from ([A-Z-]+), ([\d.]+) SIU,/.exec(l))
-    .filter((m): m is RegExpExecArray => m !== null)
-    .map((m) => ({ requestId: m[1], from: m[2], siu: m[3] }));
-}
-
 /** `Quotes you have received` — what a buyer may now pay. */
 export function receivedQuotes(prompt: string): { requestId: string; seller: string }[] {
   return sectionLines(prompt, /^Quotes you have received/)
     .map((l) => /^\s+answers (qr-\d+): seller (\S+?),/.exec(l))
     .filter((m): m is RegExpExecArray => m !== null)
     .map((m) => ({ requestId: m[1], seller: m[2] }));
-}
-
-/** `YOU HAVE BEEN PAID AND OWE THE WORK` — dollar-route quotes this seller must now deliver. */
-export function owedInUsdc(prompt: string): string[] {
-  return sectionLines(prompt, /^YOU HAVE BEEN PAID AND OWE THE WORK/)
-    .map((l) => /^\s+answers (qr-\d+):/.exec(l))
-    .filter((m): m is RegExpExecArray => m !== null)
-    .map((m) => m[1]);
 }
 
 /** `A WORK CLAIM WAS TRANSFERRED TO YOU` — a claim now held, and the quote it settles, if any. */

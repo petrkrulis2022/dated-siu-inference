@@ -31,7 +31,19 @@ export interface QuoteBoardIssuedQuote {
 /** What a quote was settled in: dollars through an escrow, a dated work claim, or both. */
 export type PaidAsset = "usdc" | "fsiu" | "split";
 
+export interface QuoteBoardOptions {
+  /**
+   * Whether the dollar route has a capacity-reservation step, and so whether the "you have been paid"
+   * line may tell a seller to `reserve_for_work`. True in the gate configuration. The currency lab grants
+   * no such tool, so there the line must not name it — a notice that names an action the system will
+   * refuse is the defect §4.6-RULE exists to prevent.
+   */
+  reservationStep?: boolean;
+}
+
 export class QuoteBoard {
+  constructor(private readonly options: QuoteBoardOptions = {}) {}
+
   #requests: QuoteBoardRequest[] = [];
   #issued: QuoteBoardIssuedQuote[] = [];
   /**
@@ -194,9 +206,11 @@ export class QuoteBoard {
       );
       for (const i of owedBySeller) {
         lines.push(
-          `  answers ${i.requestId}: amount_usd_max ${i.quote.amount_usd_max}. Commit the capacity ` +
-            `first (reserve_for_work), then do the work you quoted for, then ` +
-            `settle_escrow.`,
+          this.options.reservationStep === false
+            ? `  answers ${i.requestId}: amount_usd_max ${i.quote.amount_usd_max}.`
+            : `  answers ${i.requestId}: amount_usd_max ${i.quote.amount_usd_max}. Commit the capacity ` +
+                `first (reserve_for_work), then do the work you quoted for, then ` +
+                `settle_escrow.`,
         );
       }
     }

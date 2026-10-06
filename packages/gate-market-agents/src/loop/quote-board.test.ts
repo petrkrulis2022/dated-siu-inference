@@ -218,3 +218,24 @@ describe("QuoteBoard — what each asset tells the seller it was paid in", () =>
     }
   });
 });
+
+describe("QuoteBoard — the 'you have been paid' line names only tools the roster holds", () => {
+  const paidBoard = (options?: { reservationStep?: boolean }) => {
+    const board = new QuoteBoard(options);
+    const request = board.postRequest("ORCHESTRATOR", fakeQuoteBody("erc8004:0xWORKERCODE"));
+    board.postIssuedQuote(request.requestId, fakeQuote("erc8004:0xWORKERCODE"));
+    board.recordPaid(request.requestId, "usdc");
+    return board.renderFor("WORKER-CODE", "erc8004:0xWORKERCODE");
+  };
+
+  it("tells a seller to reserve capacity first, by default — the gate configuration's dollar route", () => {
+    expect(paidBoard()).toContain("reserve_for_work");
+  });
+
+  it("does not name that tool where the roster has none, and still says the seller is owed the work", () => {
+    const text = paidBoard({ reservationStep: false });
+    expect(text).not.toContain("reserve_for_work");
+    expect(text).toContain("YOU HAVE BEEN PAID AND OWE THE WORK");
+    expect(text).toContain("answers qr-1: amount_usd_max");
+  });
+});

@@ -293,7 +293,7 @@ Items from the stopped step c, for completeness:
 - [x] P2 — job source and work executor (T1 variants, grader, cost accounting)
 - [x] P3 — `deliver_job` and the lab guards (quote rate, size, type, round, raw-work credit)
 - [x] P4 — loop lab hooks: board section, rounds, fee rebate (loop-level tests pass; the scoring snapshot is built with the runner, P7)
-- [ ] P5 — issuer service policy seat (quotes, settles escrow, serves redemptions)
+- [x] P5 — issuer service policy seat (answers quote requests, settles USDC-paid escrows; raw-work units are credited when its quote is paid, so no separate redemption path)
 - [ ] P6 — briefs, roster, model assignment, validator
 - [ ] P7 — lab runner: opening balances, endowment mints, launch checks, rounds, run-end settlement
 - [ ] P8 — measurement, scoring, report, aggregator with Wilson intervals, countable assertion
