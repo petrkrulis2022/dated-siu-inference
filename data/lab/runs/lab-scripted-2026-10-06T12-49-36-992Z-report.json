@@ -1,0 +1,1344 @@
+{
+  "runId": "lab-scripted-2026-10-06T12-49-36-992Z",
+  "seed": 9,
+  "scripted": true,
+  "print": {
+    "printId": "2026-10-05-commodity",
+    "rateUsdPerSiu": "0.001437"
+  },
+  "params": {
+    "rounds": 3,
+    "needsPerTrader": 2,
+    "jobMilliSiu": 1000,
+    "tradeMultiplierBps": 12000,
+    "creditMultiplierBps": 15000,
+    "openingMilliSiu": 2000
+  },
+  "economy": {
+    "skillOf": {
+      "TRADER-1": "TYPE-4",
+      "TRADER-2": "TYPE-3",
+      "TRADER-3": "TYPE-1",
+      "TRADER-4": "TYPE-2"
+    },
+    "needs": [
+      {
+        "id": "TRADER-1#1",
+        "buyer": "TRADER-1",
+        "type": "TYPE-3",
+        "seller": "TRADER-2",
+        "round": 2
+      },
+      {
+        "id": "TRADER-1#2",
+        "buyer": "TRADER-1",
+        "type": "TYPE-1",
+        "seller": "TRADER-3",
+        "round": 3
+      },
+      {
+        "id": "TRADER-2#1",
+        "buyer": "TRADER-2",
+        "type": "TYPE-1",
+        "seller": "TRADER-3",
+        "round": 1
+      },
+      {
+        "id": "TRADER-2#2",
+        "buyer": "TRADER-2",
+        "type": "TYPE-2",
+        "seller": "TRADER-4",
+        "round": 2
+      },
+      {
+        "id": "TRADER-3#1",
+        "buyer": "TRADER-3",
+        "type": "TYPE-2",
+        "seller": "TRADER-4",
+        "round": 1
+      },
+      {
+        "id": "TRADER-3#2",
+        "buyer": "TRADER-3",
+        "type": "TYPE-4",
+        "seller": "TRADER-1",
+        "round": 3
+      },
+      {
+        "id": "TRADER-4#1",
+        "buyer": "TRADER-4",
+        "type": "TYPE-4",
+        "seller": "TRADER-1",
+        "round": 1
+      },
+      {
+        "id": "TRADER-4#2",
+        "buyer": "TRADER-4",
+        "type": "TYPE-3",
+        "seller": "TRADER-2",
+        "round": 2
+      }
+    ]
+  },
+  "seats": {
+    "TRADER-1": "ORCHESTRATOR",
+    "TRADER-2": "WORKER-CODE",
+    "TRADER-3": "WORKER-EXTRACT",
+    "TRADER-4": "ISSUER-A"
+  },
+  "models": {
+    "TRADER-1": "claude-haiku-4-5",
+    "TRADER-2": "gpt-5.4-mini",
+    "TRADER-3": "claude-haiku-4-5",
+    "TRADER-4": "gpt-5.4-mini"
+  },
+  "window": {
+    "fromChainSeconds": "1791290928",
+    "toChainSeconds": "1791291348"
+  },
+  "mintBound": {
+    "openingMilliSiu": "8000",
+    "jobClaimMilliSiu": "1184",
+    "rawClaimMilliSiu": "975",
+    "needs": 8,
+    "worstCaseMilliSiu": "25272",
+    "allowanceMilliSiu": "25600"
+  },
+  "pool": {
+    "startingHeadroomMilliSiu": "32000",
+    "limitMilliSiu": "32000",
+    "whole": true,
+    "endingHeadroomMilliSiu": "32000",
+    "restored": true
+  },
+  "opening": {
+    "usdcMinorPerTrader": "2874",
+    "fsiuMilliSiuPerTrader": "2000",
+    "tokenId": "32222316213219816357726008583572194593504244172744224218010839614910562614432"
+  },
+  "snapshots": [
+    {
+      "label": "opening",
+      "round": 1,
+      "atChainSeconds": "1791291010",
+      "traders": [
+        {
+          "trader": "TRADER-1",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-2",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-3",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-4",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        }
+      ]
+    },
+    {
+      "label": "round 2 opened",
+      "round": 2,
+      "atChainSeconds": "1791291056",
+      "traders": [
+        {
+          "trader": "TRADER-1",
+          "usdcMinor": "1473",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "4347000"
+        },
+        {
+          "trader": "TRADER-2",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "816",
+          "needsMet": 0,
+          "resultNano": "4046592"
+        },
+        {
+          "trader": "TRADER-3",
+          "usdcMinor": "1474",
+          "fsiuMilliSiu": "3184",
+          "needsMet": 0,
+          "resultNano": "6049408"
+        },
+        {
+          "trader": "TRADER-4",
+          "usdcMinor": "1174",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "4048000"
+        }
+      ]
+    }
+  ],
+  "final": {
+    "label": "final",
+    "round": 2,
+    "atChainSeconds": "1791291264",
+    "traders": [
+      {
+        "trader": "TRADER-1",
+        "usdcMinor": "1473",
+        "fsiuMilliSiu": "2000",
+        "needsMet": 0,
+        "resultNano": "4347000"
+      },
+      {
+        "trader": "TRADER-2",
+        "usdcMinor": "1174",
+        "fsiuMilliSiu": "816",
+        "needsMet": 0,
+        "resultNano": "2346592"
+      },
+      {
+        "trader": "TRADER-3",
+        "usdcMinor": "1474",
+        "fsiuMilliSiu": "3184",
+        "needsMet": 0,
+        "resultNano": "6049408"
+      },
+      {
+        "trader": "TRADER-4",
+        "usdcMinor": "1174",
+        "fsiuMilliSiu": "2592",
+        "needsMet": 0,
+        "resultNano": "4898704"
+      }
+    ]
+  },
+  "measuredBeforeClose": true,
+  "needsMet": {
+    "TRADER-1": 0,
+    "TRADER-2": 0,
+    "TRADER-3": 0,
+    "TRADER-4": 0
+  },
+  "sales": [
+    {
+      "requestId": "qr-1",
+      "kind": "trade",
+      "buyer": "TRADER-2",
+      "seller": "TRADER-3",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-2#1",
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-2",
+      "kind": "trade",
+      "buyer": "TRADER-4",
+      "seller": "TRADER-1",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-4#1",
+      "paidAsset": "usdc"
+    },
+    {
+      "requestId": "qr-3",
+      "kind": "trade",
+      "buyer": "TRADER-3",
+      "seller": "TRADER-4",
+      "quoted": true,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-3#1"
+    },
+    {
+      "requestId": "qr-4",
+      "kind": "rawwork",
+      "buyer": "TRADER-3",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": true,
+      "settled": true,
+      "delivered": false,
+      "attempts": 0,
+      "paidAsset": "usdc"
+    },
+    {
+      "requestId": "qr-5",
+      "kind": "rawwork",
+      "buyer": "TRADER-1",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-6",
+      "kind": "trade",
+      "buyer": "TRADER-4",
+      "seller": "TRADER-2",
+      "quoted": true,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-4#2"
+    },
+    {
+      "requestId": "qr-7",
+      "kind": "trade",
+      "buyer": "TRADER-2",
+      "seller": "TRADER-4",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-2#2",
+      "paidAsset": "split"
+    },
+    {
+      "requestId": "qr-8",
+      "kind": "rawwork",
+      "buyer": "TRADER-4",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0
+    }
+  ],
+  "escrowFeeBps": 50,
+  "workLog": [],
+  "workCostUsd": "0.000000",
+  "operatorActions": [
+    {
+      "kind": "endowment_mint",
+      "quantityMilliSiu": "8000",
+      "tokenId": "32222316213219816357726008583572194593504244172744224218010839614910562614432",
+      "backedBy": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "txHash": "0x064d8cec59bf2c2e214d532b822db5e22611719c09e7f464299c06f7bc0c6522"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "ORCHESTRATOR",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x2f10edc7dd68c8d86d56ead8ee412e9eac89dbe9f57d5a02be8fc44c7ed32ec1"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "WORKER-CODE",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x106a78ed6f635667ed092c0c5f2e400f100490dd3576e34e3b3b936f4dfab05a"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "WORKER-EXTRACT",
+      "quantityMilliSiu": "2000",
+      "txHash": "0xf35579fd7436af1e0832f3e2c2bdbaf60bf515b0be40ed01d34770088e511d0b"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "ISSUER-A",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x2880d76caf6b263b601f28f052ec5e26eefb4b328850036ebd3053fb28610017"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-1",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x8cd907fb45f2c68d33a89f72fbb62ae62240a2ca19cc3651de14751d1f5990e0"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-2",
+      "quantityMilliSiu": "816",
+      "txHash": "0x79c618ee83f839c7a2692423f35fec662f90430c36014b090abf2b8836b229be"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-3",
+      "quantityMilliSiu": "3184",
+      "txHash": "0xbf1dd1daf67048b7d27a3b1c7fa8fdea5a272aa658a412c66975caa7a1dd5187"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-4",
+      "quantityMilliSiu": "2592",
+      "txHash": "0x86d2dea9581019dcb0fba6c16729fdb9b86d927424f87c473e10b159c83ffc09"
+    },
+    {
+      "kind": "expiry",
+      "holder": "ISSUER-B",
+      "quantityMilliSiu": "975",
+      "txHash": "0x33828ef475155208e5f7e474d4191909c528f69f79991223b58b87c42020acd5"
+    },
+    {
+      "kind": "fee_rebate",
+      "seller": "ISSUER-B",
+      "requestId": "qr-4",
+      "settledMinorUnits": "1400",
+      "rebatedMinorUnits": "7",
+      "txHash": "0x50052f301024ece833c1017bf991d477592ccccf6e13c9af882ccc78e3dc4cab"
+    },
+    {
+      "kind": "round_opened",
+      "round": 2
+    }
+  ],
+  "labErrors": [],
+  "toolErrors": [
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 4,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 5,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 6,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 7,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 8,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 9,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 10,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 11,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 12,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 13,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 14,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 15,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 16,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 17,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 18,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 19,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 20,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 21,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 22,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 23,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 24,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 25,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 26,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 27,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 28,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 29,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 30,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 31,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 32,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 33,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 34,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 35,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 36,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 37,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 38,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 39,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 40,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 5,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 6,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 7,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 8,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 9,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 10,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 11,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 12,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 13,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 14,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 15,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 16,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 17,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 18,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 19,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 20,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 21,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 22,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 23,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 24,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 25,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 26,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 27,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 28,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 29,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 30,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 31,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 32,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 33,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 34,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 35,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 36,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 37,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 38,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 39,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 40,
+      "tool": "deliver_job",
+      "error": "deliver_job: this run has no jobs to deliver."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 5,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 8,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 9,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 10,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 11,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 12,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 13,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 14,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 15,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 16,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 17,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 18,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 19,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 20,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 21,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 22,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 23,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 24,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 25,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 26,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 27,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 28,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 29,
+      "tool": "pay_with_claim",
+      "error": "the paying wallet does not hold enough USDC."
+    }
+  ],
+  "turnsByAgent": {
+    "ORCHESTRATOR": 40,
+    "WORKER-CODE": 6,
+    "WORKER-EXTRACT": 40,
+    "ISSUER-A": 29,
+    "ISSUER-B": 4
+  },
+  "haltedReason": {
+    "WORKER-EXTRACT": "max_turns",
+    "ORCHESTRATOR": "max_turns",
+    "WORKER-CODE": "window_span_elapsed",
+    "ISSUER-A": "window_span_elapsed",
+    "ISSUER-B": "window_span_elapsed"
+  },
+  "totalRealizedUsd": "0.000000",
+  "spendByProvider": {
+    "anthropic": "0.000000",
+    "lab-service": "0.000000",
+    "openai": "0.000000"
+  },
+  "paymentMoments": [
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 3,
+      "tool": "transfer_claim",
+      "asset": "fsiu",
+      "requestId": "qr-1",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 3,
+      "tool": "pay",
+      "asset": "usdc",
+      "requestId": "qr-2",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 4,
+      "tool": "pay",
+      "asset": "usdc",
+      "requestId": "qr-4",
+      "heldReceivedMilliSiu": "1184",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.001437",
+      "quotedUsdMax": "0.0014"
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 3,
+      "tool": "pay_with_claim",
+      "asset": "fsiu",
+      "requestId": "qr-5",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.001437",
+      "quotedUsdMax": "0.0014"
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 6,
+      "tool": "settle_split",
+      "asset": "split",
+      "requestId": "qr-7",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    }
+  ],
+  "usdcSettlements": [
+    {
+      "sellerAgentId": "ISSUER-B",
+      "turn": 3,
+      "requestId": "qr-4",
+      "settledMinorUnits": "1400",
+      "quotedMinorUnits": "1400"
+    }
+  ],
+  "claimFlows": {
+    "ORCHESTRATOR": {
+      "receivedMilliSiu": "0",
+      "receivedKeyedMilliSiu": "0",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    },
+    "WORKER-CODE": {
+      "receivedMilliSiu": "0",
+      "receivedKeyedMilliSiu": "0",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "1184",
+      "redeemedMilliSiu": "0"
+    },
+    "WORKER-EXTRACT": {
+      "receivedMilliSiu": "1184",
+      "receivedKeyedMilliSiu": "1184",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    },
+    "ISSUER-A": {
+      "receivedMilliSiu": "592",
+      "receivedKeyedMilliSiu": "592",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    },
+    "ISSUER-B": {
+      "receivedMilliSiu": "975",
+      "receivedKeyedMilliSiu": "975",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    }
+  },
+  "capacityEvents": [
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 3,
+      "kind": "transfer_claim",
+      "timeToExpirySeconds": 330,
+      "tokenId": "32222316213219816357726008583572194593504244172744224218010839614910562614432",
+      "quantityMilliSiu": "1184",
+      "counterparty": "0x2cd53E449F6cF45c51f600e167b4D2630128c8F3",
+      "settlesRequestId": "qr-1",
+      "txHash": "0x35a47663f9110a851e7da6907a11c91b336ba1eba2ab26565ee59c896892cffe"
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 3,
+      "kind": "pay_with_claim",
+      "timeToExpirySeconds": 302,
+      "tokenId": "32222316213219816357726008583572194593504244172744224218010839614910562614432",
+      "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "quantityMilliSiu": "975",
+      "forwardDated": false,
+      "counterparty": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "mintCostMinorUnits": "1401",
+      "settlesRequestId": "qr-5",
+      "txHash": "0xb4e6f32888a3f0de39f82a9965ca6c745f3211c79406286ee120af0acc5e65d8 (mint) / 0x8925d41a51d0647c0d9c70dae30de0ab27777627a58044f85d8adcf9b61f928f (transfer)"
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 6,
+      "kind": "settle_split",
+      "timeToExpirySeconds": 262,
+      "tokenId": "32222316213219816357726008583572194593504244172744224218010839614910562614432",
+      "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "quantityMilliSiu": "592",
+      "claimShare": "0.5000",
+      "counterparty": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+      "mintCostMinorUnits": "850",
+      "settlesRequestId": "qr-7",
+      "txHash": "0x862f591a2c4f4457be64b18165eb88a258f38955210a36e8f52507f9595c8bb5"
+    }
+  ],
+  "claimPositions": [
+    {
+      "tokenId": "32222316213219816357726008583572194593504244172744224218010839614910562614432",
+      "holder": "ORCHESTRATOR",
+      "issuer": "ISSUER-B",
+      "quantity": "2000",
+      "presented": false
+    },
+    {
+      "tokenId": "32222316213219816357726008583572194593504244172744224218010839614910562614432",
+      "holder": "WORKER-CODE",
+      "issuer": "ISSUER-B",
+      "quantity": "816",
+      "presented": false
+    },
+    {
+      "tokenId": "32222316213219816357726008583572194593504244172744224218010839614910562614432",
+      "holder": "WORKER-EXTRACT",
+      "issuer": "ISSUER-B",
+      "quantity": "3184",
+      "presented": false
+    },
+    {
+      "tokenId": "32222316213219816357726008583572194593504244172744224218010839614910562614432",
+      "holder": "ISSUER-A",
+      "issuer": "ISSUER-B",
+      "quantity": "2592",
+      "presented": false
+    },
+    {
+      "tokenId": "32222316213219816357726008583572194593504244172744224218010839614910562614432",
+      "holder": "ISSUER-B",
+      "issuer": "ISSUER-B",
+      "quantity": "975",
+      "presented": false
+    }
+  ],
+  "debugMode": {
+    "disqualifiedBecause": "a scripted walk: no model was called, so there is no behaviour to count"
+  },
+  "scriptedWalk": {
+    "ok": false,
+    "checks": [
+      {
+        "id": "is_marked_scripted",
+        "ok": true,
+        "detail": "the report says no model was called"
+      },
+      {
+        "id": "ran_clean",
+        "ok": true,
+        "detail": "no abort, no contamination"
+      },
+      {
+        "id": "no_bookkeeping_errors",
+        "ok": true,
+        "detail": "0 errors in the lab's own bookkeeping"
+      },
+      {
+        "id": "no_tool_call_errored",
+        "ok": false,
+        "detail": "ORCHESTRATOR turn 4 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 5 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 6 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 7 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 8 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 9 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 10 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 11 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 12 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 13 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 14 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 15 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 16 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 17 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 18 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 19 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 20 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 21 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 22 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 23 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 24 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 25 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 26 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 27 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 28 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 29 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 30 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 31 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 32 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 33 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 34 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 35 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 36 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 37 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 38 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 39 deliver_job: deliver_job: this run has no jobs to deliver.; ORCHESTRATOR turn 40 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 5 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 6 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 7 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 8 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 9 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 10 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 11 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 12 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 13 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 14 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 15 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 16 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 17 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 18 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 19 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 20 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 21 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 22 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 23 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 24 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 25 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 26 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 27 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 28 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 29 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 30 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 31 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 32 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 33 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 34 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 35 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 36 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 37 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 38 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 39 deliver_job: deliver_job: this run has no jobs to deliver.; WORKER-EXTRACT turn 40 deliver_job: deliver_job: this run has no jobs to deliver.; ISSUER-A turn 5 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 8 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 9 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 10 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 11 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 12 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 13 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 14 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 15 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 16 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 17 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 18 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 19 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 20 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 21 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 22 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 23 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 24 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 25 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 26 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 27 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 28 pay_with_claim: the paying wallet does not hold enough USDC.; ISSUER-A turn 29 pay_with_claim: the paying wallet does not hold enough USDC."
+      },
+      {
+        "id": "every_need_met",
+        "ok": false,
+        "detail": "0 of 8 needs met"
+      },
+      {
+        "id": "jobs_paid_every_route",
+        "ok": false,
+        "detail": "not used: mint_forward"
+      },
+      {
+        "id": "raw_work_paid_every_route",
+        "ok": false,
+        "detail": "not used: held"
+      },
+      {
+        "id": "received_fsiu_passed_on",
+        "ok": false,
+        "detail": "no payment from a balance that included fSIU the payer had received"
+      },
+      {
+        "id": "fee_rebated_after_every_dollar_settlement",
+        "ok": true,
+        "detail": "1 dollar settlements, 1 rebates"
+      },
+      {
+        "id": "dollar_settlements_in_full",
+        "ok": true,
+        "detail": "0 settled for less than quoted"
+      },
+      {
+        "id": "leftover_fsiu_expired_at_close",
+        "ok": true,
+        "detail": "5 positions expired, 0 failed, pool restored"
+      },
+      {
+        "id": "fsiu_conserved",
+        "ok": true,
+        "detail": "expired 9567 = endowment 8000 + minted 1567"
+      },
+      {
+        "id": "opening_equal_for_every_trader",
+        "ok": true,
+        "detail": "each 2874 USDC minor and 2000 mSIU"
+      },
+      {
+        "id": "every_round_opened",
+        "ok": false,
+        "detail": "snapshots: opening, round 2 opened"
+      },
+      {
+        "id": "score_recomputes_from_balances",
+        "ok": true,
+        "detail": "each result equals USDC + fSIU at the print + credit"
+      },
+      {
+        "id": "scored_before_the_window_closed",
+        "ok": true,
+        "detail": "the snapshot fell inside the window"
+      },
+      {
+        "id": "no_paid_job_left_undelivered",
+        "ok": false,
+        "detail": "5 jobs sold and not delivered"
+      }
+    ],
+    "fellBack": [],
+    "steps": {
+      "decided": [
+        {
+          "trader": "TRADER-2",
+          "requestId": "qr-1",
+          "kind": "job",
+          "planned": "held",
+          "used": "held"
+        },
+        {
+          "trader": "TRADER-4",
+          "requestId": "qr-2",
+          "kind": "job",
+          "planned": "usdc",
+          "used": "usdc"
+        },
+        {
+          "trader": "TRADER-3",
+          "requestId": "qr-4",
+          "kind": "raw",
+          "planned": "usdc",
+          "used": "usdc"
+        },
+        {
+          "trader": "TRADER-1",
+          "requestId": "qr-5",
+          "kind": "raw",
+          "planned": "mint_forward",
+          "used": "mint_forward"
+        },
+        {
+          "trader": "TRADER-4",
+          "requestId": "qr-6",
+          "kind": "job",
+          "planned": "mint_forward",
+          "used": "mint_forward"
+        },
+        {
+          "trader": "TRADER-2",
+          "requestId": "qr-7",
+          "kind": "job",
+          "planned": "split",
+          "used": "split"
+        },
+        {
+          "trader": "TRADER-4",
+          "requestId": "qr-8",
+          "kind": "raw",
+          "planned": "mint_forward",
+          "used": "mint_forward"
+        }
+      ],
+      "fellBack": []
+    }
+  }
+}

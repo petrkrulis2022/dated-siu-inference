@@ -73,6 +73,42 @@ function isSimulationRevert(err: unknown): boolean {
   return false;
 }
 
+/**
+ * Runs `attempt` — a call that sends nothing until its own simulation passes — and tries it again when that
+ * simulation reverts, up to the policy's attempts. Only a simulation revert is retried: a nonce or funds error is
+ * not lag, and a transaction that was mined and reverted is final and is not this function's to see.
+ *
+ * Exported so a write that does not go through `writeAndConfirm` (the escrow client's `settle` is one) gets the
+ * same tolerance and the same telemetry. The currency lab's live walk found `settle_escrow` refused "the escrow is
+ * not open" a moment after it was opened — the eighth stale-read — because it had neither.
+ */
+export async function retryOnSimulationRevert<T>(
+  who: { functionName: string; account: string },
+  attempt: () => Promise<T>,
+): Promise<T> {
+  let retries = 0;
+  for (let n = 0; ; n++) {
+    try {
+      const value = await attempt();
+      if (retries > 0) retryListener?.({ ...who, retries, outcome: "recovered" });
+      return value;
+    } catch (err) {
+      if (!isSimulationRevert(err)) throw err;
+      if (n >= revertRetryPolicy.attempts) {
+        retryListener?.({
+          ...who,
+          retries,
+          outcome: "gave_up",
+          lastError: err instanceof Error ? err.message.split("\n")[0] : String(err),
+        });
+        throw err;
+      }
+      retries++;
+      await new Promise((r) => setTimeout(r, revertRetryPolicy.delayMs));
+    }
+  }
+}
+
 /** Shared write-then-confirm shape every WorkClaim-writing tool needs — `chain: undefined`
  * matches `packages/agents/src/wallets.ts`/`escrow-client.ts`'s own established pattern for a
  * viem `WalletClient` constructed with a fixed account already. Throws on revert rather than
@@ -89,39 +125,16 @@ export async function writeAndConfirm(
     args: readonly unknown[];
   },
 ): Promise<TransactionReceipt> {
-  let txHash: Hex | undefined;
-  let retries = 0;
-  for (let attempt = 0; txHash === undefined; attempt++) {
-    try {
-      txHash = await clients.walletClient.writeContract({
-        account: clients.account,
-        chain: undefined,
-        address: params.address,
-        abi: params.abi,
-        functionName: params.functionName,
-        args: params.args,
-      });
-    } catch (err) {
-      // Only an estimation revert is retried. A nonce or funds error is not lag, and a transaction
-      // that was mined and reverted is handled below and is final.
-      if (!isSimulationRevert(err)) throw err;
-      if (attempt >= revertRetryPolicy.attempts) {
-        retryListener?.({
-          functionName: params.functionName,
-          account: clients.account.address,
-          retries,
-          outcome: "gave_up",
-          lastError: err instanceof Error ? err.message.split("\n")[0] : String(err),
-        });
-        throw err;
-      }
-      retries++;
-      await new Promise((r) => setTimeout(r, revertRetryPolicy.delayMs));
-    }
-  }
-  if (retries > 0) {
-    retryListener?.({ functionName: params.functionName, account: clients.account.address, retries, outcome: "recovered" });
-  }
+  const txHash = await retryOnSimulationRevert({ functionName: params.functionName, account: clients.account.address }, () =>
+    clients.walletClient.writeContract({
+      account: clients.account,
+      chain: undefined,
+      address: params.address,
+      abi: params.abi,
+      functionName: params.functionName,
+      args: params.args,
+    }),
+  );
   const receipt = await clients.publicClient.waitForTransactionReceipt({ hash: txHash });
   if (receipt.status !== "success") {
     throw new Error(`${params.functionName} reverted on-chain (tx ${txHash}).`);

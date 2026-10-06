@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { BaseError, ContractFunctionRevertedError, parseAbi, type Hex } from "viem";
 import type { ChainClients } from "@touchstone/agents";
-import { setRevertRetryPolicy, setWriteRetryListener, writeAndConfirm, type WriteRetryEvent } from "./write.js";
+import { retryOnSimulationRevert, setRevertRetryPolicy, setWriteRetryListener, writeAndConfirm, type WriteRetryEvent } from "./write.js";
 
 const ABI = parseAbi(["function presentForRedemption(uint256 tokenId, bytes32 hash)", "error NothingToPresent()"]);
 const PARAMS = { address: "0x0000000000000000000000000000000000000001" as Hex, abi: ABI, functionName: "presentForRedemption", args: [1n, `0x${"00".repeat(32)}`] };
@@ -167,5 +167,47 @@ describe("writeAndConfirm — the lag is reported, not only absorbed", () => {
       stop();
     }
     expect(events).toEqual([]);
+  });
+});
+
+describe("retryOnSimulationRevert — the same tolerance for a write that does not go through writeAndConfirm", () => {
+  beforeEach(() => setRevertRetryPolicy({ attempts: 3, delayMs: 0 }));
+
+  it("retries a call whose simulation reverts and reports it, and returns what the call returned", async () => {
+    const events: WriteRetryEvent[] = [];
+    setWriteRetryListener((e) => events.push(e));
+    let n = 0;
+    try {
+      const result = await retryOnSimulationRevert({ functionName: "settle", account: "0xabc" }, async () => {
+        if (n++ < 2) throw simulationRevert();
+        return "0xtx";
+      });
+      expect(result).toBe("0xtx");
+    } finally {
+      setWriteRetryListener(undefined);
+    }
+    expect(events).toEqual([{ functionName: "settle", account: "0xabc", retries: 2, outcome: "recovered" }]);
+  });
+
+  it("does not retry an error that is not a simulation revert — a mined transaction that reverted is final", async () => {
+    let n = 0;
+    await expect(
+      retryOnSimulationRevert({ functionName: "settle", account: "0xabc" }, async () => {
+        n++;
+        throw new Error("settle(0x1) reverted on-chain.");
+      }),
+    ).rejects.toThrow(/reverted on-chain/);
+    expect(n).toBe(1);
+  });
+
+  it("gives up after the policy's attempts and throws the node's own error", async () => {
+    let n = 0;
+    await expect(
+      retryOnSimulationRevert({ functionName: "settle", account: "0xabc" }, async () => {
+        n++;
+        throw simulationRevert();
+      }),
+    ).rejects.toThrow(/reverted/);
+    expect(n).toBe(4); // the first try and three more
   });
 });

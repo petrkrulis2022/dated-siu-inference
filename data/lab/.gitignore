@@ -1,0 +1,2 @@
+# Per-run recorder directories hold every prompt and are large; the reports beside them are the record.
+runs/*/

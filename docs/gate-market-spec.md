@@ -4087,3 +4087,18 @@ Deliberately modest, because a testbed with both issuers backed by Touchstone's 
 5. **The integer finding**, which is the only result here that is publishable standalone and the only one that is evidence about the unit rather than the instrument.
 
 If 1, 4 and 5 land and 2 and 3 come back negative, the run succeeded. It answered the question, and the answer was no.
+
+### 4.6bl `settle_escrow` tolerates a node that has not seen the escrow yet
+
+**Found 2026-10-06 by the currency lab's first live walk; the eighth stale-read, invisible on a fork.** The
+seller's `settle_escrow` was refused "the escrow for this quote is not open" (and, sized from the same stale view,
+"that amount is more than the escrow holds") a moment after the escrow had been opened, by a node that had not yet
+seen the opening transaction. The settlement of one split-paid raw-work quote failed twice, the issuer service
+gave up on it, and its dollar leg stayed in escrow until the quote expired. Its other tools had this tolerance
+(`writeAndConfirm` retries a simulation that reverts, §4.6bi); `settle` is the escrow client's own write and did not.
+
+Two changes. The settlement's write now goes through the same retry (`retryOnSimulationRevert`, extracted from
+`writeAndConfirm` and shared, so it reports the same telemetry). And the amount a settlement is sized to is read
+only once the escrow is visible — status other than `none`, polled for up to eight seconds — because a read taken
+before that sized a split's settlement as the whole quote. A mined transaction that reverts is still final and is
+not retried. The fork reproduces neither, and the live walk is the only evidence they work.

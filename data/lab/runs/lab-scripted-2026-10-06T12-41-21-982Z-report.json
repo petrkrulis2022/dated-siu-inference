@@ -1,0 +1,653 @@
+{
+  "runId": "lab-scripted-2026-10-06T12-41-21-982Z",
+  "seed": 9,
+  "scripted": true,
+  "print": {
+    "printId": "2026-10-05-commodity",
+    "rateUsdPerSiu": "0.001437"
+  },
+  "params": {
+    "rounds": 3,
+    "needsPerTrader": 2,
+    "jobMilliSiu": 1000,
+    "tradeMultiplierBps": 12000,
+    "creditMultiplierBps": 15000,
+    "openingMilliSiu": 2000
+  },
+  "economy": {
+    "skillOf": {
+      "TRADER-1": "TYPE-4",
+      "TRADER-2": "TYPE-3",
+      "TRADER-3": "TYPE-1",
+      "TRADER-4": "TYPE-2"
+    },
+    "needs": [
+      {
+        "id": "TRADER-1#1",
+        "buyer": "TRADER-1",
+        "type": "TYPE-3",
+        "seller": "TRADER-2",
+        "round": 2
+      },
+      {
+        "id": "TRADER-1#2",
+        "buyer": "TRADER-1",
+        "type": "TYPE-1",
+        "seller": "TRADER-3",
+        "round": 3
+      },
+      {
+        "id": "TRADER-2#1",
+        "buyer": "TRADER-2",
+        "type": "TYPE-1",
+        "seller": "TRADER-3",
+        "round": 1
+      },
+      {
+        "id": "TRADER-2#2",
+        "buyer": "TRADER-2",
+        "type": "TYPE-2",
+        "seller": "TRADER-4",
+        "round": 2
+      },
+      {
+        "id": "TRADER-3#1",
+        "buyer": "TRADER-3",
+        "type": "TYPE-2",
+        "seller": "TRADER-4",
+        "round": 1
+      },
+      {
+        "id": "TRADER-3#2",
+        "buyer": "TRADER-3",
+        "type": "TYPE-4",
+        "seller": "TRADER-1",
+        "round": 3
+      },
+      {
+        "id": "TRADER-4#1",
+        "buyer": "TRADER-4",
+        "type": "TYPE-4",
+        "seller": "TRADER-1",
+        "round": 1
+      },
+      {
+        "id": "TRADER-4#2",
+        "buyer": "TRADER-4",
+        "type": "TYPE-3",
+        "seller": "TRADER-2",
+        "round": 2
+      }
+    ]
+  },
+  "seats": {
+    "TRADER-1": "ORCHESTRATOR",
+    "TRADER-2": "WORKER-CODE",
+    "TRADER-3": "WORKER-EXTRACT",
+    "TRADER-4": "ISSUER-A"
+  },
+  "models": {
+    "TRADER-1": "claude-haiku-4-5",
+    "TRADER-2": "gpt-5.4-mini",
+    "TRADER-3": "claude-haiku-4-5",
+    "TRADER-4": "gpt-5.4-mini"
+  },
+  "window": {
+    "fromChainSeconds": "1791290434",
+    "toChainSeconds": "1791290854"
+  },
+  "mintBound": {
+    "openingMilliSiu": "8000",
+    "jobClaimMilliSiu": "1184",
+    "rawClaimMilliSiu": "975",
+    "needs": 8,
+    "worstCaseMilliSiu": "25272",
+    "allowanceMilliSiu": "25600"
+  },
+  "pool": {
+    "startingHeadroomMilliSiu": "32000",
+    "limitMilliSiu": "32000",
+    "whole": true,
+    "endingHeadroomMilliSiu": "32000",
+    "restored": true
+  },
+  "opening": {
+    "usdcMinorPerTrader": "2874",
+    "fsiuMilliSiuPerTrader": "2000",
+    "tokenId": "24410072980621419170844244455568805883312229773798987493429022919046223618659"
+  },
+  "snapshots": [
+    {
+      "label": "opening",
+      "round": 1,
+      "atChainSeconds": "1791290530",
+      "traders": [
+        {
+          "trader": "TRADER-1",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-2",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-3",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-4",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        }
+      ]
+    },
+    {
+      "label": "round 2 opened",
+      "round": 2,
+      "atChainSeconds": "1791290534",
+      "traders": [
+        {
+          "trader": "TRADER-1",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-2",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-3",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-4",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        }
+      ]
+    },
+    {
+      "label": "round 3 opened",
+      "round": 3,
+      "atChainSeconds": "1791290538",
+      "traders": [
+        {
+          "trader": "TRADER-1",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-2",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-3",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-4",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        }
+      ]
+    }
+  ],
+  "final": {
+    "label": "final",
+    "round": 3,
+    "atChainSeconds": "1791290542",
+    "traders": [
+      {
+        "trader": "TRADER-1",
+        "usdcMinor": "2874",
+        "fsiuMilliSiu": "2000",
+        "needsMet": 0,
+        "resultNano": "5748000"
+      },
+      {
+        "trader": "TRADER-2",
+        "usdcMinor": "2874",
+        "fsiuMilliSiu": "2000",
+        "needsMet": 0,
+        "resultNano": "5748000"
+      },
+      {
+        "trader": "TRADER-3",
+        "usdcMinor": "2874",
+        "fsiuMilliSiu": "2000",
+        "needsMet": 0,
+        "resultNano": "5748000"
+      },
+      {
+        "trader": "TRADER-4",
+        "usdcMinor": "2874",
+        "fsiuMilliSiu": "2000",
+        "needsMet": 0,
+        "resultNano": "5748000"
+      }
+    ]
+  },
+  "measuredBeforeClose": true,
+  "needsMet": {
+    "TRADER-1": 0,
+    "TRADER-2": 0,
+    "TRADER-3": 0,
+    "TRADER-4": 0
+  },
+  "sales": [
+    {
+      "requestId": "qr-1",
+      "kind": "trade",
+      "buyer": "TRADER-2",
+      "seller": "TRADER-3",
+      "quoted": false,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-2#1"
+    },
+    {
+      "requestId": "qr-2",
+      "kind": "trade",
+      "buyer": "TRADER-3",
+      "seller": "TRADER-4",
+      "quoted": false,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-3#1"
+    },
+    {
+      "requestId": "qr-3",
+      "kind": "trade",
+      "buyer": "TRADER-4",
+      "seller": "TRADER-1",
+      "quoted": false,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-4#1"
+    },
+    {
+      "requestId": "qr-4",
+      "kind": "trade",
+      "buyer": "TRADER-1",
+      "seller": "TRADER-2",
+      "quoted": false,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-1#1"
+    },
+    {
+      "requestId": "qr-5",
+      "kind": "trade",
+      "buyer": "TRADER-2",
+      "seller": "TRADER-4",
+      "quoted": false,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-2#2"
+    },
+    {
+      "requestId": "qr-6",
+      "kind": "trade",
+      "buyer": "TRADER-4",
+      "seller": "TRADER-2",
+      "quoted": false,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-4#2"
+    },
+    {
+      "requestId": "qr-7",
+      "kind": "trade",
+      "buyer": "TRADER-1",
+      "seller": "TRADER-3",
+      "quoted": false,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-1#2"
+    },
+    {
+      "requestId": "qr-8",
+      "kind": "trade",
+      "buyer": "TRADER-3",
+      "seller": "TRADER-1",
+      "quoted": false,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-3#2"
+    }
+  ],
+  "escrowFeeBps": 50,
+  "workLog": [],
+  "workCostUsd": "0.000000",
+  "operatorActions": [
+    {
+      "kind": "usdc_reset",
+      "seat": "ORCHESTRATOR",
+      "move": "return",
+      "minorUnits": "601732",
+      "txHash": "0xe218356af2ee76e87b51874c97911c22661db5dd018d34b3ba02719b3774f1a6"
+    },
+    {
+      "kind": "usdc_reset",
+      "seat": "WORKER-CODE",
+      "move": "return",
+      "minorUnits": "480622",
+      "txHash": "0x7365c814606f8060fe7f2185cc071b722f74da5fffd99000671ce7085d3a8303"
+    },
+    {
+      "kind": "usdc_reset",
+      "seat": "WORKER-EXTRACT",
+      "move": "return",
+      "minorUnits": "48174",
+      "txHash": "0xca7f5a2071b139c4a594e03d3a48bdce290a5895650e06ca0f0d961787306c7b"
+    },
+    {
+      "kind": "usdc_reset",
+      "seat": "ISSUER-A",
+      "move": "return",
+      "minorUnits": "110551",
+      "txHash": "0x5184b0d9ce5632b0a658d5d99874022990b2077194e3e6efdf03d8449e26b77c"
+    },
+    {
+      "kind": "endowment_mint",
+      "quantityMilliSiu": "8000",
+      "tokenId": "24410072980621419170844244455568805883312229773798987493429022919046223618659",
+      "backedBy": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "txHash": "0x2cc529553cbafc63434b1d8649107456b0d78d0ab991cb93fa722bb60b48e4af"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "ORCHESTRATOR",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x8b8a2e03e762423c322ce4750a41808f417014dd42f3c69455e25e7f5eb4003e"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "WORKER-CODE",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x6b6d032cb5c99b818e7bea036554de674b5e77259a2d7ed1adcc327ab9bd38ba"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "WORKER-EXTRACT",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x6bf81ef3be4675d5b8e0cded8b0e2e63e03bcbe994affb0920388278902769bf"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "ISSUER-A",
+      "quantityMilliSiu": "2000",
+      "txHash": "0xb0ff675bae0715ace0a8bcac36c4e7db90796ffff04863e22c1ea206dd9535c9"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-1",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x8da722a9a81f240921bdd216c33f7784a6afd2af055b372e0e91304e39b2d23b"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-2",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x3281c3b8a35c3257c1755c9757d47b0bac38253e4101992de41956e06592c873"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-3",
+      "quantityMilliSiu": "2000",
+      "txHash": "0xfcf5b48a09c00545a1e6096887acc79ef7a8f3c1b011eca1c562d9883d8055a8"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-4",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x5c50dc6840839d7d15cd340cc0c426eb1be5b694098a62116a51539f3ab72ca9"
+    },
+    {
+      "kind": "round_opened",
+      "round": 2
+    },
+    {
+      "kind": "round_opened",
+      "round": 3
+    }
+  ],
+  "labErrors": [],
+  "toolErrors": [],
+  "turnsByAgent": {
+    "ORCHESTRATOR": 4,
+    "WORKER-CODE": 3,
+    "WORKER-EXTRACT": 4,
+    "ISSUER-A": 4,
+    "ISSUER-B": 0
+  },
+  "haltedReason": {
+    "ORCHESTRATOR": "waiting",
+    "WORKER-EXTRACT": "waiting",
+    "ISSUER-A": "waiting",
+    "WORKER-CODE": "waiting",
+    "ISSUER-B": "nothing_to_act_on"
+  },
+  "totalRealizedUsd": "0.000000",
+  "spendByProvider": {
+    "anthropic": "0.000000",
+    "openai": "0.000000"
+  },
+  "paymentMoments": [],
+  "usdcSettlements": [],
+  "claimFlows": {
+    "ORCHESTRATOR": {
+      "receivedMilliSiu": "0",
+      "receivedKeyedMilliSiu": "0",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    },
+    "WORKER-CODE": {
+      "receivedMilliSiu": "0",
+      "receivedKeyedMilliSiu": "0",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    },
+    "WORKER-EXTRACT": {
+      "receivedMilliSiu": "0",
+      "receivedKeyedMilliSiu": "0",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    },
+    "ISSUER-A": {
+      "receivedMilliSiu": "0",
+      "receivedKeyedMilliSiu": "0",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    },
+    "ISSUER-B": {
+      "receivedMilliSiu": "0",
+      "receivedKeyedMilliSiu": "0",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    }
+  },
+  "capacityEvents": [],
+  "claimPositions": [
+    {
+      "tokenId": "24410072980621419170844244455568805883312229773798987493429022919046223618659",
+      "holder": "ORCHESTRATOR",
+      "issuer": "ISSUER-B",
+      "quantity": "2000",
+      "presented": false
+    },
+    {
+      "tokenId": "24410072980621419170844244455568805883312229773798987493429022919046223618659",
+      "holder": "WORKER-CODE",
+      "issuer": "ISSUER-B",
+      "quantity": "2000",
+      "presented": false
+    },
+    {
+      "tokenId": "24410072980621419170844244455568805883312229773798987493429022919046223618659",
+      "holder": "WORKER-EXTRACT",
+      "issuer": "ISSUER-B",
+      "quantity": "2000",
+      "presented": false
+    },
+    {
+      "tokenId": "24410072980621419170844244455568805883312229773798987493429022919046223618659",
+      "holder": "ISSUER-A",
+      "issuer": "ISSUER-B",
+      "quantity": "2000",
+      "presented": false
+    }
+  ],
+  "scriptedWalk": {
+    "ok": false,
+    "checks": [
+      {
+        "id": "is_marked_scripted",
+        "ok": true,
+        "detail": "the report says no model was called"
+      },
+      {
+        "id": "ran_clean",
+        "ok": true,
+        "detail": "no abort, no contamination"
+      },
+      {
+        "id": "no_bookkeeping_errors",
+        "ok": true,
+        "detail": "0 errors in the lab's own bookkeeping"
+      },
+      {
+        "id": "no_tool_call_errored",
+        "ok": true,
+        "detail": "none"
+      },
+      {
+        "id": "every_need_met",
+        "ok": false,
+        "detail": "0 of 8 needs met"
+      },
+      {
+        "id": "jobs_paid_every_route",
+        "ok": false,
+        "detail": "not used: usdc, mint_forward, held, split"
+      },
+      {
+        "id": "raw_work_paid_every_route",
+        "ok": false,
+        "detail": "not used: usdc, mint_forward, held"
+      },
+      {
+        "id": "received_fsiu_passed_on",
+        "ok": false,
+        "detail": "no payment from a balance that included fSIU the payer had received"
+      },
+      {
+        "id": "fee_rebated_after_every_dollar_settlement",
+        "ok": false,
+        "detail": "0 dollar settlements, 0 rebates"
+      },
+      {
+        "id": "dollar_settlements_in_full",
+        "ok": true,
+        "detail": "0 settled for less than quoted"
+      },
+      {
+        "id": "leftover_fsiu_expired_at_close",
+        "ok": true,
+        "detail": "4 positions expired, 0 failed, pool restored"
+      },
+      {
+        "id": "fsiu_conserved",
+        "ok": true,
+        "detail": "expired 8000 = endowment 8000 + minted 0"
+      },
+      {
+        "id": "opening_equal_for_every_trader",
+        "ok": true,
+        "detail": "each 2874 USDC minor and 2000 mSIU"
+      },
+      {
+        "id": "every_round_opened",
+        "ok": true,
+        "detail": "snapshots: opening, round 2 opened, round 3 opened"
+      },
+      {
+        "id": "score_recomputes_from_balances",
+        "ok": true,
+        "detail": "each result equals USDC + fSIU at the print + credit"
+      },
+      {
+        "id": "scored_before_the_window_closed",
+        "ok": true,
+        "detail": "the snapshot fell inside the window"
+      },
+      {
+        "id": "no_paid_job_left_undelivered",
+        "ok": false,
+        "detail": "8 jobs sold and not delivered"
+      }
+    ],
+    "fellBack": [],
+    "steps": {
+      "decided": [],
+      "fellBack": []
+    }
+  }
+}

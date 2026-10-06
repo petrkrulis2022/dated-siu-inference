@@ -1,0 +1,1421 @@
+{
+  "runId": "lab-scripted-2026-10-06T13-11-05-732Z",
+  "seed": 9,
+  "scripted": true,
+  "print": {
+    "printId": "2026-10-05-commodity",
+    "rateUsdPerSiu": "0.001437"
+  },
+  "params": {
+    "rounds": 3,
+    "needsPerTrader": 2,
+    "jobMilliSiu": 1000,
+    "tradeMultiplierBps": 12000,
+    "creditMultiplierBps": 15000,
+    "openingMilliSiu": 2000
+  },
+  "economy": {
+    "skillOf": {
+      "TRADER-1": "TYPE-4",
+      "TRADER-2": "TYPE-3",
+      "TRADER-3": "TYPE-1",
+      "TRADER-4": "TYPE-2"
+    },
+    "needs": [
+      {
+        "id": "TRADER-1#1",
+        "buyer": "TRADER-1",
+        "type": "TYPE-3",
+        "seller": "TRADER-2",
+        "round": 2
+      },
+      {
+        "id": "TRADER-1#2",
+        "buyer": "TRADER-1",
+        "type": "TYPE-1",
+        "seller": "TRADER-3",
+        "round": 3
+      },
+      {
+        "id": "TRADER-2#1",
+        "buyer": "TRADER-2",
+        "type": "TYPE-1",
+        "seller": "TRADER-3",
+        "round": 1
+      },
+      {
+        "id": "TRADER-2#2",
+        "buyer": "TRADER-2",
+        "type": "TYPE-2",
+        "seller": "TRADER-4",
+        "round": 2
+      },
+      {
+        "id": "TRADER-3#1",
+        "buyer": "TRADER-3",
+        "type": "TYPE-2",
+        "seller": "TRADER-4",
+        "round": 1
+      },
+      {
+        "id": "TRADER-3#2",
+        "buyer": "TRADER-3",
+        "type": "TYPE-4",
+        "seller": "TRADER-1",
+        "round": 3
+      },
+      {
+        "id": "TRADER-4#1",
+        "buyer": "TRADER-4",
+        "type": "TYPE-4",
+        "seller": "TRADER-1",
+        "round": 1
+      },
+      {
+        "id": "TRADER-4#2",
+        "buyer": "TRADER-4",
+        "type": "TYPE-3",
+        "seller": "TRADER-2",
+        "round": 2
+      }
+    ]
+  },
+  "seats": {
+    "TRADER-1": "ORCHESTRATOR",
+    "TRADER-2": "WORKER-CODE",
+    "TRADER-3": "WORKER-EXTRACT",
+    "TRADER-4": "ISSUER-A"
+  },
+  "models": {
+    "TRADER-1": "claude-haiku-4-5",
+    "TRADER-2": "gpt-5.4-mini",
+    "TRADER-3": "claude-haiku-4-5",
+    "TRADER-4": "gpt-5.4-mini"
+  },
+  "window": {
+    "fromChainSeconds": "1791292216",
+    "toChainSeconds": "1791292576"
+  },
+  "mintBound": {
+    "openingMilliSiu": "8000",
+    "jobClaimMilliSiu": "1184",
+    "rawClaimMilliSiu": "975",
+    "needs": 8,
+    "worstCaseMilliSiu": "25272",
+    "allowanceMilliSiu": "25600"
+  },
+  "pool": {
+    "startingHeadroomMilliSiu": "32000",
+    "limitMilliSiu": "32000",
+    "whole": true,
+    "endingHeadroomMilliSiu": "32000",
+    "restored": true
+  },
+  "opening": {
+    "usdcMinorPerTrader": "2874",
+    "fsiuMilliSiuPerTrader": "2000",
+    "tokenId": "66562297667732604267330372781686113339534404991792626717159473417530810672522"
+  },
+  "snapshots": [
+    {
+      "label": "opening",
+      "round": 1,
+      "atChainSeconds": "1791292316",
+      "traders": [
+        {
+          "trader": "TRADER-1",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-2",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-3",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        },
+        {
+          "trader": "TRADER-4",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "5748000"
+        }
+      ]
+    },
+    {
+      "label": "round 2 opened",
+      "round": 2,
+      "atChainSeconds": "1791292378",
+      "traders": [
+        {
+          "trader": "TRADER-1",
+          "usdcMinor": "3173",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "6047000"
+        },
+        {
+          "trader": "TRADER-2",
+          "usdcMinor": "2874",
+          "fsiuMilliSiu": "816",
+          "needsMet": 1,
+          "resultNano": "6202092"
+        },
+        {
+          "trader": "TRADER-3",
+          "usdcMinor": "1474",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 1,
+          "resultNano": "6503500"
+        },
+        {
+          "trader": "TRADER-4",
+          "usdcMinor": "1174",
+          "fsiuMilliSiu": "2209",
+          "needsMet": 1,
+          "resultNano": "6503833"
+        }
+      ]
+    },
+    {
+      "label": "round 3 opened",
+      "round": 3,
+      "atChainSeconds": "1791292410",
+      "traders": [
+        {
+          "trader": "TRADER-1",
+          "usdcMinor": "1472",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 0,
+          "resultNano": "4346000"
+        },
+        {
+          "trader": "TRADER-2",
+          "usdcMinor": "1174",
+          "fsiuMilliSiu": "3184",
+          "needsMet": 1,
+          "resultNano": "7904908"
+        },
+        {
+          "trader": "TRADER-3",
+          "usdcMinor": "1474",
+          "fsiuMilliSiu": "2000",
+          "needsMet": 1,
+          "resultNano": "6503500"
+        },
+        {
+          "trader": "TRADER-4",
+          "usdcMinor": "1174",
+          "fsiuMilliSiu": "1617",
+          "needsMet": 1,
+          "resultNano": "5653129"
+        }
+      ]
+    }
+  ],
+  "final": {
+    "label": "final",
+    "round": 3,
+    "atChainSeconds": "1791292420",
+    "traders": [
+      {
+        "trader": "TRADER-1",
+        "usdcMinor": "1472",
+        "fsiuMilliSiu": "2000",
+        "needsMet": 0,
+        "resultNano": "4346000"
+      },
+      {
+        "trader": "TRADER-2",
+        "usdcMinor": "1174",
+        "fsiuMilliSiu": "3184",
+        "needsMet": 1,
+        "resultNano": "7904908"
+      },
+      {
+        "trader": "TRADER-3",
+        "usdcMinor": "1474",
+        "fsiuMilliSiu": "2000",
+        "needsMet": 1,
+        "resultNano": "6503500"
+      },
+      {
+        "trader": "TRADER-4",
+        "usdcMinor": "1174",
+        "fsiuMilliSiu": "1617",
+        "needsMet": 1,
+        "resultNano": "5653129"
+      }
+    ]
+  },
+  "measuredBeforeClose": true,
+  "needsMet": {
+    "TRADER-1": 0,
+    "TRADER-2": 1,
+    "TRADER-3": 1,
+    "TRADER-4": 1
+  },
+  "sales": [
+    {
+      "requestId": "qr-1",
+      "kind": "trade",
+      "buyer": "TRADER-2",
+      "seller": "TRADER-3",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": true,
+      "attempts": 1,
+      "needId": "TRADER-2#1",
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-2",
+      "kind": "trade",
+      "buyer": "TRADER-4",
+      "seller": "TRADER-1",
+      "quoted": true,
+      "paid": true,
+      "settled": true,
+      "delivered": true,
+      "attempts": 1,
+      "needId": "TRADER-4#1",
+      "paidAsset": "usdc"
+    },
+    {
+      "requestId": "qr-3",
+      "kind": "trade",
+      "buyer": "TRADER-3",
+      "seller": "TRADER-4",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": true,
+      "attempts": 1,
+      "needId": "TRADER-3#1",
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-4",
+      "kind": "rawwork",
+      "buyer": "TRADER-3",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "paidAsset": "split"
+    },
+    {
+      "requestId": "qr-5",
+      "kind": "rawwork",
+      "buyer": "TRADER-1",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-6",
+      "kind": "rawwork",
+      "buyer": "TRADER-4",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-7",
+      "kind": "trade",
+      "buyer": "TRADER-2",
+      "seller": "TRADER-4",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-2#2",
+      "paidAsset": "split"
+    },
+    {
+      "requestId": "qr-8",
+      "kind": "trade",
+      "buyer": "TRADER-1",
+      "seller": "TRADER-2",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-1#1",
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-9",
+      "kind": "trade",
+      "buyer": "TRADER-4",
+      "seller": "TRADER-2",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-4#2",
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-10",
+      "kind": "rawwork",
+      "buyer": "TRADER-2",
+      "seller": "ISSUER",
+      "quoted": false,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0
+    },
+    {
+      "requestId": "qr-11",
+      "kind": "rawwork",
+      "buyer": "TRADER-2",
+      "seller": "ISSUER",
+      "quoted": false,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0
+    },
+    {
+      "requestId": "qr-12",
+      "kind": "rawwork",
+      "buyer": "TRADER-4",
+      "seller": "ISSUER",
+      "quoted": false,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0
+    },
+    {
+      "requestId": "qr-13",
+      "kind": "trade",
+      "buyer": "TRADER-1",
+      "seller": "TRADER-3",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-1#2",
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-14",
+      "kind": "trade",
+      "buyer": "TRADER-3",
+      "seller": "TRADER-1",
+      "quoted": true,
+      "paid": true,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-3#2",
+      "paidAsset": "fsiu"
+    },
+    {
+      "requestId": "qr-15",
+      "kind": "rawwork",
+      "buyer": "TRADER-3",
+      "seller": "ISSUER",
+      "quoted": false,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0
+    },
+    {
+      "requestId": "qr-16",
+      "kind": "rawwork",
+      "buyer": "TRADER-1",
+      "seller": "ISSUER",
+      "quoted": false,
+      "paid": false,
+      "settled": false,
+      "delivered": false,
+      "attempts": 0
+    }
+  ],
+  "escrowFeeBps": 50,
+  "workLog": [
+    {
+      "requestId": "qr-1",
+      "seller": "TRADER-3",
+      "buyer": "TRADER-2",
+      "attempt": 1,
+      "passed": true,
+      "costUsd": "0"
+    },
+    {
+      "requestId": "qr-2",
+      "seller": "TRADER-1",
+      "buyer": "TRADER-4",
+      "attempt": 1,
+      "passed": true,
+      "costUsd": "0"
+    },
+    {
+      "requestId": "qr-3",
+      "seller": "TRADER-4",
+      "buyer": "TRADER-3",
+      "attempt": 1,
+      "passed": true,
+      "costUsd": "0"
+    }
+  ],
+  "workCostUsd": "0.000000",
+  "operatorActions": [
+    {
+      "kind": "usdc_reset",
+      "seat": "ORCHESTRATOR",
+      "move": "top_up",
+      "minorUnits": "1402",
+      "txHash": "0x6184a757ae94af4fca98889e975a3f8785525c55c047e3503a87cdbada1eb378"
+    },
+    {
+      "kind": "usdc_reset",
+      "seat": "WORKER-CODE",
+      "move": "top_up",
+      "minorUnits": "1400",
+      "txHash": "0x282662f48ac3bcf5166a43a8ad1a774114f03e6688c2e8b30ac5dbe522411d07"
+    },
+    {
+      "kind": "usdc_reset",
+      "seat": "WORKER-EXTRACT",
+      "move": "top_up",
+      "minorUnits": "2801",
+      "txHash": "0x2fc40df4ef0105e66c9cbd88c828e575d54b2c8cefabc94bc91ebc275b7fdded"
+    },
+    {
+      "kind": "usdc_reset",
+      "seat": "ISSUER-A",
+      "move": "top_up",
+      "minorUnits": "1700",
+      "txHash": "0xaa4b457045a3350bbf126ec3b11f6530cd7a3d88cff74c3c7d0b8b8ed55d5f16"
+    },
+    {
+      "kind": "endowment_mint",
+      "quantityMilliSiu": "8000",
+      "tokenId": "66562297667732604267330372781686113339534404991792626717159473417530810672522",
+      "backedBy": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "txHash": "0x0c5d6e22e13d6a9da57eb9e8847abc9e08d2fb628fc0213d9f9caddf991e55fa"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "ORCHESTRATOR",
+      "quantityMilliSiu": "2000",
+      "txHash": "0xdf4d46127745613bd44fde2272fde9c3e3e3cbf3bd4413a499dd48ab5ebdbe14"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "WORKER-CODE",
+      "quantityMilliSiu": "2000",
+      "txHash": "0xdf16155555e3450149948531f9939cf77651994ef5d5e4ff7e4bccb937dec213"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "WORKER-EXTRACT",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x2277bab753b9b279bbd8c439876f506697a72066e7d5c1ebfcbb21b2e2c88394"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "ISSUER-A",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x27d2d1faa1ba90633088fb6fecd6dae5966c0a17b6cd28b039e6bdd6dff07ca3"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-1",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x3aa79eb900319e6ccdc67cf115ce9a27c1088be3a49f36160173757d170112f7"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-2",
+      "quantityMilliSiu": "3184",
+      "txHash": "0x2d5b8eb58f03503ace324cc2159784f53f740210d56c1ddd665ed787cdbb60ed"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-3",
+      "quantityMilliSiu": "2000",
+      "txHash": "0x3738a2f7e35310fc6f30bd7f9aa3ccb2099c0859a48c4c794d8b8f6b4806c517"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-4",
+      "quantityMilliSiu": "1617",
+      "txHash": "0xda1eba3a7dcbc7202cb1f8be987164cd490588ec0553c5bb8b652a30a10d1cc9"
+    },
+    {
+      "kind": "expiry",
+      "holder": "ISSUER-B",
+      "quantityMilliSiu": "2437",
+      "txHash": "0xf2e20e8bd02d7ac4c18f0bb9b49e356c347816cf6d3655d988864f9813caf629"
+    },
+    {
+      "kind": "fee_rebate",
+      "seller": "ORCHESTRATOR",
+      "requestId": "qr-2",
+      "settledMinorUnits": "1700",
+      "rebatedMinorUnits": "8",
+      "txHash": "0xd425b529dc7ab7e5a9b7211c6056163328440d8991b8dbc49adc939d6c3d9d99"
+    },
+    {
+      "kind": "round_opened",
+      "round": 2
+    },
+    {
+      "kind": "round_opened",
+      "round": 3
+    }
+  ],
+  "labErrors": [],
+  "toolErrors": [
+    {
+      "agentId": "ISSUER-B",
+      "turn": 3,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 4,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 6,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 7,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 8,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 9,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 10,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 11,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 12,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 13,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 14,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 15,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 16,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 17,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 18,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 19,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 20,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 21,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 22,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 23,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 24,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 25,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 26,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 27,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 28,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 29,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 30,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 31,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 32,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 33,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 34,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 35,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 36,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 37,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 38,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 39,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    },
+    {
+      "agentId": "ISSUER-B",
+      "turn": 40,
+      "tool": "settle_escrow",
+      "error": "that amount is more than the escrow holds."
+    }
+  ],
+  "turnsByAgent": {
+    "ORCHESTRATOR": 15,
+    "WORKER-CODE": 11,
+    "WORKER-EXTRACT": 14,
+    "ISSUER-A": 14,
+    "ISSUER-B": 40
+  },
+  "haltedReason": {
+    "ISSUER-B": "max_turns",
+    "WORKER-CODE": "waiting",
+    "ISSUER-A": "waiting",
+    "WORKER-EXTRACT": "waiting",
+    "ORCHESTRATOR": "waiting"
+  },
+  "totalRealizedUsd": "0.000000",
+  "spendByProvider": {
+    "anthropic": "0.000000",
+    "lab-service": "0.000000",
+    "openai": "0.000000"
+  },
+  "paymentMoments": [
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 3,
+      "tool": "transfer_claim",
+      "asset": "fsiu",
+      "requestId": "qr-1",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 4,
+      "tool": "pay",
+      "asset": "usdc",
+      "requestId": "qr-2",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 5,
+      "tool": "settle_split",
+      "asset": "split",
+      "requestId": "qr-4",
+      "heldReceivedMilliSiu": "1184",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.001437",
+      "quotedUsdMax": "0.0014"
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 4,
+      "tool": "pay_with_claim",
+      "asset": "fsiu",
+      "requestId": "qr-5",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.001437",
+      "quotedUsdMax": "0.0014"
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 8,
+      "tool": "transfer_claim",
+      "asset": "fsiu",
+      "requestId": "qr-3",
+      "heldReceivedMilliSiu": "1184",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 7,
+      "tool": "transfer_claim",
+      "asset": "fsiu",
+      "requestId": "qr-6",
+      "heldReceivedMilliSiu": "1184",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.001437",
+      "quotedUsdMax": "0.0014"
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 9,
+      "tool": "pay_with_claim",
+      "asset": "fsiu",
+      "requestId": "qr-8",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 12,
+      "tool": "transfer_claim",
+      "asset": "fsiu",
+      "requestId": "qr-9",
+      "heldReceivedMilliSiu": "209",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 10,
+      "tool": "settle_split",
+      "asset": "split",
+      "requestId": "qr-7",
+      "heldReceivedMilliSiu": "2368",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 13,
+      "tool": "transfer_claim",
+      "asset": "fsiu",
+      "requestId": "qr-13",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 13,
+      "tool": "transfer_claim",
+      "asset": "fsiu",
+      "requestId": "qr-14",
+      "heldReceivedMilliSiu": "1184",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    }
+  ],
+  "usdcSettlements": [
+    {
+      "sellerAgentId": "ORCHESTRATOR",
+      "turn": 6,
+      "requestId": "qr-2",
+      "settledMinorUnits": "1700",
+      "quotedMinorUnits": "1700"
+    }
+  ],
+  "claimFlows": {
+    "ORCHESTRATOR": {
+      "receivedMilliSiu": "1184",
+      "receivedKeyedMilliSiu": "1184",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "1184",
+      "redeemedMilliSiu": "0"
+    },
+    "WORKER-CODE": {
+      "receivedMilliSiu": "2368",
+      "receivedKeyedMilliSiu": "2368",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "1184",
+      "redeemedMilliSiu": "0"
+    },
+    "WORKER-EXTRACT": {
+      "receivedMilliSiu": "2368",
+      "receivedKeyedMilliSiu": "2368",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "2368",
+      "redeemedMilliSiu": "0"
+    },
+    "ISSUER-A": {
+      "receivedMilliSiu": "1776",
+      "receivedKeyedMilliSiu": "1776",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "2159",
+      "redeemedMilliSiu": "0"
+    },
+    "ISSUER-B": {
+      "receivedMilliSiu": "2437",
+      "receivedKeyedMilliSiu": "2437",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    }
+  },
+  "capacityEvents": [
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 3,
+      "kind": "transfer_claim",
+      "timeToExpirySeconds": 252,
+      "tokenId": "66562297667732604267330372781686113339534404991792626717159473417530810672522",
+      "quantityMilliSiu": "1184",
+      "counterparty": "0x2cd53E449F6cF45c51f600e167b4D2630128c8F3",
+      "settlesRequestId": "qr-1",
+      "txHash": "0x9ba294399017b6725dc04b21802b59338fff8bda2ee115b345646491d6488c88"
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 5,
+      "kind": "settle_split",
+      "timeToExpirySeconds": 226,
+      "tokenId": "66562297667732604267330372781686113339534404991792626717159473417530810672522",
+      "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "quantityMilliSiu": "487",
+      "claimShare": "0.4993",
+      "counterparty": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "mintCostMinorUnits": "699",
+      "settlesRequestId": "qr-4",
+      "txHash": "0x06a5eb503fc8829a012faf0ed7cb9277d1845564d07d94f6f7b44d1a089dac8b"
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 4,
+      "kind": "pay_with_claim",
+      "timeToExpirySeconds": 216,
+      "tokenId": "66562297667732604267330372781686113339534404991792626717159473417530810672522",
+      "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "quantityMilliSiu": "975",
+      "forwardDated": false,
+      "counterparty": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "mintCostMinorUnits": "1401",
+      "settlesRequestId": "qr-5",
+      "txHash": "0xf67f123c00e93602d5c22e0968c166d490f81b91202a7c353abb8f1aeddc760f (mint) / 0xe948d2efb5c16d6bc42a5561bf7061f6e366da3e21a41b1ed34c9304c9121e30 (transfer)"
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 8,
+      "kind": "transfer_claim",
+      "timeToExpirySeconds": 212,
+      "tokenId": "66562297667732604267330372781686113339534404991792626717159473417530810672522",
+      "quantityMilliSiu": "1184",
+      "counterparty": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+      "settlesRequestId": "qr-3",
+      "txHash": "0xed881e13ca27b2c431d42a97b9ce480b17f014f84fdf1a8a20c0b4123f07c275"
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 7,
+      "kind": "transfer_claim",
+      "timeToExpirySeconds": 198,
+      "tokenId": "66562297667732604267330372781686113339534404991792626717159473417530810672522",
+      "quantityMilliSiu": "975",
+      "counterparty": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "settlesRequestId": "qr-6",
+      "txHash": "0x10e90762182c926ba4f73fa4462dd44d52e70ae4004b2debc27b4670964dcced"
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 9,
+      "kind": "pay_with_claim",
+      "timeToExpirySeconds": 184,
+      "tokenId": "66562297667732604267330372781686113339534404991792626717159473417530810672522",
+      "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "quantityMilliSiu": "1184",
+      "forwardDated": false,
+      "counterparty": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+      "mintCostMinorUnits": "1701",
+      "settlesRequestId": "qr-8",
+      "txHash": "0x782a7a7c84fc75a4944c7a1ae931fdb095fed187107079da72072583d8d85b40 (mint) / 0x026c4a2ec0fdcfb657532e66ad31be57cb9954b69fe6a9bc0264a742dba27f26 (transfer)"
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 12,
+      "kind": "transfer_claim",
+      "timeToExpirySeconds": 180,
+      "tokenId": "66562297667732604267330372781686113339534404991792626717159473417530810672522",
+      "quantityMilliSiu": "1184",
+      "counterparty": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560",
+      "settlesRequestId": "qr-9",
+      "txHash": "0x157bace53f571a590d3976453f63dc297fb37c3dae3a24a5ac2d866a6e41bab0"
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 10,
+      "kind": "settle_split",
+      "timeToExpirySeconds": 166,
+      "tokenId": "66562297667732604267330372781686113339534404991792626717159473417530810672522",
+      "issuer": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "quantityMilliSiu": "592",
+      "claimShare": "0.5000",
+      "counterparty": "0x6313E6CA15F751D64C16BA72bC71dBAF35eBaE54",
+      "mintCostMinorUnits": "850",
+      "settlesRequestId": "qr-7",
+      "txHash": "0xe3a50939c467d3f018ebb12e898e0dd874f8ea6dabbe7148bba2d07e1db15733"
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 13,
+      "kind": "transfer_claim",
+      "timeToExpirySeconds": 160,
+      "tokenId": "66562297667732604267330372781686113339534404991792626717159473417530810672522",
+      "quantityMilliSiu": "1184",
+      "counterparty": "0x2cd53E449F6cF45c51f600e167b4D2630128c8F3",
+      "settlesRequestId": "qr-13",
+      "txHash": "0x8045a98107018dd3c70831ec6d9a45ff5837edd62afdc2a77553f9848e7f266e"
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 13,
+      "kind": "transfer_claim",
+      "timeToExpirySeconds": 156,
+      "tokenId": "66562297667732604267330372781686113339534404991792626717159473417530810672522",
+      "quantityMilliSiu": "1184",
+      "counterparty": "0x8Bf6De67D0B9705520Cdf5a348f5763e2175F363",
+      "settlesRequestId": "qr-14",
+      "txHash": "0xb621fb1d051ab2df3715523c2551487156e3a55ed5520c81c66a08802a04a4a7"
+    }
+  ],
+  "claimPositions": [
+    {
+      "tokenId": "66562297667732604267330372781686113339534404991792626717159473417530810672522",
+      "holder": "ORCHESTRATOR",
+      "issuer": "ISSUER-B",
+      "quantity": "2000",
+      "presented": false
+    },
+    {
+      "tokenId": "66562297667732604267330372781686113339534404991792626717159473417530810672522",
+      "holder": "WORKER-CODE",
+      "issuer": "ISSUER-B",
+      "quantity": "3184",
+      "presented": false
+    },
+    {
+      "tokenId": "66562297667732604267330372781686113339534404991792626717159473417530810672522",
+      "holder": "WORKER-EXTRACT",
+      "issuer": "ISSUER-B",
+      "quantity": "2000",
+      "presented": false
+    },
+    {
+      "tokenId": "66562297667732604267330372781686113339534404991792626717159473417530810672522",
+      "holder": "ISSUER-A",
+      "issuer": "ISSUER-B",
+      "quantity": "1617",
+      "presented": false
+    },
+    {
+      "tokenId": "66562297667732604267330372781686113339534404991792626717159473417530810672522",
+      "holder": "ISSUER-B",
+      "issuer": "ISSUER-B",
+      "quantity": "2437",
+      "presented": false
+    }
+  ],
+  "lag": {
+    "writesRetried": 0,
+    "events": []
+  },
+  "debugMode": {
+    "disqualifiedBecause": "a scripted walk: no model was called, so there is no behaviour to count"
+  },
+  "scriptedWalk": {
+    "ok": false,
+    "checks": [
+      {
+        "id": "is_marked_scripted",
+        "ok": true,
+        "detail": "the report says no model was called"
+      },
+      {
+        "id": "ran_clean",
+        "ok": true,
+        "detail": "no abort, no contamination"
+      },
+      {
+        "id": "no_bookkeeping_errors",
+        "ok": true,
+        "detail": "0 errors in the lab's own bookkeeping"
+      },
+      {
+        "id": "no_tool_call_errored",
+        "ok": false,
+        "detail": "ISSUER-B turn 3 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 4 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 6 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 7 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 8 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 9 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 10 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 11 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 12 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 13 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 14 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 15 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 16 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 17 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 18 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 19 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 20 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 21 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 22 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 23 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 24 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 25 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 26 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 27 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 28 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 29 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 30 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 31 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 32 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 33 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 34 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 35 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 36 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 37 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 38 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 39 settle_escrow: that amount is more than the escrow holds.; ISSUER-B turn 40 settle_escrow: that amount is more than the escrow holds."
+      },
+      {
+        "id": "every_need_met",
+        "ok": false,
+        "detail": "3 of 8 needs met"
+      },
+      {
+        "id": "jobs_paid_every_route",
+        "ok": true,
+        "detail": "used held, usdc, mint_forward, split"
+      },
+      {
+        "id": "raw_work_paid_every_route",
+        "ok": false,
+        "detail": "not used: usdc"
+      },
+      {
+        "id": "some_purchase_paid_by_split",
+        "ok": true,
+        "detail": "a quote was settled partly in each asset"
+      },
+      {
+        "id": "received_fsiu_passed_on",
+        "ok": true,
+        "detail": "4 held-balance payment(s) made by a payer holding fSIU it had been given"
+      },
+      {
+        "id": "fee_rebated_after_every_dollar_settlement",
+        "ok": true,
+        "detail": "1 dollar settlements, 1 rebates"
+      },
+      {
+        "id": "dollar_settlements_in_full",
+        "ok": true,
+        "detail": "0 settled for less than quoted"
+      },
+      {
+        "id": "leftover_fsiu_expired_at_close",
+        "ok": true,
+        "detail": "5 positions expired, 0 failed, pool restored"
+      },
+      {
+        "id": "fsiu_conserved",
+        "ok": true,
+        "detail": "expired 11238 = endowment 8000 + minted 3238"
+      },
+      {
+        "id": "opening_equal_for_every_trader",
+        "ok": true,
+        "detail": "each 2874 USDC minor and 2000 mSIU"
+      },
+      {
+        "id": "every_round_opened",
+        "ok": true,
+        "detail": "snapshots: opening, round 2 opened, round 3 opened"
+      },
+      {
+        "id": "score_recomputes_from_balances",
+        "ok": true,
+        "detail": "each result equals USDC + fSIU at the print + credit"
+      },
+      {
+        "id": "scored_before_the_window_closed",
+        "ok": true,
+        "detail": "the snapshot fell inside the window"
+      },
+      {
+        "id": "no_payment_was_unaffordable",
+        "ok": true,
+        "detail": "every quote could be paid by some route"
+      },
+      {
+        "id": "no_paid_job_left_undelivered",
+        "ok": false,
+        "detail": "5 jobs sold and not delivered"
+      }
+    ],
+    "fellBack": [
+      {
+        "trader": "TRADER-3",
+        "requestId": "qr-3",
+        "planned": "split",
+        "because": "holds 1474 USDC minor units and 3184 mSIU; the quote is 1700 and 1184 mSIU"
+      },
+      {
+        "trader": "TRADER-4",
+        "requestId": "qr-6",
+        "planned": "usdc",
+        "because": "holds 1174 USDC minor units and 3184 mSIU; the quote is 1400 and 975 mSIU"
+      },
+      {
+        "trader": "TRADER-4",
+        "requestId": "qr-9",
+        "planned": "mint_forward",
+        "because": "holds 1174 USDC minor units and 2209 mSIU; the quote is 1700 and 1184 mSIU"
+      },
+      {
+        "trader": "TRADER-3",
+        "requestId": "qr-14",
+        "planned": "usdc",
+        "because": "holds 1474 USDC minor units and 2000 mSIU; the quote is 1700 and 1184 mSIU"
+      }
+    ],
+    "steps": {
+      "decided": [
+        {
+          "trader": "TRADER-2",
+          "requestId": "qr-1",
+          "kind": "job",
+          "planned": "held",
+          "used": "held"
+        },
+        {
+          "trader": "TRADER-4",
+          "requestId": "qr-2",
+          "kind": "job",
+          "planned": "usdc",
+          "used": "usdc"
+        },
+        {
+          "trader": "TRADER-3",
+          "requestId": "qr-4",
+          "kind": "raw",
+          "planned": "split",
+          "used": "split"
+        },
+        {
+          "trader": "TRADER-1",
+          "requestId": "qr-5",
+          "kind": "raw",
+          "planned": "mint_forward",
+          "used": "mint_forward"
+        },
+        {
+          "trader": "TRADER-3",
+          "requestId": "qr-3",
+          "kind": "job",
+          "planned": "split",
+          "used": "held"
+        },
+        {
+          "trader": "TRADER-4",
+          "requestId": "qr-6",
+          "kind": "raw",
+          "planned": "usdc",
+          "used": "held"
+        },
+        {
+          "trader": "TRADER-1",
+          "requestId": "qr-8",
+          "kind": "job",
+          "planned": "mint_forward",
+          "used": "mint_forward"
+        },
+        {
+          "trader": "TRADER-4",
+          "requestId": "qr-9",
+          "kind": "job",
+          "planned": "mint_forward",
+          "used": "held"
+        },
+        {
+          "trader": "TRADER-2",
+          "requestId": "qr-7",
+          "kind": "job",
+          "planned": "split",
+          "used": "split"
+        },
+        {
+          "trader": "TRADER-1",
+          "requestId": "qr-13",
+          "kind": "job",
+          "planned": "held",
+          "used": "held"
+        },
+        {
+          "trader": "TRADER-3",
+          "requestId": "qr-14",
+          "kind": "job",
+          "planned": "usdc",
+          "used": "held"
+        }
+      ],
+      "fellBack": [
+        {
+          "trader": "TRADER-3",
+          "requestId": "qr-3",
+          "planned": "split",
+          "because": "holds 1474 USDC minor units and 3184 mSIU; the quote is 1700 and 1184 mSIU"
+        },
+        {
+          "trader": "TRADER-4",
+          "requestId": "qr-6",
+          "planned": "usdc",
+          "because": "holds 1174 USDC minor units and 3184 mSIU; the quote is 1400 and 975 mSIU"
+        },
+        {
+          "trader": "TRADER-4",
+          "requestId": "qr-9",
+          "planned": "mint_forward",
+          "because": "holds 1174 USDC minor units and 2209 mSIU; the quote is 1700 and 1184 mSIU"
+        },
+        {
+          "trader": "TRADER-3",
+          "requestId": "qr-14",
+          "planned": "usdc",
+          "because": "holds 1474 USDC minor units and 2000 mSIU; the quote is 1700 and 1184 mSIU"
+        }
+      ],
+      "unaffordable": []
+    }
+  }
+}

@@ -3,7 +3,7 @@ import { settle } from "@touchstone/agents";
 import { quoteHashHex, retryUntilConclusive, usdToMinorUnits, type TouchstoneQuote } from "@touchstone/sdk";
 import type { Hex } from "viem";
 import { WORK_CLAIM_ABI } from "../chain/abi.js";
-import { writeAndConfirm } from "../chain/write.js";
+import { retryOnSimulationRevert, writeAndConfirm } from "../chain/write.js";
 import type { ToolDefinition } from "./types.js";
 
 /**
@@ -93,7 +93,14 @@ export const settleEscrowTool: ToolDefinition<
     const quoteHash = quoteHashHex(args.quote) as Hex;
     let held: bigint | undefined;
     try {
-      const escrow = await ctx.deps.chainReader.escrowState(ctx.deps.escrowAddress as Hex, quoteHash);
+      // A quote the board says was paid has an escrow, so "none" is a node that has not seen it open yet: read
+      // until it has. (A node can lag a settle_split's escrow by several seconds; the lab's live walk read the
+      // amount from one that had not, and asked for more than the escrow held.)
+      const escrow = await retryUntilConclusive(
+        () => ctx.deps.chainReader.escrowState(ctx.deps.escrowAddress as Hex, quoteHash),
+        (state) => state.status !== "none",
+        { attempts: 8, delayMs: 1000 },
+      );
       if (escrow.status === "open") held = escrow.maxAmountMinorUnits;
     } catch {
       // Unreadable: the quote's own ceiling stands, as it always did.
@@ -104,11 +111,13 @@ export const settleEscrowTool: ToolDefinition<
       ...(args.actualAmountUsd !== undefined ? { actualAmountUsd: args.actualAmountUsd } : {}),
     });
 
-    const txHash = await settle(ctx.clients, ctx.deps.escrowAddress, {
-      quoteHash,
-      actualAmount: requested,
-      receiptRef: args.receiptRef,
-    });
+    const txHash = await retryOnSimulationRevert({ functionName: "settle", account: ctx.clients.account.address }, () =>
+      settle(ctx.clients, ctx.deps.escrowAddress, {
+        quoteHash,
+        actualAmount: requested,
+        receiptRef: args.receiptRef,
+      }),
+    );
 
     const workClaim = ctx.deps.deployment.workClaim.address as Hex;
     await retryUntilConclusive(
