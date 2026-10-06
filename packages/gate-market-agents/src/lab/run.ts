@@ -463,7 +463,7 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
         { label: "operator", address: input.operator.address },
       ];
       for (const h of holders) {
-        let held = 0n;
+        let held: bigint;
         try {
           held = await input.chain.claimBalance(tokenId, h.address);
         } catch (err) {
