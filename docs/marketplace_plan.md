@@ -24,9 +24,9 @@ authoring, no adversary, no attacks.
 
 ### 2.2 Issuer
 ISSUER-B as an **automatic service**, not a model-driven seat: a deterministic policy on ISSUER-B's own
-key that answers requests, settles escrows and serves redemptions. It sells **raw work**: one unit per
-job, obtained by redeeming fSIU or paying USDC at the print. The two routes must cost exactly the same
-(price parity, §5).
+key that answers requests and settles escrows. It sells **raw work**: one unit per job, bought with a
+quote that is paid in USDC or in fSIU — paying the issuer in fSIU is the redemption (the claim goes back
+to the issuer that owes the work). The two routes must cost exactly the same (price parity, §5). See D8.
 
 ### 2.3 Traders
 Four model-driven traders on the existing seat IDs, shown to agents as TRADER-1 to TRADER-4. Two on
@@ -164,9 +164,9 @@ e. **On your go: 20 runs**, same seeds per comparison, around 40–50 decision t
 - **Lag telemetry** (small): every retry `writeAndConfirm` makes is recorded in the run report.
 - **Confirmed reads and writes**, the position tracker, the scripted verifier and the pool-whole
   precondition carry over unchanged.
-- **Run-end settlement.** After scoring, the operator settles every leftover claim: unpresented ones
-  expire; presented ones default at face value from ISSUER-B's bond (D8). The pool must read whole
-  afterwards.
+- **Run-end settlement.** After scoring, the operator settles every leftover claim. Nothing in the lab
+  presents a claim (D8), so every leftover expires — no bond draw, no attestation. The pool must read
+  whole afterwards.
 
 ---
 
@@ -247,8 +247,9 @@ third party, never the Assay.
 | D5 | 2026-10-06 | Economy defaults as §2.4–2.5, tunable and recorded in §2.11. | user |
 | D6 | 2026-10-06 | One window, rounds inside it. Claude Code's design: a round advances when nobody can act; the loop gains a round hook rather than the runner calling the loop once per round (a per-round call would reset the claim tracker and ledger). | Claude Code |
 | D7 | 2026-10-06 | Fee rebated per dollar settlement as an operator action. | user |
-| D8 | 2026-10-06 | **Known consequence, for approval.** `redeem_claim` presents the holder's whole balance. A trader who redeems one unit and keeps the rest leaves a *presented* remainder, which at window close defaults at face value from ISSUER-B's bond (`settleWindowClose`) instead of expiring. This is after scoring, so it is value-neutral for results, but it draws on the bond and pays USDC. The runner settles these with a publisher-signed attestation and checks the bond balance before each run. Alternative if you dislike it: pay the issuer by transferring a claim to it instead of presenting, which never defaults; that departs from "redeeming" in the canonical asset text. | Claude Code |
-| D9 | 2026-10-06 | Raw-work accounting. One unit is 1 SIU. USDC route: a quote from the issuer, paid with `pay`. fSIU route: `redeem_claim`, and the issuer service serves exactly 1,000 mSIU per presentation. Each served unit or settled escrow credits one raw-work unit; `deliver_job` consumes one. | Claude Code |
+| D8 | 2026-10-06 | **Redemption route (supersedes the first draft of this row).** The first draft had traders call `redeem_claim` for raw work. Mapping it onto the contract showed `presentForRedemption` presents the holder's *whole* balance, and any presented balance left at window close *defaults at face value from ISSUER-B's bond* instead of expiring (`settleWindowClose`). That would draw on the bond and pay USDC after every run. Instead raw work is sold as a **quote from the issuer, paid in USDC (`pay`) or in fSIU (a keyed `transfer_claim` or `pay_with_claim`)**; the claim returns to the issuer that owes the work, which is a redemption in effect. `redeem_claim` stays in the engine but is **not granted to lab traders**, so nothing is presented, every leftover claim expires, and the pool is restored with no attestation. The canonical asset text is unchanged and still true. Departs from "redeeming fSIU" in your wording; reversible — if you want literal `redeem_claim`, the cost is the default-at-close consequence above. | Claude Code |
+| D9 | 2026-10-06 | Raw-work accounting. One unit is 1 SIU at 1.0 × print. A unit is credited to the buyer when its quote is **paid** (either asset); `deliver_job` consumes one. A trader may buy a unit only while it owes a paid job it holds no unit for, so units are never stockpiled and none are left over to score. | Claude Code |
+| D11 | 2026-10-06 | **Observed asymmetry, recorded not removed.** A dollar payment sits in escrow until the seller settles; a claim transfer lands at once. So a buyer carries delivery risk on the claim route and not on the dollar route. It is a property of the instrument, not of the lab. `settle_escrow` is refused until the seller has delivered, so the escrow protects the buyer as designed. | Claude Code |
 | D10 | 2026-10-06 | Cost and turn targets are estimates until the first model run measures them. | Claude Code |
 
 ---
