@@ -2848,6 +2848,21 @@ shown to an agent must be true and must say only what is so.
 
 ## 5. Identity, wallets and chain
 
+
+### 4.6bk A seller can take the dollar leg of a quote paid partly in claims
+
+**Found 2026-10-06 by the currency lab's fourth fork walk; true of `settle_split` since it shipped.**
+`settle_split` settles one quote partly in claims and partly in dollars, and the escrow it opens holds the
+**dollar leg only**. `settle_escrow` with no `actualAmountUsd` settled the quote's full ceiling, which is more than
+that escrow holds, and the contract refused: "that amount is more than the escrow holds". A seller paid by split
+could take the claim and never the dollars, and kept being woken to try. The gate configuration never exercised a
+split, so no earlier run met it.
+
+An omitted amount now means **everything the escrow holds**: the escrow's own `maxAmount`, read from the chain,
+capped at the quote's ceiling, and the quote's ceiling when the escrow cannot be read — identical to before for a
+quote paid wholly in dollars. A seller may still settle for less. `escrowSettleAmount` is the one rule, tested
+for each case. It changes nothing a run measures except making a split settleable.
+
 ### 5.1 Chain
 
 **Base Sepolia** as primary, since the escrow and attestation contracts already live there with a working deploy path. Arc testnet as the mirror if the byte-identical deployment discipline from v4 §6 is maintained — worth doing, because ACR is on Arc and a comparison later is easier if both exist there.

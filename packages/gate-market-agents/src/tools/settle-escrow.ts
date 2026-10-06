@@ -54,6 +54,35 @@ const argsSchema = z.object({
 
 type Args = z.infer<typeof argsSchema>;
 
+/**
+ * What a settlement is for, in minor units. Omitted means everything the escrow holds, which is the quote's own
+ * ceiling for a quote paid wholly in dollars and LESS for one paid by `settle_split`: that escrow opens for the
+ * dollar leg only, and asking the contract for the full quoted amount reverts "more than the escrow holds".
+ * Found by the currency lab's fork walk, 2026-10-06 — a split-paid seller could take the claim and never the
+ * dollars. `held` is the escrow's own `maxAmount` read from the chain, or undefined when it could not be read, in
+ * which case the quote's ceiling stands as before.
+ */
+export function escrowSettleAmount(input: {
+  quotedMaxMinorUnits: bigint;
+  heldMinorUnits?: bigint;
+  actualAmountUsd?: string;
+}): bigint {
+  const ceiling =
+    input.heldMinorUnits !== undefined && input.heldMinorUnits > 0n && input.heldMinorUnits < input.quotedMaxMinorUnits
+      ? input.heldMinorUnits
+      : input.quotedMaxMinorUnits;
+  if (input.actualAmountUsd === undefined) return ceiling;
+  const requested = BigInt(usdToMinorUnits(input.actualAmountUsd));
+  if (requested > ceiling) {
+    throw new Error(
+      `settle_escrow: actualAmountUsd ${input.actualAmountUsd} exceeds the escrow's own maxAmount ` +
+        `(${ceiling} minor units${ceiling < input.quotedMaxMinorUnits ? `, the dollar part of a quote paid partly in claims` : ""}). ` +
+        "Settle for that amount or less.",
+    );
+  }
+  return requested;
+}
+
 export const settleEscrowTool: ToolDefinition<
   Args,
   { txHash: string; settledMinorUnits: string; releaseTxHash?: string }
@@ -61,19 +90,20 @@ export const settleEscrowTool: ToolDefinition<
   name: "settle_escrow",
   argsSchema,
   async handler(ctx, args) {
-    const maxMinorUnits = BigInt(args.quote.settlement[0].amount_max);
-    const requested =
-      args.actualAmountUsd === undefined
-        ? maxMinorUnits
-        : BigInt(usdToMinorUnits(args.actualAmountUsd));
-    if (requested > maxMinorUnits) {
-      throw new Error(
-        `settle_escrow: actualAmountUsd ${args.actualAmountUsd} exceeds the escrow's own maxAmount ` +
-          `(${maxMinorUnits} minor units). Settle for the quoted amount or less.`,
-      );
-    }
-
     const quoteHash = quoteHashHex(args.quote) as Hex;
+    let held: bigint | undefined;
+    try {
+      const escrow = await ctx.deps.chainReader.escrowState(ctx.deps.escrowAddress as Hex, quoteHash);
+      if (escrow.status === "open") held = escrow.maxAmountMinorUnits;
+    } catch {
+      // Unreadable: the quote's own ceiling stands, as it always did.
+    }
+    const requested = escrowSettleAmount({
+      quotedMaxMinorUnits: BigInt(args.quote.settlement[0].amount_max),
+      ...(held !== undefined ? { heldMinorUnits: held } : {}),
+      ...(args.actualAmountUsd !== undefined ? { actualAmountUsd: args.actualAmountUsd } : {}),
+    });
+
     const txHash = await settle(ctx.clients, ctx.deps.escrowAddress, {
       quoteHash,
       actualAmount: requested,

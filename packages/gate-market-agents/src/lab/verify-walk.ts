@@ -36,7 +36,7 @@ export interface WalkReport {
   labErrors: unknown[];
   toolErrors: { agentId: string; turn: number; tool: string; error: string }[];
   needsMet: Record<string, number>;
-  sales: { requestId: string; kind: "trade" | "rawwork"; delivered: boolean }[];
+  sales: { requestId: string; kind: "trade" | "rawwork"; delivered: boolean; paidAsset?: string }[];
   paymentMoments: { agentId: string; tool: string; requestId?: string; heldReceivedMilliSiu: string }[];
   usdcSettlements: { requestId: string; settledMinorUnits: string; quotedMinorUnits: string }[];
   capacityEvents: { kind: string; quantityMilliSiu?: string; settlesRequestId?: string }[];
@@ -109,8 +109,19 @@ export function verifyLabWalk(r: WalkReport, status?: ScriptStatus): WalkVerdict
     rebates.length === r.usdcSettlements.length && wrong.length === 0 && r.usdcSettlements.length > 0,
     `${r.usdcSettlements.length} dollar settlements, ${rebates.length} rebates${wrong.length > 0 ? `, ${wrong.length} not equal to the contract's fee` : ""}`,
   );
-  const notInFull = r.usdcSettlements.filter((s) => s.settledMinorUnits !== s.quotedMinorUnits);
-  check("dollar_settlements_in_full", notInFull.length === 0, `${notInFull.length} settled for less than quoted`);
+  // A quote paid wholly in dollars settles for the whole quote; one paid partly in claims opens an escrow for the
+  // dollar leg only, so it settles for something between nothing and the whole.
+  const paidAssetOf = new Map(r.sales.map((x) => [x.requestId, x.paidAsset]));
+  const wrongAmount = r.usdcSettlements.filter((s) =>
+    paidAssetOf.get(s.requestId) === "split"
+      ? !(BigInt(s.settledMinorUnits) > 0n && BigInt(s.settledMinorUnits) < BigInt(s.quotedMinorUnits))
+      : s.settledMinorUnits !== s.quotedMinorUnits,
+  );
+  check(
+    "dollar_settlements_in_full",
+    wrongAmount.length === 0,
+    `${wrongAmount.length} dollar settlement(s) not for the amount the escrow held (the whole quote, or the dollar leg of a split)`,
+  );
 
   const expiries = r.operatorActions.filter((a) => a.kind === "expiry") as unknown as { quantityMilliSiu: string }[];
   const failedExpiries = r.operatorActions.filter((a) => a.kind === "expiry_failed");

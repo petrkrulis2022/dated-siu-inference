@@ -16,12 +16,12 @@ function goodReport(): WalkReport {
   let n = 0;
   const sale = (kind: "trade" | "rawwork", tool: string, heldReceived = "0", minorUnits = kind === "trade" ? 1700n : 1400n) => {
     const requestId = `qr-${++n}`;
-    sales.push({ requestId, kind, delivered: kind === "trade" });
+    sales.push({ requestId, kind, delivered: kind === "trade", paidAsset: tool === "pay" ? "usdc" : tool === "settle_split" ? "split" : "fsiu" });
     moments.push({ agentId: "ORCHESTRATOR", tool, requestId, heldReceivedMilliSiu: heldReceived });
     const claim = kind === "trade" ? 1184n : 975n;
     if (tool === "pay" || tool === "settle_split") {
       const dollars = tool === "pay" ? minorUnits : minorUnits - (claim / 2n) * 1437n / 1000n; // any figure: the check is the fee rule on it
-      settlements.push({ requestId, settledMinorUnits: dollars.toString(), quotedMinorUnits: dollars.toString() });
+      settlements.push({ requestId, settledMinorUnits: dollars.toString(), quotedMinorUnits: minorUnits.toString() });
       rebates.push({ kind: "fee_rebate", requestId, settledMinorUnits: dollars.toString(), rebatedMinorUnits: escrowFeeMinor(dollars, 50).toString() });
     }
     if (tool === "pay_with_claim") events.push({ kind: "pay_with_claim", quantityMilliSiu: claim.toString(), settlesRequestId: requestId });
@@ -91,7 +91,12 @@ describe("the lab walk's verifier", () => {
     ["received_fsiu_passed_on", "no held payment by a payer holding received fSIU", (r) => r.paymentMoments.forEach((m) => (m.heldReceivedMilliSiu = "0"))],
     ["fee_rebated_after_every_dollar_settlement", "a settlement with no rebate", (r) => (r.operatorActions = r.operatorActions.filter((a, i) => !(a.kind === "fee_rebate" && i === 0)))],
     ["fee_rebated_after_every_dollar_settlement", "a rebate that is not the contract's fee", (r) => ((r.operatorActions.find((a) => a.kind === "fee_rebate")!).rebatedMinorUnits = "1")],
-    ["dollar_settlements_in_full", "a settlement for less than quoted", (r) => (r.usdcSettlements[0].settledMinorUnits = "1")],
+    ["dollar_settlements_in_full", "a wholly-dollar settlement for less than quoted", (r) => (r.usdcSettlements[0].settledMinorUnits = "1")],
+    ["dollar_settlements_in_full", "a split settlement for the whole quote, which the escrow cannot hold", (r) => {
+      const split = r.sales.find((x) => x.paidAsset === "split")!;
+      const settlement = r.usdcSettlements.find((x) => x.requestId === split.requestId)!;
+      settlement.settledMinorUnits = settlement.quotedMinorUnits;
+    }],
     ["leftover_fsiu_expired_at_close", "an expiry that failed", (r) => r.operatorActions.push({ kind: "expiry_failed", holder: "TRADER-3", reason: "x" })],
     ["leftover_fsiu_expired_at_close", "a pool that was not restored", (r) => (r.pool.restored = false)],
     ["fsiu_conserved", "fSIU that vanished", (r) => ((r.operatorActions.find((a) => a.kind === "expiry")!).quantityMilliSiu = "2999")],

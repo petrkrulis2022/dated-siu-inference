@@ -13,6 +13,7 @@
  */
 import type { Adapter, AdapterResult } from "@touchstone/harness";
 import { openRequests, owedInUsdc } from "../cues/prompt-cues.js";
+import { historyOf } from "./lab-cues.js";
 import type { ToolName } from "../tools/index.js";
 
 /** The only tools the service needs. */
@@ -27,12 +28,20 @@ const free = (intent: unknown): AdapterResult => ({
   deviations: [],
 });
 
+/** A release the chain has refused this many times is not tried again: a service that repeats it burns its turns. */
+export const MAX_SETTLE_ATTEMPTS = 2;
+
 /** Answers the first open request, else releases the first paid escrow, else waits. */
 export function issuerServiceAdapter(): Adapter {
   return async (_model, prompt) => {
     const open = openRequests(prompt);
     if (open.length > 0) return free({ tool: "issue_quote", args: { requestId: open[0].requestId } });
-    const owed = owedInUsdc(prompt);
+    // Found by a fork walk (2026-10-06): one escrow the contract refused to release was retried every turn, so the
+    // service spent its whole budget on it. Failed calls are in its history (spec §4.6bj); it reads them.
+    const history = historyOf(prompt);
+    const refused = (id: string): number =>
+      history.filter((c) => c.tool === "settle_escrow" && c.failed && c.args.requestId === id).length;
+    const owed = owedInUsdc(prompt).filter((id) => refused(id) < MAX_SETTLE_ATTEMPTS);
     if (owed.length > 0) return free({ tool: "settle_escrow", args: { requestId: owed[0] } });
     return free({ wait: true });
   };

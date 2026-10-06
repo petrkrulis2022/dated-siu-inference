@@ -47,6 +47,21 @@ describe("the issuer service", () => {
     expect(await decide(board.renderFor("ISSUER-B", ISSUER))).toEqual({ wait: true });
   });
 
+  it("stops retrying a release the chain keeps refusing, and goes on to the next one", async () => {
+    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName });
+    for (const buyer of ["ORCHESTRATOR", "WORKER-CODE"] as const) {
+      const r = board.postRequest(buyer, body(ISSUER));
+      board.postIssuedQuote(r.requestId, signed(ISSUER));
+      board.recordPaid(r.requestId, "usdc");
+    }
+    const refused = (turn: number) => `Turn ${turn} — called settle_escrow({"requestId":"qr-1"}) -> {"error":"that amount is more than the escrow holds."}`;
+    const withHistory = (lines: string[]) => `WHAT HAS HAPPENED SO FAR:\n${lines.join("\n")}\n\n${board.renderFor("ISSUER-B", ISSUER)}`;
+    // Once refused, it tries again (a lagging node can refuse a release that is fine a moment later).
+    expect(await decide(withHistory([refused(1)]))).toEqual({ tool: "settle_escrow", args: { requestId: "qr-1" } });
+    // Refused twice, it leaves qr-1 alone and releases qr-2.
+    expect(await decide(withHistory([refused(1), refused(2)]))).toEqual({ tool: "settle_escrow", args: { requestId: "qr-2" } });
+  });
+
   it("waits when there is nothing to do, and costs nothing", async () => {
     const r = await issuerServiceAdapter()("m", "an empty prompt", { temperature: 0, max_tokens: 1 });
     expect(JSON.parse(r.text)).toEqual({ wait: true });
