@@ -106,9 +106,23 @@ export interface LabRunInput {
   mintContext: MintContext;
   /** Gas each transacting wallet must hold before the run. */
   minEthWei: bigint;
+  /**
+   * Called the moment the endowment exists on chain, before anything else can fail. The caller writes it
+   * down, so a run that is killed outright leaves enough behind for `lab-sweep` to return the capacity.
+   */
+  onMinted?: (open: OpenLabState) => void;
   log?: (line: string) => void;
   sleep?: (ms: number) => Promise<void>;
   onTurn?: (agentId: AgentId, turn: unknown) => void;
+}
+
+/** What must survive a crash for the capacity to be returned: the token, when it closes, who may hold it. */
+export interface OpenLabState {
+  runId: string;
+  tokenId: string;
+  windowToChainSeconds: string;
+  startingHeadroomMilliSiu: string;
+  holders: { label: string; address: string }[];
 }
 
 export type OperatorRecord =
@@ -296,6 +310,17 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
     });
     tokenId = minted.tokenId;
     endowmentIssuer = minted.issuer;
+    input.onMinted?.({
+      runId: input.runId,
+      tokenId: minted.tokenId.toString(),
+      windowToChainSeconds: windowTo.toString(),
+      startingHeadroomMilliSiu: startingHeadroom.toString(),
+      holders: [
+        ...LAB_TRADERS.map((t) => ({ label: t, address: traderAddress[t] as string })),
+        { label: ISSUER_SEAT, address: issuerAddress as string },
+        { label: "operator", address: input.operator.address as string },
+      ],
+    });
     operatorActions.push({
       kind: "endowment_mint",
       quantityMilliSiu: totalEndowment.toString(),

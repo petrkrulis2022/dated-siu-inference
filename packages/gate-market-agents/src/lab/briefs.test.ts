@@ -90,6 +90,11 @@ describe("lab briefs — what they state", () => {
     expect(text).toContain("print-illustrative, 0.001437 USD per SIU");
   });
 
+  it("states the price of a mint — it is paid in USDC at the print — because calling it without knowing is a refused call", () => {
+    expect(text).toContain("a mint is paid for in USDC, at the print, to the issuer");
+    expect(text).toContain("the claim part is minted, and paid for, as above");
+  });
+
   it("states how a result is counted, and that it is measured before the window closes", () => {
     expect(text).toContain("Your result is your USDC, plus your fSIU valued at the current print, plus a credit for each need met.");
     expect(text).toContain("Results are measured before the window closes.");

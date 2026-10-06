@@ -202,6 +202,20 @@ match the contracts, which price every claim at the print; issuers differ in hea
 fSIU. Giving agents a choice of issuer at mint needs a contract change and a redeploy — that is a stop
 point. Not in phase 1.
 
+**What building phase 1 changes about this plan (2026-10-06, P11).**
+- *The seat conflict.* TRADER-4 stands on ISSUER-A's wallet (D4), the only unused one. Phase 2 makes ISSUER-A a
+  second issuer, so TRADER-4 needs another wallet or another seat. That lifts "no new wallets" and is a
+  decision for you at the start of phase 2, not something to discover then.
+- *A failing issuer is a service policy, not a model.* The phase 1 issuer is a deterministic service on its own
+  key (P5). A second one with a different measured rate, and a failing one, are the same kind of seat with a
+  different policy: the failing one credits a unit of raw work late or not at all after it has been paid.
+  `LabBooks` credits a unit on payment (D9), so that needs a rule for a paid unit that is never delivered.
+- *Seeding is an operator mint, and it routes first-fit.* An endowment of a second issuer's claims has to be
+  minted while the first issuer's headroom is too small to take the mint, which is the drain the gate
+  configuration built and parked (§9). Minting is paid for in USDC (D17), so the operator funds the seeding.
+- *The launch bound generalises.* `lab/launch.ts` bounds the worst-case mint against one issuer's headroom
+  (D16); with two issuers it bounds each, and the contamination check names which issuer backed a mint.
+
 ---
 
 ## 8. Phase 3 plan — second market (plan only)
@@ -210,6 +224,15 @@ A dealer pricing by Becker-DeGroot-Marschak on both sides; circulation counted o
 traders; several windows for mismatch; **no redemption at the print in this phase**; every output states
 that Touchstone was the counterparty to every dealer trade. In production the dealer is Markets or a
 third party, never the Assay.
+
+**What building phase 1 changes about this plan (2026-10-06, P11).**
+- The dealer needs its own wallet, a USDC float and a claim inventory: a new wallet (a decision for you), and
+  the same allowance and gas launch checks `lab/run.ts` already makes for traders.
+- A dealer's price for fSIU in USDC is the first place the print and a market price can differ. Minting is paid
+  for in USDC at the print (D17), so a dealer who sells a claim below the print is selling below what it costs
+  to make one; the report must state the print beside every dealer price.
+- Circulation is already measured as reuse of *received* fSIU (§3). Phase 3 keeps that definition and counts
+  only trades between non-dealers, which needs the dealer's address list in the report, as `seats` is today.
 
 ---
 
@@ -260,6 +283,7 @@ third party, never the Assay.
 | D14 | 2026-10-06 | **Names the traders see.** Traders are shown as TRADER-1..4 and the issuer as ISSUER-B (its own seat name). Two small engine seams carry the labels: the loop's address directory accepts the labels as aliases for the seats (`LabHooks.aliases`, so `transfer_claim` to "TRADER-2" resolves), and the quote board prints a requester by its label (`QuoteBoardOptions.displayName`; it printed the seat, which would have told a trader which seat it was). No brief or board line names a seat; a test checks it. The issuer's `model` field in a quote request is the label "raw-work": the quote format needs a string and nothing reads it. | Claude Code |
 | D15 | 2026-10-06 | **Brief contents.** Shared text is identical for all four traders and takes nothing about its reader; only label, address, skill and needs differ. It states: the lab's shape; the directory (sellerId and model per counterparty); job and raw-work sizes, rates and the quoted amounts; worked syntax for a quote request and for the four settlement calls (one list, used for a job and for raw work alike); the seller's steps; the fSIU token and the opening balances; the canonical asset text; and how a result is counted. It does not mention the escrow fee (rebated), says nothing about which route leaves more dollars or what either asset is worth, and uses none of: prefer, should, better, cheaper, advantage, recommend, convert, cash out. Models: two haiku-4-5 and two gpt-5.4-mini, alternating by seat, temperature 0.7, 4,500 output tokens. | Claude Code |
 | D16 | 2026-10-06 | **Plan error found building the launch check, and the figure changed.** §2.11 bounded the worst-case mint at 25,600 mSIU for a 4,000 mSIU endowment per trader. That sum counted only the eight job payments; each delivery also needs a unit of raw work, and a unit paid for by minting a claim consumes ISSUER-B headroom too. Counted properly the draft's worst case was 16,000 + 8 × (1,184 + 975) = 33,272 mSIU against 32,000 of headroom, so a run could have exhausted ISSUER-B and routed a mint to TRADER-4's wallet. **Opening endowment lowered to 2,000 mSIU per trader** (4 × 2,000 + 8 × 2,159 = 25,272, 79%); opening USDC stays equal in value (2,874 minor units at the illustrative print). A trader's whole opening is then about 2 SIU of each asset against about 4.3 SIU of purchases, with about 2.4 SIU coming back as sales, so a trader can complete its schedule from its opening and its takings without minting. `checkMintsFit` refuses to launch any economy whose worst case exceeds 80% of the headroom it reads, and a test pins the old figure as refused. This is a tunable default (D5), changed here before it is used. | Claude Code |
+| D17 | 2026-10-06 | **Minting a claim is paid for in USDC, and the lab brief now says so.** Found by the first walks on a fork: `pay_with_claim`, and the claim leg of `settle_split`, mint through `WorkClaim.mint`, which charges the minter the claim's value in USDC at the print, paid to the issuer. So mint-and-forward is not an fSIU route that spends no dollars: the payer spends about the quote's price in USDC and the seller is handed a claim instead of dollars. That is the instrument as designed (a claim is made by depositing USDC at the print) and the gate configuration always had it, but no tool description or gate brief states it, and a trader short of dollars calls it and is refused ("the paying wallet does not hold enough USDC"). The lab brief now states it as a primitive fact — *a mint is paid for in USDC, at the print, to the issuer* — and draws no consequence. Tool descriptions are shared with the gate configuration and are unchanged. Consequence for the measurement: a trader's holdings of both assets constrain its routes, which is the economy and not a defect. **Brief wording, so flagged for your confirmation.** | Claude Code |
 
 ---
 
@@ -306,7 +330,7 @@ Items from the stopped step c, for completeness:
 - [ ] P8 — measurement, scoring, report, aggregator with Wilson intervals, countable assertion
 - [ ] P9 — lag telemetry
 - [ ] P10 — scripted lab walk and verifier; fork, then live
-- [ ] P11 — phase 2 and phase 3 plans refined
+- [x] P11 — phase 2 and phase 3 plans refined (seat conflict, failing issuer as a service policy, first-fit seeding, dealer wallet — §7, §8)
 - [ ] STOP c — draft decision rule sent for approval
 - [ ] P12 — one model run; cost reported — STOP d
 - [ ] Phase 1: 20 runs, on your go

@@ -265,6 +265,17 @@ describe("a scripted trader's decisions", () => {
       expect(pays(s, 500, 2_000)).toMatchObject({ tool: "transfer_claim" });
     });
 
+    it("prefers a route the walk has used least over the planned one when it can afford both — coverage is the aim", () => {
+      const s = quoted("usdc");
+      // Two jobs have already gone by dollars; nothing by the other routes.
+      for (const id of ["qr-90", "qr-91"]) s.mem.status.decided.push({ trader: "TRADER-9" as never, requestId: id, kind: "job", planned: "usdc", used: "usdc" });
+      const intent = pays(s, 10_000, 5_000) as { tool: string };
+      expect(intent.tool).not.toBe("pay");
+      expect(["pay_with_claim", "transfer_claim", "settle_split"]).toContain(intent.tool);
+      // Dollars were affordable, so this is a choice for coverage and not a fall back.
+      expect(s.mem.status.fellBack).toEqual([]);
+    });
+
     it("waits, and records that it could not afford the quote, when no route is affordable", () => {
       const s = quoted("usdc");
       expect(pays(s, 10, 10)).toEqual({ wait: true });
@@ -328,7 +339,7 @@ describe("a scripted trader's decisions", () => {
       expect(decide(promptFor(s.need.seller, s.books, s.board), env, s.mem).intent).toMatchObject({ tool: "get_balances" });
       const funds = call(1, "get_balances", {}, { usdc: { integerMinorUnits: "10000" }, claims: [{ tokenId: "777", balance: "5000" }], escrows: [] });
       const { intent } = decide(promptFor(s.need.seller, s.books, s.board, [funds]), env, s.mem);
-      const expectedTool = { usdc: "pay", mint_forward: "pay_with_claim", held: "transfer_claim" }[route];
+      const expectedTool = { usdc: "pay", mint_forward: "pay_with_claim", held: "transfer_claim", split: "settle_split" }[route];
       expect(intent).toMatchObject({ tool: expectedTool });
     });
 

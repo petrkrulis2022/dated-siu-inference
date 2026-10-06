@@ -5,7 +5,7 @@
  *
  * Plan: `docs/marketplace_plan.md`. A scripted run calls no model and is never counted; its report says so.
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -221,6 +221,8 @@ async function main(): Promise<void> {
   };
 
   mkdirSync(LAB_RUNS_ROOT, { recursive: true });
+  // Written the moment the endowment exists, so a run killed outright can still be cleaned up (`lab-sweep`).
+  const openPath = join(LAB_RUNS_ROOT, `${runId}-open.json`);
   let report: LabReport;
   try {
     report = await runLab({
@@ -254,6 +256,7 @@ async function main(): Promise<void> {
       runsRoot: LAB_RUNS_ROOT,
       mintContext,
       minEthWei: MIN_ETH_WEI,
+      onMinted: (open) => writeFileSync(openPath, `${JSON.stringify({ ...open, swept: false }, null, 2)}\n`),
       log: (line) => console.log(line),
       onTurn: (agentId, turn) => {
         const t = turn as { turn: number; projectedUsd: string; realizedUsd: string; latencyMs: number; parsed: string };
@@ -271,6 +274,11 @@ async function main(): Promise<void> {
     throw err;
   }
 
+  // The run swept its own capacity: the record of what was open is closed.
+  if (report.pool.restored === true && existsSync(openPath)) {
+    const open = JSON.parse(readFileSync(openPath, "utf-8"));
+    writeFileSync(openPath, `${JSON.stringify({ ...open, swept: true }, null, 2)}\n`);
+  }
   const reportPath = join(LAB_RUNS_ROOT, `${runId}-report.json`);
   // A scripted walk is only worth having if what it was for actually happened, and a script that issued its
   // calls proves only that. The verifier reads the recorded events; a failed check fails the process.

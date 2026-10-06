@@ -351,6 +351,27 @@ describe("runLab", () => {
     expect(deliver?.error).not.toContain("no jobs to deliver");
   });
 
+  it("hands over what a sweep needs the moment the endowment is minted — before the loop, so a killed run can be cleaned up", async () => {
+    const seen: { at: string[]; open: unknown }[] = [];
+    const report = await runLab(
+      input({
+        onMinted: (open) => seen.push({ at: [...chain.calls], open }),
+      }),
+    );
+    expect(report.abortedBecause).toBeUndefined();
+    expect(seen).toHaveLength(1);
+    // Called after the mint and before the first transfer of the endowment to a trader.
+    expect(seen[0].at).toContain("mint 8000");
+    expect(seen[0].at.some((c) => c.startsWith("claim ->"))).toBe(false);
+    expect(seen[0].open).toMatchObject({
+      runId: "lab-test-run",
+      tokenId: "777",
+      startingHeadroomMilliSiu: "32000",
+      windowToChainSeconds: report.window.toChainSeconds,
+    });
+    expect((seen[0].open as { holders: { label: string }[] }).holders.map((h) => h.label)).toEqual(["TRADER-1", "TRADER-2", "TRADER-3", "TRADER-4", "ISSUER-B", "operator"]);
+  });
+
   it("reports every write that had to wait for the node to catch up, and removes its listener afterwards", async () => {
     chain.lagOnMint = true;
     // Retries are switched off under test (vitest.setup.ts); this test needs one, quickly.

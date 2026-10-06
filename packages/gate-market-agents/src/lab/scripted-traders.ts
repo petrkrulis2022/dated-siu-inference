@@ -13,11 +13,11 @@
  *
  * What it walks, by assignment (trader k = 1..4; j = that trader's j-th purchase of its kind, from 0):
  *   jobs      — usdc, mint-and-forward, held balance, split … cycled by (k + j)
- *   raw work  — usdc, mint-and-forward, held balance … cycled by (k + j)
+ *   raw work  — usdc, mint-and-forward, held balance, split … cycled by (k + j)
  * so each route is used at least twice across the eight jobs and eight units. Every route has a price in
  * something the trader must hold — dollars for `pay`, dollars for the mint in `pay_with_claim` and the split,
  * fSIU for a held transfer — so before each payment the script reads its balances, uses the planned route if it
- * can afford it and otherwise the first it can, and the walk records where it had to. A payment that fails is
+ * can afford it, else the one it can afford that the walk has used least, and the walk records where it had to. A payment that fails is
  * not repeated: the route is set aside and the balances read again. A payment made from a balance that includes
  * fSIU the trader RECEIVED is the "passed on" case, which the verifier looks for in the loop's own records.
  */
@@ -43,9 +43,10 @@ import { claimForUsd, decimalToUnits } from "./money.js";
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 export type JobRoute = "usdc" | "mint_forward" | "held" | "split";
-export type RawRoute = "usdc" | "mint_forward" | "held";
+export type RawRoute = JobRoute;
 export const JOB_ROUTES: readonly JobRoute[] = ["usdc", "mint_forward", "held", "split"];
-export const RAW_ROUTES: readonly RawRoute[] = ["usdc", "mint_forward", "held"];
+/** The brief lists the same four settlement calls "for a job and for a unit of raw work alike", so a unit may be split too. */
+export const RAW_ROUTES: readonly RawRoute[] = ["usdc", "mint_forward", "held", "split"];
 
 /** What a script needs that is not in a prompt: how to word a quote request. */
 export interface ScriptedLabEnv {
@@ -270,8 +271,15 @@ function pay(
         return false;
     }
   };
-  const allowed = (route: string): boolean => (kind === "raw" ? route !== "split" : true) && !(mem.excluded.get(id)?.has(route) ?? false);
-  const route = [planned as string, ...FALLBACK_ORDER].find((r) => allowed(r) && affordable(r));
+  const allowed = (route: string): boolean => !(mem.excluded.get(id)?.has(route) ?? false);
+  // Among the routes it can afford, the one used least so far in this walk (the planned route, then the fallback
+  // order, break ties): a trader's balances change as it trades, so a fixed plan cannot promise every route is
+  // reached, and what the walk is for is that each one is.
+  const order = [planned as string, ...FALLBACK_ORDER.filter((r) => r !== planned)];
+  const usedCount = (r: string): number => mem.status.decided.filter((d) => d.kind === kind && d.used === r && d.requestId !== id).length;
+  const route = order
+    .filter((r) => allowed(r) && affordable(r))
+    .sort((a, b) => usedCount(a) - usedCount(b) || order.indexOf(a) - order.indexOf(b))[0];
 
   if (route === undefined) {
     if (!mem.status.unaffordable.some((u) => u.requestId === id)) {
@@ -297,7 +305,8 @@ function pay(
   } else {
     existing.used = route;
   }
-  if (route !== planned && !mem.status.fellBack.some((f) => f.requestId === id)) {
+  // A fall back is the planned route being out of reach, not another being chosen for coverage.
+  if (!affordable(planned) && route !== planned && !mem.status.fellBack.some((f) => f.requestId === id)) {
     mem.status.fellBack.push({
       trader: me,
       requestId: id,

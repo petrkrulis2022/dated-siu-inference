@@ -82,10 +82,15 @@ export function verifyLabWalk(r: WalkReport, status?: ScriptStatus): WalkVerdict
     if (kind !== undefined && route !== undefined) routes[kind].add(route);
   }
   const missing = (kind: "trade" | "rawwork", wanted: readonly Route[]): Route[] => wanted.filter((w) => !routes[kind].has(w));
-  const jobMissing = missing("trade", ["usdc", "mint_forward", "held", "split"]);
+  const jobMissing = missing("trade", ["usdc", "mint_forward", "held"]);
   const rawMissing = missing("rawwork", ["usdc", "mint_forward", "held"]);
   check("jobs_paid_every_route", jobMissing.length === 0, jobMissing.length === 0 ? `used ${[...routes.trade].join(", ")}` : `not used: ${jobMissing.join(", ")}`);
   check("raw_work_paid_every_route", rawMissing.length === 0, rawMissing.length === 0 ? `used ${[...routes.rawwork].join(", ")}` : `not used: ${rawMissing.join(", ")}`);
+
+  // A split needs about the whole price in dollars (half of it is minted, and a mint is paid for in USDC), so a
+  // trader low on dollars cannot make one: it must happen for some purchase, a job or a unit of raw work.
+  const splits = routes.trade.has("split") || routes.rawwork.has("split");
+  check("some_purchase_paid_by_split", splits, splits ? "a quote was settled partly in each asset" : "no quote was settled partly in each asset");
 
   const passedOn = r.paymentMoments.filter((m) => m.tool === "transfer_claim" && BigInt(m.heldReceivedMilliSiu) > 0n);
   check(

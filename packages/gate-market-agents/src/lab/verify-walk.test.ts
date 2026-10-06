@@ -85,7 +85,7 @@ describe("the lab walk's verifier", () => {
     ["no_bookkeeping_errors", "an error in the lab's own books", (r) => r.labErrors.push({})],
     ["no_tool_call_errored", "a call that errored", (r) => r.toolErrors.push({ agentId: "ORCHESTRATOR", turn: 3, tool: "pay", error: "reverted" })],
     ["every_need_met", "a need left unmet", (r) => (r.needsMet["TRADER-2"] = 1)],
-    ["jobs_paid_every_route", "no job paid by split", (r) => (r.paymentMoments = r.paymentMoments.filter((m) => !(m.tool === "settle_split")))],
+    ["some_purchase_paid_by_split", "no purchase paid by split", (r) => (r.paymentMoments = r.paymentMoments.filter((m) => !(m.tool === "settle_split")))],
     ["jobs_paid_every_route", "no job paid from a held balance", (r) => (r.paymentMoments = r.paymentMoments.filter((m) => !(m.tool === "transfer_claim" && r.sales.find((s) => s.requestId === m.requestId)?.kind === "trade")))],
     ["raw_work_paid_every_route", "no unit paid in dollars", (r) => (r.paymentMoments = r.paymentMoments.filter((m) => !(m.tool === "pay" && r.sales.find((s) => s.requestId === m.requestId)?.kind === "rawwork")))],
     ["received_fsiu_passed_on", "no held payment by a payer holding received fSIU", (r) => r.paymentMoments.forEach((m) => (m.heldReceivedMilliSiu = "0"))],

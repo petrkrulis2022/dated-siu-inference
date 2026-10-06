@@ -19,6 +19,7 @@
     "bond-lots": "pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/bond-lots.js",
     "block-report": "pnpm run build && node dist/cli/block-report-cli.js",
     "lab-run": "pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/lab-run.js",
+    "lab-sweep": "pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/lab-sweep.js",
     "lab-report": "pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/lab-report.js",
     "approve-roster": "pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/allowances.js"
   },
