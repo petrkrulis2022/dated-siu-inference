@@ -15,6 +15,9 @@ import type { MintContext } from "../loop/full-run.js";
 import { DEFAULT_PARAMS, ISSUER_SEAT, LAB_TRADERS, SEAT_OF, type TraderLabel } from "./economy.js";
 import { referenceExecutor } from "./jobs.js";
 import type { EndowmentMint, LabChain, Signer } from "./operator.js";
+import { setRevertRetryPolicy, writeAndConfirm } from "../chain/write.js";
+import type { ChainClients } from "@touchstone/agents";
+import { BaseError, ContractFunctionRevertedError, parseAbi } from "viem";
 import { LaunchRefused, runLab, type LabRunInput } from "./run.js";
 
 // Anvil's public development keys: real, valid, and worth nothing.
@@ -44,6 +47,7 @@ class FakeChain implements LabChain {
   shortChange = 0n;
   calls: string[] = [];
   failExpiryFor: Hex | undefined;
+  lagOnMint = false;
   #token = 777n;
 
   constructor() {
@@ -75,6 +79,24 @@ class FakeChain implements LabChain {
   }
   async mintEndowment(m: EndowmentMint) {
     this.calls.push(`mint ${m.quantityMilliSiu}`);
+    if (this.lagOnMint) {
+      // A write whose first simulation reverts because the node has not caught up, through the real helper.
+      const abi = parseAbi(["function f()", "error E()"]);
+      let n = 0;
+      await writeAndConfirm(
+        {
+          account: { address: "0x00000000000000000000000000000000000000aa" },
+          walletClient: {
+            writeContract: async () => {
+              if (n++ === 0) throw new BaseError("reverted", { cause: new ContractFunctionRevertedError({ abi, functionName: "f", data: "0x3e47169c" }) });
+              return "0xabc";
+            },
+          },
+          publicClient: { waitForTransactionReceipt: async ({ hash }: { hash: Hex }) => ({ status: "success", transactionHash: hash }) },
+        } as unknown as ChainClients,
+        { address: "0x0000000000000000000000000000000000000001", abi, functionName: "f", args: [] },
+      );
+    }
     this.headroomNow -= m.quantityMilliSiu;
     this.claims.set(OPERATOR.address.toLowerCase(), this.#c(OPERATOR.address) + m.quantityMilliSiu);
     return { tokenId: this.#token, issuer: this.mintBackedBy, txHash: "0xmint" };
@@ -312,6 +334,39 @@ describe("runLab", () => {
     );
     expect(report.abortedBecause).toBe("the log pipe broke");
     expect(report.pool.restored).toBe(true);
+  });
+
+  it("gives the tools the lab's service, so deliver_job reaches it instead of saying the run has no jobs", async () => {
+    let asked = false;
+    const delivers: Adapter = async () => {
+      if (asked) return respond({ done: true, summary: "x" });
+      asked = true;
+      return respond({ tool: "deliver_job", args: { requestId: "qr-1" } });
+    };
+    const withDeliver = { ...adapters, "TRADER-1": delivers } as Record<TraderLabel, Adapter>;
+    const report = await runLab(input({ adapters: withDeliver }));
+    const errors = report.toolErrors as { tool: string; error: string }[];
+    const deliver = errors.find((e) => e.tool === "deliver_job");
+    expect(deliver?.error).toContain("there is no request qr-1");
+    expect(deliver?.error).not.toContain("no jobs to deliver");
+  });
+
+  it("reports every write that had to wait for the node to catch up, and removes its listener afterwards", async () => {
+    chain.lagOnMint = true;
+    // Retries are switched off under test (vitest.setup.ts); this test needs one, quickly.
+    setRevertRetryPolicy({ attempts: 2, delayMs: 0 });
+    let report;
+    try {
+      report = await runLab(input());
+    } finally {
+      setRevertRetryPolicy({ attempts: 0 });
+    }
+    expect(report.lag.writesRetried).toBe(1);
+    expect(report.lag.events[0]).toMatchObject({ functionName: "f", retries: 1, outcome: "recovered" });
+    // A quiet run reports none — and a later run in the same process is not handed this one's events.
+    chain.lagOnMint = false;
+    const quiet = await runLab(input({ runId: "lab-test-run-2" }));
+    expect(quiet.lag).toEqual({ writesRetried: 0, events: [] });
   });
 
   it("states what it ran: seats, models, the schedule and whether it was scripted", async () => {

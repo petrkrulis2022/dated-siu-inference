@@ -8,7 +8,7 @@ import { requestQuoteTool } from "../tools/request-quote.js";
 import { renderLabAction, renderLabInfo } from "./board.js";
 import { LabBooks } from "./books.js";
 import { buildLabBrief } from "./briefs.js";
-import { DEFAULT_PARAMS, LAB_TRADERS, SEAT_OF, buildEconomy, type TraderLabel } from "./economy.js";
+import { DEFAULT_PARAMS, LAB_TRADERS, SEAT_OF, buildEconomy, labDisplayName, type TraderLabel } from "./economy.js";
 import { guardLabCall } from "./guards.js";
 import {
   claimTokenId,
@@ -38,6 +38,8 @@ import {
 } from "./scripted-traders.js";
 
 const economy = buildEconomy(9);
+/** The board exactly as the runner builds it: a requester is shown by its label, never its seat. */
+const PRODUCTION_BOARD = { reservationStep: false, displayName: labDisplayName } as const;
 const PRINT = "0.001437"; // illustrative
 const p = printNano(PRINT);
 const ids = {
@@ -101,7 +103,7 @@ const call = (turn: number, toolName: string, args: unknown, result: unknown): T
 
 describe("lab cues read what the lab's own renderers write", () => {
   const books = new LabBooks(economy, ids);
-  const board = new QuoteBoard({ reservationStep: false });
+  const board = new QuoteBoard(PRODUCTION_BOARD);
   // A trader with a need open in round 1; which one depends on the seed.
   const me: TraderLabel = LAB_TRADERS.find((t) => books.openNeeds(t).length > 0)!;
   const prompt = promptFor(me, books, board);
@@ -126,13 +128,13 @@ describe("lab cues read what the lab's own renderers write", () => {
     const need = economy.needs.find((n) => n.round === 1)!;
     b.requestPosted("qr-1", need.buyer, need.seller);
     b.paid("qr-1", "usdc");
-    const text = promptFor(need.seller, b, new QuoteBoard({ reservationStep: false }));
+    const text = promptFor(need.seller, b, new QuoteBoard(PRODUCTION_BOARD));
     expect(owedJobs(text)).toEqual([{ requestId: "qr-1", type: need.type, buyer: need.buyer }]);
     expect(unitsHeld(text)).toBe(0);
   });
 
   it("reads quotes received with their amounts, and the history in the loop's own format", () => {
-    const bd = new QuoteBoard({ reservationStep: false });
+    const bd = new QuoteBoard(PRODUCTION_BOARD);
     const req = bd.postRequest("ORCHESTRATOR", fakeBody(ids.traders["TRADER-2"], "0.0017"));
     bd.postIssuedQuote(req.requestId, fakeQuote(ids.traders["TRADER-2"], "0.0017"));
     const history = [
@@ -166,7 +168,7 @@ describe("a scripted trader's decisions", () => {
   const fresh = (): { mem: Memory; books: LabBooks; board: QuoteBoard } => ({
     mem: newMemory(),
     books: new LabBooks(economy, ids),
-    board: new QuoteBoard({ reservationStep: false }),
+    board: new QuoteBoard(PRODUCTION_BOARD),
   });
 
   it("asks the seller of a need it can buy for a job — a request the lab's own guards and the tool accept", () => {
@@ -194,7 +196,7 @@ describe("a scripted trader's decisions", () => {
     expect(decide(promptFor(idle, books, board), env, mem).intent).toEqual({ wait: true });
   });
 
-  describe("paying a received job quote, by the route the assignment gives", () => {
+  describe("paying a received job quote: read the balances, then the planned route if it can be afforded", () => {
     const quoted = (route: "usdc" | "mint_forward" | "held" | "split") => {
       const s = fresh();
       // A trader whose first job purchase is assigned this route.
@@ -204,56 +206,84 @@ describe("a scripted trader's decisions", () => {
       s.board.postIssuedQuote(req.requestId, fakeQuote(ids.traders[need.seller], "0.0017"));
       return { ...s, me, need, requestId: req.requestId };
     };
+    /** The history after a `get_balances` at `turn` that found these funds. */
+    const read = (turn: number, usdcMinor: number, fsiu: number): ToolCallRecord =>
+      call(turn, "get_balances", {}, { usdc: { decimalUsd: "x", integerMinorUnits: String(usdcMinor), liveArm: "decimal" }, claims: [{ tokenId: "777", balance: String(fsiu) }], escrows: [] });
+    const READ = { tool: "get_balances", args: { account: `0x${"ab".repeat(20)}`, tokenIds: ["777"] } };
+    const ZERO = "0x0000000000000000000000000000000000000000";
+    /** Reads, is shown the funds, and decides. */
+    const pays = (s: ReturnType<typeof quoted>, usdc: number, fsiu: number) => {
+      expect(decide(promptFor(s.me, s.books, s.board), env, s.mem).intent).toEqual(READ);
+      return decide(promptFor(s.me, s.books, s.board, [read(1, usdc, fsiu)]), env, s.mem).intent;
+    };
+
+    it("reads its balances before paying by any route", () => {
+      for (const route of ["usdc", "mint_forward", "held", "split"] as const) {
+        const s = quoted(route);
+        expect(decide(promptFor(s.me, s.books, s.board), env, s.mem).intent, route).toEqual(READ);
+      }
+    });
 
     it("usdc: pay, with the zero settler", () => {
       const s = quoted("usdc");
-      expect(decide(promptFor(s.me, s.books, s.board), env, s.mem).intent).toEqual({
-        tool: "pay",
-        args: { requestId: s.requestId, settler: "0x0000000000000000000000000000000000000000" },
-      });
+      expect(pays(s, 10_000, 5_000)).toEqual({ tool: "pay", args: { requestId: s.requestId, settler: ZERO } });
+      expect(s.mem.status.fellBack).toEqual([]);
     });
 
     it("mint_forward: pay_with_claim", () => {
       const s = quoted("mint_forward");
-      expect(decide(promptFor(s.me, s.books, s.board), env, s.mem).intent).toEqual({ tool: "pay_with_claim", args: { requestId: s.requestId } });
+      expect(pays(s, 10_000, 5_000)).toEqual({ tool: "pay_with_claim", args: { requestId: s.requestId } });
     });
 
     it("split: half of the quote's claim, the rest in dollars", () => {
       const s = quoted("split");
-      expect(decide(promptFor(s.me, s.books, s.board), env, s.mem).intent).toEqual({
-        tool: "settle_split",
-        args: { requestId: s.requestId, claimQuantityMilliSiu: "592", settler: "0x0000000000000000000000000000000000000000" },
-      });
+      expect(pays(s, 10_000, 5_000)).toEqual({ tool: "settle_split", args: { requestId: s.requestId, claimQuantityMilliSiu: "592", settler: ZERO } });
     });
 
-    it("held: reads its balance first, then passes the claim on by name if the balance covers the quote", () => {
+    it("held: passes the claim on by name, in the seller's label, once its balance covers the quote", () => {
       const s = quoted("held");
-      const first = decide(promptFor(s.me, s.books, s.board), env, s.mem).intent;
-      expect(first).toEqual({ tool: "get_balances", args: { account: `0x${"ab".repeat(20)}`, tokenIds: ["777"] } });
-      const read = call(1, "get_balances", first, { usdc: {}, claims: [{ tokenId: "777", balance: "2000" }], escrows: [] });
-      const second = decide(promptFor(s.me, s.books, s.board, [read]), env, s.mem);
-      expect(second.intent).toEqual({ tool: "transfer_claim", args: { agentId: s.need.seller, tokenId: "777", requestId: s.requestId } });
+      expect(pays(s, 10_000, 2_000)).toEqual({ tool: "transfer_claim", args: { agentId: s.need.seller, tokenId: "777", requestId: s.requestId } });
       expect(s.mem.status.fellBack).toEqual([]);
     });
 
-    it("held: falls back to minting when the balance does not cover it, and says so", () => {
+    it("falls back to dollars when the planned route's price is in fSIU it does not hold, and says so", () => {
       const s = quoted("held");
-      const first = decide(promptFor(s.me, s.books, s.board), env, s.mem).intent;
-      const read = call(1, "get_balances", first, { usdc: {}, claims: [{ tokenId: "777", balance: "100" }], escrows: [] });
-      const second = decide(promptFor(s.me, s.books, s.board, [read]), env, s.mem).intent;
-      expect(second).toEqual({ tool: "pay_with_claim", args: { requestId: s.requestId } });
+      expect(pays(s, 10_000, 100)).toEqual({ tool: "pay", args: { requestId: s.requestId, settler: ZERO } });
       expect(s.mem.status.fellBack).toEqual([
-        { trader: s.me, requestId: s.requestId, planned: "held", because: "holds 100 mSIU, the quote needs 1184" },
+        { trader: s.me, requestId: s.requestId, planned: "held", because: "holds 10000 USDC minor units and 100 mSIU; the quote is 1700 and 1184 mSIU" },
       ]);
     });
 
-    it("moves to the next route only once the first payment has gone through — a quote still on the board is not a second purchase", () => {
+    it("falls back to a held claim when the planned mint would cost more dollars than it holds — minting is paid for in USDC", () => {
+      // 1,184 mSIU costs 1,701 minor units to mint at this print, more than the 1,200 held.
+      const s = quoted("mint_forward");
+      expect(pays(s, 1_200, 5_000)).toEqual({ tool: "transfer_claim", args: { agentId: s.need.seller, tokenId: "777", requestId: s.requestId } });
+    });
+
+    it("pays in claims it holds when it has no dollars for the quote", () => {
       const s = quoted("usdc");
-      const first = decide(promptFor(s.me, s.books, s.board), env, s.mem);
-      expect(first.intent).toMatchObject({ tool: "pay" });
-      // The payment failed: the quote is still on the board, so the same route is tried again.
-      expect(decide(promptFor(s.me, s.books, s.board), env, s.mem).intent).toMatchObject({ tool: "pay" });
+      expect(pays(s, 500, 2_000)).toMatchObject({ tool: "transfer_claim" });
+    });
+
+    it("waits, and records that it could not afford the quote, when no route is affordable", () => {
+      const s = quoted("usdc");
+      expect(pays(s, 10, 10)).toEqual({ wait: true });
+      expect(s.mem.status.unaffordable).toEqual([
+        { trader: s.me, requestId: s.requestId, usdcMinor: "10", fsiuMilliSiu: "10", needsMinor: "1700", needsMilliSiu: "1184" },
+      ]);
+    });
+
+    it("sets a route aside once it has failed and reads the balances again — a failed payment is not repeated", () => {
+      const s = quoted("usdc");
+      expect(pays(s, 10_000, 5_000)).toMatchObject({ tool: "pay" });
+      // The payment reverted (history: a failed `pay` after the read), and the quote is still on the board.
+      const failed = call(3, "pay", {}, { error: "the paying wallet does not hold enough USDC." });
+      const again = decide(promptFor(s.me, s.books, s.board, [read(1, 10_000, 5_000), failed]), env, s.mem).intent;
+      expect(again).toEqual(READ);
+      const next = decide(promptFor(s.me, s.books, s.board, [read(1, 10_000, 5_000), failed, read(5, 10_000, 5_000)]), env, s.mem).intent;
+      expect(next).toMatchObject({ tool: "transfer_claim" }); // dollars are set aside; the next affordable route is the held claim
       expect(s.mem.status.decided).toHaveLength(1);
+      expect(s.mem.status.decided[0]).toMatchObject({ planned: "usdc", used: "held" });
     });
   });
 
@@ -294,8 +324,11 @@ describe("a scripted trader's decisions", () => {
       const raw = s.board.postRequest(SEAT_OF[s.need.seller], fakeBody(ids.issuer, "0.0014"));
       s.board.postIssuedQuote(raw.requestId, fakeQuote(ids.issuer, "0.0014"));
       const route = plannedRawRoute(s.need.seller, 0);
-      const { intent } = decide(promptFor(s.need.seller, s.books, s.board), env, s.mem);
-      const expectedTool = { usdc: "pay", mint_forward: "pay_with_claim", held: "get_balances" }[route];
+      // It reads its balances first, then pays by the planned route.
+      expect(decide(promptFor(s.need.seller, s.books, s.board), env, s.mem).intent).toMatchObject({ tool: "get_balances" });
+      const funds = call(1, "get_balances", {}, { usdc: { integerMinorUnits: "10000" }, claims: [{ tokenId: "777", balance: "5000" }], escrows: [] });
+      const { intent } = decide(promptFor(s.need.seller, s.books, s.board, [funds]), env, s.mem);
+      const expectedTool = { usdc: "pay", mint_forward: "pay_with_claim", held: "transfer_claim" }[route];
       expect(intent).toMatchObject({ tool: expectedTool });
     });
 
@@ -325,6 +358,6 @@ describe("a scripted trader's decisions", () => {
   it("gives every trader its own adapter state in one shared object, and exposes what it decided", () => {
     const traders = scriptedLabTraders(env);
     expect(Object.keys(traders.adapters)).toEqual([...LAB_TRADERS]);
-    expect(traders.status()).toEqual({ decided: [], fellBack: [] });
+    expect(traders.status()).toEqual({ decided: [], fellBack: [], unaffordable: [] });
   });
 });

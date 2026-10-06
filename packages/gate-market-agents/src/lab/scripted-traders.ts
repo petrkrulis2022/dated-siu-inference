@@ -14,10 +14,12 @@
  * What it walks, by assignment (trader k = 1..4; j = that trader's j-th purchase of its kind, from 0):
  *   jobs      — usdc, mint-and-forward, held balance, split … cycled by (k + j)
  *   raw work  — usdc, mint-and-forward, held balance … cycled by (k + j)
- * so each route is used at least twice across the eight jobs and eight units. A held-balance payment is made
- * only when a balance read says the trader holds enough, else it falls back to mint-and-forward and the walk
- * records that it did; a payment made from a balance that includes fSIU the trader RECEIVED is the "passed on"
- * case, which the verifier looks for in the loop's own payment records.
+ * so each route is used at least twice across the eight jobs and eight units. Every route has a price in
+ * something the trader must hold — dollars for `pay`, dollars for the mint in `pay_with_claim` and the split,
+ * fSIU for a held transfer — so before each payment the script reads its balances, uses the planned route if it
+ * can afford it and otherwise the first it can, and the walk records where it had to. A payment that fails is
+ * not repeated: the route is set aside and the balances read again. A payment made from a balance that includes
+ * fSIU the trader RECEIVED is the "passed on" case, which the verifier looks for in the loop's own records.
  */
 import type { Adapter, AdapterResult } from "@touchstone/harness";
 import { LAB_TRADERS, type TraderLabel } from "./economy.js";
@@ -35,7 +37,8 @@ import {
   type HistoryCall,
 } from "./lab-cues.js";
 import { openRequests, owedInUsdc } from "../cues/prompt-cues.js";
-import { decimalToUnits } from "./money.js";
+import { claimMintCostMinorUnits } from "../loop/parity.js";
+import { claimForUsd, decimalToUnits } from "./money.js";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
@@ -65,6 +68,8 @@ export interface ScriptStatus {
   /** Payments the script DECIDED on; one that failed shows in the report's tool errors, not here. */
   decided: { trader: TraderLabel; requestId: string; kind: "job" | "raw"; planned: string; used: string }[];
   fellBack: { trader: TraderLabel; requestId: string; planned: string; because: string }[];
+  /** A payment the trader could not afford by any route it has. */
+  unaffordable: { trader: TraderLabel; requestId: string; usdcMinor: string; fsiuMilliSiu: string; needsMinor: string; needsMilliSiu: string }[];
 }
 
 const free = (intent: unknown): AdapterResult => ({
@@ -77,20 +82,25 @@ const free = (intent: unknown): AdapterResult => ({
 });
 
 /** The claim a quote is sized to, as the loop sizes it (`loop/parity.ts`): its price's worth at the print, rounded up. */
-export const claimFor = (amountUsd: string, printNano: bigint): bigint =>
-  (decimalToUnits(amountUsd, 6) * 1_000_000n + printNano - 1n) / printNano;
+export const claimFor = claimForUsd;
 
 const traderIndex = (t: TraderLabel): number => LAB_TRADERS.indexOf(t) + 1;
 export const plannedJobRoute = (t: TraderLabel, j: number): JobRoute => JOB_ROUTES[(traderIndex(t) + j) % JOB_ROUTES.length];
 export const plannedRawRoute = (t: TraderLabel, j: number): RawRoute => RAW_ROUTES[(traderIndex(t) + j) % RAW_ROUTES.length];
 
-/** The last `get_balances` this trader made, if it has made one since `afterTurn`. */
-function balanceSince(history: readonly HistoryCall[], afterTurn: number, tokenId: string): bigint | undefined {
-  const reads = history.filter((c) => c.tool === "get_balances" && !c.failed && c.turn > afterTurn);
-  const last = reads.at(-1);
+/** What a trader holds, from its own `get_balances` read. */
+export interface Funds {
+  usdcMinor: bigint;
+  fsiuMilliSiu: bigint;
+}
+
+/** The last `get_balances` this trader made since `afterTurn`, if it has made one and it succeeded. */
+function fundsSince(history: readonly HistoryCall[], afterTurn: number, tokenId: string): Funds | undefined {
+  const last = history.filter((c) => c.tool === "get_balances" && !c.failed && c.turn > afterTurn).at(-1);
   if (last === undefined) return undefined;
-  const claim = ((last.result as { claims?: { tokenId: string; balance: string }[] }).claims ?? []).find((c) => c.tokenId === tokenId);
-  return claim === undefined ? 0n : BigInt(claim.balance);
+  const result = last.result as { usdc?: { integerMinorUnits?: string }; claims?: { tokenId: string; balance: string }[] };
+  const claim = (result.claims ?? []).find((c) => c.tokenId === tokenId);
+  return { usdcMinor: BigInt(result.usdc?.integerMinorUnits ?? "0"), fsiuMilliSiu: claim === undefined ? 0n : BigInt(claim.balance) };
 }
 
 /** Decides one turn from one prompt. Pure but for the memory it is handed. */
@@ -168,14 +178,24 @@ export interface Memory {
   decided: Map<string, { trader: TraderLabel; kind: "job" | "raw" }>;
   /** The turn on which a balance read was asked for, per request. */
   readAskedAt: Map<string, number>;
+  /** The route last tried for a request, and the turn it was tried on. */
+  attempt: Map<string, { route: string; turn: number }>;
+  /** Routes that failed for a request and are not tried again. */
+  excluded: Map<string, Set<string>>;
   status: ScriptStatus;
 }
 
 export const newMemory = (): Memory => ({
   decided: new Map(),
   readAskedAt: new Map(),
-  status: { decided: [], fellBack: [] },
+  attempt: new Map(),
+  excluded: new Map(),
+  status: { decided: [], fellBack: [], unaffordable: [] },
 });
+
+const TOOL_OF_ROUTE: Record<string, string> = { usdc: "pay", mint_forward: "pay_with_claim", held: "transfer_claim", split: "settle_split" };
+/** Where a trader turns when it cannot afford the planned route. Dollars first: they are the plainest. */
+const FALLBACK_ORDER: readonly string[] = ["usdc", "held", "mint_forward", "split"];
 
 function requestQuote(env: ScriptedLabEnv, model: string, sellerId: string, rate: string): Intent {
   return {
@@ -209,42 +229,92 @@ function pay(
   sellerName: string,
 ): { intent: Intent; note?: string } {
   const id = quote.requestId;
+  const amountMinor = decimalToUnits(quote.amountUsd, 6);
   const claimQty = claimFor(quote.amountUsd, env.printNano);
-  const finish = (used: string, intent: Intent, because?: string): { intent: Intent; note?: string } => {
-    // Recorded once per request: a payment that failed and is tried again is still one decision.
-    if (!mem.decided.has(id)) {
-      mem.decided.set(id, { trader: me, kind });
-      mem.status.decided.push({ trader: me, requestId: id, kind, planned, used });
-      if (because !== undefined) mem.status.fellBack.push({ trader: me, requestId: id, planned, because });
-    }
-    return { intent, note: `${kind} ${id}: ${used}` };
-  };
 
-  if (planned === "usdc") return finish("usdc", { tool: "pay", args: { requestId: id, settler: ZERO_ADDRESS } });
-  if (planned === "mint_forward") return finish("mint_forward", { tool: "pay_with_claim", args: { requestId: id } });
-  if (planned === "split") {
-    return finish("split", {
-      tool: "settle_split",
-      args: { requestId: id, claimQuantityMilliSiu: (claimQty / 2n).toString(), settler: ZERO_ADDRESS },
+  // A payment that was tried and failed is not tried again: set the route aside and read the balances afresh.
+  const tried = mem.attempt.get(id);
+  if (tried !== undefined) {
+    const failed = history.some((c) => c.failed && c.turn > tried.turn && c.tool === TOOL_OF_ROUTE[tried.route]);
+    if (failed) {
+      const set = mem.excluded.get(id) ?? new Set<string>();
+      set.add(tried.route);
+      mem.excluded.set(id, set);
+      mem.readAskedAt.delete(id);
+      mem.attempt.delete(id);
+    }
+  }
+
+  const readBalances = (): { intent: Intent } => {
+    mem.readAskedAt.set(id, turn);
+    return { intent: { tool: "get_balances", args: { account: myAddress(prompt), tokenIds: [tokenId] } } };
+  };
+  const askedAt = mem.readAskedAt.get(id);
+  if (askedAt === undefined) return readBalances();
+  const funds = fundsSince(history, askedAt, tokenId);
+  // The read has not come back, or failed: ask again rather than pay blind.
+  if (funds === undefined) return readBalances();
+
+  const affordable = (route: string): boolean => {
+    switch (route) {
+      case "usdc":
+        return funds.usdcMinor >= amountMinor;
+      case "mint_forward":
+        return funds.usdcMinor >= claimMintCostMinorUnits(claimQty, env.printNano);
+      case "held":
+        return funds.fsiuMilliSiu >= claimQty;
+      case "split":
+        // Half the claim minted, the rest in dollars: together about the whole price, so require it.
+        return funds.usdcMinor >= amountMinor;
+      default:
+        return false;
+    }
+  };
+  const allowed = (route: string): boolean => (kind === "raw" ? route !== "split" : true) && !(mem.excluded.get(id)?.has(route) ?? false);
+  const route = [planned as string, ...FALLBACK_ORDER].find((r) => allowed(r) && affordable(r));
+
+  if (route === undefined) {
+    if (!mem.status.unaffordable.some((u) => u.requestId === id)) {
+      mem.status.unaffordable.push({
+        trader: me,
+        requestId: id,
+        usdcMinor: funds.usdcMinor.toString(),
+        fsiuMilliSiu: funds.fsiuMilliSiu.toString(),
+        needsMinor: amountMinor.toString(),
+        needsMilliSiu: claimQty.toString(),
+      });
+    }
+    return { intent: { wait: true } };
+  }
+
+  mem.attempt.set(id, { route, turn });
+  // Recorded once per request, with the route last tried: a payment that failed and was set aside is one
+  // decision whose final route is what the report states.
+  const existing = mem.status.decided.find((d) => d.requestId === id);
+  if (existing === undefined) {
+    mem.decided.set(id, { trader: me, kind });
+    mem.status.decided.push({ trader: me, requestId: id, kind, planned, used: route });
+  } else {
+    existing.used = route;
+  }
+  if (route !== planned && !mem.status.fellBack.some((f) => f.requestId === id)) {
+    mem.status.fellBack.push({
+      trader: me,
+      requestId: id,
+      planned,
+      because: `holds ${funds.usdcMinor} USDC minor units and ${funds.fsiuMilliSiu} mSIU; the quote is ${amountMinor} and ${claimQty} mSIU`,
     });
   }
 
-  // Held balance: read the balance first, then pay from it if it covers the quote's claim.
-  const askedAt = mem.readAskedAt.get(id);
-  if (askedAt === undefined) {
-    const account = myAddress(prompt);
-    mem.readAskedAt.set(id, turn);
-    return { intent: { tool: "get_balances", args: { account, tokenIds: [tokenId] } } };
-  }
-  const balance = balanceSince(history, askedAt, tokenId);
-  if (balance !== undefined && balance >= claimQty) {
-    return finish("held", { tool: "transfer_claim", args: { agentId: sellerName, tokenId, requestId: id } });
-  }
-  return finish(
-    "mint_forward",
-    { tool: "pay_with_claim", args: { requestId: id } },
-    balance === undefined ? "the balance read did not come back" : `holds ${balance} mSIU, the quote needs ${claimQty}`,
-  );
+  const intent: Intent =
+    route === "usdc"
+      ? { tool: "pay", args: { requestId: id, settler: ZERO_ADDRESS } }
+      : route === "mint_forward"
+        ? { tool: "pay_with_claim", args: { requestId: id } }
+        : route === "held"
+          ? { tool: "transfer_claim", args: { agentId: sellerName, tokenId, requestId: id } }
+          : { tool: "settle_split", args: { requestId: id, claimQuantityMilliSiu: (claimQty / 2n).toString(), settler: ZERO_ADDRESS } };
+  return { intent, note: `${kind} ${id}: ${route}` };
 }
 
 export interface ScriptedLabTraders {

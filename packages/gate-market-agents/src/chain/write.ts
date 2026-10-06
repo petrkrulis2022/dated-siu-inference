@@ -25,6 +25,30 @@ export interface RevertRetryPolicy {
 
 let revertRetryPolicy: RevertRetryPolicy = { attempts: 8, delayMs: 1000 };
 
+/**
+ * One write that needed the retry above — the lag, made visible. A write that succeeds first time reports
+ * nothing; one that had to wait for the node to catch up reports how many times, and whether it did. Without
+ * this a run's report cannot say whether a stall was the node's lag or the call's own fault, and "no write
+ * needed a retry" reads the same as "nobody looked".
+ */
+export interface WriteRetryEvent {
+  functionName: string;
+  /** The account that sent it. */
+  account: string;
+  /** Tries after the first. */
+  retries: number;
+  outcome: "recovered" | "gave_up";
+  /** What the node last said, for a write that gave up. */
+  lastError?: string;
+}
+
+let retryListener: ((event: WriteRetryEvent) => void) | undefined;
+
+/** Called once per write that needed a retry. One listener at a time; `undefined` removes it. */
+export function setWriteRetryListener(listener: ((event: WriteRetryEvent) => void) | undefined): void {
+  retryListener = listener;
+}
+
 export function setRevertRetryPolicy(policy: Partial<RevertRetryPolicy>): void {
   revertRetryPolicy = { ...revertRetryPolicy, ...policy };
 }
@@ -66,6 +90,7 @@ export async function writeAndConfirm(
   },
 ): Promise<TransactionReceipt> {
   let txHash: Hex | undefined;
+  let retries = 0;
   for (let attempt = 0; txHash === undefined; attempt++) {
     try {
       txHash = await clients.walletClient.writeContract({
@@ -79,9 +104,23 @@ export async function writeAndConfirm(
     } catch (err) {
       // Only an estimation revert is retried. A nonce or funds error is not lag, and a transaction
       // that was mined and reverted is handled below and is final.
-      if (!isSimulationRevert(err) || attempt >= revertRetryPolicy.attempts) throw err;
+      if (!isSimulationRevert(err)) throw err;
+      if (attempt >= revertRetryPolicy.attempts) {
+        retryListener?.({
+          functionName: params.functionName,
+          account: clients.account.address,
+          retries,
+          outcome: "gave_up",
+          lastError: err instanceof Error ? err.message.split("\n")[0] : String(err),
+        });
+        throw err;
+      }
+      retries++;
       await new Promise((r) => setTimeout(r, revertRetryPolicy.delayMs));
     }
+  }
+  if (retries > 0) {
+    retryListener?.({ functionName: params.functionName, account: clients.account.address, retries, outcome: "recovered" });
   }
   const receipt = await clients.publicClient.waitForTransactionReceipt({ hash: txHash });
   if (receipt.status !== "success") {

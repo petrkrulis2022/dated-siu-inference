@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { QuoteBody, TouchstoneQuote } from "@touchstone/sdk";
 import { QuoteBoard } from "../loop/quote-board.js";
+import { labDisplayName } from "./economy.js";
 import { ISSUER_SERVICE_TOOLS, issuerServiceAdapter } from "./issuer-service.js";
 
 const ISSUER = "erc8004:0xISSUER";
@@ -15,13 +16,13 @@ const decide = async (prompt: string) => JSON.parse((await issuerServiceAdapter(
 
 describe("the issuer service", () => {
   it("answers an open request for raw work", async () => {
-    const board = new QuoteBoard({ reservationStep: false });
+    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName });
     board.postRequest("ORCHESTRATOR", body(ISSUER));
     expect(await decide(board.renderFor("ISSUER-B", ISSUER))).toEqual({ tool: "issue_quote", args: { requestId: "qr-1" } });
   });
 
   it("releases the escrow of a quote that has been paid in dollars", async () => {
-    const board = new QuoteBoard({ reservationStep: false });
+    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName });
     const r = board.postRequest("ORCHESTRATOR", body(ISSUER));
     board.postIssuedQuote(r.requestId, signed(ISSUER));
     board.recordPaid(r.requestId, "usdc");
@@ -29,7 +30,7 @@ describe("the issuer service", () => {
   });
 
   it("answers requests before releasing escrows, one action a turn, and the rest stays on the board", async () => {
-    const board = new QuoteBoard({ reservationStep: false });
+    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName });
     const first = board.postRequest("ORCHESTRATOR", body(ISSUER));
     board.postIssuedQuote(first.requestId, signed(ISSUER));
     board.recordPaid(first.requestId, "usdc");
@@ -39,7 +40,7 @@ describe("the issuer service", () => {
   });
 
   it("does nothing about a quote paid in claims: there is no escrow, and the issuer simply holds the claim", async () => {
-    const board = new QuoteBoard({ reservationStep: false });
+    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName });
     const r = board.postRequest("ORCHESTRATOR", body(ISSUER));
     board.postIssuedQuote(r.requestId, signed(ISSUER));
     board.recordPaid(r.requestId, "fsiu");

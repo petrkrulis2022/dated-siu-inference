@@ -31,7 +31,9 @@ import {
 } from "../loop/full-run.js";
 import { QuoteBoard } from "../loop/quote-board.js";
 import type { RunManifest } from "../run-recorder/recorder.js";
+import { setWriteRetryListener, type WriteRetryEvent } from "../chain/write.js";
 import { windowContamination } from "../cli/topology.js";
+import { labDisqualification, type MeasureReport } from "./measure.js";
 import { toolErrorsOf } from "../cli/tool-errors.js";
 import { LabBooks } from "./books.js";
 import {
@@ -159,6 +161,10 @@ export interface LabReport {
   claimFlows: unknown;
   capacityEvents: unknown;
   claimPositions: unknown;
+  /** Every write that needed the node to catch up (a stale simulation) and how it ended — the lag, made visible. */
+  lag: { writesRetried: number; events: WriteRetryEvent[] };
+  /** The shape the existing `assertCountableForF1` guard reads: why this run cannot be counted, or null. */
+  debugMode: { disqualifiedBecause: string | null };
 }
 
 const required = <T>(value: T | undefined, what: string): T => {
@@ -261,6 +267,9 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
   let contamination: string | undefined;
   let endowmentIssuer: Hex | undefined;
   let workCostUsd = new D(0); // what the graded jobs cost to run; also recorded in the experiment ledger
+
+  const lag: WriteRetryEvent[] = [];
+  setWriteRetryListener((e) => lag.push(e));
 
   const t0 = await input.chain.now();
   const windowFrom = t0 - 60n;
@@ -368,7 +377,10 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
       maxTurnsPerAgent: input.maxTurns,
       windowSpanEndsAtUnixSeconds: windowTo - margin,
       budget: input.budget,
-      deps: input.loopDeps,
+      // The tools reach the lab through `deps.lab` (`deliver_job` calls it); the loop reaches it through `lab`.
+      // Both are the one service. Leaving this out made every `deliver_job` fail "this run has no jobs to deliver",
+      // found by the first scripted walk on a fork.
+      deps: { ...input.loopDeps, lab: service },
       runsRoot: input.runsRoot,
       runId: input.runId,
       manifest,
@@ -425,10 +437,11 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
     }
   }
 
+  setWriteRetryListener(undefined);
   const endingHeadroom = tokenId !== undefined ? await input.chain.headroom(issuerAddress, classId) : undefined;
   const restored = endingHeadroom === undefined ? undefined : endingHeadroom === startingHeadroom;
 
-  return {
+  const report: Omit<LabReport, "debugMode"> = {
     runId: input.runId,
     seed: input.seed,
     scripted: input.scripted,
@@ -483,5 +496,8 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
     claimFlows: result?.claimFlows ?? {},
     capacityEvents: result?.capacityEvents ?? [],
     claimPositions: result?.claimPositions ?? [],
+    lag: { writesRetried: lag.length, events: lag },
   };
+  // Stamped where it cannot be separated from the run, and recomputed by the aggregator from the facts.
+  return { ...report, debugMode: { disqualifiedBecause: labDisqualification(report as unknown as MeasureReport) } };
 }

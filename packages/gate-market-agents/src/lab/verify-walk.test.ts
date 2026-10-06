@@ -109,8 +109,18 @@ describe("the lab walk's verifier", () => {
     });
   }
 
+  it("fails when the script could not afford a quote by any route, naming what the trader held", () => {
+    const v = verifyLabWalk(goodReport(), {
+      decided: [],
+      fellBack: [],
+      unaffordable: [{ trader: "TRADER-4", requestId: "qr-8", usdcMinor: "10", fsiuMilliSiu: "10", needsMinor: "1400", needsMilliSiu: "975" }],
+    });
+    expect(v.checks.find((c) => c.id === "no_payment_was_unaffordable")).toMatchObject({ ok: false });
+    expect(renderWalk(v)).toContain("TRADER-4 qr-8 (holds 10 USDC, 10 mSIU; needs 1400 or 975)");
+  });
+
   it("lists where the script had to fall back without counting it as a failure", () => {
-    const v = verifyLabWalk(goodReport(), { decided: [], fellBack: [{ trader: "TRADER-2", requestId: "qr-5", planned: "held", because: "holds 100 mSIU, the quote needs 1184" }] });
+    const v = verifyLabWalk(goodReport(), { decided: [], unaffordable: [], fellBack: [{ trader: "TRADER-2", requestId: "qr-5", planned: "held", because: "holds 100 mSIU, the quote needs 1184" }] });
     expect(v.ok).toBe(true);
     expect(renderWalk(v)).toContain("TRADER-2 qr-5: planned held — holds 100 mSIU, the quote needs 1184");
   });

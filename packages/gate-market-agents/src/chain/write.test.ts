@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { BaseError, ContractFunctionRevertedError, parseAbi, type Hex } from "viem";
 import type { ChainClients } from "@touchstone/agents";
-import { setRevertRetryPolicy, writeAndConfirm } from "./write.js";
+import { setRevertRetryPolicy, setWriteRetryListener, writeAndConfirm, type WriteRetryEvent } from "./write.js";
 
 const ABI = parseAbi(["function presentForRedemption(uint256 tokenId, bytes32 hash)", "error NothingToPresent()"]);
 const PARAMS = { address: "0x0000000000000000000000000000000000000001" as Hex, abi: ABI, functionName: "presentForRedemption", args: [1n, `0x${"00".repeat(32)}`] };
@@ -113,5 +113,59 @@ describe("writeAndConfirm — a revert on simulation may be the node's lag, not 
     const started = Date.now();
     await writeAndConfirm(c, PARAMS);
     expect(Date.now() - started).toBeGreaterThanOrEqual(75);
+  });
+});
+
+describe("writeAndConfirm — the lag is reported, not only absorbed", () => {
+  beforeEach(() => setRevertRetryPolicy({ attempts: 3, delayMs: 0 }));
+
+  const collect = (): WriteRetryEvent[] => {
+    const events: WriteRetryEvent[] = [];
+    setWriteRetryListener((e) => events.push(e));
+    return events;
+  };
+  const stop = () => setWriteRetryListener(undefined);
+
+  it("says nothing about a write that went through first time", async () => {
+    const events = collect();
+    try {
+      await writeAndConfirm(clients([() => "0xabc" as Hex]).clients, PARAMS);
+    } finally {
+      stop();
+    }
+    expect(events).toEqual([]);
+  });
+
+  it("reports a write that needed the node to catch up, with how many tries it took", async () => {
+    const events = collect();
+    try {
+      await writeAndConfirm(clients([() => { throw simulationRevert(); }, () => { throw simulationRevert(); }, () => "0xabc" as Hex]).clients, PARAMS);
+    } finally {
+      stop();
+    }
+    expect(events).toEqual([
+      { functionName: "presentForRedemption", account: "0x0000000000000000000000000000000000000002", retries: 2, outcome: "recovered" },
+    ]);
+  });
+
+  it("reports a write that gave up, with what the node last said, and still throws the node's own error", async () => {
+    const events = collect();
+    try {
+      await expect(writeAndConfirm(clients([() => { throw simulationRevert(); }]).clients, PARAMS)).rejects.toThrow(/reverted/);
+    } finally {
+      stop();
+    }
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ retries: 3, outcome: "gave_up", lastError: "The contract function reverted" });
+  });
+
+  it("does not report an error that is not lag", async () => {
+    const events = collect();
+    try {
+      await expect(writeAndConfirm(clients([() => { throw new Error("insufficient funds"); }]).clients, PARAMS)).rejects.toThrow(/insufficient funds/);
+    } finally {
+      stop();
+    }
+    expect(events).toEqual([]);
   });
 });

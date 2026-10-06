@@ -143,6 +143,16 @@ export function verifyLabWalk(r: WalkReport, status?: ScriptStatus): WalkVerdict
   check("score_recomputes_from_balances", same, same ? "each result equals USDC + fSIU at the print + credit" : "a result differs from its own balances");
   check("scored_before_the_window_closed", r.measuredBeforeClose === true, r.measuredBeforeClose ? "the snapshot fell inside the window" : "the snapshot fell after the window closed");
 
+  if (status !== undefined) {
+    check(
+      "no_payment_was_unaffordable",
+      status.unaffordable.length === 0,
+      status.unaffordable.length === 0
+        ? "every quote could be paid by some route"
+        : status.unaffordable.map((u) => `${u.trader} ${u.requestId} (holds ${u.usdcMinor} USDC, ${u.fsiuMilliSiu} mSIU; needs ${u.needsMinor} or ${u.needsMilliSiu})`).join("; "),
+    );
+  }
+
   const undelivered = r.sales.filter((s) => s.kind === "trade" && !s.delivered);
   check("no_paid_job_left_undelivered", undelivered.length === 0, `${undelivered.length} jobs sold and not delivered`);
 

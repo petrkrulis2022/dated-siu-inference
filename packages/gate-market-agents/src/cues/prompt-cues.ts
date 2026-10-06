@@ -27,7 +27,8 @@ export function sectionLines(prompt: string, header: RegExp): string[] {
 /** `Open quote requests addressed to you` — what a seller is asked to quote. */
 export function openRequests(prompt: string): { requestId: string; from: string; siu: string }[] {
   return sectionLines(prompt, /^Open quote requests addressed to you/)
-    .map((l) => /^\s+(qr-\d+): from ([A-Z-]+), ([\d.]+) SIU,/.exec(l))
+    // A requester is named by a seat (ORCHESTRATOR) or, in the currency lab, a label (TRADER-2): digits too.
+    .map((l) => /^\s+(qr-\d+): from ([A-Z0-9-]+), ([\d.]+) SIU,/.exec(l))
     .filter((m): m is RegExpExecArray => m !== null)
     .map((m) => ({ requestId: m[1], from: m[2], siu: m[3] }));
 }

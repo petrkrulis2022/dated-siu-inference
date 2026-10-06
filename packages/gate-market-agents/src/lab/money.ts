@@ -43,6 +43,12 @@ export const rawWorkRateUsdPerSiu = (p: bigint): string => unitsToDecimal(p, 9);
 /** SIU size of a job and of a raw-work unit as the decimal SIU string `request_quote` takes ("1"). */
 export const jobSiu = (params: LabParams): string => unitsToDecimal(BigInt(params.jobMilliSiu), 3);
 
+/**
+ * The claim, in mSIU, worth `amountUsd` at the print, rounded up — the loop's own sizing for a payment in
+ * claims (`loop/parity.ts`), restated over a decimal amount so a report can be read without a quote object.
+ */
+export const claimForUsd = (amountUsd: string, p: bigint): bigint => (decimalToUnits(amountUsd, 6) * 1_000_000n + p - 1n) / p;
+
 /** What a trader gains for each need met, in nano-USD: the print times the multiple, per job. */
 export const creditNano = (p: bigint, params: LabParams): bigint =>
   (((p * BigInt(params.creditMultiplierBps)) / BPS) * BigInt(params.jobMilliSiu)) / 1000n;
