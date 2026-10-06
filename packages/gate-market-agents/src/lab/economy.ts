@@ -8,15 +8,15 @@
 import { deriveSeed, mulberry32 } from "@touchstone/basket";
 import type { AgentId } from "../identity/resolve.js";
 
-/** What an agent is shown. The seats underneath are existing ones; see plan D4. */
+/** What an agent is shown. The seats underneath are existing seat IDs; see plan D22 for TRADER-4's wallet. */
 export const LAB_TRADERS = ["TRADER-1", "TRADER-2", "TRADER-3", "TRADER-4"] as const;
 export type TraderLabel = (typeof LAB_TRADERS)[number];
 
 /**
- * TRADER-4 runs on ISSUER-A's wallet: it is the only existing wallet nothing else in phase 1 uses
- * (HEDGER has none, and the plan says no new wallets). ISSUER-A is a registered issuer, so a mint that
- * overflowed past ISSUER-B would pay TRADER-4 — the contamination check aborts the run if any mint is
- * backed by anyone but ISSUER-B.
+ * Which seat ID each label stands on. TRADER-4 keeps the seat ID `ISSUER-A` so nothing in the loop widens, but the
+ * wallet behind it is its own, not ISSUER-A's (plan D22): ISSUER-A is a bonded issuer and the failing issuer phase 2
+ * brings back, its identity carries every enforcement on record, and a trader's receipts must not appear under it.
+ * `runLab` refuses to launch if a trader's wallet is shared, or is the real ISSUER-A's.
  */
 export const SEAT_OF: Readonly<Record<TraderLabel, AgentId>> = {
   "TRADER-1": "ORCHESTRATOR",

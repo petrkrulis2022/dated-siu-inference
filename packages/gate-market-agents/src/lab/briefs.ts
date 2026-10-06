@@ -115,15 +115,18 @@ HOW TO BUY
   Step 3 — settle it. These are the ways, for a job and for a unit of raw work alike:
     in USDC:
       {"tool": "pay", "args": {"requestId": "<the requestId>", "settler": "${ZERO_ADDRESS}"}}
-    in fSIU, minting a new claim worth the quote's price at the print (a mint is paid for in USDC, at the print, to the issuer):
+    in fSIU, minting a new claim worth the quote's price at the print:
       {"tool": "pay_with_claim", "args": {"requestId": "<the requestId>"}}
     in fSIU, passing on a claim you already hold:
       {"tool": "transfer_claim", "args": {"agentId": "<the seller's name>", "tokenId": "${i.claim.tokenId}",
         "requestId": "<the requestId>"}}
       (the quantity is set from the quote: the amount of claim worth its price at the print)
-    partly in each (the claim part is minted, and paid for, as above):
+    partly in each (the claim part is a newly minted claim):
       {"tool": "settle_split", "args": {"requestId": "<the requestId>",
         "claimQuantityMilliSiu": "<how much of it to settle in claims>", "settler": "${ZERO_ADDRESS}"}}
+  WHAT EACH COSTS
+    Paying in USDC costs USDC. Paying with fSIU you hold costs that fSIU. Minting new fSIU costs USDC, at the
+    print, paid to the issuer.
   A transfer_claim may also pass fSIU to a trader with no quote: {"tool": "transfer_claim",
     "args": {"agentId": "<name>", "tokenId": "${i.claim.tokenId}", "quantity": "<mSIU>"}}.
 

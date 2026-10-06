@@ -61,7 +61,13 @@ const intFlag = (argv: readonly string[], name: string, fallback: number): numbe
 };
 
 const SEATS = ["ORCHESTRATOR", "WORKER-CODE", "WORKER-EXTRACT", "ISSUER-A", "ISSUER-B"] as const;
-const envName = (seat: string, suffix: "ADDRESS" | "PRIVATE_KEY"): string => `${seat.replace("-", "_")}_${suffix}`;
+/**
+ * The variable a seat's wallet is read from. TRADER-4 stands on the seat ID `ISSUER-A` with a wallet of its own
+ * (plan D22): ISSUER-A is the failing issuer phase 2 brings back and its identity carries every enforcement on
+ * record, so the lab never reads `ISSUER_A_*` as a trader's wallet.
+ */
+const envName = (seat: string, suffix: "ADDRESS" | "PRIVATE_KEY"): string =>
+  seat === "ISSUER-A" ? `TRADER_4_${suffix}` : `${seat.replace("-", "_")}_${suffix}`;
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
@@ -237,6 +243,10 @@ async function main(): Promise<void> {
       operator,
       issuerLimitMilliSiu: BigInt(deploymentRecord.capacityLots["ISSUER-B"].issuanceLimitPerClass),
       allowPartialPool: argv.includes("--allow-partial-pool"),
+      // The real ISSUER-A (if this environment has one) must never be a trader's wallet.
+      ...(process.env.ISSUER_A_ADDRESS !== undefined && process.env.ISSUER_A_ADDRESS !== ""
+        ? { forbiddenAddresses: { "ISSUER-A": toHex(process.env.ISSUER_A_ADDRESS, "ISSUER_A_ADDRESS") } }
+        : {}),
       windowSeconds,
       escrowFeeBps,
       maxTurns,

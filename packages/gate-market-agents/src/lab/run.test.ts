@@ -239,6 +239,19 @@ describe("runLab", () => {
     expect(chain.calls).toEqual([]);
   });
 
+  it("refuses to run a trader on another role's wallet, and two seats on one wallet (D22)", async () => {
+    // In this fixture the TRADER-4 seat's wallet is ADDRESSES["ISSUER-A"]; declaring it the issuer's makes it a violation.
+    await expect(runLab(input({ forbiddenAddresses: { "ISSUER-A": ADDRESSES["ISSUER-A"] } }))).rejects.toThrow(
+      /TRADER-4 is using ISSUER-A's wallet .* An issuer's identity must not act as a trader/,
+    );
+    const shared = { ...ADDRESSES, "WORKER-EXTRACT": ADDRESSES.ORCHESTRATOR } as Partial<Record<AgentId, Hex>>;
+    await expect(runLab(input({ addresses: shared }))).rejects.toThrow(/TRADER-3 and TRADER-1 are the same wallet/);
+    expect(chain.calls).toEqual([]); // both refusals came before anything was spent or moved
+    // A different wallet for the issuer role is no objection.
+    const ok = await runLab(input({ forbiddenAddresses: { "ISSUER-A": `0x${"cc".repeat(20)}` as Hex } }));
+    expect(ok.abortedBecause).toBeUndefined();
+  });
+
   it("refuses a wallet without gas, and an operator without enough USDC", async () => {
     chain.eth.set(ADDRESSES["WORKER-CODE"].toLowerCase(), 5n);
     await expect(runLab(input())).rejects.toThrow(/TRADER-2 holds 5 wei/);
@@ -329,7 +342,7 @@ describe("runLab", () => {
         onTurn: () => {
           throw new Error("the log pipe broke");
         },
-        adapters: Object.fromEntries(LAB_TRADERS.map((t) => [t, async () => respond({ wait: true })])) as Record<TraderLabel, Adapter>,
+        adapters: Object.fromEntries(LAB_TRADERS.map((t) => [t, async () => respond({ wait: true })])) as unknown as Record<TraderLabel, Adapter>,
       }),
     );
     expect(report.abortedBecause).toBe("the log pipe broke");

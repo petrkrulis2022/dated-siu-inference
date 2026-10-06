@@ -3,9 +3,9 @@
  * runner reads the chain and hands the numbers here; nothing in this file reads one.
  *
  * The one check that is the lab's own is the mint bound. Every mint is backed by ISSUER-B, and a mint
- * ISSUER-B cannot back falls through to the next issuer in the router's order — which is TRADER-4's
- * wallet (plan D4), so a trader would be paid for something it did not choose to sell. The run aborts if
- * that happens; this check refuses to start a run in which it could.
+ * ISSUER-B cannot back falls through to the next issuer in the router's order — the real ISSUER-A, whose
+ * claims are not part of this economy and which no trader stands on (plan D22). The run aborts if that
+ * happens; this check refuses to start a run in which it could.
  */
 import type { Economy } from "./economy.js";
 import { jobSiu, quotedPrice, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu } from "./money.js";

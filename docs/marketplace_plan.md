@@ -31,7 +31,8 @@ to the issuer that owes the work). The two routes must cost exactly the same (pr
 ### 2.3 Traders
 Four model-driven traders on the existing seat IDs, shown to agents as TRADER-1 to TRADER-4. Two on
 claude-haiku-4-5, two on gpt-5.4-mini (the cheapest registered tier of each family). **No `AgentId`
-widening, no new wallets** — see D4 for the seat mapping.
+widening.** Three traders stand on existing seats and wallets; **TRADER-4 has a wallet of its own**, kept
+under the seat ID `ISSUER-A` so nothing in the loop widens, and not ISSUER-A's wallet (D4, superseded by D22).
 
 ### 2.4 Economy
 Every number below is a **default**; tune if needed and record the final values in the table in §2.11.
@@ -106,37 +107,50 @@ headroom (D16).**
 
 ---
 
-## 3. Hypothesis and decision rule — **DRAFT, awaiting approval**
+## 3. Hypothesis and decision rule — **APPROVED 2026-10-06, with two changes (D20)**
 
-*Nothing here is registered until you approve it (stop point c). Thresholds are proposals, chosen to be
-stated before any result exists, not derived from data.*
+*Registered before any model has run. Thresholds are the proposals as made, chosen to be stated before any
+result exists, not derived from data.*
 
 **Hypothesis (H1).** When paying with fSIU costs the same as paying with USDC and every trader is free
 to choose, traders pass on fSIU they have *received* rather than only minting new fSIU.
 
 **Definitions.**
 - *fSIU use*: a payment to a trader, or a raw-work purchase, made in fSIU — from a held balance, by
-  mint-and-forward, or by redemption.
+  mint-and-forward, or in the claim part of a split.
 - *Opportunity*: any payment or raw-work purchase, in any asset, made while the trader held **received**
   fSIU at least as large as the amount due. Declining to use it counts.
 - *Reuse*: an opportunity that was funded from the held received fSIU.
 
-**Primary measure.** Reuse rate = reuse events ÷ opportunity events, pooled over runs, with a 95%
-Wilson interval. Also reported per run, and as the share of runs with at least one opportunity in which
-a majority of opportunities were reused.
+**Primary measure.** Reuse rate = reuse events ÷ opportunity events over the 20 runs.
 
-**Decision rule (draft).**
-- Fewer than 30 opportunity events pooled over the 20 runs → **inconclusive**.
-- Wilson lower bound ≥ 0.50 → fSIU **circulates as money in this setting**; phase 2 (hybrid issuers) is
-  built.
-- Wilson upper bound < 0.20 → fSIU **does not circulate** here; investigate the economy and briefs
-  before adding issuers; phase 2 is not built on this result.
+**The interval the rule reads: resample whole runs.** Decisions within one run share the same agents,
+balances and history, so they move together; a Wilson interval on pooled opportunities treats them as
+independent and comes out narrower than the evidence is. The rule therefore reads a **95% bootstrap interval
+over the runs**: draw 20 runs with replacement from the 20, recompute the pooled rate (reuse ÷ opportunities
+over the drawn runs), repeat 10,000 times with a fixed, reported seed, take the 2.5th and 97.5th percentiles.
+A draw with no opportunity in it has no rate and is left out; how many were left out is reported. The pooled
+Wilson interval is reported beside it for comparison and **is not read by the rule**. Also reported per run,
+and as the share of runs with at least one opportunity in which a majority of opportunities were reused.
+
+**Decision rule.**
+- **Inconclusive** if fewer than 30 opportunity events are pooled over the runs, **or** if fewer than 10 of
+  the 20 runs contribute at least one opportunity — so a few busy runs cannot decide the result.
+- Otherwise, run-resampled lower bound ≥ 0.50 → fSIU **circulates as money in this setting**; phase 2
+  (hybrid issuers) is built.
+- Otherwise, run-resampled upper bound < 0.20 → fSIU **does not circulate** here; investigate the economy and
+  briefs before adding issuers; phase 2 is not built on this result.
 - Otherwise → **no detectable effect at this sample size** — never "no effect".
 
-**Secondary (reported, no rule).** fSIU share of payments by route (held balance, mint-and-forward,
-USDC); fSIU held against each trader's upcoming needs, round by round; mints per job transacted.
+**First model run.** One run cannot show a reuse rate. What it shows is **how many opportunities arose at
+all**: if agents almost never receive fSIU, twenty runs will come back inconclusive, and that should be known
+after one run. The first run's report leads with that count.
 
-**Arm comparison (any later comparison).** Report each arm's rate with Wilson intervals; call it an
+**Secondary (reported, no rule).** fSIU share of payments by route (held balance, mint-and-forward, split,
+USDC); fSIU held against each trader's upcoming needs, round by round; mints per job transacted; disposals
+(claims paid on to a trader, paid to the issuer for raw work, left to expire).
+
+**Arm comparison (any later comparison).** Report each arm's rate with its run-resampled interval; call it an
 effect only if the intervals do not overlap; otherwise "no detectable effect at this sample size".
 
 ---
@@ -147,7 +161,7 @@ a. **Build phase 1.**
 b. **Scripted lab walk, fork then live**, through every route: paying in each asset, passing on received
    fSIU, buying raw work in each asset, a partial use, expiry at window close, and the score computation.
 c. **STOP:** send the draft decision rule (§3) for approval.
-d. **One model run. STOP:** report its cost and anything odd.
+d. **One model run. STOP:** report its cost and anything odd — and lead with how many opportunities arose.
 e. **On your go: 20 runs**, same seeds per comparison, around 40–50 decision turns each.
 
 **Also stop** if any contract change becomes necessary. A debug or scripted run never counts.
@@ -203,9 +217,8 @@ fSIU. Giving agents a choice of issuer at mint needs a contract change and a red
 point. Not in phase 1.
 
 **What building phase 1 changes about this plan (2026-10-06, P11).**
-- *The seat conflict.* TRADER-4 stands on ISSUER-A's wallet (D4), the only unused one. Phase 2 makes ISSUER-A a
-  second issuer, so TRADER-4 needs another wallet or another seat. That lifts "no new wallets" and is a
-  decision for you at the start of phase 2, not something to discover then.
+- *The seat conflict is gone.* TRADER-4 has a wallet of its own (D22), so ISSUER-A's wallet and identity are free
+  to become the second, failing issuer without a trader's receipts appearing under it.
 - *A failing issuer is a service policy, not a model.* The phase 1 issuer is a deterministic service on its own
   key (P5). A second one with a different measured rate, and a failing one, are the same kind of seat with a
   different policy: the failing one credits a unit of raw work late or not at all after it has been paid.
@@ -270,7 +283,7 @@ third party, never the Assay.
 | D1 | 2026-10-06 | Gate-attack retired from the currency test; step c stopped; the engine stays. | user |
 | D2 | 2026-10-06 | Task is T1 shipment records, four job types as variants. | user |
 | D3 | 2026-10-06 | ISSUER-B is an automatic service, a deterministic policy seat on its own key. | user |
-| D4 | 2026-10-06 | Traders use existing seat IDs, no new wallets. **Mapping (Claude Code, to confirm):** TRADER-1 = ORCHESTRATOR, TRADER-2 = WORKER-CODE, TRADER-3 = WORKER-EXTRACT, TRADER-4 = ISSUER-A. ISSUER-A's wallet is the only unused one (HEDGER has none). It is a registered issuer, so a mint that overflowed to it would pay TRADER-4 and the contamination check aborts the run. | Claude Code |
+| D4 | 2026-10-06 | **SUPERSEDED by D22 (TRADER-4 has its own wallet).** Traders use existing seat IDs, no new wallets. **Mapping (Claude Code, to confirm):** TRADER-1 = ORCHESTRATOR, TRADER-2 = WORKER-CODE, TRADER-3 = WORKER-EXTRACT, TRADER-4 = ISSUER-A. ISSUER-A's wallet is the only unused one (HEDGER has none). It is a registered issuer, so a mint that overflowed to it would pay TRADER-4 and the contamination check aborts the run. | Claude Code |
 | D5 | 2026-10-06 | Economy defaults as §2.4–2.5, tunable and recorded in §2.11. | user |
 | D6 | 2026-10-06 | One window, rounds inside it. Claude Code's design: a round advances when nobody can act; the loop gains a round hook rather than the runner calling the loop once per round (a per-round call would reset the claim tracker and ledger). | Claude Code |
 | D7 | 2026-10-06 | Fee rebated per dollar settlement as an operator action. | user |
@@ -286,6 +299,10 @@ third party, never the Assay.
 | D17 | 2026-10-06 | **Minting a claim is paid for in USDC, and the lab brief now says so.** Found by the first walks on a fork: `pay_with_claim`, and the claim leg of `settle_split`, mint through `WorkClaim.mint`, which charges the minter the claim's value in USDC at the print, paid to the issuer. So mint-and-forward is not an fSIU route that spends no dollars: the payer spends about the quote's price in USDC and the seller is handed a claim instead of dollars. That is the instrument as designed (a claim is made by depositing USDC at the print) and the gate configuration always had it, but no tool description or gate brief states it, and a trader short of dollars calls it and is refused ("the paying wallet does not hold enough USDC"). The lab brief now states it as a primitive fact — *a mint is paid for in USDC, at the print, to the issuer* — and draws no consequence. Tool descriptions are shared with the gate configuration and are unchanged. Consequence for the measurement: a trader's holdings of both assets constrain its routes, which is the economy and not a defect. **Brief wording, so flagged for your confirmation.** | Claude Code |
 | D18 | 2026-10-06 | **Engine defect found by the fourth fork walk: a seller could not take the dollar leg of a split.** The escrow opened by `settle_split` holds the dollar leg only, and `settle_escrow` defaulted to the whole quoted amount, which the contract refuses. An omitted amount now means what the escrow holds (spec §4.6bk). It affects the gate configuration only where a split is used, which it never was. The issuer service, which retried the refused settlement every turn, starved its other work: that is why three of eight needs were met in that walk. | Claude Code |
 | D19 | 2026-10-06 | **The first live walk found a second lag-class defect: `settle_escrow` had no tolerance for a node that had not seen the escrow.** It was refused "not open" and "more than the escrow holds" a moment after the escrow opened, the issuer service gave up on that release, and one split-paid dollar leg was stranded until its quote expires (cents, testnet; no capacity was left outstanding). The write now retries a simulation revert like every other write, and the amount is read only once the escrow is visible (spec §4.6bl). The fork cannot show this class; a second live walk is the evidence. | Claude Code |
+| D20 | 2026-10-06 | **Decision rule approved (stop point c), thresholds as proposed (30, 0.50, 0.20), with two changes.** (1) The rule reads a 95% **bootstrap interval over the runs**, not a Wilson interval on pooled opportunities, because decisions within a run share agents, balances and history and so are not independent; the pooled Wilson interval is reported beside it and is not read. (2) **Inconclusive if fewer than 10 of the 20 runs contribute an opportunity**, so a few busy runs cannot decide it. The first model run is read for how many opportunities arose at all, not for a rate. §3 is the registered text. | user |
+| D21 | 2026-10-06 | **D17 accepted as a fact, worded in parallel.** The brief states every way's cost side by side, so no single one is singled out: *Paying in USDC costs USDC. Paying with fSIU you hold costs that fSIU. Minting new fSIU costs USDC, at the print, paid to the issuer.* Replaces the one-route parenthetical. | user |
+| D22 | 2026-10-06 | **TRADER-4 gets a new wallet; D4 is not accepted.** The seat ID stays (`ISSUER-A`, so nothing widens) and only the wallet behind it changes: ISSUER-A is the failing issuer phase 2 brings back and its identity carries every enforcement on record; a trader's receipts under an issuer's identity would be confusing in any explorer, and a mint ever routed to A would make TRADER-4 the issuer of claims it holds. The lab reads the new wallet from `TRADER_4_ADDRESS` / `TRADER_4_PRIVATE_KEY` and never touches `ISSUER_A_*`. The contamination check still aborts on any mint not backed by ISSUER-B, and the real ISSUER-A's address is now simply one that must never appear. This also lifts phase 2's seat conflict (§7). | user |
+| D23 | 2026-10-06 | **D8 and D16 accepted.** D8: raw work is bought by quote, so both assets take the same path; every claim paid to the issuer for raw work is counted as *redeemed for raw work* in the disposals (held claims and newly minted ones, reported apart), and the issuer service holds no tool that passes a claim on — it can only issue quotes and release escrows, so claims it receives stay with it until they expire. D16: a smaller endowment may mean fewer opportunities, and the inconclusive rule covers that. | user |
 
 ---
 
@@ -333,7 +350,7 @@ Items from the stopped step c, for completeness:
 - [x] P9 — lag telemetry (`chain/write.ts` reports every write that needed the node to catch up and how it ended; the run report carries `lag`; 4 + 1 tests)
 - [x] P10 — scripted lab walk and verifier, fork then live (`lab/scripted-traders.ts`, `lab/verify-walk.ts`, `lab/lab-cues.ts`). **Passed all 19 checks on a fork (walk 6) and live on Base Sepolia (live walk 2, `lab-scripted-2026-10-06T13-46-58-655Z`): 8 of 8 needs met, every route used for jobs and for raw work (dollars, mint-and-forward, held balance, split), 6 payments made from a balance that included fSIU the payer had received, 5 of 5 fee rebates equal to the contract's fee, fSIU conserved, every leftover position expired at close, the pool back at 32,000 mSIU, no tool call errored.** Six walks found six defects the unit tests could not, each fixed and pinned: the open-request reader matched seat names only; the runner never gave the tools the lab service; minting is paid for in USDC (D17); a split's dollar leg could not be settled (D18); and, live only, `settle_escrow` had no lag tolerance (D19). A scripted run costs gas and about a cent of testnet USDC; no model was called
 - [x] P11 — phase 2 and phase 3 plans refined (seat conflict, failing issuer as a service policy, first-fit seeding, dealer wallet — §7, §8)
-- [ ] STOP c — **reached 2026-10-06; the draft rule (§3) is with you for approval.** Nothing further is built or run until you reply
+- [x] STOP c — rule approved 2026-10-06 with two changes (D20); TRADER-4 moved to its own wallet (D22)
 - [ ] P12 — one model run; cost reported — STOP d
 - [ ] Phase 1: 20 runs, on your go
 

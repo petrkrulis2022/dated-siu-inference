@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_PARAMS } from "./economy.js";
 import {
   CIRCULATES_LOWER_BOUND,
-  MIN_OPPORTUNITIES,
   assertCountableForLab,
+  bootstrapOverRuns,
   compareArms,
   decide,
   labDisqualification,
@@ -12,6 +12,8 @@ import {
   renderPooled,
   wilson,
   type MeasureReport,
+  type RunCounts,
+  type Verdict,
 } from "./measure.js";
 
 const SEATS = { "TRADER-1": "ORCHESTRATOR", "TRADER-2": "WORKER-CODE", "TRADER-3": "WORKER-EXTRACT", "TRADER-4": "ISSUER-A" };
@@ -118,7 +120,7 @@ describe("what a run measured", () => {
 
   it("reports what each trader disposed of: passed on, redeemed for raw work, expired", () => {
     expect(of("TRADER-1").passedOnMilliSiu).toBe("1184");
-    expect(of("TRADER-2")).toMatchObject({ passedOnMilliSiu: "1184", redeemedForRawWorkMilliSiu: "975" });
+    expect(of("TRADER-2")).toMatchObject({ passedOnMilliSiu: "1184", redeemedForRawWorkMilliSiu: "975", redeemedFromHeldMilliSiu: "975" });
     expect(of("TRADER-1").expiredMilliSiu).toBe("816");
     // The issuer's and the operator's leftovers are not a trader's disposal.
     expect(m.traders.map((t) => t.expiredMilliSiu)).toEqual(["816", "0", "0", "0"]);
@@ -196,27 +198,102 @@ describe("the Wilson interval", () => {
   });
 });
 
-describe("the draft decision rule", () => {
+describe("the bootstrap over runs", () => {
+  const counts = (spec: [number, number][]): RunCounts[] => spec.map(([opportunities, reuse]) => ({ opportunities, reuse }));
+  const repeat = (n: number, c: [number, number]): [number, number][] => Array.from({ length: n }, () => c);
+
+  it("is the same every time it is computed: the seed is fixed and reported", () => {
+    const runs = counts([...repeat(12, [10, 10]), ...repeat(8, [10, 0])]);
+    expect(bootstrapOverRuns(runs)).toEqual(bootstrapOverRuns(runs));
+    expect(bootstrapOverRuns(runs).seed).toBe(20_261_006);
+    expect(bootstrapOverRuns(runs, { seed: 1 })).not.toEqual(bootstrapOverRuns(runs));
+  });
+
+  it("is a point when every run is alike", () => {
+    const b = bootstrapOverRuns(counts(repeat(20, [10, 5])));
+    expect(b).toMatchObject({ rate: 0.5, lower: 0.5, upper: 0.5, runs: 20, discarded: 0 });
+  });
+
+  it("is wider than the Wilson interval on the same pooled counts when runs differ — the reason runs are resampled", () => {
+    // Half the runs reuse everything and half nothing: 100 of 200 pooled, but only 20 independent observations.
+    const runs = counts([...repeat(10, [10, 10]), ...repeat(10, [10, 0])]);
+    const b = bootstrapOverRuns(runs);
+    const w = wilson(100, 200);
+    expect(b.rate).toBe(0.5);
+    expect(b.lower).toBeLessThan(w.lower - 0.1);
+    expect(b.upper).toBeGreaterThan(w.upper + 0.1);
+  });
+
+  it("leaves out draws that contain no opportunity, and says how many", () => {
+    const b = bootstrapOverRuns(counts([...repeat(19, [0, 0]), [10, 10]]));
+    expect(b.discarded).toBeGreaterThan(0);
+    expect(b.discarded).toBeLessThan(b.draws);
+    expect(b).toMatchObject({ lower: 1, upper: 1 }); // every draw that has an opportunity reused all of them
+  });
+
+  it("has no interval when there is no opportunity at all", () => {
+    const b = bootstrapOverRuns(counts(repeat(20, [0, 0])));
+    expect(Number.isNaN(b.lower)).toBe(true);
+    expect(b.discarded).toBe(b.draws);
+    expect(Number.isNaN(bootstrapOverRuns([]).upper)).toBe(true);
+  });
+});
+
+describe("the approved decision rule", () => {
+  const counts = (spec: [number, number][]): RunCounts[] => spec.map(([opportunities, reuse]) => ({ opportunities, reuse }));
+  const repeat = (n: number, c: [number, number]): [number, number][] => Array.from({ length: n }, () => c);
+  const verdictOf = (spec: [number, number][]): Verdict => {
+    const runs = counts(spec);
+    return decide({
+      opportunities: runs.reduce((s, r) => s + r.opportunities, 0),
+      runsWithOpportunity: runs.filter((r) => r.opportunities > 0).length,
+      interval: bootstrapOverRuns(runs),
+    });
+  };
+
   it("is inconclusive below 30 opportunities, whatever the rate", () => {
-    expect(decide(wilson(29, 29))).toBe("inconclusive");
-    expect(decide(wilson(0, MIN_OPPORTUNITIES - 1))).toBe("inconclusive");
+    expect(verdictOf(repeat(20, [1, 1]))).toBe("inconclusive"); // 20 opportunities, all reused
+    expect(verdictOf(repeat(10, [2, 2]))).toBe("inconclusive");
   });
-  it("says fSIU circulates only when the interval's lower bound reaches 0.50", () => {
-    expect(decide(wilson(28, 30))).toBe("circulates");
-    expect(wilson(21, 30).lower).toBeGreaterThanOrEqual(CIRCULATES_LOWER_BOUND);
-    expect(decide(wilson(21, 30))).toBe("circulates");
-    expect(decide(wilson(20, 30))).toBe("no detectable effect at this sample size");
+
+  it("is inconclusive if fewer than 10 runs contribute an opportunity, even when those few are unanimous", () => {
+    // 9 runs, 100 opportunities each, all reused: the pooled count is huge and the interval is [1, 1].
+    const spec = [...repeat(9, [100, 100] as [number, number]), ...repeat(11, [0, 0] as [number, number])];
+    expect(verdictOf(spec)).toBe("inconclusive");
+    // The tenth run tips it.
+    expect(verdictOf([...repeat(10, [100, 100] as [number, number]), ...repeat(10, [0, 0] as [number, number])])).toBe("circulates");
   });
-  it("says it does not circulate only when the upper bound is below 0.20", () => {
-    expect(decide(wilson(0, 30))).toBe("does not circulate");
-    expect(wilson(1, 30).upper).toBeLessThan(0.2);
-    expect(decide(wilson(1, 30))).toBe("does not circulate");
-    expect(wilson(2, 30).upper).toBeGreaterThanOrEqual(0.2);
-    expect(decide(wilson(2, 30))).toBe("no detectable effect at this sample size");
+
+  it("says fSIU circulates when the run-resampled lower bound reaches 0.50", () => {
+    expect(verdictOf(repeat(20, [3, 3]))).toBe("circulates");
   });
+
+  it("says it does not circulate when the run-resampled upper bound is below 0.20", () => {
+    expect(verdictOf(repeat(20, [3, 0]))).toBe("does not circulate");
+  });
+
   it("is never 'no effect': the middle is 'no detectable effect at this sample size'", () => {
-    expect(decide(wilson(15, 30))).toBe("no detectable effect at this sample size");
-    expect(decide(wilson(15, 30))).not.toMatch(/^no effect/);
+    const v = verdictOf(repeat(20, [3, 1]));
+    expect(v).toBe("no detectable effect at this sample size");
+    expect(v).not.toMatch(/^no effect/);
+  });
+
+  it("applies the thresholds at their edges, to the interval it is given", () => {
+    const base = { opportunities: 30, runsWithOpportunity: 10 };
+    expect(decide({ ...base, interval: { lower: 0.5, upper: 0.9 } })).toBe("circulates");
+    expect(decide({ ...base, interval: { lower: 0.49, upper: 0.9 } })).toBe("no detectable effect at this sample size");
+    expect(decide({ ...base, interval: { lower: 0, upper: 0.1999 } })).toBe("does not circulate");
+    expect(decide({ ...base, interval: { lower: 0, upper: 0.2 } })).toBe("no detectable effect at this sample size");
+    expect(decide({ opportunities: 29, runsWithOpportunity: 10, interval: { lower: 1, upper: 1 } })).toBe("inconclusive");
+    expect(decide({ opportunities: 30, runsWithOpportunity: 9, interval: { lower: 1, upper: 1 } })).toBe("inconclusive");
+  });
+
+  it("reads the interval resampled over runs, not the Wilson interval — they can disagree", () => {
+    // 12 runs reuse everything and 8 nothing: 120 of 200 pooled. Wilson on 200 decisions clears 0.50; twenty runs do not.
+    const spec = [...repeat(12, [10, 10] as [number, number]), ...repeat(8, [10, 0] as [number, number])];
+    expect(wilson(120, 200).lower).toBeGreaterThan(CIRCULATES_LOWER_BOUND);
+    expect(bootstrapOverRuns(counts(spec)).lower).toBeLessThan(CIRCULATES_LOWER_BOUND);
+    expect(verdictOf(spec)).toBe("no detectable effect at this sample size");
   });
 });
 
@@ -231,16 +308,27 @@ describe("pooling runs", () => {
     }
     return base({ runId: id, sales, paymentMoments: moments });
   };
+  const twenty = (make: (i: number) => MeasureReport): MeasureReport[] => Array.from({ length: 20 }, (_, i) => make(i));
 
   it("pools only runs the guard admits, lists the rest with their reason, and applies the rule to the pool", () => {
-    const pooled = pool([runWith("a", 10, 0), runWith("b", 9, 1), runWith("c", 9, 1), { ...runWith("walk", 5, 0), scripted: true }, { ...runWith("bad", 5, 0), abortedBecause: "boom" }]);
-    expect(pooled.runsAdmitted).toBe(3);
+    const pooled = pool([
+      ...twenty((i) => runWith(`r${i}`, 2, 1)),
+      { ...runWith("walk", 5, 0), scripted: true },
+      { ...runWith("bad", 5, 0), abortedBecause: "boom" },
+    ]);
+    expect(pooled.runsAdmitted).toBe(20);
     expect(pooled.runsExcluded.map((e) => e.runId)).toEqual(["walk", "bad"]);
     expect(pooled.runsExcluded[0].because).toMatch(/scripted walk/);
-    expect(pooled.interval).toMatchObject({ n: 30, successes: 28 });
-    expect(pooled.verdict).toBe("circulates");
-    expect(pooled.runsWithOpportunity).toBe(3);
-    expect(pooled.runsWithMajorityReused).toBe(3);
+    expect(pooled).toMatchObject({ opportunities: 60, reuse: 40, runsWithOpportunity: 20 });
+    expect(pooled.interval.rate).toBeCloseTo(40 / 60, 10);
+    expect(pooled.verdict).toBe("circulates"); // every run reuses two of three: the resampled lower bound is 2/3
+  });
+
+  it("reports the Wilson interval beside the run-resampled one, and they are not the same", () => {
+    const pooled = pool(twenty((i) => (i < 12 ? runWith(`r${i}`, 10, 0) : runWith(`r${i}`, 0, 10))));
+    expect(pooled.wilson.lower).toBeGreaterThan(CIRCULATES_LOWER_BOUND); // 120 of 200
+    expect(pooled.interval.lower).toBeLessThan(CIRCULATES_LOWER_BOUND);
+    expect(pooled.verdict).toBe("no detectable effect at this sample size");
   });
 
   it("counts a run as reusing a majority only when more than half of its opportunities were reused", () => {
@@ -248,21 +336,60 @@ describe("pooling runs", () => {
     expect(pooled.runsWithMajorityReused).toBe(1);
   });
 
-  it("is inconclusive on too few opportunities even when every one was reused", () => {
-    expect(pool([runWith("a", 10, 0)]).verdict).toBe("inconclusive");
+  it("is inconclusive on too few runs even when every opportunity was reused", () => {
+    const pooled = pool(twenty((i) => (i < 9 ? runWith(`r${i}`, 10, 0) : runWith(`r${i}`, 0, 0))));
+    expect(pooled.opportunities).toBe(90);
+    expect(pooled.runsWithOpportunity).toBe(9);
+    expect(pooled.verdict).toBe("inconclusive");
   });
 
-  it("renders the verdict beside the interval, in capitals, with every exclusion named", () => {
+  it("renders both intervals, the guard, the verdict in capitals, and every exclusion by name", () => {
     const text = renderPooled(pool([runWith("a", 10, 0), { ...runWith("walk", 1, 0), scripted: true }]));
     expect(text).toContain("excluded walk:");
-    expect(text).toContain("verdict under the draft rule: INCONCLUSIVE");
+    expect(text).toContain("interval the rule reads — 95% bootstrap over runs");
+    expect(text).toContain("beside it, not read — pooled Wilson");
+    expect(text).toContain("runs with an opportunity 1 of 1 (the rule needs 10)");
+    expect(text).toContain("verdict under the approved rule: INCONCLUSIVE");
   });
 });
 
 describe("comparing two arms", () => {
   it("calls it an effect only when the intervals do not overlap", () => {
-    expect(compareArms(wilson(28, 30), wilson(2, 30))).toBe("effect");
-    expect(compareArms(wilson(20, 30), wilson(15, 30))).toBe("no detectable effect at this sample size");
-    expect(compareArms(wilson(0, 0), wilson(15, 30))).toBe("no detectable effect at this sample size");
+    expect(compareArms({ lower: 0.7, upper: 0.9 }, { lower: 0.1, upper: 0.3 })).toBe("effect");
+    expect(compareArms({ lower: 0.4, upper: 0.8 }, { lower: 0.2, upper: 0.5 })).toBe("no detectable effect at this sample size");
+    expect(compareArms({ lower: Number.NaN, upper: Number.NaN }, { lower: 0.2, upper: 0.5 })).toBe("no detectable effect at this sample size");
+  });
+});
+
+describe("what was paid to the issuer for raw work", () => {
+  // D8, D23: a claim paid to the issuer is a redemption in effect, whichever way it came to be paid.
+  const raw = (id: string, buyer: string) => sale(id, "rawwork", buyer, "ISSUER");
+  const r = base({
+    sales: [raw("qr-1", "TRADER-1"), raw("qr-2", "TRADER-2"), raw("qr-3", "TRADER-3"), raw("qr-4", "TRADER-4")],
+    paymentMoments: [
+      moment("ORCHESTRATOR", "transfer_claim", "qr-1", "0", "0.0014"), // a held claim
+      moment("WORKER-CODE", "pay_with_claim", "qr-2", "0", "0.0014"), // minted and forwarded
+      moment("WORKER-EXTRACT", "settle_split", "qr-3", "0", "0.0014"), // the claim part of a split
+      moment("ISSUER-A", "pay", "qr-4", "0", "0.0014"), // dollars: no claim reaches the issuer
+    ],
+    capacityEvents: [
+      { kind: "transfer_claim", agentId: "ORCHESTRATOR", quantityMilliSiu: "975", settlesRequestId: "qr-1" },
+      { kind: "pay_with_claim", agentId: "WORKER-CODE", quantityMilliSiu: "975", settlesRequestId: "qr-2" },
+      { kind: "settle_split", agentId: "WORKER-EXTRACT", quantityMilliSiu: "487", settlesRequestId: "qr-3" },
+    ],
+    operatorActions: [{ kind: "expiry", holder: "ISSUER-B", quantityMilliSiu: "2437" }],
+  });
+  const m = measureRun(r);
+  const of = (t: string) => m.traders.find((x) => x.trader === t)!;
+
+  it("counts every claim paid to the issuer as redeemed for raw work, and says which were held and which were minted", () => {
+    expect(of("TRADER-1")).toMatchObject({ redeemedForRawWorkMilliSiu: "975", redeemedFromHeldMilliSiu: "975", redeemedMintedMilliSiu: "0" });
+    expect(of("TRADER-2")).toMatchObject({ redeemedForRawWorkMilliSiu: "975", redeemedFromHeldMilliSiu: "0", redeemedMintedMilliSiu: "975" });
+    expect(of("TRADER-3")).toMatchObject({ redeemedForRawWorkMilliSiu: "487", redeemedMintedMilliSiu: "487" }); // the quantity the loop recorded
+    expect(of("TRADER-4")).toMatchObject({ redeemedForRawWorkMilliSiu: "0" }); // paid in dollars
+  });
+
+  it("reports what the issuer was left holding at the close — it can pass none of it on", () => {
+    expect(m.leftWithIssuerMilliSiu).toBe("2437");
   });
 });

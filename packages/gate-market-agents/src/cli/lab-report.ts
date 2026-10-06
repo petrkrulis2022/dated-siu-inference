@@ -25,7 +25,7 @@ function main(): void {
 
   const pooled = pool(reports);
   console.log(renderPooled(pooled));
-  console.log("  (the decision rule is a DRAFT until approved; this is its verdict, not a registered result)\n");
+  console.log("  (the rule was approved on 2026-10-06 with two changes — plan §3, D20; it reads the interval resampled over runs)\n");
 
   console.log("PER RUN");
   for (const r of reports) {

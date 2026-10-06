@@ -4,6 +4,10 @@
  * payment records, the books' sales, the operator's actions and the snapshots, so a number here can be
  * recomputed by anyone holding the report.
  *
+ * The rule reads a bootstrap interval over RUNS, not a Wilson interval on pooled opportunities (D20): decisions
+ * within a run share its agents, balances and history, so they are not independent, and an interval that treats
+ * them so is narrower than the evidence. The pooled Wilson interval is reported beside it and is not read.
+ *
  * Definitions, as the plan states them:
  *   fSIU use      — a payment to a trader, or a raw-work purchase, made in fSIU (held balance, mint-and-forward).
  *   opportunity   — any payment or raw-work purchase, in any asset, made while the trader held RECEIVED fSIU at
@@ -16,6 +20,7 @@
 import { D } from "@touchstone/sdk";
 import { assertCountableForF1 } from "../cli/debug-mode.js";
 import { LAB_TRADERS, type LabParams, type TraderLabel } from "./economy.js";
+import { mulberry32 } from "@touchstone/basket";
 import { claimForUsd, jobSiu, printNano, quotedPrice, tradeRateUsdPerSiu } from "./money.js";
 
 /** The parts of a report this reads. Structural, so a test can build one by hand. */
@@ -85,9 +90,16 @@ export interface TraderMeasures {
   reuse: number;
   /** Held-balance payments whose amount exceeded what the trader had RECEIVED: funded, at least in part, by the opening. */
   heldFundedByOpening: number;
-  /** mSIU passed on to a trader, and to the issuer for raw work. */
+  /** mSIU of held claims passed on to a trader in payment for a job. */
   passedOnMilliSiu: string;
+  /**
+   * mSIU paid to the issuer for raw work, by any route (D23): a claim paid to the issuer is a redemption in effect,
+   * since the issuer is the one that owes the work. Of it, what came out of a held balance and what was newly
+   * minted for the purpose (mint-and-forward, or the claim part of a split) are given apart.
+   */
   redeemedForRawWorkMilliSiu: string;
+  redeemedFromHeldMilliSiu: string;
+  redeemedMintedMilliSiu: string;
   /** mSIU left at the close and expired. */
   expiredMilliSiu: string;
   needsMet: number;
@@ -120,6 +132,8 @@ export interface RunMeasures {
   jobsTransacted: number;
   mintsPerJob: string;
   holdings: HoldingsRow[];
+  /** mSIU the issuer was left holding at the close and expired. The issuer service has no tool that passes a claim on. */
+  leftWithIssuerMilliSiu: string;
   costUsd: string;
 }
 
@@ -141,6 +155,8 @@ export function measureRun(r: MeasureReport): RunMeasures {
         heldFundedByOpening: 0,
         passedOnMilliSiu: "0",
         redeemedForRawWorkMilliSiu: "0",
+        redeemedFromHeldMilliSiu: "0",
+        redeemedMintedMilliSiu: "0",
         expiredMilliSiu: "0",
         needsMet: r.needsMet[t] ?? 0,
         resultNano: r.final?.traders.find((x) => x.trader === t)?.resultNano ?? "0",
@@ -149,6 +165,12 @@ export function measureRun(r: MeasureReport): RunMeasures {
     ]),
   );
   const add = (a: string, b: bigint): string => (BigInt(a) + b).toString();
+
+  // The claim each payment moved, from the loop's own capacity event for it; the quote's sizing only if absent.
+  const movedBy = new Map<string, bigint>();
+  for (const e of r.capacityEvents) {
+    if (e.settlesRequestId !== undefined && e.quantityMilliSiu !== undefined) movedBy.set(e.settlesRequestId, BigInt(e.quantityMilliSiu));
+  }
 
   const paymentsByRoute = zeroRoutes();
   let opportunities = 0;
@@ -174,10 +196,16 @@ export function measureRun(r: MeasureReport): RunMeasures {
         reuse += 1;
       }
     }
-    if (route === "held") {
-      if (!isOpportunity) t.heldFundedByOpening += 1;
-      if (sale.kind === "rawwork") t.redeemedForRawWorkMilliSiu = add(t.redeemedForRawWorkMilliSiu, due);
-      else t.passedOnMilliSiu = add(t.passedOnMilliSiu, due);
+    if (route === "held" && !isOpportunity) t.heldFundedByOpening += 1;
+    if (route !== "usdc") {
+      const moved = movedBy.get(m.requestId!) ?? due;
+      if (sale.kind === "rawwork") {
+        t.redeemedForRawWorkMilliSiu = add(t.redeemedForRawWorkMilliSiu, moved);
+        if (route === "held") t.redeemedFromHeldMilliSiu = add(t.redeemedFromHeldMilliSiu, moved);
+        else t.redeemedMintedMilliSiu = add(t.redeemedMintedMilliSiu, moved);
+      } else if (route === "held") {
+        t.passedOnMilliSiu = add(t.passedOnMilliSiu, moved);
+      }
     }
   }
 
@@ -230,6 +258,10 @@ export function measureRun(r: MeasureReport): RunMeasures {
     jobsTransacted,
     mintsPerJob: ratio(mints, jobsTransacted),
     holdings,
+    leftWithIssuerMilliSiu: r.operatorActions
+      .filter((a) => a.kind === "expiry" && a.holder === "ISSUER-B")
+      .reduce((sum, a) => sum + BigInt(String(a.quantityMilliSiu)), 0n)
+      .toString(),
     costUsd: new D(r.totalRealizedUsd).plus(new D(r.workCostUsd)).toFixed(6),
   };
 }
@@ -256,25 +288,90 @@ export function wilson(successes: number, n: number, z = 1.959963984540054): Int
   return { successes, n, rate: p, lower: Math.max(0, centre - half), upper: Math.min(1, centre + half) };
 }
 
-/** Plan §3, draft: below this many pooled opportunities nothing can be said. */
+/** Plan §3 (approved, D20): below this many pooled opportunities nothing can be said. */
 export const MIN_OPPORTUNITIES = 30;
+/** …and unless this many runs each contribute at least one, a few busy runs could decide the result. */
+export const MIN_RUNS_WITH_OPPORTUNITY = 10;
 export const CIRCULATES_LOWER_BOUND = 0.5;
 export const DOES_NOT_CIRCULATE_UPPER_BOUND = 0.2;
+/** The bootstrap: draws, and a fixed seed so the interval is the same every time it is computed. */
+export const BOOTSTRAP_DRAWS = 10_000;
+export const BOOTSTRAP_SEED = 20_261_006;
+
+export interface RunCounts {
+  opportunities: number;
+  reuse: number;
+}
+
+/** A percentile interval from resampling whole runs. `discarded` draws had no opportunity and so no rate. */
+export interface RunInterval {
+  rate: number;
+  lower: number;
+  upper: number;
+  runs: number;
+  draws: number;
+  discarded: number;
+  seed: number;
+}
+
+/**
+ * The 95% bootstrap interval over runs: draw as many runs as there are, with replacement, pool their counts into
+ * one rate, repeat, and take the 2.5th and 97.5th percentiles of the rates. Runs, not decisions, are the unit
+ * resampled, because decisions within a run move together (D20).
+ */
+export function bootstrapOverRuns(
+  runs: readonly RunCounts[],
+  options: { draws?: number; seed?: number } = {},
+): RunInterval {
+  const draws = options.draws ?? BOOTSTRAP_DRAWS;
+  const seed = options.seed ?? BOOTSTRAP_SEED;
+  const totalOpps = runs.reduce((s, r) => s + r.opportunities, 0);
+  const totalReuse = runs.reduce((s, r) => s + r.reuse, 0);
+  const rate = totalOpps === 0 ? Number.NaN : totalReuse / totalOpps;
+  if (runs.length === 0 || totalOpps === 0) {
+    return { rate, lower: Number.NaN, upper: Number.NaN, runs: runs.length, draws, discarded: draws, seed };
+  }
+  const rng = mulberry32(seed);
+  const rates: number[] = [];
+  for (let d = 0; d < draws; d++) {
+    let opps = 0;
+    let reuse = 0;
+    for (let i = 0; i < runs.length; i++) {
+      const pick = runs[Math.floor(rng() * runs.length)];
+      opps += pick.opportunities;
+      reuse += pick.reuse;
+    }
+    if (opps > 0) rates.push(reuse / opps);
+  }
+  rates.sort((a, b) => a - b);
+  const at = (q: number): number => rates[Math.min(rates.length - 1, Math.max(0, Math.round(q * (rates.length - 1))))];
+  return { rate, lower: at(0.025), upper: at(0.975), runs: runs.length, draws, discarded: draws - rates.length, seed };
+}
 
 export type Verdict = "inconclusive" | "circulates" | "does not circulate" | "no detectable effect at this sample size";
 
-export function decide(i: Interval): Verdict {
-  if (i.n < MIN_OPPORTUNITIES) return "inconclusive";
-  if (i.lower >= CIRCULATES_LOWER_BOUND) return "circulates";
-  if (i.upper < DOES_NOT_CIRCULATE_UPPER_BOUND) return "does not circulate";
+/**
+ * Plan §3. Inconclusive on too few opportunities, or too few runs that contribute one; otherwise the
+ * run-resampled interval decides.
+ */
+export function decide(input: { opportunities: number; runsWithOpportunity: number; interval: { lower: number; upper: number } }): Verdict {
+  if (input.opportunities < MIN_OPPORTUNITIES) return "inconclusive";
+  if (input.runsWithOpportunity < MIN_RUNS_WITH_OPPORTUNITY) return "inconclusive";
+  if (input.interval.lower >= CIRCULATES_LOWER_BOUND) return "circulates";
+  if (input.interval.upper < DOES_NOT_CIRCULATE_UPPER_BOUND) return "does not circulate";
   return "no detectable effect at this sample size";
 }
 
 export interface Pooled {
   runsAdmitted: number;
   runsExcluded: { runId: string; because: string }[];
-  interval: Interval;
+  /** The interval the rule reads: resampled over runs. */
+  interval: RunInterval;
+  /** Reported beside it, for comparison; the rule does not read it. */
+  wilson: Interval;
   verdict: Verdict;
+  opportunities: number;
+  reuse: number;
   /** Of runs with at least one opportunity, how many reused a majority of theirs. */
   runsWithOpportunity: number;
   runsWithMajorityReused: number;
@@ -298,34 +395,43 @@ export function pool(reports: readonly MeasureReport[]): Pooled {
   }
   const opportunities = measured.reduce((s, m) => s + m.opportunities, 0);
   const reuse = measured.reduce((s, m) => s + m.reuse, 0);
-  const interval = wilson(reuse, opportunities);
   const withOpp = measured.filter((m) => m.opportunities > 0);
+  const interval = bootstrapOverRuns(measured.map((m) => ({ opportunities: m.opportunities, reuse: m.reuse })));
   return {
     runsAdmitted: measured.length,
     runsExcluded: excluded,
     interval,
-    verdict: decide(interval),
+    wilson: wilson(reuse, opportunities),
+    verdict: decide({ opportunities, runsWithOpportunity: withOpp.length, interval }),
+    opportunities,
+    reuse,
     runsWithOpportunity: withOpp.length,
     runsWithMajorityReused: withOpp.filter((m) => m.reuse * 2 > m.opportunities).length,
   };
 }
 
-/** Plan §3, arm comparison: an effect only if the intervals do not overlap. */
-export function compareArms(a: Interval, b: Interval): "effect" | "no detectable effect at this sample size" {
-  if (a.n === 0 || b.n === 0) return "no detectable effect at this sample size";
+/** Plan §3, arm comparison: an effect only if the (run-resampled) intervals do not overlap. */
+export function compareArms(
+  a: { lower: number; upper: number },
+  b: { lower: number; upper: number },
+): "effect" | "no detectable effect at this sample size" {
+  if ([a.lower, a.upper, b.lower, b.upper].some(Number.isNaN)) return "no detectable effect at this sample size";
   return a.lower > b.upper || b.lower > a.upper ? "effect" : "no detectable effect at this sample size";
 }
 
 export function renderPooled(p: Pooled): string {
   const pct = (x: number): string => (Number.isNaN(x) ? "n/a" : `${(x * 100).toFixed(1)}%`);
   const i = p.interval;
+  const w = p.wilson;
   const lines = [
     "LAB RESULT (pooled over the runs a report may admit)",
     `  runs admitted ${p.runsAdmitted}; excluded ${p.runsExcluded.length}`,
     ...p.runsExcluded.map((e) => `    excluded ${e.runId}: ${e.because}`),
-    `  opportunities ${i.n}, reused ${i.successes}, reuse rate ${pct(i.rate)} (95% Wilson ${pct(i.lower)} to ${pct(i.upper)})`,
-    `  runs with an opportunity ${p.runsWithOpportunity}; of those, a majority reused in ${p.runsWithMajorityReused}`,
-    `  verdict under the draft rule: ${p.verdict.toUpperCase()}`,
+    `  opportunities ${p.opportunities}, reused ${p.reuse}, reuse rate ${pct(i.rate)}`,
+    `  runs with an opportunity ${p.runsWithOpportunity} of ${p.runsAdmitted} (the rule needs ${MIN_RUNS_WITH_OPPORTUNITY}); of those, a majority reused in ${p.runsWithMajorityReused}`,
+    `  interval the rule reads — 95% bootstrap over runs (${i.draws} draws, seed ${i.seed}, ${i.discarded} with no opportunity left out): ${pct(i.lower)} to ${pct(i.upper)}`,
+    `  beside it, not read — pooled Wilson: ${pct(w.lower)} to ${pct(w.upper)}`,
+    `  verdict under the approved rule: ${p.verdict.toUpperCase()}`,
   ];
   return lines.join("\n");
 }

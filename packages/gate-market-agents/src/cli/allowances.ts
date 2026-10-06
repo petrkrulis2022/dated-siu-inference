@@ -163,7 +163,8 @@ export function rosterTargets(env: NodeJS.ProcessEnv): AllowanceTarget[] {
 /**
  * The currency lab's holders. All four traders can pay by minting a claim (`pay_with_claim`), so all four
  * need the WorkClaim approved — the gate configuration's list stops at the two buyers because nobody else
- * mints there. TRADER-3 and TRADER-4 stand on WORKER-EXTRACT's and ISSUER-A's wallets (plan D4).
+ * mints there. TRADER-3 stands on WORKER-EXTRACT's wallet. TRADER-4 has a wallet of its own (plan D22), read from
+ * TRADER_4_ADDRESS / TRADER_4_PRIVATE_KEY: ISSUER-A's wallet is an issuer's identity and is never used as a trader.
  */
 export function labRosterTargets(env: NodeJS.ProcessEnv): AllowanceTarget[] {
   const need = (name: string): string => {
@@ -182,7 +183,7 @@ export function labRosterTargets(env: NodeJS.ProcessEnv): AllowanceTarget[] {
     trader("ORCHESTRATOR", "ORCHESTRATOR_ADDRESS"),
     trader("WORKER-CODE", "WORKER_CODE_ADDRESS"),
     trader("WORKER-EXTRACT", "WORKER_EXTRACT_ADDRESS"),
-    trader("ISSUER-A", "ISSUER_A_ADDRESS"),
+    trader("TRADER-4", "TRADER_4_ADDRESS"),
     { label: "operator", address: privateKeyToAccount(operatorKey).address, minimum: 1_000_000n, target: 2_000_000n },
   ];
 }

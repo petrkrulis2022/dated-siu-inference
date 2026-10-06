@@ -85,6 +85,8 @@ export interface LabRunInput {
   operator: Signer;
   /** ISSUER-B's issuance limit in this class — what a whole pool's headroom is. */
   issuerLimitMilliSiu: bigint;
+  /** Wallets that must never act as a trader or the issuer service: another role's identity (D22). */
+  forbiddenAddresses?: Readonly<Record<string, Hex>>;
   /** Proceed from a pool that is not whole. Recorded in the report; never the default. */
   allowPartialPool?: boolean;
   windowSeconds: number;
@@ -218,6 +220,28 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
   const margin = BigInt(input.closeMarginSeconds ?? 90);
 
   // ---------------------------------------------------------------- launch checks (nothing spent yet)
+  // Every seat is its own wallet, and none is another role's. A trader's receipts under an issuer's identity would
+  // be confusing in any explorer, and a mint ever routed to that issuer would make the trader the issuer of
+  // claims it holds (D22).
+  const wallets: { who: string; address: Hex }[] = [
+    ...LAB_TRADERS.map((t) => ({ who: t as string, address: traderAddress[t] })),
+    { who: ISSUER_SEAT as string, address: issuerAddress },
+    { who: "operator", address: input.operator.address },
+  ];
+  const seen = new Map<string, string>();
+  for (const w of wallets) {
+    const key = w.address.toLowerCase();
+    const other = seen.get(key);
+    if (other !== undefined) throw new LaunchRefused(`${w.who} and ${other} are the same wallet (${w.address}); each seat needs its own.`);
+    seen.set(key, w.who);
+  }
+  for (const [role, address] of Object.entries(input.forbiddenAddresses ?? {})) {
+    const holder = wallets.find((w) => w.address.toLowerCase() === address.toLowerCase());
+    if (holder !== undefined) {
+      throw new LaunchRefused(`${holder.who} is using ${role}'s wallet (${address}). An issuer's identity must not act as a trader.`);
+    }
+  }
+
   const startingHeadroom = await input.chain.headroom(issuerAddress, classId);
   const poolWhole = startingHeadroom === input.issuerLimitMilliSiu;
   if (!poolWhole && !input.allowPartialPool) {

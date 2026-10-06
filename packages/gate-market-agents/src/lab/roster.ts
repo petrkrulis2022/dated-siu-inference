@@ -1,6 +1,6 @@
 /**
  * Who sits at the lab's table: four model-driven traders on existing seats, and ISSUER-B as a service.
- * Plan §2.2, §2.3 and D4.
+ * Plan §2.2, §2.3, D4 and D22.
  *
  * A trader's seat is an implementation detail it is never told (`SEAT_OF`); what it sees is TRADER-n. The
  * loop's own lookups use seats, so the labels reach it through two small, tested seams: the loop's address

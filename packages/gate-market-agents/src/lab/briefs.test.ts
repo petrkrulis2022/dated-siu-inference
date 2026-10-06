@@ -90,9 +90,14 @@ describe("lab briefs — what they state", () => {
     expect(text).toContain("print-illustrative, 0.001437 USD per SIU");
   });
 
-  it("states the price of a mint — it is paid in USDC at the print — because calling it without knowing is a refused call", () => {
-    expect(text).toContain("a mint is paid for in USDC, at the print, to the issuer");
-    expect(text).toContain("the claim part is minted, and paid for, as above");
+  it("states what every way of paying costs, side by side, in the words the user approved — no one route singled out (D21)", () => {
+    expect(text).toContain(
+      "Paying in USDC costs USDC. Paying with fSIU you hold costs that fSIU. Minting new fSIU costs USDC, at the\n    print, paid to the issuer.",
+    );
+    // The one-route parentheticals are gone: the cost of minting appears only in the parallel statement.
+    expect(text).not.toContain("a mint is paid for in USDC");
+    expect(text).not.toContain("minted, and paid for, as above");
+    expect(text.match(/paid to the issuer/g)).toHaveLength(1);
   });
 
   it("states how a result is counted, and that it is measured before the window closes", () => {

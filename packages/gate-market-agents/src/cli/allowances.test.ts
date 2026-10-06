@@ -65,8 +65,12 @@ describe("reading the roster's keys from the environment", () => {
   });
 
   it("for the currency lab, approves all four traders and the operator — every one of them can mint", () => {
-    const e = { ...env(raw), WORKER_EXTRACT_ADDRESS: "0x3", ISSUER_A_ADDRESS: "0x4" };
-    expect(labRosterTargets(e).map((t) => t.label)).toEqual(["ORCHESTRATOR", "WORKER-CODE", "WORKER-EXTRACT", "ISSUER-A", "operator"]);
+    const e = { ...env(raw), WORKER_EXTRACT_ADDRESS: "0x3", TRADER_4_ADDRESS: "0x4" };
+    expect(labRosterTargets(e).map((t) => t.label)).toEqual(["ORCHESTRATOR", "WORKER-CODE", "WORKER-EXTRACT", "TRADER-4", "operator"]);
+    // TRADER-4 is its own wallet: ISSUER-A's is never read for the lab (D22), and its key follows the label.
+    expect(labRosterTargets(e).find((t) => t.label === "TRADER-4")?.address).toBe("0x4");
+    expect(labRosterTargets({ ...e, ISSUER_A_ADDRESS: "0xdead" }).some((t) => t.address === "0xdead")).toBe(false);
+    expect(rosterKey({ ...env(raw), TRADER_4_PRIVATE_KEY: bare }, "TRADER-4")).toBe(raw);
     // The gate configuration's list is untouched.
     expect(rosterTargets(e).map((t) => t.label)).toEqual(["ORCHESTRATOR", "WORKER-CODE", "operator"]);
     expect(() => labRosterTargets(env(raw))).toThrow(/WORKER_EXTRACT_ADDRESS is not set/);
