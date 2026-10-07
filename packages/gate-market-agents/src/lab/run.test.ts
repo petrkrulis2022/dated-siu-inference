@@ -479,4 +479,25 @@ describe("runLab", () => {
     for (const name of ["pay_with_usdc", "pay_with_held_claim", "pay_split"]) expect(shown, name).toContain(name);
     for (const name of ["pay_with_new_claim", "pay_with_claim", "settle_escrow", "mint_claim"]) expect(shown, name).not.toContain(name);
   });
+
+  it("carries each trader's decisions and what it said about them, read from its own reply, and none for the issuer service (D49)", async () => {
+    let turn = 0;
+    let shown = "";
+    const speaks: Adapter = async (_m, prompt) => {
+      turn++;
+      if (turn === 1) shown = prompt;
+      return turn === 1
+        ? respond({ tool: "get_balances", args: { account: ADDRESSES.ORCHESTRATOR, tokenIds: ["777"] }, rationale: "see what I hold" })
+        : respond({ done: true, summary: "x" });
+    };
+    const report = await runLab(input({ adapters: { ...adapters, "TRADER-1": speaks } as Record<TraderLabel, Adapter> }));
+    const mine = report.decisions.filter((d) => d.agentId === "ORCHESTRATOR");
+    // The round is the one the turn's own prompt states (which round a trader first wakes in depends on the schedule).
+    expect(mine[0]).toMatchObject({ turn: 1, round: Number(/THE LAB — ROUND (\d+) OF/.exec(shown)![1]), tool: "get_balances", rationale: "see what I hold" });
+    expect(mine[1]).toMatchObject({ tool: "done" });
+    expect("rationale" in mine[1]).toBe(false); // no rationale given: absent, not empty
+    // Every seat that took a turn is a trader; the issuer service has no model behind it and gives no reason.
+    expect(report.decisions.map((d) => d.agentId)).not.toContain("ISSUER-B");
+    expect(new Set(report.decisions.map((d) => d.agentId))).toEqual(new Set(["ORCHESTRATOR", "WORKER-CODE", "WORKER-EXTRACT", "ISSUER-A"]));
+  });
 });

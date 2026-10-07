@@ -41,7 +41,7 @@ export interface MeasureReport {
   /** What each trader opened with, in mSIU: the figure a holding is measured as a fraction of. */
   opening?: { fsiuMilliSiuPerTrader: string };
   sales: { requestId: string; round?: number; kind: "trade" | "rawwork"; buyer: string; seller: string; delivered: boolean }[];
-  paymentMoments: { agentId: string; tool: string; requestId?: string; heldReceivedMilliSiu: string; quotedUsdMax?: string }[];
+  paymentMoments: { agentId: string; turn?: number; tool: string; requestId?: string; heldReceivedMilliSiu: string; quotedUsdMax?: string }[];
   capacityEvents: { kind: string; agentId: string; quantityMilliSiu?: string; settlesRequestId?: string; counterparty?: string }[];
   /** Every wait, and what was on the screen it waited on (D34). A report made before the record has none. */
   waits?: { agentId: string; turn: number; hadWork: string[] }[];

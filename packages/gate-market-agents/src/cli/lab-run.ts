@@ -23,6 +23,7 @@ import { DEFAULT_PARAMS, LAB_TRADERS, type TraderLabel } from "../lab/economy.js
 import { jobSiu, printNano, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu } from "../lab/money.js";
 import { scriptedLabTraders, type ScriptedLabTraders } from "../lab/scripted-traders.js";
 import { renderWalk, verifyLabWalk, type WalkReport } from "../lab/verify-walk.js";
+import { renderOverview, type OverviewReport } from "../lab/overview.js";
 import { modelExecutor, referenceExecutor, type WorkExecutor } from "../lab/jobs.js";
 import { viemLabChain } from "../lab/operator-chain.js";
 import { LAB_MODELS } from "../lab/roster.js";
@@ -309,6 +310,10 @@ async function main(): Promise<void> {
     `${JSON.stringify(walk !== undefined ? { ...report, scriptedWalk: { ...walk, steps: scriptedTraders!.status() } } : report, null, 2)}\n`,
   );
   console.log(`\nMachine-readable report written to ${reportPath}`);
+  // Every run's report carries the overview: who paid whom, for what, in which asset, and why in the agent's own words (the user's standing request).
+  const overviewPath = join(LAB_RUNS_ROOT, `${runId}-overview.md`);
+  writeFileSync(overviewPath, `${renderOverview(JSON.parse(JSON.stringify(report)) as unknown as OverviewReport)}\n`);
+  console.log(`Run overview written to ${overviewPath}`);
   printSummary(report);
   if (walk !== undefined) {
     console.log(`\n${renderWalk(walk)}`);

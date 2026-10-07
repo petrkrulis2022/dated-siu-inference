@@ -53,6 +53,7 @@ import { checkEndowmentFits, endowmentBound } from "./launch.js";
 import { printNano } from "./money.js";
 import { buildPrintPath, ceilingPrint, reachablePrints, type PrintPath } from "./prints.js";
 import { waitsOf, type WaitRecord } from "./waits.js";
+import { decisionsOf, type DecisionRecord } from "./decisions.js";
 import { LAB_ASSET_DESCRIPTION } from "./asset-text.js";
 import {
   operatorUsdcNeed,
@@ -191,6 +192,11 @@ export interface LabReport {
   paymentMoments: unknown;
   /** Every wait, and what was on the screen it waited on (D34). */
   waits: WaitRecord[];
+  /**
+   * Every decision an agent made and what it said about it, read from the model's own raw reply by the loop's own parser (`lab/decisions.ts`).
+   * The optional rationale is one line in the agent's words, never required or prompted for; the raw reply is authoritative.
+   */
+  decisions: DecisionRecord[];
   claimFlows: unknown;
   capacityEvents: unknown;
   claimPositions: unknown;
@@ -579,6 +585,7 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
     spendByProvider: result?.spendByProvider ?? {},
     paymentMoments: result?.paymentMoments ?? [],
     waits: result !== undefined ? waitsOf(result.turnLogsByAgent) : [],
+    decisions: result !== undefined ? decisionsOf(Object.fromEntries(LAB_TRADERS.map((t) => [SEAT_OF[t], result!.turnLogsByAgent[SEAT_OF[t]] ?? []]))) : [],
     claimFlows: result?.claimFlows ?? {},
     capacityEvents: result?.capacityEvents ?? [],
     claimPositions: result?.claimPositions ?? [],
