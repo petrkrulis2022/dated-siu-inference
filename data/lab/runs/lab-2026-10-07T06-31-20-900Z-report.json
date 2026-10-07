@@ -1,0 +1,722 @@
+{
+  "runId": "lab-2026-10-07T06-31-20-900Z",
+  "seed": 1,
+  "scripted": false,
+  "print": {
+    "printId": "2026-10-05-commodity",
+    "rateUsdPerSiu": "0.001437"
+  },
+  "params": {
+    "rounds": 3,
+    "needsPerTrader": 2,
+    "jobMilliSiu": 1000,
+    "tradeMultiplierBps": 12000,
+    "creditMultiplierBps": 15000
+  },
+  "economy": {
+    "skillOf": {
+      "TRADER-1": "TYPE-4",
+      "TRADER-2": "TYPE-3",
+      "TRADER-3": "TYPE-2",
+      "TRADER-4": "TYPE-1"
+    },
+    "needs": [
+      {
+        "id": "TRADER-1#1",
+        "buyer": "TRADER-1",
+        "type": "TYPE-3",
+        "seller": "TRADER-2",
+        "round": 1
+      },
+      {
+        "id": "TRADER-1#2",
+        "buyer": "TRADER-1",
+        "type": "TYPE-2",
+        "seller": "TRADER-3",
+        "round": 2
+      },
+      {
+        "id": "TRADER-2#1",
+        "buyer": "TRADER-2",
+        "type": "TYPE-2",
+        "seller": "TRADER-3",
+        "round": 1
+      },
+      {
+        "id": "TRADER-2#2",
+        "buyer": "TRADER-2",
+        "type": "TYPE-1",
+        "seller": "TRADER-4",
+        "round": 2
+      },
+      {
+        "id": "TRADER-3#1",
+        "buyer": "TRADER-3",
+        "type": "TYPE-1",
+        "seller": "TRADER-4",
+        "round": 1
+      },
+      {
+        "id": "TRADER-3#2",
+        "buyer": "TRADER-3",
+        "type": "TYPE-4",
+        "seller": "TRADER-1",
+        "round": 3
+      },
+      {
+        "id": "TRADER-4#1",
+        "buyer": "TRADER-4",
+        "type": "TYPE-4",
+        "seller": "TRADER-1",
+        "round": 1
+      },
+      {
+        "id": "TRADER-4#2",
+        "buyer": "TRADER-4",
+        "type": "TYPE-3",
+        "seller": "TRADER-2",
+        "round": 2
+      }
+    ]
+  },
+  "seats": {
+    "TRADER-1": "ORCHESTRATOR",
+    "TRADER-2": "WORKER-CODE",
+    "TRADER-3": "WORKER-EXTRACT",
+    "TRADER-4": "ISSUER-A"
+  },
+  "models": {
+    "TRADER-1": "claude-haiku-4-5",
+    "TRADER-2": "gpt-5.4-mini",
+    "TRADER-3": "claude-haiku-4-5",
+    "TRADER-4": "gpt-5.4-mini"
+  },
+  "window": {
+    "fromChainSeconds": "1791354642",
+    "toChainSeconds": "1791356202"
+  },
+  "endowment": {
+    "perTraderMilliSiu": "4318",
+    "totalMilliSiu": "17272",
+    "perTraderUsdcMinor": "6205",
+    "perTraderUsdcNeededMinor": "6200",
+    "allowanceMilliSiu": "25600"
+  },
+  "pool": {
+    "startingHeadroomMilliSiu": "32000",
+    "limitMilliSiu": "32000",
+    "whole": true,
+    "endingHeadroomMilliSiu": "32000",
+    "restored": true
+  },
+  "opening": {
+    "usdcMinorPerTrader": "6205",
+    "fsiuMilliSiuPerTrader": "4318",
+    "tokenId": "62504822217491223999927323033658451501792559148514988194096443330964120387498"
+  },
+  "snapshots": [
+    {
+      "label": "opening",
+      "round": 1,
+      "atChainSeconds": "1791354714",
+      "traders": [
+        {
+          "trader": "TRADER-1",
+          "usdcMinor": "6205",
+          "fsiuMilliSiu": "4318",
+          "needsMet": 0,
+          "resultNano": "12409966"
+        },
+        {
+          "trader": "TRADER-2",
+          "usdcMinor": "6205",
+          "fsiuMilliSiu": "4318",
+          "needsMet": 0,
+          "resultNano": "12409966"
+        },
+        {
+          "trader": "TRADER-3",
+          "usdcMinor": "6205",
+          "fsiuMilliSiu": "4318",
+          "needsMet": 0,
+          "resultNano": "12409966"
+        },
+        {
+          "trader": "TRADER-4",
+          "usdcMinor": "6205",
+          "fsiuMilliSiu": "4318",
+          "needsMet": 0,
+          "resultNano": "12409966"
+        }
+      ],
+      "issuer": {
+        "usdcMinor": "448791",
+        "fsiuMilliSiu": "0"
+      }
+    },
+    {
+      "label": "round 2 opened",
+      "round": 2,
+      "atChainSeconds": "1791354770",
+      "traders": [
+        {
+          "trader": "TRADER-1",
+          "usdcMinor": "4505",
+          "fsiuMilliSiu": "4318",
+          "needsMet": 0,
+          "resultNano": "10709966"
+        },
+        {
+          "trader": "TRADER-2",
+          "usdcMinor": "6205",
+          "fsiuMilliSiu": "4318",
+          "needsMet": 1,
+          "resultNano": "14565466"
+        },
+        {
+          "trader": "TRADER-3",
+          "usdcMinor": "6505",
+          "fsiuMilliSiu": "4318",
+          "needsMet": 0,
+          "resultNano": "12709966"
+        },
+        {
+          "trader": "TRADER-4",
+          "usdcMinor": "6205",
+          "fsiuMilliSiu": "4318",
+          "needsMet": 0,
+          "resultNano": "12409966"
+        }
+      ],
+      "issuer": {
+        "usdcMinor": "450191",
+        "fsiuMilliSiu": "0"
+      }
+    },
+    {
+      "label": "round 3 opened",
+      "round": 3,
+      "atChainSeconds": "1791354808",
+      "traders": [
+        {
+          "trader": "TRADER-1",
+          "usdcMinor": "2805",
+          "fsiuMilliSiu": "4318",
+          "needsMet": 1,
+          "resultNano": "11165466"
+        },
+        {
+          "trader": "TRADER-2",
+          "usdcMinor": "6205",
+          "fsiuMilliSiu": "4318",
+          "needsMet": 1,
+          "resultNano": "14565466"
+        },
+        {
+          "trader": "TRADER-3",
+          "usdcMinor": "6805",
+          "fsiuMilliSiu": "4318",
+          "needsMet": 0,
+          "resultNano": "13009966"
+        },
+        {
+          "trader": "TRADER-4",
+          "usdcMinor": "6205",
+          "fsiuMilliSiu": "4318",
+          "needsMet": 0,
+          "resultNano": "12409966"
+        }
+      ],
+      "issuer": {
+        "usdcMinor": "451591",
+        "fsiuMilliSiu": "0"
+      }
+    }
+  ],
+  "final": {
+    "label": "final",
+    "round": 3,
+    "atChainSeconds": "1791354848",
+    "traders": [
+      {
+        "trader": "TRADER-1",
+        "usdcMinor": "3105",
+        "fsiuMilliSiu": "4318",
+        "needsMet": 1,
+        "resultNano": "11465466"
+      },
+      {
+        "trader": "TRADER-2",
+        "usdcMinor": "6205",
+        "fsiuMilliSiu": "4318",
+        "needsMet": 1,
+        "resultNano": "14565466"
+      },
+      {
+        "trader": "TRADER-3",
+        "usdcMinor": "5105",
+        "fsiuMilliSiu": "4318",
+        "needsMet": 1,
+        "resultNano": "13465466"
+      },
+      {
+        "trader": "TRADER-4",
+        "usdcMinor": "6205",
+        "fsiuMilliSiu": "4318",
+        "needsMet": 0,
+        "resultNano": "12409966"
+      }
+    ],
+    "issuer": {
+      "usdcMinor": "452991",
+      "fsiuMilliSiu": "0"
+    }
+  },
+  "measuredBeforeClose": true,
+  "needsMet": {
+    "TRADER-1": 1,
+    "TRADER-2": 1,
+    "TRADER-3": 1,
+    "TRADER-4": 0
+  },
+  "sales": [
+    {
+      "requestId": "qr-1",
+      "kind": "trade",
+      "buyer": "TRADER-1",
+      "seller": "TRADER-2",
+      "quoted": true,
+      "paid": true,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-1#1",
+      "paidAsset": "usdc"
+    },
+    {
+      "requestId": "qr-2",
+      "kind": "trade",
+      "buyer": "TRADER-3",
+      "seller": "TRADER-4",
+      "quoted": false,
+      "paid": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-3#1"
+    },
+    {
+      "requestId": "qr-3",
+      "kind": "trade",
+      "buyer": "TRADER-2",
+      "seller": "TRADER-3",
+      "quoted": true,
+      "paid": true,
+      "delivered": true,
+      "attempts": 1,
+      "needId": "TRADER-2#1",
+      "paidAsset": "usdc"
+    },
+    {
+      "requestId": "qr-4",
+      "kind": "rawwork",
+      "buyer": "TRADER-3",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": true,
+      "delivered": false,
+      "attempts": 0,
+      "paidAsset": "usdc"
+    },
+    {
+      "requestId": "qr-5",
+      "kind": "trade",
+      "buyer": "TRADER-1",
+      "seller": "TRADER-3",
+      "quoted": true,
+      "paid": true,
+      "delivered": true,
+      "attempts": 1,
+      "needId": "TRADER-1#2",
+      "paidAsset": "usdc"
+    },
+    {
+      "requestId": "qr-6",
+      "kind": "trade",
+      "buyer": "TRADER-2",
+      "seller": "TRADER-4",
+      "quoted": false,
+      "paid": false,
+      "delivered": false,
+      "attempts": 0,
+      "needId": "TRADER-2#2"
+    },
+    {
+      "requestId": "qr-7",
+      "kind": "rawwork",
+      "buyer": "TRADER-3",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": true,
+      "delivered": false,
+      "attempts": 0,
+      "paidAsset": "usdc"
+    },
+    {
+      "requestId": "qr-8",
+      "kind": "trade",
+      "buyer": "TRADER-3",
+      "seller": "TRADER-1",
+      "quoted": true,
+      "paid": true,
+      "delivered": true,
+      "attempts": 1,
+      "needId": "TRADER-3#2",
+      "paidAsset": "usdc"
+    },
+    {
+      "requestId": "qr-9",
+      "kind": "rawwork",
+      "buyer": "TRADER-1",
+      "seller": "ISSUER",
+      "quoted": true,
+      "paid": true,
+      "delivered": false,
+      "attempts": 0,
+      "paidAsset": "usdc"
+    }
+  ],
+  "workLog": [
+    {
+      "requestId": "qr-3",
+      "seller": "TRADER-3",
+      "buyer": "TRADER-2",
+      "attempt": 1,
+      "passed": true,
+      "costUsd": "0.0013"
+    },
+    {
+      "requestId": "qr-5",
+      "seller": "TRADER-3",
+      "buyer": "TRADER-1",
+      "attempt": 1,
+      "passed": true,
+      "costUsd": "0.001444"
+    },
+    {
+      "requestId": "qr-8",
+      "seller": "TRADER-1",
+      "buyer": "TRADER-3",
+      "attempt": 1,
+      "passed": true,
+      "costUsd": "0.001407"
+    }
+  ],
+  "workCostUsd": "0.004151",
+  "operatorActions": [
+    {
+      "kind": "usdc_reset",
+      "seat": "ISSUER-A",
+      "move": "return",
+      "minorUnits": "1849",
+      "txHash": "0x8f00133daf137e80831d71ea05f8c14402a5347c5cd72572fbef163ffa85b150"
+    },
+    {
+      "kind": "usdc_reset",
+      "seat": "ORCHESTRATOR",
+      "move": "top_up",
+      "minorUnits": "1551",
+      "txHash": "0x4ed2225e286128b1efce817dad6df99c77a94ba58a175962e18cd95d24b7a159"
+    },
+    {
+      "kind": "usdc_reset",
+      "seat": "WORKER-CODE",
+      "move": "top_up",
+      "minorUnits": "3801",
+      "txHash": "0x2d964790b8751bd53046e776bdb20b3d68412a337b82fcf0f73a2cd01f17831b"
+    },
+    {
+      "kind": "usdc_reset",
+      "seat": "WORKER-EXTRACT",
+      "move": "top_up",
+      "minorUnits": "1400",
+      "txHash": "0xcd9238244f7eb7155163b832fe130f9d17457ad10dec7315d0934108744be580"
+    },
+    {
+      "kind": "endowment_mint",
+      "quantityMilliSiu": "17272",
+      "tokenId": "62504822217491223999927323033658451501792559148514988194096443330964120387498",
+      "backedBy": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776",
+      "txHash": "0x7c24c901bb5c6394d9d70604f576797989a921fdc758ae2e7e24c6a4678740e5"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "ORCHESTRATOR",
+      "quantityMilliSiu": "4318",
+      "txHash": "0xd7bb339f28d7eccdef9042256a3a4ca4cb33bac9adf3cb0a2386f39a7da0e2be"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "WORKER-CODE",
+      "quantityMilliSiu": "4318",
+      "txHash": "0x13d54b0230df6a727a6ff93319b05d78973e8c18f8d1b91c7f4d45917cd62563"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "WORKER-EXTRACT",
+      "quantityMilliSiu": "4318",
+      "txHash": "0x77e352d89f541ef5247c3a6da98736343901dd5b033d8bc0c88cde8cb500a79a"
+    },
+    {
+      "kind": "endowment_transfer",
+      "seat": "ISSUER-A",
+      "quantityMilliSiu": "4318",
+      "txHash": "0x7cb7a909cb8e74dfacbfa0e26c5af667e962a6f02e0224532b51398cd2700f25"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-1",
+      "quantityMilliSiu": "4318",
+      "txHash": "0xa8d313863a6cba298811a7797037171d96ca83c77cb2b96ab20b460bea4161f7"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-2",
+      "quantityMilliSiu": "4318",
+      "txHash": "0xb8b79a0fbd99328f34cedbeb6e40ce13818e333a5eeb5d1c668a5e83cbb0b881"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-3",
+      "quantityMilliSiu": "4318",
+      "txHash": "0x2f7a8c568bb6b714e71f59b88b7536f3b9364c0d23d52386563b29bc7580d452"
+    },
+    {
+      "kind": "expiry",
+      "holder": "TRADER-4",
+      "quantityMilliSiu": "4318",
+      "txHash": "0x29092732ea4129972f09fb184e5099995b63e30aaccffef280bdae6c14abe88c"
+    },
+    {
+      "kind": "round_opened",
+      "round": 2
+    },
+    {
+      "kind": "round_opened",
+      "round": 3
+    }
+  ],
+  "labErrors": [],
+  "toolErrors": [],
+  "refusals": [
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 3,
+      "kind": "refused",
+      "sentence": "qr-1 is not yours to pay: it was asked for by TRADER-1."
+    },
+    {
+      "agentId": "ISSUER-A",
+      "turn": 1,
+      "kind": "format",
+      "sentence": "Unparseable model response (no valid tool-call JSON object). Raw response: \"{\\\"issue_quote\\\":{\\\"requestId\\\":\\\"qr-2\\\"}}\" — halting this turn rather than retrying or guessing, since silently papering ov"
+    }
+  ],
+  "turnsByAgent": {
+    "ORCHESTRATOR": 8,
+    "WORKER-CODE": 6,
+    "WORKER-EXTRACT": 11,
+    "ISSUER-A": 1,
+    "ISSUER-B": 3
+  },
+  "haltedReason": {
+    "ISSUER-A": "parse_error",
+    "WORKER-CODE": "waiting",
+    "ORCHESTRATOR": "nothing_to_act_on",
+    "WORKER-EXTRACT": "nothing_to_act_on",
+    "ISSUER-B": "nothing_to_act_on"
+  },
+  "totalRealizedUsd": "0.125282",
+  "spendByProvider": {
+    "anthropic": "0.103888",
+    "lab-service": "0.000000",
+    "openai": "0.021394"
+  },
+  "paymentMoments": [
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 2,
+      "tool": "pay",
+      "asset": "usdc",
+      "requestId": "qr-1",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 4,
+      "tool": "pay",
+      "asset": "usdc",
+      "requestId": "qr-3",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 4,
+      "tool": "pay",
+      "asset": "usdc",
+      "requestId": "qr-4",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.001437",
+      "quotedUsdMax": "0.0014"
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 4,
+      "tool": "pay",
+      "asset": "usdc",
+      "requestId": "qr-5",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 8,
+      "tool": "pay",
+      "asset": "usdc",
+      "requestId": "qr-7",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.001437",
+      "quotedUsdMax": "0.0014"
+    },
+    {
+      "agentId": "WORKER-EXTRACT",
+      "turn": 11,
+      "tool": "pay",
+      "asset": "usdc",
+      "requestId": "qr-8",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.0017244",
+      "quotedUsdMax": "0.0017"
+    },
+    {
+      "agentId": "ORCHESTRATOR",
+      "turn": 7,
+      "tool": "pay",
+      "asset": "usdc",
+      "requestId": "qr-9",
+      "heldReceivedMilliSiu": "0",
+      "quotedSiu": "1",
+      "quoteRateUsdPerSiu": "0.001437",
+      "quotedUsdMax": "0.0014"
+    }
+  ],
+  "waits": [
+    {
+      "agentId": "WORKER-CODE",
+      "turn": 5,
+      "hadWork": [
+        "a need to buy, a job owed, or raw work to buy"
+      ]
+    }
+  ],
+  "claimFlows": {
+    "ORCHESTRATOR": {
+      "receivedMilliSiu": "0",
+      "receivedKeyedMilliSiu": "0",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    },
+    "WORKER-CODE": {
+      "receivedMilliSiu": "0",
+      "receivedKeyedMilliSiu": "0",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    },
+    "WORKER-EXTRACT": {
+      "receivedMilliSiu": "0",
+      "receivedKeyedMilliSiu": "0",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    },
+    "ISSUER-A": {
+      "receivedMilliSiu": "0",
+      "receivedKeyedMilliSiu": "0",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    },
+    "ISSUER-B": {
+      "receivedMilliSiu": "0",
+      "receivedKeyedMilliSiu": "0",
+      "receivedUnkeyedMilliSiu": "0",
+      "mintedMilliSiu": "0",
+      "transferredOutKeyedMilliSiu": "0",
+      "redeemedMilliSiu": "0"
+    }
+  },
+  "capacityEvents": [],
+  "claimPositions": [
+    {
+      "tokenId": "62504822217491223999927323033658451501792559148514988194096443330964120387498",
+      "holder": "ORCHESTRATOR",
+      "issuer": "ISSUER-B",
+      "quantity": "4318",
+      "presented": false
+    },
+    {
+      "tokenId": "62504822217491223999927323033658451501792559148514988194096443330964120387498",
+      "holder": "WORKER-CODE",
+      "issuer": "ISSUER-B",
+      "quantity": "4318",
+      "presented": false
+    },
+    {
+      "tokenId": "62504822217491223999927323033658451501792559148514988194096443330964120387498",
+      "holder": "WORKER-EXTRACT",
+      "issuer": "ISSUER-B",
+      "quantity": "4318",
+      "presented": false
+    },
+    {
+      "tokenId": "62504822217491223999927323033658451501792559148514988194096443330964120387498",
+      "holder": "ISSUER-A",
+      "issuer": "ISSUER-B",
+      "quantity": "4318",
+      "presented": false
+    }
+  ],
+  "lag": {
+    "writesRetried": 0,
+    "recovered": 0,
+    "gaveUp": 0,
+    "events": []
+  },
+  "instrument": {
+    "version": 4,
+    "changes": [
+      "v1 2026-10-06: phase 1 as first built — T1 jobs, four traders, raw work from ISSUER-B, opening 2,000 mSIU and equal USDC, price parity with the dollar-route fee rebated.",
+      "v2 2026-10-06: a quote may be paid only by the trader who asked for it, and once (lab/guards.ts). Before it a seller could pay its own quote by minting a claim for itself, and a quote could be paid twice by claim; found by the first model run, which therefore predates this and is not pooled.",
+      "v3 2026-10-06: what a trader meets changed in four ways, all from the first model run (D26 to D28): the payment tools are named by what they do — pay_with_usdc, pay_with_new_claim, pay_with_held_claim, pay_split — with descriptions of one shape and one worked example each, and the loop's own names refused; a quote line leads with its request id alone (`qr-2: quote from seller …`); a payment the wallet cannot afford is refused before it is sent, in one sentence whichever asset it is in; and the spend projection uses measured output so the cap means what it says.",
+      "v4 2026-10-07: the economy changed in five ways, all from the pilot and the first rerun (D30 to D35). Every payment is a direct transfer to the seller at the moment it is made, in either asset — no escrow, no fee, no rebate, no release step — so choosing an asset no longer chooses buyer protection or when the seller can spend. The opening is sized from the print and the schedule so that either asset alone meets every need, equal in value at the print (4,318 mSIU and 6,205 USDC minor units each at the print the pilot used; derived per run, not fixed), and nothing is minted after it: the fSIU supply is the endowment, fixed for the run. A payment may be drawn partly from a held claim and partly in USDC (pay_split). A refused payment states the whole wallet, in both assets, in one form. The brief states the three calls, what each costs, and that the supply is the opening supply. The motive structure is unchanged: the score counts fSIU at the print, and the lab has no route from fSIU to USDC."
+    ]
+  },
+  "debugMode": {
+    "disqualifiedBecause": null
+  }
+}

@@ -14,6 +14,7 @@ import { AGENT_IDS, type AgentId } from "../identity/resolve.js";
 import type { MintContext } from "../loop/full-run.js";
 import { DEFAULT_PARAMS, ISSUER_SEAT, LAB_TRADERS, SEAT_OF, type TraderLabel } from "./economy.js";
 import { referenceExecutor } from "./jobs.js";
+import { LAB_INSTRUMENT_VERSION } from "./instrument.js";
 import type { EndowmentMint, LabChain, Signer } from "./operator.js";
 import { setRevertRetryPolicy, writeAndConfirm } from "../chain/write.js";
 import type { ChainClients } from "@touchstone/agents";
@@ -419,7 +420,7 @@ describe("runLab", () => {
     });
     expect(report).not.toHaveProperty("mintBound");
     expect(report).not.toHaveProperty("escrowFeeBps");
-    expect(report.instrument.version).toBe(4);
+    expect(report.instrument.version).toBe(LAB_INSTRUMENT_VERSION);
     expect(ISSUER_SEAT).toBe("ISSUER-B");
   });
 

@@ -18,14 +18,18 @@ import { ISSUER_SEAT, LAB_TRADERS, SEAT_OF, type Economy, type TraderLabel } fro
 import { ISSUER_SERVICE_TOOLS, issuerServiceAdapter } from "./issuer-service.js";
 
 /**
- * Two of each family, on the cheapest registered tier of each (plan §2.3). Alternating rather than
- * grouped, so whichever skills the seed hands out, neither family holds a consecutive pair of seats.
+ * Four traders on claude-haiku-4-5 (instrument v5, D38). Through v4 this was two of each family, haiku and gpt-5.4-mini
+ * alternating by seat (plan §2.3). The v4 rerun showed both gpt-5.4-mini seats stalled with work on their boards — one sent a
+ * malformed first reply and never acted again, the other waited with a paid job owed and never bought the raw work to deliver
+ * it — and every need left unmet traced to one of them; the instruction was to replace that family with a stronger cheap model
+ * from another family. Haiku is the one with evidence here: it made no malformed call in four runs of this loop.
+ * `deepseek-v3.2` (registered, $0.28/$0.40 per million) is the alternative that keeps two families; it has not been tried.
  */
 export const LAB_MODELS: Readonly<Record<TraderLabel, string>> = {
   "TRADER-1": "claude-haiku-4-5",
-  "TRADER-2": "gpt-5.4-mini",
+  "TRADER-2": "claude-haiku-4-5",
   "TRADER-3": "claude-haiku-4-5",
-  "TRADER-4": "gpt-5.4-mini",
+  "TRADER-4": "claude-haiku-4-5",
 };
 
 /**

@@ -46,12 +46,11 @@ describe("the lab roster", () => {
     expect(roster.map((r) => r.agentId)).toEqual([...LAB_TRADERS.map((t) => SEAT_OF[t]), ISSUER_SEAT]);
   });
 
-  it("runs two traders on each model family", () => {
+  it("runs all four traders on claude-haiku-4-5 (D38: the gpt-5.4-mini seats stalled in the v4 rerun)", () => {
     const models = LAB_TRADERS.map((t) => LAB_MODELS[t]);
-    expect(models.filter((m) => m === "claude-haiku-4-5")).toHaveLength(2);
-    expect(models.filter((m) => m === "gpt-5.4-mini")).toHaveLength(2);
+    expect(models).toEqual(["claude-haiku-4-5", "claude-haiku-4-5", "claude-haiku-4-5", "claude-haiku-4-5"]);
     expect(roster.slice(0, 4).map((r) => r.modelString)).toEqual(models);
-    expect(roster.slice(0, 4).map((r) => r.provider)).toEqual(["anthropic", "openai", "anthropic", "openai"]);
+    expect(roster.slice(0, 4).map((r) => r.provider)).toEqual(["anthropic", "anthropic", "anthropic", "anthropic"]);
   });
 
   it("grants the traders the same eight tools, none of them capacity, redemption, minting or escrow tools", () => {
