@@ -191,6 +191,9 @@ describe("which runs may be counted", () => {
   const cases: [string, Partial<MeasureReport>, RegExp][] = [
     ["a scripted walk", { scripted: true }, /scripted walk/],
     ["a run stopped by a spending cap", { haltedReason: { ORCHESTRATOR: "experiment_halt", "WORKER-CODE": "max_turns" } }, /stopped by a spending cap, not by its agents \(ORCHESTRATOR: experiment_halt\)/],
+    ["a seat stopped by its provider", { haltedReason: { "WORKER-CODE": "adapter_error", ORCHESTRATOR: "nothing_to_act_on" } }, /stopped by its provider or the harness, not by its own choices \(WORKER-CODE: adapter_error\)/],
+    ["a seat stopped by the harness's own validator", { haltedReason: { "WORKER-CODE": "validation_failed" } }, /not by its own choices/],
+    ["a seat stopped by the run's infrastructure failing", { haltedReason: { "WORKER-CODE": "run_infrastructure_failed" } }, /not by its own choices/],
     ["a run stopped by an agent's own ceiling", { haltedReason: { "WORKER-EXTRACT": "ceiling" } }, /spending cap/],
     ["a run made before versions were stamped", { instrument: undefined }, /before versions were stamped.*current version/],
     ["a run made under an earlier version of the lab", { instrument: { version: LAB_INSTRUMENT_VERSION - 1 } }, new RegExp(`version ${LAB_INSTRUMENT_VERSION - 1}, not the current version ${LAB_INSTRUMENT_VERSION}`)],
@@ -210,6 +213,10 @@ describe("which runs may be counted", () => {
       expect(() => assertCountableForLab(r)).toThrow(why);
     });
   }
+
+  it("does not disqualify a seat that sent a malformed reply or was refused by its model: those are what the agent did", () => {
+    expect(labDisqualification(base({ haltedReason: { "ISSUER-A": "parse_error", "WORKER-CODE": "policy_refusal" } }))).toBeNull();
+  });
 
   it("does not disqualify a run in which agents simply used their turns, or stopped on their own", () => {
     const r = base({ haltedReason: { ORCHESTRATOR: "voluntary_stop", "WORKER-CODE": "max_turns", "ISSUER-B": "waiting", "ISSUER-A": "window_span_elapsed" } });

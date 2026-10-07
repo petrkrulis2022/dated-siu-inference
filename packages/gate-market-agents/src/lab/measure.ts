@@ -86,6 +86,13 @@ export function labDisqualification(r: MeasureReport): string | null {
   // cut after about 125 turns by a cap set too low, and round 3 never opened.
   const capped = Object.entries(r.haltedReason ?? {}).filter(([, why]) => why === "experiment_halt" || why === "ceiling");
   if (capped.length > 0) return `the run was stopped by a spending cap, not by its agents (${capped.map(([a, w]) => `${a}: ${w}`).join(", ")})`;
+  // A seat stopped by its provider (an account out of credit, a node that errored) did not stop for any reason of its own, so what the run
+  // shows of that seat's behaviour is cut short by the environment. Found by the first v6 run: OpenRouter answered 402 on one seat's twelfth turn,
+  // the seat never delivered a job it had been paid for in fSIU, and the report still called the run countable (D46).
+  const stopped = Object.entries(r.haltedReason ?? {}).filter(([, why]) => why === "adapter_error" || why === "run_infrastructure_failed" || why === "validation_failed");
+  if (stopped.length > 0) {
+    return `a seat was stopped by its provider or the harness, not by its own choices (${stopped.map(([a, w]) => `${a}: ${w}`).join(", ")}), so the run shows less than the agents would have done`;
+  }
   if (!r.pool.whole) return "the run started from a pool that was not whole, so it is not comparable with one that did";
   if (r.pool.restored !== true) return "the pool was not restored after the run";
   if (r.final === undefined) return "no scoring snapshot was taken";
