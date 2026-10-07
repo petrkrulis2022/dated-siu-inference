@@ -32,11 +32,12 @@ const input = (over: Partial<LabRosterInput> = {}): LabRosterInput => ({
   adapters: Object.fromEntries(LAB_TRADERS.map((t) => [t, noAdapter])) as LabRosterInput["adapters"],
   prices: {
     "claude-haiku-4-5": { priceInUsdPer1M: "1", priceOutUsdPer1M: "5" },
-    "deepseek-v3.2": { priceInUsdPer1M: "0.28", priceOutUsdPer1M: "0.4" },
+    "gpt-5.1": { priceInUsdPer1M: "1.25", priceOutUsdPer1M: "10" },
+    "grok-4.6": { priceInUsdPer1M: "2", priceOutUsdPer1M: "6" },
   },
   keys,
   addresses,
-  providerOf: (m) => (m.startsWith("claude") ? "anthropic" : "openrouter"),
+  providerOf: (m) => (m.startsWith("claude") ? "anthropic" : m.startsWith("grok") ? "xai" : "openai"),
   ...over,
 });
 
@@ -47,13 +48,13 @@ describe("the lab roster", () => {
     expect(roster.map((r) => r.agentId)).toEqual([...LAB_TRADERS.map((t) => SEAT_OF[t]), ISSUER_SEAT]);
   });
 
-  it("runs two traders on each of two families again: haiku on TRADER-1 and TRADER-3, deepseek-v3.2 on TRADER-2 and TRADER-4 (D42)", () => {
+  it("runs three families, all direct: haiku on TRADER-1 and TRADER-3, gpt-5.1 on TRADER-2, grok-4.6 on TRADER-4 (D47)", () => {
     const models = LAB_TRADERS.map((t) => LAB_MODELS[t]);
-    expect(models).toEqual(["claude-haiku-4-5", "deepseek-v3.2", "claude-haiku-4-5", "deepseek-v3.2"]);
-    expect(models.filter((m) => m === "claude-haiku-4-5")).toHaveLength(2);
-    expect(models.filter((m) => m === "deepseek-v3.2")).toHaveLength(2);
+    expect(models).toEqual(["claude-haiku-4-5", "gpt-5.1", "claude-haiku-4-5", "grok-4.6"]);
     expect(roster.slice(0, 4).map((r) => r.modelString)).toEqual(models);
-    expect(roster.slice(0, 4).map((r) => r.provider)).toEqual(["anthropic", "openrouter", "anthropic", "openrouter"]);
+    expect(roster.slice(0, 4).map((r) => r.provider)).toEqual(["anthropic", "openai", "anthropic", "xai"]);
+    // Nothing routes through a third party: no seat is on OpenRouter, and the replaced models are not in the roster.
+    for (const gone of ["deepseek-v3.2", "gpt-5.4-mini"]) expect(models).not.toContain(gone);
   });
 
   it("grants the traders the same seven tools, none of them capacity, redemption, minting or escrow tools", () => {

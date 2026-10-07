@@ -18,18 +18,20 @@ import { ISSUER_SEAT, LAB_TRADERS, SEAT_OF, type Economy, type TraderLabel } fro
 import { ISSUER_SERVICE_TOOLS, issuerServiceAdapter } from "./issuer-service.js";
 
 /**
- * Two of each family (plan §2.3): claude-haiku-4-5 on TRADER-1 and TRADER-3, deepseek-v3.2 on TRADER-2 and TRADER-4. Through v4 the
- * second family was gpt-5.4-mini; the v4 rerun showed both of its seats stalled with work on their boards (D38), and the
- * instruction was to replace it with a stronger cheap model from another family. D39 put haiku on all four seats for want of a
- * tested alternative; D40 fixed the bar for deepseek-v3.2 (registered, $0.28 / $0.40 per million) before replaying the two stalled
- * screens through it, and it acted correctly on both, five times in five (D42). So the two-family roster is back, with a model that
- * has been shown to act on the screens the last one did not. Alternating by seat, as before.
+ * Three families (instrument v7, D47): claude-haiku-4-5 on TRADER-1 and TRADER-3 (Anthropic), gpt-5.1 on TRADER-2 (OpenAI), grok-4.6 on
+ * TRADER-4 (xAI) — all reached directly, with keys already in use, so no third-party router stands between a seat and its provider.
+ * History: through v4 the second family was gpt-5.4-mini, whose two seats stalled in the v4 rerun (D38); D39 put haiku on all four; D40-D42
+ * seated deepseek-v3.2 through OpenRouter, which ran out of credit mid-run in the first v6 run (D46) and had never been a provider of this
+ * lab's; D47 replayed the two stalled screens through gpt-5.1 and grok-4.6 under the same bar and both acted correctly five times in five on
+ * each. gpt-5.1 is a much larger OpenAI model than the gpt-5.4-mini that stalled, so seating it does not repeat the replaced family.
+ * grok-4.6 thinks before every reply (about 1,000 to 2,400 tokens, billed as output) and takes about 23 seconds a reply, which the loop's
+ * one-turn-at-a-time schedule absorbs in a 25-minute window.
  */
 export const LAB_MODELS: Readonly<Record<TraderLabel, string>> = {
   "TRADER-1": "claude-haiku-4-5",
-  "TRADER-2": "deepseek-v3.2",
+  "TRADER-2": "gpt-5.1",
   "TRADER-3": "claude-haiku-4-5",
-  "TRADER-4": "deepseek-v3.2",
+  "TRADER-4": "grok-4.6",
 };
 
 /**
