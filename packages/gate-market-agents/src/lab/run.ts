@@ -51,6 +51,7 @@ import {
 import type { WorkExecutor } from "./jobs.js";
 import { checkEndowmentFits, endowmentBound } from "./launch.js";
 import { printNano } from "./money.js";
+import { buildPrintPath, ceilingPrint, reachablePrints, type PrintPath } from "./prints.js";
 import { waitsOf, type WaitRecord } from "./waits.js";
 import { LAB_ASSET_DESCRIPTION } from "./asset-text.js";
 import {
@@ -150,7 +151,20 @@ export interface LabReport {
   models: Record<string, string>;
   window: { fromChainSeconds: string; toChainSeconds: string };
   /** The whole fSIU supply of the run, and what it was checked against (D31): nothing is minted after the opening. */
-  endowment: { perTraderMilliSiu: string; totalMilliSiu: string; perTraderUsdcMinor: string; perTraderUsdcNeededMinor: string; allowanceMilliSiu: string };
+  endowment: {
+    perTraderMilliSiu: string;
+    totalMilliSiu: string;
+    perTraderUsdcMinor: string;
+    perTraderUsdcNeededMinor: string;
+    allowanceMilliSiu: string;
+    /** The highest print the walk could reach, which the USDC opening is sized at (D41). */
+    ceilingPrintNano: string;
+  };
+  /**
+   * The scenario print in each round (D41): lab-only, never published, never the index. Round 1 is the real print.
+   * `byRound` is nano-USD per SIU, round 1 first; `ids` is what each goes by in a quote's `print_id`.
+   */
+  prints: { stepBps: number; byRound: string[]; ids: string[]; reachableNano: string[] };
   pool: { startingHeadroomMilliSiu: string; limitMilliSiu: string; whole: boolean; endingHeadroomMilliSiu?: string; restored?: boolean };
   opening: { usdcMinorPerTrader: string; fsiuMilliSiuPerTrader: string; tokenId?: string };
   snapshots: unknown[];
@@ -255,7 +269,10 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
         "Settle them, or pass --allow-partial-pool (recorded in the report).",
     );
   }
-  const bound = endowmentBound(p, params);
+  // The print moves between rounds, from the seed (D41). What the walk can reach is known now, so the opening can be sized at its ceiling.
+  const printPath: PrintPath = buildPrintPath(input.seed, p, params, input.print.printId);
+  const reachable = reachablePrints(p, params);
+  const bound = endowmentBound(reachable, params);
   const fit = checkEndowmentFits(bound, startingHeadroom);
   if (!fit.ok) throw new LaunchRefused(fit.reason);
 
@@ -289,7 +306,8 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
   }
   log(
     `launch checks passed: pool ${poolWhole ? "whole" : "NOT whole (allowed)"} at ${startingHeadroom} mSIU; endowment ` +
-      `${bound.totalMilliSiu} of ${fit.allowanceMilliSiu} allowed; operator holds ${operatorHolds}, needs ${operatorNeeds}.`,
+      `${bound.totalMilliSiu} of ${fit.allowanceMilliSiu} allowed; operator holds ${operatorHolds}, needs ${operatorNeeds}. ` +
+      `Print by round (nano-USD per SIU): ${printPath.byRound.join(", ")}; ceiling ${ceilingPrint(p, params)}.`,
   );
 
   // ---------------------------------------------------------------- the run
@@ -363,9 +381,10 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
       traders: Object.fromEntries(LAB_TRADERS.map((t) => [t, erc8004IdFor(traderAddress[t])])) as Record<TraderLabel, string>,
       issuer: erc8004IdFor(issuerAddress),
     };
-    books = new LabBooks(economy, ids);
+    books = new LabBooks(economy, ids, printPath);
+    // A snapshot values fSIU at the print in force when it is taken (D41): round r's print for "round r opened", the last round's for "final".
     const snap = (label: string): Promise<Snapshot> =>
-      takeSnapshot({ label, chain: input.chain, books: books!, addressOf: traderAddress, issuerAddress, tokenId: tokenId!, printNano: p, params });
+      takeSnapshot({ label, chain: input.chain, books: books!, addressOf: traderAddress, issuerAddress, tokenId: tokenId!, printNano: books!.currentPrint()!, params });
 
     const opening = await snap("opening");
     snapshots.push(opening);
@@ -375,7 +394,13 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
 
     service = new LabService({
       books,
-      guard: { printNano: p, params },
+      // A getter, so the guards and the board follow the round: the print in force is the books' current one (D41).
+      guard: {
+        get printNano(): bigint {
+          return books!.currentPrint()!;
+        },
+        params,
+      },
       seed: input.seed,
       executorFor: input.executorFor,
       recordWorkCost: (usd) => {
@@ -398,6 +423,7 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
       print: input.print,
       claim: { tokenId: tokenId.toString(), classLabel: "extract", fromIso: iso(windowFrom), untilIso: iso(windowTo) },
       maxTurns: input.maxTurns,
+      opening: { fsiuMilliSiu: openingFsiu, usdcMinor: openingUsdc },
       chain: input.chainName,
       rpcUrl: input.rpcUrl,
       adapters: input.adapters,
@@ -514,6 +540,13 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
       perTraderUsdcMinor: bound.perTraderUsdcMinor.toString(),
       perTraderUsdcNeededMinor: bound.perTraderUsdcNeededMinor.toString(),
       allowanceMilliSiu: fit.allowanceMilliSiu.toString(),
+      ceilingPrintNano: bound.ceilingPrintNano.toString(),
+    },
+    prints: {
+      stepBps: params.printStepBps,
+      byRound: printPath.byRound.map((x) => x.toString()),
+      ids: [...printPath.ids],
+      reachableNano: reachable.map((x) => x.toString()),
     },
     pool: {
       startingHeadroomMilliSiu: startingHeadroom.toString(),

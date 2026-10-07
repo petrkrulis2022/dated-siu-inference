@@ -96,7 +96,15 @@ async function main(): Promise<void> {
     id: string;
     provider: string;
     host: string;
+    /** The name the provider's API knows the model by, where it is not the registry id (OpenRouter's is `vendor/model`). */
+    model_string?: string;
   }[];
+  /** The adapter for a registry id, speaking the API's own name for the model (the loop and the prices use the registry id). */
+  const adapterForModel = (id: string, keys: ReturnType<typeof loadApiKeysFromEnv>): Adapter => {
+    const base = withRetry(createAdapterFor(registryEntry(id), keys));
+    const apiName = registry.find((r) => r.id === id)?.model_string ?? id;
+    return apiName === id ? base : (model, prompt, params) => base(model === id ? apiName : model, prompt, params);
+  };
   const registryEntry = (id: string): { provider: string; host: string } => {
     const entry = registry.find((r) => r.id === id);
     if (!entry) throw new Error(`"${id}" is not a registered model.`);
@@ -151,6 +159,7 @@ async function main(): Promise<void> {
     scriptedTraders = scriptedLabTraders({
       print: { printId: commodityPrint.print_id, printHash: "0x00", rateUsdPerSiu, indexVersion: "SIU-2026a" },
       rates: { trade: tradeRateUsdPerSiu(p, DEFAULT_PARAMS), raw: rawWorkRateUsdPerSiu(p) },
+      params: DEFAULT_PARAMS,
       sizeSiu: jobSiu(DEFAULT_PARAMS),
       chain: "base-sepolia",
       quoteExpirySeconds: windowSeconds,
@@ -161,7 +170,7 @@ async function main(): Promise<void> {
     executorFor = () => referenceExecutor;
     console.log("Providers: none to check — a scripted run calls no model.\n");
   } else {
-    adapters = Object.fromEntries(LAB_TRADERS.map((t) => [t, withRetry(createAdapterFor(registryEntry(models[t]), apiKeys))])) as Record<TraderLabel, Adapter>;
+    adapters = Object.fromEntries(LAB_TRADERS.map((t) => [t, adapterForModel(models[t], apiKeys)])) as Record<TraderLabel, Adapter>;
     // One real call per provider, through the run's own adapter: key, organisation and balance together.
     const byProvider = new Map<string, { model: string; adapter: Adapter }>();
     for (const t of LAB_TRADERS) {

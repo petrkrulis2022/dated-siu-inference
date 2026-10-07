@@ -4,15 +4,19 @@ import { LAB_INSTRUMENT_VERSION } from "./instrument.js";
 import {
   CIRCULATES_LOWER_BOUND,
   assertCountableForLab,
+  bootstrapH2,
   bootstrapOverRuns,
   compareArms,
   decide,
+  decideH2,
   labDisqualification,
   measureRun,
   pool,
   renderPooled,
   wilson,
+  type H2Counts,
   type MeasureReport,
+  type RunMeasures,
   type RunCounts,
   type Verdict,
 } from "./measure.js";
@@ -427,5 +431,165 @@ describe("what was paid to the issuer for raw work", () => {
 
   it("reports what the issuer was left holding at the close — it can pass none of it on", () => {
     expect(m.leftWithIssuerMilliSiu).toBe("1462");
+  });
+});
+
+describe("an opportunity is judged at the print of the quote's round (D41)", () => {
+  // At round 3's print of 1,900,432 a job quote is $0.0023 and its claim 1,211 mSIU; at round 1's 1,437,000 the same $0.0023 would take 1,601.
+  const report = (heldReceived: string): MeasureReport =>
+    base({
+      prints: { byRound: ["1437000", "1652550", "1900432"], stepBps: 1500 },
+      sales: [{ requestId: "qr-1", round: 3, kind: "trade", buyer: "TRADER-1", seller: "TRADER-2", delivered: true }],
+      paymentMoments: [moment("ORCHESTRATOR", "transfer_claim", "qr-1", heldReceived, "0.0023")],
+    });
+
+  it("counts holding enough received fSIU for the quote at its own round's print as an opportunity", () => {
+    const m = measureRun(report("1211"));
+    expect(m.opportunities).toBe(1);
+    expect(m.reuse).toBe(1);
+  });
+
+  it("does not count holding less than that, even if it would have covered the quote at another round's print", () => {
+    expect(measureRun(report("1210")).opportunities).toBe(0);
+  });
+
+  it("falls back to the report's one print for a report that has none, as every earlier run did", () => {
+    const m = measureRun(base({ sales: [sale("qr-1", "trade", "TRADER-1", "TRADER-2")], paymentMoments: [moment("ORCHESTRATOR", "transfer_claim", "qr-1", "1184")] }));
+    expect(m.opportunities).toBe(1);
+  });
+});
+
+describe("H2 — fSIU held at each round's start against the raw work still to buy (D41)", () => {
+  const needs = [
+    { id: "a", buyer: "TRADER-2", seller: "TRADER-1", round: 1 },
+    { id: "b", buyer: "TRADER-3", seller: "TRADER-1", round: 3 },
+    { id: "c", buyer: "TRADER-1", seller: "TRADER-2", round: 1 },
+    { id: "d", buyer: "TRADER-4", seller: "TRADER-2", round: 2 },
+    { id: "e", buyer: "TRADER-1", seller: "TRADER-3", round: 2 },
+    { id: "f", buyer: "TRADER-2", seller: "TRADER-4", round: 1 },
+  ];
+  // fSIU each trader holds when each round opens: TRADER-4 spends down; the rest keep most of it.
+  const held: Record<string, string[]> = {
+    "TRADER-1": ["4516", "4516", "4516"],
+    "TRADER-2": ["4516", "4516", "3000"],
+    "TRADER-3": ["4516", "4516", "2258"],
+    "TRADER-4": ["4516", "2258", "0"],
+  };
+  const snapshot = (round: number, label: string) => ({
+    label,
+    round,
+    traders: ["TRADER-1", "TRADER-2", "TRADER-3", "TRADER-4"].map((t) => ({ trader: t, usdcMinor: "8583", fsiuMilliSiu: held[t][round - 1], needsMet: 0, resultNano: "0" })),
+  });
+  const run = (): RunMeasures =>
+    measureRun(
+      base({
+        prints: { byRound: ["1437000", "1652550", "1900432"], stepBps: 1500 },
+        opening: { fsiuMilliSiuPerTrader: "4516" },
+        economy: { needs },
+        snapshots: [snapshot(1, "opening"), snapshot(2, "round 2 opened"), snapshot(3, "round 3 opened")],
+        final: { traders: snapshot(3, "final").traders },
+      }),
+    );
+
+  it("counts, for each trader at each round's start, the units of raw work its schedule still has it buying: jobs it sells in that round or later", () => {
+    const rows = run().holdings.filter((h) => h.label !== "final");
+    const units = (t: string, r: number) => rows.find((h) => h.trader === t && h.round === r)!.upcomingRawUnits;
+    expect([1, 2, 3].map((r) => units("TRADER-1", r))).toEqual([2, 1, 1]); // sells in rounds 1 and 3
+    expect([1, 2, 3].map((r) => units("TRADER-2", r))).toEqual([2, 1, 0]); // rounds 1 and 2
+    expect([1, 2, 3].map((r) => units("TRADER-3", r))).toEqual([1, 1, 0]); // round 2
+    expect([1, 2, 3].map((r) => units("TRADER-4", r))).toEqual([1, 0, 0]); // round 1
+  });
+
+  it("states those units in mSIU at that round's print: about 1 SIU each whatever the print", () => {
+    const row = run().holdings.find((h) => h.trader === "TRADER-1" && h.round === 3 && h.label !== "final")!;
+    expect(row.upcomingRawWorkMilliSiu).toBe("1000"); // $0.0019 at 1,900,432 nano-USD per SIU
+    const first = run().holdings.find((h) => h.trader === "TRADER-1" && h.round === 1)!;
+    expect(first.upcomingRawWorkMilliSiu).toBe("1950"); // two units at 975 mSIU at round 1's print
+  });
+
+  it("measures a holding as a fraction of what the trader opened with, and never the final row", () => {
+    const m = run();
+    const row = (t: string, r: number) => m.holdings.find((h) => h.trader === t && h.round === r && h.label !== "final")!;
+    expect(row("TRADER-4", 2).heldFraction).toBe(0.5);
+    expect(row("TRADER-3", 3).heldFraction).toBe(0.5);
+    expect(m.holdings.find((h) => h.label === "final")!.heldFraction).toBeUndefined();
+    expect(m.h2.rows).toHaveLength(12);
+  });
+
+  it("splits the trader-rounds into those with raw work still to buy and those without, and sums their holdings", () => {
+    const { counts } = run().h2;
+    // with: round 1 all four; round 2 TRADER-1, -2, -3; round 3 TRADER-1.  without: TRADER-4 in round 2; TRADER-2, -3, -4 in round 3.
+    expect(counts.withN).toBe(8);
+    expect(counts.withoutN).toBe(4);
+    expect(counts.withSum).toBeCloseTo(1 + 1 + 1 + 1 + 1 + 1 + 1 + 1, 6);
+    // A holding is recorded as a fraction to four decimals: 3,000 / 4,516 is 0.6643.
+    expect(counts.withoutSum).toBeCloseTo(0.5 + 0.6643 + 0.5 + 0, 9);
+  });
+
+  describe("the interval and the proposed rule", () => {
+    const runs = (n: number, withMean: number, withoutMean: number): H2Counts[] =>
+      Array.from({ length: n }, () => ({ withN: 8, withSum: 8 * withMean, withoutN: 4, withoutSum: 4 * withoutMean }));
+
+    it("is the difference of the two means, with an interval from resampling runs", () => {
+      const i = bootstrapH2(runs(20, 1, 0.5));
+      expect(i.delta).toBeCloseTo(0.5, 9);
+      expect(i.lower).toBeCloseTo(0.5, 9); // identical runs: nothing to resample
+      expect(i.upper).toBeCloseTo(0.5, 9);
+    });
+
+    it("widens when runs differ, and is the same every time (fixed seed)", () => {
+      const mixed = [...runs(10, 1, 0.9), ...runs(10, 1, 0.3)];
+      const a = bootstrapH2(mixed);
+      expect(bootstrapH2(mixed)).toEqual(a);
+      expect(a.lower).toBeLessThan(a.delta);
+      expect(a.upper).toBeGreaterThan(a.delta);
+    });
+
+    it("has no interval when a group is empty", () => {
+      const i = bootstrapH2([{ withN: 8, withSum: 8, withoutN: 0, withoutSum: 0 }]);
+      expect(Number.isNaN(i.delta)).toBe(true);
+      expect(bootstrapH2([]).runs).toBe(0);
+    });
+
+    it("is inconclusive below 30 trader-rounds without raw work to buy, or below 10 runs contributing both groups", () => {
+      const good = { delta: 0.5, lower: 0.4, upper: 0.6 };
+      expect(decideH2({ traderRoundsWithout: 29, runsWithBoth: 20, interval: good })).toBe("inconclusive");
+      expect(decideH2({ traderRoundsWithout: 80, runsWithBoth: 9, interval: good })).toBe("inconclusive");
+      expect(decideH2({ traderRoundsWithout: 30, runsWithBoth: 10, interval: good })).toBe("supported");
+    });
+
+    it("is supported only with the lower bound at 0.10 or more and a difference of at least 0.20", () => {
+      const at = (delta: number, lower: number, upper: number) => decideH2({ traderRoundsWithout: 80, runsWithBoth: 20, interval: { delta, lower, upper } });
+      expect(at(0.3, 0.1, 0.5)).toBe("supported");
+      expect(at(0.3, 0.09, 0.5)).toBe("no detectable effect at this sample size");
+      expect(at(0.15, 0.1, 0.2)).toBe("no detectable effect at this sample size"); // lower bound met, but the difference is under 0.20
+    });
+
+    it("is not supported when the whole interval sits below 0.10", () => {
+      expect(decideH2({ traderRoundsWithout: 80, runsWithBoth: 20, interval: { delta: 0.02, lower: -0.05, upper: 0.09 } })).toBe("not supported");
+      expect(decideH2({ traderRoundsWithout: 80, runsWithBoth: 20, interval: { delta: 0.05, lower: -0.05, upper: 0.1 } })).toBe("no detectable effect at this sample size");
+    });
+
+    it("pools runs, reads the rule, and puts the result beside H1's in the rendered report", () => {
+      const reports = Array.from({ length: 2 }, (_, k) =>
+        base({
+          runId: `lab-h2-${k}`,
+          prints: { byRound: ["1437000", "1652550", "1900432"], stepBps: 1500 },
+          opening: { fsiuMilliSiuPerTrader: "4516" },
+          economy: { needs },
+          snapshots: [snapshot(1, "opening"), snapshot(2, "round 2 opened"), snapshot(3, "round 3 opened")],
+          final: { traders: snapshot(3, "final").traders },
+        }),
+      );
+      const pooled = pool(reports);
+      expect(pooled.h2.traderRoundsWith).toBe(16);
+      expect(pooled.h2.traderRoundsWithout).toBe(8);
+      expect(pooled.h2.runsWithBoth).toBe(2);
+      expect(pooled.h2.verdict).toBe("inconclusive"); // 8 trader-rounds without, 2 runs
+      const text = renderPooled(pooled);
+      expect(text).toContain("H2 (fSIU held at each round's start");
+      expect(text).toContain("verdict under the proposed rule: INCONCLUSIVE");
+      expect(text).toContain("verdict under the approved rule"); // H1's line is still there
+    });
   });
 });

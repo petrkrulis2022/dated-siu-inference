@@ -37,11 +37,11 @@ export const LAB_TOOL_DESCRIPTIONS: Readonly<Partial<Record<ToolName, string>>> 
     "price, in USDC.",
   transfer_claim:
     "pay_with_held_claim(requestId) -> settles a quote you were sent by giving the seller a claim you already hold, at " +
-    "once, worth the quote's price at the print. Costs: that claim's fSIU.",
+    "once, worth the quote's price at the print of the round the quote was asked for in. Costs: that claim's fSIU.",
   settle_split_held:
     "pay_split(requestId, claimQuantityMilliSiu) -> settles a quote you were sent by giving the seller, at once, a claim " +
-    "you already hold of the quantity you give and the rest of the quote's price in USDC. Costs: that quantity of fSIU, " +
-    "plus the rest of the quote's price in USDC.",
+    "you already hold of the quantity you give, valued at the print of the round the quote was asked for in, and the rest " +
+    "of the quote's price in USDC. Costs: that quantity of fSIU, plus the rest of the quote's price in USDC.",
 };
 
 export interface CallLookup {
@@ -49,6 +49,8 @@ export interface CallLookup {
   sellerNameOf(requestId: string): string | undefined;
   /** The one token every trader holds. */
   tokenId: string;
+  /** What the current round's print is called in a quote's `print_id` (D41); undefined where the lab has no print path. */
+  printIdNow?(): string | undefined;
 }
 
 /** `undefined` for a tool that was not renamed; a refusal for an internal name the agent was not given. */
@@ -59,6 +61,12 @@ export function resolveLabCall(
 ): { tool: ToolName; args: unknown } | { refuse: string } | undefined {
   if ((Object.keys(LAB_TOOL_NAMES) as string[]).includes(name) || RETIRED_INTERNAL.includes(name)) {
     return { refuse: `${name} is not one of your tools.` };
+  }
+  // A quote request names the print of the round it is asked in. The agent copies a print id from its brief, which names round 1's;
+  // the lab writes the current round's, so a later round's quote carries its own scenario print and not the published one (D41).
+  if (name === "request_quote") {
+    const now = lookup.printIdNow?.();
+    return now === undefined || typeof args !== "object" || args === null ? undefined : { tool: "request_quote", args: { ...(args as object), printId: now } };
   }
   // Not renamed, but the loop fills in arguments the agent never gave it: a list of escrows to read, for one. Resolved to
   // itself so the agent's history shows `get_balances` exactly as it called it, and names no escrow it never heard of.

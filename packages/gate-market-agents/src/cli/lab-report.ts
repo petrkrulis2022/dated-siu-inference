@@ -35,6 +35,19 @@ function main(): void {
         `partial reuse ${m.partialReuse}; routes ${JSON.stringify(m.paymentsByRoute)}; not-wholly-dollar share ${m.fsiuShareOfPayments}; ` +
         `needs met ${m.needsMet} of ${m.needsTotal}; waited with work ${m.waitedWithWork}; cost $${m.costUsd}`,
     );
+    // H2's raw material, per trader per round (D41): fSIU held at the start of the round against the raw work its schedule still has it buying.
+    if (r.prints !== undefined) {
+      console.log(`    print by round (nano-USD per SIU): ${r.prints.byRound.join(", ")}`);
+      for (const t of m.traders) {
+        const rows = m.holdings.filter((h) => h.trader === t.trader && h.label !== "final");
+        console.log(
+          `    ${t.trader}: ` +
+            rows
+              .map((h) => `r${h.round} held ${h.fsiuMilliSiu} (${((h.heldFraction ?? 0) * 100).toFixed(0)}%), raw work still to buy ${h.upcomingRawUnits} unit(s) = ${h.upcomingRawWorkMilliSiu} mSIU`)
+              .join(" | "),
+        );
+      }
+    }
   }
 }
 

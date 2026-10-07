@@ -49,6 +49,11 @@ export interface LabParams {
   tradeMultiplierBps: number;
   /** What each need met adds to a result, as a multiple of the print per job, in basis points. */
   creditMultiplierBps: number;
+  /**
+   * The print moves between rounds by this much, up or down with equal probability, in basis points (D41). It is a scenario
+   * value used inside the lab only and never the published index. Zero keeps the print fixed, as through instrument v5.
+   */
+  printStepBps: number;
 }
 
 /** Plan §2.11. Change them there first. */
@@ -58,6 +63,7 @@ export const DEFAULT_PARAMS: LabParams = {
   jobMilliSiu: 1000,
   tradeMultiplierBps: 12_000,
   creditMultiplierBps: 15_000,
+  printStepBps: 1500,
 };
 
 export interface Need {

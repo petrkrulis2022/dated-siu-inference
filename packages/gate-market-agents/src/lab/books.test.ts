@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { LabBooks, MAX_DELIVERY_ATTEMPTS } from "./books.js";
-import { LAB_TRADERS, buildEconomy, needsOf, type Economy, type TraderLabel } from "./economy.js";
+import { DEFAULT_PARAMS, LAB_TRADERS, buildEconomy, needsOf, type Economy, type TraderLabel } from "./economy.js";
+import { buildPrintPath } from "./prints.js";
 
 const ids = {
   traders: Object.fromEntries(LAB_TRADERS.map((t) => [t, `erc8004:0x${t}`])) as Record<TraderLabel, string>,
@@ -146,5 +147,45 @@ describe("LabBooks", () => {
 
   it("allows three attempts at a job, no more", () => {
     expect(MAX_DELIVERY_ATTEMPTS).toBe(3);
+  });
+
+  describe("the print in each round (D41)", () => {
+    const path = buildPrintPath(9, 1_437_000n, DEFAULT_PARAMS, "real-print");
+
+    it("knows the print of every round, the one in force, and its id; none without a path", () => {
+      const plain = new LabBooks(economy, ids);
+      expect(plain.currentPrint()).toBeUndefined();
+      expect(plain.printOfRound(1)).toBeUndefined();
+      const b = new LabBooks(economy, ids, path);
+      expect(b.currentPrint()).toBe(path.byRound[0]);
+      expect(b.currentPrintId()).toBe("real-print");
+      b.advanceRound();
+      expect(b.currentPrint()).toBe(path.byRound[1]);
+      expect(b.currentPrintId()).toBe("lab-scenario-round-2");
+      expect(b.printOfRound(3)).toBe(path.byRound[2]);
+    });
+
+    it("prices a quote at the print of the round it was asked for in, whatever round it is paid in", () => {
+      const b = new LabBooks(economy, ids, path);
+      const need = economy.needs.find((n) => n.round === 1)!;
+      b.requestPosted("qr-1", need.buyer, need.seller);
+      b.requestPosted("qr-raw", need.buyer, "ISSUER");
+      b.advanceRound();
+      b.advanceRound();
+      // Two rounds on, the print in force is round 3's; these quotes were asked for in round 1 and keep round 1's print.
+      expect(b.currentPrint()).toBe(path.byRound[2]);
+      expect(b.printForSale("qr-1")).toBe(path.byRound[0]);
+      expect(b.printForSale("qr-raw")).toBe(path.byRound[0]);
+      expect(b.sale("qr-1")?.round).toBe(1);
+      expect(b.printForSale("qr-nope")).toBeUndefined();
+    });
+
+    it("records the round of a request made after the print has moved", () => {
+      const b = new LabBooks(economy, ids, path);
+      b.advanceRound();
+      b.requestPosted("qr-9", "TRADER-1", "ISSUER");
+      expect(b.sale("qr-9")?.round).toBe(2);
+      expect(b.printForSale("qr-9")).toBe(path.byRound[1]);
+    });
   });
 });

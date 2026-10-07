@@ -13,7 +13,8 @@ import { claimValueMinorUnits } from "../tools/settle-split.js";
 import { decimalToUnits, jobSiu, quotedPrice, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu } from "./money.js";
 
 export interface GuardConfig {
-  printNano: bigint;
+  /** The print in force now. A getter in a run, so it follows the round (D41); a plain number in a test. */
+  readonly printNano: bigint;
   params: LabParams;
 }
 
@@ -84,7 +85,7 @@ function guardRequestQuote(books: LabBooks, cfg: GuardConfig, caller: TraderLabe
       return `a unit of raw work is ${size} SIU.`;
     }
     const rate = rawWorkRateUsdPerSiu(cfg.printNano);
-    if (!sameDecimal(a.rateUsdPerSiu, rate)) return `raw work is sold at the published print, ${rate} USD per SIU.`;
+    if (!sameDecimal(a.rateUsdPerSiu, rate)) return `raw work is sold at the print, ${rate} USD per SIU.`;
     return null;
   }
 
@@ -121,11 +122,13 @@ function guardClaimPart(books: LabBooks, cfg: GuardConfig, rawArgs: unknown): st
   if (typeof q !== "string" || !/^[1-9]\d*$/.test(q)) {
     return "the claim part of a split is a whole number of mSIU, more than 0.";
   }
+  // The quote's price is its round's, and so is the print the claim part is valued at (D41).
+  const p = books.printForSale(sale.requestId) ?? cfg.printNano;
   const price = quotedPrice(
     jobSiu(cfg.params),
-    sale.kind === "trade" ? tradeRateUsdPerSiu(cfg.printNano, cfg.params) : rawWorkRateUsdPerSiu(cfg.printNano),
+    sale.kind === "trade" ? tradeRateUsdPerSiu(p, cfg.params) : rawWorkRateUsdPerSiu(p),
   ).minorUnits;
-  const value = claimValueMinorUnits(q, cfg.printNano.toString());
+  const value = claimValueMinorUnits(q, p.toString());
   if (value === 0n || value >= price) {
     return `the claim part of a split must be worth more than nothing and less than the quote's price: ${q} mSIU is worth ${value} USDC minor units at the print, and the price is ${price}.`;
   }

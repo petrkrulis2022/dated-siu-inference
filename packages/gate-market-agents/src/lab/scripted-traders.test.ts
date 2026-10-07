@@ -18,12 +18,14 @@ import {
   myAddress,
   openNeeds,
   owedJobs,
+  printInForce,
   receivedQuotes,
   unitsHeld,
   whoAmI,
 } from "./lab-cues.js";
 import { jobSiu, printNano, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu } from "./money.js";
 import { LAB_TRADER_TOOLS } from "./roster.js";
+import { buildPrintPath } from "./prints.js";
 import { LAB_TOOL_DESCRIPTIONS } from "./tools.js";
 import {
   JOB_ROUTES,
@@ -54,6 +56,7 @@ const directory = {
 const env: ScriptedLabEnv = {
   print: { printId: "print-illustrative", printHash: "0x00", rateUsdPerSiu: PRINT, indexVersion: "SIU-2026a" },
   rates: { trade: tradeRateUsdPerSiu(p, DEFAULT_PARAMS), raw: rawWorkRateUsdPerSiu(p) },
+  params: DEFAULT_PARAMS,
   sizeSiu: jobSiu(DEFAULT_PARAMS),
   chain: "base-sepolia",
   quoteExpirySeconds: 3600,
@@ -66,18 +69,19 @@ const fakeQuote = (sellerId: string, amount: string): TouchstoneQuote =>
   ({ ...fakeBody(sellerId, amount), print_id: "print-illustrative", settlement: [{ amount_max: "0" }] }) as unknown as TouchstoneQuote;
 
 /** A trader's whole prompt, built by the real renderers: brief, tools, history, board, lab sections. */
-function promptFor(me: TraderLabel, books: LabBooks, board: QuoteBoard, history: ToolCallRecord[] = []): string {
+function promptFor(me: TraderLabel, books: LabBooks, board: QuoteBoard, history: ToolCallRecord[] = [], guardOverride?: { readonly printNano: bigint; params: typeof DEFAULT_PARAMS }): string {
   const brief = buildLabBrief({
     me,
     economy,
     print: { printId: "print-illustrative", rateUsdPerSiu: PRINT },
+    opening: { fsiuMilliSiu: 4_318n, usdcMinor: 6_205n },
     address: `0x${"ab".repeat(20)}`,
     directory,
     claim: { tokenId: "777", classLabel: "extract", fromIso: "2026-10-06 10:00:00", untilIso: "2026-10-06 10:25:00" },
     maxTurns: 40,
     chain: "base-sepolia",
   });
-  const guard = { printNano: p, params: DEFAULT_PARAMS };
+  const guard = guardOverride ?? { printNano: p, params: DEFAULT_PARAMS };
   const sections = composeBoard(
     {
       marketBoardText: board.renderFor(SEAT_OF[me], ids.traders[me]),
@@ -371,5 +375,54 @@ describe("a scripted trader's decisions", () => {
     const traders = scriptedLabTraders(env);
     expect(Object.keys(traders.adapters)).toEqual([...LAB_TRADERS]);
     expect(traders.status()).toEqual({ decided: [], fellBack: [], unaffordable: [] });
+  });
+
+  describe("a print that moves between rounds (D41)", () => {
+    const path = buildPrintPath(9, p, DEFAULT_PARAMS, "print-illustrative");
+    // A prompt built by the real renderers, with the books' print path, so it carries THE PRINT as a trader reads it.
+    const movingPrompt = (round: number, me: TraderLabel, extra?: (b: LabBooks) => void): string => {
+      const b = new LabBooks(economy, ids, path);
+      for (let i = 1; i < round; i++) b.advanceRound();
+      extra?.(b);
+      const guard = {
+        get printNano(): bigint {
+          return b.currentPrint()!;
+        },
+        params: DEFAULT_PARAMS,
+      };
+      return promptFor(me, b, new QuoteBoard(PRODUCTION_BOARD), [], guard);
+    };
+
+    it("reads the print in force from THE PRINT in the prompt: round 1's in round 1, the latest after a move", () => {
+      expect(printInForce(movingPrompt(1, "TRADER-1"))).toBe(path.byRound[0]);
+      expect(printInForce(movingPrompt(2, "TRADER-1"))).toBe(path.byRound[1]);
+      expect(printInForce(movingPrompt(3, "TRADER-1"))).toBe(path.byRound[2]);
+    });
+
+    it("reads none from a prompt that states none, and is not fooled by a needs line that starts the same way", () => {
+      expect(printInForce("nothing here")).toBeUndefined();
+      expect(printInForce("  Round 2: TRADER-1 needs TYPE-3 from TRADER-2 (not yet open).")).toBeUndefined();
+    });
+
+    it("asks for a job at the rate of the round in force, as the guard will insist", () => {
+      for (const round of [1, 2, 3]) {
+        const mem = newMemory();
+        const buyer = LAB_TRADERS.find((t) => {
+          const b = new LabBooks(economy, ids, path);
+          for (let i = 1; i < round; i++) b.advanceRound();
+          return b.openNeeds(t).length > 0;
+        })!;
+        const prompt = movingPrompt(round, buyer);
+        const { intent } = decide(prompt, env, mem);
+        expect(intent, `round ${round}`).toMatchObject({ tool: "request_quote", args: { rateUsdPerSiu: tradeRateUsdPerSiu(path.byRound[round - 1], DEFAULT_PARAMS) } });
+        const b = new LabBooks(economy, ids, path);
+        for (let i = 1; i < round; i++) b.advanceRound();
+        const args = (intent as { args: Record<string, unknown> }).args;
+        expect(
+          guardLabCall(b, { printNano: path.byRound[round - 1], params: DEFAULT_PARAMS }, buyer, "request_quote", args),
+          `round ${round}`,
+        ).toBeNull();
+      }
+    });
   });
 });

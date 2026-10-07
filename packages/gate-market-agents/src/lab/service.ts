@@ -105,10 +105,19 @@ export class LabService implements LabHooks, DeliverService {
           return sale === undefined ? undefined : sale.seller === "ISSUER" ? ISSUER_SEAT : sale.seller;
         },
         tokenId: this.d.tokenId,
+        printIdNow: () => this.d.books.currentPrintId(),
       },
       name,
       args,
     );
+  }
+
+  /**
+   * The print a quote was asked for at, which sizes a claim paid against it (D41). A quote keeps the price it was asked for at,
+   * so paying it later, in either asset, costs what it cost then; a claim is sized at that round's print and not the current one.
+   */
+  printForQuote(requestId: string): bigint | undefined {
+    return this.d.books.printForSale(requestId);
   }
 
   rewriteText(text: string): string {
@@ -127,7 +136,8 @@ export class LabService implements LabHooks, DeliverService {
     if (typeof a.requestId !== "string") return null;
     const sale = this.d.books.sale(a.requestId);
     if (sale === undefined) return null;
-    const p = this.d.guard.printNano;
+    // The quote's own round's print, not the current one (D41).
+    const p = this.d.books.printForSale(a.requestId) ?? this.d.guard.printNano;
     const price = quotedPrice(
       jobSiu(this.d.guard.params),
       sale.kind === "trade" ? tradeRateUsdPerSiu(p, this.d.guard.params) : rawWorkRateUsdPerSiu(p),

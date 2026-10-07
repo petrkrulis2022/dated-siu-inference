@@ -3,6 +3,7 @@ import { renderLabAction, renderLabInfo } from "./board.js";
 import { LabBooks } from "./books.js";
 import { DEFAULT_PARAMS, LAB_TRADERS, buildEconomy, type Economy, type TraderLabel } from "./economy.js";
 import type { GuardConfig } from "./guards.js";
+import { buildPrintPath, describeMove, printText } from "./prints.js";
 
 const ids = {
   traders: Object.fromEntries(LAB_TRADERS.map((t) => [t, `erc8004:0x${t}`])) as Record<TraderLabel, string>,
@@ -23,7 +24,7 @@ describe("the lab board", () => {
     expect(text).toContain("ROUND 1 OF 3");
     expect(text).toContain(`You are TRADER-2. You deliver ${economy.skillOf["TRADER-2"]} jobs, and only you can.`);
     expect(text).toContain("A job is 1 SIU, priced at 0.0017244 USD per SIU; its quote is 0.0017 USD.");
-    expect(text).toContain("sold by ISSUER-B at the published print, 0.001437 USD per SIU; its quote is 0.0014 USD.");
+    expect(text).toContain("sold by ISSUER-B at the print, 0.001437 USD per SIU; its quote is 0.0014 USD.");
     for (const t of LAB_TRADERS) expect(text).toContain(`${t} delivers ${economy.skillOf[t]}.`);
     for (const n of economy.needs) expect(text).toContain(`${n.buyer} needs ${n.type} from ${n.seller}`);
   });
@@ -91,5 +92,48 @@ describe("the lab board", () => {
         expect(text).not.toMatch(/usdc|fsiu|claim|escrow|mint|redeem|hold on|should|better|cheaper|prefer|keep |convert/i);
       }
     }
+  });
+
+  describe("the print and its moves (D41)", () => {
+    const path = buildPrintPath(9, 1_437_000n, DEFAULT_PARAMS, "real-print");
+    const moving = () => new LabBooks(economy, ids, path);
+
+    it("shows only round 1's print in round 1, and says it is a scenario value that can move", () => {
+      const text = renderLabInfo(moving(), { printNano: path.byRound[0], params: DEFAULT_PARAMS }, "TRADER-1");
+      expect(text).toContain("THE PRINT (a scenario value used only inside this lab, not the published index; it can move at each round)");
+      expect(text).toContain("  Round 1: 0.001437 USD per SIU");
+      expect(text).not.toMatch(/Round 2: [0-9.]+ USD per SIU/); // a round that has not opened has no print shown (its needs are listed, as always)
+      expect(text).toContain("The print in force now is round 1's.");
+    });
+
+    it("shows every round so far and how far each moved, once the rounds have opened", () => {
+      const b = moving();
+      b.advanceRound();
+      b.advanceRound();
+      const text = renderLabInfo(b, { printNano: path.byRound[2], params: DEFAULT_PARAMS }, "TRADER-1");
+      expect(text).toContain(`  Round 2: ${printText(path.byRound[1])} USD per SIU (${describeMove(path.byRound[0], path.byRound[1])} on round 1)`);
+      expect(text).toContain(`  Round 3: ${printText(path.byRound[2])} USD per SIU (${describeMove(path.byRound[1], path.byRound[2])} on round 2)`);
+      expect(text).toMatch(/\(up 15\.0% on round 1\)|\(down 15\.0% on round 1\)/);
+      expect(text).toContain("The print in force now is round 3's.");
+    });
+
+    it("states the prices at the print in force, which is round 2's after round 1", () => {
+      const b = moving();
+      b.advanceRound();
+      const p2 = path.byRound[1];
+      const text = renderLabInfo(b, { printNano: p2, params: DEFAULT_PARAMS }, "TRADER-1");
+      expect(text).toContain(`sold by ISSUER-B at the print, ${printText(p2)} USD per SIU`);
+    });
+
+    it("says nothing about what a move means, or which asset to hold: facts only", () => {
+      const b = moving();
+      b.advanceRound();
+      const text = renderLabInfo(b, { printNano: path.byRound[1], params: DEFAULT_PARAMS }, "TRADER-1");
+      expect(text).not.toMatch(/\b(hedge|lock|hold|spend|prefer|should|expect|cheaper|dearer|gain)\b/i);
+    });
+
+    it("shows no print section in a lab with no print path (a test of the rest)", () => {
+      expect(renderLabInfo(books, cfg, "TRADER-1")).not.toContain("THE PRINT");
+    });
   });
 });

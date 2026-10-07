@@ -15,6 +15,7 @@ import type { MintContext } from "../loop/full-run.js";
 import { DEFAULT_PARAMS, ISSUER_SEAT, LAB_TRADERS, SEAT_OF, type TraderLabel } from "./economy.js";
 import { referenceExecutor } from "./jobs.js";
 import { LAB_INSTRUMENT_VERSION } from "./instrument.js";
+import { buildPrintPath } from "./prints.js";
 import type { EndowmentMint, LabChain, Signer } from "./operator.js";
 import { setRevertRetryPolicy, writeAndConfirm } from "../chain/write.js";
 import type { ChainClients } from "@touchstone/agents";
@@ -234,8 +235,8 @@ describe("runLab", () => {
     expect(chain.calls).toEqual([]);
   });
 
-  it("refuses an economy whose endowment does not fit, naming the figure: three needs each is 3 x 2,159 mSIU per trader", async () => {
-    await expect(runLab(input({ params: { ...DEFAULT_PARAMS, needsPerTrader: 3 } }))).rejects.toThrow(/the endowment is 25908 mSIU/);
+  it("refuses an economy whose endowment does not fit, naming the figure: three needs each is 3 x (1,229 + 1,029) mSIU per trader at the walk's largest claims", async () => {
+    await expect(runLab(input({ params: { ...DEFAULT_PARAMS, needsPerTrader: 3 } }))).rejects.toThrow(/the endowment is 27096 mSIU/);
     expect(chain.calls).toEqual([]);
   });
 
@@ -266,21 +267,22 @@ describe("runLab", () => {
   it("sets every trader to the same opening, endows them from one mint, and records both as operator action", async () => {
     // Different starting USDC: one short, one over, one exact, one empty.
     chain.usdc.set(ADDRESSES.ORCHESTRATOR.toLowerCase(), 10_000n);
-    chain.usdc.set(ADDRESSES["WORKER-CODE"].toLowerCase(), 6_205n);
+    chain.usdc.set(ADDRESSES["WORKER-CODE"].toLowerCase(), 8_583n);
     chain.usdc.set(ADDRESSES["WORKER-EXTRACT"].toLowerCase(), 100n);
     const report = await runLab(input());
 
     expect(report.abortedBecause).toBeUndefined();
-    // Sized from the print and the schedule so either asset alone meets every need (D31): 2 x (1,184 + 975) mSIU, and USDC of equal value.
-    expect(report.opening).toMatchObject({ usdcMinorPerTrader: "6205", fsiuMilliSiuPerTrader: "4318", tokenId: "777" });
+    // Sized from the print and the schedule so either asset alone meets every need however the print moves (D31, D41): 2 x (1,229 + 1,029) mSIU,
+    // the largest claims any reachable print asks for, and USDC of equal value at the highest print the walk can reach.
+    expect(report.opening).toMatchObject({ usdcMinorPerTrader: "8583", fsiuMilliSiuPerTrader: "4516", tokenId: "777" });
     const resets = report.operatorActions.filter((a) => a.kind === "usdc_reset");
     expect(resets.map((a) => (a as { move: string }).move)).toEqual(["return", "top_up", "top_up"]); // returns first; the exact one moves nothing
     // One mint for all four, then each trader's share.
-    expect(chain.calls.filter((c) => c.startsWith("mint"))).toEqual(["mint 17272"]);
+    expect(chain.calls.filter((c) => c.startsWith("mint"))).toEqual(["mint 18064"]);
     expect(report.operatorActions.filter((a) => a.kind === "endowment_transfer")).toHaveLength(4);
     const opening = report.snapshots[0] as { label: string; traders: { usdcMinor: string; fsiuMilliSiu: string }[] };
     expect(opening.label).toBe("opening");
-    for (const t of opening.traders) expect(t).toMatchObject({ usdcMinor: "6205", fsiuMilliSiu: "4318" });
+    for (const t of opening.traders) expect(t).toMatchObject({ usdcMinor: "8583", fsiuMilliSiu: "4516" });
   });
 
   it("takes a snapshot when each round opens and one more before the window closes", async () => {
@@ -289,11 +291,18 @@ describe("runLab", () => {
     expect(labels).toEqual(["opening", "round 2 opened", "round 3 opened"]);
     expect((report.final as { label: string }).label).toBe("final");
     expect(report.measuredBeforeClose).toBe(true);
-    // Nobody traded, so every result is the opening's value and no need is met.
-    const final = report.final as { traders: { resultNano: string; needsMet: number }[] };
+    // Nobody traded, so every result is the opening valued at the print of the round the snapshot was taken in, and no need is met (D41).
+    const path = buildPrintPath(9, 1_437_000n, DEFAULT_PARAMS, "print-illustrative").byRound;
+    const value = (print: bigint): string => (8_583n * 1000n + (4_516n * print) / 1000n).toString();
+    const snaps = report.snapshots as { round: number; traders: { resultNano: string }[] }[];
+    snaps.forEach((s, i) => {
+      for (const t of s.traders) expect(t.resultNano, `round ${s.round}`).toBe(value(path[i]));
+    });
+    const final = report.final as { round: number; traders: { resultNano: string; needsMet: number }[] };
+    expect(final.round).toBe(3);
     for (const t of final.traders) {
       expect(t.needsMet).toBe(0);
-      expect(t.resultNano).toBe((6_205n * 1000n + (4_318n * 1_437_000n) / 1000n).toString());
+      expect(t.resultNano).toBe(value(path[2])); // the last round's print, the one in force at the end
     }
   });
 
@@ -301,7 +310,7 @@ describe("runLab", () => {
     const report = await runLab(input());
     const expiries = report.operatorActions.filter((a) => a.kind === "expiry") as { holder: string; quantityMilliSiu: string }[];
     expect(expiries.map((e) => e.holder).sort()).toEqual(["TRADER-1", "TRADER-2", "TRADER-3", "TRADER-4"]);
-    for (const e of expiries) expect(e.quantityMilliSiu).toBe("4318");
+    for (const e of expiries) expect(e.quantityMilliSiu).toBe("4516");
     expect(report.pool).toMatchObject({ startingHeadroomMilliSiu: "32000", endingHeadroomMilliSiu: "32000", restored: true });
     // The clock was taken past the window's close before the first expiry (the fake sleep advances it).
     expect(chain.clock).toBeGreaterThanOrEqual(BigInt(report.window.toChainSeconds));
@@ -313,9 +322,9 @@ describe("runLab", () => {
     chain.failExpiryFor = ADDRESSES["WORKER-EXTRACT"];
     const report = await runLab(input());
     const failed = report.operatorActions.filter((a) => a.kind === "expiry_failed") as { holder: string; reason: string }[];
-    expect(failed).toEqual([{ kind: "expiry_failed", holder: "TRADER-3", quantityMilliSiu: "4318", reason: "WindowNotClosedYet" }]);
-    // Three holders expired, so 12,954 of the 17,272 minted came back; TRADER-3's 4,318 is still outstanding.
-    expect(report.pool).toMatchObject({ endingHeadroomMilliSiu: "27682", restored: false });
+    expect(failed).toEqual([{ kind: "expiry_failed", holder: "TRADER-3", quantityMilliSiu: "4516", reason: "WindowNotClosedYet" }]);
+    // Three holders expired, so 13,548 of the 18,064 minted came back; TRADER-3's 4,516 is still outstanding.
+    expect(report.pool).toMatchObject({ endingHeadroomMilliSiu: "27484", restored: false });
   });
 
   // ---- aborts -------------------------------------------------------------------------------
@@ -376,7 +385,7 @@ describe("runLab", () => {
     expect(report.abortedBecause).toBeUndefined();
     expect(seen).toHaveLength(1);
     // Called after the mint and before the first transfer of the endowment to a trader.
-    expect(seen[0].at).toContain("mint 17272");
+    expect(seen[0].at).toContain("mint 18064");
     expect(seen[0].at.some((c) => c.startsWith("claim ->"))).toBe(false);
     expect(seen[0].open).toMatchObject({
       runId: "lab-test-run",
@@ -410,14 +419,24 @@ describe("runLab", () => {
     expect(report.scripted).toBe(true);
     expect(report.seats).toEqual({ "TRADER-1": "ORCHESTRATOR", "TRADER-2": "WORKER-CODE", "TRADER-3": "WORKER-EXTRACT", "TRADER-4": SEAT_OF["TRADER-4"] });
     expect(report.economy.needs).toHaveLength(8);
-    // Nothing is minted after the opening (D31): the whole fSIU supply is the endowment, 54% of the 32,000 mSIU headroom.
+    // Nothing is minted after the opening (D31): the whole fSIU supply is the endowment, 56% of the 32,000 mSIU headroom.
     expect(report.endowment).toEqual({
-      perTraderMilliSiu: "4318",
-      totalMilliSiu: "17272",
-      perTraderUsdcMinor: "6205",
-      perTraderUsdcNeededMinor: "6200",
+      perTraderMilliSiu: "4516",
+      totalMilliSiu: "18064",
+      perTraderUsdcMinor: "8583",
+      perTraderUsdcNeededMinor: "8400",
       allowanceMilliSiu: "25600",
+      ceilingPrintNano: "1900432",
     });
+    // The print moves between rounds, from the seed, starting at the real print (D41).
+    const path = buildPrintPath(9, 1_437_000n, DEFAULT_PARAMS, "print-illustrative");
+    expect(report.prints).toEqual({
+      stepBps: 1500,
+      byRound: path.byRound.map(String),
+      ids: ["print-illustrative", "lab-scenario-round-2", "lab-scenario-round-3"],
+      reachableNano: ["1038232", "1221450", "1404667", "1437000", "1652550", "1900432"],
+    });
+    expect(path.byRound[0]).toBe(1_437_000n);
     expect(report).not.toHaveProperty("mintBound");
     expect(report).not.toHaveProperty("escrowFeeBps");
     expect(report.instrument.version).toBe(LAB_INSTRUMENT_VERSION);

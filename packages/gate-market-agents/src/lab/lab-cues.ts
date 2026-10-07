@@ -8,6 +8,7 @@
  */
 import { sectionLines } from "../cues/prompt-cues.js";
 import { LAB_TRADERS, type TraderLabel } from "./economy.js";
+import { decimalToUnits } from "./money.js";
 
 export type Counterparty = TraderLabel | "ISSUER-B";
 
@@ -24,6 +25,19 @@ export function myAddress(prompt: string): string | undefined {
 /** The fSIU every trader holds: `tokenId 777,` in the brief's THE FSIU IN THIS LAB. */
 export function claimTokenId(prompt: string): string | undefined {
   return /All fSIU here is one token: tokenId (\d+),/.exec(prompt)?.[1];
+}
+
+/**
+ * The print in force: the last of `Round N: 0.0016526 USD per SIU (…)` in THE PRINT section — a round that has opened is listed, one that
+ * has not is not (D41). Undefined when the prompt carries none (a lab with a fixed print states it only in the brief's round-1 line).
+ */
+export function printInForce(prompt: string): bigint | undefined {
+  let best: { round: number; rate: string } | undefined;
+  for (const m of prompt.matchAll(/^ {2}Round (\d+): ([0-9]+(?:\.[0-9]+)?) USD per SIU/gm)) {
+    const round = Number(m[1]);
+    if (best === undefined || round > best.round) best = { round, rate: m[2] };
+  }
+  return best === undefined ? undefined : decimalToUnits(best.rate, 9);
 }
 
 /** `THE TRADERS` — the sellerId and model a quote request needs, for every counterparty. */

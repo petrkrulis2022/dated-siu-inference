@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { LabBooks } from "./books.js";
 import { DEFAULT_PARAMS, ISSUER_SEAT, LAB_TRADERS, SEAT_OF, buildEconomy, type Economy, type TraderLabel } from "./economy.js";
 import { LabService, type LabServiceDeps } from "./service.js";
+import { buildPrintPath } from "./prints.js";
+import { claimForUsd, quotedPrice, tradeRateUsdPerSiu } from "./money.js";
 import type { WorkExecutor } from "./jobs.js";
 import type { AgentId } from "../identity/resolve.js";
 
@@ -360,6 +362,93 @@ describe("LabService", () => {
       // A claim part the lab's own rules refuse is refused before the chain is asked, too.
       expect(await svc2.guard(SEAT_OF[economy.needs.find((x) => x.round === 1)!.buyer], "settle_split_held", { requestId: "qr-1", claimQuantityMilliSiu: "99999" })).toContain("the claim part of a split must be worth");
       expect(reads).toBe(0);
+    });
+  });
+
+  describe("a print that moves between rounds (D41)", () => {
+    const path = buildPrintPath(9, 1_437_000n, DEFAULT_PARAMS, "real-print");
+    const movingBooks = () => new LabBooks(economy, ids, path);
+    const movingService = (b: LabBooks, holdings?: LabServiceDeps["holdings"]): LabService =>
+      new LabService({
+        books: b,
+        // A getter, as the runner builds it: the guards and the board follow the round.
+        guard: {
+          get printNano(): bigint {
+            return b.currentPrint()!;
+          },
+          params: DEFAULT_PARAMS,
+        },
+        seed: 4,
+        executorFor: () => executor,
+        tokenId: "777",
+        ...(holdings !== undefined ? { holdings } : {}),
+      });
+    const quotedInRound1 = (b: LabBooks) => {
+      const n = economy.needs.find((x) => x.round === 1)!;
+      b.requestPosted("qr-1", n.buyer, n.seller);
+      b.quoteIssued("qr-1");
+      return n;
+    };
+
+    it("writes the current round's print id into a quote request, over the one the agent copied from its brief", () => {
+      const b = movingBooks();
+      const svc2 = movingService(b);
+      const asked = { siu: "1", model: "m", rateUsdPerSiu: "0.0017244", indexVersion: "SIU-2026a", printId: "real-print", printHash: "0x00", sellerId: "s", chain: "c", expiresInSeconds: 1, pattern: "fixed" };
+      expect(svc2.resolveCall("ORCHESTRATOR", "request_quote", asked)).toEqual({ tool: "request_quote", args: { ...asked, printId: "real-print" } });
+      b.advanceRound();
+      // Round 2: the agent still copies round 1's id from the brief; the lab writes round 2's scenario print, which is not the published one.
+      expect(svc2.resolveCall("ORCHESTRATOR", "request_quote", asked)).toEqual({ tool: "request_quote", args: { ...asked, printId: "lab-scenario-round-2" } });
+    });
+
+    it("leaves a quote request alone in a lab with no print path, and never touches another tool's arguments", () => {
+      expect(svc.resolveCall("ORCHESTRATOR", "request_quote", { siu: "1" })).toBeUndefined();
+      const svc2 = movingService(movingBooks());
+      expect(svc2.resolveCall("ORCHESTRATOR", "issue_quote", { requestId: "qr-1" })).toBeUndefined();
+    });
+
+    it("says what print a quote was asked for at, so a claim paid against it is sized there, even rounds later", () => {
+      const b = movingBooks();
+      const svc2 = movingService(b);
+      quotedInRound1(b);
+      b.advanceRound();
+      b.advanceRound();
+      expect(svc2.printForQuote("qr-1")).toBe(path.byRound[0]);
+      expect(b.currentPrint()).toBe(path.byRound[2]);
+      expect(svc2.printForQuote("qr-nope")).toBeUndefined();
+    });
+
+    it("judges whether a payment is affordable at the quote's print, not the current one", async () => {
+      const b = movingBooks();
+      const n = quotedInRound1(b);
+      const buyer = SEAT_OF[n.buyer];
+      // The quote's claim at round 1's print is 1,184 mSIU; a wallet holding exactly that can pay it in round 3, when the print has moved.
+      const exact = movingService(b, async () => ({ usdcMinor: 0n, fsiuMilliSiu: 1_184n }));
+      b.advanceRound();
+      b.advanceRound();
+      expect(b.currentPrint()).not.toBe(path.byRound[0]);
+      expect(await exact.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toBeNull();
+      const short = movingService(b, async () => ({ usdcMinor: 0n, fsiuMilliSiu: 1_183n }));
+      expect(await short.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toBe(
+        "This payment costs 1184 mSIU of fSIU; the wallet holds 0 USDC minor units and 1183 mSIU of fSIU.",
+      );
+    });
+
+    it("prices a quote asked for in a later round at that round's print: the same job costs a different amount of USDC and about the same fSIU", async () => {
+      const b = movingBooks();
+      b.advanceRound();
+      const n = economy.needs.find((x) => x.round <= 2)!;
+      b.requestPosted("qr-2", n.buyer, n.seller);
+      b.quoteIssued("qr-2");
+      const p2 = path.byRound[1];
+      const svc2 = movingService(b, async () => ({ usdcMinor: 0n, fsiuMilliSiu: 0n }));
+      const cost = (await svc2.guard(SEAT_OF[n.buyer], "pay", { requestId: "qr-2" }))!;
+      const usd = quotedPrice("1", tradeRateUsdPerSiu(p2, DEFAULT_PARAMS)).minorUnits;
+      expect(cost).toContain(`costs ${usd} USDC minor units`);
+      const claim = (await svc2.guard(SEAT_OF[n.buyer], "transfer_claim", { requestId: "qr-2" }))!;
+      const mSiu = claimForUsd(quotedPrice("1", tradeRateUsdPerSiu(p2, DEFAULT_PARAMS)).usd, p2);
+      expect(claim).toContain(`costs ${mSiu} mSIU of fSIU`);
+      expect(mSiu).toBeGreaterThanOrEqual(1_150n); // about 1.2 SIU whatever the print
+      expect(mSiu).toBeLessThanOrEqual(1_250n);
     });
   });
 });

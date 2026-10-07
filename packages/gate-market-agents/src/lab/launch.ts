@@ -16,7 +16,9 @@ import { openingMilliSiuPerTrader, openingUsdcMinor, usdcNeededPerTrader } from 
 export const ENDOWMENT_HEADROOM_SHARE_BPS = 8_000n;
 
 export interface EndowmentBound {
-  /** One trader's opening, in fSIU and in USDC of equal value at the print. */
+  /** The highest print the walk can reach (D41): USDC is sized at it, so USDC alone is enough however the print moves. */
+  ceilingPrintNano: bigint;
+  /** One trader's opening, in fSIU and in USDC of equal value at the highest reachable print. */
   perTraderMilliSiu: bigint;
   perTraderUsdcMinor: bigint;
   /** What one trader must pay to meet every need, in USDC minor units: either asset alone covers it. */
@@ -25,12 +27,14 @@ export interface EndowmentBound {
   totalMilliSiu: bigint;
 }
 
-export function endowmentBound(printNano: bigint, params: LabParams): EndowmentBound {
-  const perTrader = openingMilliSiuPerTrader(printNano, params);
+/** `reachable` is every print the walk can reach (`lab/prints.ts`); a lab with a fixed print passes the one. */
+export function endowmentBound(reachable: readonly bigint[], params: LabParams): EndowmentBound {
+  const perTrader = openingMilliSiuPerTrader(reachable, params);
   return {
+    ceilingPrintNano: reachable.reduce((a, b) => (a > b ? a : b)),
     perTraderMilliSiu: perTrader,
-    perTraderUsdcMinor: openingUsdcMinor(printNano, params),
-    perTraderUsdcNeededMinor: usdcNeededPerTrader(printNano, params),
+    perTraderUsdcMinor: openingUsdcMinor(reachable, params),
+    perTraderUsdcNeededMinor: usdcNeededPerTrader(reachable, params),
     totalMilliSiu: perTrader * BigInt(LAB_TRADERS.length),
   };
 }

@@ -18,25 +18,26 @@ import { ISSUER_SEAT, LAB_TRADERS, SEAT_OF, type Economy, type TraderLabel } fro
 import { ISSUER_SERVICE_TOOLS, issuerServiceAdapter } from "./issuer-service.js";
 
 /**
- * Four traders on claude-haiku-4-5 (instrument v5, D38). Through v4 this was two of each family, haiku and gpt-5.4-mini
- * alternating by seat (plan §2.3). The v4 rerun showed both gpt-5.4-mini seats stalled with work on their boards — one sent a
- * malformed first reply and never acted again, the other waited with a paid job owed and never bought the raw work to deliver
- * it — and every need left unmet traced to one of them; the instruction was to replace that family with a stronger cheap model
- * from another family. Haiku is the one with evidence here: it made no malformed call in four runs of this loop.
- * `deepseek-v3.2` (registered, $0.28/$0.40 per million) is the alternative that keeps two families; it has not been tried.
+ * Two of each family (plan §2.3): claude-haiku-4-5 on TRADER-1 and TRADER-3, deepseek-v3.2 on TRADER-2 and TRADER-4. Through v4 the
+ * second family was gpt-5.4-mini; the v4 rerun showed both of its seats stalled with work on their boards (D38), and the
+ * instruction was to replace it with a stronger cheap model from another family. D39 put haiku on all four seats for want of a
+ * tested alternative; D40 fixed the bar for deepseek-v3.2 (registered, $0.28 / $0.40 per million) before replaying the two stalled
+ * screens through it, and it acted correctly on both, five times in five (D42). So the two-family roster is back, with a model that
+ * has been shown to act on the screens the last one did not. Alternating by seat, as before.
  */
 export const LAB_MODELS: Readonly<Record<TraderLabel, string>> = {
   "TRADER-1": "claude-haiku-4-5",
-  "TRADER-2": "claude-haiku-4-5",
+  "TRADER-2": "deepseek-v3.2",
   "TRADER-3": "claude-haiku-4-5",
-  "TRADER-4": "claude-haiku-4-5",
+  "TRADER-4": "deepseek-v3.2",
 };
 
 /**
  * A trader's whole grant. No `redeem_claim` (raw work is bought by quote, D8), no `reserve_for_work`, no `mint_claim` or
  * `pay_with_claim` (nothing is minted after the opening, D31), no `settle_escrow` (every payment is a direct transfer,
  * D30), no `check_headroom` and no `whoami`: the lab is not about capacity, and a tool it does not use is a tool an agent
- * may spend turns on. Three ways to pay: USDC, a held claim, or both (`settle_split_held`, shown as `pay_split`).
+ * may spend turns on. Three ways to pay: USDC, a held claim, or both (`settle_split_held`, shown as `pay_split`). No `get_print`
+ * either (v6): it reads the published print, which is not the lab's — the print moves between rounds and each turn states it (D41).
  */
 export const LAB_TRADER_TOOLS: readonly ToolName[] = [
   "request_quote",
@@ -46,7 +47,6 @@ export const LAB_TRADER_TOOLS: readonly ToolName[] = [
   "settle_split_held",
   "deliver_job",
   "get_balances",
-  "get_print",
 ];
 
 export { LAB_ALIASES, labDisplayName } from "./economy.js";
@@ -60,6 +60,8 @@ export interface LabRosterInput {
   rpcUrl: string;
   /** One adapter per trader; the runner builds them from the models below. */
   adapters: Readonly<Record<TraderLabel, Adapter>>;
+  /** What each trader opens with, from the print and the schedule: stated in the brief. */
+  opening: { fsiuMilliSiu: bigint; usdcMinor: bigint };
   /** Prices to cost each model's turns at. */
   prices: Readonly<Record<string, ModelPrices>>;
   /** Defaults to `LAB_MODELS`. */
@@ -104,6 +106,7 @@ export function buildLabRoster(input: LabRosterInput): RosterAgentConfig[] {
         me,
         economy: input.economy,
         print: input.print,
+        opening: input.opening,
         address: addressOf(seat),
         directory,
         claim: input.claim,

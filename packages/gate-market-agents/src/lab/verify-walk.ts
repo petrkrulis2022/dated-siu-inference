@@ -6,7 +6,8 @@
  *
  * Counts as evidence of nothing but that the plumbing works: a scripted run is never counted (plan §4).
  */
-import { openingMilliSiuPerTrader, openingUsdcMinor, printNano, resultNano, usdcNeededPerTrader } from "./money.js";
+import { claimForUsd, openingMilliSiuPerTrader, openingUsdcMinor, printNano, resultNano, usdcNeededPerTrader } from "./money.js";
+import { buildPrintPath, stepDown, stepUp } from "./prints.js";
 import type { ScriptStatus } from "./scripted-traders.js";
 import type { LabParams } from "./economy.js";
 
@@ -26,8 +27,11 @@ export interface WalkVerdict {
 /** The parts of a report this reads. Structural, so a test can build one by hand. */
 export interface WalkReport {
   scripted: boolean;
+  seed: number;
   params: LabParams;
-  print: { rateUsdPerSiu: string };
+  print: { printId?: string; rateUsdPerSiu: string };
+  /** The scenario print in each round (D41), and every print the walk could have reached. */
+  prints: { stepBps: number; byRound: string[]; reachableNano: string[] };
   economy: { needs: unknown[] };
   abortedBecause?: string;
   contamination?: string;
@@ -35,8 +39,8 @@ export interface WalkReport {
   labErrors: unknown[];
   toolErrors: { agentId: string; turn: number; tool: string; error: string }[];
   needsMet: Record<string, number>;
-  sales: { requestId: string; kind: "trade" | "rawwork"; delivered: boolean; paidAsset?: string }[];
-  paymentMoments: { agentId: string; tool: string; requestId?: string; heldReceivedMilliSiu: string }[];
+  sales: { requestId: string; round: number; kind: "trade" | "rawwork"; delivered: boolean; paidAsset?: string }[];
+  paymentMoments: { agentId: string; tool: string; requestId?: string; heldReceivedMilliSiu: string; quotedUsdMax?: string }[];
   capacityEvents: { kind: string; quantityMilliSiu?: string; settlesRequestId?: string }[];
   operatorActions: { kind: string; [k: string]: unknown }[];
   snapshots: {
@@ -45,6 +49,7 @@ export interface WalkReport {
     issuer: { usdcMinor: string; fsiuMilliSiu: string };
   }[];
   final?: {
+    round: number;
     traders: { trader: string; usdcMinor: string; fsiuMilliSiu: string; needsMet: number; resultNano: string }[];
     issuer: { usdcMinor: string; fsiuMilliSiu: string };
   };
@@ -172,15 +177,16 @@ export function verifyLabWalk(r: WalkReport, status?: ScriptStatus): WalkVerdict
 
   // Either asset alone must be enough for every need (D31): the opening is what the print and the schedule say it is.
   const pn = printNano(r.print.rateUsdPerSiu);
-  const wantFsiu = openingMilliSiuPerTrader(pn, r.params);
-  const wantUsdc = openingUsdcMinor(pn, r.params);
-  const needUsdc = usdcNeededPerTrader(pn, r.params);
+  const reachable = r.prints.reachableNano.map((x) => BigInt(x));
+  const wantFsiu = openingMilliSiuPerTrader(reachable, r.params);
+  const wantUsdc = openingUsdcMinor(reachable, r.params);
+  const needUsdc = usdcNeededPerTrader(reachable, r.params);
   const sized = r.opening.fsiuMilliSiuPerTrader === wantFsiu.toString() && r.opening.usdcMinorPerTrader === wantUsdc.toString() && wantUsdc >= needUsdc;
   check(
     "opening_covers_every_need_in_either_asset",
     sized,
     sized
-      ? `${wantFsiu} mSIU, or ${wantUsdc} USDC minor units against the ${needUsdc} every quote comes to`
+      ? `${wantFsiu} mSIU, or ${wantUsdc} USDC minor units against the ${needUsdc} every quote comes to at the highest print the walk can reach (${reachable.reduce((a, b) => (a > b ? a : b))})`
       : `opened with ${r.opening.fsiuMilliSiuPerTrader} mSIU and ${r.opening.usdcMinorPerTrader} USDC minor units; the print and schedule give ${wantFsiu} and ${wantUsdc} (needs ${needUsdc})`,
   );
 
@@ -188,7 +194,35 @@ export function verifyLabWalk(r: WalkReport, status?: ScriptStatus): WalkVerdict
   const wanted = Array.from({ length: r.params.rounds - 1 }, (_, i) => `round ${i + 2} opened`);
   check("every_round_opened", wanted.every((w) => labels.includes(w)), `snapshots: ${labels.join(", ")}`);
 
-  const p = pn;
+  // The path is what the seed says, every step is the step, and it moves every round (D41).
+  const byRound = r.prints.byRound.map((x) => BigInt(x));
+  const expectedPath = buildPrintPath(r.seed, pn, r.params, r.print.printId ?? "print").byRound;
+  const pathIsSeeds = byRound.length === expectedPath.length && byRound.every((x, i) => x === expectedPath[i]);
+  const stepsAreSteps = byRound.every(
+    (x, i) => i === 0 || r.prints.stepBps === 0 || x === stepUp(byRound[i - 1], r.prints.stepBps) || x === stepDown(byRound[i - 1], r.prints.stepBps),
+  );
+  const moved = r.prints.stepBps === 0 || byRound.every((x, i) => i === 0 || x !== byRound[i - 1]);
+  check(
+    "print_path_is_the_seeds_and_moves_every_round",
+    pathIsSeeds && stepsAreSteps && moved && byRound[0] === pn,
+    pathIsSeeds && stepsAreSteps && moved && byRound[0] === pn
+      ? `round by round ${byRound.join(" → ")} nano-USD per SIU, from the real print ${pn}, step ${r.prints.stepBps} bps`
+      : `the report's prints (${byRound.join(", ")}) are not the seed's walk (${expectedPath.join(", ")}) from the real print ${pn}`,
+  );
+
+  // A claim paid against a quote is sized at the print of the round the quote was asked for in, not the print in force when it was paid.
+  const saleOfId = new Map(r.sales.map((x) => [x.requestId, x]));
+  const claimOf = new Map(r.capacityEvents.filter((e) => e.kind === "transfer_claim" && e.settlesRequestId !== undefined).map((e) => [e.settlesRequestId!, BigInt(e.quantityMilliSiu ?? "0")]));
+  const wrongSize = r.paymentMoments.filter((m) => {
+    if (m.tool !== "transfer_claim" || m.requestId === undefined || m.quotedUsdMax === undefined) return false;
+    const sale = saleOfId.get(m.requestId);
+    const print = sale === undefined ? undefined : byRound[sale.round - 1];
+    return print === undefined || claimOf.get(m.requestId) !== claimForUsd(m.quotedUsdMax, print);
+  });
+  check("held_claims_sized_at_the_quotes_print", wrongSize.length === 0, `${wrongSize.length} held-claim payment(s) not the quote's price at its round's print`);
+
+  const final = r.final === undefined ? undefined : byRound[r.final.round - 1];
+  const p = final ?? pn;
   const recomputed = r.final?.traders.map((t) =>
     resultNano({ usdcMinor: BigInt(t.usdcMinor), fsiuMilliSiu: BigInt(t.fsiuMilliSiu), needsMet: t.needsMet }, p, r.params).toString(),
   );

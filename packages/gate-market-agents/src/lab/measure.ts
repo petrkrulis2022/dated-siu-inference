@@ -25,7 +25,7 @@ import { assertCountableForF1 } from "../cli/debug-mode.js";
 import { LAB_TRADERS, type LabParams, type TraderLabel } from "./economy.js";
 import { mulberry32 } from "@touchstone/basket";
 import { LAB_INSTRUMENT_VERSION } from "./instrument.js";
-import { claimForUsd, jobSiu, printNano, quotedPrice, tradeRateUsdPerSiu } from "./money.js";
+import { claimForUsd, jobSiu, printNano, quotedPrice, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu } from "./money.js";
 
 /** The parts of a report this reads. Structural, so a test can build one by hand. */
 export interface MeasureReport {
@@ -36,7 +36,11 @@ export interface MeasureReport {
   print: { rateUsdPerSiu: string };
   seats: Record<string, string>;
   economy: { needs: { id: string; buyer: string; seller: string; round: number }[] };
-  sales: { requestId: string; kind: "trade" | "rawwork"; buyer: string; seller: string; delivered: boolean }[];
+  /** The scenario print in each round (D41), nano-USD per SIU, round 1 first. A report made before it moved has none. */
+  prints?: { byRound: string[]; stepBps: number };
+  /** What each trader opened with, in mSIU: the figure a holding is measured as a fraction of. */
+  opening?: { fsiuMilliSiuPerTrader: string };
+  sales: { requestId: string; round?: number; kind: "trade" | "rawwork"; buyer: string; seller: string; delivered: boolean }[];
   paymentMoments: { agentId: string; tool: string; requestId?: string; heldReceivedMilliSiu: string; quotedUsdMax?: string }[];
   capacityEvents: { kind: string; agentId: string; quantityMilliSiu?: string; settlesRequestId?: string; counterparty?: string }[];
   /** Every wait, and what was on the screen it waited on (D34). A report made before the record has none. */
@@ -139,6 +143,30 @@ export interface HoldingsRow {
   /** Needs this trader has not yet met, and what buying each by claim would take. */
   unmetNeeds: number;
   upcomingNeedsMilliSiu: string;
+  /**
+   * Raw work its schedule says it will need from this round on: one unit for each job it is to sell in a round at or after this
+   * one (D41, H2). What a unit costs in fSIU is about 1 SIU at every print, so the figure in mSIU is at this round's print.
+   */
+  upcomingRawUnits: number;
+  upcomingRawWorkMilliSiu: string;
+  /** fSIU held as a fraction of what the trader opened with (1 is none spent). Absent on the final row, which is not a round start. */
+  heldFraction?: number;
+}
+
+/** One trader's holding at the start of one round, against whether its schedule has it needing raw work from then on. */
+export interface H2Row {
+  trader: TraderLabel;
+  round: number;
+  heldFraction: number;
+  upcomingRawUnits: number;
+}
+
+/** The two groups of H2, per run: trader-rounds whose schedule has raw work still to buy, and those whose has none. */
+export interface H2Counts {
+  withN: number;
+  withSum: number;
+  withoutN: number;
+  withoutSum: number;
 }
 
 export interface RunMeasures {
@@ -160,6 +188,7 @@ export interface RunMeasures {
   needsMet: number;
   needsTotal: number;
   holdings: HoldingsRow[];
+  h2: { rows: H2Row[]; counts: H2Counts };
   /** mSIU the issuer was left holding at the close and expired. The issuer service has no tool that passes a claim on. */
   leftWithIssuerMilliSiu: string;
   costUsd: string;
@@ -216,7 +245,9 @@ export function measureRun(r: MeasureReport): RunMeasures {
     (sale.kind === "trade" ? t.jobsBoughtBy : t.rawBoughtBy)[route] += 1;
     paymentsByRoute[route] += 1;
 
-    const due = claimForUsd(m.quotedUsdMax, p);
+    // The amount due is the quote's price at the print of the round the quote was asked for in (D41), which is what a claim is sized at.
+    const askedAt = sale.round !== undefined && r.prints !== undefined ? BigInt(r.prints.byRound[sale.round - 1] ?? p) : p;
+    const due = claimForUsd(m.quotedUsdMax, askedAt);
     const heldReceived = BigInt(m.heldReceivedMilliSiu);
     const isOpportunity = heldReceived >= due;
     if (isOpportunity) {
@@ -268,12 +299,18 @@ export function measureRun(r: MeasureReport): RunMeasures {
   const size = jobSiu(r.params);
   const jobClaim = claimForUsd(quotedPrice(size, tradeRateUsdPerSiu(p, r.params)).usd, p);
   const needsOf = (t: TraderLabel): number => r.economy.needs.filter((n) => n.buyer === t).length;
+  const openingFsiu = BigInt(r.opening?.fsiuMilliSiuPerTrader ?? r.snapshots[0]?.traders[0]?.fsiuMilliSiu ?? "0");
+  const rawClaimAt = (round: number): bigint => {
+    const rp = r.prints !== undefined ? BigInt(r.prints.byRound[round - 1] ?? p) : p;
+    return claimForUsd(quotedPrice(size, rawWorkRateUsdPerSiu(rp)).usd, rp);
+  };
   const holdings: HoldingsRow[] = [
     ...r.snapshots,
     ...(r.final !== undefined ? [{ label: "final", round: r.snapshots.at(-1)?.round ?? 0, traders: r.final.traders }] : []),
   ].flatMap((s) =>
     s.traders.map((x) => {
       const unmet = needsOf(x.trader as TraderLabel) - x.needsMet;
+      const upcomingRawUnits = r.economy.needs.filter((n) => n.seller === x.trader && n.round >= s.round).length;
       return {
         label: s.label,
         round: s.round,
@@ -281,9 +318,26 @@ export function measureRun(r: MeasureReport): RunMeasures {
         fsiuMilliSiu: x.fsiuMilliSiu,
         unmetNeeds: unmet,
         upcomingNeedsMilliSiu: (BigInt(unmet) * jobClaim).toString(),
+        upcomingRawUnits,
+        upcomingRawWorkMilliSiu: (BigInt(upcomingRawUnits) * rawClaimAt(s.round)).toString(),
+        ...(s.label !== "final" && openingFsiu > 0n ? { heldFraction: Number((BigInt(x.fsiuMilliSiu) * 10_000n) / openingFsiu) / 10_000 } : {}),
       };
     }),
   );
+  // H2's rows: every trader at the start of every round (round 1 is the opening). Never the final row, which is the end of the run.
+  const h2Rows: H2Row[] = holdings
+    .filter((h) => h.label !== "final" && h.heldFraction !== undefined)
+    .map((h) => ({ trader: h.trader, round: h.round, heldFraction: h.heldFraction!, upcomingRawUnits: h.upcomingRawUnits }));
+  const h2Counts: H2Counts = { withN: 0, withSum: 0, withoutN: 0, withoutSum: 0 };
+  for (const row of h2Rows) {
+    if (row.upcomingRawUnits > 0) {
+      h2Counts.withN += 1;
+      h2Counts.withSum += row.heldFraction;
+    } else {
+      h2Counts.withoutN += 1;
+      h2Counts.withoutSum += row.heldFraction;
+    }
+  }
 
   const total = paymentsByRoute.usdc + paymentsByRoute.held + paymentsByRoute.split;
   const why = labDisqualification(r) ?? r.debugMode?.disqualifiedBecause ?? null;
@@ -303,6 +357,7 @@ export function measureRun(r: MeasureReport): RunMeasures {
     needsMet: jobsTransacted,
     needsTotal: r.economy.needs.length,
     holdings,
+    h2: { rows: h2Rows, counts: h2Counts },
     leftWithIssuerMilliSiu: r.operatorActions
       .filter((a) => a.kind === "expiry" && a.holder === "ISSUER-B")
       .reduce((sum, a) => sum + BigInt(String(a.quantityMilliSiu)), 0n)
@@ -420,6 +475,8 @@ export interface Pooled {
   /** Of runs with at least one opportunity, how many reused a majority of theirs. */
   runsWithOpportunity: number;
   runsWithMajorityReused: number;
+  /** H2: fSIU held at each round's start against the raw work still to buy (D41). */
+  h2: H2Pooled;
 }
 
 /**
@@ -452,6 +509,7 @@ export function pool(reports: readonly MeasureReport[]): Pooled {
     reuse,
     runsWithOpportunity: withOpp.length,
     runsWithMajorityReused: withOpp.filter((m) => m.reuse * 2 > m.opportunities).length,
+    h2: poolH2(measured),
   };
 }
 
@@ -462,6 +520,105 @@ export function compareArms(
 ): "effect" | "no detectable effect at this sample size" {
   if ([a.lower, a.upper, b.lower, b.upper].some(Number.isNaN)) return "no detectable effect at this sample size";
   return a.lower > b.upper || b.lower > a.upper ? "effect" : "no detectable effect at this sample size";
+}
+
+// ---------------------------------------------------------------------------------------------------
+// H2, registered for instrument v6 (plan §3, D41): a trader's fSIU holding at the start of each round tracks the raw work its
+// schedule says it will need from then on — holding fSIU as a hedge against the price of work. Thresholds PROPOSED before any
+// result, to be changed only before the block.
+// ---------------------------------------------------------------------------------------------------
+
+/** Fewer pooled trader-rounds with NO raw work still to buy than this, and nothing can be said. */
+export const H2_MIN_TRADER_ROUNDS_WITHOUT = 30;
+/** …and unless this many runs each contribute trader-rounds to both groups, a few runs could decide the result. */
+export const H2_MIN_RUNS_WITH_BOTH = 10;
+/** Supported: the difference's interval sits at or above this lower bound and the point estimate is at least the point threshold. */
+export const H2_SUPPORT_LOWER_BOUND = 0.1;
+export const H2_SUPPORT_POINT = 0.2;
+/** Not supported: the difference's interval sits entirely below this. */
+export const H2_REJECT_UPPER_BOUND = 0.1;
+
+export interface H2Interval {
+  /** mean held fraction of trader-rounds with raw work still to buy, minus those without. */
+  delta: number;
+  lower: number;
+  upper: number;
+  runs: number;
+  draws: number;
+  discarded: number;
+  seed: number;
+}
+
+/**
+ * The 95% bootstrap interval over runs for the difference in mean held fraction between trader-rounds that have raw work still to
+ * buy and those that do not: draw as many runs as there are, with replacement, pool their trader-rounds, take the difference,
+ * repeat. Runs are resampled, not trader-rounds, for the reason H1's interval resamples runs (D20). A draw in which either
+ * group is empty has no difference and is left out.
+ */
+export function bootstrapH2(runs: readonly H2Counts[], options: { draws?: number; seed?: number } = {}): H2Interval {
+  const draws = options.draws ?? BOOTSTRAP_DRAWS;
+  const seed = options.seed ?? BOOTSTRAP_SEED;
+  const diff = (c: H2Counts): number => c.withSum / c.withN - c.withoutSum / c.withoutN;
+  const total = runs.reduce<H2Counts>(
+    (a, c) => ({ withN: a.withN + c.withN, withSum: a.withSum + c.withSum, withoutN: a.withoutN + c.withoutN, withoutSum: a.withoutSum + c.withoutSum }),
+    { withN: 0, withSum: 0, withoutN: 0, withoutSum: 0 },
+  );
+  if (runs.length === 0 || total.withN === 0 || total.withoutN === 0) {
+    return { delta: Number.NaN, lower: Number.NaN, upper: Number.NaN, runs: runs.length, draws, discarded: draws, seed };
+  }
+  const rng = mulberry32(seed);
+  const deltas: number[] = [];
+  for (let d = 0; d < draws; d++) {
+    const acc: H2Counts = { withN: 0, withSum: 0, withoutN: 0, withoutSum: 0 };
+    for (let i = 0; i < runs.length; i++) {
+      const pick = runs[Math.floor(rng() * runs.length)];
+      acc.withN += pick.withN;
+      acc.withSum += pick.withSum;
+      acc.withoutN += pick.withoutN;
+      acc.withoutSum += pick.withoutSum;
+    }
+    if (acc.withN > 0 && acc.withoutN > 0) deltas.push(diff(acc));
+  }
+  deltas.sort((a, b) => a - b);
+  const at = (q: number): number => deltas[Math.min(deltas.length - 1, Math.max(0, Math.round(q * (deltas.length - 1))))];
+  return { delta: diff(total), lower: at(0.025), upper: at(0.975), runs: runs.length, draws, discarded: draws - deltas.length, seed };
+}
+
+export type H2Verdict = "inconclusive" | "supported" | "not supported" | "no detectable effect at this sample size";
+
+export function decideH2(input: { traderRoundsWithout: number; runsWithBoth: number; interval: { delta: number; lower: number; upper: number } }): H2Verdict {
+  if (input.traderRoundsWithout < H2_MIN_TRADER_ROUNDS_WITHOUT) return "inconclusive";
+  if (input.runsWithBoth < H2_MIN_RUNS_WITH_BOTH) return "inconclusive";
+  if (input.interval.lower >= H2_SUPPORT_LOWER_BOUND && input.interval.delta >= H2_SUPPORT_POINT) return "supported";
+  if (input.interval.upper < H2_REJECT_UPPER_BOUND) return "not supported";
+  return "no detectable effect at this sample size";
+}
+
+export interface H2Pooled {
+  interval: H2Interval;
+  verdict: H2Verdict;
+  traderRoundsWith: number;
+  traderRoundsWithout: number;
+  runsWithBoth: number;
+  meanHeldWith: number;
+  meanHeldWithout: number;
+}
+
+export function poolH2(measured: readonly RunMeasures[]): H2Pooled {
+  const counts = measured.map((m) => m.h2.counts);
+  const both = counts.filter((c) => c.withN > 0 && c.withoutN > 0);
+  const withN = counts.reduce((s, c) => s + c.withN, 0);
+  const withoutN = counts.reduce((s, c) => s + c.withoutN, 0);
+  const interval = bootstrapH2(counts);
+  return {
+    interval,
+    verdict: decideH2({ traderRoundsWithout: withoutN, runsWithBoth: both.length, interval }),
+    traderRoundsWith: withN,
+    traderRoundsWithout: withoutN,
+    runsWithBoth: both.length,
+    meanHeldWith: withN === 0 ? Number.NaN : counts.reduce((s, c) => s + c.withSum, 0) / withN,
+    meanHeldWithout: withoutN === 0 ? Number.NaN : counts.reduce((s, c) => s + c.withoutSum, 0) / withoutN,
+  };
 }
 
 export function renderPooled(p: Pooled): string {
@@ -477,6 +634,11 @@ export function renderPooled(p: Pooled): string {
     `  interval the rule reads — 95% bootstrap over runs (${i.draws} draws, seed ${i.seed}, ${i.discarded} with no opportunity left out): ${pct(i.lower)} to ${pct(i.upper)}`,
     `  beside it, not read — pooled Wilson: ${pct(w.lower)} to ${pct(w.upper)}`,
     `  verdict under the approved rule: ${p.verdict.toUpperCase()}`,
+    "",
+    "H2 (fSIU held at each round's start, as a fraction of the opening, against raw work still to buy — proposed rule, D41)",
+    `  trader-rounds with raw work still to buy ${p.h2.traderRoundsWith} (mean held ${pct(p.h2.meanHeldWith)}); without ${p.h2.traderRoundsWithout} (mean held ${pct(p.h2.meanHeldWithout)}); runs contributing both ${p.h2.runsWithBoth} (the rule needs ${H2_MIN_RUNS_WITH_BOTH}, and ${H2_MIN_TRADER_ROUNDS_WITHOUT} trader-rounds without)`,
+    `  difference ${pct(p.h2.interval.delta)}; 95% bootstrap over runs (${p.h2.interval.draws} draws, seed ${p.h2.interval.seed}, ${p.h2.interval.discarded} left out): ${pct(p.h2.interval.lower)} to ${pct(p.h2.interval.upper)}`,
+    `  verdict under the proposed rule: ${p.h2.verdict.toUpperCase()}`,
   ];
   return lines.join("\n");
 }

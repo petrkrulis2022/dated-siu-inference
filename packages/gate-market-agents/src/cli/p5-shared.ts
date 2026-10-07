@@ -38,6 +38,9 @@ export const PRICES: Record<string, ModelPrices> = {
   // snapshot (`data/registry/price-snapshot-litellm-2026-10-05T01-09-49.027Z.json`, entry
   // `gpt-5.4-mini`: in 0.75, out 4.5), read directly, not remembered.
   "gpt-5.4-mini": { priceInUsdPer1M: "0.75", priceOutUsdPer1M: "4.5" },
+  // Added 2026-10-07 for the currency lab's second family (D42). From this repo's own latest LiteLLM snapshot
+  // (`data/registry/price-snapshot-litellm-2026-10-05T01-09-49.027Z.json`, entry `deepseek-v3.2`: in 0.28, out 0.4), read directly.
+  "deepseek-v3.2": { priceInUsdPer1M: "0.28", priceOutUsdPer1M: "0.4" },
 };
 
 /**

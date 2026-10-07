@@ -57,28 +57,38 @@ export const creditNano = (p: bigint, params: LabParams): bigint =>
 export const sellerMarginNano = (p: bigint, params: LabParams): bigint =>
   ((tradeRateNano(p, params) - p) * BigInt(params.jobMilliSiu)) / 1000n;
 
+const maxOf = (xs: readonly bigint[]): bigint => xs.reduce((a, b) => (a > b ? a : b));
+
+/** The claim, in mSIU, that pays one job's quote asked for at print `p`, and one unit of raw work's. */
+export const jobClaimAt = (p: bigint, params: LabParams): bigint =>
+  claimForUsd(quotedPrice(jobSiu(params), tradeRateUsdPerSiu(p, params)).usd, p);
+export const rawClaimAt = (p: bigint, params: LabParams): bigint =>
+  claimForUsd(quotedPrice(jobSiu(params), rawWorkRateUsdPerSiu(p)).usd, p);
+
 /**
- * What each trader opens with in fSIU, sized so that fSIU ALONE could meet every need (D31): the claim for each job it
- * buys and for each unit of raw work it must buy to deliver the jobs it sells. `buildEconomy` makes every trader buy
- * `needsPerTrader` jobs and sell `needsPerTrader` jobs, so each trader needs that many of each. Claims are sized as the
- * loop sizes a payment, the price's worth at the print rounded up (`claimForUsd`), so this covers the quotes exactly.
+ * What each trader opens with in fSIU, sized so that fSIU ALONE could meet every need however the print moves (D31, D41): the
+ * claim for each job it buys and for each unit of raw work it must buy to deliver the jobs it sells. `buildEconomy` makes
+ * every trader buy `needsPerTrader` jobs and sell `needsPerTrader` jobs, so each trader needs that many of each. A claim is
+ * sized as the loop sizes a payment, the quote's price at the print it was asked for at, rounded up (`claimForUsd`). That is
+ * very nearly the same number of mSIU at every print, since the quote's price follows the print, so the sizing takes the
+ * largest claim any reachable print asks for. `prints` is every print the walk can reach (`reachablePrints`); with one
+ * print in it this is v4's figure.
  */
-export function openingMilliSiuPerTrader(p: bigint, params: LabParams): bigint {
-  const size = jobSiu(params);
-  const job = claimForUsd(quotedPrice(size, tradeRateUsdPerSiu(p, params)).usd, p);
-  const raw = claimForUsd(quotedPrice(size, rawWorkRateUsdPerSiu(p)).usd, p);
-  return BigInt(params.needsPerTrader) * (job + raw);
+export function openingMilliSiuPerTrader(prints: readonly bigint[], params: LabParams): bigint {
+  return BigInt(params.needsPerTrader) * (maxOf(prints.map((p) => jobClaimAt(p, params))) + maxOf(prints.map((p) => rawClaimAt(p, params))));
 }
 
 /**
- * Opening USDC in minor units: the opening fSIU's value at the print, rounded UP — equal in value to the fSIU, and so
- * enough, alone, for every quote a trader must pay (those are sized down from the same print, never above it).
+ * Opening USDC in minor units: the opening fSIU's value at the HIGHEST print the walk can reach, rounded UP. USDC is paid at
+ * the quote's price, which follows the print, so this is the amount that is enough, alone, for every quote at the ceiling and
+ * so at every print below it (the claims round up, so the value is never less than the quotes' prices).
  */
-export const openingUsdcMinor = (p: bigint, params: LabParams): bigint =>
-  ceilDiv(openingMilliSiuPerTrader(p, params) * p, 1_000_000n);
+export const openingUsdcMinor = (prints: readonly bigint[], params: LabParams): bigint =>
+  ceilDiv(openingMilliSiuPerTrader(prints, params) * maxOf(prints), 1_000_000n);
 
-/** What every quote a trader must pay comes to in USDC minor units: its jobs and its raw work. */
-export function usdcNeededPerTrader(p: bigint, params: LabParams): bigint {
+/** What every quote a trader must pay comes to in USDC minor units at the highest reachable print: its jobs and its raw work. */
+export function usdcNeededPerTrader(prints: readonly bigint[], params: LabParams): bigint {
+  const p = maxOf(prints);
   const size = jobSiu(params);
   return (
     BigInt(params.needsPerTrader) *

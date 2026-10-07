@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PARAMS } from "./economy.js";
+import { reachablePrints } from "./prints.js";
 import {
   creditNano,
+  jobClaimAt,
   quotedPrice,
   decimalToUnits,
   fsiuValueNano,
@@ -9,6 +11,7 @@ import {
   openingMilliSiuPerTrader,
   openingUsdcMinor,
   printNano,
+  rawClaimAt,
   rawWorkRateUsdPerSiu,
   resultNano,
   sellerMarginNano,
@@ -59,31 +62,71 @@ describe("the lab's prices at an illustrative print", () => {
   it("sizes the opening from the print and the schedule: each trader buys two jobs and two units of raw work (D31)", () => {
     // A job's quote is 1,700 minor units and a unit's 1,400; the claim for each is its price's worth at the print, rounded
     // up: 1,184 and 975 mSIU. Each trader buys two jobs and, selling two, two units: 2 x (1,184 + 975).
-    expect(openingMilliSiuPerTrader(P, DEFAULT_PARAMS)).toBe(4_318n);
-    expect(usdcNeededPerTrader(P, DEFAULT_PARAMS)).toBe(6_200n);
+    expect(openingMilliSiuPerTrader([P], DEFAULT_PARAMS)).toBe(4_318n);
+    expect(usdcNeededPerTrader([P], DEFAULT_PARAMS)).toBe(6_200n);
   });
 
   it("opens each trader with USDC and fSIU of equal value, either alone enough for every quote", () => {
-    expect(openingUsdcMinor(P, DEFAULT_PARAMS)).toBe(6_205n);
+    expect(openingUsdcMinor([P], DEFAULT_PARAMS)).toBe(6_205n);
     // 6,205 USDC minor units against 4,318 mSIU at the print: the fSIU is worth 6,204.966 of them, so the USDC is the
     // same value rounded up, never less.
     expect(usdcValueNano(6_205n)).toBeGreaterThanOrEqual(fsiuValueNano(4_318n, P));
     expect(usdcValueNano(6_205n) - fsiuValueNano(4_318n, P)).toBeLessThan(1_000n);
-    expect(openingUsdcMinor(P, DEFAULT_PARAMS)).toBeGreaterThanOrEqual(usdcNeededPerTrader(P, DEFAULT_PARAMS));
+    expect(openingUsdcMinor([P], DEFAULT_PARAMS)).toBeGreaterThanOrEqual(usdcNeededPerTrader([P], DEFAULT_PARAMS));
   });
 
   it("rounds opening USDC UP when the print does not divide evenly, so USDC is never worth less", () => {
     const odd = 1_437_001n;
-    const fsiu = openingMilliSiuPerTrader(odd, DEFAULT_PARAMS);
-    const usdc = openingUsdcMinor(odd, DEFAULT_PARAMS);
+    const fsiu = openingMilliSiuPerTrader([odd], DEFAULT_PARAMS);
+    const usdc = openingUsdcMinor([odd], DEFAULT_PARAMS);
     expect(usdcValueNano(usdc)).toBeGreaterThanOrEqual(fsiuValueNano(fsiu, odd));
     expect(usdcValueNano(usdc - 1n)).toBeLessThan(fsiuValueNano(fsiu, odd));
   });
 
   it("keeps either asset alone enough at other prints, not only the illustrative one", () => {
     for (const print of [900_000n, 1_000_000n, 1_437_001n, 2_500_000n, 7_777_777n]) {
-      expect(openingUsdcMinor(print, DEFAULT_PARAMS)).toBeGreaterThanOrEqual(usdcNeededPerTrader(print, DEFAULT_PARAMS));
+      expect(openingUsdcMinor([print], DEFAULT_PARAMS)).toBeGreaterThanOrEqual(usdcNeededPerTrader([print], DEFAULT_PARAMS));
     }
+  });
+
+  describe("when the print moves (D41): sized at the highest print the walk can reach", () => {
+    const reachable = reachablePrints(P, DEFAULT_PARAMS);
+
+    it("asks for about the same fSIU at every print, because a quote's price follows the print", () => {
+      // A job's claim is about 1.2 SIU and a unit of raw work's about 1 SIU whatever the print: only the quote's $0.0001 rounding moves it.
+      for (const q of reachable) {
+        expect(jobClaimAt(q, DEFAULT_PARAMS)).toBeGreaterThanOrEqual(1_150n);
+        expect(jobClaimAt(q, DEFAULT_PARAMS)).toBeLessThanOrEqual(1_250n);
+        expect(rawClaimAt(q, DEFAULT_PARAMS)).toBeGreaterThanOrEqual(950n);
+        expect(rawClaimAt(q, DEFAULT_PARAMS)).toBeLessThanOrEqual(1_050n);
+      }
+    });
+
+    it("takes the largest claim any reachable print asks for, so fSIU alone is enough on every path", () => {
+      const fsiu = openingMilliSiuPerTrader(reachable, DEFAULT_PARAMS);
+      for (const q of reachable) expect(fsiu).toBeGreaterThanOrEqual(2n * (jobClaimAt(q, DEFAULT_PARAMS) + rawClaimAt(q, DEFAULT_PARAMS)));
+    });
+
+    it("sizes USDC at the ceiling, so USDC alone is enough on every path, and says it is worth more than the fSIU at round 1", () => {
+      const ceiling = reachable.at(-1)!;
+      const usdc = openingUsdcMinor(reachable, DEFAULT_PARAMS);
+      expect(usdc).toBeGreaterThanOrEqual(usdcNeededPerTrader(reachable, DEFAULT_PARAMS));
+      // The needs at every lower print are cheaper in dollars, so the ceiling's cover them all.
+      for (const q of reachable) {
+        const needs = BigInt(DEFAULT_PARAMS.needsPerTrader) * (quotedPrice("1", tradeRateUsdPerSiu(q, DEFAULT_PARAMS)).minorUnits + quotedPrice("1", rawWorkRateUsdPerSiu(q)).minorUnits);
+        expect(usdc, `at ${q}`).toBeGreaterThanOrEqual(needs);
+      }
+      // At round 1's print the USDC is worth more than the fSIU: the price of guaranteeing USDC alone is enough at the ceiling.
+      expect(usdcValueNano(usdc)).toBeGreaterThan(fsiuValueNano(openingMilliSiuPerTrader(reachable, DEFAULT_PARAMS), P));
+      expect(usdcValueNano(usdc)).toBeGreaterThanOrEqual(fsiuValueNano(openingMilliSiuPerTrader(reachable, DEFAULT_PARAMS), ceiling));
+    });
+
+    it("with a fixed print (no step) is v4's figure exactly", () => {
+      const fixed = reachablePrints(P, { ...DEFAULT_PARAMS, printStepBps: 0 });
+      expect(fixed).toEqual([P]);
+      expect(openingMilliSiuPerTrader(fixed, DEFAULT_PARAMS)).toBe(4_318n);
+      expect(openingUsdcMinor(fixed, DEFAULT_PARAMS)).toBe(6_205n);
+    });
   });
 });
 

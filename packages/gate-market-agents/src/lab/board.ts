@@ -9,6 +9,7 @@
 import { LabBooks } from "./books.js";
 import { ISSUER_SEAT, JOB_TYPES, LAB_TRADERS, needsInRound, type TraderLabel } from "./economy.js";
 import { jobSiu, quotedPrice, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu } from "./money.js";
+import { describeMove, printText } from "./prints.js";
 import type { GuardConfig } from "./guards.js";
 
 export function renderLabInfo(books: LabBooks, cfg: GuardConfig, me: TraderLabel): string {
@@ -19,9 +20,10 @@ export function renderLabInfo(books: LabBooks, cfg: GuardConfig, me: TraderLabel
     `  You are ${me}. You deliver ${e.skillOf[me]} jobs, and only you can.`,
     `  A job is ${size} SIU, priced at ${tradeRateUsdPerSiu(cfg.printNano, cfg.params)} USD per SIU; ` +
       `its quote is ${quotedPrice(size, tradeRateUsdPerSiu(cfg.printNano, cfg.params)).usd} USD.`,
-    `  A unit of raw work is ${size} SIU, sold by ${ISSUER_SEAT} at the published print, ` +
+    `  A unit of raw work is ${size} SIU, sold by ${ISSUER_SEAT} at the print, ` +
       `${rawWorkRateUsdPerSiu(cfg.printNano)} USD per SIU; its quote is ` +
       `${quotedPrice(size, rawWorkRateUsdPerSiu(cfg.printNano)).usd} USD. Delivering a job uses one unit of raw work.`,
+    ...renderPrintHistory(books),
     "",
     "WHO DELIVERS WHAT",
     ...LAB_TRADERS.map((t) => `  ${t} delivers ${e.skillOf[t]}.`),
@@ -45,6 +47,26 @@ export function renderLabInfo(books: LabBooks, cfg: GuardConfig, me: TraderLabel
   }
   lines.push("", `YOUR RESULT SO FAR: ${books.needsMet(me)} of ${e.needs.filter((n) => n.buyer === me).length} needs met.`);
   return lines.join("\n");
+}
+
+/**
+ * The print of every round that has opened, and how far it moved (D41). Facts only: the numbers and the moves, nothing about what
+ * either means for a trader, and nothing about a round that has not opened. Empty in a lab with no print path.
+ */
+export function renderPrintHistory(books: LabBooks): string[] {
+  const path = books.path;
+  if (path === undefined) return [];
+  const rounds = path.byRound.slice(0, books.round);
+  return [
+    "",
+    "THE PRINT (a scenario value used only inside this lab, not the published index; it can move at each round)",
+    ...rounds.map((p, i) =>
+      i === 0
+        ? `  Round 1: ${printText(p)} USD per SIU`
+        : `  Round ${i + 1}: ${printText(p)} USD per SIU (${describeMove(rounds[i - 1], p)} on round ${i})`,
+    ),
+    `  The print in force now is round ${books.round}'s.`,
+  ];
 }
 
 /** What the trader can act on right now — empty when there is nothing, which is what lets it wait. */

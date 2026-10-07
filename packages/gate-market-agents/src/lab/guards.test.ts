@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { LabBooks } from "./books.js";
 import { DEFAULT_PARAMS, LAB_TRADERS, buildEconomy, type Economy, type TraderLabel } from "./economy.js";
 import { guardLabCall, type GuardConfig } from "./guards.js";
+import { quotedPrice, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu } from "./money.js";
+import { buildPrintPath } from "./prints.js";
 
 const ids = {
   traders: Object.fromEntries(LAB_TRADERS.map((t) => [t, `erc8004:0x${t}`])) as Record<TraderLabel, string>,
@@ -89,7 +91,7 @@ describe("guardLabCall", () => {
     it("is refused at any other price, naming the print", () => {
       const seller = LAB_TRADERS.find((t) => owe(t))!;
       expect(guardLabCall(books, cfg, seller, "request_quote", req(ids.issuer, "1", "0.0017244")))
-        .toBe("raw work is sold at the published print, 0.001437 USD per SIU.");
+        .toBe("raw work is sold at the print, 0.001437 USD per SIU.");
     });
 
     it("is refused once the trader holds, or has ordered, a unit for each delivery it owes", () => {
@@ -218,5 +220,68 @@ describe("guardLabCall", () => {
       })(),
     ].filter((s): s is string => s !== null);
     for (const s of sentences) expect(s).not.toMatch(/usdc|fsiu|dollar|claim|should|better|cheaper|prefer/i);
+  });
+
+  describe("a print that moves between rounds (D41)", () => {
+    const path = buildPrintPath(9, 1_437_000n, DEFAULT_PARAMS, "real-print");
+    const moving = (): { b: LabBooks; c: GuardConfig } => {
+      const b = new LabBooks(economy, ids, path);
+      return {
+        b,
+        c: {
+          get printNano(): bigint {
+            return b.currentPrint()!;
+          },
+          params: DEFAULT_PARAMS,
+        },
+      };
+    };
+
+    it("accepts a quote request only at the rate of the round in force: round 1's rate is refused in round 2", () => {
+      const { b, c } = moving();
+      const buyer = LAB_TRADERS.find((t) => b.openNeeds(t).length > 0)!;
+      const need = b.openNeeds(buyer)[0];
+      const round1 = tradeRateUsdPerSiu(path.byRound[0], DEFAULT_PARAMS);
+      expect(guardLabCall(b, c, buyer, "request_quote", req(ids.traders[need.seller], "1", round1))).toBeNull();
+      b.advanceRound();
+      const buyer2 = LAB_TRADERS.find((t) => b.openNeeds(t).length > 0)!;
+      const need2 = b.openNeeds(buyer2)[0];
+      const round2 = tradeRateUsdPerSiu(path.byRound[1], DEFAULT_PARAMS);
+      expect(round2).not.toBe(round1);
+      expect(guardLabCall(b, c, buyer2, "request_quote", req(ids.traders[need2.seller], "1", round1))).toBe(`a job is priced at ${round2} USD per SIU.`);
+      expect(guardLabCall(b, c, buyer2, "request_quote", req(ids.traders[need2.seller], "1", round2))).toBeNull();
+    });
+
+    it("holds a raw-work request to the print in force, too", () => {
+      const { b, c } = moving();
+      const owing = LAB_TRADERS.find((t) => economy.needs.some((n) => n.seller === t && n.round === 1))!;
+      const need = economy.needs.find((n) => n.seller === owing && n.round === 1)!;
+      b.requestPosted("qr-1", need.buyer, owing);
+      b.quoteIssued("qr-1");
+      b.paid("qr-1", "usdc");
+      b.advanceRound();
+      const old = rawWorkRateUsdPerSiu(path.byRound[0]);
+      const now = rawWorkRateUsdPerSiu(path.byRound[1]);
+      expect(guardLabCall(b, c, owing, "request_quote", req(ids.issuer, "1", old))).toBe(`raw work is sold at the print, ${now} USD per SIU.`);
+      expect(guardLabCall(b, c, owing, "request_quote", req(ids.issuer, "1", now))).toBeNull();
+    });
+
+    it("values a split's claim part at the print of the round the quote was asked for in, not the print in force", () => {
+      const { b, c } = moving();
+      const buyer = LAB_TRADERS.find((t) => b.openNeeds(t).length > 0)!;
+      const need = b.openNeeds(buyer)[0];
+      b.requestPosted("qr-1", buyer, need.seller);
+      b.quoteIssued("qr-1");
+      b.advanceRound();
+      b.advanceRound();
+      const askedAt = path.byRound[0];
+      const price = quotedPrice("1", tradeRateUsdPerSiu(askedAt, DEFAULT_PARAMS)).minorUnits; // 1,700 at round 1's print
+      // The claim that is worth the whole price at round 1's print is refused as a split; one a little smaller is accepted.
+      const whole = (price * 1_000_000n + askedAt - 1n) / askedAt;
+      const refusal = guardLabCall(b, c, buyer, "settle_split_held", { requestId: "qr-1", claimQuantityMilliSiu: whole.toString() });
+      expect(refusal).toContain("must be worth more than nothing and less than the quote's price");
+      expect(refusal).toContain(`the price is ${price}`);
+      expect(guardLabCall(b, c, buyer, "settle_split_held", { requestId: "qr-1", claimQuantityMilliSiu: "500" })).toBeNull();
+    });
   });
 });

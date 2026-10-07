@@ -18,6 +18,7 @@ const input = (me: TraderLabel): LabBriefInput => ({
   me,
   economy,
   print: { printId: "print-illustrative", rateUsdPerSiu: "0.001437" }, // illustrative
+  opening: { fsiuMilliSiu: 4_516n, usdcMinor: 8_583n }, // what the walk's ceiling asks for at this print (launch.test.ts)
   address: `0xADDR-${me}`,
   directory,
   claim: { tokenId: "777", classLabel: "extract", fromIso: "2026-10-06", untilIso: "2026-10-07" },
@@ -81,15 +82,31 @@ describe("lab briefs — what they state", () => {
     }
   });
 
-  it("states the quoted amounts, the print, the credit and the opening balances from the economy's own arithmetic", () => {
+  it("states the multiples, round 1's print, the credit and the opening balances; the amounts for a round come each turn (D41)", () => {
     expect(text).toContain("A job is 1 SIU.");
-    expect(text).toContain("0.0017244 USD per SIU, a quote of 0.0017 USD");
-    expect(text).toContain("0.001437 USD per SIU, a quote of 0.0014 USD");
-    expect(text).toContain("150% of the print per SIU of the job: 0.0021555 USD for a job of 1 SIU");
-    // The opening is derived (D31): two jobs and two units of raw work, each paid in claims — 2 x (1,184 + 975) — and USDC of
-    // the same value at the print.
-    expect(text).toContain("4.318 SIU of it (4318 mSIU) and 0.006205 USD in USDC");
-    expect(text).toContain("print-illustrative, 0.001437 USD per SIU");
+    // The brief is written before round 1 and the print moves, so it states how a price is made, not a price that goes stale.
+    expect(text).toContain("A job's\n  price is 1.2 times the print per SIU");
+    expect(text).toContain("a unit is 1 SIU at the\n  print, so its price is the print per SIU");
+    expect(text).not.toContain("0.0017244");
+    expect(text).not.toContain("a quote of 0.0014 USD");
+    expect(text).toContain("Round 1's print is 0.001437 USD per SIU");
+    expect(text).toContain("1.5 times the print for a job of 1 SIU");
+    expect(text).toContain("150% of the current print per SIU of the job");
+    // The opening is derived (D31, D41): the larger of two figures the walk's ceiling asks for, as the runner passes it in.
+    expect(text).toContain("4.516 SIU of it (4516 mSIU) and 0.008583 USD in USDC");
+  });
+
+  it("states that the print can move, that it is not the published index, and that each turn shows it (D41)", () => {
+    expect(text).toContain("The print can move at each round. It is a scenario value used only inside this lab; it is not the");
+    expect(text).toContain("published index.");
+    expect(text).toContain("Your turn shows the print of every round so far");
+    expect(text).toContain("and how much it moved.");
+    expect(text).toContain("A quote is priced from the print of the round it is asked for in, and keeps that price.");
+  });
+
+  it("no longer offers get_print: the lab's print is not the published one, and each turn states it", () => {
+    expect(text).not.toContain("get_print");
+    expect(LAB_TRADER_TOOLS).not.toContain("get_print");
   });
 
   it("states what every way of paying costs, side by side, in one parallel statement — no one route singled out (D21, D31)", () => {
@@ -109,15 +126,11 @@ describe("lab briefs — what they state", () => {
     expect(text).not.toMatch(/settle_escrow/);
   });
 
-  it("does not state that converting changes nothing or is never required — the brief says how a result is counted and no more (D35)", () => {
-    expect(text.toLowerCase()).not.toContain("changes nothing");
-    expect(text.toLowerCase()).not.toContain("never required");
-    expect(text).not.toMatch(/convert/i);
-  });
-
-  it("states how a result is counted, and that it is measured before the window closes", () => {
-    expect(text).toContain("Your result is your USDC, plus your fSIU valued at the current print, plus a credit for each need met.");
-    expect(text).toContain("Results are measured before the window closes.");
+  it("states, with the qualifier the moving print needs, that converting changes nothing and is never required (D35)", () => {
+    const flat = text.replace(/\s+/g, " ");
+    expect(flat).toContain("Valued at the current print, converting between the two assets changes nothing about your result, and you are never required to convert.");
+    // Without "valued at the current print" the sentence would be false once the print moves; it is never stated bare.
+    expect(flat).not.toMatch(/(^|[.] )Converting between the two assets changes nothing/);
   });
 
   it("lists every counterparty with the sellerId and model a quote request needs", () => {
@@ -132,9 +145,17 @@ describe("lab briefs — no steering, and nothing the system would refuse", () =
   const own = text.split(LAB_ASSET_DESCRIPTION).join("");
 
   it("uses none of the words that advise or compare", () => {
-    for (const word of ["prefer", "should", "better", "cheaper", "advantage", "recommend", "best", "save", "worth holding", "hold on", "keep your", "convert", "cash out", "same either way"]) {
+    for (const word of ["prefer", "should", "better", "cheaper", "advantage", "recommend", "best", "save", "worth holding", "hold on", "keep your", "cash out", "same either way"]) {
       expect(own.toLowerCase(), word).not.toMatch(new RegExp(`\\b${word}\\b`));
     }
+  });
+
+  it("uses \"convert\" in exactly one place, the D35 sentence, which D15 had kept it out of until the user asked for that line", () => {
+    const uses = own.match(/[^.]*\bconvert[a-z]*\b[^.]*\./gi) ?? [];
+    // `own` is every trader's brief, so the one sentence appears once in each.
+    expect([...new Set(uses.map((u) => u.replace(/\s+/g, " ").trim()))]).toEqual([
+      "Valued at the current print, converting between the two assets changes nothing about your result, and you are never required to convert.",
+    ]);
   });
 
   it("does not mention the escrow fee, a rebate or the route that costs less", () => {

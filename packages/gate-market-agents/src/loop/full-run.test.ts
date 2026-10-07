@@ -1304,6 +1304,50 @@ describe("buildToolArgs", () => {
     ).rejects.toThrow(/mintContext/);
   });
 
+  it("a run whose print moves sizes a claim at the print the quote was asked for at, not the print in force (D41)", async () => {
+    const seller = "0x00000000000000000000000000000000000000cd";
+    // The board's quote names print "2026-09-25" and prices 10 SIU at $0.05 = 500,000 minor units; the mint context's print in force is 10,700,000 nano-USD/SIU.
+    const { board, requestId } = boardWithQuote(seller, "10");
+    const inForce = (await buildToolArgs("transfer_claim", { to: seller, tokenId: "7", requestId }, baseCtx({ mintContext: QUOTED_MINT, board }))) as { quantity: string };
+    expect(inForce.quantity).toBe("46729"); // 500,000 / 10.7, rounded up
+    // The lab says the quote was asked for at 5,000,000 nano-USD per SIU; the same price then takes more claim.
+    const askedAt = (await buildToolArgs(
+      "transfer_claim",
+      { to: seller, tokenId: "7", requestId },
+      baseCtx({ mintContext: QUOTED_MINT, board, printForQuote: () => 5_000_000n }),
+    )) as { quantity: string };
+    expect(askedAt.quantity).toBe("100000"); // 500,000 / 5
+    // A quote naming another print than the mint context's is refused, as always, unless the run says what print it was asked for at.
+    const { board: other, requestId: otherId } = boardWithQuote(seller, "10", "500000", "scenario-round-2");
+    await expect(buildToolArgs("transfer_claim", { to: seller, tokenId: "7", requestId: otherId }, baseCtx({ mintContext: QUOTED_MINT, board: other }))).rejects.toThrow(/issued against print "scenario-round-2"/);
+    const ok = (await buildToolArgs(
+      "transfer_claim",
+      { to: seller, tokenId: "7", requestId: otherId },
+      baseCtx({ mintContext: QUOTED_MINT, board: other, printForQuote: () => 5_000_000n }),
+    )) as { quantity: string };
+    expect(ok.quantity).toBe("100000");
+    // A quote the run knows nothing about falls back to the print in force.
+    const unknown = (await buildToolArgs(
+      "transfer_claim",
+      { to: seller, tokenId: "7", requestId },
+      baseCtx({ mintContext: QUOTED_MINT, board, printForQuote: () => undefined }),
+    )) as { quantity: string };
+    expect(unknown.quantity).toBe("46729");
+  });
+
+  it("a held-claim split is valued at the quote's own print as well (D41)", async () => {
+    const seller = "0x00000000000000000000000000000000000000cd";
+    const { board, requestId } = boardWithQuote(seller, "10");
+    const args = (await buildToolArgs(
+      "settle_split_held",
+      { requestId, tokenId: "7", claimQuantityMilliSiu: "20000" },
+      baseCtx({ mintContext: QUOTED_MINT, board, printForQuote: () => 5_000_000n }),
+    )) as { nanoUsdPerSiu: string };
+    expect(args.nanoUsdPerSiu).toBe("5000000");
+    const fallback = (await buildToolArgs("settle_split_held", { requestId, tokenId: "7", claimQuantityMilliSiu: "20000" }, baseCtx({ mintContext: QUOTED_MINT, board }))) as { nanoUsdPerSiu: string };
+    expect(fallback.nanoUsdPerSiu).toBe("10700000");
+  });
+
   it("get_balances names no escrow when payments settle directly, and still does in the gate configuration", async () => {
     const { board } = boardWithQuote();
     const ctx = (direct: boolean) =>

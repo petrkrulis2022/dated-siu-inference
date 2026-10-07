@@ -2134,6 +2134,7 @@ export async function runFullRunWindow(
         caller: { agentId: agent.agentId, erc8004Id: agent.erc8004Id },
         requiredQuoteSiu: options.requiredQuoteSiu,
         ...(options.deps.directSettlement === true ? { directSettlement: true } : {}),
+        ...(options.lab?.printForQuote !== undefined ? { printForQuote: (id: string) => options.lab!.printForQuote!(id) } : {}),
         ...(options.lab !== undefined
           ? { labGuard: (t: ToolName, a: unknown) => options.lab!.guard(agent.agentId, t, a) }
           : {}),
@@ -3018,6 +3019,8 @@ export interface BuildToolArgsContext {
   mintContext?: MintContext;
   /** Payments settle by direct transfer (`RunnerDeps.directSettlement`): no escrow exists to look up. */
   directSettlement?: boolean;
+  /** Currency lab only: the print a quote was asked for at, when it is not the mint context's (`LabHooks.printForQuote`). */
+  printForQuote?: (requestId: string) => bigint | undefined;
   /** See `FullRunWindowOptions.requiredQuoteSiu`. */
   requiredQuoteSiu?: Readonly<Record<string, string>>;
   /** Live, mutated by the loop as gates are delivered and attacked — see `submit_attack`'s case
@@ -3728,10 +3731,15 @@ export async function buildToolArgs(
             "that names a quote must go to that quote's seller.",
         );
       }
-      quantity = claimMilliSiuForQuote(quote, {
-        printId: ctx.mintContext.printId,
-        nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu,
-      }).toString();
+      // A run whose print moves (the currency lab's, D41) sizes the claim at the print the quote was asked for at, which the quote
+      // itself names; every other run sizes it at the print in force, and refuses a quote from another print, as always.
+      const askedAt = ctx.printForQuote?.(named);
+      quantity = claimMilliSiuForQuote(
+        quote,
+        askedAt !== undefined
+          ? { printId: quote.print_id, nanoUsdPerSiu: askedAt }
+          : { printId: ctx.mintContext.printId, nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu },
+      ).toString();
     }
     return {
       to,
@@ -3829,7 +3837,8 @@ export async function buildToolArgs(
       to: quote.seller_id.replace(/^erc8004:/, ""),
       tokenId: asDecimalString(raw.tokenId),
       claimQuantityMilliSiu,
-      nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu.toString(),
+      // Valued at the print the quote was asked for at when the run's print moves (D41), else the print in force.
+      nanoUsdPerSiu: (ctx.printForQuote?.(raw.requestId) ?? ctx.mintContext.nanoUsdPerSiu).toString(),
       ...(typeof raw.memo === "string" && raw.memo.trim() !== "" ? { memo: raw.memo.trim() } : {}),
     };
   }

@@ -24,6 +24,7 @@ const noAdapter: Adapter = async () => {
 const input = (over: Partial<LabRosterInput> = {}): LabRosterInput => ({
   economy: buildEconomy(9),
   print: { printId: "print-illustrative", rateUsdPerSiu: "0.001437" },
+  opening: { fsiuMilliSiu: 4_516n, usdcMinor: 8_583n },
   claim: { tokenId: "777", classLabel: "extract", fromIso: "2026-10-06", untilIso: "2026-10-07" },
   maxTurns: 40,
   chain: "base-sepolia",
@@ -31,11 +32,11 @@ const input = (over: Partial<LabRosterInput> = {}): LabRosterInput => ({
   adapters: Object.fromEntries(LAB_TRADERS.map((t) => [t, noAdapter])) as LabRosterInput["adapters"],
   prices: {
     "claude-haiku-4-5": { priceInUsdPer1M: "1", priceOutUsdPer1M: "5" },
-    "gpt-5.4-mini": { priceInUsdPer1M: "0.75", priceOutUsdPer1M: "4.5" },
+    "deepseek-v3.2": { priceInUsdPer1M: "0.28", priceOutUsdPer1M: "0.4" },
   },
   keys,
   addresses,
-  providerOf: (m) => (m.startsWith("claude") ? "anthropic" : "openai"),
+  providerOf: (m) => (m.startsWith("claude") ? "anthropic" : "openrouter"),
   ...over,
 });
 
@@ -46,19 +47,22 @@ describe("the lab roster", () => {
     expect(roster.map((r) => r.agentId)).toEqual([...LAB_TRADERS.map((t) => SEAT_OF[t]), ISSUER_SEAT]);
   });
 
-  it("runs all four traders on claude-haiku-4-5 (D38: the gpt-5.4-mini seats stalled in the v4 rerun)", () => {
+  it("runs two traders on each of two families again: haiku on TRADER-1 and TRADER-3, deepseek-v3.2 on TRADER-2 and TRADER-4 (D42)", () => {
     const models = LAB_TRADERS.map((t) => LAB_MODELS[t]);
-    expect(models).toEqual(["claude-haiku-4-5", "claude-haiku-4-5", "claude-haiku-4-5", "claude-haiku-4-5"]);
+    expect(models).toEqual(["claude-haiku-4-5", "deepseek-v3.2", "claude-haiku-4-5", "deepseek-v3.2"]);
+    expect(models.filter((m) => m === "claude-haiku-4-5")).toHaveLength(2);
+    expect(models.filter((m) => m === "deepseek-v3.2")).toHaveLength(2);
     expect(roster.slice(0, 4).map((r) => r.modelString)).toEqual(models);
-    expect(roster.slice(0, 4).map((r) => r.provider)).toEqual(["anthropic", "anthropic", "anthropic", "anthropic"]);
+    expect(roster.slice(0, 4).map((r) => r.provider)).toEqual(["anthropic", "openrouter", "anthropic", "openrouter"]);
   });
 
-  it("grants the traders the same eight tools, none of them capacity, redemption, minting or escrow tools", () => {
+  it("grants the traders the same seven tools, none of them capacity, redemption, minting or escrow tools", () => {
     for (const r of roster.slice(0, 4)) expect(r.availableTools).toEqual(LAB_TRADER_TOOLS);
     for (const absent of ["redeem_claim", "reserve_for_work", "mint_claim", "pay_with_claim", "settle_split", "settle_escrow", "check_headroom", "whoami", "submit_job", "submit_attack"]) {
       expect(LAB_TRADER_TOOLS).not.toContain(absent);
     }
-    expect(LAB_TRADER_TOOLS).toHaveLength(8);
+    expect(LAB_TRADER_TOOLS).toHaveLength(7);
+    expect(LAB_TRADER_TOOLS).not.toContain("get_print"); // it reads the published print, which is not the lab's (D41)
   });
 
   it("gives the issuer service only the one tool it uses, no model, and no cost", () => {

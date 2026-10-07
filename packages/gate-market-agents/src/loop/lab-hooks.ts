@@ -54,6 +54,12 @@ export interface LabHooks {
    */
   resolveCall?(agentId: AgentId, name: string, args: unknown): { tool: ToolName; args: unknown } | { refuse: string } | undefined;
   rewriteText?(text: string): string;
+  /**
+   * The print a quote was asked for at, in nano-USD per SIU, when it is not the print the run's mint context carries — the lab's
+   * print moves between rounds (D41). A claim paid against a quote is sized at it: the quote's price at the print the quote was
+   * issued against, which the quote itself names. Absent, or undefined for a quote, the mint context's print is used, as always.
+   */
+  printForQuote?(requestId: string): bigint | undefined;
   /** After a call that succeeded: the lab updates its own books. May act on the chain (the fee rebate). */
   afterToolCall(event: LabToolEvent): Promise<void>;
   /** Nobody can act. Opens the next round and returns true, or returns false when there is none. */

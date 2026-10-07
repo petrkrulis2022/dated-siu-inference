@@ -6,12 +6,15 @@
  * It holds no money. Balances are the chain's; this holds the economy's own facts.
  */
 import type { Economy, Need, TraderLabel } from "./economy.js";
+import type { PrintPath } from "./prints.js";
 
 export type Asset = "usdc" | "fsiu" | "split";
 export type Counterparty = TraderLabel | "ISSUER";
 
 export interface Sale {
   requestId: string;
+  /** The round the quote was asked for in. The quote is priced at that round's print, and a claim paid against it is sized there. */
+  round: number;
   /** A job bought from a trader to meet a need, or one unit of raw work bought from the issuer. */
   kind: "trade" | "rawwork";
   buyer: TraderLabel;
@@ -38,10 +41,33 @@ export class LabBooks {
   constructor(
     readonly economy: Economy,
     readonly ids: { traders: Readonly<Record<TraderLabel, string>>; issuer: string },
+    /** The print in each round (D41). Absent in a test that has no use for one. */
+    readonly path?: PrintPath,
   ) {}
 
   get round(): number {
     return this.#round;
+  }
+
+  /** The print of a round, nano-USD per SIU; undefined if this lab has no print path. */
+  printOfRound(round: number): bigint | undefined {
+    return this.path?.byRound[round - 1];
+  }
+
+  /** The print in force now. */
+  currentPrint(): bigint | undefined {
+    return this.printOfRound(this.#round);
+  }
+
+  /** The id the current round's print goes by in a quote's `print_id`. */
+  currentPrintId(): string | undefined {
+    return this.path?.ids[this.#round - 1];
+  }
+
+  /** The print a quote was asked for at: the print of the round of its request. */
+  printForSale(requestId: string): bigint | undefined {
+    const s = this.#sales.get(requestId);
+    return s === undefined ? undefined : this.printOfRound(s.round);
   }
 
   /** Opens the next round. False, and nothing changes, when the last round is already open. */
@@ -66,12 +92,12 @@ export class LabBooks {
    */
   requestPosted(requestId: string, buyer: TraderLabel, seller: Counterparty): void {
     if (seller === "ISSUER") {
-      this.#sales.set(requestId, blank(requestId, "rawwork", buyer, seller));
+      this.#sales.set(requestId, blank(requestId, this.#round, "rawwork", buyer, seller));
       return;
     }
     const need = this.openNeeds(buyer).find((n) => n.seller === seller);
     if (need === undefined) return;
-    this.#sales.set(requestId, { ...blank(requestId, "trade", buyer, seller), needId: need.id });
+    this.#sales.set(requestId, { ...blank(requestId, this.#round, "trade", buyer, seller), needId: need.id });
   }
 
   quoteIssued(requestId: string): void {
@@ -156,6 +182,6 @@ export class LabBooks {
   }
 }
 
-function blank(requestId: string, kind: Sale["kind"], buyer: TraderLabel, seller: Counterparty): Sale {
-  return { requestId, kind, buyer, seller, quoted: false, paid: false, delivered: false, attempts: 0 };
+function blank(requestId: string, round: number, kind: Sale["kind"], buyer: TraderLabel, seller: Counterparty): Sale {
+  return { requestId, round, kind, buyer, seller, quoted: false, paid: false, delivered: false, attempts: 0 };
 }
