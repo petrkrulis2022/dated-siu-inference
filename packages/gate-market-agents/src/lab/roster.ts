@@ -9,7 +9,7 @@
  */
 import type { Adapter } from "@touchstone/harness";
 import type { ModelPrices } from "../budget/inference-cost.js";
-import { CANONICAL_ASSET_DESCRIPTION } from "../skills/asset-description.js";
+import { LAB_ASSET_DESCRIPTION } from "./asset-text.js";
 import { erc8004IdFor, type AgentId } from "../identity/resolve.js";
 import type { RosterAgentConfig } from "../loop/full-run.js";
 import type { ToolName } from "../tools/index.js";
@@ -29,18 +29,17 @@ export const LAB_MODELS: Readonly<Record<TraderLabel, string>> = {
 };
 
 /**
- * A trader's whole grant. No `redeem_claim` (raw work is bought by quote, D8), no `reserve_for_work`, no
- * `mint_claim` (a payment in fSIU mints inside `pay_with_claim`), no `check_headroom` and no `whoami`: the
- * lab is not about capacity, and a tool it does not use is a tool an agent may spend turns on.
+ * A trader's whole grant. No `redeem_claim` (raw work is bought by quote, D8), no `reserve_for_work`, no `mint_claim` or
+ * `pay_with_claim` (nothing is minted after the opening, D31), no `settle_escrow` (every payment is a direct transfer,
+ * D30), no `check_headroom` and no `whoami`: the lab is not about capacity, and a tool it does not use is a tool an agent
+ * may spend turns on. Three ways to pay: USDC, a held claim, or both (`settle_split_held`, shown as `pay_split`).
  */
 export const LAB_TRADER_TOOLS: readonly ToolName[] = [
   "request_quote",
   "issue_quote",
   "pay",
-  "pay_with_claim",
   "transfer_claim",
-  "settle_split",
-  "settle_escrow",
+  "settle_split_held",
   "deliver_job",
   "get_balances",
   "get_print",
@@ -130,8 +129,8 @@ export function buildLabRoster(input: LabRosterInput): RosterAgentConfig[] {
     prices: FREE_PRICES,
     // The validator checks every seat's text, the service's too. It reads no brief; it says what it is.
     skillPackText:
-      `YOU ARE ${ISSUER_SEAT}, a service: it answers requests for raw work and releases the escrows it is paid through.\n\n` +
-      CANONICAL_ASSET_DESCRIPTION,
+      `YOU ARE ${ISSUER_SEAT}, a service: it answers requests for raw work.\n\n` +
+      LAB_ASSET_DESCRIPTION,
     availableTools: ISSUER_SERVICE_TOOLS,
     waitsFor: "inbox" as const,
     privateKeyHex: keyOf(ISSUER_SEAT),

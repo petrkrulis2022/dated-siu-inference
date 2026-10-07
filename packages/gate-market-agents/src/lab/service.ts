@@ -1,7 +1,8 @@
 /**
  * The currency lab's service: the loop's lab hooks and the `deliver_job` backend in one object, over the
- * lab's books. It is told what each tool call did, vets each call's arguments, runs the work, gives the
- * escrow fee back, and opens each round when the last has gone quiet.
+ * lab's books. It is told what each tool call did, vets each call's arguments, runs the work, and opens each
+ * round when the last has gone quiet. Every payment is a direct transfer (D30), so there is no escrow to
+ * release and no fee to give back.
  *
  * Operator-side throughout. Nothing here is shown to an agent except through the board (`board.ts`), the
  * refusals (`guards.ts`) and `deliver_job`'s result — and none of those names an asset or advises.
@@ -14,8 +15,8 @@ import { LabBooks, MAX_DELIVERY_ATTEMPTS, type Asset } from "./books.js";
 import { ISSUER_SEAT, LAB_ALIASES, traderForSeat, type TraderLabel } from "./economy.js";
 import { guardLabCall, type GuardConfig } from "./guards.js";
 import { renderLabAction, renderLabInfo } from "./board.js";
-import { claimForUsd, escrowFeeMinor, quotedPrice, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu, jobSiu } from "./money.js";
-import { claimMintCostMinorUnits } from "../loop/parity.js";
+import { claimForUsd, quotedPrice, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu, jobSiu } from "./money.js";
+import { claimValueMinorUnits } from "../tools/settle-split.js";
 import { LAB_TOOL_DESCRIPTIONS, resolveLabCall, rewriteLabText } from "./tools.js";
 import { jobFor, type WorkExecutor } from "./jobs.js";
 
@@ -25,9 +26,6 @@ export interface LabServiceDeps {
   seed: number;
   /** Performs and grades a job on behalf of its seller. */
   executorFor: (trader: TraderLabel) => WorkExecutor;
-  /** Operator: give the escrow's fee back to the seller who paid it. */
-  rebate: (seller: AgentId, minorUnits: bigint) => Promise<{ txHash?: string }>;
-  escrowFeeBps: number;
   /** Real cost of a work execution, decimal USD, for the run's own ledger. */
   recordWorkCost?: (usd: string) => void;
   /** Called after a round opens, e.g. to take a snapshot of every trader's holdings. */
@@ -36,14 +34,12 @@ export interface LabServiceDeps {
   tokenId: string;
   /**
    * A trader's confirmed holdings, read from the chain. With it, a payment the trader cannot afford is refused before
-   * anything is sent, in one sentence whichever asset it is in. Without it (a test) every payment goes to the chain.
+   * anything is sent, in one sentence that states the whole wallet whichever asset the payment is in. Without it (a test) every payment goes to the chain.
    */
   holdings?: (trader: TraderLabel) => Promise<{ usdcMinor: bigint; fsiuMilliSiu: bigint }>;
 }
 
-export type LabOperatorAction =
-  | { kind: "fee_rebate"; seller: AgentId; requestId: string; settledMinorUnits: string; rebatedMinorUnits: string; txHash?: string }
-  | { kind: "round_opened"; round: number };
+export type LabOperatorAction = { kind: "round_opened"; round: number };
 
 export interface WorkLogEntry {
   requestId: string;
@@ -57,9 +53,8 @@ export interface WorkLogEntry {
 
 const PAYMENT_ASSET: Partial<Record<ToolName, Asset>> = {
   pay: "usdc",
-  pay_with_claim: "fsiu",
   transfer_claim: "fsiu",
-  settle_split: "split",
+  settle_split_held: "split",
 };
 
 export class LabService implements LabHooks, DeliverService {
@@ -121,43 +116,43 @@ export class LabService implements LabHooks, DeliverService {
   }
 
   /**
-   * What a payment costs against what the wallet holds — confirmed reads, one sentence, the same form whichever asset it
-   * is paid in. A payment the trader cannot afford is refused here, before it is sent, so it neither reaches the chain
-   * nor is retried as though the node were lagging; a payment this lets through that the chain then refuses is a
-   * stale balance, and the loop's own retry is the right answer to that.
+   * What a payment costs against what the wallet holds — confirmed reads, one sentence, the same form whichever asset it is
+   * paid in and whichever is short: the cost, then the whole wallet, both assets (D33). A fact, symmetric, with no advice
+   * about what to do. A payment the trader cannot afford is refused here, before it is sent, so it neither reaches the chain
+   * nor is retried as though the node were lagging; a payment this lets through that the chain then refuses is a stale
+   * balance, and the loop's own retry is the right answer to that.
    */
   async #affordability(me: TraderLabel, tool: ToolName, rawArgs: unknown): Promise<string | null> {
-    const id = (rawArgs as { requestId?: unknown } | undefined)?.requestId;
-    if (typeof id !== "string") return null;
-    const sale = this.d.books.sale(id);
+    const a = (rawArgs ?? {}) as { requestId?: unknown; claimQuantityMilliSiu?: unknown };
+    if (typeof a.requestId !== "string") return null;
+    const sale = this.d.books.sale(a.requestId);
     if (sale === undefined) return null;
     const p = this.d.guard.printNano;
-    const size = jobSiu(this.d.guard.params);
     const price = quotedPrice(
-      size,
+      jobSiu(this.d.guard.params),
       sale.kind === "trade" ? tradeRateUsdPerSiu(p, this.d.guard.params) : rawWorkRateUsdPerSiu(p),
-    ).minorUnits;
-    const claim = claimForUsd(quotedPrice(size, sale.kind === "trade" ? tradeRateUsdPerSiu(p, this.d.guard.params) : rawWorkRateUsdPerSiu(p)).usd, p);
-    let cost: bigint;
-    let asset: "usdc" | "fsiu";
-    if (tool === "pay" || tool === "settle_split") {
-      // A split is a minted part and a dollar part that together come to the whole price.
-      cost = price;
-      asset = "usdc";
-    } else if (tool === "pay_with_claim") {
-      cost = claimMintCostMinorUnits(claim, p);
-      asset = "usdc";
+    );
+    let usdcCost = 0n;
+    let claimCost = 0n;
+    if (tool === "pay") {
+      usdcCost = price.minorUnits;
     } else if (tool === "transfer_claim") {
-      cost = claim;
-      asset = "fsiu";
+      claimCost = claimForUsd(price.usd, p);
+    } else if (tool === "settle_split_held") {
+      // A malformed or out-of-range claim part is the guard's to refuse (`guards.ts`); it never reaches here.
+      if (typeof a.claimQuantityMilliSiu !== "string" || !/^[1-9]\d*$/.test(a.claimQuantityMilliSiu)) return null;
+      claimCost = BigInt(a.claimQuantityMilliSiu);
+      usdcCost = price.minorUnits - claimValueMinorUnits(a.claimQuantityMilliSiu, p.toString());
     } else {
       return null;
     }
     const held = await this.d.holdings!(me);
-    const have = asset === "usdc" ? held.usdcMinor : held.fsiuMilliSiu;
-    if (have >= cost) return null;
-    const unit = asset === "usdc" ? "USDC minor units" : "mSIU of fSIU";
-    return `This payment costs ${cost} ${unit}; the wallet holds ${have} ${unit}.`;
+    if (held.usdcMinor >= usdcCost && held.fsiuMilliSiu >= claimCost) return null;
+    const costs = [
+      ...(usdcCost > 0n ? [`${usdcCost} USDC minor units`] : []),
+      ...(claimCost > 0n ? [`${claimCost} mSIU of fSIU`] : []),
+    ].join(" and ");
+    return `This payment costs ${costs}; the wallet holds ${held.usdcMinor} USDC minor units and ${held.fsiuMilliSiu} mSIU of fSIU.`;
   }
 
   async afterToolCall(e: LabToolEvent): Promise<void> {
@@ -184,23 +179,6 @@ export class LabService implements LabHooks, DeliverService {
       const requestId = (e.intentArgs as { requestId?: unknown } | undefined)?.requestId;
       if (typeof requestId === "string") books.paid(requestId, asset);
       return;
-    }
-
-    if (e.tool === "settle_escrow" && e.settledRequestId !== undefined) {
-      books.settled(e.settledRequestId);
-      const settled = BigInt((e.result as { settledMinorUnits?: string } | undefined)?.settledMinorUnits ?? "0");
-      const fee = escrowFeeMinor(settled, this.d.escrowFeeBps);
-      if (fee > 0n) {
-        const { txHash } = await this.d.rebate(e.agentId, fee);
-        this.operatorActions.push({
-          kind: "fee_rebate",
-          seller: e.agentId,
-          requestId: e.settledRequestId,
-          settledMinorUnits: settled.toString(),
-          rebatedMinorUnits: fee.toString(),
-          ...(txHash !== undefined ? { txHash } : {}),
-        });
-      }
     }
   }
 

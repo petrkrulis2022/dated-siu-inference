@@ -1,6 +1,6 @@
 /**
  * Everything the operator does to the lab's chain, as one surface. The operator is not a participant: it sets
- * the opening balances, mints and hands out the opening endowment, gives the escrow fee back (plan §5), and
+ * the opening balances, mints and hands out the opening endowment, and
  * returns capacity to the pool once the window has closed. All of it is recorded as operator action in the
  * run's report, apart from every agent's record, so no behavioural statistic can include it.
  *
@@ -59,19 +59,8 @@ export function planUsdcReset(current: ReadonlyMap<AgentId, bigint>, opening: bi
   return moves;
 }
 
-/** What the operator's wallet must hold before the run: the top-ups, the endowment's mint cost and a reserve for fee rebates. */
-export function operatorUsdcNeed(moves: readonly UsdcMove[], mintCostMinor: bigint, rebateReserveMinor: bigint): bigint {
+/** What the operator's wallet must hold before the run: the top-ups and the endowment's mint cost. Nothing is given back (D30). */
+export function operatorUsdcNeed(moves: readonly UsdcMove[], mintCostMinor: bigint): bigint {
   const topUps = moves.filter((m) => m.kind === "top_up").reduce((s, m) => s + m.minorUnits, 0n);
-  return topUps + mintCostMinor + rebateReserveMinor;
-}
-
-/**
- * The most fee rebates can come to: every need paid in dollars, plus every raw-work unit, each at the
- * contract's fee on its quote, never below one unit. An upper bound, so the reserve is never the thing that runs out.
- */
-export function rebateReserveMinor(quoteMinorUnits: readonly bigint[], feeBps: number): bigint {
-  return quoteMinorUnits.reduce((sum, q) => {
-    const fee = (q * BigInt(feeBps)) / 10_000n;
-    return sum + (fee === 0n ? 1n : fee);
-  }, 0n);
+  return topUps + mintCostMinor;
 }

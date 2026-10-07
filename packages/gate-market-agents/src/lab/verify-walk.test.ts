@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PARAMS } from "./economy.js";
-import { escrowFeeMinor, printNano, resultNano } from "./money.js";
+import { printNano, resultNano } from "./money.js";
 import { renderWalk, verifyLabWalk, type WalkReport } from "./verify-walk.js";
 
 const P = printNano("0.001437"); // illustrative
@@ -10,59 +10,59 @@ type Pay = WalkReport["paymentMoments"][number];
 function goodReport(): WalkReport {
   const sales: WalkReport["sales"] = [];
   const moments: Pay[] = [];
-  const settlements: WalkReport["usdcSettlements"] = [];
-  const rebates: WalkReport["operatorActions"] = [];
   const events: WalkReport["capacityEvents"] = [];
   let n = 0;
-  const sale = (kind: "trade" | "rawwork", tool: string, heldReceived = "0", minorUnits = kind === "trade" ? 1700n : 1400n) => {
+  const sale = (kind: "trade" | "rawwork", tool: string, heldReceived = "0") => {
     const requestId = `qr-${++n}`;
-    sales.push({ requestId, kind, delivered: kind === "trade", paidAsset: tool === "pay" ? "usdc" : tool === "settle_split" ? "split" : "fsiu" });
+    sales.push({ requestId, kind, delivered: kind === "trade", paidAsset: tool === "pay" ? "usdc" : tool === "settle_split_held" ? "split" : "fsiu" });
     moments.push({ agentId: "ORCHESTRATOR", tool, requestId, heldReceivedMilliSiu: heldReceived });
     const claim = kind === "trade" ? 1184n : 975n;
-    if (tool === "pay" || tool === "settle_split") {
-      const dollars = tool === "pay" ? minorUnits : minorUnits - (claim / 2n) * 1437n / 1000n; // any figure: the check is the fee rule on it
-      settlements.push({ requestId, settledMinorUnits: dollars.toString(), quotedMinorUnits: minorUnits.toString() });
-      rebates.push({ kind: "fee_rebate", requestId, settledMinorUnits: dollars.toString(), rebatedMinorUnits: escrowFeeMinor(dollars, 50).toString() });
-    }
-    if (tool === "pay_with_claim") events.push({ kind: "pay_with_claim", quantityMilliSiu: claim.toString(), settlesRequestId: requestId });
-    if (tool === "settle_split") events.push({ kind: "settle_split", quantityMilliSiu: (claim / 2n).toString(), settlesRequestId: requestId });
+    // A held payment moves the whole claim; a split moves half of it. Either way it is a transfer of a held claim.
+    if (tool === "transfer_claim") events.push({ kind: "transfer_claim", quantityMilliSiu: claim.toString(), settlesRequestId: requestId });
+    if (tool === "settle_split_held") events.push({ kind: "transfer_claim", quantityMilliSiu: (claim / 2n).toString(), settlesRequestId: requestId });
   };
-  for (const tool of ["pay", "pay", "pay_with_claim", "pay_with_claim", "transfer_claim", "transfer_claim", "settle_split", "settle_split"]) {
+  for (const tool of ["pay", "pay", "transfer_claim", "transfer_claim", "settle_split_held", "settle_split_held", "pay", "transfer_claim"]) {
     sale("trade", tool, tool === "transfer_claim" ? "1184" : "0");
   }
-  for (const tool of ["pay", "pay", "pay", "pay_with_claim", "pay_with_claim", "pay_with_claim", "transfer_claim", "transfer_claim"]) sale("rawwork", tool);
-  // 8000 endowed + 2 x 1184 + 3 x 975 + 2 x 592 minted = 14,477 expired across the holders.
+  for (const tool of ["pay", "pay", "transfer_claim", "transfer_claim", "settle_split_held", "settle_split_held", "pay", "transfer_claim"]) sale("rawwork", tool);
+  // Nothing is minted after the opening: what expires at close is exactly the endowment, 4 x 4,318 = 17,272 mSIU.
   const expiry = (holder: string, q: string) => ({ kind: "expiry", holder, quantityMilliSiu: q, txHash: "0x1" });
   const traders = ["TRADER-1", "TRADER-2", "TRADER-3", "TRADER-4"];
+  // USDC and fSIU move only among the five wallets: the totals at the end are the totals at the start.
+  const finalUsdc = [6000n, 6100n, 6200n, 6300n]; // 24,600, and the issuer holds 1,220 of the 25,820 there were
+  const finalFsiu = [4000n, 4100n, 4200n, 4300n]; // 16,600, and the issuer holds 672 of the 17,272 there were
   const finalTraders = traders.map((t, i) => {
-    const usdcMinor = 2874n + BigInt(i);
-    const fsiuMilliSiu = 3000n;
     const needsMet = 2;
-    return { trader: t, usdcMinor: usdcMinor.toString(), fsiuMilliSiu: fsiuMilliSiu.toString(), needsMet, resultNano: resultNano({ usdcMinor, fsiuMilliSiu, needsMet }, P, DEFAULT_PARAMS).toString() };
+    return {
+      trader: t,
+      usdcMinor: finalUsdc[i].toString(),
+      fsiuMilliSiu: finalFsiu[i].toString(),
+      needsMet,
+      resultNano: resultNano({ usdcMinor: finalUsdc[i], fsiuMilliSiu: finalFsiu[i], needsMet }, P, DEFAULT_PARAMS).toString(),
+    };
   });
-  const uniform = traders.map((t) => ({ trader: t, usdcMinor: "2874", fsiuMilliSiu: "2000" }));
+  const uniform = traders.map((t) => ({ trader: t, usdcMinor: "6205", fsiuMilliSiu: "4318" }));
+  const issuerOpening = { usdcMinor: "1000", fsiuMilliSiu: "0" };
   return {
     scripted: true,
     params: DEFAULT_PARAMS,
     print: { rateUsdPerSiu: "0.001437" },
-    escrowFeeBps: 50,
     economy: { needs: new Array(8).fill({}) },
     labErrors: [],
     toolErrors: [],
     needsMet: { "TRADER-1": 2, "TRADER-2": 2, "TRADER-3": 2, "TRADER-4": 2 },
     sales,
     paymentMoments: moments,
-    usdcSettlements: settlements,
     capacityEvents: events,
-    operatorActions: [...rebates, expiry("TRADER-1", "3000"), expiry("TRADER-2", "3000"), expiry("TRADER-3", "3000"), expiry("TRADER-4", "3000"), expiry("ISSUER-B", "2477")],
+    operatorActions: [expiry("TRADER-1", "4000"), expiry("TRADER-2", "4100"), expiry("TRADER-3", "4200"), expiry("TRADER-4", "4300"), expiry("ISSUER-B", "672")],
     snapshots: [
-      { label: "opening", traders: uniform },
-      { label: "round 2 opened", traders: uniform },
-      { label: "round 3 opened", traders: uniform },
+      { label: "opening", traders: uniform, issuer: issuerOpening },
+      { label: "round 2 opened", traders: uniform, issuer: issuerOpening },
+      { label: "round 3 opened", traders: uniform, issuer: issuerOpening },
     ],
-    final: { traders: finalTraders },
+    final: { traders: finalTraders, issuer: { usdcMinor: "1220", fsiuMilliSiu: "672" } },
     measuredBeforeClose: true,
-    opening: { usdcMinorPerTrader: "2874", fsiuMilliSiuPerTrader: "2000" },
+    opening: { usdcMinorPerTrader: "6205", fsiuMilliSiuPerTrader: "4318" },
     pool: { restored: true },
   };
 }
@@ -85,22 +85,29 @@ describe("the lab walk's verifier", () => {
     ["no_bookkeeping_errors", "an error in the lab's own books", (r) => r.labErrors.push({})],
     ["no_tool_call_errored", "a call that errored", (r) => r.toolErrors.push({ agentId: "ORCHESTRATOR", turn: 3, tool: "pay", error: "reverted" })],
     ["every_need_met", "a need left unmet", (r) => (r.needsMet["TRADER-2"] = 1)],
-    ["some_purchase_paid_by_split", "no purchase paid by split", (r) => (r.paymentMoments = r.paymentMoments.filter((m) => !(m.tool === "settle_split")))],
+    ["jobs_paid_every_route", "no job paid by split", (r) => (r.paymentMoments = r.paymentMoments.filter((m) => !(m.tool === "settle_split_held" && r.sales.find((s) => s.requestId === m.requestId)?.kind === "trade")))],
     ["jobs_paid_every_route", "no job paid from a held balance", (r) => (r.paymentMoments = r.paymentMoments.filter((m) => !(m.tool === "transfer_claim" && r.sales.find((s) => s.requestId === m.requestId)?.kind === "trade")))],
     ["raw_work_paid_every_route", "no unit paid in dollars", (r) => (r.paymentMoments = r.paymentMoments.filter((m) => !(m.tool === "pay" && r.sales.find((s) => s.requestId === m.requestId)?.kind === "rawwork")))],
+    ["raw_work_paid_every_route", "no unit paid by split", (r) => (r.paymentMoments = r.paymentMoments.filter((m) => !(m.tool === "settle_split_held" && r.sales.find((s) => s.requestId === m.requestId)?.kind === "rawwork")))],
+    ["every_split_moved_a_held_claim", "a split with no claim part recorded", (r) => (r.capacityEvents = r.capacityEvents.filter((e) => !(e.settlesRequestId === "qr-5")))],
+    ["every_split_moved_a_held_claim", "no split at all", (r) => (r.paymentMoments = r.paymentMoments.filter((m) => m.tool !== "settle_split_held"))],
     ["received_fsiu_passed_on", "no held payment by a payer holding received fSIU", (r) => r.paymentMoments.forEach((m) => (m.heldReceivedMilliSiu = "0"))],
-    ["fee_rebated_after_every_dollar_settlement", "a settlement with no rebate", (r) => (r.operatorActions = r.operatorActions.filter((a, i) => !(a.kind === "fee_rebate" && i === 0)))],
-    ["fee_rebated_after_every_dollar_settlement", "a rebate that is not the contract's fee", (r) => ((r.operatorActions.find((a) => a.kind === "fee_rebate")!).rebatedMinorUnits = "1")],
-    ["dollar_settlements_in_full", "a wholly-dollar settlement for less than quoted", (r) => (r.usdcSettlements[0].settledMinorUnits = "1")],
-    ["dollar_settlements_in_full", "a split settlement for the whole quote, which the escrow cannot hold", (r) => {
-      const split = r.sales.find((x) => x.paidAsset === "split")!;
-      const settlement = r.usdcSettlements.find((x) => x.requestId === split.requestId)!;
-      settlement.settledMinorUnits = settlement.quotedMinorUnits;
-    }],
+    ["every_paid_sale_has_one_payment", "a sale paid twice", (r) => r.paymentMoments.push({ ...r.paymentMoments[0] })],
+    ["every_paid_sale_has_one_payment", "a sale marked paid that no payment made", (r) => (r.paymentMoments = r.paymentMoments.slice(1))],
+    ["usdc_conserved_no_fee_no_escrow", "USDC that a fee, an escrow or a rebate moved out of the five wallets", (r) => (r.final!.issuer.usdcMinor = "1219")],
+    ["usdc_conserved_no_fee_no_escrow", "USDC held by someone other than the five wallets", (r) => (r.final!.traders[0].usdcMinor = "5990")],
+    ["fsiu_supply_unchanged", "fSIU that appeared after the opening", (r) => (r.final!.issuer.fsiuMilliSiu = "700")],
+    ["nothing_minted_after_the_opening", "a mint by an agent", (r) => r.capacityEvents.push({ kind: "pay_with_claim", quantityMilliSiu: "1184", settlesRequestId: "qr-1" })],
+    ["nothing_minted_after_the_opening", "a mint of the old split kind", (r) => r.capacityEvents.push({ kind: "settle_split", quantityMilliSiu: "592", settlesRequestId: "qr-5" })],
+    ["no_fee_rebated", "a fee rebate", (r) => r.operatorActions.push({ kind: "fee_rebate" })],
     ["leftover_fsiu_expired_at_close", "an expiry that failed", (r) => r.operatorActions.push({ kind: "expiry_failed", holder: "TRADER-3", reason: "x" })],
     ["leftover_fsiu_expired_at_close", "a pool that was not restored", (r) => (r.pool.restored = false)],
-    ["fsiu_conserved", "fSIU that vanished", (r) => ((r.operatorActions.find((a) => a.kind === "expiry")!).quantityMilliSiu = "2999")],
-    ["opening_equal_for_every_trader", "an opening that differs", (r) => (r.snapshots[0].traders[2].usdcMinor = "2873")],
+    ["fsiu_conserved", "fSIU that vanished", (r) => ((r.operatorActions.find((a) => a.kind === "expiry")!).quantityMilliSiu = "3999")],
+    ["opening_equal_for_every_trader", "an opening that differs", (r) => (r.snapshots[0].traders[2].usdcMinor = "6204")],
+    ["opening_covers_every_need_in_either_asset", "an opening smaller than the print and schedule give", (r) => {
+      r.opening = { usdcMinorPerTrader: "2874", fsiuMilliSiuPerTrader: "2000" };
+      for (const snap of r.snapshots) for (const t of snap.traders) Object.assign(t, { usdcMinor: "2874", fsiuMilliSiu: "2000" });
+    }],
     ["every_round_opened", "a round that never opened", (r) => (r.snapshots = r.snapshots.filter((s) => s.label !== "round 3 opened"))],
     ["score_recomputes_from_balances", "a result that is not its balances", (r) => (r.final!.traders[0].resultNano = "1")],
     ["scored_before_the_window_closed", "a snapshot after close", (r) => (r.measuredBeforeClose = false)],

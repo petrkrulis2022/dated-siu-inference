@@ -57,9 +57,34 @@ export const creditNano = (p: bigint, params: LabParams): bigint =>
 export const sellerMarginNano = (p: bigint, params: LabParams): bigint =>
   ((tradeRateNano(p, params) - p) * BigInt(params.jobMilliSiu)) / 1000n;
 
-/** Opening USDC in minor units: the opening fSIU's value at the print, rounded UP so USDC is never worth less. */
+/**
+ * What each trader opens with in fSIU, sized so that fSIU ALONE could meet every need (D31): the claim for each job it
+ * buys and for each unit of raw work it must buy to deliver the jobs it sells. `buildEconomy` makes every trader buy
+ * `needsPerTrader` jobs and sell `needsPerTrader` jobs, so each trader needs that many of each. Claims are sized as the
+ * loop sizes a payment, the price's worth at the print rounded up (`claimForUsd`), so this covers the quotes exactly.
+ */
+export function openingMilliSiuPerTrader(p: bigint, params: LabParams): bigint {
+  const size = jobSiu(params);
+  const job = claimForUsd(quotedPrice(size, tradeRateUsdPerSiu(p, params)).usd, p);
+  const raw = claimForUsd(quotedPrice(size, rawWorkRateUsdPerSiu(p)).usd, p);
+  return BigInt(params.needsPerTrader) * (job + raw);
+}
+
+/**
+ * Opening USDC in minor units: the opening fSIU's value at the print, rounded UP — equal in value to the fSIU, and so
+ * enough, alone, for every quote a trader must pay (those are sized down from the same print, never above it).
+ */
 export const openingUsdcMinor = (p: bigint, params: LabParams): bigint =>
-  ceilDiv(BigInt(params.openingMilliSiu) * p, 1_000_000n);
+  ceilDiv(openingMilliSiuPerTrader(p, params) * p, 1_000_000n);
+
+/** What every quote a trader must pay comes to in USDC minor units: its jobs and its raw work. */
+export function usdcNeededPerTrader(p: bigint, params: LabParams): bigint {
+  const size = jobSiu(params);
+  return (
+    BigInt(params.needsPerTrader) *
+    (quotedPrice(size, tradeRateUsdPerSiu(p, params)).minorUnits + quotedPrice(size, rawWorkRateUsdPerSiu(p)).minorUnits)
+  );
+}
 
 /** fSIU valued at the print, in nano-USD, rounded down. */
 export const fsiuValueNano = (milliSiu: bigint, p: bigint): bigint => (milliSiu * p) / 1000n;
@@ -76,17 +101,6 @@ export interface Holdings {
 /** A trader's result, in nano-USD: its USDC, plus its fSIU at the print, plus the credit for needs met. */
 export function resultNano(h: Holdings, p: bigint, params: LabParams): bigint {
   return usdcValueNano(h.usdcMinor) + fsiuValueNano(h.fsiuMilliSiu, p) + BigInt(h.needsMet) * creditNano(p, params);
-}
-
-/**
- * What the escrow keeps at settlement — `TouchstoneEscrow.settle`'s own rule, restated so the operator can
- * give it back: nothing on a zero settlement or a zero fee, otherwise the proportional fee rounded down but
- * never below one unit.
- */
-export function escrowFeeMinor(settledMinor: bigint, feeBps: number): bigint {
-  if (settledMinor === 0n || feeBps === 0) return 0n;
-  const raw = (settledMinor * BigInt(feeBps)) / BPS;
-  return raw === 0n ? 1n : raw;
 }
 
 /**

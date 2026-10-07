@@ -3,19 +3,21 @@
  *
  * Plan §2.9: identical wording for every trader except its own skill, needs, address and label; the
  * canonical asset text; no instruction to hold, spend, convert or prefer either asset; the context
- * validator stays on. The structure enforces the first of those: `personalBlock` is the only part that
+ * validator stays on. The asset text is the canonical one with the two sentences about USDC's escrow replaced by what is so
+ * of the lab (`asset-text.ts`, D36). The structure enforces the first of those: `personalBlock` is the only part that
  * differs, and `sharedBlock` takes nothing about who is reading — a test compares them byte for byte.
  *
- * Everything the brief says about money is a primitive fact (what the calls are, what the credit is, how a
- * result is counted). It never says what follows from them: not which route leaves more dollars, not that
+ * Everything the brief says about money is a primitive fact (what the calls are, what each costs, what the supply is,
+ * what the credit is, how a result is counted). It never says what follows from them: not which route leaves more dollars, not that
  * either asset keeps its worth, not that a result is the same either way. Those consequences are the
  * agent's to find (the 2026-10-05 decision on the gate briefs, applied here).
  */
-import { CANONICAL_ASSET_DESCRIPTION } from "../skills/asset-description.js";
+import { LAB_ASSET_DESCRIPTION } from "./asset-text.js";
 import { ISSUER_SEAT, LAB_TRADERS, needsOf, type Economy, type TraderLabel } from "./economy.js";
 import {
   creditNano,
   jobSiu,
+  openingMilliSiuPerTrader,
   openingUsdcMinor,
   printNano,
   quotedPrice,
@@ -73,6 +75,7 @@ function sharedBlock(i: LabBriefInput): string {
   const rawQuote = quotedPrice(size, rawRate).usd;
   const credit = unitsToDecimal(creditNano(print, p), 9);
   const openingUsdc = unitsToDecimal(openingUsdcMinor(print, p) * 1000n, 9);
+  const openingMilliSiu = openingMilliSiuPerTrader(print, p);
   const traderLines = LAB_TRADERS.map(
     (t) =>
       `  ${t}: skill ${e.skillOf[t]}; sellerId "${i.directory[t].sellerId}"; model "${i.directory[t].model}"`,
@@ -111,15 +114,14 @@ HOW TO BUY
       "printHash": "0x00", "sellerId": "<sellerId>", "chain": "${i.chain}",
       "expiresInSeconds": 3600, "pattern": "fixed"}}
   Step 2 — the seller answers; the quote appears on your board as "Quotes you have received".
-  Step 3 — settle it, by any of these. Each names the quote by its requestId, and each works for a job and for a
-  unit of raw work alike:
+  Step 3 — settle it, by any of these. Each names the quote by its requestId, each works for a job and for a
+  unit of raw work alike, and each reaches the seller at the moment you make it:
     {"tool": "pay_with_usdc", "args": {"requestId": "<the requestId>"}}
-    {"tool": "pay_with_new_claim", "args": {"requestId": "<the requestId>"}}
     {"tool": "pay_with_held_claim", "args": {"requestId": "<the requestId>"}}
     {"tool": "pay_split", "args": {"requestId": "<the requestId>", "claimQuantityMilliSiu": "<mSIU of the claim part>"}}
   WHAT EACH COSTS
-    Paying in USDC costs USDC. Paying with fSIU you hold costs that fSIU. Minting new fSIU costs USDC, at the
-    print, paid to the issuer.
+    Paying in USDC costs USDC. Paying with fSIU you hold costs that fSIU. Paying with both costs the fSIU you give
+    and the rest of the price in USDC.
 
 IF YOU ARE THE SELLER OF A JOB
   A request addressed to you appears on your board. {"tool": "issue_quote", "args": {"requestId": "<id>"}}
@@ -128,17 +130,16 @@ IF YOU ARE THE SELLER OF A JOB
   then: {"tool": "deliver_job", "args": {"requestId": "<id>"}}. A grader checks the result. A pass uses up
   the unit and meets the buyer's need; an attempt that does not pass leaves the unit with you. A job has at
   most ${MAX_DELIVERY_ATTEMPTS} attempts.
-  A quote paid in USDC is held in escrow until you release it: {"tool": "settle_escrow", "args":
-  {"requestId": "<id>"}}. It is refused until the job is delivered. A quote paid in fSIU has nothing to
-  release; the claim is already yours.
+  A payment reaches you at the moment it is made, in whichever asset it is in; there is nothing to release.
 
 THE FSIU IN THIS LAB
   All fSIU here is one token: tokenId ${i.claim.tokenId}, class ${i.claim.classLabel}, issued by ${ISSUER_SEAT}, for this lab's
-  window. Each trader opened the lab holding ${unitsToDecimal(BigInt(p.openingMilliSiu), 3)} SIU of it (${p.openingMilliSiu} mSIU) and ${openingUsdc} USD in USDC.
+  window. Each trader opened the lab holding ${unitsToDecimal(openingMilliSiu, 3)} SIU of it (${openingMilliSiu} mSIU) and ${openingUsdc} USD in USDC.
+  The fSIU in the lab is that opening supply. Nothing creates more during the run.
   {"tool": "get_balances", "args": {"account": "<an address>", "tokenIds": ["${i.claim.tokenId}"]}} reads a balance.
   get_print shows the print: ${i.print.printId}, ${i.print.rateUsdPerSiu} USD per SIU.
 
-${CANONICAL_ASSET_DESCRIPTION}
+${LAB_ASSET_DESCRIPTION}
 
 YOUR RESULT
   Your result is your USDC, plus your fSIU valued at the current print, plus a credit for each need met.

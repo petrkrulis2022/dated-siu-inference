@@ -90,6 +90,25 @@ describe("validateAgentContext", () => {
     }
   });
 
+  it("requires the asset description a run states, byte for byte, in place of the canonical one — the lab's (D36)", () => {
+    const own = "You hold two assets.\n\nA run's own paragraph, which is not the canonical one.";
+    const withOwn = assembleContext("ISSUER-A", `${own}\n\nsome seat text`, []);
+    expect(() => validateAgentContext(withOwn, own)).not.toThrow();
+    // The canonical text is no longer what is required once a run states its own …
+    const withCanonical = assembleContext("ISSUER-A", cleanPackText(), []);
+    expect(() => validateAgentContext(withCanonical, own)).toThrow(ContextValidationError);
+    // … a paraphrase of the run's own text is drift like any other …
+    const paraphrased = assembleContext("ISSUER-A", own.replace("which", "that"), []);
+    try {
+      validateAgentContext(paraphrased, own);
+      throw new Error("did not throw");
+    } catch (err) {
+      expect((err as ContextValidationError).kind).toBe("asset-description-drift");
+    }
+    // … and with no override the canonical text is still what is required.
+    expect(() => validateAgentContext(withOwn)).toThrow(ContextValidationError);
+  });
+
   it("halts on a provider API key pattern appearing anywhere in the context", () => {
     const context = assembleContext("ISSUER-A", cleanPackText(), [
       {

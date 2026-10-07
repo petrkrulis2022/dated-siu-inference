@@ -24,7 +24,7 @@ authoring, no adversary, no attacks.
 
 ### 2.2 Issuer
 ISSUER-B as an **automatic service**, not a model-driven seat: a deterministic policy on ISSUER-B's own
-key that answers requests and settles escrows. It sells **raw work**: one unit per job, bought with a
+key that answers requests (from instrument v4 every payment is a direct transfer, so there is no escrow for it to settle, D30). It sells **raw work**: one unit per job, bought with a
 quote that is paid in USDC or in fSIU — paying the issuer in fSIU is the redemption (the claim goes back
 to the issuer that owes the work). The two routes must cost exactly the same (price parity, §5). See D8.
 
@@ -49,9 +49,14 @@ Every number below is a **default**; tune if needed and record the final values 
   either asset, so neither asset is favoured.
 
 ### 2.5 Opening balances
-Each trader starts every run with **equal value in USDC and fSIU**. The fSIU is minted once per trader
-at run start. The operator resets each trader's USDC to the opening figure before every run, so runs
-are comparable. Claims are valid for the whole window.
+*As revised for instrument v4 (D31); the v1 to v3 text was "equal value in USDC and fSIU, 2,000 mSIU each".*
+Each trader starts every run with **equal value in USDC and fSIU, sized so that either alone meets every need**:
+the claim for each job it buys and for each unit of raw work it buys to deliver the jobs it sells (a balanced
+schedule makes both counts `needsPerTrader`), and USDC of the same value at the print, rounded up. The figures are
+derived from the print and the schedule at launch, not fixed. **The fSIU supply is the endowment, fixed for the
+run: nothing is minted after the opening.** The endowment is minted once, by the operator, for all four traders
+together. The operator resets each trader's USDC to the opening figure before every run, so runs are comparable.
+Claims are valid for the whole window.
 
 ### 2.6 Window and rounds
 **One window, several rounds.** No forward-dating, no window transitions, no drain. A round opens when
@@ -68,6 +73,10 @@ met. Results are measured before the window closes, so unexpired fSIU counts at 
 between the two assets does not change the result, and a trader is never required to convert fSIU to
 USDC.
 
+*Which of this a brief states (D35): the brief says how a result is counted, and no more. The last sentence above
+describes the structure; the brief does not carry it, because D15 keeps "convert" out of the brief's wording. The
+lab has no route from fSIU to USDC and v4 adds none.*
+
 ### 2.9 Briefs
 Facts only, identical wording across traders except each trader's own skill and needs. The canonical
 asset text for redemption and expiry. No instruction to hold, spend, convert or prefer either asset.
@@ -79,7 +88,7 @@ ISSUER-A 48,000, 1 USDC bond each); the quote, payment, claim-transfer, redempti
 loop; the claim-position tracker; price parity; the claim ledger; scripted mode and its verifier; the
 confirmed-write retry; the debug disqualification; the carried-forward settlement list.
 **New:** the economy module (schedule, needs, credits); the job source and work executor;
-`deliver_job` and the lab guards; lab hooks in the loop (board section, rounds, fee rebate); the
+`deliver_job` and the lab guards; lab hooks in the loop (board section, rounds; through v3 a fee rebate, gone in v4); the
 issuer service; briefs and roster; a lab runner; scoring and measurement; a scripted lab walk.
 
 ### 2.11 Final values (record here once tuned)
@@ -94,16 +103,19 @@ issuer service; briefs and roster; a lab runner; scoring and measurement; a scri
 | traders | 4 | |
 | rounds | 3 | |
 | needs per trader | 2 (8 jobs per run) | |
-| opening per trader | 2 SIU of USDC and 2,000 mSIU of fSIU (**changed from 4 SIU, D16**) | 2 SIU: 2,000 mSIU of fSIU and 2,874 USDC minor units at the illustrative print |
+| opening per trader | 2 SIU of USDC and 2,000 mSIU of fSIU (**changed from 4 SIU, D16; derived from the print and the schedule from v4, D31**) | **v4: derived.** At the illustrative print, 4,318 mSIU of fSIU and 6,205 USDC minor units (v1 to v3: 2,000 mSIU and 2,874) |
+| minting after the opening | allowed (paid in USDC at the print, D17) | **none from v4 (D31)** |
+| settlement | USDC through the escrow, fSIU direct | **direct transfer in both assets from v4 (D30)** |
 | decision turns per run | about 50 | |
 
-*Worst-case mint check (enforced at launch, §5; `lab/launch.ts`):* the endowment, then every need paid by
-minting both its job claim and its raw-work claim. At the illustrative print of 0.001437 USD/SIU a job quote
-is 1,700 minor units, so a job claim is 1,184 mSIU, and a raw-work quote is 1,400, so its claim is 975. With
-eight needs and four endowments of 2,000 that is 8,000 + 8 × (1,184 + 975) = **25,272 mSIU, 79% of ISSUER-B's
-32,000 mSIU headroom** (the bound is 80%, 25,600). **The first draft of this note said 25,600 for a 4,000 mSIU
-endowment and left the raw-work claims out; with them the draft's figure was 33,272, more than the whole
-headroom (D16).**
+*Endowment check (enforced at launch, §5; `lab/launch.ts`), v4:* at the illustrative print of 0.001437 USD/SIU a job
+quote is 1,700 minor units, so a job claim is 1,184 mSIU, and a raw-work quote is 1,400, so its claim is 975. Each
+trader buys two jobs and two units of raw work: 2 × (1,184 + 975) = **4,318 mSIU, or 6,200 USDC minor units** (6,205 is
+the same value rounded up). Four endowments are **17,272 mSIU, 54% of ISSUER-B's 32,000 mSIU headroom** (the bound is
+80%, 25,600). *Why minting was removed (D31):* with it, the worst case adds eight job claims and eight raw-work claims,
+8 × (1,184 + 975) = 17,272, for **34,544 mSIU, more than the whole headroom**. *History (v1 to v3, D16):* with an
+opening of 2,000 each the worst case was 8,000 + 17,272 = 25,272 mSIU, 79% of the headroom; the first draft's note said
+25,600 for a 4,000 mSIU endowment and left the raw-work claims out, which with them was 33,272.
 
 ---
 
@@ -166,6 +178,10 @@ b. **Scripted lab walk, fork then live**, through every route: paying in each as
    fSIU, buying raw work in each asset, a partial use, expiry at window close, and the score computation.
 c. **STOP:** send the draft decision rule (§3) for approval.
 d. **One model run. STOP:** report its cost and anything odd — and lead with how many opportunities arose.
+d2. **Instrument v4 and one rerun (D30 to D36), STOP.** Report needs met, opportunities, reuse, and whether any trader
+   waited while it had something it could do. If the rerun meets most needs and shows a handful of opportunities, freeze
+   the instrument and run the twenty; if not, the question is whether the economy gives agents enough reasons to trade,
+   and that is a conversation before anything more is spent.
 e. **On your go: 20 runs**, same seeds per comparison, around 40–50 decision turns each.
 
 **Also stop** if any contract change becomes necessary. A debug or scripted run never counts.
@@ -175,10 +191,12 @@ e. **On your go: 20 runs**, same seeds per comparison, around 40–50 decision t
 ## 5. Safeguards
 
 - **Price parity on every route**, including buying raw work from the issuer.
-- **Fee rebate.** The escrow takes 50 bps from the seller's proceeds on the dollar route and nothing on
-  the claim route. After each dollar settlement the operator rebates the fee to the seller (the issuer
-  included), logged as an operator action, so neither route carries a fee and no brief mentions one.
-- **Headroom.** The worst-case mint (the endowment, then every need paid by minting its job and its raw-work claim) is held to 80% of ISSUER-B's extract headroom (§2.11, D16), checked at launch against the headroom actually read; a run that would exceed it does not start. The contamination check (a mint backed by anyone but ISSUER-B aborts the run) stays as the backstop.
+- **No escrow, no fee (v4, D30).** Every payment is a transfer to the seller at the moment it is made, in either asset,
+  so neither route carries a fee, a rebate, a release step or buyer protection the other lacks. *Through v3 the escrow took
+  50 bps on the dollar route and the operator rebated it after each settlement; that safeguard is gone with the escrow.*
+  The report's check that replaces it: USDC and fSIU are conserved across the four traders and the issuer, from the opening
+  to the final snapshot, so a fee, money left in an escrow or a mint after the opening would show as a total that moved.
+- **Headroom.** The endowment, which is the whole fSIU supply of the run (nothing is minted after it, D31), is held to 80% of ISSUER-B's extract headroom (§2.11), checked at launch against the headroom actually read; a run that would exceed it does not start. The contamination check (a mint backed by anyone but ISSUER-B aborts the run) stays as the backstop.
   The contamination check from the gate configuration stays as a backstop: a mint backed by any other
   issuer aborts the run.
 - **Countable assertion.** `assertCountableForF1` is wired into every run the report admits; debug and
@@ -194,9 +212,11 @@ e. **On your go: 20 runs**, same seeds per comparison, around 40–50 decision t
 
 ## 6. Measurement, per run and per trader
 
-- **Reuse:** fSIU payments and raw-work purchases funded by received fSIU versus newly minted fSIU;
-  mints per job transacted.
-- **Share of payments in fSIU, by route:** held balance, mint-and-forward, USDC.
+- **Reuse (v4, re-registered in §3):** payments and raw-work purchases made wholly from a held balance that included
+  received fSIU, against payments made in USDC while holding enough received fSIU to have paid; **partial reuse** (a split
+  that spends received fSIU in part) reported apart and not read by the rule. There is no minted fSIU to compare with.
+- **Waits taken while there was something to do (D34):** per trader, from the prompts.
+- **Share of payments in fSIU, by route:** held balance, split, USDC.
 - **Holdings against needs:** fSIU held against each trader's upcoming needs, round by round.
 - **Disposals:** passed on, redeemed for raw work, expired.
 - **Needs met, result per trader, and cost per run.**
@@ -318,7 +338,8 @@ third party, never the Assay.
 | D32 | 2026-10-07 | **Paying with both (your answer 3).** `pay_split(requestId, claimQuantityMilliSiu)` is now one payment drawn partly from a **held** claim (the amount given, valued at the print) and partly in USDC (the rest of the quote's price), both transferred at once. It replaces the split that minted its claim part. A new internal tool (`settle_split_held`) over the same two transfers; no contract change. A trader whose holdings straddle the two assets, like TRADER-3's 1,174 USDC and 816 mSIU, can now pay. | user |
 | D33 | 2026-10-07 | **Refusals state the whole wallet (your answer 4).** *This payment costs {what it costs}; the wallet holds {USDC} USDC minor units and {fSIU} mSIU of fSIU.* The same two figures whichever asset the payment was in and whichever was short; a split states both of its parts. A fact, symmetric, no advice. Replaces D27's wording. | user |
 | D34 | 2026-10-07 | **The gpt-5.4-mini seats (your answer 5): rerun first, replace only on evidence.** The rerun reports, for each trader, whether it **waited while it had something it could do** — a wait on a turn whose screen listed an open request addressed to it, a quote to pay, a need to buy, or a paid job to deliver — counted from the prompts and now recorded in the report. If either gpt-5.4-mini seat still does, that family is replaced by a stronger cheap model from another family and the replacement is reported. | user |
-| D35 | 2026-10-07 | **The motive structure is kept; nothing is added, and one assumption is corrected.** The score counts fSIU at the print; the lab has no route from fSIU to USDC and v4 adds none. **The brief does not currently say "converting changes nothing and is never required"** — it states only how a result is counted (your fSIU valued at the current print is part of it), and D15 keeps "convert" and "cash out" out of the brief's wording. The sentence was assumed to be present and is not. Left as it is until you decide whether to add it; adding it would change the brief's text for the first time since v3, so it would be stamped in this version's change line if you do. | user |
+| D35 | 2026-10-07 | **The motive structure is kept; nothing is added, and one assumption is corrected.** The score counts fSIU at the print; the lab has no route from fSIU to USDC and v4 adds none. **The brief does not currently say "converting changes nothing and is never required"** — it states only how a result is counted (your fSIU valued at the current print is part of it), and D15 keeps "convert" and "cash out" out of the brief's wording. The sentence was assumed to be present and is not. Left as it is until you decide whether to add it; if you do, it is one more line in this version's change list. | user |
+| D36 | 2026-10-07 | **The asset paragraph in the brief had to change, and that was more than a tool change (your answer 1: "report if a direct USDC transfer needs more than a tool change").** Settling directly needed no contract change and no change to the gate configuration. It did make two sentences of the canonical asset text false of the lab: *"Paid against a quote, it is held in escrow until the seller settles. A seller may settle for less than it quoted, and whatever it does not claim returns to you."* Nothing is held, there is nothing to settle, and nothing returns. The lab's brief embeds that text verbatim, and the context validator requires it verbatim in every agent's context, so leaving it would have put a false sentence about USDC in front of every trader and a validator that insisted on it. **What changed:** `lab/asset-text.ts` derives the lab's asset text from the canonical constant by one replacement of exactly those two sentences with *"Paid against a quote, it reaches the seller at once."*, throwing at load if the canonical text no longer contains them; `validateAgentContext` takes an optional asset text (default: the canonical one, so nothing else changes) and only the lab passes its own; a test pins that the two texts differ in nothing else, and the fSIU paragraph is untouched. The gate configuration keeps the canonical text. **This is a call I made rather than asked; it is reversible, and it is in the instrument's change line.** | Claude Code |
 
 ---
 
@@ -368,6 +389,8 @@ Items from the stopped step c, for completeness:
 - [x] P11 — phase 2 and phase 3 plans refined (seat conflict, failing issuer as a service policy, first-fit seeding, dealer wallet — §7, §8)
 - [x] STOP c — rule approved 2026-10-06 with two changes (D20); TRADER-4 moved to its own wallet (D22)
 - [x] P12 — one model run; cost reported — **STOP d reached 2026-10-06** (D25): 0 opportunities, $0.693; the run was cut by a harness cap and undermined by presentation problems; a rerun is proposed after the agent-visible fixes are approved
+- [ ] P13 — **instrument v4** (D30 to D36), built and walked 2026-10-07; the full gate set's last line is below. Direct transfer in both assets (no escrow, fee, rebate or release); opening derived so either asset alone meets every need, minting removed; `pay_split` from a held claim and USDC; whole-wallet refusals; the lab's own asset paragraph (D36); waits-with-work recorded; H1 re-registered (§3). **The scripted walk was rewritten for the new routes and gained checks** that USDC and fSIU are conserved across the five wallets, that nothing is minted after the opening, that every split moved a held claim, and that the opening covers every need in either asset. **It passed all 22 checks on a fork (`lab-scripted-2026-10-07T05-13-57-295Z`) and live on Base Sepolia (`lab-scripted-2026-10-07T05-24-09-073Z`): 8 of 8 needs met; every route used for jobs and for raw work (dollars, held balance, split); 4 held-balance payments by a payer holding fSIU it had been given; 443,889 USDC minor units across the five wallets before and after, and 17,272 mSIU before and after — no fee, no escrow, nothing minted; every leftover position expired at close and the pool back at 32,000 mSIU.** The live walk had one write that needed the node to catch up and recovered. A scripted run costs gas and about a cent of testnet USDC; no model was called.
+- [ ] v4 rerun — one run, stamped v4; STOP and report (§4 d2)
 - [ ] Phase 1: 20 runs, on your go
 
 ---

@@ -4102,3 +4102,42 @@ Two changes. The settlement's write now goes through the same retry (`retryOnSim
 only once the escrow is visible — status other than `none`, polled for up to eight seconds — because a read taken
 before that sized a split's settlement as the whole quote. A mined transaction that reverts is still final and is
 not retried. The fork reproduces neither, and the live walk is the only evidence they work.
+
+### 4.6bm Direct settlement, a held-claim split, and the lab's own asset paragraph (instrument v4)
+
+**Added 2026-10-07 for the currency lab's instrument v4 (`docs/marketplace_plan.md` D30 to D36). Nothing here changes the
+gate configuration: each of the three is selected by a flag that only the lab sets.**
+
+**Direct settlement.** `RunnerDeps.directSettlement` makes `pay` a plain USDC `transfer` to the quote's seller instead of
+opening an escrow, and makes the escrow-less route the only one the lab offers. The reason is measured: through v3 a job paid in
+USDC sat in the escrow until its seller delivered and released it, while a job paid in claims moved at once, so choosing an
+asset also chose buyer protection, when the seller could spend the money, a 50 bps fee and the operator's rebate of it. In
+the lab's first runs a trader finished 2.80 million nano-USD below its opening, about 49% of it, with two jobs it had paid for
+in dollars undelivered in escrow, which the score does not count for the buyer (`docs/lab-first-runs-2026-10-06.md`, §6). **It is a tool change, not a contract change** (the answer to "report if a direct USDC transfer
+needs more than a tool change", with one more thing, below). `tools/direct-settlement.ts` holds the helpers. The transfer is
+made in the *deployment's* USDC, not at the address the quote names: the quote's address is the SDK's per-chain constant, the same
+token on every real chain, and on a local devnet the canonical address of a chain that is not there, where a `transfer`
+is estimated, sent and mined and moves nothing. A direct payment refuses a quote past its expiry, as the escrow would. `get_balances`
+reads no escrows and its history line names none, because none exists.
+
+**`settle_split_held`.** One call, two transfers to the quote's seller: a claim the caller already holds, of the quantity it
+names (valued at the print, rounded down), then the rest of the quote's price in USDC. It replaces `settle_split` in the lab,
+which minted its claim part; the lab has no minting from v4 (D31). The claim part must be worth something and less than the
+price, so at neither end is it a different payment in disguise. The claim part goes first; if the USDC part then fails, the
+error says what moved, so a half-made payment is never reported as made. The loop records the claim part as the held-claim
+transfer it is (`transfer_claim`, keyed to the quote), so the position tracker and the claim ledger see a held claim passed on
+whichever tool did it, and the report separates a split that spends received fSIU in part as **partial reuse**, outside the
+registered measure.
+
+**The asset paragraph.** The canonical asset text says of USDC that paid against a quote it "is held in escrow until the seller
+settles. A seller may settle for less than it quoted, and whatever it does not claim returns to you." That is false of direct
+settlement, and the lab's brief embeds the text verbatim while `validateAgentContext` requires it verbatim in every agent's
+context. So the lab states its own paragraph (`lab/asset-text.ts`): the canonical text with exactly those two sentences replaced
+by "Paid against a quote, it reaches the seller at once." — derived by one replacement that throws at load if the canonical text
+changes under it — and the validator takes an optional asset text (default: the canonical one) which only the lab passes. The
+check is the same check, still byte for byte, against the lab's text. A test pins that the two texts differ in nothing else.
+The gate configuration keeps the canonical text. This was a call, not an instruction; it is D36.
+
+**Evidence.** Unit tests for each piece, and `loop/direct-settlement.test.ts`, which drives the real loop against a local chain
+whose escrow address is a dead address: a payment that tried to open an escrow would fail against it. The fork walk and the live
+walk are what show it on a node with lag.

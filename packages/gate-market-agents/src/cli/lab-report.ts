@@ -32,8 +32,8 @@ function main(): void {
     const m = measureRun(r);
     console.log(
       `  ${m.runId}${m.countable ? "" : "  [NOT COUNTED]"}: opportunities ${m.opportunities}, reused ${m.reuse}; ` +
-        `routes ${JSON.stringify(m.paymentsByRoute)}; not-wholly-dollar share ${m.fsiuShareOfPayments}; ` +
-        `mints/job ${m.mintsPerJob}; needs met ${m.jobsTransacted}; cost $${m.costUsd}`,
+        `partial reuse ${m.partialReuse}; routes ${JSON.stringify(m.paymentsByRoute)}; not-wholly-dollar share ${m.fsiuShareOfPayments}; ` +
+        `needs met ${m.needsMet} of ${m.needsTotal}; waited with work ${m.waitedWithWork}; cost $${m.costUsd}`,
     );
   }
 }

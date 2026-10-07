@@ -69,28 +69,33 @@ describe("what a run measured", () => {
         sale("qr-2", "trade", "TRADER-1", "TRADER-3"), // usdc while holding received >= due: an opportunity, declined
         sale("qr-3", "trade", "TRADER-2", "TRADER-3"), // held from the opening: received 0 < due
         sale("qr-4", "rawwork", "TRADER-2", "ISSUER"), // held for raw work, received >= due: reuse
-        sale("qr-5", "trade", "TRADER-3", "TRADER-4"), // mint-and-forward
-        sale("qr-6", "trade", "TRADER-4", "TRADER-1"), // split
+        sale("qr-5", "trade", "TRADER-3", "TRADER-4"), // usdc, nothing received
+        sale("qr-6", "trade", "TRADER-4", "TRADER-1"), // a split, paid while holding some received fSIU
       ],
       paymentMoments: [
         moment("ORCHESTRATOR", "transfer_claim", "qr-1", "1184"),
         moment("ORCHESTRATOR", "pay", "qr-2", "5000"),
         moment("WORKER-CODE", "transfer_claim", "qr-3", "0"),
         moment("WORKER-CODE", "transfer_claim", "qr-4", "975", "0.0014"),
-        moment("WORKER-EXTRACT", "pay_with_claim", "qr-5", "0"),
-        moment("ISSUER-A", "settle_split", "qr-6", "0"),
+        moment("WORKER-EXTRACT", "pay", "qr-5", "0"),
+        moment("ISSUER-A", "settle_split_held", "qr-6", "300"),
         moment("WORKER-CODE", "transfer_claim", undefined, "5000"), // names no quote: settles nothing
       ],
       capacityEvents: [
-        { kind: "pay_with_claim", agentId: "WORKER-EXTRACT", quantityMilliSiu: "1184" },
-        { kind: "settle_split", agentId: "ISSUER-A", quantityMilliSiu: "592" },
+        // The claim part of the split is recorded as the held-claim transfer it is.
+        { kind: "transfer_claim", agentId: "ISSUER-A", quantityMilliSiu: "592", settlesRequestId: "qr-6" },
         { kind: "transfer_claim", agentId: "ORCHESTRATOR", quantityMilliSiu: "1184" },
       ],
       needsMet: { "TRADER-1": 2, "TRADER-2": 1, "TRADER-3": 1, "TRADER-4": 1 },
       operatorActions: [
         { kind: "expiry", holder: "TRADER-1", quantityMilliSiu: "816" },
         { kind: "expiry", holder: "ISSUER-B", quantityMilliSiu: "9999" },
-        { kind: "fee_rebate" },
+      ],
+      waits: [
+        { agentId: "WORKER-CODE", turn: 3, hadWork: ["a quote it was sent and has not paid"] },
+        { agentId: "WORKER-CODE", turn: 9, hadWork: [] },
+        { agentId: "ISSUER-A", turn: 4, hadWork: ["a need to buy, a job owed, or raw work to buy"] },
+        { agentId: "ISSUER-B", turn: 2, hadWork: [] }, // the issuer service is not a trader
       ],
     });
 
@@ -114,24 +119,47 @@ describe("what a run measured", () => {
   });
 
   it("counts payments by what was bought and by route", () => {
-    expect(m.paymentsByRoute).toEqual({ usdc: 1, mint_forward: 1, held: 3, split: 1 });
-    expect(of("TRADER-2").jobsBoughtBy).toEqual({ usdc: 0, mint_forward: 0, held: 1, split: 0 });
-    expect(of("TRADER-2").rawBoughtBy).toEqual({ usdc: 0, mint_forward: 0, held: 1, split: 0 });
-    expect(m.fsiuShareOfPayments).toBe("0.833"); // five of six payments were not wholly in dollars
+    expect(m.paymentsByRoute).toEqual({ usdc: 2, held: 3, split: 1 });
+    expect(of("TRADER-2").jobsBoughtBy).toEqual({ usdc: 0, held: 1, split: 0 });
+    expect(of("TRADER-2").rawBoughtBy).toEqual({ usdc: 0, held: 1, split: 0 });
+    expect(m.fsiuShareOfPayments).toBe("0.667"); // four of six payments were not wholly in dollars
   });
 
   it("reports what each trader disposed of: passed on, redeemed for raw work, expired", () => {
     expect(of("TRADER-1").passedOnMilliSiu).toBe("1184");
-    expect(of("TRADER-2")).toMatchObject({ passedOnMilliSiu: "1184", redeemedForRawWorkMilliSiu: "975", redeemedFromHeldMilliSiu: "975" });
+    expect(of("TRADER-2")).toMatchObject({ passedOnMilliSiu: "1184", redeemedForRawWorkMilliSiu: "975" });
+    // The claim part of a split is a held claim passed on, by the quantity the loop recorded.
+    expect(of("TRADER-4").passedOnMilliSiu).toBe("592");
     expect(of("TRADER-1").expiredMilliSiu).toBe("816");
     // The issuer's and the operator's leftovers are not a trader's disposal.
     expect(m.traders.map((t) => t.expiredMilliSiu)).toEqual(["816", "0", "0", "0"]);
   });
 
-  it("counts mints per job transacted", () => {
-    expect(m.mints).toBe(2); // the transfer is not a mint
+  it("reports a split that spends received fSIU as partial reuse, apart from reuse, and does not count it as an opportunity it did not meet", () => {
+    // qr-6: 300 mSIU received against 1,184 due is not an opportunity, and the split is not a reuse; but 300 of its 592 mSIU
+    // claim part came from what the trader had received, so it is partial reuse.
+    expect(m.partialReuse).toBe(1);
+    expect(of("TRADER-4")).toMatchObject({ partialReuse: 1, partialReuseMilliSiu: "300", opportunities: 0, reuse: 0 });
+    expect(m.reuse).toBe(2); // unchanged by it
+  });
+
+  it("reports needs met against all needs, and no mints (nothing is minted after the opening)", () => {
+    expect(m.needsMet).toBe(5);
+    expect(m.needsTotal).toBe(8);
     expect(m.jobsTransacted).toBe(5);
-    expect(m.mintsPerJob).toBe("0.400");
+    expect(m).not.toHaveProperty("mints");
+  });
+
+  it("counts the waits a trader took with something on its screen, and none of the issuer service's (D34)", () => {
+    expect(m.waitedWithWork).toBe(2);
+    expect(of("TRADER-2")).toMatchObject({ waits: 2, waitedWithWork: 1 });
+    expect(of("TRADER-4")).toMatchObject({ waits: 1, waitedWithWork: 1 });
+    expect(m.traders.reduce((s, t) => s + t.waits, 0)).toBe(3);
+  });
+
+  it("reads a report made before waits were recorded as having none", () => {
+    const old = measureRun(base());
+    expect(old.waitedWithWork).toBe(0);
   });
 
   it("states holdings against what each trader still has to buy, at every snapshot", () => {
@@ -161,7 +189,7 @@ describe("which runs may be counted", () => {
     ["a run stopped by a spending cap", { haltedReason: { ORCHESTRATOR: "experiment_halt", "WORKER-CODE": "max_turns" } }, /stopped by a spending cap, not by its agents \(ORCHESTRATOR: experiment_halt\)/],
     ["a run stopped by an agent's own ceiling", { haltedReason: { "WORKER-EXTRACT": "ceiling" } }, /spending cap/],
     ["a run made before versions were stamped", { instrument: undefined }, /before versions were stamped.*current version/],
-    ["a run made under an earlier version of the lab", { instrument: { version: LAB_INSTRUMENT_VERSION - 1 } }, /version 2, not the current version 3/],
+    ["a run made under an earlier version of the lab", { instrument: { version: LAB_INSTRUMENT_VERSION - 1 } }, new RegExp(`version ${LAB_INSTRUMENT_VERSION - 1}, not the current version ${LAB_INSTRUMENT_VERSION}`)],
     ["an aborted run", { abortedBecause: "the endowment was backed by ISSUER-A" }, /aborted: the endowment/],
     ["a contaminated run", { contamination: "a mint was backed by TRADER-4" }, /contaminated/],
     ["a harness failure", { infrastructureFailure: {} }, /harness failed/],
@@ -373,34 +401,31 @@ describe("comparing two arms", () => {
 });
 
 describe("what was paid to the issuer for raw work", () => {
-  // D8, D23: a claim paid to the issuer is a redemption in effect, whichever way it came to be paid.
+  // D8, D23: a claim paid to the issuer is a redemption in effect, whichever way it was paid.
   const raw = (id: string, buyer: string) => sale(id, "rawwork", buyer, "ISSUER");
   const r = base({
-    sales: [raw("qr-1", "TRADER-1"), raw("qr-2", "TRADER-2"), raw("qr-3", "TRADER-3"), raw("qr-4", "TRADER-4")],
+    sales: [raw("qr-1", "TRADER-1"), raw("qr-2", "TRADER-3"), raw("qr-3", "TRADER-4")],
     paymentMoments: [
       moment("ORCHESTRATOR", "transfer_claim", "qr-1", "0", "0.0014"), // a held claim
-      moment("WORKER-CODE", "pay_with_claim", "qr-2", "0", "0.0014"), // minted and forwarded
-      moment("WORKER-EXTRACT", "settle_split", "qr-3", "0", "0.0014"), // the claim part of a split
-      moment("ISSUER-A", "pay", "qr-4", "0", "0.0014"), // dollars: no claim reaches the issuer
+      moment("WORKER-EXTRACT", "settle_split_held", "qr-2", "0", "0.0014"), // the claim part of a split
+      moment("ISSUER-A", "pay", "qr-3", "0", "0.0014"), // dollars: no claim reaches the issuer
     ],
     capacityEvents: [
       { kind: "transfer_claim", agentId: "ORCHESTRATOR", quantityMilliSiu: "975", settlesRequestId: "qr-1" },
-      { kind: "pay_with_claim", agentId: "WORKER-CODE", quantityMilliSiu: "975", settlesRequestId: "qr-2" },
-      { kind: "settle_split", agentId: "WORKER-EXTRACT", quantityMilliSiu: "487", settlesRequestId: "qr-3" },
+      { kind: "transfer_claim", agentId: "WORKER-EXTRACT", quantityMilliSiu: "487", settlesRequestId: "qr-2" },
     ],
-    operatorActions: [{ kind: "expiry", holder: "ISSUER-B", quantityMilliSiu: "2437" }],
+    operatorActions: [{ kind: "expiry", holder: "ISSUER-B", quantityMilliSiu: "1462" }],
   });
   const m = measureRun(r);
   const of = (t: string) => m.traders.find((x) => x.trader === t)!;
 
-  it("counts every claim paid to the issuer as redeemed for raw work, and says which were held and which were minted", () => {
-    expect(of("TRADER-1")).toMatchObject({ redeemedForRawWorkMilliSiu: "975", redeemedFromHeldMilliSiu: "975", redeemedMintedMilliSiu: "0" });
-    expect(of("TRADER-2")).toMatchObject({ redeemedForRawWorkMilliSiu: "975", redeemedFromHeldMilliSiu: "0", redeemedMintedMilliSiu: "975" });
-    expect(of("TRADER-3")).toMatchObject({ redeemedForRawWorkMilliSiu: "487", redeemedMintedMilliSiu: "487" }); // the quantity the loop recorded
+  it("counts every claim paid to the issuer as redeemed for raw work", () => {
+    expect(of("TRADER-1")).toMatchObject({ redeemedForRawWorkMilliSiu: "975" });
+    expect(of("TRADER-3")).toMatchObject({ redeemedForRawWorkMilliSiu: "487" }); // the quantity the loop recorded
     expect(of("TRADER-4")).toMatchObject({ redeemedForRawWorkMilliSiu: "0" }); // paid in dollars
   });
 
   it("reports what the issuer was left holding at the close — it can pass none of it on", () => {
-    expect(m.leftWithIssuerMilliSiu).toBe("2437");
+    expect(m.leftWithIssuerMilliSiu).toBe("1462");
   });
 });

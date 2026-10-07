@@ -58,6 +58,8 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
     "pay_with_claim(requestId, forWindow?) -> settles a quote the seller issued, in fSIU: mints a dated work claim against an issuer's bonded capacity, sized so it is worth the quote's dollar price at the print in force, and transfers it to the seller; returns the claim's tokenId and its issuer. forWindow names which delivery window the claim is for, and defaults to the one you are in",
   settle_split:
     "settle_split(requestId | quote, claimQuantityMilliSiu) -> settles ONE quote partly in fSIU and partly in USDC, in a single call. claimQuantityMilliSiu is how much of it to settle in claims; the dollar leg is whatever the quote's remaining value is, and the escrow opens for that. One call, one turn — the same turn cost as settling wholly in either asset.",
+  settle_split_held:
+    "settle_split_held(requestId, claimQuantityMilliSiu, tokenId) -> settles ONE quote partly from a claim you already hold and partly in USDC, in a single call, by two direct transfers to the quote's seller (no escrow). claimQuantityMilliSiu is how much to pay from the held claim, valued at the print; the USDC part is the rest of the quote's price. Only a run that settles by direct transfer has this tool.",
   settle_escrow:
     "settle_escrow(actualAmountUsd?, receiptRef) -> as the SELLER named in a quote that was paid: releases the escrowed USDC to yourself. Until you call this the money sits in escrow and never reaches your wallet. Omit actualAmountUsd to settle the full quoted amount; settling for less is allowed and is what quote accuracy is scored on. Any capacity you reserved against this quote is returned to its issuer automatically here.",
   reserve_for_work:

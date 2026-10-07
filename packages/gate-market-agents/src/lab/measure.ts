@@ -8,14 +8,17 @@
  * within a run share its agents, balances and history, so they are not independent, and an interval that treats
  * them so is narrower than the evidence. The pooled Wilson interval is reported beside it and is not read.
  *
- * Definitions, as the plan states them:
- *   fSIU use      — a payment to a trader, or a raw-work purchase, made in fSIU (held balance, mint-and-forward).
+ * Definitions, as the plan states them (re-registered for instrument v4, D30 to D33):
+ *   fSIU use      — a payment to a trader, or a raw-work purchase, made from a held fSIU balance, wholly or in the claim
+ *                   part of a split. Nothing is minted after the opening, so there is no other way to pay in fSIU.
  *   opportunity   — any payment or raw-work purchase, in any asset, made while the trader held RECEIVED fSIU at
  *                   least as large as the amount due. Declining to use it counts.
- *   reuse         — an opportunity funded from the held received fSIU: a transfer of a held claim.
+ *   reuse         — an opportunity paid wholly from the held fSIU, the claim taken from what the trader received first:
+ *                   a transfer of a held claim. A split that spends received fSIU in part is PARTIAL reuse, reported
+ *                   apart and not read by the decision rule.
  *
- * "Received" is fSIU another agent handed the trader. The opening endowment is the operator's and is neither
- * received nor minted by the trader; a held-balance payment funded by it is reported apart.
+ * "Received" is fSIU another agent handed the trader. The opening endowment is the operator's and is not received by
+ * the trader; a held-balance payment funded by it is reported apart.
  */
 import { D } from "@touchstone/sdk";
 import { assertCountableForF1 } from "../cli/debug-mode.js";
@@ -36,6 +39,8 @@ export interface MeasureReport {
   sales: { requestId: string; kind: "trade" | "rawwork"; buyer: string; seller: string; delivered: boolean }[];
   paymentMoments: { agentId: string; tool: string; requestId?: string; heldReceivedMilliSiu: string; quotedUsdMax?: string }[];
   capacityEvents: { kind: string; agentId: string; quantityMilliSiu?: string; settlesRequestId?: string; counterparty?: string }[];
+  /** Every wait, and what was on the screen it waited on (D34). A report made before the record has none. */
+  waits?: { agentId: string; turn: number; hadWork: string[] }[];
   operatorActions: { kind: string; [k: string]: unknown }[];
   snapshots: { label: string; round: number; traders: { trader: string; usdcMinor: string; fsiuMilliSiu: string; needsMet: number; resultNano: string }[] }[];
   final?: { traders: { trader: string; usdcMinor: string; fsiuMilliSiu: string; needsMet: number; resultNano: string }[] };
@@ -93,9 +98,9 @@ export function assertCountableForLab(r: MeasureReport): void {
   }
 }
 
-type Route = "usdc" | "mint_forward" | "held" | "split";
-const ROUTE_OF_TOOL: Record<string, Route> = { pay: "usdc", pay_with_claim: "mint_forward", transfer_claim: "held", settle_split: "split" };
-const zeroRoutes = (): Record<Route, number> => ({ usdc: 0, mint_forward: 0, held: 0, split: 0 });
+type Route = "usdc" | "held" | "split";
+const ROUTE_OF_TOOL: Record<string, Route> = { pay: "usdc", transfer_claim: "held", settle_split_held: "split" };
+const zeroRoutes = (): Record<Route, number> => ({ usdc: 0, held: 0, split: 0 });
 
 export interface TraderMeasures {
   trader: TraderLabel;
@@ -104,18 +109,21 @@ export interface TraderMeasures {
   rawBoughtBy: Record<Route, number>;
   opportunities: number;
   reuse: number;
+  /** Splits made while the trader held received fSIU, and how much of the claim part came from it (reported apart, D32). */
+  partialReuse: number;
+  partialReuseMilliSiu: string;
   /** Held-balance payments whose amount exceeded what the trader had RECEIVED: funded, at least in part, by the opening. */
   heldFundedByOpening: number;
   /** mSIU of held claims passed on to a trader in payment for a job. */
   passedOnMilliSiu: string;
   /**
    * mSIU paid to the issuer for raw work, by any route (D23): a claim paid to the issuer is a redemption in effect,
-   * since the issuer is the one that owes the work. Of it, what came out of a held balance and what was newly
-   * minted for the purpose (mint-and-forward, or the claim part of a split) are given apart.
+   * since the issuer is the one that owes the work.
    */
   redeemedForRawWorkMilliSiu: string;
-  redeemedFromHeldMilliSiu: string;
-  redeemedMintedMilliSiu: string;
+  /** Waits taken, and how many of them with something on the screen to act on (D34). */
+  waits: number;
+  waitedWithWork: number;
   /** mSIU left at the close and expired. */
   expiredMilliSiu: string;
   needsMet: number;
@@ -140,13 +148,17 @@ export interface RunMeasures {
   disqualifiedBecause: string | null;
   opportunities: number;
   reuse: number;
+  partialReuse: number;
+  /** Waits taken while there was something to act on, over all traders (D34). */
+  waitedWithWork: number;
   traders: TraderMeasures[];
   paymentsByRoute: Record<Route, number>;
   /** Payments that were not wholly in dollars, over all payments. */
   fsiuShareOfPayments: string;
-  mints: number;
   jobsTransacted: number;
-  mintsPerJob: string;
+  /** Needs met, over all needs. */
+  needsMet: number;
+  needsTotal: number;
   holdings: HoldingsRow[];
   /** mSIU the issuer was left holding at the close and expired. The issuer service has no tool that passes a claim on. */
   leftWithIssuerMilliSiu: string;
@@ -168,11 +180,13 @@ export function measureRun(r: MeasureReport): RunMeasures {
         rawBoughtBy: zeroRoutes(),
         opportunities: 0,
         reuse: 0,
+        partialReuse: 0,
+        partialReuseMilliSiu: "0",
         heldFundedByOpening: 0,
         passedOnMilliSiu: "0",
         redeemedForRawWorkMilliSiu: "0",
-        redeemedFromHeldMilliSiu: "0",
-        redeemedMintedMilliSiu: "0",
+        waits: 0,
+        waitedWithWork: 0,
         expiredMilliSiu: "0",
         needsMet: r.needsMet[t] ?? 0,
         resultNano: r.final?.traders.find((x) => x.trader === t)?.resultNano ?? "0",
@@ -191,6 +205,7 @@ export function measureRun(r: MeasureReport): RunMeasures {
   const paymentsByRoute = zeroRoutes();
   let opportunities = 0;
   let reuse = 0;
+  let partialReuse = 0;
   for (const m of r.paymentMoments) {
     const trader = labelOfSeat[m.agentId];
     const route = ROUTE_OF_TOOL[m.tool];
@@ -215,13 +230,26 @@ export function measureRun(r: MeasureReport): RunMeasures {
     if (route === "held" && !isOpportunity) t.heldFundedByOpening += 1;
     if (route !== "usdc") {
       const moved = movedBy.get(m.requestId!) ?? due;
-      if (sale.kind === "rawwork") {
-        t.redeemedForRawWorkMilliSiu = add(t.redeemedForRawWorkMilliSiu, moved);
-        if (route === "held") t.redeemedFromHeldMilliSiu = add(t.redeemedFromHeldMilliSiu, moved);
-        else t.redeemedMintedMilliSiu = add(t.redeemedMintedMilliSiu, moved);
-      } else if (route === "held") {
-        t.passedOnMilliSiu = add(t.passedOnMilliSiu, moved);
+      // A split that spends received fSIU in part: the claim part, up to what had been received, is partial reuse.
+      if (route === "split" && heldReceived > 0n) {
+        t.partialReuse += 1;
+        partialReuse += 1;
+        t.partialReuseMilliSiu = add(t.partialReuseMilliSiu, moved < heldReceived ? moved : heldReceived);
       }
+      if (sale.kind === "rawwork") t.redeemedForRawWorkMilliSiu = add(t.redeemedForRawWorkMilliSiu, moved);
+      else t.passedOnMilliSiu = add(t.passedOnMilliSiu, moved);
+    }
+  }
+
+  let waitedWithWork = 0;
+  for (const w of r.waits ?? []) {
+    const trader = labelOfSeat[w.agentId];
+    if (trader === undefined) continue; // the issuer service's waits are not a trader's
+    const t = per.get(trader)!;
+    t.waits += 1;
+    if (w.hadWork.length > 0) {
+      t.waitedWithWork += 1;
+      waitedWithWork += 1;
     }
   }
 
@@ -234,7 +262,6 @@ export function measureRun(r: MeasureReport): RunMeasures {
     }
   }
 
-  const mints = r.capacityEvents.filter((e) => e.kind === "pay_with_claim" || e.kind === "settle_split" || e.kind === "mint_claim").length;
   const jobsTransacted = Object.values(r.needsMet).reduce((a, b) => a + b, 0);
 
   // Holdings against what each trader still needs to buy, at each snapshot.
@@ -258,7 +285,7 @@ export function measureRun(r: MeasureReport): RunMeasures {
     }),
   );
 
-  const total = paymentsByRoute.usdc + paymentsByRoute.mint_forward + paymentsByRoute.held + paymentsByRoute.split;
+  const total = paymentsByRoute.usdc + paymentsByRoute.held + paymentsByRoute.split;
   const why = labDisqualification(r) ?? r.debugMode?.disqualifiedBecause ?? null;
   return {
     runId: r.runId,
@@ -267,12 +294,14 @@ export function measureRun(r: MeasureReport): RunMeasures {
     disqualifiedBecause: why,
     opportunities,
     reuse,
+    partialReuse,
+    waitedWithWork,
     traders: [...per.values()],
     paymentsByRoute,
     fsiuShareOfPayments: ratio(total - paymentsByRoute.usdc, total),
-    mints,
     jobsTransacted,
-    mintsPerJob: ratio(mints, jobsTransacted),
+    needsMet: jobsTransacted,
+    needsTotal: r.economy.needs.length,
     holdings,
     leftWithIssuerMilliSiu: r.operatorActions
       .filter((a) => a.kind === "expiry" && a.holder === "ISSUER-B")

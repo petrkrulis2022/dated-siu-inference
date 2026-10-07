@@ -49,8 +49,6 @@ export interface LabParams {
   tradeMultiplierBps: number;
   /** What each need met adds to a result, as a multiple of the print per job, in basis points. */
   creditMultiplierBps: number;
-  /** Each trader opens with this much fSIU, and USDC of equal value at the print. */
-  openingMilliSiu: number;
 }
 
 /** Plan §2.11. Change them there first. */
@@ -60,7 +58,6 @@ export const DEFAULT_PARAMS: LabParams = {
   jobMilliSiu: 1000,
   tradeMultiplierBps: 12_000,
   creditMultiplierBps: 15_000,
-  openingMilliSiu: 2000,
 };
 
 export interface Need {

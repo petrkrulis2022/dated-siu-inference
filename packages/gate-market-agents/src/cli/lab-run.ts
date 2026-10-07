@@ -19,7 +19,7 @@ import type { RunnerDeps } from "../deps.js";
 import { AGENT_IDS, type AgentId } from "../identity/resolve.js";
 import { classIdFor, type MintContext } from "../loop/full-run.js";
 import { assertAllowancesForRun, readAllowances, RUN_MINIMUM_ALLOWANCE_MINOR_UNITS } from "./allowances.js";
-import { DEFAULT_PARAMS, LAB_TRADERS, SEAT_OF, type TraderLabel } from "../lab/economy.js";
+import { DEFAULT_PARAMS, LAB_TRADERS, type TraderLabel } from "../lab/economy.js";
 import { jobSiu, printNano, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu } from "../lab/money.js";
 import { scriptedLabTraders, type ScriptedLabTraders } from "../lab/scripted-traders.js";
 import { renderWalk, verifyLabWalk, type WalkReport } from "../lab/verify-walk.js";
@@ -120,22 +120,16 @@ async function main(): Promise<void> {
   const operator = { label: "operator", address: privateKeyToAccount(operatorKey).address, privateKeyHex: operatorKey };
   const publisherKey = toHex(process.env.TOUCHSTONE_PUBLISHER_KEY, "TOUCHSTONE_PUBLISHER_KEY");
 
-  // Every trader can pay by minting, so every trader's wallet must have approved this WorkClaim.
+  // Nothing is minted by a trader (instrument v4), and a payment is a plain transfer, so a trader needs no allowance. Only
+  // the operator mints, once, for the opening endowment, and must have approved this WorkClaim.
   const rows = await readAllowances({
     usdc: deploymentRecord.usdc.address as Hex,
     spender: deploymentRecord.workClaim.address as Hex,
     rpcUrl,
-    owners: [
-      ...LAB_TRADERS.map((t) => ({
-        label: `${t} (${SEAT_OF[t]})`,
-        address: addresses[SEAT_OF[t] as (typeof SEATS)[number]],
-        minimum: RUN_MINIMUM_ALLOWANCE_MINOR_UNITS.agent,
-      })),
-      { label: "operator", address: operator.address, minimum: RUN_MINIMUM_ALLOWANCE_MINOR_UNITS.operator },
-    ],
+    owners: [{ label: "operator", address: operator.address, minimum: RUN_MINIMUM_ALLOWANCE_MINOR_UNITS.operator }],
   });
   assertAllowancesForRun(rows, `pnpm run approve-roster -- --deployment ${deploymentFile} --lab --execute`);
-  console.log("USDC allowances to this deployment's WorkClaim: OK for all four traders and the operator.\n");
+  console.log("USDC allowance to this deployment's WorkClaim: OK for the operator (the only wallet that mints).\n");
 
   const commodityPrint = loadLatestCommodityPrint();
   const rateUsdPerSiu = commodityPrint.dated_siu;
@@ -194,10 +188,9 @@ async function main(): Promise<void> {
     );
   }
   const escrowAddress = escrowFromRecord;
-  const escrowFeeBps = await chainReader.escrowFeeBps(escrowAddress as Hex);
   console.log(
-    `The escrow keeps ${escrowFeeBps} bps of a dollar settlement. The operator gives it back to the seller after each one, ` +
-      "so the two routes cost the same; the brief does not mention it.\n",
+    "Every payment in this lab is a direct transfer to the seller, in either asset (instrument v4): the escrow is not used, " +
+      "so there is no fee and nothing to release.\n",
   );
 
   const series = seriesForPrint(commodityPrint.series);
@@ -255,7 +248,6 @@ async function main(): Promise<void> {
         ? { forbiddenAddresses: { "ISSUER-A": toHex(process.env.ISSUER_A_ADDRESS, "ISSUER_A_ADDRESS") } }
         : {}),
       windowSeconds,
-      escrowFeeBps,
       maxTurns,
       chainName: "base-sepolia",
       rpcUrl,

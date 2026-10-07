@@ -20,8 +20,6 @@ export interface Sale {
   quoted: boolean;
   paid: boolean;
   paidAsset?: Asset;
-  /** The seller released the escrow. */
-  settled: boolean;
   delivered: boolean;
   attempts: number;
 }
@@ -88,11 +86,6 @@ export class LabBooks {
     s.paid = true;
     s.paidAsset = asset;
     if (s.kind === "rawwork") this.#units.set(s.buyer, (this.#units.get(s.buyer) ?? 0) + 1);
-  }
-
-  settled(requestId: string): void {
-    const s = this.#sales.get(requestId);
-    if (s) s.settled = true;
   }
 
   /** One attempt at a job, pass or fail. A pass consumes the seller's unit and meets the buyer's need. */
@@ -164,5 +157,5 @@ export class LabBooks {
 }
 
 function blank(requestId: string, kind: Sale["kind"], buyer: TraderLabel, seller: Counterparty): Sale {
-  return { requestId, kind, buyer, seller, quoted: false, paid: false, settled: false, delivered: false, attempts: 0 };
+  return { requestId, kind, buyer, seller, quoted: false, paid: false, delivered: false, attempts: 0 };
 }

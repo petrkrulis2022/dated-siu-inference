@@ -287,6 +287,12 @@ export interface FullRunWindowOptions {
    */
   lab?: LabHooks;
   /**
+   * The asset paragraph the context validator requires in every agent's context, byte for byte. Absent: the canonical
+   * text, as in every run before the lab's instrument v4. The lab passes its own (`lab/asset-text.ts`), the canonical text
+   * with the sentences its direct settlement makes false replaced; the validator is otherwise unchanged.
+   */
+  assetDescription?: string;
+  /**
    * Currency lab only: claims the operator put into traders' hands before the first turn (the opening
    * endowment). The loop's trackers learn only what its own calls do, so without this a trader holding the
    * endowment would be a holder of nothing as far as the claim ledger and the redemption tracker can see —
@@ -734,7 +740,7 @@ export interface BoardSections {
 export const NEVER_WAKING_SECTIONS: readonly string[] = ["labInfoText"];
 
 export const WAKE_SECTION_TOOLS: Record<string, readonly ToolName[]> = {
-  marketBoardText: ["request_quote", "issue_quote", "pay", "pay_with_claim", "settle_split"],
+  marketBoardText: ["request_quote", "issue_quote", "pay", "pay_with_claim", "settle_split", "settle_split_held"],
   redemptionText: ["serve_redemption"],
   transferText: ["redeem_claim"],
   deliveryOwedText: ["submit_job"],
@@ -752,7 +758,17 @@ export const WAKE_SECTION_TOOLS: Record<string, readonly ToolName[]> = {
   forwardInvitation: ["quote_forward"],
   // The currency lab's own actionable section: a purchasable need, a paid job to deliver, a unit of
   // raw work to buy. The informational section is deliberately absent — it never wakes.
-  labActionText: ["request_quote", "issue_quote", "pay", "pay_with_claim", "transfer_claim", "settle_split", "settle_escrow", "deliver_job"],
+  labActionText: [
+    "request_quote",
+    "issue_quote",
+    "pay",
+    "pay_with_claim",
+    "transfer_claim",
+    "settle_split",
+    "settle_split_held",
+    "settle_escrow",
+    "deliver_job",
+  ],
 };
 
 /**
@@ -1399,7 +1415,7 @@ export async function runFullRunWindow(
     recorder.recordContext(agent.agentId, turn, context);
 
     try {
-      validateAgentContext(context);
+      validateAgentContext(context, options.assetDescription);
       recorder.recordValidatorVerdict(agent.agentId, turn, null);
     } catch (err) {
       if (err instanceof ContextValidationError)
@@ -2117,6 +2133,7 @@ export async function runFullRunWindow(
         deliveryFor: buildDeliveryFor,
         caller: { agentId: agent.agentId, erc8004Id: agent.erc8004Id },
         requiredQuoteSiu: options.requiredQuoteSiu,
+        ...(options.deps.directSettlement === true ? { directSettlement: true } : {}),
         ...(options.lab !== undefined
           ? { labGuard: (t: ToolName, a: unknown) => options.lab!.guard(agent.agentId, t, a) }
           : {}),
@@ -2345,6 +2362,34 @@ export async function runFullRunWindow(
             : {}),
           ...(settlesRequestId !== undefined ? { settlesRequestId } : {}),
           ...(split.claimMintTxHash ? { txHash: split.claimMintTxHash } : {}),
+        });
+      }
+
+      // The held split (D32): two transfers, of which the claim part is exactly what `transfer_claim` would have moved, so
+      // it is recorded as that — the tracker and the ledger see a held claim passed on, whichever tool did it.
+      if (intent.tool === "settle_split_held") {
+        const split = record.result as {
+          tokenId: string;
+          claimQuantityMilliSiu: string;
+          claimShare: string;
+          claimTxHash?: string;
+        };
+        const to = (args as { to?: unknown } | undefined)?.to;
+        if (typeof to === "string") {
+          redemption.recordTransfer(
+            agentIdByAddress[to.toLowerCase()] ?? to.toLowerCase(),
+            (args as { memo?: unknown } | undefined)?.memo as string | undefined,
+            settlesRequestId,
+            { tokenId: split.tokenId, quantity: split.claimQuantityMilliSiu, from: agent.agentId },
+          );
+        }
+        await recordCapacityEvent("transfer_claim", {
+          tokenId: split.tokenId,
+          quantityMilliSiu: split.claimQuantityMilliSiu,
+          claimShare: split.claimShare,
+          ...(typeof to === "string" ? { counterparty: to } : {}),
+          ...(settlesRequestId !== undefined ? { settlesRequestId } : {}),
+          ...(split.claimTxHash ? { txHash: split.claimTxHash } : {}),
         });
       }
 
@@ -2971,6 +3016,8 @@ export interface BuildToolArgsContext {
    * the quote object itself. */
   caller?: { agentId: AgentId; erc8004Id: string };
   mintContext?: MintContext;
+  /** Payments settle by direct transfer (`RunnerDeps.directSettlement`): no escrow exists to look up. */
+  directSettlement?: boolean;
   /** See `FullRunWindowOptions.requiredQuoteSiu`. */
   requiredQuoteSiu?: Readonly<Record<string, string>>;
   /** Live, mutated by the loop as gates are delivered and attacked — see `submit_attack`'s case
@@ -3020,7 +3067,7 @@ export interface BuildToolArgsContext {
  */
 export function assetSettledBy(tool: ToolName): PaidAsset {
   if (tool === "pay_with_claim" || tool === "transfer_claim") return "fsiu";
-  if (tool === "settle_split") return "split";
+  if (tool === "settle_split" || tool === "settle_split_held") return "split";
   return "usdc";
 }
 
@@ -3029,6 +3076,7 @@ export function settlesQuote(tool: ToolName): boolean {
     tool === "pay" ||
     tool === "pay_with_claim" ||
     tool === "settle_split" ||
+    tool === "settle_split_held" ||
     tool === "transfer_claim"
   );
 }
@@ -3277,14 +3325,17 @@ export async function buildToolArgs(
           ...(ctx.caller ? ctx.board.issuedQuotesFor(ctx.caller.agentId) : []),
         ]
       : [];
-    const escrowQuoteHashes = [...new Set(mine.map((i) => quoteHashHex(i.quote)))];
+    // With direct settlement there is no escrow to read, and reading one for every quote the agent is party to would put
+    // "escrows" of status None into its history for payments that never opened one.
+    const escrowQuoteHashes = ctx.directSettlement === true ? [] : [...new Set(mine.map((i) => quoteHashHex(i.quote)))];
     return {
       account:
         typeof raw.account === "string"
           ? raw.account
           : ((ctx.caller && ctx.agentAddressByAgentId[ctx.caller.agentId]) ?? ""),
       tokenIds: Array.isArray(raw.tokenIds) ? raw.tokenIds.map((t) => asDecimalString(t)) : [],
-      escrowQuoteHashes,
+      // Left out entirely with direct settlement, so the call an agent's history shows names no escrow.
+      ...(ctx.directSettlement === true ? {} : { escrowQuoteHashes }),
     };
   }
 
@@ -3749,6 +3800,37 @@ export async function buildToolArgs(
       nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu.toString(),
       validUntil: validUntil.toString(),
       signature,
+    };
+  }
+
+  if (tool === "settle_split_held") {
+    // Paying a quote partly from a held claim and partly in USDC (D32). The quote is the board's own, as everywhere; the
+    // claim goes to its seller; the claim part is valued at the print in force, which only the mint context carries.
+    if (!ctx.mintContext) {
+      throw new Error("settle_split_held: this window has no mintContext, so a claim cannot be valued at the print.");
+    }
+    const raw = rawArgs as { requestId?: unknown; claimQuantityMilliSiu?: unknown; tokenId?: unknown; memo?: unknown } | undefined;
+    if (typeof raw?.requestId !== "string") {
+      throw new Error('settle_split_held: expected a string "requestId" naming the quote being paid.');
+    }
+    const quote = ctx.board.issuedQuoteById(raw.requestId);
+    if (!quote) {
+      throw new Error(`settle_split_held: no issued quote found for request "${raw.requestId}".`);
+    }
+    const claimQuantityMilliSiu = asDecimalString(raw.claimQuantityMilliSiu);
+    if (typeof claimQuantityMilliSiu !== "string") {
+      throw new Error(
+        'settle_split_held: expected a string "claimQuantityMilliSiu" — how much of this quote to pay from a held claim. ' +
+          "The rest is paid in USDC.",
+      );
+    }
+    return {
+      quote,
+      to: quote.seller_id.replace(/^erc8004:/, ""),
+      tokenId: asDecimalString(raw.tokenId),
+      claimQuantityMilliSiu,
+      nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu.toString(),
+      ...(typeof raw.memo === "string" && raw.memo.trim() !== "" ? { memo: raw.memo.trim() } : {}),
     };
   }
 

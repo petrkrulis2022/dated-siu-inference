@@ -11,7 +11,7 @@
  *   - The close-out always runs once anything has been minted — even if the run aborts or the loop throws —
  *     because a claim left outstanding is capacity the next run starts without (spec §4.6z).
  *
- * Operator actions (setting balances, the endowment, the fee rebate, the expiry sweep) are recorded apart
+ * Operator actions (setting balances, the endowment, the expiry sweep) are recorded apart
  * from every agent's record, so no behavioural statistic can include them.
  */
 import type { Adapter } from "@touchstone/harness";
@@ -49,12 +49,13 @@ import {
   type TraderLabel,
 } from "./economy.js";
 import type { WorkExecutor } from "./jobs.js";
-import { checkMintsFit, mintBound, type MintBound } from "./launch.js";
-import { openingUsdcMinor, printNano, quotedPrice, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu, jobSiu } from "./money.js";
+import { checkEndowmentFits, endowmentBound } from "./launch.js";
+import { printNano } from "./money.js";
+import { waitsOf, type WaitRecord } from "./waits.js";
+import { LAB_ASSET_DESCRIPTION } from "./asset-text.js";
 import {
   operatorUsdcNeed,
   planUsdcReset,
-  rebateReserveMinor,
   type LabChain,
   type Signer,
   type UsdcMove,
@@ -93,7 +94,6 @@ export interface LabRunInput {
   windowSeconds: number;
   /** Turns stop being handed out this long before the window closes, so the scoring snapshot falls inside it. */
   closeMarginSeconds?: number;
-  escrowFeeBps: number;
   maxTurns: number;
   chainName: string;
   rpcUrl: string;
@@ -149,7 +149,8 @@ export interface LabReport {
   seats: Record<string, string>;
   models: Record<string, string>;
   window: { fromChainSeconds: string; toChainSeconds: string };
-  mintBound: { openingMilliSiu: string; jobClaimMilliSiu: string; rawClaimMilliSiu: string; needs: number; worstCaseMilliSiu: string; allowanceMilliSiu: string };
+  /** The whole fSIU supply of the run, and what it was checked against (D31): nothing is minted after the opening. */
+  endowment: { perTraderMilliSiu: string; totalMilliSiu: string; perTraderUsdcMinor: string; perTraderUsdcNeededMinor: string; allowanceMilliSiu: string };
   pool: { startingHeadroomMilliSiu: string; limitMilliSiu: string; whole: boolean; endingHeadroomMilliSiu?: string; restored?: boolean };
   opening: { usdcMinorPerTrader: string; fsiuMilliSiuPerTrader: string; tokenId?: string };
   snapshots: unknown[];
@@ -159,8 +160,6 @@ export interface LabReport {
   needsMet: Record<string, number>;
   /** Every sale the books saw: a job bought from a trader, or a unit of raw work bought from the issuer. */
   sales: unknown[];
-  /** What the escrow kept per dollar settlement, in basis points, and so what the operator gave back. */
-  escrowFeeBps: number;
   workLog: unknown[];
   workCostUsd: string;
   operatorActions: OperatorRecord[];
@@ -176,7 +175,8 @@ export interface LabReport {
   totalRealizedUsd: string;
   spendByProvider: Record<string, string>;
   paymentMoments: unknown;
-  usdcSettlements: unknown;
+  /** Every wait, and what was on the screen it waited on (D34). */
+  waits: WaitRecord[];
   claimFlows: unknown;
   capacityEvents: unknown;
   claimPositions: unknown;
@@ -255,8 +255,8 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
         "Settle them, or pass --allow-partial-pool (recorded in the report).",
     );
   }
-  const bound: MintBound = mintBound(p, economy);
-  const fit = checkMintsFit(bound, startingHeadroom);
+  const bound = endowmentBound(p, params);
+  const fit = checkEndowmentFits(bound, startingHeadroom);
   if (!fit.ok) throw new LaunchRefused(fit.reason);
 
   const gasWallets: { label: string; address: Hex }[] = [
@@ -271,31 +271,25 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
   }
   if (lowGas.length > 0) throw new LaunchRefused(`not enough gas (needs ${input.minEthWei} wei each): ${lowGas.join("; ")}.`);
 
-  const openingUsdc = openingUsdcMinor(p, params);
-  const openingFsiu = BigInt(params.openingMilliSiu);
-  const totalEndowment = openingFsiu * BigInt(LAB_TRADERS.length);
+  // Sized so that either asset alone meets every need, equal in value at the print (D31).
+  const openingUsdc = bound.perTraderUsdcMinor;
+  const openingFsiu = bound.perTraderMilliSiu;
+  const totalEndowment = bound.totalMilliSiu;
   const current = new Map<AgentId, bigint>();
   for (const t of LAB_TRADERS) current.set(SEAT_OF[t], await input.chain.usdcBalance(traderAddress[t]));
   const moves: UsdcMove[] = planUsdcReset(current, openingUsdc);
-  const size = jobSiu(params);
-  const jobQuote = quotedPrice(size, tradeRateUsdPerSiu(p, params)).minorUnits;
-  const rawQuote = quotedPrice(size, rawWorkRateUsdPerSiu(p)).minorUnits;
-  const reserve = rebateReserveMinor(
-    economy.needs.flatMap(() => [jobQuote, rawQuote]),
-    input.escrowFeeBps,
-  );
   const mintCost = claimMintCostMinorUnits(totalEndowment, p);
-  const operatorNeeds = operatorUsdcNeed(moves, mintCost, reserve);
+  const operatorNeeds = operatorUsdcNeed(moves, mintCost);
   const operatorHolds = await input.chain.usdcBalance(input.operator.address);
   if (operatorHolds < operatorNeeds) {
     throw new LaunchRefused(
       `the operator holds ${operatorHolds} USDC minor units and needs ${operatorNeeds} ` +
-        `(top-ups, the endowment's mint cost ${mintCost}, and a fee-rebate reserve ${reserve}).`,
+        `(top-ups, and the endowment's mint cost ${mintCost}).`,
     );
   }
   log(
-    `launch checks passed: pool ${poolWhole ? "whole" : "NOT whole (allowed)"} at ${startingHeadroom} mSIU; worst-case mint ` +
-      `${bound.worstCaseMilliSiu} of ${fit.allowanceMilliSiu} allowed; operator holds ${operatorHolds}, needs ${operatorNeeds}.`,
+    `launch checks passed: pool ${poolWhole ? "whole" : "NOT whole (allowed)"} at ${startingHeadroom} mSIU; endowment ` +
+      `${bound.totalMilliSiu} of ${fit.allowanceMilliSiu} allowed; operator holds ${operatorHolds}, needs ${operatorNeeds}.`,
   );
 
   // ---------------------------------------------------------------- the run
@@ -371,7 +365,7 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
     };
     books = new LabBooks(economy, ids);
     const snap = (label: string): Promise<Snapshot> =>
-      takeSnapshot({ label, chain: input.chain, books: books!, addressOf: traderAddress, tokenId: tokenId!, printNano: p, params });
+      takeSnapshot({ label, chain: input.chain, books: books!, addressOf: traderAddress, issuerAddress, tokenId: tokenId!, printNano: p, params });
 
     const opening = await snap("opening");
     snapshots.push(opening);
@@ -384,8 +378,6 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
       guard: { printNano: p, params },
       seed: input.seed,
       executorFor: input.executorFor,
-      rebate: async (seat, minorUnits) => ({ txHash: await input.chain.transferUsdc(input.operator, addr(seat), minorUnits) }),
-      escrowFeeBps: input.escrowFeeBps,
       recordWorkCost: (usd) => {
         workCostUsd = workCostUsd.plus(new D(usd));
         input.budget.recordRealizedInferenceSpend(usd);
@@ -440,7 +432,8 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
       // The tools reach the lab through `deps.lab` (`deliver_job` calls it); the loop reaches it through `lab`.
       // Both are the one service. Leaving this out made every `deliver_job` fail "this run has no jobs to deliver",
       // found by the first scripted walk on a fork.
-      deps: { ...input.loopDeps, lab: service },
+      // `directSettlement`: every payment is a transfer to the seller at the moment it is made (D30), with no escrow.
+      deps: { ...input.loopDeps, lab: service, directSettlement: true },
       runsRoot: input.runsRoot,
       runId: input.runId,
       manifest,
@@ -448,7 +441,8 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
       windowTo,
       mintContext: input.mintContext,
       lab: service,
-      board: new QuoteBoard({ reservationStep: false, displayName: labDisplayName, requestIdFirst: true }),
+      assetDescription: LAB_ASSET_DESCRIPTION,
+      board: new QuoteBoard({ reservationStep: false, displayName: labDisplayName, requestIdFirst: true, escrow: false }),
       openingClaims,
       ...(input.onTurn !== undefined ? { onTurn: input.onTurn as never } : {}),
     });
@@ -514,12 +508,11 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
     seats: Object.fromEntries(LAB_TRADERS.map((t) => [t, SEAT_OF[t]])),
     models: { ...input.models },
     window: { fromChainSeconds: windowFrom.toString(), toChainSeconds: windowTo.toString() },
-    mintBound: {
-      openingMilliSiu: bound.openingMilliSiu.toString(),
-      jobClaimMilliSiu: bound.jobClaimMilliSiu.toString(),
-      rawClaimMilliSiu: bound.rawClaimMilliSiu.toString(),
-      needs: bound.needs,
-      worstCaseMilliSiu: bound.worstCaseMilliSiu.toString(),
+    endowment: {
+      perTraderMilliSiu: bound.perTraderMilliSiu.toString(),
+      totalMilliSiu: bound.totalMilliSiu.toString(),
+      perTraderUsdcMinor: bound.perTraderUsdcMinor.toString(),
+      perTraderUsdcNeededMinor: bound.perTraderUsdcNeededMinor.toString(),
       allowanceMilliSiu: fit.allowanceMilliSiu.toString(),
     },
     pool: {
@@ -538,7 +531,6 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
     ...(final !== undefined ? { final: snapshotToJson(final), measuredBeforeClose: final.atChainSeconds < windowTo } : {}),
     needsMet: Object.fromEntries(LAB_TRADERS.map((t) => [t, books?.needsMet(t) ?? 0])),
     sales: books?.allSales().map((x) => ({ ...x })) ?? [],
-    escrowFeeBps: input.escrowFeeBps,
     workLog: service?.workLog ?? [],
     workCostUsd: workCostUsd.toFixed(6),
     operatorActions: [...operatorActions, ...(service?.operatorActions ?? [])],
@@ -553,7 +545,7 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
     totalRealizedUsd: result?.totalRealizedUsd ?? "0.000000",
     spendByProvider: result?.spendByProvider ?? {},
     paymentMoments: result?.paymentMoments ?? [],
-    usdcSettlements: result?.usdcSettlements ?? [],
+    waits: result !== undefined ? waitsOf(result.turnLogsByAgent) : [],
     claimFlows: result?.claimFlows ?? {},
     capacityEvents: result?.capacityEvents ?? [],
     claimPositions: result?.claimPositions ?? [],

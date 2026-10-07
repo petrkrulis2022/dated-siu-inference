@@ -52,6 +52,14 @@ export interface QuoteBoardOptions {
    * the gate configuration, which its scripted readers and its history are written against.
    */
   requestIdFirst?: boolean;
+  /**
+   * Whether a payment in dollars opens an escrow that its seller must later release. True in the gate configuration.
+   * Off in the currency lab from instrument v4 (D30), where every route is a direct transfer: a paid quote leaves
+   * nothing to settle, so the board tells no seller that "real USDC is in escrow" — it would be false — and shows no
+   * paid-and-unsettled section at all. A lab seller learns it was paid, in either asset, from the lab's own action
+   * section, which lists the jobs it owes.
+   */
+  escrow?: boolean;
 }
 
 export class QuoteBoard {
@@ -136,6 +144,8 @@ export class QuoteBoard {
    * wake check and the stall guard believing somebody can still act, indefinitely. A claim's
    * arrival is told through the holder's own section, which ends when the claim is presented. */
   paidUnsettledFor(sellerId: string): QuoteBoardIssuedQuote[] {
+    // No escrow, nothing to settle: a direct payment has already reached its seller.
+    if (this.options.escrow === false) return [];
     return this.issuedQuotesBySeller(sellerId).filter(
       (i) =>
         this.#paid.has(i.requestId) &&

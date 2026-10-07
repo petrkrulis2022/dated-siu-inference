@@ -83,7 +83,15 @@ function searchableText(context: AgentContext): string {
  * so this is exposed as a plain function for whichever loop calls it first, and exercised
  * directly by `validate.test.ts` here.
  */
-export function validateAgentContext(context: AgentContext): void {
+export function validateAgentContext(
+  context: AgentContext,
+  /**
+   * The asset paragraph every agent's context must carry, byte for byte. The canonical text unless a run states one of its
+   * own: the currency lab does, because two of the canonical sentences about USDC's escrow are false once its payments are
+   * direct transfers (`lab/asset-text.ts`). The check is the same check against that text — still verbatim, still required.
+   */
+  assetDescription: string = CANONICAL_ASSET_DESCRIPTION,
+): void {
   const serialized = searchableText(context);
   const lower = serialized.toLowerCase();
 
@@ -99,10 +107,12 @@ export function validateAgentContext(context: AgentContext): void {
     }
   }
 
-  if (!serialized.includes(CANONICAL_ASSET_DESCRIPTION)) {
+  if (!serialized.includes(assetDescription)) {
     throw new ContextValidationError(
       "asset-description-drift",
-      "(canonical asset description not found verbatim)",
+      assetDescription === CANONICAL_ASSET_DESCRIPTION
+        ? "(canonical asset description not found verbatim)"
+        : "(this run's asset description not found verbatim)",
     );
   }
 

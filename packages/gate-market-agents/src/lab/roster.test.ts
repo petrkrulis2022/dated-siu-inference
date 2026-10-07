@@ -1,3 +1,4 @@
+import { LAB_ASSET_DESCRIPTION } from "./asset-text.js";
 import { describe, expect, it } from "vitest";
 import type { Adapter } from "@touchstone/harness";
 import { assembleContext } from "../context/assemble.js";
@@ -53,23 +54,23 @@ describe("the lab roster", () => {
     expect(roster.slice(0, 4).map((r) => r.provider)).toEqual(["anthropic", "openai", "anthropic", "openai"]);
   });
 
-  it("grants the traders the same ten tools, none of them capacity or redemption tools", () => {
+  it("grants the traders the same eight tools, none of them capacity, redemption, minting or escrow tools", () => {
     for (const r of roster.slice(0, 4)) expect(r.availableTools).toEqual(LAB_TRADER_TOOLS);
-    for (const absent of ["redeem_claim", "reserve_for_work", "mint_claim", "check_headroom", "whoami", "submit_job", "submit_attack"]) {
+    for (const absent of ["redeem_claim", "reserve_for_work", "mint_claim", "pay_with_claim", "settle_split", "settle_escrow", "check_headroom", "whoami", "submit_job", "submit_attack"]) {
       expect(LAB_TRADER_TOOLS).not.toContain(absent);
     }
-    expect(LAB_TRADER_TOOLS).toHaveLength(10);
+    expect(LAB_TRADER_TOOLS).toHaveLength(8);
   });
 
-  it("gives the issuer service only the two tools it uses, no model, and no cost", () => {
+  it("gives the issuer service only the one tool it uses, no model, and no cost", () => {
     const issuer = roster[4];
-    expect(issuer.availableTools).toEqual(["issue_quote", "settle_escrow"]);
+    expect(issuer.availableTools).toEqual(["issue_quote"]);
     expect(issuer.prices).toEqual({ priceInUsdPer1M: "0", priceOutUsdPer1M: "0" });
     expect(issuer.provider).toBe("lab-service");
   });
 
   it("passes every seat's text through the context validator, the service's too", () => {
-    for (const r of roster) expect(() => validateAgentContext(assembleContext(r.agentId, r.skillPackText, []))).not.toThrow();
+    for (const r of roster) expect(() => validateAgentContext(assembleContext(r.agentId, r.skillPackText, []), LAB_ASSET_DESCRIPTION)).not.toThrow();
   });
 
   it("puts each trader's own label, address and skill in its brief, and addresses each counterparty by its seat's identity", () => {

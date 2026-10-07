@@ -30,6 +30,11 @@ export interface RunnerDeps {
   isReconciled: (printId: string) => Promise<boolean>;
   /** Currency lab runs only. */
   lab?: LabService;
+  /**
+   * Settle a paid quote by a plain transfer to its seller instead of opening an escrow (`tools/direct-settlement.ts`).
+   * Set by the currency lab from instrument v4 (D30); absent everywhere else, so the gate configuration is unchanged.
+   */
+  directSettlement?: boolean;
 }
 
 /** Bundled with `RunnerDeps` for every tool call — this agent's own viem account/clients, held

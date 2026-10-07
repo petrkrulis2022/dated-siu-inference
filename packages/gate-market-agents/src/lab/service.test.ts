@@ -15,7 +15,6 @@ const fail: WorkExecutor = async () => ({ passed: false, reason: "the output did
 describe("LabService", () => {
   let economy: Economy;
   let books: LabBooks;
-  let rebates: { seller: AgentId; minor: bigint }[];
   let costs: string[];
   let rounds: number[];
   let executor: WorkExecutor;
@@ -27,11 +26,6 @@ describe("LabService", () => {
       guard: { printNano: 1_437_000n, params: DEFAULT_PARAMS },
       seed: 4,
       executorFor: () => executor,
-      rebate: async (seller, minor) => {
-        rebates.push({ seller, minor });
-        return { txHash: "0xrebate" };
-      },
-      escrowFeeBps: 50,
       tokenId: "777",
       recordWorkCost: (usd) => costs.push(usd),
       onRoundOpened: async (r) => void rounds.push(r),
@@ -42,7 +36,6 @@ describe("LabService", () => {
   beforeEach(() => {
     economy = buildEconomy(4);
     books = new LabBooks(economy, ids);
-    rebates = [];
     costs = [];
     rounds = [];
     executor = pass;
@@ -55,7 +48,7 @@ describe("LabService", () => {
     ({ agentId, turn: 1, tool, intentArgs: {}, builtArgs: {}, result: {}, ...extra }) as never;
 
   /** Takes a need all the way to paid, as the loop would report it. */
-  async function payNeed(requestId: string, asset: "pay" | "pay_with_claim" | "transfer_claim" = "pay_with_claim") {
+  async function payNeed(requestId: string, asset: "pay" | "transfer_claim" | "settle_split_held" = "pay") {
     const n = need1();
     await svc.afterToolCall(ev(seat(n.buyer), "request_quote", { requestId, result: { seller_id: ids.traders[n.seller] } }));
     await svc.afterToolCall(ev(seat(n.seller), "issue_quote", { intentArgs: { requestId } }));
@@ -70,7 +63,7 @@ describe("LabService", () => {
 
   describe("following the loop's calls", () => {
     it("turns a request, an answer and a payment into a paid job, whichever asset paid", async () => {
-      for (const tool of ["pay", "pay_with_claim", "transfer_claim", "settle_split"]) {
+      for (const tool of ["pay", "transfer_claim", "settle_split_held"]) {
         books = new LabBooks(economy, ids);
         svc = build();
         const n = await payNeed("qr-1", tool as never);
@@ -103,38 +96,20 @@ describe("LabService", () => {
     });
   });
 
-  describe("the fee rebate", () => {
-    it("gives the seller back exactly the fee the escrow took, and logs it", async () => {
+  describe("no escrow, no fee (D30)", () => {
+    it("has nothing to give back: a release the loop might still report moves nothing and records nothing", async () => {
       await svc.afterToolCall(ev("WORKER-CODE", "settle_escrow", { settledRequestId: "qr-4", result: { settledMinorUnits: "1725" } }));
-      expect(rebates).toEqual([{ seller: "WORKER-CODE", minor: 8n }]);
-      expect(svc.operatorActions).toEqual([
-        { kind: "fee_rebate", seller: "WORKER-CODE", requestId: "qr-4", settledMinorUnits: "1725", rebatedMinorUnits: "8", txHash: "0xrebate" },
-      ]);
+      expect(svc.operatorActions).toEqual([]);
     });
 
-    it("rebates the issuer too, so neither side of a dollar payment carries a fee", async () => {
-      await svc.afterToolCall(ev(ISSUER_SEAT, "settle_escrow", { settledRequestId: "qr-5", result: { settledMinorUnits: "1437" } }));
-      expect(rebates).toEqual([{ seller: "ISSUER-B", minor: 7n }]);
-    });
-
-    it("rebates nothing when nothing was settled", async () => {
-      await svc.afterToolCall(ev("WORKER-CODE", "settle_escrow", { settledRequestId: "qr-4", result: { settledMinorUnits: "0" } }));
-      expect(rebates).toEqual([]);
-    });
-
-    it("lets a failed rebate surface to the loop, which records it as the harness's", async () => {
-      svc = new LabService({
-        books,
-        guard: { printNano: 1_437_000n, params: DEFAULT_PARAMS },
-        seed: 4,
-        executorFor: () => executor,
-        escrowFeeBps: 50,
-        tokenId: "777",
-        rebate: async () => {
-          throw new Error("operator out of funds");
-        },
-      });
-      await expect(svc.afterToolCall(ev("WORKER-CODE", "settle_escrow", { settledRequestId: "qr-4", result: { settledMinorUnits: "1725" } }))).rejects.toThrow("operator out of funds");
+    it("marks a quote paid the moment a payment is made, in any asset, with nothing left to release", async () => {
+      for (const [tool, asset] of [["pay", "usdc"], ["transfer_claim", "fsiu"], ["settle_split_held", "split"]] as const) {
+        books = new LabBooks(economy, ids);
+        svc = build();
+        await payNeed("qr-1", tool);
+        expect(books.sale("qr-1")).toMatchObject({ paid: true, paidAsset: asset });
+        expect(books.sale("qr-1")).not.toHaveProperty("settled");
+      }
     });
   });
 
@@ -224,10 +199,14 @@ describe("LabService", () => {
       return n;
     };
 
-    it("describes the four routes in one shape, each ending in what it costs", () => {
-      const d = (["pay", "pay_with_claim", "transfer_claim", "settle_split"] as const).map((t) => svc.toolDescription(t)!);
-      expect(d.map((x) => x.split("(")[0])).toEqual(["pay_with_usdc", "pay_with_new_claim", "pay_with_held_claim", "pay_split"]);
-      for (const line of d) expect(line).toMatch(/-> settles a quote you were sent .* Costs: /);
+    it("describes the three routes in one shape, each settling at once and ending in what it costs", () => {
+      const d = (["pay", "transfer_claim", "settle_split_held"] as const).map((t) => svc.toolDescription(t)!);
+      expect(d.map((x) => x.split("(")[0])).toEqual(["pay_with_usdc", "pay_with_held_claim", "pay_split"]);
+      for (const line of d) expect(line).toMatch(/-> settles a quote you were sent .* at\s+once.* Costs: /s);
+      for (const line of d) expect(line).not.toMatch(/escrow|mint/i);
+      // The routes that retired with minting have no description: a trader is never shown them.
+      expect(svc.toolDescription("pay_with_claim")).toBeUndefined();
+      expect(svc.toolDescription("settle_split")).toBeUndefined();
       expect(svc.toolDescription("get_print")).toBeUndefined(); // everything else keeps its own
     });
 
@@ -235,11 +214,12 @@ describe("LabService", () => {
       const n = quoted();
       const ZERO = "0x0000000000000000000000000000000000000000";
       expect(svc.resolveCall("ORCHESTRATOR", "pay_with_usdc", { requestId: "qr-1" })).toEqual({ tool: "pay", args: { requestId: "qr-1", settler: ZERO } });
-      expect(svc.resolveCall("ORCHESTRATOR", "pay_with_new_claim", { requestId: "qr-1" })).toEqual({ tool: "pay_with_claim", args: { requestId: "qr-1" } });
+      // A split names the quote and the claim part; the token it is paid from is the lab's to supply.
       expect(svc.resolveCall("ORCHESTRATOR", "pay_split", { requestId: "qr-1", claimQuantityMilliSiu: "592" })).toEqual({
-        tool: "settle_split",
-        args: { requestId: "qr-1", claimQuantityMilliSiu: "592", settler: ZERO },
+        tool: "settle_split_held",
+        args: { requestId: "qr-1", claimQuantityMilliSiu: "592", tokenId: "777" },
       });
+      expect(svc.resolveCall("ORCHESTRATOR", "pay_split", { requestId: "qr-9", claimQuantityMilliSiu: "592" })).toEqual({ refuse: "there is no quote qr-9." });
       // Paying with a held claim names only the quote: the seller and the token are the lab's to supply.
       expect(svc.resolveCall("ORCHESTRATOR", "pay_with_held_claim", { requestId: "qr-1" })).toEqual({
         tool: "transfer_claim",
@@ -248,32 +228,36 @@ describe("LabService", () => {
       expect(svc.resolveCall("ORCHESTRATOR", "pay_with_held_claim", { requestId: "qr-9" })).toEqual({ refuse: "there is no quote qr-9." });
     });
 
-    it("refuses the loop's own names for the renamed tools, and leaves every other tool alone", () => {
-      for (const internal of ["pay", "pay_with_claim", "transfer_claim", "settle_split"]) {
+    it("refuses the loop's own names for the renamed tools, and for the ones that retired, and leaves every other tool alone", () => {
+      for (const internal of ["pay", "transfer_claim", "settle_split_held", "pay_with_claim", "settle_split", "settle_escrow"]) {
         expect(svc.resolveCall("ORCHESTRATOR", internal, { requestId: "qr-1" })).toEqual({ refuse: `${internal} is not one of your tools.` });
       }
-      for (const other of ["request_quote", "issue_quote", "settle_escrow", "deliver_job", "get_balances", "wait"]) {
+      // The old v3 names are not tools of this lab either; the loop refuses them as unknown.
+      for (const other of ["request_quote", "issue_quote", "deliver_job", "wait", "pay_with_new_claim"]) {
         expect(svc.resolveCall("ORCHESTRATOR", other, {})).toBeUndefined();
       }
+      // get_balances runs as called; it resolves to itself only so the history shows the call as the trader made it.
+      expect(svc.resolveCall("ORCHESTRATOR", "get_balances", { account: "0xabc", tokenIds: ["777"] })).toEqual({
+        tool: "get_balances",
+        args: { account: "0xabc", tokenIds: ["777"] },
+      });
     });
 
     it("writes an internal tool name inside a sentence as the trader knows it", () => {
-      expect(svc.rewriteText("pay_with_claim: \"forWindow\" must be a number. transfer_claim: no. settle_split: no. pay: no quote.")).toBe(
-        'pay_with_new_claim: "forWindow" must be a number. pay_with_held_claim: no. pay_split: no. pay_with_usdc: no quote.',
+      expect(svc.rewriteText("transfer_claim: no. settle_split_held: no. pay: no quote.")).toBe(
+        "pay_with_held_claim: no. pay_split: no. pay_with_usdc: no quote.",
       );
       expect(svc.rewriteText("you will pay the seller")).toBe("you will pay the seller"); // the word alone is left
     });
   });
 
-  describe("a payment the trader cannot afford is refused in one sentence, whichever asset it is in", () => {
+  describe("a payment the trader cannot afford is refused in one sentence that states the whole wallet (D33)", () => {
     const withHoldings = (usdcMinor: bigint, fsiuMilliSiu: bigint): LabService =>
       new LabService({
         books,
         guard: { printNano: 1_437_000n, params: DEFAULT_PARAMS },
         seed: 4,
         executorFor: () => executor,
-        rebate: async () => ({}),
-        escrowFeeBps: 50,
         tokenId: "777",
         holdings: async () => ({ usdcMinor, fsiuMilliSiu }),
       });
@@ -283,36 +267,77 @@ describe("LabService", () => {
       books.quoteIssued("qr-1");
       return SEAT_OF[n.buyer];
     };
-    // At the illustrative print a job quote is 1,700 minor units, its claim 1,184 mSIU, and minting that claim 1,701.
+    // At the illustrative print a job quote is 1,700 minor units and its claim 1,184 mSIU; a unit of raw work is 1,400 and 975.
 
-    it("states cost against holdings in the same form for dollars, a new claim, a split and a held claim", async () => {
+    it("states the cost, then both assets the wallet holds, in the same form for dollars, a held claim and a split", async () => {
       const buyer = quotedTrade();
       const poor = withHoldings(100n, 100n);
-      expect(await poor.guard(buyer, "pay", { requestId: "qr-1" })).toBe("This payment costs 1700 USDC minor units; the wallet holds 100 USDC minor units.");
-      expect(await poor.guard(buyer, "pay_with_claim", { requestId: "qr-1" })).toBe("This payment costs 1701 USDC minor units; the wallet holds 100 USDC minor units.");
-      expect(await poor.guard(buyer, "settle_split", { requestId: "qr-1", claimQuantityMilliSiu: "592" })).toBe(
-        "This payment costs 1700 USDC minor units; the wallet holds 100 USDC minor units.",
+      const wallet = "the wallet holds 100 USDC minor units and 100 mSIU of fSIU.";
+      expect(await poor.guard(buyer, "pay", { requestId: "qr-1" })).toBe(`This payment costs 1700 USDC minor units; ${wallet}`);
+      expect(await poor.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toBe(`This payment costs 1184 mSIU of fSIU; ${wallet}`);
+      // 592 mSIU is worth 850 minor units at the print (floored), so the dollar part is the other 850.
+      expect(await poor.guard(buyer, "settle_split_held", { requestId: "qr-1", claimQuantityMilliSiu: "592" })).toBe(
+        `This payment costs 850 USDC minor units and 592 mSIU of fSIU; ${wallet}`,
       );
-      expect(await poor.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toBe("This payment costs 1184 mSIU of fSIU; the wallet holds 100 mSIU of fSIU.");
     });
 
-    it("lets a payment through when the wallet holds enough, and judges each route by the asset it spends", async () => {
+    it("says it in exactly the words the user gave, for a wallet that holds 1,174 USDC and 2,000 mSIU (the pilot's TRADER-4)", async () => {
+      const n = economy.needs.find((x) => x.round === 1)!;
+      books.requestPosted("qr-raw", n.buyer, "ISSUER");
+      books.quoteIssued("qr-raw");
+      // The raw-work quote costs 1,400 USDC minor units: more than the 1,174 held, though 2,000 mSIU would pay it.
+      expect(await withHoldings(1_174n, 2_000n).guard(SEAT_OF[n.buyer], "pay", { requestId: "qr-raw" })).toBe(
+        "This payment costs 1400 USDC minor units; the wallet holds 1174 USDC minor units and 2000 mSIU of fSIU.",
+      );
+    });
+
+    it("lets a payment through when the wallet holds enough of the asset it spends, and judges each route by what it spends", async () => {
       const buyer = quotedTrade();
       const dollarsOnly = withHoldings(5_000n, 0n);
       expect(await dollarsOnly.guard(buyer, "pay", { requestId: "qr-1" })).toBeNull();
-      expect(await dollarsOnly.guard(buyer, "pay_with_claim", { requestId: "qr-1" })).toBeNull();
-      expect(await dollarsOnly.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toContain("costs 1184 mSIU of fSIU; the wallet holds 0");
+      expect(await dollarsOnly.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toContain("costs 1184 mSIU of fSIU; the wallet holds 5000 USDC minor units and 0 mSIU of fSIU");
       const claimsOnly = withHoldings(0n, 5_000n);
       expect(await claimsOnly.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toBeNull();
       expect(await claimsOnly.guard(buyer, "pay", { requestId: "qr-1" })).toContain("USDC minor units");
     });
 
+    it("lets a split through for a wallet that holds some of each, where neither asset alone would pay", async () => {
+      const buyer = quotedTrade();
+      const straddling = withHoldings(1_174n, 816n); // the pilot's TRADER-3: neither 1,700 USDC nor 1,184 mSIU
+      expect(await straddling.guard(buyer, "pay", { requestId: "qr-1" })).toContain("This payment costs 1700 USDC minor units");
+      expect(await straddling.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toContain("This payment costs 1184 mSIU of fSIU");
+      // 500 mSIU is worth 718 minor units; the dollar part is 982: 1,174 and 816 cover it.
+      expect(await straddling.guard(buyer, "settle_split_held", { requestId: "qr-1", claimQuantityMilliSiu: "500" })).toBeNull();
+    });
+
+    it("refuses a split when either of its parts is short, and says what both parts cost", async () => {
+      const buyer = quotedTrade();
+      expect(await withHoldings(5_000n, 100n).guard(buyer, "settle_split_held", { requestId: "qr-1", claimQuantityMilliSiu: "500" })).toBe(
+        "This payment costs 982 USDC minor units and 500 mSIU of fSIU; the wallet holds 5000 USDC minor units and 100 mSIU of fSIU.",
+      );
+      expect(await withHoldings(100n, 5_000n).guard(buyer, "settle_split_held", { requestId: "qr-1", claimQuantityMilliSiu: "500" })).toContain(
+        "This payment costs 982 USDC minor units and 500 mSIU of fSIU; the wallet holds 100 USDC minor units and 5000 mSIU of fSIU.",
+      );
+    });
+
+    it("is the same sentence whichever asset is short, differing only in the cost and the figures", async () => {
+      const buyer = quotedTrade();
+      const poor = withHoldings(0n, 0n);
+      const shape = (s: string) => s.replace(/\d+/g, "N");
+      expect(shape((await poor.guard(buyer, "pay", { requestId: "qr-1" }))!)).toBe(
+        "This payment costs N USDC minor units; the wallet holds N USDC minor units and N mSIU of fSIU.",
+      );
+      expect(shape((await poor.guard(buyer, "transfer_claim", { requestId: "qr-1" }))!)).toBe(
+        "This payment costs N mSIU of fSIU; the wallet holds N USDC minor units and N mSIU of fSIU.",
+      );
+    });
+
     it("never advises, and names no asset beyond the units it counts", async () => {
       const buyer = quotedTrade();
       const poor = withHoldings(0n, 0n);
-      for (const tool of ["pay", "pay_with_claim", "settle_split", "transfer_claim"] as const) {
+      for (const tool of ["pay", "transfer_claim", "settle_split_held"] as const) {
         const s = (await poor.guard(buyer, tool, { requestId: "qr-1", claimQuantityMilliSiu: "592" }))!;
-        expect(s).not.toMatch(/should|better|cheaper|prefer|instead|try/i);
+        expect(s).not.toMatch(/should|better|cheaper|prefer|instead|try|could|only/i);
       }
     });
 
@@ -324,8 +349,6 @@ describe("LabService", () => {
         guard: { printNano: 1_437_000n, params: DEFAULT_PARAMS },
         seed: 4,
         executorFor: () => executor,
-        rebate: async () => ({}),
-        escrowFeeBps: 50,
         tokenId: "777",
         holdings: async () => {
           reads++;
@@ -334,6 +357,8 @@ describe("LabService", () => {
       });
       const stranger = (["ORCHESTRATOR", "WORKER-CODE", "WORKER-EXTRACT", "ISSUER-A"] as const).find((s) => s !== quotedTrade() && SEAT_OF[economy.needs[0].seller] !== s)!;
       expect(await svc2.guard(stranger, "pay", { requestId: "qr-1" })).toContain("not yours to pay");
+      // A claim part the lab's own rules refuse is refused before the chain is asked, too.
+      expect(await svc2.guard(SEAT_OF[economy.needs.find((x) => x.round === 1)!.buyer], "settle_split_held", { requestId: "qr-1", claimQuantityMilliSiu: "99999" })).toContain("the claim part of a split must be worth");
       expect(reads).toBe(0);
     });
   });

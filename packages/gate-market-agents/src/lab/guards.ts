@@ -9,7 +9,8 @@
 import type { ToolName } from "../tools/index.js";
 import { LabBooks, type Counterparty } from "./books.js";
 import { type LabParams, type TraderLabel } from "./economy.js";
-import { decimalToUnits, jobSiu, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu } from "./money.js";
+import { claimValueMinorUnits } from "../tools/settle-split.js";
+import { decimalToUnits, jobSiu, quotedPrice, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu } from "./money.js";
 
 export interface GuardConfig {
   printNano: bigint;
@@ -26,7 +27,7 @@ const sameDecimal = (a: unknown, b: string): boolean => {
 };
 
 /** Every call that settles a quote — the ways of paying. */
-const PAYING_TOOLS: ReadonlySet<ToolName> = new Set<ToolName>(["pay", "pay_with_claim", "settle_split", "transfer_claim"]);
+const PAYING_TOOLS: ReadonlySet<ToolName> = new Set<ToolName>(["pay", "settle_split_held", "transfer_claim"]);
 
 export function guardLabCall(
   books: LabBooks,
@@ -36,8 +37,11 @@ export function guardLabCall(
   rawArgs: unknown,
 ): string | null {
   if (tool === "request_quote") return guardRequestQuote(books, cfg, caller, rawArgs);
-  if (tool === "settle_escrow") return guardSettleEscrow(books, caller, rawArgs);
-  if (PAYING_TOOLS.has(tool)) return guardPayment(books, caller, rawArgs);
+  if (PAYING_TOOLS.has(tool)) {
+    const refusal = guardPayment(books, caller, rawArgs);
+    if (refusal !== null) return refusal;
+    if (tool === "settle_split_held") return guardClaimPart(books, cfg, rawArgs);
+  }
   return null;
 }
 
@@ -45,8 +49,8 @@ export function guardLabCall(
  * A quote is paid by the trader who asked for it, once. Found by the first model run (2026-10-06): a seller
  * called `pay_with_claim` on a quote it had itself issued, which its buyer had already paid in dollars, and it
  * went through — it minted a claim and sent it to itself, and the payment was recorded against the wrong trader.
- * The chain stops a second `pay` (the escrow exists) but nothing stops a second claim payment, and nothing in the
- * tools asks who the payer is. The sentences say only what is so.
+ * With direct settlement nothing on the chain stops a second payment of any kind, and nothing in the tools asks who
+ * the payer is. The sentences say only what is so.
  *
  * A transfer that names no quote settles nothing and is passed on to be a plain transfer. A request id this lab
  * does not know is left to the loop's own refusal, which says there is no such quote.
@@ -104,16 +108,26 @@ function guardRequestQuote(books: LabBooks, cfg: GuardConfig, caller: TraderLabe
   return null;
 }
 
-function guardSettleEscrow(books: LabBooks, caller: TraderLabel | "ISSUER", rawArgs: unknown): string | null {
-  if (caller === "ISSUER") return null;
-  const wanted = (rawArgs as { requestId?: unknown } | undefined)?.requestId;
-  // Which escrow would be settled: the one named, else the first job this trader has been paid for in
-  // dollars and not settled — the same choice the loop makes.
-  const sale =
-    typeof wanted === "string"
-      ? books.sale(wanted)
-      : books.allSales().find((s) => s.kind === "trade" && s.seller === caller && s.paid && s.paidAsset !== "fsiu" && !s.settled);
-  if (sale === undefined || sale.kind !== "trade" || sale.seller !== caller) return null;
-  if (!sale.delivered) return `you have not delivered ${sale.requestId}, so its escrow is not yet yours to release.`;
+/**
+ * The claim part of a split is a whole number of mSIU worth something at the print and less than the quote's price: at
+ * either end it is not a split but one of the other two payments. Said as a fact; it does not name the other payment.
+ * A request id this lab does not know is left to the loop's own refusal.
+ */
+function guardClaimPart(books: LabBooks, cfg: GuardConfig, rawArgs: unknown): string | null {
+  const a = (rawArgs ?? {}) as { requestId?: unknown; claimQuantityMilliSiu?: unknown };
+  const sale = typeof a.requestId === "string" ? books.sale(a.requestId) : undefined;
+  if (sale === undefined) return null;
+  const q = a.claimQuantityMilliSiu;
+  if (typeof q !== "string" || !/^[1-9]\d*$/.test(q)) {
+    return "the claim part of a split is a whole number of mSIU, more than 0.";
+  }
+  const price = quotedPrice(
+    jobSiu(cfg.params),
+    sale.kind === "trade" ? tradeRateUsdPerSiu(cfg.printNano, cfg.params) : rawWorkRateUsdPerSiu(cfg.printNano),
+  ).minorUnits;
+  const value = claimValueMinorUnits(q, cfg.printNano.toString());
+  if (value === 0n || value >= price) {
+    return `the claim part of a split must be worth more than nothing and less than the quote's price: ${q} mSIU is worth ${value} USDC minor units at the print, and the price is ${price}.`;
+  }
   return null;
 }

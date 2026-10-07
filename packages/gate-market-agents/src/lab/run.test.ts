@@ -188,7 +188,6 @@ describe("runLab", () => {
     issuerLimitMilliSiu: LIMIT,
     windowSeconds: 600,
     closeMarginSeconds: 90,
-    escrowFeeBps: 50,
     maxTurns: 12,
     chainName: "base-sepolia",
     rpcUrl: "http://127.0.0.1:1",
@@ -221,21 +220,21 @@ describe("runLab", () => {
   });
 
   it("starts from a slightly short pool only when told to, and says so in the report", async () => {
-    chain.headroomNow = LIMIT - 200n; // 31,800: 80% of it, 25,440, still covers the worst case of 25,272
+    chain.headroomNow = LIMIT - 200n; // 31,800: 80% of it, 25,440, still covers the endowment of 17,272
     await expect(runLab(input())).rejects.toThrow(LaunchRefused);
     const report = await runLab(input({ allowPartialPool: true }));
     expect(report.pool).toMatchObject({ whole: false, startingHeadroomMilliSiu: "31800" });
     expect(report.abortedBecause).toBeUndefined();
   });
 
-  it("does not let permission to start short override the mint bound: a pool too short for the worst case is refused anyway", async () => {
-    chain.headroomNow = LIMIT - 3_000n;
-    await expect(runLab(input({ allowPartialPool: true }))).rejects.toThrow(/ISSUER-B can back 23200/);
+  it("does not let permission to start short override the endowment bound: a pool too short for the endowment is refused anyway", async () => {
+    chain.headroomNow = 20_000n; // 80% of it is 16,000, less than the endowment of 17,272
+    await expect(runLab(input({ allowPartialPool: true }))).rejects.toThrow(/ISSUER-B can back 16000/);
     expect(chain.calls).toEqual([]);
   });
 
-  it("refuses an economy whose worst-case mint does not fit, naming the figure", async () => {
-    await expect(runLab(input({ params: { ...DEFAULT_PARAMS, openingMilliSiu: 4000 } }))).rejects.toThrow(/33272 mSIU/);
+  it("refuses an economy whose endowment does not fit, naming the figure: three needs each is 3 x 2,159 mSIU per trader", async () => {
+    await expect(runLab(input({ params: { ...DEFAULT_PARAMS, needsPerTrader: 3 } }))).rejects.toThrow(/the endowment is 25908 mSIU/);
     expect(chain.calls).toEqual([]);
   });
 
@@ -266,20 +265,21 @@ describe("runLab", () => {
   it("sets every trader to the same opening, endows them from one mint, and records both as operator action", async () => {
     // Different starting USDC: one short, one over, one exact, one empty.
     chain.usdc.set(ADDRESSES.ORCHESTRATOR.toLowerCase(), 10_000n);
-    chain.usdc.set(ADDRESSES["WORKER-CODE"].toLowerCase(), 2_874n);
+    chain.usdc.set(ADDRESSES["WORKER-CODE"].toLowerCase(), 6_205n);
     chain.usdc.set(ADDRESSES["WORKER-EXTRACT"].toLowerCase(), 100n);
     const report = await runLab(input());
 
     expect(report.abortedBecause).toBeUndefined();
-    expect(report.opening).toMatchObject({ usdcMinorPerTrader: "2874", fsiuMilliSiuPerTrader: "2000", tokenId: "777" });
+    // Sized from the print and the schedule so either asset alone meets every need (D31): 2 x (1,184 + 975) mSIU, and USDC of equal value.
+    expect(report.opening).toMatchObject({ usdcMinorPerTrader: "6205", fsiuMilliSiuPerTrader: "4318", tokenId: "777" });
     const resets = report.operatorActions.filter((a) => a.kind === "usdc_reset");
     expect(resets.map((a) => (a as { move: string }).move)).toEqual(["return", "top_up", "top_up"]); // returns first; the exact one moves nothing
     // One mint for all four, then each trader's share.
-    expect(chain.calls.filter((c) => c.startsWith("mint"))).toEqual(["mint 8000"]);
+    expect(chain.calls.filter((c) => c.startsWith("mint"))).toEqual(["mint 17272"]);
     expect(report.operatorActions.filter((a) => a.kind === "endowment_transfer")).toHaveLength(4);
     const opening = report.snapshots[0] as { label: string; traders: { usdcMinor: string; fsiuMilliSiu: string }[] };
     expect(opening.label).toBe("opening");
-    for (const t of opening.traders) expect(t).toMatchObject({ usdcMinor: "2874", fsiuMilliSiu: "2000" });
+    for (const t of opening.traders) expect(t).toMatchObject({ usdcMinor: "6205", fsiuMilliSiu: "4318" });
   });
 
   it("takes a snapshot when each round opens and one more before the window closes", async () => {
@@ -292,7 +292,7 @@ describe("runLab", () => {
     const final = report.final as { traders: { resultNano: string; needsMet: number }[] };
     for (const t of final.traders) {
       expect(t.needsMet).toBe(0);
-      expect(t.resultNano).toBe((2_874n * 1000n + (2000n * 1_437_000n) / 1000n).toString());
+      expect(t.resultNano).toBe((6_205n * 1000n + (4_318n * 1_437_000n) / 1000n).toString());
     }
   });
 
@@ -300,7 +300,7 @@ describe("runLab", () => {
     const report = await runLab(input());
     const expiries = report.operatorActions.filter((a) => a.kind === "expiry") as { holder: string; quantityMilliSiu: string }[];
     expect(expiries.map((e) => e.holder).sort()).toEqual(["TRADER-1", "TRADER-2", "TRADER-3", "TRADER-4"]);
-    for (const e of expiries) expect(e.quantityMilliSiu).toBe("2000");
+    for (const e of expiries) expect(e.quantityMilliSiu).toBe("4318");
     expect(report.pool).toMatchObject({ startingHeadroomMilliSiu: "32000", endingHeadroomMilliSiu: "32000", restored: true });
     // The clock was taken past the window's close before the first expiry (the fake sleep advances it).
     expect(chain.clock).toBeGreaterThanOrEqual(BigInt(report.window.toChainSeconds));
@@ -312,8 +312,9 @@ describe("runLab", () => {
     chain.failExpiryFor = ADDRESSES["WORKER-EXTRACT"];
     const report = await runLab(input());
     const failed = report.operatorActions.filter((a) => a.kind === "expiry_failed") as { holder: string; reason: string }[];
-    expect(failed).toEqual([{ kind: "expiry_failed", holder: "TRADER-3", quantityMilliSiu: "2000", reason: "WindowNotClosedYet" }]);
-    expect(report.pool).toMatchObject({ endingHeadroomMilliSiu: "30000", restored: false });
+    expect(failed).toEqual([{ kind: "expiry_failed", holder: "TRADER-3", quantityMilliSiu: "4318", reason: "WindowNotClosedYet" }]);
+    // Three holders expired, so 12,954 of the 17,272 minted came back; TRADER-3's 4,318 is still outstanding.
+    expect(report.pool).toMatchObject({ endingHeadroomMilliSiu: "27682", restored: false });
   });
 
   // ---- aborts -------------------------------------------------------------------------------
@@ -374,7 +375,7 @@ describe("runLab", () => {
     expect(report.abortedBecause).toBeUndefined();
     expect(seen).toHaveLength(1);
     // Called after the mint and before the first transfer of the endowment to a trader.
-    expect(seen[0].at).toContain("mint 8000");
+    expect(seen[0].at).toContain("mint 17272");
     expect(seen[0].at.some((c) => c.startsWith("claim ->"))).toBe(false);
     expect(seen[0].open).toMatchObject({
       runId: "lab-test-run",
@@ -408,7 +409,54 @@ describe("runLab", () => {
     expect(report.scripted).toBe(true);
     expect(report.seats).toEqual({ "TRADER-1": "ORCHESTRATOR", "TRADER-2": "WORKER-CODE", "TRADER-3": "WORKER-EXTRACT", "TRADER-4": SEAT_OF["TRADER-4"] });
     expect(report.economy.needs).toHaveLength(8);
-    expect(report.mintBound).toMatchObject({ worstCaseMilliSiu: "25272", allowanceMilliSiu: "25600" });
+    // Nothing is minted after the opening (D31): the whole fSIU supply is the endowment, 54% of the 32,000 mSIU headroom.
+    expect(report.endowment).toEqual({
+      perTraderMilliSiu: "4318",
+      totalMilliSiu: "17272",
+      perTraderUsdcMinor: "6205",
+      perTraderUsdcNeededMinor: "6200",
+      allowanceMilliSiu: "25600",
+    });
+    expect(report).not.toHaveProperty("mintBound");
+    expect(report).not.toHaveProperty("escrowFeeBps");
+    expect(report.instrument.version).toBe(4);
     expect(ISSUER_SEAT).toBe("ISSUER-B");
+  });
+
+  // ---- what the runner hands the loop (instrument v4) -----------------------------------------
+
+  it("settles by direct transfer: the tools are told so, and an agent's balances show no escrow", async () => {
+    const prompts: string[] = [];
+    let turn = 0;
+    const reads: Adapter = async (_m, prompt) => {
+      prompts.push(prompt);
+      turn++;
+      return turn === 1
+        ? respond({ tool: "get_balances", args: { account: ADDRESSES.ORCHESTRATOR, tokenIds: ["777"] } })
+        : respond({ done: true, summary: "x" });
+    };
+    const report = await runLab(input({ adapters: { ...adapters, "TRADER-1": reads } as Record<TraderLabel, Adapter> }));
+    expect(report.abortedBecause).toBeUndefined();
+    const second = prompts.find((p) => p.includes("called get_balances"));
+    expect(second).toBeDefined();
+    // The tool ran in direct mode: its result has USDC and claims and no `escrows` at all.
+    expect(second).toContain("called get_balances");
+    expect(second).not.toMatch(/escrow/i);
+  });
+
+  it("states its own asset paragraph to the context validator, so no agent is halted for lacking the canonical one", async () => {
+    const report = await runLab(input());
+    expect(Object.values(report.haltedReason as Record<string, string>)).not.toContain("validation_failed");
+  });
+
+  it("gives a trader three ways to pay and none that mints or releases an escrow, and the issuer service one tool", async () => {
+    let shown = "";
+    const looks: Adapter = async (_m, prompt) => {
+      shown = prompt;
+      return respond({ done: true, summary: "x" });
+    };
+    await runLab(input({ adapters: { ...adapters, "TRADER-1": looks } as Record<TraderLabel, Adapter> }));
+    for (const name of ["pay_with_usdc", "pay_with_held_claim", "pay_split"]) expect(shown, name).toContain(name);
+    for (const name of ["pay_with_new_claim", "pay_with_claim", "settle_escrow", "mint_claim"]) expect(shown, name).not.toContain(name);
   });
 });

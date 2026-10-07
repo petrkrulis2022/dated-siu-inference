@@ -12,14 +12,14 @@
  * guards, the wake gates, the validator and the chain are all the real ones.
  *
  * What it walks, by assignment (trader k = 1..4; j = that trader's j-th purchase of its kind, from 0):
- *   jobs      — usdc, mint-and-forward, held balance, split … cycled by (k + j)
- *   raw work  — usdc, mint-and-forward, held balance, split … cycled by (k + j)
- * so each route is used at least twice across the eight jobs and eight units. Every route has a price in
- * something the trader must hold — dollars for `pay`, dollars for the mint in `pay_with_claim` and the split,
- * fSIU for a held transfer — so before each payment the script reads its balances, uses the planned route if it
- * can afford it, else the one it can afford that the walk has used least, and the walk records where it had to. A payment that fails is
- * not repeated: the route is set aside and the balances read again. A payment made from a balance that includes
- * fSIU the trader RECEIVED is the "passed on" case, which the verifier looks for in the loop's own records.
+ *   jobs      — usdc, held balance, split … cycled by (k + j)
+ *   raw work  — usdc, held balance, split … cycled by (k + j)
+ * so each route is used at least twice across the eight jobs and eight units. Every route has a price in something
+ * the trader must hold — dollars for `pay_with_usdc`, fSIU for a held transfer, a part of each for a split — so before each
+ * payment the script reads its balances, uses the planned route if it can afford it, else the one it can afford that the
+ * walk has used least, and the walk records where it had to. A payment that fails is not repeated: the route is set aside
+ * and the balances read again. A payment made from a balance that includes fSIU the trader RECEIVED is the "passed on" case,
+ * which the verifier looks for in the loop's own records.
  */
 import type { Adapter, AdapterResult } from "@touchstone/harness";
 import { LAB_TRADERS, type TraderLabel } from "./economy.js";
@@ -36,15 +36,15 @@ import {
   whoAmI,
   type HistoryCall,
 } from "./lab-cues.js";
-import { openRequests, owedInUsdc } from "../cues/prompt-cues.js";
-import { claimMintCostMinorUnits } from "../loop/parity.js";
+import { openRequests } from "../cues/prompt-cues.js";
+import { claimValueMinorUnits } from "../tools/settle-split.js";
 import { claimForUsd, decimalToUnits } from "./money.js";
 
-export type JobRoute = "usdc" | "mint_forward" | "held" | "split";
+export type JobRoute = "usdc" | "held" | "split";
 export type RawRoute = JobRoute;
-export const JOB_ROUTES: readonly JobRoute[] = ["usdc", "mint_forward", "held", "split"];
-/** The brief lists the same four settlement calls "for a job and for a unit of raw work alike", so a unit may be split too. */
-export const RAW_ROUTES: readonly RawRoute[] = ["usdc", "mint_forward", "held", "split"];
+export const JOB_ROUTES: readonly JobRoute[] = ["usdc", "held", "split"];
+/** The brief lists the same three settlement calls "for a job and for a unit of raw work alike", so a unit may be split too. */
+export const RAW_ROUTES: readonly RawRoute[] = ["usdc", "held", "split"];
 
 /** What a script needs that is not in a prompt: how to word a quote request. */
 export interface ScriptedLabEnv {
@@ -118,13 +118,8 @@ export function decide(prompt: string, env: ScriptedLabEnv, mem: Memory): { inte
   const asked = openRequests(prompt)[0];
   if (asked !== undefined) return { intent: { tool: "issue_quote", args: { requestId: asked.requestId } } };
 
-  // 2. Release a dollar escrow I have been paid into, once the job is delivered.
+  // 2. Deliver a job I have been paid for, once I hold a unit of raw work.
   const delivered = deliveredIn(history);
-  const settled = new Set(history.filter((c) => c.tool === "settle_escrow" && !c.failed).map((c) => String(c.args.requestId)));
-  const releasable = owedInUsdc(prompt).find((id) => delivered.has(id) && !settled.has(id));
-  if (releasable !== undefined) return { intent: { tool: "settle_escrow", args: { requestId: releasable } } };
-
-  // 3. Deliver a job I have been paid for, once I hold a unit of raw work.
   const owed = owedJobs(prompt);
   const units = unitsHeld(prompt) ?? 0;
   const toDeliver = owed.find((o) => !delivered.has(o.requestId));
@@ -137,20 +132,20 @@ export function decide(prompt: string, env: ScriptedLabEnv, mem: Memory): { inte
   const confirmed = (kind: "job" | "raw"): number =>
     [...mem.decided.entries()].filter(([id, d]) => d.trader === me && d.kind === kind && !shown.has(id)).length;
 
-  // 4. Pay the issuer's quote for a unit of raw work.
+  // 3. Pay the issuer's quote for a unit of raw work.
   const rawQuote = issuerId === undefined ? undefined : quotes.find((q) => q.sellerId === issuerId);
   if (rawQuote !== undefined && tokenId !== undefined) {
     return pay(me, "raw", rawQuote, plannedRawRoute(me, confirmed("raw")), prompt, history, turn, tokenId, env, mem);
   }
 
-  // 5. Ask the issuer for a unit when I owe more deliveries than I hold or have ordered units for.
+  // 4. Ask the issuer for a unit when I owe more deliveries than I hold or have ordered units for.
   const rawOrdered = history.filter((c) => c.tool === "request_quote" && c.args.sellerId === issuerId && !c.failed).length;
   const outstandingRaw = rawOrdered - confirmed("raw");
   if (toDeliver !== undefined && owed.length > units + Math.max(0, outstandingRaw) && issuerId !== undefined) {
     return { intent: requestQuote(env, dir["ISSUER-B"]!.model, issuerId, env.rates.raw) };
   }
 
-  // 6. Pay a job quote I have received.
+  // 5. Pay a job quote I have received.
   const jobQuote = quotes.find((q) => q.sellerId !== issuerId);
   if (jobQuote !== undefined && tokenId !== undefined) {
     const seller = sellerLabelOf(jobQuote.sellerId);
@@ -159,7 +154,7 @@ export function decide(prompt: string, env: ScriptedLabEnv, mem: Memory): { inte
     }
   }
 
-  // 7. Ask a seller for a job I now need.
+  // 6. Ask a seller for a job I now need.
   const need = openNeeds(prompt)[0];
   if (need !== undefined) {
     const to = dir[need.seller];
@@ -195,12 +190,17 @@ export const newMemory = (): Memory => ({
 /** The names the lab gives a trader for each route (`lab/tools.ts`): a script calls them as a model does. */
 const TOOL_OF_ROUTE: Record<string, string> = {
   usdc: "pay_with_usdc",
-  mint_forward: "pay_with_new_claim",
   held: "pay_with_held_claim",
   split: "pay_split",
 };
 /** Where a trader turns when it cannot afford the planned route. Dollars first: they are the plainest. */
-const FALLBACK_ORDER: readonly string[] = ["usdc", "held", "mint_forward", "split"];
+const FALLBACK_ORDER: readonly string[] = ["usdc", "held", "split"];
+
+/** A split's claim part: half the claim the whole quote would take, and so what remains in dollars. */
+function splitParts(amountMinor: bigint, claimQty: bigint, printNano: bigint): { claimPart: bigint; usdcPart: bigint } {
+  const claimPart = claimQty / 2n;
+  return { claimPart, usdcPart: amountMinor - claimValueMinorUnits(claimPart.toString(), printNano.toString()) };
+}
 
 function requestQuote(env: ScriptedLabEnv, model: string, sellerId: string, rate: string): Intent {
   return {
@@ -263,13 +263,13 @@ function pay(
     switch (route) {
       case "usdc":
         return funds.usdcMinor >= amountMinor;
-      case "mint_forward":
-        return funds.usdcMinor >= claimMintCostMinorUnits(claimQty, env.printNano);
       case "held":
         return funds.fsiuMilliSiu >= claimQty;
-      case "split":
-        // Half the claim minted, the rest in dollars: together about the whole price, so require it.
-        return funds.usdcMinor >= amountMinor;
+      case "split": {
+        // Half the claim from a held balance, the rest of the price in dollars: it needs some of each.
+        const parts = splitParts(amountMinor, claimQty, env.printNano);
+        return funds.fsiuMilliSiu >= parts.claimPart && funds.usdcMinor >= parts.usdcPart;
+      }
       default:
         return false;
     }
@@ -320,7 +320,7 @@ function pay(
 
   const intent: Intent =
     route === "split"
-      ? { tool: TOOL_OF_ROUTE.split, args: { requestId: id, claimQuantityMilliSiu: (claimQty / 2n).toString() } }
+      ? { tool: TOOL_OF_ROUTE.split, args: { requestId: id, claimQuantityMilliSiu: splitParts(amountMinor, claimQty, env.printNano).claimPart.toString() } }
       : { tool: TOOL_OF_ROUTE[route], args: { requestId: id } };
   return { intent, note: `${kind} ${id}: ${route}` };
 }

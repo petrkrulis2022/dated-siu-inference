@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assembleContext } from "../context/assemble.js";
 import { ContextValidationError, validateAgentContext } from "../pack/validate.js";
-import { CANONICAL_ASSET_DESCRIPTION } from "../skills/asset-description.js";
+import { LAB_ASSET_DESCRIPTION } from "./asset-text.js";
 import { requestQuoteTool } from "../tools/request-quote.js";
 import { buildLabBrief, sharedPartOf, type LabBriefInput } from "./briefs.js";
 import { LAB_TRADERS, SEAT_OF, buildEconomy, type TraderLabel } from "./economy.js";
@@ -74,10 +74,10 @@ describe("lab briefs — who differs from whom", () => {
 describe("lab briefs — what they state", () => {
   const text = briefs["TRADER-1"];
 
-  it("carries the canonical asset text verbatim, and passes the context validator", () => {
+  it("carries the lab's asset text (the canonical text, its escrow sentences replaced — D36) and passes the context validator", () => {
     for (const t of LAB_TRADERS) {
-      expect(briefs[t]).toContain(CANONICAL_ASSET_DESCRIPTION);
-      expect(() => validateAgentContext(assembleContext(SEAT_OF[t], briefs[t], []))).not.toThrow();
+      expect(briefs[t]).toContain(LAB_ASSET_DESCRIPTION);
+      expect(() => validateAgentContext(assembleContext(SEAT_OF[t], briefs[t], []), LAB_ASSET_DESCRIPTION)).not.toThrow();
     }
   });
 
@@ -86,18 +86,33 @@ describe("lab briefs — what they state", () => {
     expect(text).toContain("0.0017244 USD per SIU, a quote of 0.0017 USD");
     expect(text).toContain("0.001437 USD per SIU, a quote of 0.0014 USD");
     expect(text).toContain("150% of the print per SIU of the job: 0.0021555 USD for a job of 1 SIU");
-    expect(text).toContain("2 SIU of it (2000 mSIU) and 0.002874 USD in USDC");
+    // The opening is derived (D31): two jobs and two units of raw work, each paid in claims — 2 x (1,184 + 975) — and USDC of
+    // the same value at the print.
+    expect(text).toContain("4.318 SIU of it (4318 mSIU) and 0.006205 USD in USDC");
     expect(text).toContain("print-illustrative, 0.001437 USD per SIU");
   });
 
-  it("states what every way of paying costs, side by side, in the words the user approved — no one route singled out (D21)", () => {
+  it("states what every way of paying costs, side by side, in one parallel statement — no one route singled out (D21, D31)", () => {
     expect(text).toContain(
-      "Paying in USDC costs USDC. Paying with fSIU you hold costs that fSIU. Minting new fSIU costs USDC, at the\n    print, paid to the issuer.",
+      "Paying in USDC costs USDC. Paying with fSIU you hold costs that fSIU. Paying with both costs the fSIU you give\n    and the rest of the price in USDC.",
     );
-    // The one-route parentheticals are gone: the cost of minting appears only in the parallel statement.
-    expect(text).not.toContain("a mint is paid for in USDC");
-    expect(text).not.toContain("minted, and paid for, as above");
-    expect(text.match(/paid to the issuer/g)).toHaveLength(1);
+    // Nothing is minted after the opening, so there is no mint to cost: the third sentence of v3 is gone.
+    expect(text).not.toMatch(/mint/i);
+    expect(text).not.toContain("paid to the issuer");
+  });
+
+  it("states that a payment reaches the seller at once and that the fSIU supply is the opening supply (D30, D31)", () => {
+    expect(text).toContain("each reaches the seller at the moment you make it");
+    expect(text).toContain("A payment reaches you at the moment it is made, in whichever asset it is in; there is nothing to release.");
+    expect(text).toContain("The fSIU in the lab is that opening supply. Nothing creates more during the run.");
+    expect(text).not.toMatch(/escrow/i);
+    expect(text).not.toMatch(/settle_escrow/);
+  });
+
+  it("does not state that converting changes nothing or is never required — the brief says how a result is counted and no more (D35)", () => {
+    expect(text.toLowerCase()).not.toContain("changes nothing");
+    expect(text.toLowerCase()).not.toContain("never required");
+    expect(text).not.toMatch(/convert/i);
   });
 
   it("states how a result is counted, and that it is measured before the window closes", () => {
@@ -114,7 +129,7 @@ describe("lab briefs — what they state", () => {
 describe("lab briefs — no steering, and nothing the system would refuse", () => {
   const text = LAB_TRADERS.map((t) => briefs[t]).join("\n");
   // Outside the canonical text, which is validated separately and says what it says.
-  const own = text.split(CANONICAL_ASSET_DESCRIPTION).join("");
+  const own = text.split(LAB_ASSET_DESCRIPTION).join("");
 
   it("uses none of the words that advise or compare", () => {
     for (const word of ["prefer", "should", "better", "cheaper", "advantage", "recommend", "best", "save", "worth holding", "hold on", "keep your", "convert", "cash out", "same either way"]) {
@@ -152,17 +167,16 @@ describe("lab briefs — no steering, and nothing the system would refuse", () =
     const section = briefs["TRADER-1"].slice(briefs["TRADER-1"].indexOf("Step 3"), briefs["TRADER-1"].indexOf("IF YOU ARE THE SELLER"));
     expect(section.replace(/\s+/g, " ")).toContain("each works for a job and for a unit of raw work alike");
     const routes = toolExamples(section).filter((e) => e.tool.startsWith("pay_"));
-    expect(routes.map((e) => e.tool)).toEqual(["pay_with_usdc", "pay_with_new_claim", "pay_with_held_claim", "pay_split"]);
+    expect(routes.map((e) => e.tool)).toEqual(["pay_with_usdc", "pay_with_held_claim", "pay_split"]);
     // The same one-argument shape for every route; the split alone has to say how much of it is claim.
     for (const e of routes) expect(Object.keys(e.args)).toContain("requestId");
     expect(Object.keys(routes[0].args)).toEqual(["requestId"]);
     expect(Object.keys(routes[1].args)).toEqual(["requestId"]);
-    expect(Object.keys(routes[2].args)).toEqual(["requestId"]);
-    expect(Object.keys(routes[3].args)).toEqual(["requestId", "claimQuantityMilliSiu"]);
+    expect(Object.keys(routes[2].args)).toEqual(["requestId", "claimQuantityMilliSiu"]);
   });
 
   it("is refused by the validator if an asset is recommended — the guard is live on these briefs", () => {
     const bad = `${briefs["TRADER-1"]}\nYou should prefer USDC.`;
-    expect(() => validateAgentContext(assembleContext("ORCHESTRATOR", bad, []))).toThrow(ContextValidationError);
+    expect(() => validateAgentContext(assembleContext("ORCHESTRATOR", bad, []), LAB_ASSET_DESCRIPTION)).toThrow(ContextValidationError);
   });
 });

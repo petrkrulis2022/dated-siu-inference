@@ -13,53 +13,31 @@ const body = (seller: string): QuoteBody =>
   }) as QuoteBody;
 const signed = (seller: string): TouchstoneQuote => ({ ...body(seller), sig: "0xsig" }) as TouchstoneQuote;
 const decide = async (prompt: string) => JSON.parse((await issuerServiceAdapter()("m", prompt, { temperature: 0, max_tokens: 1 })).text);
+// The lab's own board: every payment is a direct transfer, so there is no escrow to show a seller (D30).
+const labBoard = () => new QuoteBoard({ reservationStep: false, displayName: labDisplayName, requestIdFirst: true, escrow: false });
 
 describe("the issuer service", () => {
   it("answers an open request for raw work", async () => {
-    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName, requestIdFirst: true });
+    const board = labBoard();
     board.postRequest("ORCHESTRATOR", body(ISSUER));
     expect(await decide(board.renderFor("ISSUER-B", ISSUER))).toEqual({ tool: "issue_quote", args: { requestId: "qr-1" } });
   });
 
-  it("releases the escrow of a quote that has been paid in dollars", async () => {
-    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName, requestIdFirst: true });
-    const r = board.postRequest("ORCHESTRATOR", body(ISSUER));
-    board.postIssuedQuote(r.requestId, signed(ISSUER));
-    board.recordPaid(r.requestId, "usdc");
-    expect(await decide(board.renderFor("ISSUER-B", ISSUER))).toEqual({ tool: "settle_escrow", args: { requestId: "qr-1" } });
-  });
-
-  it("answers requests before releasing escrows, one action a turn, and the rest stays on the board", async () => {
-    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName, requestIdFirst: true });
-    const first = board.postRequest("ORCHESTRATOR", body(ISSUER));
-    board.postIssuedQuote(first.requestId, signed(ISSUER));
-    board.recordPaid(first.requestId, "usdc");
+  it("answers requests one at a time, and the rest stays on the board", async () => {
+    const board = labBoard();
+    board.postRequest("ORCHESTRATOR", body(ISSUER));
     board.postRequest("WORKER-CODE", body(ISSUER));
-    const text = board.renderFor("ISSUER-B", ISSUER);
-    expect(await decide(text)).toEqual({ tool: "issue_quote", args: { requestId: "qr-2" } });
+    expect(await decide(board.renderFor("ISSUER-B", ISSUER))).toEqual({ tool: "issue_quote", args: { requestId: "qr-1" } });
   });
 
-  it("does nothing about a quote paid in claims: there is no escrow, and the issuer simply holds the claim", async () => {
-    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName, requestIdFirst: true });
-    const r = board.postRequest("ORCHESTRATOR", body(ISSUER));
-    board.postIssuedQuote(r.requestId, signed(ISSUER));
-    board.recordPaid(r.requestId, "fsiu");
-    expect(await decide(board.renderFor("ISSUER-B", ISSUER))).toEqual({ wait: true });
-  });
-
-  it("stops retrying a release the chain keeps refusing, and goes on to the next one", async () => {
-    const board = new QuoteBoard({ reservationStep: false, displayName: labDisplayName, requestIdFirst: true });
-    for (const buyer of ["ORCHESTRATOR", "WORKER-CODE"] as const) {
-      const r = board.postRequest(buyer, body(ISSUER));
+  it("does nothing about a quote that has been paid, in either asset: the payment has already reached it", async () => {
+    for (const asset of ["usdc", "fsiu", "split"] as const) {
+      const board = labBoard();
+      const r = board.postRequest("ORCHESTRATOR", body(ISSUER));
       board.postIssuedQuote(r.requestId, signed(ISSUER));
-      board.recordPaid(r.requestId, "usdc");
+      board.recordPaid(r.requestId, asset);
+      expect(await decide(board.renderFor("ISSUER-B", ISSUER)), asset).toEqual({ wait: true });
     }
-    const refused = (turn: number) => `Turn ${turn} — called settle_escrow({"requestId":"qr-1"}) -> {"error":"that amount is more than the escrow holds."}`;
-    const withHistory = (lines: string[]) => `WHAT HAS HAPPENED SO FAR:\n${lines.join("\n")}\n\n${board.renderFor("ISSUER-B", ISSUER)}`;
-    // Once refused, it tries again (a lagging node can refuse a release that is fine a moment later).
-    expect(await decide(withHistory([refused(1)]))).toEqual({ tool: "settle_escrow", args: { requestId: "qr-1" } });
-    // Refused twice, it leaves qr-1 alone and releases qr-2.
-    expect(await decide(withHistory([refused(1), refused(2)]))).toEqual({ tool: "settle_escrow", args: { requestId: "qr-2" } });
   });
 
   it("waits when there is nothing to do, and costs nothing", async () => {
@@ -68,7 +46,7 @@ describe("the issuer service", () => {
     expect(r.usage).toEqual({ input: 0, output: 0, cached_input: 0, reasoning: 0 });
   });
 
-  it("needs only the two tools it uses", () => {
-    expect([...ISSUER_SERVICE_TOOLS]).toEqual(["issue_quote", "settle_escrow"]);
+  it("needs only the one tool it uses: it has no escrow to release", () => {
+    expect([...ISSUER_SERVICE_TOOLS]).toEqual(["issue_quote"]);
   });
 });

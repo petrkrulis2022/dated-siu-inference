@@ -27,6 +27,11 @@ export interface Snapshot {
   round: number;
   atChainSeconds: bigint;
   traders: TraderHoldings[];
+  /**
+   * What ISSUER-B holds. Every payment is a direct transfer (D30), so USDC and fSIU are conserved across the four traders
+   * and the issuer together: a fee, an escrow left holding money, or a mint after the opening would show as a total that moved.
+   */
+  issuer: { usdcMinor: bigint; fsiuMilliSiu: bigint };
 }
 
 export async function takeSnapshot(input: {
@@ -34,6 +39,7 @@ export async function takeSnapshot(input: {
   chain: LabChain;
   books: LabBooks;
   addressOf: Readonly<Record<TraderLabel, Hex>>;
+  issuerAddress: Hex;
   tokenId: bigint;
   printNano: bigint;
   params: LabParams;
@@ -53,7 +59,11 @@ export async function takeSnapshot(input: {
       };
     }),
   );
-  return { label: input.label, round: input.books.round, atChainSeconds, traders };
+  const issuer = {
+    usdcMinor: await input.chain.usdcBalance(input.issuerAddress),
+    fsiuMilliSiu: await input.chain.claimBalance(input.tokenId, input.issuerAddress),
+  };
+  return { label: input.label, round: input.books.round, atChainSeconds, traders, issuer };
 }
 
 /** A snapshot with its bigints as decimal strings, which is what a JSON report can hold. */
@@ -69,6 +79,7 @@ export function snapshotToJson(s: Snapshot): unknown {
       needsMet: t.needsMet,
       resultNano: t.resultNano.toString(),
     })),
+    issuer: { usdcMinor: s.issuer.usdcMinor.toString(), fsiuMilliSiu: s.issuer.fsiuMilliSiu.toString() },
   };
 }
 

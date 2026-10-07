@@ -22,7 +22,8 @@ export interface BalancesResult {
   /** Escrows this account is party to. `status: "open"` with this account as `seller` means the
    * money is committed and waiting on a `settle_escrow` call — it is not in the wallet above and
    * never will be until that call is made. */
-  escrows: Array<{
+  /** Absent when the run settles by direct transfer (`RunnerDeps.directSettlement`): there is no escrow to report. */
+  escrows?: Array<{
     quoteHash: string;
     status: string;
     role: "seller" | "buyer" | "not a party";
@@ -73,6 +74,6 @@ export const getBalancesTool: ToolDefinition<Args, BalancesResult> = {
       }),
     );
 
-    return { usdc, claims, escrows };
+    return ctx.deps.directSettlement === true ? { usdc, claims } : { usdc, claims, escrows };
   },
 };

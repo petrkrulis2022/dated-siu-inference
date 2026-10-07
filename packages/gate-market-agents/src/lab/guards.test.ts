@@ -99,33 +99,10 @@ describe("guardLabCall", () => {
     });
   });
 
-  describe("settle_escrow", () => {
-    it("is refused for a trader until it has delivered the job whose escrow it would release", () => {
-      const need = economy.needs.find((n) => n.round === 1)!;
-      books.requestPosted("qr-1", need.buyer, need.seller);
-      books.quoteIssued("qr-1");
-      books.paid("qr-1", "usdc");
-      expect(guardLabCall(books, cfg, need.seller, "settle_escrow", {})).toBe("you have not delivered qr-1, so its escrow is not yet yours to release.");
-      expect(guardLabCall(books, cfg, need.seller, "settle_escrow", { requestId: "qr-1" })).toContain("not yet yours");
-      books.attempted("qr-1", true);
-      expect(guardLabCall(books, cfg, need.seller, "settle_escrow", {})).toBeNull();
-    });
-
-    it("never stands between the issuer and the escrow it is paid through", () => {
-      books.requestPosted("qr-raw", "TRADER-1", "ISSUER");
-      books.paid("qr-raw", "usdc");
-      expect(guardLabCall(books, cfg, "ISSUER", "settle_escrow", {})).toBeNull();
-    });
-
-    it("does not guard an escrow that is not one of the caller's jobs", () => {
-      expect(guardLabCall(books, cfg, "TRADER-1", "settle_escrow", { requestId: "qr-nope" })).toBeNull();
-    });
-  });
-
   describe("paying a quote — by the trader who asked for it, once", () => {
     // Found by the first model run (2026-10-06): a seller called pay_with_claim on a quote it had issued, which its
     // buyer had already paid, and it went through: a claim minted to itself, recorded against the wrong trader.
-    const PAYING = ["pay", "pay_with_claim", "settle_split", "transfer_claim"] as const;
+    const PAYING = ["pay", "settle_split_held", "transfer_claim"] as const;
     const quoted = () => {
       const need = economy.needs.find((n) => n.round === 1)!;
       books.requestPosted("qr-1", need.buyer, need.seller);
@@ -135,7 +112,10 @@ describe("guardLabCall", () => {
 
     it("lets the buyer pay its own quote, by every route", () => {
       const need = quoted();
-      for (const tool of PAYING) expect(guardLabCall(books, cfg, need.buyer, tool, { requestId: "qr-1" }), tool).toBeNull();
+      for (const tool of PAYING) {
+        const args = tool === "settle_split_held" ? { requestId: "qr-1", claimQuantityMilliSiu: "500" } : { requestId: "qr-1" };
+        expect(guardLabCall(books, cfg, need.buyer, tool, args), tool).toBeNull();
+      }
     });
 
     it("refuses the seller, and anyone else, paying a quote that is not theirs — by every route", () => {
@@ -149,7 +129,7 @@ describe("guardLabCall", () => {
       }
     });
 
-    it("refuses a second payment of a quote that has been paid, by every route — the chain stops only a second dollar payment", () => {
+    it("refuses a second payment of a quote that has been paid, by every route — with direct settlement nothing on the chain stops one", () => {
       const need = quoted();
       books.paid("qr-1", "usdc");
       for (const tool of PAYING) expect(guardLabCall(books, cfg, need.buyer, tool, { requestId: "qr-1" }), tool).toBe("qr-1 has already been paid.");
@@ -170,6 +150,46 @@ describe("guardLabCall", () => {
     it("leaves a transfer that names no quote alone — it settles nothing — and a quote this lab does not know to the loop's own refusal", () => {
       expect(guardLabCall(books, cfg, "TRADER-1", "transfer_claim", { agentId: "TRADER-2", tokenId: "7", quantity: "100" })).toBeNull();
       expect(guardLabCall(books, cfg, "TRADER-1", "pay", { requestId: "answers qr-9" })).toBeNull();
+    });
+  });
+
+  describe("the claim part of a split (pay_split)", () => {
+    const quoted = () => {
+      const need = economy.needs.find((n) => n.round === 1)!;
+      books.requestPosted("qr-1", need.buyer, need.seller);
+      books.quoteIssued("qr-1");
+      return need;
+    };
+    // A job's quote is 1,700 minor units at the illustrative print 0.001437 USD per SIU; 1 mSIU is worth 1.437 of them.
+    const split = (claim: unknown) => ({ requestId: "qr-1", claimQuantityMilliSiu: claim });
+
+    it("accepts a claim part worth something and less than the price", () => {
+      const need = quoted();
+      expect(guardLabCall(books, cfg, need.buyer, "settle_split_held", split("500"))).toBeNull();
+      expect(guardLabCall(books, cfg, need.buyer, "settle_split_held", split("1182"))).toBeNull();
+    });
+
+    it("refuses anything that is not a whole number of mSIU, more than none", () => {
+      const need = quoted();
+      for (const bad of ["0", "-5", "1.5", "five", "", undefined, 500]) {
+        expect(guardLabCall(books, cfg, need.buyer, "settle_split_held", split(bad)), String(bad)).toBe(
+          "the claim part of a split is a whole number of mSIU, more than 0.",
+        );
+      }
+    });
+
+    it("refuses a claim part worth the whole price or more, stating what it is worth and what the price is", () => {
+      const need = quoted();
+      expect(guardLabCall(books, cfg, need.buyer, "settle_split_held", split("1184"))).toBe(
+        "the claim part of a split must be worth more than nothing and less than the quote's price: 1184 mSIU is worth 1701 USDC minor units at the print, and the price is 1700.",
+      );
+      expect(guardLabCall(books, cfg, need.buyer, "settle_split_held", split("5000"))).toContain("must be worth more than nothing and less than");
+    });
+
+    it("says nothing about which payment to use instead", () => {
+      const need = quoted();
+      const refusal = guardLabCall(books, cfg, need.buyer, "settle_split_held", split("5000"))!;
+      expect(refusal).not.toMatch(/pay_with|instead|should|better|prefer/i);
     });
   });
 

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { openAndFund } from "@touchstone/agents";
 import { quoteHashHex, type TouchstoneQuote } from "@touchstone/sdk";
+import { refuseExpired, sellerAddress, sendUsdc } from "./direct-settlement.js";
 import type { ToolDefinition } from "./types.js";
 
 const argsSchema = z.object({
@@ -29,6 +30,12 @@ export const payTool: ToolDefinition<Args, { txHash: string }> = {
   spendUsd: (args) => args.quote.amount_usd_max,
   async handler(ctx, args) {
     const maxAmount = BigInt(args.quote.settlement[0].amount_max);
+    if (ctx.deps.directSettlement === true) {
+      // The lab: the quote's price goes to its seller now, and there is nothing to release (D30).
+      await refuseExpired(ctx, args.quote, "pay");
+      const txHash = await sendUsdc(ctx, sellerAddress(args.quote, "pay"), maxAmount);
+      return { txHash };
+    }
     const expiryUnix = BigInt(Math.floor(new Date(args.quote.expiry).getTime() / 1000));
     const txHash = await openAndFund(
       ctx.clients,

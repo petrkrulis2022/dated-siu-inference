@@ -285,3 +285,38 @@ describe("QuoteBoard — the line that names a quote", () => {
     expect(b.renderFor("WORKER-CODE", "erc8004:0xWORKERCODE")).not.toContain("answers qr-1");
   });
 });
+
+describe("QuoteBoard — direct settlement, no escrow (escrow: false, D30)", () => {
+  const seller = "erc8004:0xWORKERCODE";
+  const labBoard = () => new QuoteBoard({ reservationStep: false, requestIdFirst: true, escrow: false });
+  function paid(board: QuoteBoard, asset: "usdc" | "fsiu" | "split") {
+    const request = board.postRequest("ORCHESTRATOR", fakeQuoteBody(seller));
+    board.postIssuedQuote(request.requestId, fakeQuote(seller));
+    board.recordPaid(request.requestId, asset);
+    return request.requestId;
+  }
+
+  it("tells a seller paid in dollars nothing about an escrow, because none exists — in any asset", () => {
+    for (const asset of ["usdc", "fsiu", "split"] as const) {
+      const board = labBoard();
+      paid(board, asset);
+      expect(board.paidUnsettledFor(seller), asset).toEqual([]);
+      expect(board.renderFor("WORKER-CODE", seller), asset).toBe("");
+    }
+  });
+
+  it("still marks the quote paid, so its buyer is no longer shown it as one to pay", () => {
+    const board = labBoard();
+    const id = paid(board, "usdc");
+    expect(board.isPaid(id)).toBe(true);
+    expect(board.paidAsset(id)).toBe("usdc");
+    expect(board.unpaidQuotesFor("ORCHESTRATOR")).toHaveLength(0);
+  });
+
+  it("leaves the default board — the gate configuration's — telling a dollar-paid seller what it always did", () => {
+    const board = new QuoteBoard();
+    paid(board, "usdc");
+    expect(board.paidUnsettledFor(seller)).toHaveLength(1);
+    expect(board.renderFor("WORKER-CODE", seller)).toContain("real USDC is in escrow");
+  });
+});

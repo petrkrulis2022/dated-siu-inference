@@ -1279,6 +1279,47 @@ describe("buildToolArgs", () => {
     ).rejects.toThrow(/mintContext/);
   });
 
+  it("settle_split_held (D32): the quote and the seller come from the board, the claim part from the agent, the print from the mint context", async () => {
+    const seller = "0x00000000000000000000000000000000000000cd";
+    const { board, requestId } = boardWithQuote(seller, "10");
+    const args = (await buildToolArgs(
+      "settle_split_held",
+      { requestId, claimQuantityMilliSiu: "592", tokenId: "7", to: "0x000000000000000000000000000000000000dead", nanoUsdPerSiu: "1" },
+      baseCtx({ mintContext: QUOTED_MINT, board }),
+    )) as { quote: { sig: string }; to: string; tokenId: string; claimQuantityMilliSiu: string; nanoUsdPerSiu: string };
+    expect(args.quote.sig).toBe("0xrealsignature"); // the seller's own signed quote, never one the agent built
+    expect(args.to).toBe(seller); // not the address the agent offered
+    expect(args.nanoUsdPerSiu).toBe("10700000"); // the print in force, not the "1" the agent offered
+    expect(args.claimQuantityMilliSiu).toBe("592");
+    expect(args.tokenId).toBe("7");
+
+    await expect(buildToolArgs("settle_split_held", { requestId, tokenId: "7" }, baseCtx({ mintContext: QUOTED_MINT, board }))).rejects.toThrow(
+      /claimQuantityMilliSiu/,
+    );
+    await expect(
+      buildToolArgs("settle_split_held", { requestId: "qr-nonexistent", claimQuantityMilliSiu: "5", tokenId: "7" }, baseCtx({ mintContext: QUOTED_MINT })),
+    ).rejects.toThrow(/no issued quote/);
+    await expect(
+      buildToolArgs("settle_split_held", { requestId, claimQuantityMilliSiu: "5", tokenId: "7" }, baseCtx({ board })),
+    ).rejects.toThrow(/mintContext/);
+  });
+
+  it("get_balances names no escrow when payments settle directly, and still does in the gate configuration", async () => {
+    const { board } = boardWithQuote();
+    const ctx = (direct: boolean) =>
+      baseCtx({
+        board,
+        caller: { agentId: "ORCHESTRATOR", erc8004Id: "erc8004:0x00000000000000000000000000000000000000ab" },
+        ...(direct ? { directSettlement: true } : {}),
+      });
+    const call = { account: "0xab", tokenIds: ["7"] };
+    const direct = (await buildToolArgs("get_balances", call, ctx(true))) as Record<string, unknown>;
+    expect(direct).not.toHaveProperty("escrowQuoteHashes");
+    expect(direct.tokenIds).toEqual(["7"]);
+    const gate = (await buildToolArgs("get_balances", call, ctx(false))) as { escrowQuoteHashes: string[] };
+    expect(Array.isArray(gate.escrowQuoteHashes)).toBe(true);
+  });
+
   it("transfer_claim by a name the run gives an agent: the alias resolves to the seat's address, an unknown name still fails", async () => {
     // The currency lab shows traders as TRADER-n. A brief that says "pass a claim to TRADER-2" is a
     // brief whose syntax must work, so the lab's labels are aliases for the seats underneath.

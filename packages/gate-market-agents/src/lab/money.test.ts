@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_PARAMS } from "./economy.js";
 import {
   creditNano,
-  escrowFeeMinor,
   quotedPrice,
   decimalToUnits,
   fsiuValueNano,
   jobSiu,
+  openingMilliSiuPerTrader,
   openingUsdcMinor,
   printNano,
   rawWorkRateUsdPerSiu,
@@ -15,6 +15,7 @@ import {
   tradeRateNano,
   tradeRateUsdPerSiu,
   unitsToDecimal,
+  usdcNeededPerTrader,
   usdcValueNano,
 } from "./money.js";
 
@@ -55,16 +56,34 @@ describe("the lab's prices at an illustrative print", () => {
     expect(sellerMarginNano(P, DEFAULT_PARAMS)).toBeGreaterThan(0n);
   });
 
-  it("opens each trader with USDC and fSIU of equal value", () => {
-    expect(openingUsdcMinor(P, DEFAULT_PARAMS)).toBe(2_874n);
-    expect(usdcValueNano(2_874n)).toBe(fsiuValueNano(2000n, P));
+  it("sizes the opening from the print and the schedule: each trader buys two jobs and two units of raw work (D31)", () => {
+    // A job's quote is 1,700 minor units and a unit's 1,400; the claim for each is its price's worth at the print, rounded
+    // up: 1,184 and 975 mSIU. Each trader buys two jobs and, selling two, two units: 2 x (1,184 + 975).
+    expect(openingMilliSiuPerTrader(P, DEFAULT_PARAMS)).toBe(4_318n);
+    expect(usdcNeededPerTrader(P, DEFAULT_PARAMS)).toBe(6_200n);
+  });
+
+  it("opens each trader with USDC and fSIU of equal value, either alone enough for every quote", () => {
+    expect(openingUsdcMinor(P, DEFAULT_PARAMS)).toBe(6_205n);
+    // 6,205 USDC minor units against 4,318 mSIU at the print: the fSIU is worth 6,204.966 of them, so the USDC is the
+    // same value rounded up, never less.
+    expect(usdcValueNano(6_205n)).toBeGreaterThanOrEqual(fsiuValueNano(4_318n, P));
+    expect(usdcValueNano(6_205n) - fsiuValueNano(4_318n, P)).toBeLessThan(1_000n);
+    expect(openingUsdcMinor(P, DEFAULT_PARAMS)).toBeGreaterThanOrEqual(usdcNeededPerTrader(P, DEFAULT_PARAMS));
   });
 
   it("rounds opening USDC UP when the print does not divide evenly, so USDC is never worth less", () => {
     const odd = 1_437_001n;
+    const fsiu = openingMilliSiuPerTrader(odd, DEFAULT_PARAMS);
     const usdc = openingUsdcMinor(odd, DEFAULT_PARAMS);
-    expect(usdcValueNano(usdc)).toBeGreaterThanOrEqual(fsiuValueNano(2000n, odd));
-    expect(usdcValueNano(usdc - 1n)).toBeLessThan(fsiuValueNano(2000n, odd));
+    expect(usdcValueNano(usdc)).toBeGreaterThanOrEqual(fsiuValueNano(fsiu, odd));
+    expect(usdcValueNano(usdc - 1n)).toBeLessThan(fsiuValueNano(fsiu, odd));
+  });
+
+  it("keeps either asset alone enough at other prints, not only the illustrative one", () => {
+    for (const print of [900_000n, 1_000_000n, 1_437_001n, 2_500_000n, 7_777_777n]) {
+      expect(openingUsdcMinor(print, DEFAULT_PARAMS)).toBeGreaterThanOrEqual(usdcNeededPerTrader(print, DEFAULT_PARAMS));
+    }
   });
 });
 
@@ -85,24 +104,6 @@ describe("resultNano — USDC plus fSIU at the print plus the credit", () => {
   it("values fSIU at the print in force, so a move in the print moves the result", () => {
     const h = { usdcMinor: 0n, fsiuMilliSiu: 4000n, needsMet: 0 };
     expect(resultNano(h, 2_000_000n, DEFAULT_PARAMS)).toBe(8_000_000n);
-  });
-});
-
-describe("escrowFeeMinor — the escrow's own rule", () => {
-  it("is the proportional fee rounded down", () => {
-    expect(escrowFeeMinor(1_725n, 50)).toBe(8n); // 8.625
-    expect(escrowFeeMinor(1_437n, 50)).toBe(7n); // 7.185
-    expect(escrowFeeMinor(20_000n, 50)).toBe(100n);
-  });
-
-  it("is never below one unit on a settlement that has a fee, as the contract floors it", () => {
-    expect(escrowFeeMinor(100n, 50)).toBe(1n); // 0.5 rounds to 0, floored to 1
-    expect(escrowFeeMinor(199n, 50)).toBe(1n);
-  });
-
-  it("is nothing on a zero settlement or a zero fee", () => {
-    expect(escrowFeeMinor(0n, 50)).toBe(0n);
-    expect(escrowFeeMinor(1_725n, 0)).toBe(0n);
   });
 });
 

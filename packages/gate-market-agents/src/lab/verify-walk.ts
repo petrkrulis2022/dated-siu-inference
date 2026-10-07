@@ -6,7 +6,7 @@
  *
  * Counts as evidence of nothing but that the plumbing works: a scripted run is never counted (plan §4).
  */
-import { escrowFeeMinor, printNano, resultNano } from "./money.js";
+import { openingMilliSiuPerTrader, openingUsdcMinor, printNano, resultNano, usdcNeededPerTrader } from "./money.js";
 import type { ScriptStatus } from "./scripted-traders.js";
 import type { LabParams } from "./economy.js";
 
@@ -28,7 +28,6 @@ export interface WalkReport {
   scripted: boolean;
   params: LabParams;
   print: { rateUsdPerSiu: string };
-  escrowFeeBps: number;
   economy: { needs: unknown[] };
   abortedBecause?: string;
   contamination?: string;
@@ -38,18 +37,24 @@ export interface WalkReport {
   needsMet: Record<string, number>;
   sales: { requestId: string; kind: "trade" | "rawwork"; delivered: boolean; paidAsset?: string }[];
   paymentMoments: { agentId: string; tool: string; requestId?: string; heldReceivedMilliSiu: string }[];
-  usdcSettlements: { requestId: string; settledMinorUnits: string; quotedMinorUnits: string }[];
   capacityEvents: { kind: string; quantityMilliSiu?: string; settlesRequestId?: string }[];
   operatorActions: { kind: string; [k: string]: unknown }[];
-  snapshots: { label: string; traders: { trader: string; usdcMinor: string; fsiuMilliSiu: string }[] }[];
-  final?: { traders: { trader: string; usdcMinor: string; fsiuMilliSiu: string; needsMet: number; resultNano: string }[] };
+  snapshots: {
+    label: string;
+    traders: { trader: string; usdcMinor: string; fsiuMilliSiu: string }[];
+    issuer: { usdcMinor: string; fsiuMilliSiu: string };
+  }[];
+  final?: {
+    traders: { trader: string; usdcMinor: string; fsiuMilliSiu: string; needsMet: number; resultNano: string }[];
+    issuer: { usdcMinor: string; fsiuMilliSiu: string };
+  };
   measuredBeforeClose?: boolean;
   opening: { usdcMinorPerTrader: string; fsiuMilliSiuPerTrader: string };
   pool: { restored?: boolean };
 }
 
-type Route = "usdc" | "mint_forward" | "held" | "split";
-const ROUTE_OF_TOOL: Record<string, Route> = { pay: "usdc", pay_with_claim: "mint_forward", transfer_claim: "held", settle_split: "split" };
+type Route = "usdc" | "held" | "split";
+const ROUTE_OF_TOOL: Record<string, Route> = { pay: "usdc", transfer_claim: "held", settle_split_held: "split" };
 
 export function verifyLabWalk(r: WalkReport, status?: ScriptStatus): WalkVerdict {
   const checks: WalkCheck[] = [];
@@ -82,15 +87,22 @@ export function verifyLabWalk(r: WalkReport, status?: ScriptStatus): WalkVerdict
     if (kind !== undefined && route !== undefined) routes[kind].add(route);
   }
   const missing = (kind: "trade" | "rawwork", wanted: readonly Route[]): Route[] => wanted.filter((w) => !routes[kind].has(w));
-  const jobMissing = missing("trade", ["usdc", "mint_forward", "held"]);
-  const rawMissing = missing("rawwork", ["usdc", "mint_forward", "held"]);
+  const jobMissing = missing("trade", ["usdc", "held", "split"]);
+  const rawMissing = missing("rawwork", ["usdc", "held", "split"]);
   check("jobs_paid_every_route", jobMissing.length === 0, jobMissing.length === 0 ? `used ${[...routes.trade].join(", ")}` : `not used: ${jobMissing.join(", ")}`);
   check("raw_work_paid_every_route", rawMissing.length === 0, rawMissing.length === 0 ? `used ${[...routes.rawwork].join(", ")}` : `not used: ${rawMissing.join(", ")}`);
 
-  // A split needs about the whole price in dollars (half of it is minted, and a mint is paid for in USDC), so a
-  // trader low on dollars cannot make one: it must happen for some purchase, a job or a unit of raw work.
-  const splits = routes.trade.has("split") || routes.rawwork.has("split");
-  check("some_purchase_paid_by_split", splits, splits ? "a quote was settled partly in each asset" : "no quote was settled partly in each asset");
+  // A split pays from both assets: its claim part must be a real transfer of a held claim, for some amount, keyed to the quote.
+  const splitIds = r.paymentMoments.filter((m) => m.tool === "settle_split_held" && m.requestId !== undefined).map((m) => m.requestId!);
+  const claimPartOf = new Map(
+    r.capacityEvents.filter((e) => e.kind === "transfer_claim" && e.settlesRequestId !== undefined).map((e) => [e.settlesRequestId!, BigInt(e.quantityMilliSiu ?? "0")]),
+  );
+  const noClaimPart = splitIds.filter((id) => (claimPartOf.get(id) ?? 0n) <= 0n);
+  check(
+    "every_split_moved_a_held_claim",
+    splitIds.length > 0 && noClaimPart.length === 0,
+    splitIds.length === 0 ? "no quote was settled partly in each asset" : `${splitIds.length} split(s), ${noClaimPart.length} without a claim part recorded`,
+  );
 
   const passedOn = r.paymentMoments.filter((m) => m.tool === "transfer_claim" && BigInt(m.heldReceivedMilliSiu) > 0n);
   check(
@@ -101,27 +113,41 @@ export function verifyLabWalk(r: WalkReport, status?: ScriptStatus): WalkVerdict
       : "no payment from a balance that included fSIU the payer had received",
   );
 
-  // ---- the operator's side -------------------------------------------------------------------
-  const rebates = r.operatorActions.filter((a) => a.kind === "fee_rebate") as unknown as { requestId: string; settledMinorUnits: string; rebatedMinorUnits: string }[];
-  const wrong = rebates.filter((x) => escrowFeeMinor(BigInt(x.settledMinorUnits), r.escrowFeeBps).toString() !== x.rebatedMinorUnits);
-  check(
-    "fee_rebated_after_every_dollar_settlement",
-    rebates.length === r.usdcSettlements.length && wrong.length === 0 && r.usdcSettlements.length > 0,
-    `${r.usdcSettlements.length} dollar settlements, ${rebates.length} rebates${wrong.length > 0 ? `, ${wrong.length} not equal to the contract's fee` : ""}`,
-  );
-  // A quote paid wholly in dollars settles for the whole quote; one paid partly in claims opens an escrow for the
-  // dollar leg only, so it settles for something between nothing and the whole.
-  const paidAssetOf = new Map(r.sales.map((x) => [x.requestId, x.paidAsset]));
-  const wrongAmount = r.usdcSettlements.filter((s) =>
-    paidAssetOf.get(s.requestId) === "split"
-      ? !(BigInt(s.settledMinorUnits) > 0n && BigInt(s.settledMinorUnits) < BigInt(s.quotedMinorUnits))
-      : s.settledMinorUnits !== s.quotedMinorUnits,
-  );
-  check(
-    "dollar_settlements_in_full",
-    wrongAmount.length === 0,
-    `${wrongAmount.length} dollar settlement(s) not for the amount the escrow held (the whole quote, or the dollar leg of a split)`,
-  );
+  // Each quote paid is paid once, and the loop saw it: no sale is marked paid without a payment, none is paid twice.
+  const momentsPer = new Map<string, number>();
+  for (const m of r.paymentMoments) if (m.requestId !== undefined) momentsPer.set(m.requestId, (momentsPer.get(m.requestId) ?? 0) + 1);
+  const unpaidMoments = r.sales.filter((x) => x.paidAsset !== undefined && (momentsPer.get(x.requestId) ?? 0) !== 1);
+  check("every_paid_sale_has_one_payment", unpaidMoments.length === 0, `${unpaidMoments.length} paid sale(s) without exactly one payment`);
+
+  // ---- no escrow, no fee, nothing minted (D30, D31) -----------------------------------------
+  // Direct settlement moves both assets between the same five wallets and nowhere else, so what the traders and the issuer
+  // hold, together, does not change: a fee, money left in an escrow, a rebate or a mint after the opening would show here.
+  const first = r.snapshots[0];
+  const sum = (s: { traders: { usdcMinor: string; fsiuMilliSiu: string }[]; issuer: { usdcMinor: string; fsiuMilliSiu: string } }, asset: "usdcMinor" | "fsiuMilliSiu"): bigint =>
+    s.traders.reduce((a, t) => a + BigInt(t[asset]), 0n) + BigInt(s.issuer[asset]);
+  if (first !== undefined && r.final !== undefined) {
+    const usdcBefore = sum(first, "usdcMinor");
+    const usdcAfter = sum(r.final, "usdcMinor");
+    const fsiuBefore = sum(first, "fsiuMilliSiu");
+    const fsiuAfter = sum(r.final, "fsiuMilliSiu");
+    check(
+      "usdc_conserved_no_fee_no_escrow",
+      usdcBefore === usdcAfter,
+      usdcBefore === usdcAfter ? `${usdcAfter} USDC minor units across the traders and the issuer, before and after` : `${usdcBefore} before, ${usdcAfter} after`,
+    );
+    check(
+      "fsiu_supply_unchanged",
+      fsiuBefore === fsiuAfter,
+      fsiuBefore === fsiuAfter ? `${fsiuAfter} mSIU across the traders and the issuer, before and after` : `${fsiuBefore} before, ${fsiuAfter} after`,
+    );
+  } else {
+    check("usdc_conserved_no_fee_no_escrow", false, "no opening or final snapshot to compare");
+    check("fsiu_supply_unchanged", false, "no opening or final snapshot to compare");
+  }
+  const created = r.capacityEvents.filter((e) => e.kind === "pay_with_claim" || e.kind === "settle_split" || e.kind === "mint_claim");
+  check("nothing_minted_after_the_opening", created.length === 0, `${created.length} mint event(s) by an agent`);
+  const rebates = r.operatorActions.filter((a) => a.kind === "fee_rebate");
+  check("no_fee_rebated", rebates.length === 0, `${rebates.length} fee rebates (there is no fee)`);
 
   const expiries = r.operatorActions.filter((a) => a.kind === "expiry") as unknown as { quantityMilliSiu: string }[];
   const failedExpiries = r.operatorActions.filter((a) => a.kind === "expiry_failed");
@@ -131,13 +157,10 @@ export function verifyLabWalk(r: WalkReport, status?: ScriptStatus): WalkVerdict
     `${expiries.length} positions expired, ${failedExpiries.length} failed, pool ${r.pool.restored ? "restored" : "NOT restored"}`,
   );
 
-  // fSIU is conserved: what was expired at close is what was handed out plus what was minted in the run.
+  // fSIU is conserved: what was expired at close is exactly the endowment, since nothing is minted in the run.
   const endowed = BigInt(r.opening.fsiuMilliSiuPerTrader) * 4n;
-  const minted = r.capacityEvents
-    .filter((e) => e.kind === "pay_with_claim" || e.kind === "settle_split" || e.kind === "mint_claim")
-    .reduce((s, e) => s + BigInt(e.quantityMilliSiu ?? "0"), 0n);
   const expired = expiries.reduce((s, e) => s + BigInt(e.quantityMilliSiu), 0n);
-  check("fsiu_conserved", expired === endowed + minted, `expired ${expired} = endowment ${endowed} + minted ${minted}`);
+  check("fsiu_conserved", expired === endowed, `expired ${expired} = endowment ${endowed}`);
 
   // ---- the opening, the rounds, the score ---------------------------------------------------
   const opening = r.snapshots[0];
@@ -147,11 +170,25 @@ export function verifyLabWalk(r: WalkReport, status?: ScriptStatus): WalkVerdict
     opening.traders.every((t) => t.usdcMinor === r.opening.usdcMinorPerTrader && t.fsiuMilliSiu === r.opening.fsiuMilliSiuPerTrader);
   check("opening_equal_for_every_trader", uniform, uniform ? `each ${r.opening.usdcMinorPerTrader} USDC minor and ${r.opening.fsiuMilliSiuPerTrader} mSIU` : "the opening snapshot is not uniform");
 
+  // Either asset alone must be enough for every need (D31): the opening is what the print and the schedule say it is.
+  const pn = printNano(r.print.rateUsdPerSiu);
+  const wantFsiu = openingMilliSiuPerTrader(pn, r.params);
+  const wantUsdc = openingUsdcMinor(pn, r.params);
+  const needUsdc = usdcNeededPerTrader(pn, r.params);
+  const sized = r.opening.fsiuMilliSiuPerTrader === wantFsiu.toString() && r.opening.usdcMinorPerTrader === wantUsdc.toString() && wantUsdc >= needUsdc;
+  check(
+    "opening_covers_every_need_in_either_asset",
+    sized,
+    sized
+      ? `${wantFsiu} mSIU, or ${wantUsdc} USDC minor units against the ${needUsdc} every quote comes to`
+      : `opened with ${r.opening.fsiuMilliSiuPerTrader} mSIU and ${r.opening.usdcMinorPerTrader} USDC minor units; the print and schedule give ${wantFsiu} and ${wantUsdc} (needs ${needUsdc})`,
+  );
+
   const labels = r.snapshots.map((s) => s.label);
   const wanted = Array.from({ length: r.params.rounds - 1 }, (_, i) => `round ${i + 2} opened`);
   check("every_round_opened", wanted.every((w) => labels.includes(w)), `snapshots: ${labels.join(", ")}`);
 
-  const p = printNano(r.print.rateUsdPerSiu);
+  const p = pn;
   const recomputed = r.final?.traders.map((t) =>
     resultNano({ usdcMinor: BigInt(t.usdcMinor), fsiuMilliSiu: BigInt(t.fsiuMilliSiu), needsMet: t.needsMet }, p, r.params).toString(),
   );

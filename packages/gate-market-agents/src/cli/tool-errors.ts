@@ -54,7 +54,7 @@ export function refusalsOf(
         const sentence = l.parsed.slice(at + ARGS_MARKER.length);
         // Lab guards and the payment check speak in whole sentences about the lab; a tool's own argument complaint names
         // the tool or a field. The first are refusals, the second a malformed call.
-        const refused = /^(This payment costs|you |a job |a unit |raw work |there is no quote|qr-\d+ )/.test(sentence);
+        const refused = /^(This payment costs|you |a job |a unit |raw work |there is no quote|the claim part|qr-\d+ )/.test(sentence);
         out.push({ agentId, turn: l.turn, kind: refused ? "refused" : "format", sentence });
         continue;
       }
