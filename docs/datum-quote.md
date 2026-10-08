@@ -61,6 +61,22 @@ _Illustrative, matching build1-spec.md §8's own example:_ `siu_max: "1.400"`,
 `rate_usd_per_siu: "0.0483"` → `amount_usd_max: "0.0676"` (1.400 × 0.0483 = 0.06762, rounded
 half-up to 4dp).
 
+### Quote amount precision (optional, named explicitly)
+
+The default above — four decimals, half-up — is build 1's rule and is unchanged. `buildQuoteBody(input, precision?)` and `validateQuote(data,
+precision?)` also take an explicit `QuoteAmountPrecision`, `{ decimals, rounding: "half-up" | "up" }`, for a deployment whose settlement asset has
+more decimals than four (USDC has six) and whose quotes are priced in SIU: it may derive `amount_usd_max` at the asset's own precision and round
+**up** to its smallest unit, so a quote is owed in the dollars its SIU price comes to and not in $0.0001 steps. The minimum quotable amount
+scales with it: one unit of the named precision.
+
+_Illustrative, from the currency lab (docs/marketplace_plan.md, D50):_ `siu: "1.2"` at `rate_usd_per_siu: "0.001437"` is 0.0017244, which at six
+decimals rounded up is `amount_usd_max: "0.001725"` (1725 USDC minor units); a payment in claims costs `siu` itself, 1,200 mSIU, whatever the
+rate. The SIU price does not move with the print; only the dollars do.
+
+This changes no field, no schema and no signature. The precision is **not** part of the signed body: it is a convention between the builder and
+the validator, named by the deployment. A consumer that does not name it validates against the default and rejects a quote built at another
+precision, which is the intended failure — it cannot be read as a quote of the wrong amount. Nothing outside the currency lab names it.
+
 ### Minimum quotable amount
 
 **The floor is `$0.0001`** — the smallest nonzero value representable at `amount_usd_max`'s own
