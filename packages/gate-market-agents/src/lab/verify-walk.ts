@@ -6,7 +6,7 @@
  *
  * Counts as evidence of nothing but that the plumbing works: a scripted run is never counted (plan §4).
  */
-import { claimForUsd, openingMilliSiuPerTrader, openingUsdcMinor, printNano, resultNano, usdcNeededPerTrader } from "./money.js";
+import { decimalToUnits, openingMilliSiuPerTrader, openingUsdcMinor, priceMilliSiu, printNano, quoteTerms, resultNano, usdcNeededPerTrader } from "./money.js";
 import { buildPrintPath, stepDown, stepUp } from "./prints.js";
 import type { ScriptStatus } from "./scripted-traders.js";
 import type { LabParams } from "./economy.js";
@@ -40,7 +40,21 @@ export interface WalkReport {
   toolErrors: { agentId: string; turn: number; tool: string; error: string }[];
   needsMet: Record<string, number>;
   sales: { requestId: string; round: number; kind: "trade" | "rawwork"; delivered: boolean; paidAsset?: string }[];
-  paymentMoments: { agentId: string; tool: string; requestId?: string; heldReceivedMilliSiu: string; quotedUsdMax?: string }[];
+  paymentMoments: {
+    agentId: string;
+    tool: string;
+    requestId?: string;
+    heldReceivedMilliSiu: string;
+    heldTotalMilliSiu?: string;
+    quotedSiu?: string;
+    quoteRateUsdPerSiu?: string;
+    quotedUsdMax?: string;
+  }[];
+  /** What each trader was shown of its own wallet each turn (D50). */
+  holdingsShown: { trader: string; round: number; usdcMinor: string; fsiuMilliSiu: string }[];
+  routeOrder: { assetFirst: string; tools: string[] };
+  /** Where the wallet shown to a trader differed from the chain's at a snapshot (none in a sound run). */
+  holdingsDisagreements: unknown[];
   capacityEvents: { kind: string; quantityMilliSiu?: string; settlesRequestId?: string }[];
   operatorActions: { kind: string; [k: string]: unknown }[];
   snapshots: {
@@ -178,7 +192,7 @@ export function verifyLabWalk(r: WalkReport, status?: ScriptStatus): WalkVerdict
   // Either asset alone must be enough for every need (D31): the opening is what the print and the schedule say it is.
   const pn = printNano(r.print.rateUsdPerSiu);
   const reachable = r.prints.reachableNano.map((x) => BigInt(x));
-  const wantFsiu = openingMilliSiuPerTrader(reachable, r.params);
+  const wantFsiu = openingMilliSiuPerTrader(r.params);
   const wantUsdc = openingUsdcMinor(reachable, r.params);
   const needUsdc = usdcNeededPerTrader(reachable, r.params);
   const sized = r.opening.fsiuMilliSiuPerTrader === wantFsiu.toString() && r.opening.usdcMinorPerTrader === wantUsdc.toString() && wantUsdc >= needUsdc;
@@ -210,16 +224,47 @@ export function verifyLabWalk(r: WalkReport, status?: ScriptStatus): WalkVerdict
       : `the report's prints (${byRound.join(", ")}) are not the seed's walk (${expectedPath.join(", ")}) from the real print ${pn}`,
   );
 
-  // A claim paid against a quote is sized at the print of the round the quote was asked for in, not the print in force when it was paid.
+  // A quote is priced in SIU (D50): its siu is the price (1.2 for a job, 1 for a unit of raw work), its rate is the print of the round it was
+  // asked for in, and its dollars are the SDK's own product at USDC's precision, rounded up.
   const saleOfId = new Map(r.sales.map((x) => [x.requestId, x]));
-  const claimOf = new Map(r.capacityEvents.filter((e) => e.kind === "transfer_claim" && e.settlesRequestId !== undefined).map((e) => [e.settlesRequestId!, BigInt(e.quantityMilliSiu ?? "0")]));
-  const wrongSize = r.paymentMoments.filter((m) => {
-    if (m.tool !== "transfer_claim" || m.requestId === undefined || m.quotedUsdMax === undefined) return false;
+  const mispriced = r.paymentMoments.filter((m) => {
+    if (m.requestId === undefined) return false;
     const sale = saleOfId.get(m.requestId);
     const print = sale === undefined ? undefined : byRound[sale.round - 1];
-    return print === undefined || claimOf.get(m.requestId) !== claimForUsd(m.quotedUsdMax, print);
+    if (sale === undefined || print === undefined || m.quotedSiu === undefined || m.quoteRateUsdPerSiu === undefined) return true;
+    const t = quoteTerms(sale.kind, print, r.params);
+    return decimalToUnits(m.quotedSiu, 3) !== t.milliSiu || decimalToUnits(m.quoteRateUsdPerSiu, 9) !== print || m.quotedUsdMax !== t.usd;
   });
-  check("held_claims_sized_at_the_quotes_print", wrongSize.length === 0, `${wrongSize.length} held-claim payment(s) not the quote's price at its round's print`);
+  check("quotes_are_priced_in_siu_at_their_rounds_print", mispriced.length === 0, `${mispriced.length} payment(s) on a quote whose price in SIU, rate or dollars is not what the lab states`);
+
+  // Paid in claims, a quote costs exactly its price in mSIU at every print: 1,200 for a job and 1,000 for a unit of raw work.
+  const claimOf = new Map(r.capacityEvents.filter((e) => e.kind === "transfer_claim" && e.settlesRequestId !== undefined).map((e) => [e.settlesRequestId!, BigInt(e.quantityMilliSiu ?? "0")]));
+  const wrongSize = r.paymentMoments.filter((m) => {
+    if (m.tool !== "transfer_claim" || m.requestId === undefined) return false;
+    const sale = saleOfId.get(m.requestId);
+    return sale === undefined || claimOf.get(m.requestId) !== priceMilliSiu(sale.kind, r.params);
+  });
+  check("held_claims_cost_the_quotes_price_in_msiu", wrongSize.length === 0, `${wrongSize.length} held-claim payment(s) not exactly the quote's price in mSIU`);
+
+  // What a trader was shown of its wallet is the chain's, and the first screen of each is the opening.
+  const firstShown = new Map<string, WalkReport["holdingsShown"][number]>();
+  for (const h of r.holdingsShown) if (!firstShown.has(h.trader)) firstShown.set(h.trader, h);
+  const wrongOpening = [...firstShown.values()].filter((h) => h.usdcMinor !== r.opening.usdcMinorPerTrader || h.fsiuMilliSiu !== r.opening.fsiuMilliSiuPerTrader);
+  check(
+    "holdings_shown_start_at_the_opening",
+    r.holdingsShown.length > 0 && firstShown.size === 4 && wrongOpening.length === 0,
+    r.holdingsShown.length === 0 ? "no holdings were shown to any trader" : `${firstShown.size} traders shown their wallet; ${wrongOpening.length} first screen(s) not the opening`,
+  );
+  check(
+    "holdings_shown_agree_with_the_chain",
+    r.holdingsDisagreements !== undefined && r.holdingsDisagreements.length === 0,
+    r.holdingsDisagreements === undefined ? "the report does not say" : `${r.holdingsDisagreements.length} snapshot(s) at which the wallet shown to a trader differed from the chain's`,
+  );
+  check(
+    "route_order_recorded",
+    r.routeOrder !== undefined && (r.routeOrder.assetFirst === "usdc" || r.routeOrder.assetFirst === "fsiu") && r.routeOrder.tools.length === 3,
+    r.routeOrder === undefined ? "the report records no route order" : `assets ${r.routeOrder.assetFirst} first; routes ${r.routeOrder.tools.join(", ")}`,
+  );
 
   const final = r.final === undefined ? undefined : byRound[r.final.round - 1];
   const p = final ?? pn;

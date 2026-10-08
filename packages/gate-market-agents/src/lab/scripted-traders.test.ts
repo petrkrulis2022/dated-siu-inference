@@ -8,13 +8,14 @@ import { requestQuoteTool } from "../tools/request-quote.js";
 import { renderLabAction, renderLabInfo } from "./board.js";
 import { LabBooks } from "./books.js";
 import { buildLabBrief } from "./briefs.js";
-import { DEFAULT_PARAMS, LAB_TRADERS, SEAT_OF, buildEconomy, labDisplayName, type TraderLabel } from "./economy.js";
+import { DEFAULT_PARAMS, LAB_TRADERS, SEAT_OF, buildEconomy, type TraderLabel } from "./economy.js";
 import { guardLabCall } from "./guards.js";
 import {
   claimTokenId,
   deliveredIn,
   directoryOf,
   historyOf,
+  holdingsShown,
   myAddress,
   openNeeds,
   owedJobs,
@@ -23,14 +24,15 @@ import {
   unitsHeld,
   whoAmI,
 } from "./lab-cues.js";
-import { jobSiu, printNano, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu } from "./money.js";
+import { priceMilliSiu, printNano, printRate } from "./money.js";
+import { LabService, labQuoteBoard } from "./service.js";
+import { referenceExecutor } from "./jobs.js";
 import { LAB_TRADER_TOOLS } from "./roster.js";
 import { buildPrintPath } from "./prints.js";
 import { LAB_TOOL_DESCRIPTIONS } from "./tools.js";
 import {
   JOB_ROUTES,
   RAW_ROUTES,
-  claimFor,
   decide,
   newMemory,
   plannedJobRoute,
@@ -41,8 +43,13 @@ import {
 } from "./scripted-traders.js";
 
 const economy = buildEconomy(9);
-/** The board exactly as the runner builds it: a requester is shown by its label, never its seat. */
-const PRODUCTION_BOARD = { reservationStep: false, displayName: labDisplayName, requestIdFirst: true, escrow: false } as const;
+/**
+ * The board exactly as the runner builds it: a requester is shown by its label, never its seat, and each request and quote reads as the lab writes it,
+ * in SIU (D50), from the books the lab keeps (`LabService.describeRequest`, `describeQuote`).
+ */
+const boardFor = (books: LabBooks, guard: { readonly printNano: bigint; params: typeof DEFAULT_PARAMS } = { printNano: p, params: DEFAULT_PARAMS }): QuoteBoard => {
+  return labQuoteBoard(new LabService({ books, guard, seed: 9, executorFor: () => referenceExecutor, tokenId: "777" }));
+};
 const PRINT = "0.001437"; // illustrative
 const p = printNano(PRINT);
 const ids = {
@@ -55,18 +62,41 @@ const directory = {
 } as Parameters<typeof buildLabBrief>[0]["directory"];
 const env: ScriptedLabEnv = {
   print: { printId: "print-illustrative", printHash: "0x00", rateUsdPerSiu: PRINT, indexVersion: "SIU-2026a" },
-  rates: { trade: tradeRateUsdPerSiu(p, DEFAULT_PARAMS), raw: rawWorkRateUsdPerSiu(p) },
   params: DEFAULT_PARAMS,
-  sizeSiu: jobSiu(DEFAULT_PARAMS),
   chain: "base-sepolia",
   quoteExpirySeconds: 3600,
   printNano: p,
 };
 
-const fakeBody = (sellerId: string, amount: string): QuoteBody =>
-  ({ schema_version: "2.0", siu: "1", pattern: "fixed", model: "m", rate_usd_per_siu: "0.0017244", amount_usd_max: amount, seller_id: sellerId }) as unknown as QuoteBody;
-const fakeQuote = (sellerId: string, amount: string): TouchstoneQuote =>
-  ({ ...fakeBody(sellerId, amount), print_id: "print-illustrative", settlement: [{ amount_max: "0" }] }) as unknown as TouchstoneQuote;
+/** A request or quote body as v8 states it: its siu is the price in SIU (1.2 for a job, 1 for a unit of raw work) and its rate is the print. */
+const fakeBody = (sellerId: string, kind: "trade" | "rawwork" = "trade"): QuoteBody =>
+  ({
+    schema_version: "2.0",
+    siu: kind === "trade" ? "1.2" : "1",
+    pattern: "fixed",
+    model: "m",
+    rate_usd_per_siu: PRINT,
+    amount_usd_max: kind === "trade" ? "0.001725" : "0.001437",
+    seller_id: sellerId,
+  }) as unknown as QuoteBody;
+const fakeQuote = (sellerId: string, kind: "trade" | "rawwork" = "trade"): TouchstoneQuote =>
+  ({ ...fakeBody(sellerId, kind), print_id: "print-illustrative", expiry: "2026-10-06T11:00:00Z", settlement: [{ amount_max: kind === "trade" ? "1725" : "1437" }] }) as unknown as TouchstoneQuote;
+
+/**
+ * A request, answered, on the board AND in the lab's books, as the loop and the lab record them together: the board's id is the books'.
+ * `buyer` asks `seller` (a trader, or the issuer) for a job or a unit of raw work; the quote is issued unless told not to.
+ */
+function postQuote(books: LabBooks, board: QuoteBoard, buyer: TraderLabel, seller: TraderLabel | "ISSUER", options: { issue?: boolean } = {}): string {
+  const kind = seller === "ISSUER" ? "rawwork" : "trade";
+  const sellerId = seller === "ISSUER" ? ids.issuer : ids.traders[seller];
+  const req = board.postRequest(SEAT_OF[buyer], fakeBody(sellerId, kind));
+  books.requestPosted(req.requestId, buyer, seller);
+  if (options.issue !== false) {
+    board.postIssuedQuote(req.requestId, fakeQuote(sellerId, kind));
+    books.quoteIssued(req.requestId);
+  }
+  return req.requestId;
+}
 
 /** A trader's whole prompt, built by the real renderers: brief, tools, history, board, lab sections. */
 function promptFor(me: TraderLabel, books: LabBooks, board: QuoteBoard, history: ToolCallRecord[] = [], guardOverride?: { readonly printNano: bigint; params: typeof DEFAULT_PARAMS }): string {
@@ -74,7 +104,7 @@ function promptFor(me: TraderLabel, books: LabBooks, board: QuoteBoard, history:
     me,
     economy,
     print: { printId: "print-illustrative", rateUsdPerSiu: PRINT },
-    opening: { fsiuMilliSiu: 4_318n, usdcMinor: 6_205n },
+    opening: { fsiuMilliSiu: 4_400n, usdcMinor: 8_364n },
     address: `0x${"ab".repeat(20)}`,
     directory,
     claim: { tokenId: "777", classLabel: "extract", fromIso: "2026-10-06 10:00:00", untilIso: "2026-10-06 10:25:00" },
@@ -96,7 +126,7 @@ function promptFor(me: TraderLabel, books: LabBooks, board: QuoteBoard, history:
       deliveredGateText: "",
       gateDefeatedText: "",
       forwardInvitation: "",
-      labInfoText: renderLabInfo(books, guard, me),
+      labInfoText: renderLabInfo(books, guard, me, { held: { usdcMinor: 8_364n, fsiuMilliSiu: 4_400n } }),
       labActionText: renderLabAction(books, me),
     },
     LAB_TRADER_TOOLS,
@@ -109,7 +139,7 @@ const call = (turn: number, toolName: string, args: unknown, result: unknown): T
 
 describe("lab cues read what the lab's own renderers write", () => {
   const books = new LabBooks(economy, ids);
-  const board = new QuoteBoard(PRODUCTION_BOARD);
+  const board = boardFor(books);
   // A trader with a need open in round 1; which one depends on the seed.
   const me: TraderLabel = LAB_TRADERS.find((t) => books.openNeeds(t).length > 0)!;
   const prompt = promptFor(me, books, board);
@@ -134,25 +164,48 @@ describe("lab cues read what the lab's own renderers write", () => {
     const need = economy.needs.find((n) => n.round === 1)!;
     b.requestPosted("qr-1", need.buyer, need.seller);
     b.paid("qr-1", "usdc");
-    const text = promptFor(need.seller, b, new QuoteBoard(PRODUCTION_BOARD));
+    const text = promptFor(need.seller, b, boardFor(b));
     expect(owedJobs(text)).toEqual([{ requestId: "qr-1", type: need.type, buyer: need.buyer }]);
     expect(unitsHeld(text)).toBe(0);
   });
 
-  it("reads quotes received with their amounts, and the history in the loop's own format", () => {
-    const bd = new QuoteBoard(PRODUCTION_BOARD);
-    const req = bd.postRequest("ORCHESTRATOR", fakeBody(ids.traders["TRADER-2"], "0.0017"));
-    bd.postIssuedQuote(req.requestId, fakeQuote(ids.traders["TRADER-2"], "0.0017"));
+  it("reads quotes received in SIU, with what each costs in either asset and the print it was priced at, and the history in the loop's own format", () => {
+    const b = new LabBooks(economy, ids);
+    const bd = boardFor(b);
+    // A buyer with a need open in round 1, and the seller of it; the unit of raw work is the same buyer's.
+    const need = economy.needs.find((n) => n.round === 1)!;
+    postQuote(b, bd, need.buyer, need.seller);
+    postQuote(b, bd, need.buyer, "ISSUER");
     const history = [
       call(1, "request_quote", { sellerId: ids.traders["TRADER-2"] }, {}),
       call(2, "deliver_job", { requestId: "qr-9" }, { delivered: true }),
       call(3, "pay", { requestId: "qr-8" }, { error: "no" }),
     ];
-    const text = promptFor("TRADER-1", books, bd, history);
-    expect(receivedQuotes(text)).toEqual([{ requestId: "qr-1", sellerId: ids.traders["TRADER-2"], amountUsd: "0.0017" }]);
+    const text = promptFor(need.buyer, b, bd, history);
+    expect(receivedQuotes(text)).toEqual([
+      { requestId: "qr-1", seller: need.seller, kind: "job", priceSiu: "1.2", amountUsd: "0.001725", claimMilliSiu: 1_200n, printNano: p },
+      { requestId: "qr-2", seller: "ISSUER-B", kind: "raw", priceSiu: "1", amountUsd: "0.001437", claimMilliSiu: 1_000n, printNano: p },
+    ]);
     const parsed = historyOf(text);
     expect(parsed.map((c) => [c.turn, c.tool, c.failed])).toEqual([[1, "request_quote", false], [2, "deliver_job", false], [3, "pay", true]]);
     expect([...deliveredIn(parsed)]).toEqual(["qr-9"]);
+  });
+
+  it("reads the quote line whichever asset the run lists first", () => {
+    const b = new LabBooks(economy, ids);
+    const bd = boardFor(b);
+    const need = economy.needs.find((n) => n.round === 1)!;
+    postQuote(b, bd, need.buyer, need.seller);
+    const flipped = promptFor(need.buyer, b, bd).replace("settle 0.001725 USD or 1,200 mSIU of fSIU", "settle 1,200 mSIU of fSIU or 0.001725 USD");
+    expect(flipped).toContain("settle 1,200 mSIU of fSIU or 0.001725 USD");
+    expect(receivedQuotes(flipped)).toHaveLength(1);
+    expect(receivedQuotes(flipped)).toEqual(receivedQuotes(promptFor(need.buyer, b, bd)));
+  });
+
+  it("reads the holdings line it is shown", () => {
+    expect(holdingsShown(promptFor("TRADER-1", new LabBooks(economy, ids), boardFor(new LabBooks(economy, ids))))).toEqual({ usdcMinor: 8_364n, fsiuMilliSiu: 4_400n });
+    expect(holdingsShown("  YOU HOLD: 4,400 mSIU of fSIU (= 6,323 USDC minor units at this print) and 8,364 USDC minor units (= 5,820 mSIU at this print)")).toEqual({ usdcMinor: 8_364n, fsiuMilliSiu: 4_400n });
+    expect(holdingsShown("nothing here")).toBeUndefined();
   });
 });
 
@@ -164,25 +217,24 @@ describe("the route assignment", () => {
     for (const r of RAW_ROUTES) expect(raws.filter((x) => x === r).length, r).toBeGreaterThanOrEqual(2);
   });
 
-  it("sizes a claim from a quote the way the loop does: the price's worth at the print, rounded up", () => {
-    expect(claimFor("0.0017", p)).toBe(1184n);
-    expect(claimFor("0.0014", p)).toBe(975n);
+  it("pays a quote in claims by its price in SIU, which is what the quote line states: 1,200 mSIU for a job and 1,000 for a unit of raw work", () => {
+    expect(priceMilliSiu("trade", DEFAULT_PARAMS)).toBe(1_200n);
+    expect(priceMilliSiu("rawwork", DEFAULT_PARAMS)).toBe(1_000n);
   });
 });
 
 describe("a scripted trader's decisions", () => {
-  const fresh = (): { mem: Memory; books: LabBooks; board: QuoteBoard } => ({
-    mem: newMemory(),
-    books: new LabBooks(economy, ids),
-    board: new QuoteBoard(PRODUCTION_BOARD),
-  });
+  const fresh = (): { mem: Memory; books: LabBooks; board: QuoteBoard } => {
+    const books = new LabBooks(economy, ids);
+    return { mem: newMemory(), books, board: boardFor(books) };
+  };
 
   it("asks the seller of a need it can buy for a job — a request the lab's own guards and the tool accept", () => {
     const { mem, books, board } = fresh();
     const me: TraderLabel = LAB_TRADERS.find((t) => books.openNeeds(t).length > 0)!;
     const need = books.openNeeds(me)[0];
     const { intent } = decide(promptFor(me, books, board), env, mem);
-    expect(intent).toMatchObject({ tool: "request_quote", args: { sellerId: ids.traders[need.seller], siu: "1", rateUsdPerSiu: "0.0017244", model: `model-of-${need.seller}`, pattern: "fixed" } });
+    expect(intent).toMatchObject({ tool: "request_quote", args: { sellerId: ids.traders[need.seller], siu: "1.2", rateUsdPerSiu: "0.001437", model: `model-of-${need.seller}`, pattern: "fixed" } });
     const args = (intent as { args: Record<string, unknown> }).args;
     expect(guardLabCall(books, { printNano: p, params: DEFAULT_PARAMS }, me, "request_quote", args)).toBeNull();
     expect(requestQuoteTool.argsSchema.safeParse(args).success).toBe(true);
@@ -191,9 +243,9 @@ describe("a scripted trader's decisions", () => {
   it("answers a request addressed to it before anything else", () => {
     const { mem, books, board } = fresh();
     const need = economy.needs.find((n) => n.round === 1)!;
-    const req = board.postRequest(SEAT_OF[need.buyer], fakeBody(ids.traders[need.seller], "0.0017"));
+    const id = postQuote(books, board, need.buyer, need.seller, { issue: false });
     const { intent } = decide(promptFor(need.seller, books, board), env, mem);
-    expect(intent).toEqual({ tool: "issue_quote", args: { requestId: req.requestId } });
+    expect(intent).toEqual({ tool: "issue_quote", args: { requestId: id } });
   });
 
   it("waits when there is nothing to do", () => {
@@ -205,12 +257,11 @@ describe("a scripted trader's decisions", () => {
   describe("paying a received job quote: read the balances, then the planned route if it can be afforded", () => {
     const quoted = (route: "usdc" | "held" | "split") => {
       const s = fresh();
-      // A trader whose first job purchase is assigned this route.
-      const me = LAB_TRADERS.find((t) => plannedJobRoute(t, 0) === route)!;
-      const need = economy.needs.find((n) => n.buyer === me)!;
-      const req = s.board.postRequest(SEAT_OF[me], fakeBody(ids.traders[need.seller], "0.0017"));
-      s.board.postIssuedQuote(req.requestId, fakeQuote(ids.traders[need.seller], "0.0017"));
-      return { ...s, me, need, requestId: req.requestId };
+      // A trader with a need open in round 1 whose first job purchase is assigned this route.
+      const me = LAB_TRADERS.find((t) => s.books.openNeeds(t).length > 0 && plannedJobRoute(t, 0) === route)!;
+      const need = s.books.openNeeds(me)[0];
+      const requestId = postQuote(s.books, s.board, me, need.seller);
+      return { ...s, me, need, requestId };
     };
     /** The history after a `get_balances` at `turn` that found these funds. */
     const read = (turn: number, usdcMinor: number, fsiu: number): ToolCallRecord =>
@@ -235,21 +286,21 @@ describe("a scripted trader's decisions", () => {
       expect(s.mem.status.fellBack).toEqual([]);
     });
 
-    it("split: half of the quote's claim from a held balance, the rest in dollars", () => {
+    it("split: half of the quote's price in mSIU from a held balance, the rest in dollars", () => {
       const s = quoted("split");
-      expect(pays(s, 10_000, 5_000)).toEqual({ tool: "pay_split", args: { requestId: s.requestId, claimQuantityMilliSiu: "592" } });
+      expect(pays(s, 10_000, 5_000)).toEqual({ tool: "pay_split", args: { requestId: s.requestId, claimQuantityMilliSiu: "600" } });
     });
 
     it("split: needs some of each asset — it is not affordable with only one of them", () => {
-      // 592 mSIU from a held balance and 850 minor units in dollars (592 mSIU is worth 850 at this print).
+      // 600 mSIU from a held balance and 863 minor units in dollars (600 mSIU is worth 862 at this print, and the quote is 1,725).
       expect(pays(quoted("split"), 10_000, 100)).toMatchObject({ tool: "pay_with_usdc" }); // too little fSIU: falls back to dollars
       expect(pays(quoted("split"), 100, 5_000)).toMatchObject({ tool: "pay_with_held_claim" }); // too few dollars: falls back to the claim
     });
 
     it("pays a quote by a split when its wallet straddles the two assets and neither alone would pay — the pilot's TRADER-3", () => {
-      // 1,174 USDC against a 1,700 quote and 816 mSIU against a 1,184 claim: neither route alone, but 592 mSIU and 850 USDC.
+      // 1,174 USDC against a 1,725 quote and 816 mSIU against a 1,200 mSIU price: neither route alone, but 600 mSIU and 863 USDC.
       const s = quoted("usdc");
-      expect(pays(s, 1_174, 816)).toEqual({ tool: "pay_split", args: { requestId: s.requestId, claimQuantityMilliSiu: "592" } });
+      expect(pays(s, 1_174, 816)).toEqual({ tool: "pay_split", args: { requestId: s.requestId, claimQuantityMilliSiu: "600" } });
     });
 
     it("held: pay_with_held_claim, by the quote alone, once its balance covers the quote", () => {
@@ -262,7 +313,7 @@ describe("a scripted trader's decisions", () => {
       const s = quoted("held");
       expect(pays(s, 10_000, 100)).toEqual({ tool: "pay_with_usdc", args: { requestId: s.requestId } });
       expect(s.mem.status.fellBack).toEqual([
-        { trader: s.me, requestId: s.requestId, planned: "held", because: "holds 10000 USDC minor units and 100 mSIU; the quote is 1700 and 1184 mSIU" },
+        { trader: s.me, requestId: s.requestId, planned: "held", because: "holds 10000 USDC minor units and 100 mSIU; the quote is 1725 and 1200 mSIU" },
       ]);
     });
 
@@ -286,7 +337,7 @@ describe("a scripted trader's decisions", () => {
       const s = quoted("usdc");
       expect(pays(s, 10, 10)).toEqual({ wait: true });
       expect(s.mem.status.unaffordable).toEqual([
-        { trader: s.me, requestId: s.requestId, usdcMinor: "10", fsiuMilliSiu: "10", needsMinor: "1700", needsMilliSiu: "1184" },
+        { trader: s.me, requestId: s.requestId, usdcMinor: "10", fsiuMilliSiu: "10", needsMinor: "1725", needsMilliSiu: "1200" },
       ]);
     });
 
@@ -338,8 +389,7 @@ describe("a scripted trader's decisions", () => {
 
     it("pays the issuer's quote by the raw-work route the assignment gives", () => {
       const s = paidJob(0);
-      const raw = s.board.postRequest(SEAT_OF[s.need.seller], fakeBody(ids.issuer, "0.0014"));
-      s.board.postIssuedQuote(raw.requestId, fakeQuote(ids.issuer, "0.0014"));
+      postQuote(s.books, s.board, s.need.seller, "ISSUER");
       const route = plannedRawRoute(s.need.seller, 0);
       // It reads its balances first, then pays by the planned route.
       expect(decide(promptFor(s.need.seller, s.books, s.board), env, s.mem).intent).toMatchObject({ tool: "get_balances" });
@@ -357,8 +407,7 @@ describe("a scripted trader's decisions", () => {
 
     it("delivers a job paid in dollars and then has nothing to release: every payment reached it when it was made (D30)", () => {
       const s = paidJob(1);
-      const req = s.board.postRequest(SEAT_OF[s.need.buyer], fakeBody(ids.traders[s.need.seller], "0.0017"));
-      s.board.postIssuedQuote(req.requestId, fakeQuote(ids.traders[s.need.seller], "0.0017"));
+      const req = { requestId: postQuote(s.books, s.board, s.need.buyer, s.need.seller) };
       s.board.recordPaid(req.requestId, "usdc");
       // Paid and not delivered: it delivers (it holds a unit).
       expect(decide(promptFor(s.need.seller, s.books, s.board), env, s.mem).intent).toMatchObject({ tool: "deliver_job" });
@@ -390,7 +439,7 @@ describe("a scripted trader's decisions", () => {
         },
         params: DEFAULT_PARAMS,
       };
-      return promptFor(me, b, new QuoteBoard(PRODUCTION_BOARD), [], guard);
+      return promptFor(me, b, boardFor(b, guard), [], guard);
     };
 
     it("reads the print in force from THE PRINT in the prompt: round 1's in round 1, the latest after a move", () => {
@@ -404,7 +453,7 @@ describe("a scripted trader's decisions", () => {
       expect(printInForce("  Round 2: TRADER-1 needs TYPE-3 from TRADER-2 (not yet open).")).toBeUndefined();
     });
 
-    it("asks for a job at the rate of the round in force, as the guard will insist", () => {
+    it("asks for a job at its price in SIU and the print of the round in force as the rate, as the guard will insist", () => {
       for (const round of [1, 2, 3]) {
         const mem = newMemory();
         const buyer = LAB_TRADERS.find((t) => {
@@ -414,7 +463,7 @@ describe("a scripted trader's decisions", () => {
         })!;
         const prompt = movingPrompt(round, buyer);
         const { intent } = decide(prompt, env, mem);
-        expect(intent, `round ${round}`).toMatchObject({ tool: "request_quote", args: { rateUsdPerSiu: tradeRateUsdPerSiu(path.byRound[round - 1], DEFAULT_PARAMS) } });
+        expect(intent, `round ${round}`).toMatchObject({ tool: "request_quote", args: { siu: "1.2", rateUsdPerSiu: printRate(path.byRound[round - 1]) } });
         const b = new LabBooks(economy, ids, path);
         for (let i = 1; i < round; i++) b.advanceRound();
         const args = (intent as { args: Record<string, unknown> }).args;

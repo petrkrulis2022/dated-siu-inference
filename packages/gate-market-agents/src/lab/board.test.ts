@@ -4,6 +4,7 @@ import { LabBooks } from "./books.js";
 import { DEFAULT_PARAMS, LAB_TRADERS, buildEconomy, type Economy, type TraderLabel } from "./economy.js";
 import type { GuardConfig } from "./guards.js";
 import { buildPrintPath, describeMove, printText } from "./prints.js";
+import { fmt } from "./quote-text.js";
 
 const ids = {
   traders: Object.fromEntries(LAB_TRADERS.map((t) => [t, `erc8004:0x${t}`])) as Record<TraderLabel, string>,
@@ -23,8 +24,9 @@ describe("the lab board", () => {
     const text = renderLabInfo(books, cfg, "TRADER-2");
     expect(text).toContain("ROUND 1 OF 3");
     expect(text).toContain(`You are TRADER-2. You deliver ${economy.skillOf["TRADER-2"]} jobs, and only you can.`);
-    expect(text).toContain("A job is 1 SIU, priced at 0.0017244 USD per SIU; its quote is 0.0017 USD.");
-    expect(text).toContain("sold by ISSUER-B at the print, 0.001437 USD per SIU; its quote is 0.0014 USD.");
+    // A quote is priced in SIU (D50): the job at 1.2, the unit at 1; then what settling costs in each asset at the round's print.
+    expect(text).toContain("A job is 1 SIU of work, priced at 1.2 SIU; at this round's print, 0.001437 USD per SIU, its quote settles at 0.001725 USD or 1,200 mSIU of fSIU.");
+    expect(text).toContain("A unit of raw work is 1 SIU of work, sold by ISSUER-B at 1 SIU; at this round's print its quote settles at 0.001437 USD or 1,000 mSIU of fSIU.");
     for (const t of LAB_TRADERS) expect(text).toContain(`${t} delivers ${economy.skillOf[t]}.`);
     for (const n of economy.needs) expect(text).toContain(`${n.buyer} needs ${n.type} from ${n.seller}`);
   });
@@ -83,15 +85,52 @@ describe("the lab board", () => {
     expect(after).not.toContain("You owe 1 delivery");
   });
 
-  it("never names either asset or advises, in anything it shows", () => {
+  it("never advises, in anything it shows: it names both assets, as prices and holdings, and says nothing of which to use", () => {
     const need = economy.needs.find((n) => n.round === 1)!;
     books.requestPosted("qr-1", need.buyer, need.seller);
     books.paid("qr-1", "usdc");
     for (const t of LAB_TRADERS) {
       for (const text of [renderLabInfo(books, cfg, t), renderLabAction(books, t)]) {
-        expect(text).not.toMatch(/usdc|fsiu|claim|escrow|mint|redeem|hold on|should|better|cheaper|prefer|keep |convert/i);
+        expect(text).not.toMatch(/claim|escrow|mint|redeem|hold on|should|better|cheaper|prefer|keep |convert/i);
       }
     }
+  });
+
+  describe("what a trader holds, and the order the assets are named in (D50)", () => {
+    const held = { usdcMinor: 8_364n, fsiuMilliSiu: 4_400n };
+
+    it("states both holdings, each in the other's terms at the print in force, when the chain read supplied them", () => {
+      const text = renderLabInfo(books, cfg, "TRADER-1", { held });
+      expect(text).toContain(
+        "  YOU HOLD: 8,364 USDC minor units (= 5,820 mSIU at this print) and 4,400 mSIU of fSIU (= 6,323 USDC minor units at this print)",
+      );
+    });
+
+    it("leaves the line out rather than guess a wallet when there is no read", () => {
+      expect(renderLabInfo(books, cfg, "TRADER-1")).not.toContain("YOU HOLD");
+    });
+
+    it("converts at the print in force, which moves: the same wallet reads differently in round 2", () => {
+      const path = buildPrintPath(9, 1_437_000n, DEFAULT_PARAMS, "real-print");
+      const b = new LabBooks(economy, ids, path);
+      b.advanceRound();
+      const p2 = path.byRound[1];
+      const text = renderLabInfo(b, { printNano: p2, params: DEFAULT_PARAMS }, "TRADER-1", { held });
+      expect(text).toContain(`(= ${fmt((8_364n * 1_000_000n + p2 / 2n) / p2)} mSIU at this print)`);
+      expect(text).not.toContain("(= 5,820 mSIU at this print)");
+    });
+
+    it("names the assets in the run's seeded order: fSIU first flips the holdings line and each settling cost", () => {
+      const text = renderLabInfo(books, cfg, "TRADER-1", { held, order: { assetFirst: "fsiu", tools: ["pay_split", "pay_with_usdc", "pay_with_held_claim"] } });
+      expect(text).toContain("YOU HOLD: 4,400 mSIU of fSIU (= 6,323 USDC minor units at this print) and 8,364 USDC minor units (= 5,820 mSIU at this print)");
+      expect(text).toContain("its quote settles at 1,200 mSIU of fSIU or 0.001725 USD.");
+      expect(text).toContain("its quote settles at 1,000 mSIU of fSIU or 0.001437 USD.");
+    });
+
+    it("says nothing about which asset to use or keep", () => {
+      const text = renderLabInfo(books, cfg, "TRADER-1", { held });
+      expect(text).not.toMatch(/\b(hedge|spend|prefer|should|expect|cheaper|dearer|gain|better)\b/i);
+    });
   });
 
   describe("the print and its moves (D41)", () => {
@@ -122,7 +161,10 @@ describe("the lab board", () => {
       b.advanceRound();
       const p2 = path.byRound[1];
       const text = renderLabInfo(b, { printNano: p2, params: DEFAULT_PARAMS }, "TRADER-1");
-      expect(text).toContain(`sold by ISSUER-B at the print, ${printText(p2)} USD per SIU`);
+      expect(text).toContain(`at this round's print, ${printText(p2)} USD per SIU`);
+      // Its quotes settle at the round's dollars, and the price in SIU is the same as in round 1.
+      expect(text).toContain("A job is 1 SIU of work, priced at 1.2 SIU;");
+      expect(text).toContain("its quote settles at 0.001984 USD or 1,200 mSIU of fSIU.");
     });
 
     it("says nothing about what a move means, or which asset to hold: facts only", () => {

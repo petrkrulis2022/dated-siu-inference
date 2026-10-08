@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseModelResponse } from "../loop/parse-tool-call.js";
-import { EMPHASIS_GAP, decisionsOf, isPayment, rationaleCoverage, type DecisionRecord } from "./decisions.js";
+import { EMPHASIS_GAP, RAW_EXCERPT_CHARS, THINKING_EXCERPT_CHARS, decisionsOf, isPayment, rationaleCoverage, type DecisionRecord } from "./decisions.js";
 
 const prompt = (round: number): string => `...\nTHE LAB — ROUND ${round} OF 3\n  You are TRADER-1.\n...`;
 const turn = (n: number, rawText: string, round = 1) => ({ turn: n, rawText, promptText: prompt(round) });
@@ -10,7 +10,10 @@ describe("decisions, read from the model's raw reply by the loop's own parser", 
     const [d] = decisionsOf({
       ORCHESTRATOR: [turn(2, '{"tool":"pay_with_usdc","args":{"requestId":"qr-1"},"rationale":"to meet my first need"}', 2)],
     });
-    expect(d).toEqual({ agentId: "ORCHESTRATOR", turn: 2, round: 2, tool: "pay_with_usdc", requestId: "qr-1", rationale: "to meet my first need" });
+    expect(d).toMatchObject({ agentId: "ORCHESTRATOR", turn: 2, round: 2, tool: "pay_with_usdc", requestId: "qr-1", rationale: "to meet my first need" });
+    // And the raw reply it was read from, and what the call came to.
+    expect(d.raw).toBe('{"tool":"pay_with_usdc","args":{"requestId":"qr-1"},"rationale":"to meet my first need"}');
+    expect(d.outcome).toBe("paid");
   });
 
   it("reads a reply in a code fence and one with trailing text the way the loop does, so what counts as a decision here counted in the run", () => {
@@ -86,5 +89,58 @@ describe("the emphasis check", () => {
 
   it("does not flag on too few calls to say", () => {
     expect(rationaleCoverage([...many("pay_with_usdc", 3, 3), ...many("request_quote", 3, 0)]).emphasis).toBe(false);
+  });
+});
+
+describe("what each decision carries beyond its reason (D52)", () => {
+  const pay = '{"tool":"pay_with_usdc","args":{"requestId":"qr-1"},"rationale":"r"}';
+
+  it("keeps the loop's own place in the run's one order of turns, which each agent's turn counter cannot give", () => {
+    const rows = decisionsOf({ A: [{ ...turn(1, pay), seq: 5 }], B: [{ ...turn(1, pay), seq: 2 }] });
+    expect(rows.map((d) => [d.agentId, d.seq])).toEqual([["A", 5], ["B", 2]]);
+  });
+
+  it("keeps the raw reply, authoritative, and states a cut", () => {
+    const long = `{"wait":true,"rationale":"${"x".repeat(RAW_EXCERPT_CHARS * 3)}"}`;
+    const [d] = decisionsOf({ A: [turn(1, long)] });
+    expect(d.raw!.length).toBeLessThan(long.length);
+    expect(d.raw).toContain(`[…cut at ${RAW_EXCERPT_CHARS} of ${long.length} characters]`);
+  });
+
+  it("keeps any reasoning the provider returned, cut and said so, and the reasoning tokens billed whether or not the text came back", () => {
+    const [a, b] = decisionsOf({
+      A: [
+        { ...turn(1, pay), thinking: "I weigh the two routes.", usage: { reasoning: 201 } },
+        { ...turn(2, pay), thinking: "y".repeat(THINKING_EXCERPT_CHARS + 10), usage: { reasoning: 0 } },
+      ],
+    });
+    expect(a.thinking).toBe("I weigh the two routes.");
+    expect(a.reasoningTokens).toBe(201);
+    expect(b.thinking).toContain(`[…cut at ${THINKING_EXCERPT_CHARS} of ${THINKING_EXCERPT_CHARS + 10} characters]`);
+    const [none] = decisionsOf({ A: [{ ...turn(1, pay), usage: { reasoning: 1_400 } }] });
+    expect("thinking" in none).toBe(false);
+    expect(none.reasoningTokens).toBe(1_400);
+  });
+
+  it("says what a call came to: paid, a request and its id, quoted, delivered or not, waited", () => {
+    const event = (requestId?: string, result?: unknown) => () => ({ ...(requestId !== undefined ? { requestId } : {}), result });
+    const one = (raw: string, ev?: ReturnType<typeof event>) => decisionsOf({ A: [turn(1, raw)] }, ev ?? (() => undefined))[0];
+    expect(one(pay).outcome).toBe("paid");
+    const ask = one('{"tool":"request_quote","args":{"sellerId":"s"}}', event("qr-3"));
+    expect(ask.outcome).toBe("asked for a quote, qr-3");
+    // A request names no id of its own; the lab's record of the request it posted supplies it.
+    expect(ask.requestId).toBe("qr-3");
+    expect(one('{"tool":"issue_quote","args":{"requestId":"qr-3"}}').outcome).toBe("quoted");
+    expect(one('{"tool":"deliver_job","args":{"requestId":"qr-3"}}', event(undefined, { delivered: true })).outcome).toBe("delivered");
+    expect(one('{"tool":"deliver_job","args":{"requestId":"qr-3"}}', event(undefined, { delivered: false, reason: "the output did not match" })).outcome).toBe("not delivered: the output did not match");
+    expect(one('{"wait":true}').outcome).toBe("waited");
+    expect(one('{"done":true,"summary":"s"}').outcome).toBe("finished");
+  });
+
+  it("states a refusal with the lab's own sentence, and an error with the tool's", () => {
+    const [refused] = decisionsOf({ A: [{ ...turn(1, pay), parsed: `${pay} -> args error: a job is priced at 1.2 SIU.`, toolCall: undefined }] });
+    expect(refused.outcome).toBe("refused before it ran: a job is priced at 1.2 SIU.");
+    const [errored] = decisionsOf({ A: [{ ...turn(1, pay), parsed: `${pay} -> tool call error: the node reverted`, toolCall: { name: "pay", ok: false } }] });
+    expect(errored.outcome).toBe("errored: the node reverted");
   });
 });

@@ -15,8 +15,10 @@
  */
 import { LAB_ASSET_DESCRIPTION } from "./asset-text.js";
 import { ISSUER_SEAT, LAB_TRADERS, needsOf, type Economy, type TraderLabel } from "./economy.js";
-import { jobSiu, printNano, unitsToDecimal } from "./money.js";
+import { jobSiu, priceSiu, printNano, unitsToDecimal } from "./money.js";
 import { MAX_DELIVERY_ATTEMPTS } from "./books.js";
+import { fmt } from "./quote-text.js";
+import { FIXED_ROUTE_ORDER, inAssetOrder, type PayTool, type RouteOrder } from "./route-order.js";
 
 export type Counterparty = TraderLabel | "ISSUER";
 
@@ -25,8 +27,10 @@ export interface LabBriefInput {
   economy: Economy;
   /** Round 1's print: the real print the lab starts from. Later rounds' prints move (D41) and are shown on each turn. */
   print: { printId: string; rateUsdPerSiu: string };
-  /** What each trader opens with: the fSIU, and the USDC. Derived from the print and the schedule (D31, D41). */
+  /** What each trader opens with: the fSIU, and the USDC. Derived from the schedule and the highest print the walk can reach (D31, D41, D50). */
   opening: { fsiuMilliSiu: bigint; usdcMinor: bigint };
+  /** The run's seeded order of routes and assets (D50): the same for every reader. Defaults to the fixed order, for a test with no seed. */
+  order?: RouteOrder;
   /** This trader's own address, which every `get_balances` call about itself names. */
   address: string;
   /**
@@ -43,6 +47,13 @@ export interface LabBriefInput {
 }
 
 const INDEX_VERSION = "SIU-2026a";
+
+/** Each payment route's example call, one line each, so the brief can list them in the run's order. */
+const PAY_EXAMPLE: Readonly<Record<PayTool, string>> = {
+  pay_with_usdc: `    {"tool": "pay_with_usdc", "args": {"requestId": "<the requestId>"}}`,
+  pay_with_held_claim: `    {"tool": "pay_with_held_claim", "args": {"requestId": "<the requestId>"}}`,
+  pay_split: `    {"tool": "pay_split", "args": {"requestId": "<the requestId>", "claimQuantityMilliSiu": "<mSIU of the claim part>"}}`,
+};
 
 /** Who the reader is, and the three things that differ between traders: skill, needs, address. */
 function personalBlock(i: LabBriefInput): string {
@@ -61,10 +72,23 @@ function sharedBlock(i: LabBriefInput): string {
   const e = i.economy;
   const p = e.params;
   const size = jobSiu(p);
+  const order = i.order ?? FIXED_ROUTE_ORDER;
+  const jobPrice = priceSiu("trade", p);
+  const rawPrice = priceSiu("rawwork", p);
   const tradeMultiple = unitsToDecimal(BigInt(p.tradeMultiplierBps), 4);
   const creditMultiple = unitsToDecimal(BigInt(p.creditMultiplierBps), 4);
   const openingUsdc = unitsToDecimal(i.opening.usdcMinor * 1000n, 9);
   const openingMilliSiu = i.opening.fsiuMilliSiu;
+  const [openFirst, openSecond] = inAssetOrder(
+    order,
+    `${fmt(i.opening.usdcMinor)} USDC minor units (${openingUsdc} USD)`,
+    `${unitsToDecimal(openingMilliSiu, 3)} SIU of fSIU (${fmt(openingMilliSiu)} mSIU)`,
+  );
+  const [costFirst, costSecond] = inAssetOrder(
+    order,
+    "Paying in USDC costs the USD amount the quote states.",
+    "Paying with fSIU you hold costs the mSIU of fSIU the quote states.",
+  );
   const round1Print = unitsToDecimal(printNano(i.print.rateUsdPerSiu), 9);
   const traderLines = LAB_TRADERS.map(
     (t) =>
@@ -87,36 +111,37 @@ ${traderLines.join("\n")}
 THE PRINT
   The print can move at each round. It is a scenario value used only inside this lab; it is not the
   published index. Round 1's print is ${round1Print} USD per SIU. Your turn shows the print of every round so far
-  and how much it moved. A quote is priced from the print of the round it is asked for in, and keeps that price.
+  and how much it moved. A quote is priced in SIU. What settling it costs in dollars is its price in SIU times the print of the
+  round it is asked for in, and once it is asked for, its price in SIU and its dollars do not change.
 
 JOBS
-  A job is ${size} SIU. A job of a type is delivered only by the trader whose skill it is. A job's
-  price is ${tradeMultiple} times the print per SIU; your turn shows the price and the quote for the round in force.
+  A job is ${size} SIU of work. A job of a type is delivered only by the trader whose skill it is. A job's
+  price is ${jobPrice} SIU (${tradeMultiple} times its size); your turn shows what that price settles at, in each asset, for the round in force.
   A quote request for a job is accepted only for a job you currently need, from the trader who delivers
-  that type, at that size and that price.
+  that type, at that price.
 
 RAW WORK
-  Delivering a job uses one unit of raw work. ${ISSUER_SEAT} sells units: a unit is ${size} SIU at the
-  print, so its price is the print per SIU; your turn shows the price and the quote for the round in force.
+  Delivering a job uses one unit of raw work. ${ISSUER_SEAT} sells units: a unit is ${size} SIU of work and its
+  price is ${rawPrice} SIU; your turn shows what that price settles at, in each asset, for the round in force.
   A unit is credited to you when its quote is paid, and is used up when a delivery you make passes. A quote
   request to ${ISSUER_SEAT} is accepted only while you owe more deliveries than you hold units of raw work.
 
 HOW TO BUY
   Step 1 — ask the seller for a quote (a job from its trader, or a unit from ${ISSUER_SEAT}; take sellerId
-  and model from THE TRADERS above, and use the rate your turn states for what you are buying, in the round in force):
-    {"tool": "request_quote", "args": {"siu": "${size}", "model": "<model>",
-      "rateUsdPerSiu": "<rate>", "indexVersion": "${INDEX_VERSION}", "printId": "${i.print.printId}",
+  and model from THE TRADERS above). A request's siu is the price in SIU of what you are buying (${jobPrice} for a job, ${rawPrice} for
+  a unit of raw work), and its rateUsdPerSiu is the print of the round in force, which your turn states:
+    {"tool": "request_quote", "args": {"siu": "<the price in SIU>", "model": "<model>",
+      "rateUsdPerSiu": "<the print>", "indexVersion": "${INDEX_VERSION}", "printId": "${i.print.printId}",
       "printHash": "0x00", "sellerId": "<sellerId>", "chain": "${i.chain}",
       "expiresInSeconds": 3600, "pattern": "fixed"}}
   Step 2 — the seller answers; the quote appears on your board as "Quotes you have received".
   Step 3 — settle it, by any of these. Each names the quote by its requestId, each works for a job and for a
   unit of raw work alike, and each reaches the seller at the moment you make it:
-    {"tool": "pay_with_usdc", "args": {"requestId": "<the requestId>"}}
-    {"tool": "pay_with_held_claim", "args": {"requestId": "<the requestId>"}}
-    {"tool": "pay_split", "args": {"requestId": "<the requestId>", "claimQuantityMilliSiu": "<mSIU of the claim part>"}}
+${order.tools.map((t) => PAY_EXAMPLE[t]).join("\n")}
   WHAT EACH COSTS
-    Paying in USDC costs USDC. Paying with fSIU you hold costs that fSIU. Paying with both costs the fSIU you give
-    and the rest of the price in USDC.
+    A quote states what settling it costs in each asset. ${costFirst} ${costSecond} Paying with both costs
+    the mSIU of fSIU you give as the claim part, and the rest of the quote's USD amount in USDC, the claim part being valued at the
+    print the quote was priced at.
 
 IF YOU ARE THE SELLER OF A JOB
   A request addressed to you appears on your board. {"tool": "issue_quote", "args": {"requestId": "<id>"}}
@@ -129,8 +154,8 @@ IF YOU ARE THE SELLER OF A JOB
 
 THE FSIU IN THIS LAB
   All fSIU here is one token: tokenId ${i.claim.tokenId}, class ${i.claim.classLabel}, issued by ${ISSUER_SEAT}, for this lab's
-  window. Each trader opened the lab holding ${unitsToDecimal(openingMilliSiu, 3)} SIU of it (${openingMilliSiu} mSIU) and ${openingUsdc} USD in USDC.
-  The fSIU in the lab is that opening supply. Nothing creates more during the run.
+  window. Each trader opened the lab holding ${openFirst} and ${openSecond}.
+  The fSIU in the lab is that opening supply. Nothing creates more during the run. Your turn shows what you hold, in both assets.
   {"tool": "get_balances", "args": {"account": "<an address>", "tokenIds": ["${i.claim.tokenId}"]}} reads a balance.
 
 ${LAB_ASSET_DESCRIPTION}

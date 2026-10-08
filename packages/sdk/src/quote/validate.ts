@@ -1,8 +1,8 @@
 import type { TouchstoneQuote } from "../types/generated/datum-quote.schema.js";
 import type { ValidationResult } from "../validation/types.js";
 import { validateTouchstoneQuote } from "../validation/datum-quote.js";
-import { D, roundHalfUp, usdToMinorUnits, usdcAddressFor } from "../money/index.js";
-import { QUOTE_AMOUNT_DP, MINIMUM_QUOTABLE_USD } from "./build.js";
+import { D, usdToMinorUnits, usdcAddressFor } from "../money/index.js";
+import { DEFAULT_QUOTE_AMOUNT_PRECISION, roundQuoteAmount, type QuoteAmountPrecision } from "./build.js";
 
 /**
  * Everything ajv's schema check (`validateTouchstoneQuote`) cannot express: `if/then` covers
@@ -14,7 +14,8 @@ import { QUOTE_AMOUNT_DP, MINIMUM_QUOTABLE_USD } from "./build.js";
  * become invalid at a clock tick, only stale. Expiration and spending limits are payer
  * decisions, made by `quote/mandate.ts`'s `checkSpendingMandate`, not shape validity.
  */
-export function validateQuote(data: unknown): ValidationResult<TouchstoneQuote> {
+export function validateQuote(data: unknown, precision: QuoteAmountPrecision = DEFAULT_QUOTE_AMOUNT_PRECISION): ValidationResult<TouchstoneQuote> {
+  const minimumQuotable = roundQuoteAmount(new D(1).dividedBy(new D(10).pow(precision.decimals)), { decimals: precision.decimals, rounding: "half-up" });
   const schemaCheck = validateTouchstoneQuote(data);
   if (!schemaCheck.valid) {
     return schemaCheck;
@@ -51,15 +52,12 @@ export function validateQuote(data: unknown): ValidationResult<TouchstoneQuote> 
   // comparison while charging an unrelated dollar amount.
   const siuForAmount = quote.pattern === "fixed" ? quote.siu : quote.siu_max;
   if (siuForAmount !== undefined) {
-    const expectedAmount = roundHalfUp(
-      new D(siuForAmount).times(quote.rate_usd_per_siu),
-      QUOTE_AMOUNT_DP,
-    );
+    const expectedAmount = roundQuoteAmount(new D(siuForAmount).times(quote.rate_usd_per_siu), precision);
     if (expectedAmount !== quote.amount_usd_max) {
       const basis = quote.pattern === "fixed" ? "siu" : "siu_max";
       errors.push(
         `amount_usd_max (${quote.amount_usd_max}) does not equal ${basis} × rate_usd_per_siu ` +
-          `rounded to ${QUOTE_AMOUNT_DP}dp (expected ${expectedAmount})`,
+          `rounded ${precision.rounding === "up" ? "up" : "half-up"} to ${precision.decimals}dp (expected ${expectedAmount})`,
       );
     }
   }
@@ -69,10 +67,10 @@ export function validateQuote(data: unknown): ValidationResult<TouchstoneQuote> 
   // zero maxAmount — hit live in P14. Rejected rather than rounded up: rounding up would charge
   // the buyer more than the seller's real cost, an invented number. A seller whose true cost
   // rounds to zero must batch calls into one quote or widen a cap/estimate ceiling instead.
-  if (new D(quote.amount_usd_max).lessThan(MINIMUM_QUOTABLE_USD)) {
+  if (new D(quote.amount_usd_max).lessThan(minimumQuotable)) {
     errors.push(
       `amount_usd_max (${quote.amount_usd_max}) is below the minimum quotable amount ` +
-        `(${MINIMUM_QUOTABLE_USD}) — see docs/datum-quote.md's "Minimum quotable amount". Batch ` +
+        `(${minimumQuotable}) — see docs/datum-quote.md's "Minimum quotable amount". Batch ` +
         `multiple calls into one quote, or widen a cap/estimate pattern's ceiling, instead of ` +
         `issuing an unpayable quote.`,
     );

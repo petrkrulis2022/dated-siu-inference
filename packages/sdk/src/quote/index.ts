@@ -1,8 +1,11 @@
 export {
   buildQuoteBody,
   QUOTE_AMOUNT_DP,
+  DEFAULT_QUOTE_AMOUNT_PRECISION,
+  roundQuoteAmount,
   MINIMUM_QUOTABLE_USD,
   QUOTE_SCHEMA_VERSION,
+  type QuoteAmountPrecision,
   type QuoteBody,
   type QuoteBuildInput,
 } from "./build.js";

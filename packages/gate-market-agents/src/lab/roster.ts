@@ -16,6 +16,7 @@ import type { ToolName } from "../tools/index.js";
 import { buildLabBrief } from "./briefs.js";
 import { ISSUER_SEAT, LAB_TRADERS, SEAT_OF, type Economy, type TraderLabel } from "./economy.js";
 import { ISSUER_SERVICE_TOOLS, issuerServiceAdapter } from "./issuer-service.js";
+import { FIXED_ROUTE_ORDER, type RouteOrder } from "./route-order.js";
 
 /**
  * Three families (instrument v7, D47): claude-haiku-4-5 on TRADER-1 and TRADER-3 (Anthropic), gpt-5.1 on TRADER-2 (OpenAI), grok-4.6 on
@@ -62,8 +63,10 @@ export interface LabRosterInput {
   rpcUrl: string;
   /** One adapter per trader; the runner builds them from the models below. */
   adapters: Readonly<Record<TraderLabel, Adapter>>;
-  /** What each trader opens with, from the print and the schedule: stated in the brief. */
+  /** What each trader opens with, from the schedule and the highest print the walk can reach: stated in the brief. */
   opening: { fsiuMilliSiu: bigint; usdcMinor: bigint };
+  /** The run's seeded order of routes and assets (D50). Defaults to the fixed order, for a test with no seed. */
+  order?: RouteOrder;
   /** Prices to cost each model's turns at. */
   prices: Readonly<Record<string, ModelPrices>>;
   /** Defaults to `LAB_MODELS`. */
@@ -109,6 +112,7 @@ export function buildLabRoster(input: LabRosterInput): RosterAgentConfig[] {
         economy: input.economy,
         print: input.print,
         opening: input.opening,
+        order: input.order ?? FIXED_ROUTE_ORDER,
         address: addressOf(seat),
         directory,
         claim: input.claim,

@@ -11,8 +11,8 @@ const MARKER = " -> tool call error: ";
  */
 export function toolErrorsOf(
   turnLogsByAgent: Readonly<Record<string, readonly TurnLog[]>>,
-): { agentId: string; turn: number; tool: string; error: string }[] {
-  const out: { agentId: string; turn: number; tool: string; error: string }[] = [];
+): { agentId: string; turn: number; seq?: number; tool: string; error: string }[] {
+  const out: { agentId: string; turn: number; seq?: number; tool: string; error: string }[] = [];
   for (const [agentId, logs] of Object.entries(turnLogsByAgent)) {
     for (const l of logs) {
       if (l.toolCall === undefined || l.toolCall.ok) continue;
@@ -20,6 +20,7 @@ export function toolErrorsOf(
       out.push({
         agentId,
         turn: l.turn,
+        ...(l.seq !== undefined ? { seq: l.seq } : {}),
         tool: l.toolCall.name,
         error: at === -1 ? l.parsed : l.parsed.slice(at + MARKER.length),
       });
@@ -41,12 +42,12 @@ const REFUSED_MARKER = " -> tool call error: ";
  */
 export function refusalsOf(
   turnLogsByAgent: Readonly<Record<string, readonly TurnLog[]>>,
-): { agentId: string; turn: number; kind: "format" | "refused"; sentence: string }[] {
-  const out: { agentId: string; turn: number; kind: "format" | "refused"; sentence: string }[] = [];
+): { agentId: string; turn: number; seq?: number; kind: "format" | "refused"; sentence: string }[] {
+  const out: { agentId: string; turn: number; seq?: number; kind: "format" | "refused"; sentence: string }[] = [];
   for (const [agentId, logs] of Object.entries(turnLogsByAgent)) {
     for (const l of logs) {
       if (l.parsed.startsWith("Unparseable model response")) {
-        out.push({ agentId, turn: l.turn, kind: "format", sentence: l.parsed.slice(0, 200) });
+        out.push({ agentId, turn: l.turn, ...(l.seq !== undefined ? { seq: l.seq } : {}), kind: "format", sentence: l.parsed.slice(0, 200) });
         continue;
       }
       const at = l.parsed.indexOf(ARGS_MARKER);
@@ -54,14 +55,14 @@ export function refusalsOf(
         const sentence = l.parsed.slice(at + ARGS_MARKER.length);
         // Lab guards and the payment check speak in whole sentences about the lab; a tool's own argument complaint names
         // the tool or a field. The first are refusals, the second a malformed call.
-        const refused = /^(This payment costs|you |a job |a unit |raw work |there is no quote|the claim part|qr-\d+ )/.test(sentence);
-        out.push({ agentId, turn: l.turn, kind: refused ? "refused" : "format", sentence });
+        const refused = /^(This payment costs|you |a job |a unit |a quote's |raw work |there is no quote|the claim part|qr-\d+ )/.test(sentence);
+        out.push({ agentId, turn: l.turn, ...(l.seq !== undefined ? { seq: l.seq } : {}), kind: refused ? "refused" : "format", sentence });
         continue;
       }
       // A call by a name the agent was not given is refused before it runs, and so carries no `toolCall` mark.
       if (l.toolCall === undefined) {
         const r = l.parsed.indexOf(REFUSED_MARKER);
-        if (r !== -1) out.push({ agentId, turn: l.turn, kind: "format", sentence: l.parsed.slice(r + REFUSED_MARKER.length) });
+        if (r !== -1) out.push({ agentId, turn: l.turn, ...(l.seq !== undefined ? { seq: l.seq } : {}), kind: "format", sentence: l.parsed.slice(r + REFUSED_MARKER.length) });
       }
     }
   }

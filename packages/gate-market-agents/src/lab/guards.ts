@@ -2,15 +2,16 @@
  * What the lab refuses, and the sentence it refuses with. Each refusal is shown to the agent as its
  * call's error, so each says only what is so — never what to do, never which asset is better.
  *
- * Quantity and price belong to the economy, not to the buyer: a job is one SIU at the trade price, a
- * unit of raw work is one SIU at the print. The schedule decides what a trader may ask for and when
- * (plan §2.4), the same discipline the gate configuration applies to job size.
+ * Quantity and price belong to the economy, not to the buyer: a quote is priced in SIU (D50), a job at the trade multiple of
+ * its size and a unit of raw work at its size, and its rate is the print. The schedule decides what a trader may ask for and
+ * when (plan §2.4), the same discipline the gate configuration applies to job size.
  */
 import type { ToolName } from "../tools/index.js";
 import { LabBooks, type Counterparty } from "./books.js";
 import { type LabParams, type TraderLabel } from "./economy.js";
 import { claimValueMinorUnits } from "../tools/settle-split.js";
-import { decimalToUnits, jobSiu, quotedPrice, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu } from "./money.js";
+import { decimalToUnits, priceMilliSiu, priceSiu, printRate, quoteTerms } from "./money.js";
+import { fmt } from "./quote-text.js";
 
 export interface GuardConfig {
   /** The print in force now. A getter in a run, so it follows the round (D41); a plain number in a test. */
@@ -76,16 +77,20 @@ function guardRequestQuote(books: LabBooks, cfg: GuardConfig, caller: TraderLabe
   if (seller === undefined) return `${a.sellerId} is not a trader or the issuer in this run.`;
   if (seller === caller) return "a job cannot be bought from yourself.";
 
-  const size = jobSiu(cfg.params);
+  const rate = printRate(cfg.printNano);
+  const priceIs = (kind: "trade" | "rawwork"): boolean => {
+    try {
+      return typeof a.siu === "string" && decimalToUnits(a.siu, 3) === priceMilliSiu(kind, cfg.params);
+    } catch {
+      return false;
+    }
+  };
   if (seller === "ISSUER") {
     if (!books.mayBuyRawWork(caller)) {
       return "you owe no delivery that lacks a unit of raw work, so there is nothing to buy from the issuer.";
     }
-    if (a.siu !== size && !(typeof a.siu === "string" && decimalToUnits(a.siu, 3) === BigInt(cfg.params.jobMilliSiu))) {
-      return `a unit of raw work is ${size} SIU.`;
-    }
-    const rate = rawWorkRateUsdPerSiu(cfg.printNano);
-    if (!sameDecimal(a.rateUsdPerSiu, rate)) return `raw work is sold at the print, ${rate} USD per SIU.`;
+    if (!priceIs("rawwork")) return `a unit of raw work is priced at ${priceSiu("rawwork", cfg.params)} SIU.`;
+    if (!sameDecimal(a.rateUsdPerSiu, rate)) return `a quote's rate is the print, ${rate} USD per SIU.`;
     return null;
   }
 
@@ -101,18 +106,15 @@ function guardRequestQuote(books: LabBooks, cfg: GuardConfig, caller: TraderLabe
         : "You have no open needs now.")
     );
   }
-  if (!(typeof a.siu === "string" && decimalToUnits(a.siu, 3) === BigInt(cfg.params.jobMilliSiu))) {
-    return `a job is ${size} SIU.`;
-  }
-  const rate = tradeRateUsdPerSiu(cfg.printNano, cfg.params);
-  if (!sameDecimal(a.rateUsdPerSiu, rate)) return `a job is priced at ${rate} USD per SIU.`;
+  if (!priceIs("trade")) return `a job is priced at ${priceSiu("trade", cfg.params)} SIU.`;
+  if (!sameDecimal(a.rateUsdPerSiu, rate)) return `a quote's rate is the print, ${rate} USD per SIU.`;
   return null;
 }
 
 /**
- * The claim part of a split is a whole number of mSIU worth something at the print and less than the quote's price: at
- * either end it is not a split but one of the other two payments. Said as a fact; it does not name the other payment.
- * A request id this lab does not know is left to the loop's own refusal.
+ * The claim part of a split is a whole number of mSIU, more than none and less than the quote's price in mSIU (D50): at either
+ * end it is not a split but one of the other two payments. Said as a fact; it does not name the other payment. A request id
+ * this lab does not know is left to the loop's own refusal.
  */
 function guardClaimPart(books: LabBooks, cfg: GuardConfig, rawArgs: unknown): string | null {
   const a = (rawArgs ?? {}) as { requestId?: unknown; claimQuantityMilliSiu?: unknown };
@@ -122,15 +124,17 @@ function guardClaimPart(books: LabBooks, cfg: GuardConfig, rawArgs: unknown): st
   if (typeof q !== "string" || !/^[1-9]\d*$/.test(q)) {
     return "the claim part of a split is a whole number of mSIU, more than 0.";
   }
-  // The quote's price is its round's, and so is the print the claim part is valued at (D41).
+  const price = priceMilliSiu(sale.kind, cfg.params);
+  if (BigInt(q) >= price) {
+    return `the claim part of a split must be less than the quote's price, ${fmt(price)} mSIU: ${fmt(BigInt(q))} mSIU is not.`;
+  }
+  // The USDC part is the quote's dollars less the claim part's value at the print the quote was asked for at (D41); a claim
+  // part worth nothing there leaves the whole price in dollars.
   const p = books.printForSale(sale.requestId) ?? cfg.printNano;
-  const price = quotedPrice(
-    jobSiu(cfg.params),
-    sale.kind === "trade" ? tradeRateUsdPerSiu(p, cfg.params) : rawWorkRateUsdPerSiu(p),
-  ).minorUnits;
+  const quoteUsdc = quoteTerms(sale.kind, p, cfg.params).minorUnits;
   const value = claimValueMinorUnits(q, p.toString());
-  if (value === 0n || value >= price) {
-    return `the claim part of a split must be worth more than nothing and less than the quote's price: ${q} mSIU is worth ${value} USDC minor units at the print, and the price is ${price}.`;
+  if (value === 0n || value >= quoteUsdc) {
+    return `the claim part of a split must be worth more than nothing and less than the quote's price: ${fmt(BigInt(q))} mSIU is worth ${fmt(value)} USDC minor units at the print, and the price is ${fmt(quoteUsdc)}.`;
   }
   return null;
 }

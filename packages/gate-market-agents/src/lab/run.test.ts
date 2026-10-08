@@ -16,6 +16,9 @@ import { DEFAULT_PARAMS, ISSUER_SEAT, LAB_TRADERS, SEAT_OF, type TraderLabel } f
 import { referenceExecutor } from "./jobs.js";
 import { LAB_INSTRUMENT_VERSION } from "./instrument.js";
 import { buildPrintPath } from "./prints.js";
+import { routeOrderFor } from "./route-order.js";
+import { milliSiuAsUsdcMinor, usdcMinorAsMilliSiu } from "./money.js";
+import { fmt } from "./quote-text.js";
 import type { EndowmentMint, LabChain, Signer } from "./operator.js";
 import { setRevertRetryPolicy, writeAndConfirm } from "../chain/write.js";
 import type { ChainClients } from "@touchstone/agents";
@@ -222,7 +225,7 @@ describe("runLab", () => {
   });
 
   it("starts from a slightly short pool only when told to, and says so in the report", async () => {
-    chain.headroomNow = LIMIT - 200n; // 31,800: 80% of it, 25,440, still covers the endowment of 17,272
+    chain.headroomNow = LIMIT - 200n; // 31,800: 80% of it, 25,440, still covers the endowment of 17,600
     await expect(runLab(input())).rejects.toThrow(LaunchRefused);
     const report = await runLab(input({ allowPartialPool: true }));
     expect(report.pool).toMatchObject({ whole: false, startingHeadroomMilliSiu: "31800" });
@@ -230,13 +233,13 @@ describe("runLab", () => {
   });
 
   it("does not let permission to start short override the endowment bound: a pool too short for the endowment is refused anyway", async () => {
-    chain.headroomNow = 20_000n; // 80% of it is 16,000, less than the endowment of 17,272
+    chain.headroomNow = 20_000n; // 80% of it is 16,000, less than the endowment of 17,600
     await expect(runLab(input({ allowPartialPool: true }))).rejects.toThrow(/ISSUER-B can back 16000/);
     expect(chain.calls).toEqual([]);
   });
 
-  it("refuses an economy whose endowment does not fit, naming the figure: three needs each is 3 x (1,229 + 1,029) mSIU per trader at the walk's largest claims", async () => {
-    await expect(runLab(input({ params: { ...DEFAULT_PARAMS, needsPerTrader: 3 } }))).rejects.toThrow(/the endowment is 27096 mSIU/);
+  it("refuses an economy whose endowment does not fit, naming the figure: three needs each is 3 x (1,200 + 1,000) mSIU per trader", async () => {
+    await expect(runLab(input({ params: { ...DEFAULT_PARAMS, needsPerTrader: 3 } }))).rejects.toThrow(/the endowment is 26400 mSIU/);
     expect(chain.calls).toEqual([]);
   });
 
@@ -267,22 +270,22 @@ describe("runLab", () => {
   it("sets every trader to the same opening, endows them from one mint, and records both as operator action", async () => {
     // Different starting USDC: one short, one over, one exact, one empty.
     chain.usdc.set(ADDRESSES.ORCHESTRATOR.toLowerCase(), 10_000n);
-    chain.usdc.set(ADDRESSES["WORKER-CODE"].toLowerCase(), 8_583n);
+    chain.usdc.set(ADDRESSES["WORKER-CODE"].toLowerCase(), 8_364n);
     chain.usdc.set(ADDRESSES["WORKER-EXTRACT"].toLowerCase(), 100n);
     const report = await runLab(input());
 
     expect(report.abortedBecause).toBeUndefined();
-    // Sized from the print and the schedule so either asset alone meets every need however the print moves (D31, D41): 2 x (1,229 + 1,029) mSIU,
-    // the largest claims any reachable print asks for, and USDC of equal value at the highest print the walk can reach.
-    expect(report.opening).toMatchObject({ usdcMinorPerTrader: "8583", fsiuMilliSiuPerTrader: "4516", tokenId: "777" });
+    // Sized from the schedule and the prices so either asset alone meets every need however the print moves (D31, D41, D50): 2 x (1,200 + 1,000) mSIU,
+    // what the quotes come to in claims at every print, and the USDC that pays them at the highest print the walk can reach.
+    expect(report.opening).toMatchObject({ usdcMinorPerTrader: "8364", fsiuMilliSiuPerTrader: "4400", tokenId: "777" });
     const resets = report.operatorActions.filter((a) => a.kind === "usdc_reset");
     expect(resets.map((a) => (a as { move: string }).move)).toEqual(["return", "top_up", "top_up"]); // returns first; the exact one moves nothing
     // One mint for all four, then each trader's share.
-    expect(chain.calls.filter((c) => c.startsWith("mint"))).toEqual(["mint 18064"]);
+    expect(chain.calls.filter((c) => c.startsWith("mint"))).toEqual(["mint 17600"]);
     expect(report.operatorActions.filter((a) => a.kind === "endowment_transfer")).toHaveLength(4);
     const opening = report.snapshots[0] as { label: string; traders: { usdcMinor: string; fsiuMilliSiu: string }[] };
     expect(opening.label).toBe("opening");
-    for (const t of opening.traders) expect(t).toMatchObject({ usdcMinor: "8583", fsiuMilliSiu: "4516" });
+    for (const t of opening.traders) expect(t).toMatchObject({ usdcMinor: "8364", fsiuMilliSiu: "4400" });
   });
 
   it("takes a snapshot when each round opens and one more before the window closes", async () => {
@@ -293,7 +296,7 @@ describe("runLab", () => {
     expect(report.measuredBeforeClose).toBe(true);
     // Nobody traded, so every result is the opening valued at the print of the round the snapshot was taken in, and no need is met (D41).
     const path = buildPrintPath(9, 1_437_000n, DEFAULT_PARAMS, "print-illustrative").byRound;
-    const value = (print: bigint): string => (8_583n * 1000n + (4_516n * print) / 1000n).toString();
+    const value = (print: bigint): string => (8_364n * 1000n + (4_400n * print) / 1000n).toString();
     const snaps = report.snapshots as { round: number; traders: { resultNano: string }[] }[];
     snaps.forEach((s, i) => {
       for (const t of s.traders) expect(t.resultNano, `round ${s.round}`).toBe(value(path[i]));
@@ -310,7 +313,7 @@ describe("runLab", () => {
     const report = await runLab(input());
     const expiries = report.operatorActions.filter((a) => a.kind === "expiry") as { holder: string; quantityMilliSiu: string }[];
     expect(expiries.map((e) => e.holder).sort()).toEqual(["TRADER-1", "TRADER-2", "TRADER-3", "TRADER-4"]);
-    for (const e of expiries) expect(e.quantityMilliSiu).toBe("4516");
+    for (const e of expiries) expect(e.quantityMilliSiu).toBe("4400");
     expect(report.pool).toMatchObject({ startingHeadroomMilliSiu: "32000", endingHeadroomMilliSiu: "32000", restored: true });
     // The clock was taken past the window's close before the first expiry (the fake sleep advances it).
     expect(chain.clock).toBeGreaterThanOrEqual(BigInt(report.window.toChainSeconds));
@@ -322,9 +325,9 @@ describe("runLab", () => {
     chain.failExpiryFor = ADDRESSES["WORKER-EXTRACT"];
     const report = await runLab(input());
     const failed = report.operatorActions.filter((a) => a.kind === "expiry_failed") as { holder: string; reason: string }[];
-    expect(failed).toEqual([{ kind: "expiry_failed", holder: "TRADER-3", quantityMilliSiu: "4516", reason: "WindowNotClosedYet" }]);
-    // Three holders expired, so 13,548 of the 18,064 minted came back; TRADER-3's 4,516 is still outstanding.
-    expect(report.pool).toMatchObject({ endingHeadroomMilliSiu: "27484", restored: false });
+    expect(failed).toEqual([{ kind: "expiry_failed", holder: "TRADER-3", quantityMilliSiu: "4400", reason: "WindowNotClosedYet" }]);
+    // Three holders expired, so 13,200 of the 17,600 minted came back; TRADER-3's 4,400 is still outstanding.
+    expect(report.pool).toMatchObject({ endingHeadroomMilliSiu: "27600", restored: false });
   });
 
   // ---- aborts -------------------------------------------------------------------------------
@@ -385,7 +388,7 @@ describe("runLab", () => {
     expect(report.abortedBecause).toBeUndefined();
     expect(seen).toHaveLength(1);
     // Called after the mint and before the first transfer of the endowment to a trader.
-    expect(seen[0].at).toContain("mint 18064");
+    expect(seen[0].at).toContain("mint 17600");
     expect(seen[0].at.some((c) => c.startsWith("claim ->"))).toBe(false);
     expect(seen[0].open).toMatchObject({
       runId: "lab-test-run",
@@ -419,12 +422,12 @@ describe("runLab", () => {
     expect(report.scripted).toBe(true);
     expect(report.seats).toEqual({ "TRADER-1": "ORCHESTRATOR", "TRADER-2": "WORKER-CODE", "TRADER-3": "WORKER-EXTRACT", "TRADER-4": SEAT_OF["TRADER-4"] });
     expect(report.economy.needs).toHaveLength(8);
-    // Nothing is minted after the opening (D31): the whole fSIU supply is the endowment, 56% of the 32,000 mSIU headroom.
+    // Nothing is minted after the opening (D31): the whole fSIU supply is the endowment, 55% of the 32,000 mSIU headroom.
     expect(report.endowment).toEqual({
-      perTraderMilliSiu: "4516",
-      totalMilliSiu: "18064",
-      perTraderUsdcMinor: "8583",
-      perTraderUsdcNeededMinor: "8400",
+      perTraderMilliSiu: "4400",
+      totalMilliSiu: "17600",
+      perTraderUsdcMinor: "8364",
+      perTraderUsdcNeededMinor: "8364",
       allowanceMilliSiu: "25600",
       ceilingPrintNano: "1900432",
     });
@@ -499,5 +502,91 @@ describe("runLab", () => {
     // Every seat that took a turn is a trader; the issuer service has no model behind it and gives no reason.
     expect(report.decisions.map((d) => d.agentId)).not.toContain("ISSUER-B");
     expect(new Set(report.decisions.map((d) => d.agentId))).toEqual(new Set(["ORCHESTRATOR", "WORKER-CODE", "WORKER-EXTRACT", "ISSUER-A"]));
+  });
+
+  // ---- what v8 shows a trader and reports (D50, D52) ---------------------------------------------
+
+  it("shows each trader what it holds, read from the chain, in both assets and each in the other's terms, and records every such screen", async () => {
+    let shown = "";
+    const looks: Adapter = async (_m, prompt) => {
+      if (shown === "") shown = prompt;
+      return respond({ done: true, summary: "x" });
+    };
+    const report = await runLab(input({ adapters: { ...adapters, "TRADER-1": looks } as Record<TraderLabel, Adapter> }));
+    // The first round a trader wakes in depends on the schedule; the conversions are at the print of the round its screen states.
+    const round = Number(/THE LAB — ROUND (\d+) OF/.exec(shown)![1]);
+    const p = buildPrintPath(9, 1_437_000n, DEFAULT_PARAMS, "print-illustrative").byRound[round - 1];
+    const order = routeOrderFor(9);
+    const usdc = `${fmt(8_364n)} USDC minor units (= ${fmt(usdcMinorAsMilliSiu(8_364n, p))} mSIU at this print)`;
+    const fsiu = `${fmt(4_400n)} mSIU of fSIU (= ${fmt(milliSiuAsUsdcMinor(4_400n, p))} USDC minor units at this print)`;
+    expect(shown).toContain(`YOU HOLD: ${order.assetFirst === "usdc" ? `${usdc} and ${fsiu}` : `${fsiu} and ${usdc}`}`);
+    // The first screen of every trader is the opening, as the chain held it.
+    const first = new Map<string, { usdcMinor: string; fsiuMilliSiu: string }>();
+    for (const h of report.holdingsShown) if (!first.has(h.trader)) first.set(h.trader, h);
+    expect([...first.keys()].sort()).toEqual([...LAB_TRADERS]);
+    for (const h of first.values()) expect(h).toMatchObject({ usdcMinor: "8364", fsiuMilliSiu: "4400" });
+  });
+
+  it("finds nothing amiss when nobody trades: the wallet the lab shows is the chain's at every snapshot", async () => {
+    const report = await runLab(input());
+    expect(report.holdingsDisagreements).toEqual([]);
+    // (This fixture is a scripted run, which is never countable for its own reason; the wallet is not one.)
+    expect(report.debugMode.disqualifiedBecause).not.toMatch(/wallet shown/);
+  });
+
+  it("records every snapshot at which the wallet shown to a trader was not the chain's, and the run is then not countable", async () => {
+    // A trader's USDC changes on the chain by a route the lab does not know of, mid-run.
+    const tampers: Adapter = async () => {
+      chain.usdc.set(ADDRESSES.ORCHESTRATOR.toLowerCase(), 1_234n);
+      return respond({ done: true, summary: "x" });
+    };
+    const report = await runLab(input({ adapters: { ...adapters, "TRADER-1": tampers } as Record<TraderLabel, Adapter>, scripted: false }));
+    expect(report.holdingsDisagreements.length).toBeGreaterThan(0);
+    expect(report.holdingsDisagreements[0]).toMatchObject({ trader: "TRADER-1", shown: { usdcMinor: "8364" }, chain: { usdcMinor: "1234" } });
+    expect(report.debugMode.disqualifiedBecause).toMatch(/the wallet shown to a trader differed from the chain's/);
+  });
+
+  it("states quotes in SIU on a trader's screen: a job's price is 1.2 SIU and what settling costs comes in each asset", async () => {
+    let shown = "";
+    const looks: Adapter = async (_m, prompt) => {
+      if (shown === "") shown = prompt;
+      return respond({ done: true, summary: "x" });
+    };
+    await runLab(input({ adapters: { ...adapters, "TRADER-1": looks } as Record<TraderLabel, Adapter> }));
+    expect(shown).toContain("priced at 1.2 SIU");
+    expect(shown).toContain("1,200 mSIU of fSIU");
+    expect(shown).toContain("1,000 mSIU of fSIU");
+  });
+
+  it("records the order of routes the lab used, drawn from the seed, and the order each agent's tools were listed in", async () => {
+    const report = await runLab(input());
+    expect(report.routeOrder).toEqual(routeOrderFor(9));
+    expect(Object.keys(report.toolListOrder).sort()).toEqual(["ISSUER-A", "ISSUER-B", "ORCHESTRATOR", "WORKER-CODE", "WORKER-EXTRACT"]);
+    expect([...report.toolListOrder.ORCHESTRATOR].sort()).toEqual(["deliver_job", "get_balances", "issue_quote", "pay", "request_quote", "settle_split_held", "transfer_claim"]);
+    // A different seed may draw a different order, and a run is reproduced from its seed alone.
+    expect(routeOrderFor(9)).toEqual(routeOrderFor(9));
+    expect(new Set([1, 2, 3, 4, 5, 6, 7, 8].map((n) => JSON.stringify(routeOrderFor(n)))).size).toBeGreaterThan(1);
+  });
+
+  it("captures what a provider returned of its reasoning, per turn and per trader, and says plainly what a model returned none of (D52)", async () => {
+    let turn = 0;
+    const thinks: Adapter = async () => {
+      turn++;
+      return {
+        ...respond(turn === 1 ? { wait: true, rationale: "nothing yet" } : { done: true, summary: "x" }),
+        usage: { input: 10, output: 5, cached_input: 0, reasoning: 120 },
+        raw: { choices: [{ message: { content: "{}", reasoning_content: "I hold both; the quote is 1,200 mSIU." } }] },
+      };
+    };
+    const report = await runLab(input({ adapters: { ...adapters, "TRADER-4": thinks } as Record<TraderLabel, Adapter> }));
+    const mine = report.decisions.filter((d) => d.agentId === SEAT_OF["TRADER-4"]);
+    expect(mine[0]).toMatchObject({ tool: "wait", thinking: "I hold both; the quote is 1,200 mSIU.", reasoningTokens: 120 });
+    expect(report.thinkingCapture["TRADER-4"]).toMatchObject({ model: "gpt-5.4-mini", turnsWithReasoningText: mine.length, reasoningTokensBilled: 120 * mine.length });
+    // A model whose responses carry no reasoning shows none returned, and none billed.
+    expect(report.thinkingCapture["TRADER-1"]).toMatchObject({ turnsWithReasoningText: 0, reasoningTokensBilled: 0, reasoningCharsReturned: 0 });
+    // The turns are numbered in the run's one order, so the overview can list them as they happened.
+    const seqs = report.decisions.map((d) => d.seq);
+    expect(seqs.every((q) => typeof q === "number")).toBe(true);
+    expect(new Set(seqs).size).toBe(seqs.length);
   });
 });

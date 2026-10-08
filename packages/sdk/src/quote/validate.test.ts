@@ -141,3 +141,44 @@ describe("validateQuote — minimum quotable amount", () => {
     expect(validateQuote(quote).valid).toBe(true);
   });
 });
+
+describe("validateQuote — quote amount precision", () => {
+  const USDC: { decimals: number; rounding: "up" } = { decimals: 6, rounding: "up" };
+  const quoteAt = (precision?: { decimals: number; rounding: "half-up" | "up" }) =>
+    signQuote(
+      buildQuoteBody(
+        {
+          siu: "1.200",
+          pattern: "fixed",
+          model: "registry-id",
+          rateUsdPerSiu: "0.001437",
+          indexVersion: "SIU-2026a",
+          printId: "2026-08-14",
+          printHash: "0xabc123",
+          sellerId: "erc8004:0xSellerAddress",
+          chain: "base",
+          expiresInSeconds: 300,
+        },
+        precision,
+      ),
+      TEST_KEY,
+    );
+
+  it("accepts a quote built at USDC's precision when the validator is told that precision", () => {
+    const quote = quoteAt(USDC);
+    expect(quote.amount_usd_max).toBe("0.001725");
+    expect(validateQuote(quote, USDC).valid).toBe(true);
+  });
+
+  it("rejects the same quote against build 1's default rule — the precision is never assumed", () => {
+    const result = validateQuote(quoteAt(USDC));
+    expect(result.valid).toBe(false);
+    if (!result.valid) expect(result.errors.join(" ")).toMatch(/does not equal siu × rate_usd_per_siu rounded half-up to 4dp/);
+  });
+
+  it("rejects a default-precision quote when the validator is told USDC's precision", () => {
+    const result = validateQuote(quoteAt(), USDC);
+    expect(result.valid).toBe(false);
+    if (!result.valid) expect(result.errors.join(" ")).toMatch(/rounded up to 6dp \(expected 0\.001725\)/);
+  });
+});

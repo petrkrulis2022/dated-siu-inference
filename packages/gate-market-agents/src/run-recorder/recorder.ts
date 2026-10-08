@@ -20,6 +20,8 @@ export interface ModelCallRecord {
   usage?: { input: number; output: number; cached_input: number; reasoning: number };
   contentBlockTypes?: string[];
   latencyMs: number;
+  /** The reasoning the provider returned with the reply, when it returned any (`loop/thinking.ts`). Never requested. */
+  thinking?: string;
   parseError?: string;
   /** Present only when the turn was retried after an empty completion at the token budget (see
    *  loop/empty-completion.ts): which call of the turn this record is. The first call stays in

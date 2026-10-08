@@ -41,6 +41,7 @@ import { RunRecorder, type RunManifest } from "../run-recorder/recorder.js";
 import { FrictionLogWriter, type FrictionLogEntry } from "../friction/log.js";
 import { QuoteBoard, type PaidAsset } from "./quote-board.js";
 import { claimMilliSiuForQuote } from "./parity.js";
+import { extractThinking } from "./thinking.js";
 import { explainToolError } from "./plain-errors.js";
 import { ClaimLedger, type ClaimFlows } from "./claim-ledger.js";
 import {
@@ -492,6 +493,10 @@ export interface TurnLog {
    */
   rawText?: string;
   promptText?: string;
+  /** Order in which turns were taken across all agents in the run, from 1: the turn counters are per agent, so this is the only global order. */
+  seq?: number;
+  /** The reasoning the provider returned with this turn's reply, if it returned any (`loop/thinking.ts`); never requested. */
+  thinking?: string;
   /**
    * The two prompt sections that were genuinely shown to this agent but recorded nowhere, so
    * "did it see the offer?" could not be answered from the record — the exact question that
@@ -540,6 +545,8 @@ export interface PaymentMoment {
   requestId?: string;
   /** mSIU of claims the agent had been GIVEN and still held, as a decimal string. */
   heldReceivedMilliSiu: string;
+  /** mSIU of claims the agent held in all, opening supply included, before this payment's own effect — the lab's H2 decision rule (D51). */
+  heldTotalMilliSiu: string;
   /**
    * The settled quote's own STATED terms, read from the signed quote — so a run's artefact can say
    * what a payment bought and at what price without a board that no longer exists. Decimal
@@ -663,6 +670,8 @@ export interface FullRunWindowResult {
     | "waiting"
   >;
   turnLogsByAgent: Record<string, TurnLog[]>;
+  /** The order each agent's tool descriptions were shown in (`shuffledToolOrder`): seeded per agent and per run, and recorded so a reader can check a choice against position. */
+  toolOrderByAgent: Record<string, readonly ToolName[]>;
 }
 
 function summarizeGateResult(result: GateHardeningResult): string {
@@ -978,6 +987,10 @@ export async function runFullRunWindow(
     claimLedger.mint(c.agentId, c.tokenId, BigInt(c.quantityMilliSiu));
   }
   const paymentMoments: PaymentMoment[] = [];
+  // What a turn carries beyond its log: where it fell in the run's one order of turns, and any reasoning the provider returned. Attached to the
+  // turn's log when the window ends, so the sites that write a log need not each know about either.
+  const turnExtras = new Map<string, { seq: number; thinking?: string }>();
+  let turnSeq = 0;
   const usdcSettlements: UsdcSettlement[] = [];
   const testingPurchaseRequired = options.requireTestingPurchase === true;
   // Whoever can attack is who testing is bought FROM. Derived from the roster's own grants, so
@@ -1553,7 +1566,7 @@ export async function runFullRunWindow(
     const servedText = options.lab !== undefined ? "" : redemption.renderServedForHolder(agent.agentId);
     const unservedText =
       options.lab !== undefined ? "" : redemption.renderUnservedForHolder(agent.agentId, chainNowSeconds);
-    const labInfoText = options.lab?.infoTextFor(agent.agentId) ?? "";
+    const labInfoText = (await options.lab?.infoTextFor(agent.agentId)) ?? "";
     const labActionText = options.lab?.actionTextFor(agent.agentId) ?? "";
 
     const { shown: boardSectionText, wakeKey, wakeKeyNext } = composeBoard({
@@ -1766,6 +1779,7 @@ export async function runFullRunWindow(
             ? { infrastructureRetry: { outcome: "retry_failed" as const, firstAttempt } }
             : {}),
         };
+        turnExtras.set(`${agent.agentId}#${turn}`, { seq: ++turnSeq });
         turnLogsByAgent[agent.agentId].push(log);
         options.onTurn?.(agent.agentId, log);
         haltedReason[agent.agentId] =
@@ -1792,6 +1806,8 @@ export async function runFullRunWindow(
       // that a turn which then fails to parse is recorded exactly as fully as one that succeeds. A
       // parse failure re-writes this same file below with `parseError` filled in; if the process
       // dies in between, the call itself is already on disk. See ModelCallRecord.
+      const thinking = extractThinking(result.raw);
+      turnExtras.set(`${agent.agentId}#${turn}`, { seq: ++turnSeq, ...(thinking !== undefined ? { thinking } : {}) });
       recorder.recordMessage(agent.agentId, turn, {
         prompt,
         rawText: result.text,
@@ -1799,6 +1815,7 @@ export async function runFullRunWindow(
         usage: result.usage,
         contentBlockTypes: result.contentBlockTypes,
         latencyMs: result.latency_ms,
+        ...(thinking !== undefined ? { thinking } : {}),
         ...(attempt > 1 ? { attempt } : {}),
       });
       return { result, realizedUsd: callUsd };
@@ -2135,6 +2152,7 @@ export async function runFullRunWindow(
         requiredQuoteSiu: options.requiredQuoteSiu,
         ...(options.deps.directSettlement === true ? { directSettlement: true } : {}),
         ...(options.lab?.printForQuote !== undefined ? { printForQuote: (id: string) => options.lab!.printForQuote!(id) } : {}),
+        ...(options.lab?.claimForQuote !== undefined ? { claimForQuote: (id: string) => options.lab!.claimForQuote!(id) } : {}),
         ...(options.lab !== undefined
           ? { labGuard: (t: ToolName, a: unknown) => options.lab!.guard(agent.agentId, t, a) }
           : {}),
@@ -2258,6 +2276,7 @@ export async function runFullRunWindow(
           asset: assetSettledBy(intent.tool),
           ...(typeof requestId === "string" ? { requestId } : {}),
           heldReceivedMilliSiu: claimLedger.heldReceived(agent.agentId).toString(),
+          heldTotalMilliSiu: claimLedger.heldTotal(agent.agentId).toString(),
           ...(settledQuote !== undefined
             ? {
                 quotedSiu: settledQuote.siu,
@@ -2952,7 +2971,11 @@ export async function runFullRunWindow(
     turnsByAgent,
     haltedReason,
     turnLogsByAgent,
+    toolOrderByAgent,
   };
+  for (const [agentId, logs] of Object.entries(turnLogsByAgent)) {
+    for (const log of logs) Object.assign(log, turnExtras.get(`${agentId}#${log.turn}`));
+  }
   recorder.finalizeMetrics(result);
   return result;
 }
@@ -3021,6 +3044,8 @@ export interface BuildToolArgsContext {
   directSettlement?: boolean;
   /** Currency lab only: the print a quote was asked for at, when it is not the mint context's (`LabHooks.printForQuote`). */
   printForQuote?: (requestId: string) => bigint | undefined;
+  /** Currency lab only: the claim that pays a quote in full when the quote is priced in SIU (`LabHooks.claimForQuote`). */
+  claimForQuote?: (requestId: string) => bigint | undefined;
   /** See `FullRunWindowOptions.requiredQuoteSiu`. */
   requiredQuoteSiu?: Readonly<Record<string, string>>;
   /** Live, mutated by the loop as gates are delivered and attacked — see `submit_attack`'s case
@@ -3733,13 +3758,18 @@ export async function buildToolArgs(
       }
       // A run whose print moves (the currency lab's, D41) sizes the claim at the print the quote was asked for at, which the quote
       // itself names; every other run sizes it at the print in force, and refuses a quote from another print, as always.
+      // A quote priced in SIU (the lab's, D50) is paid in claims by its price in SIU, whatever the print.
+      const inSiu = ctx.claimForQuote?.(named);
       const askedAt = ctx.printForQuote?.(named);
-      quantity = claimMilliSiuForQuote(
-        quote,
-        askedAt !== undefined
-          ? { printId: quote.print_id, nanoUsdPerSiu: askedAt }
-          : { printId: ctx.mintContext.printId, nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu },
-      ).toString();
+      quantity =
+        inSiu !== undefined
+          ? inSiu.toString()
+          : claimMilliSiuForQuote(
+              quote,
+              askedAt !== undefined
+                ? { printId: quote.print_id, nanoUsdPerSiu: askedAt }
+                : { printId: ctx.mintContext.printId, nanoUsdPerSiu: ctx.mintContext.nanoUsdPerSiu },
+            ).toString();
     }
     return {
       to,

@@ -18,17 +18,21 @@ const argsSchema = z.object({
 
 type Args = z.infer<typeof argsSchema>;
 
-/** Wraps `@touchstone/sdk`'s `buildQuoteBody` directly — no new quote-construction logic here. */
+/**
+ * Wraps `@touchstone/sdk`'s `buildQuoteBody` directly — no new quote-construction logic here. The amount's precision is the
+ * deployment's (`RunnerDeps.quoteAmount`, set by the currency lab only); absent, the SDK's own default applies.
+ */
 export const requestQuoteTool: ToolDefinition<Args, QuoteBody> = {
   name: "request_quote",
   argsSchema,
-  async handler(_ctx, args) {
+  async handler(ctx, args) {
+    const precision = ctx.deps.quoteAmount;
     if (args.pattern === "fixed") {
-      return buildQuoteBody({ ...args, pattern: "fixed" });
+      return buildQuoteBody({ ...args, pattern: "fixed" }, precision);
     }
     if (!args.siuMax) {
       throw new Error(`request_quote: pattern "${args.pattern}" requires siuMax.`);
     }
-    return buildQuoteBody({ ...args, pattern: args.pattern, siuMax: args.siuMax });
+    return buildQuoteBody({ ...args, pattern: args.pattern, siuMax: args.siuMax }, precision);
   },
 };

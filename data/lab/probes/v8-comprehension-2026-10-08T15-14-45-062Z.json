@@ -1,0 +1,211 @@
+{
+  "criteria": "docs/marketplace_plan.md D54",
+  "expected": {
+    "usdc": "more",
+    "fsiu": "same",
+    "quoteChanges": "no"
+  },
+  "screenSha256": "1b98976ad9ecbae87e8d415391641313f032bfddc5538f0bd2878e0c57e98bea",
+  "seed": 9,
+  "trader": "TRADER-1",
+  "printByRound": [
+    "1437000",
+    "1652550",
+    "1404667"
+  ],
+  "samplesPerModel": 3,
+  "totalUsd": "0.053090",
+  "printDirectionWrong": 0,
+  "quoteWrong": 0,
+  "results": [
+    {
+      "model": "claude-haiku-4-5",
+      "sample": 1,
+      "reply": "```json\n{\n  \"print_up_15_percent\": {\n    \"usdc\": \"more\",\n    \"fsiu\": \"same\"\n  },\n  \"quote_price_changes_after_issue\": \"no\"\n}\n```",
+      "answer": {
+        "usdc": "more",
+        "fsiu": "same",
+        "quoteChanges": "no"
+      },
+      "judgement": {
+        "printDirectionRight": true,
+        "quoteRight": true
+      },
+      "usage": {
+        "input": 3943,
+        "output": 60,
+        "cached_input": 0,
+        "reasoning": 0
+      },
+      "usd": "0.004243"
+    },
+    {
+      "model": "claude-haiku-4-5",
+      "sample": 2,
+      "reply": "```json\n{\n  \"print_up_15_percent\": {\n    \"usdc\": \"more\",\n    \"fsiu\": \"same\"\n  },\n  \"quote_price_changes_after_issue\": \"no\"\n}\n```",
+      "answer": {
+        "usdc": "more",
+        "fsiu": "same",
+        "quoteChanges": "no"
+      },
+      "judgement": {
+        "printDirectionRight": true,
+        "quoteRight": true
+      },
+      "usage": {
+        "input": 3943,
+        "output": 60,
+        "cached_input": 0,
+        "reasoning": 0
+      },
+      "usd": "0.004243"
+    },
+    {
+      "model": "claude-haiku-4-5",
+      "sample": 3,
+      "reply": "```json\n{\n  \"print_up_15_percent\": {\n    \"usdc\": \"more\",\n    \"fsiu\": \"same\"\n  },\n  \"quote_price_changes_after_issue\": \"no\"\n}\n```",
+      "answer": {
+        "usdc": "more",
+        "fsiu": "same",
+        "quoteChanges": "no"
+      },
+      "judgement": {
+        "printDirectionRight": true,
+        "quoteRight": true
+      },
+      "usage": {
+        "input": 3943,
+        "output": 60,
+        "cached_input": 0,
+        "reasoning": 0
+      },
+      "usd": "0.004243"
+    },
+    {
+      "model": "gpt-5.1",
+      "sample": 1,
+      "reply": "{\"print_up_15_percent\": {\"usdc\": \"more\", \"fsiu\": \"same\"}, \"quote_price_changes_after_issue\": \"no\"}",
+      "answer": {
+        "usdc": "more",
+        "fsiu": "same",
+        "quoteChanges": "no"
+      },
+      "judgement": {
+        "printDirectionRight": true,
+        "quoteRight": true
+      },
+      "usage": {
+        "input": 3523,
+        "output": 40,
+        "cached_input": 0,
+        "reasoning": 0
+      },
+      "usd": "0.004804"
+    },
+    {
+      "model": "gpt-5.1",
+      "sample": 2,
+      "reply": "{\"print_up_15_percent\": {\"usdc\": \"more\", \"fsiu\": \"same\"}, \"quote_price_changes_after_issue\": \"no\"}",
+      "answer": {
+        "usdc": "more",
+        "fsiu": "same",
+        "quoteChanges": "no"
+      },
+      "judgement": {
+        "printDirectionRight": true,
+        "quoteRight": true
+      },
+      "usage": {
+        "input": 3523,
+        "output": 40,
+        "cached_input": 3328,
+        "reasoning": 0
+      },
+      "usd": "0.004804"
+    },
+    {
+      "model": "gpt-5.1",
+      "sample": 3,
+      "reply": "{\"print_up_15_percent\": {\"usdc\": \"more\", \"fsiu\": \"same\"}, \"quote_price_changes_after_issue\": \"no\"}",
+      "answer": {
+        "usdc": "more",
+        "fsiu": "same",
+        "quoteChanges": "no"
+      },
+      "judgement": {
+        "printDirectionRight": true,
+        "quoteRight": true
+      },
+      "usage": {
+        "input": 3523,
+        "output": 40,
+        "cached_input": 3328,
+        "reasoning": 0
+      },
+      "usd": "0.004804"
+    },
+    {
+      "model": "grok-4.6",
+      "sample": 1,
+      "reply": "{\"print_up_15_percent\": {\"usdc\": \"more\", \"fsiu\": \"same\"}, \"quote_price_changes_after_issue\": \"no\"}",
+      "answer": {
+        "usdc": "more",
+        "fsiu": "same",
+        "quoteChanges": "no"
+      },
+      "judgement": {
+        "printDirectionRight": true,
+        "quoteRight": true
+      },
+      "usage": {
+        "input": 4211,
+        "output": 38,
+        "cached_input": 512,
+        "reasoning": 779
+      },
+      "usd": "0.008650"
+    },
+    {
+      "model": "grok-4.6",
+      "sample": 2,
+      "reply": "{\"print_up_15_percent\": {\"usdc\": \"more\", \"fsiu\": \"same\"}, \"quote_price_changes_after_issue\": \"no\"}",
+      "answer": {
+        "usdc": "more",
+        "fsiu": "same",
+        "quoteChanges": "no"
+      },
+      "judgement": {
+        "printDirectionRight": true,
+        "quoteRight": true
+      },
+      "usage": {
+        "input": 4211,
+        "output": 38,
+        "cached_input": 512,
+        "reasoning": 1030
+      },
+      "usd": "0.008650"
+    },
+    {
+      "model": "grok-4.6",
+      "sample": 3,
+      "reply": "{\"print_up_15_percent\": {\"usdc\": \"more\", \"fsiu\": \"same\"}, \"quote_price_changes_after_issue\": \"no\"}",
+      "answer": {
+        "usdc": "more",
+        "fsiu": "same",
+        "quoteChanges": "no"
+      },
+      "judgement": {
+        "printDirectionRight": true,
+        "quoteRight": true
+      },
+      "usage": {
+        "input": 4211,
+        "output": 38,
+        "cached_input": 4096,
+        "reasoning": 845
+      },
+      "usd": "0.008650"
+    }
+  ]
+}

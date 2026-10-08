@@ -1,0 +1,33 @@
+{
+  "runId": "lab-scripted-2026-10-08T15-56-11-495Z",
+  "tokenId": "15136602093487715616149536110249170684927497424279100064115585012938078247666",
+  "windowToChainSeconds": "1791475404",
+  "startingHeadroomMilliSiu": "32000",
+  "holders": [
+    {
+      "label": "TRADER-1",
+      "address": "0x8Bf6De67D0B9705520Cdf5a348f5763e2175F363"
+    },
+    {
+      "label": "TRADER-2",
+      "address": "0xee18C8bdB822Dcaf988Af2E09141D3e6Ea80e560"
+    },
+    {
+      "label": "TRADER-3",
+      "address": "0x2cd53E449F6cF45c51f600e167b4D2630128c8F3"
+    },
+    {
+      "label": "TRADER-4",
+      "address": "0xB4D793bb1aA4B802251be9Dfb6024159697D1C86"
+    },
+    {
+      "label": "ISSUER-B",
+      "address": "0xD4BeCD22D3CEE01b1B388C065C1Fdd1F967EE776"
+    },
+    {
+      "label": "operator",
+      "address": "0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e"
+    }
+  ],
+  "swept": true
+}

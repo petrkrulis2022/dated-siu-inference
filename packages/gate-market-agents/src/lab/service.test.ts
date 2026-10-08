@@ -3,7 +3,8 @@ import { LabBooks } from "./books.js";
 import { DEFAULT_PARAMS, ISSUER_SEAT, LAB_TRADERS, SEAT_OF, buildEconomy, type Economy, type TraderLabel } from "./economy.js";
 import { LabService, type LabServiceDeps } from "./service.js";
 import { buildPrintPath } from "./prints.js";
-import { claimForUsd, quotedPrice, tradeRateUsdPerSiu } from "./money.js";
+import { quoteTerms } from "./money.js";
+import { fmt } from "./quote-text.js";
 import type { WorkExecutor } from "./jobs.js";
 import type { AgentId } from "../identity/resolve.js";
 
@@ -184,11 +185,155 @@ describe("LabService", () => {
 
   describe("the hooks the loop calls", () => {
     it("shows a trader the board and the issuer nothing, and refuses by the guard", async () => {
-      expect(svc.infoTextFor("ORCHESTRATOR")).toContain("THE LAB");
-      expect(svc.infoTextFor(ISSUER_SEAT)).toBe("");
+      expect(await svc.infoTextFor("ORCHESTRATOR")).toContain("THE LAB");
+      expect(await svc.infoTextFor(ISSUER_SEAT)).toBe("");
       expect(svc.actionTextFor(ISSUER_SEAT)).toBe("");
       expect(await svc.guard("ORCHESTRATOR", "request_quote", { siu: "1" })).toBe("request_quote needs a sellerId.");
       expect(await svc.guard("HEDGER", "request_quote", { siu: "1" })).toBeNull();
+    });
+  });
+
+  describe("what a trader is shown of its wallet and of a quote (D50)", () => {
+    const OPENING = { usdcMinor: 8_364n, fsiuMilliSiu: 4_400n };
+    const withOpening = (extra: Partial<LabServiceDeps> = {}): LabService =>
+      new LabService({ books, guard: { printNano: 1_437_000n, params: DEFAULT_PARAMS }, seed: 4, executorFor: () => executor, tokenId: "777", opening: OPENING, ...extra });
+
+    it("states what the trader holds by the lab's own account, each asset in the other's terms, and records what it showed", async () => {
+      const shown: { trader: string; round: number; usdc: bigint; fsiu: bigint }[] = [];
+      const s = withOpening({ onHoldingsShown: (trader, round, h) => shown.push({ trader, round, usdc: h.usdcMinor, fsiu: h.fsiuMilliSiu }) });
+      const text = await s.infoTextFor("ORCHESTRATOR");
+      expect(text).toContain("YOU HOLD: 8,364 USDC minor units (= 5,820 mSIU at this print) and 4,400 mSIU of fSIU (= 6,323 USDC minor units at this print)");
+      expect(shown).toEqual([{ trader: "TRADER-1", round: 1, usdc: 8_364n, fsiu: 4_400n }]);
+    });
+
+    it("leaves the line out, and guesses nothing, when the service was given no opening", async () => {
+      expect(await svc.infoTextFor("ORCHESTRATOR")).not.toContain("YOU HOLD");
+      expect(svc.walletOf("TRADER-1")).toBeUndefined();
+    });
+
+    it("does not read the chain to show a wallet: a stable read waits a block and costs every turn seconds", async () => {
+      let reads = 0;
+      const s = withOpening({
+        holdings: async () => {
+          reads++;
+          return OPENING;
+        },
+      });
+      await s.infoTextFor("ORCHESTRATOR");
+      await s.infoTextFor("WORKER-CODE");
+      expect(reads).toBe(0);
+    });
+
+    it("names the assets in the run's seeded order", async () => {
+      const s = withOpening({ order: { assetFirst: "fsiu", tools: ["pay_split", "pay_with_usdc", "pay_with_held_claim"] } });
+      expect(await s.infoTextFor("ORCHESTRATOR")).toContain("YOU HOLD: 4,400 mSIU of fSIU (= 6,323 USDC minor units at this print) and 8,364 USDC minor units");
+    });
+
+    it("writes a quote the buyer has received in SIU, leading with the work, then what settling costs in each asset", () => {
+      const n = need1();
+      books.requestPosted("qr-1", n.buyer, n.seller);
+      books.quoteIssued("qr-1");
+      const line = svc.describeQuote({ requestId: "qr-1", quote: { expiry: "2026-10-07T14:00:00Z" } as never })!;
+      expect(line).toBe(
+        `${n.type} job from ${n.seller}, 1 SIU of work, price 1.2 SIU — settle 0.001725 USD or 1,200 mSIU of fSIU (print 0.001437 USD/SIU), expires 2026-10-07T14:00:00Z`,
+      );
+    });
+
+    it("writes the seller's line for a request the same way, naming who asked, and a unit of raw work likewise", () => {
+      const n = need1();
+      books.requestPosted("qr-1", n.buyer, n.seller);
+      expect(svc.describeRequest({ requestId: "qr-1" } as never)).toBe(
+        `${n.type} job asked for by ${n.buyer}, 1 SIU of work, price 1.2 SIU — settle 0.001725 USD or 1,200 mSIU of fSIU (print 0.001437 USD/SIU)`,
+      );
+      books.requestPosted("qr-2", n.buyer, "ISSUER");
+      books.quoteIssued("qr-2");
+      expect(svc.describeQuote({ requestId: "qr-2", quote: { expiry: "x" } as never })).toBe(
+        "a unit of raw work from ISSUER-B, 1 SIU of work, price 1 SIU — settle 0.001437 USD or 1,000 mSIU of fSIU (print 0.001437 USD/SIU), expires x",
+      );
+    });
+
+    it("leaves a request it does not know to the board's own line", () => {
+      expect(svc.describeRequest({ requestId: "qr-404" } as never)).toBeUndefined();
+      expect(svc.describeQuote({ requestId: "qr-404", quote: { expiry: "x" } as never })).toBeUndefined();
+    });
+
+    it("sizes the claim that pays a quote at its price in mSIU, whatever the print: 1,200 for a job and 1,000 for a unit of raw work", () => {
+      const n = need1();
+      books.requestPosted("qr-1", n.buyer, n.seller);
+      books.requestPosted("qr-2", n.buyer, "ISSUER");
+      expect(svc.claimForQuote("qr-1")).toBe(1_200n);
+      expect(svc.claimForQuote("qr-2")).toBe(1_000n);
+      expect(svc.claimForQuote("qr-404")).toBeUndefined();
+    });
+
+    it("keeps its own record of a successful call, by agent and turn, for the report's decisions", async () => {
+      const n = need1();
+      await svc.afterToolCall(ev(seat(n.buyer), "request_quote", { requestId: "qr-5", turn: 7, result: { seller_id: ids.traders[n.seller] } }));
+      expect(svc.eventAt(seat(n.buyer), 7)).toEqual({ requestId: "qr-5", result: { seller_id: ids.traders[n.seller] } });
+      expect(svc.eventAt(seat(n.buyer), 8)).toBeUndefined();
+    });
+  });
+
+  describe("each payment moves the payer's and the payee's wallet by exactly what it moved (D50)", () => {
+    const OPENING = { usdcMinor: 8_364n, fsiuMilliSiu: 4_400n };
+    const withOpening = (): LabService =>
+      new LabService({ books, guard: { printNano: 1_437_000n, params: DEFAULT_PARAMS }, seed: 4, executorFor: () => executor, tokenId: "777", opening: OPENING });
+    const job = () => need1();
+
+    it("starts every trader at the opening, and hands out copies nobody can move from outside", () => {
+      const s = withOpening();
+      for (const t of LAB_TRADERS) expect(s.walletOf(t)).toEqual(OPENING);
+      s.walletOf("TRADER-1")!.usdcMinor = 0n;
+      expect(s.walletOf("TRADER-1")).toEqual(OPENING);
+    });
+
+    it("moves the quote's dollars from the buyer to the seller when it is paid in USDC", async () => {
+      svc = withOpening();
+      const n = await payNeed("qr-1", "pay");
+      // A job at the illustrative print: 1.2 SIU x 0.001437 = 1,725 USDC minor units.
+      expect(svc.walletOf(n.buyer)).toEqual({ usdcMinor: 8_364n - 1_725n, fsiuMilliSiu: 4_400n });
+      expect(svc.walletOf(n.seller)).toEqual({ usdcMinor: 8_364n + 1_725n, fsiuMilliSiu: 4_400n });
+    });
+
+    it("moves exactly the price in mSIU when it is paid in claims: 1,200 for a job", async () => {
+      svc = withOpening();
+      const n = await payNeed("qr-1", "transfer_claim");
+      expect(svc.walletOf(n.buyer)).toEqual({ usdcMinor: 8_364n, fsiuMilliSiu: 4_400n - 1_200n });
+      expect(svc.walletOf(n.seller)).toEqual({ usdcMinor: 8_364n, fsiuMilliSiu: 4_400n + 1_200n });
+    });
+
+    it("moves a split's claim part and the rest of the dollars: the quote's less the claim part's value at the print, rounded down", async () => {
+      svc = withOpening();
+      const n = job();
+      await svc.afterToolCall(ev(seat(n.buyer), "request_quote", { requestId: "qr-1", result: { seller_id: ids.traders[n.seller] } }));
+      await svc.afterToolCall(ev(seat(n.seller), "issue_quote", { intentArgs: { requestId: "qr-1" } }));
+      await svc.afterToolCall(ev(seat(n.buyer), "settle_split_held", { intentArgs: { requestId: "qr-1", claimQuantityMilliSiu: "600" } }));
+      // 600 mSIU at 1.437 USD per SIU is 862.2, so 862 minor units; the quote is 1,725, so 863 in dollars.
+      expect(svc.walletOf(n.buyer)).toEqual({ usdcMinor: 8_364n - 863n, fsiuMilliSiu: 4_400n - 600n });
+      expect(svc.walletOf(n.seller)).toEqual({ usdcMinor: 8_364n + 863n, fsiuMilliSiu: 4_400n + 600n });
+    });
+
+    it("moves the buyer's wallet and no trader's when the payee is the issuer, whose wallet is not kept", async () => {
+      svc = withOpening();
+      await buyUnit("TRADER-1", "qr-7");
+      expect(svc.walletOf("TRADER-1")).toEqual({ usdcMinor: 8_364n - 1_437n, fsiuMilliSiu: 4_400n });
+      for (const t of LAB_TRADERS.filter((x) => x !== "TRADER-1")) expect(svc.walletOf(t)).toEqual(OPENING);
+    });
+
+    it("moves nothing a second time for a quote already paid, a payment that names no quote, or a request it does not know", async () => {
+      svc = withOpening();
+      const n = await payNeed("qr-1", "pay");
+      const after = svc.walletOf(n.buyer);
+      await svc.afterToolCall(ev(seat(n.buyer), "pay", { intentArgs: { requestId: "qr-1" } }));
+      await svc.afterToolCall(ev(seat(n.buyer), "transfer_claim", { intentArgs: { agentId: "WORKER-CODE", tokenId: "1", quantity: "1" } }));
+      await svc.afterToolCall(ev(seat(n.buyer), "pay", { intentArgs: { requestId: "qr-404" } }));
+      expect(svc.walletOf(n.buyer)).toEqual(after);
+    });
+
+    it("shows the moved wallet on the next turn", async () => {
+      svc = withOpening();
+      const n = await payNeed("qr-1", "pay");
+      expect(await svc.infoTextFor(seat(n.buyer))).toContain("YOU HOLD: 6,639 USDC minor units");
     });
   });
 
@@ -269,17 +414,17 @@ describe("LabService", () => {
       books.quoteIssued("qr-1");
       return SEAT_OF[n.buyer];
     };
-    // At the illustrative print a job quote is 1,700 minor units and its claim 1,184 mSIU; a unit of raw work is 1,400 and 975.
+    // At the illustrative print a job's quote is 1,725 minor units or 1,200 mSIU; a unit of raw work's is 1,437 or 1,000 (D50).
 
     it("states the cost, then both assets the wallet holds, in the same form for dollars, a held claim and a split", async () => {
       const buyer = quotedTrade();
       const poor = withHoldings(100n, 100n);
       const wallet = "the wallet holds 100 USDC minor units and 100 mSIU of fSIU.";
-      expect(await poor.guard(buyer, "pay", { requestId: "qr-1" })).toBe(`This payment costs 1700 USDC minor units; ${wallet}`);
-      expect(await poor.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toBe(`This payment costs 1184 mSIU of fSIU; ${wallet}`);
-      // 592 mSIU is worth 850 minor units at the print (floored), so the dollar part is the other 850.
+      expect(await poor.guard(buyer, "pay", { requestId: "qr-1" })).toBe(`This payment costs 1,725 USDC minor units; ${wallet}`);
+      expect(await poor.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toBe(`This payment costs 1,200 mSIU of fSIU; ${wallet}`);
+      // 592 mSIU is worth 850 minor units at the print (floored), so the dollar part is the other 875.
       expect(await poor.guard(buyer, "settle_split_held", { requestId: "qr-1", claimQuantityMilliSiu: "592" })).toBe(
-        `This payment costs 850 USDC minor units and 592 mSIU of fSIU; ${wallet}`,
+        `This payment costs 875 USDC minor units and 592 mSIU of fSIU; ${wallet}`,
       );
     });
 
@@ -287,9 +432,9 @@ describe("LabService", () => {
       const n = economy.needs.find((x) => x.round === 1)!;
       books.requestPosted("qr-raw", n.buyer, "ISSUER");
       books.quoteIssued("qr-raw");
-      // The raw-work quote costs 1,400 USDC minor units: more than the 1,174 held, though 2,000 mSIU would pay it.
+      // The raw-work quote costs 1,437 USDC minor units: more than the 1,174 held, though 2,000 mSIU would pay it.
       expect(await withHoldings(1_174n, 2_000n).guard(SEAT_OF[n.buyer], "pay", { requestId: "qr-raw" })).toBe(
-        "This payment costs 1400 USDC minor units; the wallet holds 1174 USDC minor units and 2000 mSIU of fSIU.",
+        "This payment costs 1,437 USDC minor units; the wallet holds 1,174 USDC minor units and 2,000 mSIU of fSIU.",
       );
     });
 
@@ -297,7 +442,7 @@ describe("LabService", () => {
       const buyer = quotedTrade();
       const dollarsOnly = withHoldings(5_000n, 0n);
       expect(await dollarsOnly.guard(buyer, "pay", { requestId: "qr-1" })).toBeNull();
-      expect(await dollarsOnly.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toContain("costs 1184 mSIU of fSIU; the wallet holds 5000 USDC minor units and 0 mSIU of fSIU");
+      expect(await dollarsOnly.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toContain("costs 1,200 mSIU of fSIU; the wallet holds 5,000 USDC minor units and 0 mSIU of fSIU");
       const claimsOnly = withHoldings(0n, 5_000n);
       expect(await claimsOnly.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toBeNull();
       expect(await claimsOnly.guard(buyer, "pay", { requestId: "qr-1" })).toContain("USDC minor units");
@@ -305,27 +450,27 @@ describe("LabService", () => {
 
     it("lets a split through for a wallet that holds some of each, where neither asset alone would pay", async () => {
       const buyer = quotedTrade();
-      const straddling = withHoldings(1_174n, 816n); // the pilot's TRADER-3: neither 1,700 USDC nor 1,184 mSIU
-      expect(await straddling.guard(buyer, "pay", { requestId: "qr-1" })).toContain("This payment costs 1700 USDC minor units");
-      expect(await straddling.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toContain("This payment costs 1184 mSIU of fSIU");
-      // 500 mSIU is worth 718 minor units; the dollar part is 982: 1,174 and 816 cover it.
+      const straddling = withHoldings(1_174n, 816n); // the pilot's TRADER-3: neither 1,725 USDC nor 1,200 mSIU
+      expect(await straddling.guard(buyer, "pay", { requestId: "qr-1" })).toContain("This payment costs 1,725 USDC minor units");
+      expect(await straddling.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toContain("This payment costs 1,200 mSIU of fSIU");
+      // 500 mSIU is worth 718 minor units; the dollar part is 1,007: 1,174 and 816 cover it.
       expect(await straddling.guard(buyer, "settle_split_held", { requestId: "qr-1", claimQuantityMilliSiu: "500" })).toBeNull();
     });
 
     it("refuses a split when either of its parts is short, and says what both parts cost", async () => {
       const buyer = quotedTrade();
       expect(await withHoldings(5_000n, 100n).guard(buyer, "settle_split_held", { requestId: "qr-1", claimQuantityMilliSiu: "500" })).toBe(
-        "This payment costs 982 USDC minor units and 500 mSIU of fSIU; the wallet holds 5000 USDC minor units and 100 mSIU of fSIU.",
+        "This payment costs 1,007 USDC minor units and 500 mSIU of fSIU; the wallet holds 5,000 USDC minor units and 100 mSIU of fSIU.",
       );
       expect(await withHoldings(100n, 5_000n).guard(buyer, "settle_split_held", { requestId: "qr-1", claimQuantityMilliSiu: "500" })).toContain(
-        "This payment costs 982 USDC minor units and 500 mSIU of fSIU; the wallet holds 100 USDC minor units and 5000 mSIU of fSIU.",
+        "This payment costs 1,007 USDC minor units and 500 mSIU of fSIU; the wallet holds 100 USDC minor units and 5,000 mSIU of fSIU.",
       );
     });
 
     it("is the same sentence whichever asset is short, differing only in the cost and the figures", async () => {
       const buyer = quotedTrade();
       const poor = withHoldings(0n, 0n);
-      const shape = (s: string) => s.replace(/\d+/g, "N");
+      const shape = (s: string) => s.replace(/\d[\d,]*/g, "N");
       expect(shape((await poor.guard(buyer, "pay", { requestId: "qr-1" }))!)).toBe(
         "This payment costs N USDC minor units; the wallet holds N USDC minor units and N mSIU of fSIU.",
       );
@@ -360,7 +505,7 @@ describe("LabService", () => {
       const stranger = (["ORCHESTRATOR", "WORKER-CODE", "WORKER-EXTRACT", "ISSUER-A"] as const).find((s) => s !== quotedTrade() && SEAT_OF[economy.needs[0].seller] !== s)!;
       expect(await svc2.guard(stranger, "pay", { requestId: "qr-1" })).toContain("not yours to pay");
       // A claim part the lab's own rules refuse is refused before the chain is asked, too.
-      expect(await svc2.guard(SEAT_OF[economy.needs.find((x) => x.round === 1)!.buyer], "settle_split_held", { requestId: "qr-1", claimQuantityMilliSiu: "99999" })).toContain("the claim part of a split must be worth");
+      expect(await svc2.guard(SEAT_OF[economy.needs.find((x) => x.round === 1)!.buyer], "settle_split_held", { requestId: "qr-1", claimQuantityMilliSiu: "99999" })).toContain("the claim part of a split must be less than the quote's price");
       expect(reads).toBe(0);
     });
   });
@@ -422,18 +567,18 @@ describe("LabService", () => {
       const n = quotedInRound1(b);
       const buyer = SEAT_OF[n.buyer];
       // The quote's claim at round 1's print is 1,184 mSIU; a wallet holding exactly that can pay it in round 3, when the print has moved.
-      const exact = movingService(b, async () => ({ usdcMinor: 0n, fsiuMilliSiu: 1_184n }));
+      const exact = movingService(b, async () => ({ usdcMinor: 0n, fsiuMilliSiu: 1_200n }));
       b.advanceRound();
       b.advanceRound();
       expect(b.currentPrint()).not.toBe(path.byRound[0]);
       expect(await exact.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toBeNull();
-      const short = movingService(b, async () => ({ usdcMinor: 0n, fsiuMilliSiu: 1_183n }));
+      const short = movingService(b, async () => ({ usdcMinor: 0n, fsiuMilliSiu: 1_199n }));
       expect(await short.guard(buyer, "transfer_claim", { requestId: "qr-1" })).toBe(
-        "This payment costs 1184 mSIU of fSIU; the wallet holds 0 USDC minor units and 1183 mSIU of fSIU.",
+        "This payment costs 1,200 mSIU of fSIU; the wallet holds 0 USDC minor units and 1,199 mSIU of fSIU.",
       );
     });
 
-    it("prices a quote asked for in a later round at that round's print: the same job costs a different amount of USDC and about the same fSIU", async () => {
+    it("prices a quote asked for in a later round at that round's print: the same job costs a different amount of USDC and exactly the same fSIU (D50)", async () => {
       const b = movingBooks();
       b.advanceRound();
       const n = economy.needs.find((x) => x.round <= 2)!;
@@ -442,13 +587,12 @@ describe("LabService", () => {
       const p2 = path.byRound[1];
       const svc2 = movingService(b, async () => ({ usdcMinor: 0n, fsiuMilliSiu: 0n }));
       const cost = (await svc2.guard(SEAT_OF[n.buyer], "pay", { requestId: "qr-2" }))!;
-      const usd = quotedPrice("1", tradeRateUsdPerSiu(p2, DEFAULT_PARAMS)).minorUnits;
-      expect(cost).toContain(`costs ${usd} USDC minor units`);
+      const usd = quoteTerms("trade", p2, DEFAULT_PARAMS).minorUnits;
+      expect(usd).not.toBe(1_725n);
+      expect(cost).toContain(`costs ${fmt(usd)} USDC minor units`);
       const claim = (await svc2.guard(SEAT_OF[n.buyer], "transfer_claim", { requestId: "qr-2" }))!;
-      const mSiu = claimForUsd(quotedPrice("1", tradeRateUsdPerSiu(p2, DEFAULT_PARAMS)).usd, p2);
-      expect(claim).toContain(`costs ${mSiu} mSIU of fSIU`);
-      expect(mSiu).toBeGreaterThanOrEqual(1_150n); // about 1.2 SIU whatever the print
-      expect(mSiu).toBeLessThanOrEqual(1_250n);
+      expect(claim).toContain("costs 1,200 mSIU of fSIU");
+      expect(svc2.claimForQuote("qr-2")).toBe(1_200n);
     });
   });
 });

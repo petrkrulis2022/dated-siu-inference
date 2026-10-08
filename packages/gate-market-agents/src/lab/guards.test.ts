@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { LabBooks } from "./books.js";
 import { DEFAULT_PARAMS, LAB_TRADERS, buildEconomy, type Economy, type TraderLabel } from "./economy.js";
 import { guardLabCall, type GuardConfig } from "./guards.js";
-import { quotedPrice, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu } from "./money.js";
+import { printRate } from "./money.js";
 import { buildPrintPath } from "./prints.js";
 
 const ids = {
   traders: Object.fromEntries(LAB_TRADERS.map((t) => [t, `erc8004:0x${t}`])) as Record<TraderLabel, string>,
   issuer: "erc8004:0xISSUER",
 };
-// An ILLUSTRATIVE print of 0.001437 USD/SIU: trade price "0.0017244", raw work "0.001437".
+// An ILLUSTRATIVE print of 0.001437 USD/SIU. A quote is priced in SIU (D50): a job at 1.2, a unit of raw work at 1, each at the print as its rate.
 const cfg: GuardConfig = { printNano: 1_437_000n, params: DEFAULT_PARAMS };
 
 describe("guardLabCall", () => {
@@ -19,24 +19,27 @@ describe("guardLabCall", () => {
     economy = buildEconomy(5);
     books = new LabBooks(economy, ids);
   });
-  const req = (sellerId: string, siu = "1", rate = "0.0017244") => ({ sellerId, siu, rateUsdPerSiu: rate });
+  const req = (sellerId: string, siu = "1.2", rate = "0.001437") => ({ sellerId, siu, rateUsdPerSiu: rate });
   const buyerWithOpenNeed = () => LAB_TRADERS.find((t) => books.openNeeds(t).length > 0)!;
 
   describe("request_quote to a trader", () => {
-    it("accepts exactly an open need at exactly the trade price and size", () => {
+    it("accepts exactly an open need at exactly the job's price in SIU and the print as the rate", () => {
       const buyer = buyerWithOpenNeed();
       const need = books.openNeeds(buyer)[0];
       expect(guardLabCall(books, cfg, buyer, "request_quote", req(ids.traders[need.seller]))).toBeNull();
       // The same figure written with trailing zeros is the same price.
-      expect(guardLabCall(books, cfg, buyer, "request_quote", req(ids.traders[need.seller], "1.000", "0.00172440"))).toBeNull();
+      expect(guardLabCall(books, cfg, buyer, "request_quote", req(ids.traders[need.seller], "1.200", "0.00143700"))).toBeNull();
     });
 
-    it("refuses a wrong price and a wrong size, and names the right ones", () => {
+    it("refuses a wrong price in SIU and a wrong rate, and names the right ones", () => {
       const buyer = buyerWithOpenNeed();
       const sellerId = ids.traders[books.openNeeds(buyer)[0].seller];
-      expect(guardLabCall(books, cfg, buyer, "request_quote", req(sellerId, "1", "0.001")))
-        .toBe("a job is priced at 0.0017244 USD per SIU.");
-      expect(guardLabCall(books, cfg, buyer, "request_quote", req(sellerId, "2"))).toBe("a job is 1 SIU.");
+      expect(guardLabCall(books, cfg, buyer, "request_quote", req(sellerId, "1.2", "0.001")))
+        .toBe("a quote's rate is the print, 0.001437 USD per SIU.");
+      expect(guardLabCall(books, cfg, buyer, "request_quote", req(sellerId, "2"))).toBe("a job is priced at 1.2 SIU.");
+      // The size of the work, 1 SIU, is not the job's price: asking at it is refused.
+      expect(guardLabCall(books, cfg, buyer, "request_quote", req(sellerId, "1"))).toBe("a job is priced at 1.2 SIU.");
+      expect(guardLabCall(books, cfg, buyer, "request_quote", req(sellerId, "one point two"))).toBe("a job is priced at 1.2 SIU.");
     });
 
     it("refuses a seller the trader has no open need of, and says what it does have", () => {
@@ -83,15 +86,17 @@ describe("guardLabCall", () => {
       expect(guardLabCall(books, cfg, "TRADER-1", "request_quote", req(ids.issuer, "1", "0.001437"))).toContain("nothing to buy from the issuer");
     });
 
-    it("is accepted at exactly the print once a delivery is owed", () => {
+    it("is accepted at exactly 1 SIU, at the print, once a delivery is owed", () => {
       const seller = LAB_TRADERS.find((t) => owe(t))!;
       expect(guardLabCall(books, cfg, seller, "request_quote", req(ids.issuer, "1", "0.001437"))).toBeNull();
     });
 
-    it("is refused at any other price, naming the print", () => {
+    it("is refused at any other rate, naming the print, and at any other price in SIU, naming it", () => {
       const seller = LAB_TRADERS.find((t) => owe(t))!;
       expect(guardLabCall(books, cfg, seller, "request_quote", req(ids.issuer, "1", "0.0017244")))
-        .toBe("raw work is sold at the print, 0.001437 USD per SIU.");
+        .toBe("a quote's rate is the print, 0.001437 USD per SIU.");
+      expect(guardLabCall(books, cfg, seller, "request_quote", req(ids.issuer, "1.2", "0.001437")))
+        .toBe("a unit of raw work is priced at 1 SIU.");
     });
 
     it("is refused once the trader holds, or has ordered, a unit for each delivery it owes", () => {
@@ -162,13 +167,14 @@ describe("guardLabCall", () => {
       books.quoteIssued("qr-1");
       return need;
     };
-    // A job's quote is 1,700 minor units at the illustrative print 0.001437 USD per SIU; 1 mSIU is worth 1.437 of them.
+    // A job's quote is 1,200 mSIU, or 1,725 USDC minor units at the illustrative print 0.001437 USD per SIU; 1 mSIU is worth 1.437 of them.
     const split = (claim: unknown) => ({ requestId: "qr-1", claimQuantityMilliSiu: claim });
 
-    it("accepts a claim part worth something and less than the price", () => {
+    it("accepts a claim part of at least 1 mSIU and less than the quote's price in mSIU", () => {
       const need = quoted();
       expect(guardLabCall(books, cfg, need.buyer, "settle_split_held", split("500"))).toBeNull();
-      expect(guardLabCall(books, cfg, need.buyer, "settle_split_held", split("1182"))).toBeNull();
+      expect(guardLabCall(books, cfg, need.buyer, "settle_split_held", split("1"))).toBeNull();
+      expect(guardLabCall(books, cfg, need.buyer, "settle_split_held", split("1199"))).toBeNull();
     });
 
     it("refuses anything that is not a whole number of mSIU, more than none", () => {
@@ -180,18 +186,29 @@ describe("guardLabCall", () => {
       }
     });
 
-    it("refuses a claim part worth the whole price or more, stating what it is worth and what the price is", () => {
+    it("refuses a claim part of the whole price or more, stating the price in mSIU", () => {
       const need = quoted();
-      expect(guardLabCall(books, cfg, need.buyer, "settle_split_held", split("1184"))).toBe(
-        "the claim part of a split must be worth more than nothing and less than the quote's price: 1184 mSIU is worth 1701 USDC minor units at the print, and the price is 1700.",
+      expect(guardLabCall(books, cfg, need.buyer, "settle_split_held", split("1200"))).toBe(
+        "the claim part of a split must be less than the quote's price, 1,200 mSIU: 1,200 mSIU is not.",
       );
-      expect(guardLabCall(books, cfg, need.buyer, "settle_split_held", split("5000"))).toContain("must be worth more than nothing and less than");
+      expect(guardLabCall(books, cfg, need.buyer, "settle_split_held", split("5000"))).toBe(
+        "the claim part of a split must be less than the quote's price, 1,200 mSIU: 5,000 mSIU is not.",
+      );
+    });
+
+    it("refuses a claim part worth nothing at the print, stating what it is worth and what the quote's dollars are", () => {
+      const need = quoted();
+      // At a print of 0.0005 USD per SIU, 1 mSIU is worth half a minor unit, which rounds down to none; the job's quote is 600.
+      expect(guardLabCall(books, { printNano: 500_000n, params: DEFAULT_PARAMS }, need.buyer, "settle_split_held", split("1"))).toBe(
+        "the claim part of a split must be worth more than nothing and less than the quote's price: 1 mSIU is worth 0 USDC minor units at the print, and the price is 600.",
+      );
     });
 
     it("says nothing about which payment to use instead", () => {
       const need = quoted();
       const refusal = guardLabCall(books, cfg, need.buyer, "settle_split_held", split("5000"))!;
       expect(refusal).not.toMatch(/pay_with|instead|should|better|prefer/i);
+      expect(refusal).not.toMatch(/usdc|fsiu|dollar/i);
     });
   });
 
@@ -205,7 +222,7 @@ describe("guardLabCall", () => {
     const buyer = buyerWithOpenNeed();
     const sellerId = ids.traders[books.openNeeds(buyer)[0].seller];
     const sentences = [
-      guardLabCall(books, cfg, buyer, "request_quote", req(sellerId, "1", "0.001")),
+      guardLabCall(books, cfg, buyer, "request_quote", req(sellerId, "1.2", "0.001")),
       guardLabCall(books, cfg, buyer, "request_quote", req(sellerId, "2")),
       guardLabCall(books, cfg, "TRADER-1", "request_quote", req(ids.issuer, "1", "0.001437")),
       (() => {
@@ -237,19 +254,19 @@ describe("guardLabCall", () => {
       };
     };
 
-    it("accepts a quote request only at the rate of the round in force: round 1's rate is refused in round 2", () => {
+    it("accepts a quote request only at the print of the round in force as its rate: round 1's is refused in round 2", () => {
       const { b, c } = moving();
       const buyer = LAB_TRADERS.find((t) => b.openNeeds(t).length > 0)!;
       const need = b.openNeeds(buyer)[0];
-      const round1 = tradeRateUsdPerSiu(path.byRound[0], DEFAULT_PARAMS);
-      expect(guardLabCall(b, c, buyer, "request_quote", req(ids.traders[need.seller], "1", round1))).toBeNull();
+      const round1 = printRate(path.byRound[0]);
+      expect(guardLabCall(b, c, buyer, "request_quote", req(ids.traders[need.seller], "1.2", round1))).toBeNull();
       b.advanceRound();
       const buyer2 = LAB_TRADERS.find((t) => b.openNeeds(t).length > 0)!;
       const need2 = b.openNeeds(buyer2)[0];
-      const round2 = tradeRateUsdPerSiu(path.byRound[1], DEFAULT_PARAMS);
+      const round2 = printRate(path.byRound[1]);
       expect(round2).not.toBe(round1);
-      expect(guardLabCall(b, c, buyer2, "request_quote", req(ids.traders[need2.seller], "1", round1))).toBe(`a job is priced at ${round2} USD per SIU.`);
-      expect(guardLabCall(b, c, buyer2, "request_quote", req(ids.traders[need2.seller], "1", round2))).toBeNull();
+      expect(guardLabCall(b, c, buyer2, "request_quote", req(ids.traders[need2.seller], "1.2", round1))).toBe(`a quote's rate is the print, ${round2} USD per SIU.`);
+      expect(guardLabCall(b, c, buyer2, "request_quote", req(ids.traders[need2.seller], "1.2", round2))).toBeNull();
     });
 
     it("holds a raw-work request to the print in force, too", () => {
@@ -260,13 +277,13 @@ describe("guardLabCall", () => {
       b.quoteIssued("qr-1");
       b.paid("qr-1", "usdc");
       b.advanceRound();
-      const old = rawWorkRateUsdPerSiu(path.byRound[0]);
-      const now = rawWorkRateUsdPerSiu(path.byRound[1]);
-      expect(guardLabCall(b, c, owing, "request_quote", req(ids.issuer, "1", old))).toBe(`raw work is sold at the print, ${now} USD per SIU.`);
+      const old = printRate(path.byRound[0]);
+      const now = printRate(path.byRound[1]);
+      expect(guardLabCall(b, c, owing, "request_quote", req(ids.issuer, "1", old))).toBe(`a quote's rate is the print, ${now} USD per SIU.`);
       expect(guardLabCall(b, c, owing, "request_quote", req(ids.issuer, "1", now))).toBeNull();
     });
 
-    it("values a split's claim part at the print of the round the quote was asked for in, not the print in force", () => {
+    it("states a split's limit in mSIU, which is the same at every print: the quote's price in SIU does not move", () => {
       const { b, c } = moving();
       const buyer = LAB_TRADERS.find((t) => b.openNeeds(t).length > 0)!;
       const need = b.openNeeds(buyer)[0];
@@ -274,13 +291,12 @@ describe("guardLabCall", () => {
       b.quoteIssued("qr-1");
       b.advanceRound();
       b.advanceRound();
-      const askedAt = path.byRound[0];
-      const price = quotedPrice("1", tradeRateUsdPerSiu(askedAt, DEFAULT_PARAMS)).minorUnits; // 1,700 at round 1's print
-      // The claim that is worth the whole price at round 1's print is refused as a split; one a little smaller is accepted.
-      const whole = (price * 1_000_000n + askedAt - 1n) / askedAt;
-      const refusal = guardLabCall(b, c, buyer, "settle_split_held", { requestId: "qr-1", claimQuantityMilliSiu: whole.toString() });
-      expect(refusal).toContain("must be worth more than nothing and less than the quote's price");
-      expect(refusal).toContain(`the price is ${price}`);
+      // Two rounds on, the print has moved, and the limit on the claim part is still the job's 1,200 mSIU.
+      expect(path.byRound[2]).not.toBe(path.byRound[0]);
+      expect(guardLabCall(b, c, buyer, "settle_split_held", { requestId: "qr-1", claimQuantityMilliSiu: "1200" })).toBe(
+        "the claim part of a split must be less than the quote's price, 1,200 mSIU: 1,200 mSIU is not.",
+      );
+      expect(guardLabCall(b, c, buyer, "settle_split_held", { requestId: "qr-1", claimQuantityMilliSiu: "1199" })).toBeNull();
       expect(guardLabCall(b, c, buyer, "settle_split_held", { requestId: "qr-1", claimQuantityMilliSiu: "500" })).toBeNull();
     });
   });

@@ -3,26 +3,40 @@
  * them: what the trader is SHOWN, and what is a reason to WAKE it (`loop/lab-hooks.ts`).
  *
  * Facts only. It states the schedule, the prices and what the trader owes and may do; it does not say
- * which asset to use, whether to hold or spend, or what would be wise — and it never names either asset,
- * since prices are in dollars per SIU and the choice of asset is the thing being measured.
+ * which asset to use, whether to hold or spend, or what would be wise. From instrument v8 (D50) it does name both assets: a price is
+ * stated in SIU and then in what settling it costs in each asset at the round's print, and the trader's holdings are stated in
+ * both, each also in the other's terms — the choice of asset is the thing being measured, and an agent cannot choose between
+ * two assets it is never shown side by side.
  */
 import { LabBooks } from "./books.js";
 import { ISSUER_SEAT, JOB_TYPES, LAB_TRADERS, needsInRound, type TraderLabel } from "./economy.js";
-import { jobSiu, quotedPrice, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu } from "./money.js";
+import { jobSiu, quoteTerms } from "./money.js";
 import { describeMove, printText } from "./prints.js";
 import type { GuardConfig } from "./guards.js";
+import { holdingsLine, settleText } from "./quote-text.js";
+import { FIXED_ROUTE_ORDER, type RouteOrder } from "./route-order.js";
 
-export function renderLabInfo(books: LabBooks, cfg: GuardConfig, me: TraderLabel): string {
+export interface InfoOptions {
+  /** The run's seeded order of routes and assets (`route-order.ts`); the fixed one where a test has no seed. */
+  order?: RouteOrder;
+  /** The trader's confirmed holdings, read from the chain this turn. Without them the line is left out rather than guessed. */
+  held?: { usdcMinor: bigint; fsiuMilliSiu: bigint };
+}
+
+export function renderLabInfo(books: LabBooks, cfg: GuardConfig, me: TraderLabel, opts: InfoOptions = {}): string {
   const e = books.economy;
+  const order = opts.order ?? FIXED_ROUTE_ORDER;
   const size = jobSiu(cfg.params);
+  const job = quoteTerms("trade", cfg.printNano, cfg.params);
+  const raw = quoteTerms("rawwork", cfg.printNano, cfg.params);
   const lines: string[] = [
     `THE LAB — ROUND ${books.round} OF ${e.params.rounds}`,
     `  You are ${me}. You deliver ${e.skillOf[me]} jobs, and only you can.`,
-    `  A job is ${size} SIU, priced at ${tradeRateUsdPerSiu(cfg.printNano, cfg.params)} USD per SIU; ` +
-      `its quote is ${quotedPrice(size, tradeRateUsdPerSiu(cfg.printNano, cfg.params)).usd} USD.`,
-    `  A unit of raw work is ${size} SIU, sold by ${ISSUER_SEAT} at the print, ` +
-      `${rawWorkRateUsdPerSiu(cfg.printNano)} USD per SIU; its quote is ` +
-      `${quotedPrice(size, rawWorkRateUsdPerSiu(cfg.printNano)).usd} USD. Delivering a job uses one unit of raw work.`,
+    ...(opts.held === undefined ? [] : [`  ${holdingsLine(opts.held, cfg.printNano, order)}`]),
+    `  A job is ${size} SIU of work, priced at ${job.siu} SIU; at this round's print, ${job.rate} USD per SIU, its quote settles at ` +
+      `${settleText(job, order)}.`,
+    `  A unit of raw work is ${size} SIU of work, sold by ${ISSUER_SEAT} at ${raw.siu} SIU; at this round's print its quote settles at ` +
+      `${settleText(raw, order)}. Delivering a job uses one unit of raw work.`,
     ...renderPrintHistory(books),
     "",
     "WHO DELIVERS WHAT",

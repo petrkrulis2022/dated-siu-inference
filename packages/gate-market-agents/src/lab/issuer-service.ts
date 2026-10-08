@@ -3,8 +3,9 @@
  * called and nothing is decided — it does what an issuer selling a standing product does, on ISSUER-B's own key and
  * through the same tools, the same board and the same loop as every other seat.
  *
- * It reads the same structured sections a trader's prompt carries, with the reader the scripted policy also uses
- * (`cues/prompt-cues.ts`). One action per turn; whatever is left stays on the board and wakes it again.
+ * It reads the same structured sections a trader's prompt carries, with the reader the scripted traders also use for the lab's request lines
+ * (`lab-cues.ts`: from instrument v8 a request reads "… asked for by TRADER-n, 1 SIU of work, price … SIU — settle …", D50). One action per turn;
+ * whatever is left stays on the board and wakes it again.
  *
  * Since instrument v4 (D30) every payment is a direct transfer to the seller, so there is no escrow for it to release: a
  * unit of raw work is credited when its quote is paid, and the payment has already reached ISSUER-B.
@@ -14,7 +15,7 @@
  * other (plan D8).
  */
 import type { Adapter, AdapterResult } from "@touchstone/harness";
-import { openRequests } from "../cues/prompt-cues.js";
+import { labOpenRequests } from "./lab-cues.js";
 import type { ToolName } from "../tools/index.js";
 
 /** The only tool the service needs. */
@@ -32,7 +33,7 @@ const free = (intent: unknown): AdapterResult => ({
 /** Answers the first open request, else waits. */
 export function issuerServiceAdapter(): Adapter {
   return async (_model, prompt) => {
-    const open = openRequests(prompt);
+    const open = labOpenRequests(prompt);
     if (open.length > 0) return free({ tool: "issue_quote", args: { requestId: open[0].requestId } });
     return free({ wait: true });
   };

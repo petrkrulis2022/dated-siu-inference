@@ -550,6 +550,7 @@ function windowResult(overrides: Partial<FullRunWindowResult> = {}): FullRunWind
     capacityEvents: [],
     turnsByAgent: {},
     turnLogsByAgent: {},
+    toolOrderByAgent: {},
     ...overrides,
   };
 }

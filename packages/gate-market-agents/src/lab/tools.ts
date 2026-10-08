@@ -33,15 +33,15 @@ const INTERNAL_OF: Readonly<Record<string, ToolName>> = Object.fromEntries(
 /** The three, in one shape: what it settles and how, then what it costs. */
 export const LAB_TOOL_DESCRIPTIONS: Readonly<Partial<Record<ToolName, string>>> = {
   pay:
-    "pay_with_usdc(requestId) -> settles a quote you were sent by giving the seller USDC, at once. Costs: the quote's " +
-    "price, in USDC.",
+    "pay_with_usdc(requestId) -> settles a quote you were sent by giving the seller USDC, at once. Costs: the USD " +
+    "amount the quote states, in USDC.",
   transfer_claim:
     "pay_with_held_claim(requestId) -> settles a quote you were sent by giving the seller a claim you already hold, at " +
-    "once, worth the quote's price at the print of the round the quote was asked for in. Costs: that claim's fSIU.",
+    "once, for the quote's price in SIU. Costs: the mSIU of fSIU the quote states.",
   settle_split_held:
     "pay_split(requestId, claimQuantityMilliSiu) -> settles a quote you were sent by giving the seller, at once, a claim " +
-    "you already hold of the quantity you give, valued at the print of the round the quote was asked for in, and the rest " +
-    "of the quote's price in USDC. Costs: that quantity of fSIU, plus the rest of the quote's price in USDC.",
+    "you already hold of the quantity you give, valued at the print the quote was priced at, and the rest of the quote's " +
+    "USD amount in USDC. Costs: that quantity of fSIU, plus the rest of the quote's USD amount in USDC.",
 };
 
 export interface CallLookup {

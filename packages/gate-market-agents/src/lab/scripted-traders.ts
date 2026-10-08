@@ -28,6 +28,7 @@ import {
   deliveredIn,
   directoryOf,
   historyOf,
+  labOpenRequests,
   myAddress,
   openNeeds,
   owedJobs,
@@ -36,10 +37,10 @@ import {
   unitsHeld,
   whoAmI,
   type HistoryCall,
+  type ReceivedQuote,
 } from "./lab-cues.js";
-import { openRequests } from "../cues/prompt-cues.js";
 import { claimValueMinorUnits } from "../tools/settle-split.js";
-import { claimForUsd, decimalToUnits, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu } from "./money.js";
+import { decimalToUnits, priceSiu, printRate } from "./money.js";
 import type { LabParams } from "./economy.js";
 
 export type JobRoute = "usdc" | "held" | "split";
@@ -51,12 +52,8 @@ export const RAW_ROUTES: readonly RawRoute[] = ["usdc", "held", "split"];
 /** What a script needs that is not in a prompt: how to word a quote request. */
 export interface ScriptedLabEnv {
   print: { printId: string; printHash: string; rateUsdPerSiu: string; indexVersion: string };
-  /** The rates the guards accept in round 1: a job at the trade price, a unit of raw work at the print. Later rounds' are read from the prompt's print. */
-  rates: { trade: string; raw: string };
-  /** The lab's parameters, to price a quote at whatever print a round has (D41). */
+  /** The lab's parameters, to price a quote in SIU (D50): the print of the round in force is read from the prompt. */
   params: LabParams;
-  /** The size of a job and of a unit, as `request_quote` takes it ("1"). */
-  sizeSiu: string;
   chain: string;
   quoteExpirySeconds: number;
   /** Round 1's print in nano-USD per SIU, used when the prompt states none; otherwise the print in force is read from the prompt. */
@@ -84,9 +81,6 @@ const free = (intent: unknown): AdapterResult => ({
   deviations: [],
 });
 
-/** The claim a quote is sized to, as the loop sizes it (`loop/parity.ts`): its price's worth at the print, rounded up. */
-export const claimFor = claimForUsd;
-
 const traderIndex = (t: TraderLabel): number => LAB_TRADERS.indexOf(t) + 1;
 export const plannedJobRoute = (t: TraderLabel, j: number): JobRoute => JOB_ROUTES[(traderIndex(t) + j) % JOB_ROUTES.length];
 export const plannedRawRoute = (t: TraderLabel, j: number): RawRoute => RAW_ROUTES[(traderIndex(t) + j) % RAW_ROUTES.length];
@@ -111,18 +105,15 @@ export function decide(prompt: string, env: ScriptedLabEnv, mem: Memory): { inte
   const me = whoAmI(prompt);
   if (me === undefined) return { intent: { wait: true } };
   const dir = directoryOf(prompt);
-  // The print in force, and so the rates a quote must carry and the claim a payment is sized at (D41).
+  // The print in force: a quote request's rate is the print of the round it is asked in (D50).
   const print = printInForce(prompt) ?? env.printNano;
-  const rates = { trade: tradeRateUsdPerSiu(print, env.params), raw: rawWorkRateUsdPerSiu(print) };
   const tokenId = claimTokenId(prompt);
   const history = historyOf(prompt);
   const turn = history.reduce((m, c) => Math.max(m, c.turn), 0);
   const issuerId = dir["ISSUER-B"]?.sellerId;
-  const sellerLabelOf = (sellerId: string): Counterparty | undefined =>
-    (Object.entries(dir).find(([, v]) => v?.sellerId === sellerId)?.[0] as Counterparty | undefined);
 
   // 1. Answer a request addressed to me.
-  const asked = openRequests(prompt)[0];
+  const asked = labOpenRequests(prompt)[0];
   if (asked !== undefined) return { intent: { tool: "issue_quote", args: { requestId: asked.requestId } } };
 
   // 2. Deliver a job I have been paid for, once I hold a unit of raw work.
@@ -140,38 +131,33 @@ export function decide(prompt: string, env: ScriptedLabEnv, mem: Memory): { inte
     [...mem.decided.entries()].filter(([id, d]) => d.trader === me && d.kind === kind && !shown.has(id)).length;
 
   // 3. Pay the issuer's quote for a unit of raw work.
-  const rawQuote = issuerId === undefined ? undefined : quotes.find((q) => q.sellerId === issuerId);
+  const rawQuote = quotes.find((q) => q.seller === "ISSUER-B");
   if (rawQuote !== undefined && tokenId !== undefined) {
-    return pay(me, "raw", rawQuote, plannedRawRoute(me, confirmed("raw")), prompt, history, turn, tokenId, env, mem, print);
+    return pay(me, "raw", rawQuote, plannedRawRoute(me, confirmed("raw")), prompt, history, turn, tokenId, mem);
   }
 
   // 4. Ask the issuer for a unit when I owe more deliveries than I hold or have ordered units for.
   const rawOrdered = history.filter((c) => c.tool === "request_quote" && c.args.sellerId === issuerId && !c.failed).length;
   const outstandingRaw = rawOrdered - confirmed("raw");
   if (toDeliver !== undefined && owed.length > units + Math.max(0, outstandingRaw) && issuerId !== undefined) {
-    return { intent: requestQuote(env, dir["ISSUER-B"]!.model, issuerId, rates.raw) };
+    return { intent: requestQuote(env, dir["ISSUER-B"]!.model, issuerId, "rawwork", print) };
   }
 
   // 5. Pay a job quote I have received.
-  const jobQuote = quotes.find((q) => q.sellerId !== issuerId);
+  const jobQuote = quotes.find((q) => q.seller !== "ISSUER-B");
   if (jobQuote !== undefined && tokenId !== undefined) {
-    const seller = sellerLabelOf(jobQuote.sellerId);
-    if (seller !== undefined) {
-      return pay(me, "job", jobQuote, plannedJobRoute(me, confirmed("job")), prompt, history, turn, tokenId, env, mem, print);
-    }
+    return pay(me, "job", jobQuote, plannedJobRoute(me, confirmed("job")), prompt, history, turn, tokenId, mem);
   }
 
   // 6. Ask a seller for a job I now need.
   const need = openNeeds(prompt)[0];
   if (need !== undefined) {
     const to = dir[need.seller];
-    if (to !== undefined) return { intent: requestQuote(env, to.model, to.sellerId, rates.trade) };
+    if (to !== undefined) return { intent: requestQuote(env, to.model, to.sellerId, "trade", print) };
   }
 
   return { intent: { wait: true } };
 }
-
-type Counterparty = TraderLabel | "ISSUER-B";
 
 export interface Memory {
   /** Payments the script has decided on, by request. Whether one went through is read off the board: a paid
@@ -209,13 +195,14 @@ function splitParts(amountMinor: bigint, claimQty: bigint, printNano: bigint): {
   return { claimPart, usdcPart: amountMinor - claimValueMinorUnits(claimPart.toString(), printNano.toString()) };
 }
 
-function requestQuote(env: ScriptedLabEnv, model: string, sellerId: string, rate: string): Intent {
+/** A quote is asked for at its price in SIU, at the print of the round in force (D50). */
+function requestQuote(env: ScriptedLabEnv, model: string, sellerId: string, kind: "trade" | "rawwork", print: bigint): Intent {
   return {
     tool: "request_quote",
     args: {
-      siu: env.sizeSiu,
+      siu: priceSiu(kind, env.params),
       model,
-      rateUsdPerSiu: rate,
+      rateUsdPerSiu: printRate(print),
       indexVersion: env.print.indexVersion,
       printId: env.print.printId,
       printHash: env.print.printHash,
@@ -230,19 +217,19 @@ function requestQuote(env: ScriptedLabEnv, model: string, sellerId: string, rate
 function pay(
   me: TraderLabel,
   kind: "job" | "raw",
-  quote: { requestId: string; amountUsd: string },
+  quote: ReceivedQuote,
   planned: JobRoute | RawRoute,
   prompt: string,
   history: readonly HistoryCall[],
   turn: number,
   tokenId: string,
-  env: ScriptedLabEnv,
   mem: Memory,
-  print: bigint,
 ): { intent: Intent; note?: string } {
   const id = quote.requestId;
+  // What the quote itself states: its dollars, its price in mSIU, and the print it was priced at (a split's claim part is valued there).
   const amountMinor = decimalToUnits(quote.amountUsd, 6);
-  const claimQty = claimFor(quote.amountUsd, print);
+  const claimQty = quote.claimMilliSiu;
+  const print = quote.printNano;
 
   // A payment that was tried and failed is not tried again: set the route aside and read the balances afresh.
   const tried = mem.attempt.get(id);

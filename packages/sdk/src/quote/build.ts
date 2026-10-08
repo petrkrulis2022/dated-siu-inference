@@ -1,10 +1,29 @@
 import type { TouchstoneQuote } from "../types/generated/datum-quote.schema.js";
-import { D, roundHalfUp, usdToMinorUnits, usdcAddressFor } from "../money/index.js";
+import { D, roundHalfUp, usdToMinorUnits, usdcAddressFor, type DecimalValue } from "../money/index.js";
 
 /** Build-1's fixed convention for amount_usd_max's precision — matches build1-spec.md §8's own
  * illustrative example (siu_max 1.400 × rate 0.0483 = 0.06762, rounded half-up to 4dp = 0.0676)
  * and print's usd_per_siu_dp default. `quote/validate.ts` reconciles against the same constant. */
 export const QUOTE_AMOUNT_DP = 4;
+
+/**
+ * How `amount_usd_max` is rounded. The published default is build 1's: four decimals, half-up. A deployment whose settlement asset has
+ * more decimals than that (USDC has six) may quote at the asset's own precision and round UP to its smallest unit, so a quote priced in
+ * SIU is owed in exactly the dollars that price comes to, with no $0.0001 step in between. It is an explicit option on both `buildQuoteBody`
+ * and `validateQuote`, never a default: a consumer that does not name it validates against build 1's rule, and a quote built at another
+ * precision fails that validation, as it should. Used by the currency lab (docs/marketplace_plan.md D50); see docs/datum-quote.md.
+ */
+export interface QuoteAmountPrecision {
+  decimals: number;
+  rounding: "half-up" | "up";
+}
+
+export const DEFAULT_QUOTE_AMOUNT_PRECISION: QuoteAmountPrecision = { decimals: QUOTE_AMOUNT_DP, rounding: "half-up" };
+
+/** A dollar amount rounded as `precision` says, as a fixed-point decimal string. */
+export function roundQuoteAmount(value: DecimalValue, precision: QuoteAmountPrecision): string {
+  return value.toFixed(precision.decimals, precision.rounding === "up" ? D.ROUND_UP : D.ROUND_HALF_UP);
+}
 
 /**
  * The smallest nonzero value representable at `QUOTE_AMOUNT_DP`'s precision — docs/datum-quote.md's
@@ -78,9 +97,9 @@ export type QuoteBuildInput =
  * quote allows, not the seller's best guess. For `fixed`, there is no `siu_max`, so the
  * committed `siu` figure is what's owed and what escrow holds against.
  */
-export function buildQuoteBody(input: QuoteBuildInput): QuoteBody {
+export function buildQuoteBody(input: QuoteBuildInput, precision: QuoteAmountPrecision = DEFAULT_QUOTE_AMOUNT_PRECISION): QuoteBody {
   const siuForAmount = input.pattern === "fixed" ? input.siu : input.siuMax;
-  const amountUsdMax = roundHalfUp(new D(siuForAmount).times(input.rateUsdPerSiu), QUOTE_AMOUNT_DP);
+  const amountUsdMax = roundQuoteAmount(new D(siuForAmount).times(input.rateUsdPerSiu), precision);
 
   const address = usdcAddressFor(input.chain);
   if (!address) {

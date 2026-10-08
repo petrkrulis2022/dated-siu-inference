@@ -1,4 +1,4 @@
-import type { Print } from "@touchstone/sdk";
+import type { Print, QuoteAmountPrecision } from "@touchstone/sdk";
 import type { ChainClients } from "@touchstone/agents";
 import type { GateHardeningJobInputs, GateHardeningResult } from "@touchstone/task-pack-gate-hardening";
 import type { ChainReader } from "./chain/reader.js";
@@ -35,6 +35,12 @@ export interface RunnerDeps {
    * Set by the currency lab from instrument v4 (D30); absent everywhere else, so the gate configuration is unchanged.
    */
   directSettlement?: boolean;
+  /**
+   * How `request_quote` rounds a quote's dollar amount. Absent, the SDK's default: four decimals, half-up (build 1's rule). The
+   * currency lab names USDC's own six decimals, rounded up (D50), so a quote priced in SIU is owed in the dollars that price
+   * comes to. The gate configuration never sets it.
+   */
+  quoteAmount?: QuoteAmountPrecision;
 }
 
 /** Bundled with `RunnerDeps` for every tool call — this agent's own viem account/clients, held

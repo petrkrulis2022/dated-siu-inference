@@ -31,8 +31,11 @@ export interface LabHooks {
    * as TRADER-n, so a trader that is told to pass a claim to TRADER-2 must be able to say so.
    */
   aliases?: Readonly<Record<string, AgentId>>;
-  /** Shown to the agent every turn and never a reason to wake it: the schedule, its standing. */
-  infoTextFor(agentId: AgentId): string;
+  /**
+   * Shown to the agent every turn and never a reason to wake it: the schedule, its standing. May be asynchronous: from instrument v8
+   * (D50) the trader's holdings are part of it, and they are read from the chain.
+   */
+  infoTextFor(agentId: AgentId): string | Promise<string>;
   /** Shown, and a reason to wake the agent if it holds a tool it could act with: what it can do now. */
   actionTextFor(agentId: AgentId): string;
   /**
@@ -60,6 +63,12 @@ export interface LabHooks {
    * issued against, which the quote itself names. Absent, or undefined for a quote, the mint context's print is used, as always.
    */
   printForQuote?(requestId: string): bigint | undefined;
+  /**
+   * The claim, in mSIU, that pays a quote in full, when the quote is priced in SIU (D50): the price itself, whatever the print.
+   * Absent, or undefined for a quote, the claim is sized from the quote's dollars at the print, as the gate configuration does
+   * (`loop/parity.ts`).
+   */
+  claimForQuote?(requestId: string): bigint | undefined;
   /** After a call that succeeded: the lab updates its own books. May act on the chain (the fee rebate). */
   afterToolCall(event: LabToolEvent): Promise<void>;
   /** Nobody can act. Opens the next round and returns true, or returns false when there is none. */

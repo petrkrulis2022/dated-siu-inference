@@ -60,6 +60,14 @@ export interface QuoteBoardOptions {
    * section, which lists the jobs it owes.
    */
   escrow?: boolean;
+  /**
+   * How a request addressed to a seller reads, after its id. The gate configuration shows the request's own fields (`siu`, model, rate,
+   * pattern). The currency lab states what a quote is priced at in SIU and what settling it costs in each asset (D50), which only it
+   * knows, so it writes the line. Undefined for a request it does not know: the board then writes its own.
+   */
+  describeRequest?: (request: QuoteBoardRequest) => string | undefined;
+  /** The same for a quote a buyer has received: what follows its id. */
+  describeQuote?: (issued: QuoteBoardIssuedQuote) => string | undefined;
 }
 
 export class QuoteBoard {
@@ -216,9 +224,12 @@ export class QuoteBoard {
         "Open quote requests addressed to you (call issue_quote with { requestId } to answer one):",
       );
       for (const r of openRequests) {
+        const said = this.options.describeRequest?.(r);
         lines.push(
-          `  ${r.requestId}: from ${this.options.displayName?.(r.buyer) ?? r.buyer}, ${r.body.siu} SIU, model ${r.body.model}, ` +
-            `rate ${r.body.rate_usd_per_siu} USD/SIU, pattern ${r.body.pattern}`,
+          said !== undefined
+            ? `  ${r.requestId}: ${said}`
+            : `  ${r.requestId}: from ${this.options.displayName?.(r.buyer) ?? r.buyer}, ${r.body.siu} SIU, model ${r.body.model}, ` +
+                `rate ${r.body.rate_usd_per_siu} USD/SIU, pattern ${r.body.pattern}`,
         );
       }
     }
@@ -243,6 +254,11 @@ export class QuoteBoard {
         "Quotes you have received (settle one by naming its requestId, in whichever asset you choose):",
       );
       for (const i of myQuotes) {
+        const said = this.options.describeQuote?.(i);
+        if (said !== undefined) {
+          lines.push(`  ${i.requestId}: ${said}`);
+          continue;
+        }
         const lead =
           this.options.requestIdFirst === true ? `  ${i.requestId}: quote from seller` : `  answers ${i.requestId}: seller`;
         lines.push(`${lead} ${i.quote.seller_id}, amount_usd_max ${i.quote.amount_usd_max}, expires ${i.quote.expiry}`);

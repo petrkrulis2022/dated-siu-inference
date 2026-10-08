@@ -29,7 +29,6 @@ import {
   type MintContext,
   type OpeningClaim,
 } from "../loop/full-run.js";
-import { QuoteBoard } from "../loop/quote-board.js";
 import type { RunManifest } from "../run-recorder/recorder.js";
 import { setWriteRetryListener, type WriteRetryEvent } from "../chain/write.js";
 import { windowContamination } from "../cli/topology.js";
@@ -43,14 +42,13 @@ import {
   LAB_TRADERS,
   SEAT_OF,
   buildEconomy,
-  labDisplayName,
   type Economy,
   type LabParams,
   type TraderLabel,
 } from "./economy.js";
 import type { WorkExecutor } from "./jobs.js";
 import { checkEndowmentFits, endowmentBound } from "./launch.js";
-import { printNano } from "./money.js";
+import { LAB_QUOTE_PRECISION, printNano } from "./money.js";
 import { buildPrintPath, ceilingPrint, reachablePrints, type PrintPath } from "./prints.js";
 import { waitsOf, type WaitRecord } from "./waits.js";
 import { decisionsOf, type DecisionRecord } from "./decisions.js";
@@ -63,7 +61,9 @@ import {
   type UsdcMove,
 } from "./operator.js";
 import { buildLabRoster } from "./roster.js";
-import { LabService, type LabOperatorAction } from "./service.js";
+import { routeOrderFor, type RouteOrder } from "./route-order.js";
+import { thinkingCaptureOf, type ThinkingCapture } from "./thinking-report.js";
+import { LabService, labQuoteBoard, type LabOperatorAction } from "./service.js";
 import { openingMatches, snapshotToJson, takeSnapshot, type Snapshot } from "./scoring.js";
 
 /** Refused before anything was spent or minted. */
@@ -166,6 +166,20 @@ export interface LabReport {
    * `byRound` is nano-USD per SIU, round 1 first; `ids` is what each goes by in a quote's `print_id`.
    */
   prints: { stepBps: number; byRound: string[]; ids: string[]; reachableNano: string[] };
+  /**
+   * The order the lab listed its payment routes and the two assets in, drawn from the seed (D50): so a reader can tell whether a run's
+   * choices follow position. `assetFirst` is the asset named first wherever both are named; `tools` is the order of the three routes.
+   */
+  routeOrder: RouteOrder;
+  /** The order each agent's tool descriptions were listed in, seeded per agent and per run by the loop (`shuffledToolOrder`). */
+  toolListOrder: Record<string, readonly string[]>;
+  /** What each trader was shown of its own wallet, each time a turn was composed for it (D50): the chain's confirmed balances, in raw units. */
+  holdingsShown: { trader: string; round: number; usdcMinor: string; fsiuMilliSiu: string }[];
+  /**
+   * Every time the wallet the lab showed a trader (its own account, moved by each payment) differed from what the chain held at a snapshot: none in a sound
+   * run. A run with any is not countable — a figure shown to an agent was wrong.
+   */
+  holdingsDisagreements: { label: string; trader: string; shown: { usdcMinor: string; fsiuMilliSiu: string }; chain: { usdcMinor: string; fsiuMilliSiu: string } }[];
   pool: { startingHeadroomMilliSiu: string; limitMilliSiu: string; whole: boolean; endingHeadroomMilliSiu?: string; restored?: boolean };
   opening: { usdcMinorPerTrader: string; fsiuMilliSiuPerTrader: string; tokenId?: string };
   snapshots: unknown[];
@@ -197,6 +211,8 @@ export interface LabReport {
    * The optional rationale is one line in the agent's words, never required or prompted for; the raw reply is authoritative.
    */
   decisions: DecisionRecord[];
+  /** Per trader: what its model returned of its own reasoning at the lab's settings (D52). Nothing is switched on to get more. */
+  thinkingCapture: Record<string, ThinkingCapture>;
   claimFlows: unknown;
   capacityEvents: unknown;
   claimPositions: unknown;
@@ -279,6 +295,9 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
   const printPath: PrintPath = buildPrintPath(input.seed, p, params, input.print.printId);
   const reachable = reachablePrints(p, params);
   const bound = endowmentBound(reachable, params);
+  const order = routeOrderFor(input.seed);
+  const holdingsShown: LabReport["holdingsShown"] = [];
+  const holdingsDisagreements: LabReport["holdingsDisagreements"] = [];
   const fit = checkEndowmentFits(bound, startingHeadroom);
   if (!fit.ok) throw new LaunchRefused(fit.reason);
 
@@ -398,6 +417,22 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
     if (mismatch !== undefined) throw new Error(mismatch);
     log(`opening set: ${LAB_TRADERS.length} traders, each ${openingUsdc} USDC minor units and ${openingFsiu} mSIU (token ${tokenId}).`);
 
+    // The wallet shown to each trader is the lab's own account of it, moved by each payment; the chain is the authority, and is checked at every snapshot.
+    const checkWallets = (s: Snapshot): void => {
+      for (const t of s.traders) {
+        const w = service?.walletOf(t.trader);
+        if (w !== undefined && (w.usdcMinor !== t.usdcMinor || w.fsiuMilliSiu !== t.fsiuMilliSiu)) {
+          holdingsDisagreements.push({
+            label: s.label,
+            trader: t.trader,
+            shown: { usdcMinor: w.usdcMinor.toString(), fsiuMilliSiu: w.fsiuMilliSiu.toString() },
+            chain: { usdcMinor: t.usdcMinor.toString(), fsiuMilliSiu: t.fsiuMilliSiu.toString() },
+          });
+          log(`WALLET DISAGREES with the chain at ${s.label}: ${t.trader} shown ${w.usdcMinor} USDC and ${w.fsiuMilliSiu} mSIU, chain ${t.usdcMinor} and ${t.fsiuMilliSiu}.`);
+        }
+      }
+    };
+
     service = new LabService({
       books,
       // A getter, so the guards and the board follow the round: the print in force is the books' current one (D41).
@@ -420,8 +455,14 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
         fsiuMilliSiu: await input.chain.claimBalance(tokenId!, traderAddress[t]),
       }),
       onRoundOpened: async (round) => {
-        snapshots.push(await snap(`round ${round} opened`));
+        const s = await snap(`round ${round} opened`);
+        snapshots.push(s);
+        checkWallets(s);
       },
+      opening: { usdcMinor: openingUsdc, fsiuMilliSiu: openingFsiu },
+      order,
+      onHoldingsShown: (trader, round, held) =>
+        holdingsShown.push({ trader, round, usdcMinor: held.usdcMinor.toString(), fsiuMilliSiu: held.fsiuMilliSiu.toString() }),
     });
 
     const roster = buildLabRoster({
@@ -430,6 +471,7 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
       claim: { tokenId: tokenId.toString(), classLabel: "extract", fromIso: iso(windowFrom), untilIso: iso(windowTo) },
       maxTurns: input.maxTurns,
       opening: { fsiuMilliSiu: openingFsiu, usdcMinor: openingUsdc },
+      order,
       chain: input.chainName,
       rpcUrl: input.rpcUrl,
       adapters: input.adapters,
@@ -465,7 +507,8 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
       // Both are the one service. Leaving this out made every `deliver_job` fail "this run has no jobs to deliver",
       // found by the first scripted walk on a fork.
       // `directSettlement`: every payment is a transfer to the seller at the moment it is made (D30), with no escrow.
-      deps: { ...input.loopDeps, lab: service, directSettlement: true },
+      // `quoteAmount`: a quote's dollars are derived from its price in SIU at USDC's own precision, rounded up (D50).
+      deps: { ...input.loopDeps, lab: service, directSettlement: true, quoteAmount: LAB_QUOTE_PRECISION },
       runsRoot: input.runsRoot,
       runId: input.runId,
       manifest,
@@ -474,13 +517,14 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
       mintContext: input.mintContext,
       lab: service,
       assetDescription: LAB_ASSET_DESCRIPTION,
-      board: new QuoteBoard({ reservationStep: false, displayName: labDisplayName, requestIdFirst: true, escrow: false }),
+      board: labQuoteBoard({ describeRequest: (r) => service!.describeRequest(r), describeQuote: (i) => service!.describeQuote(i) }),
       openingClaims,
       ...(input.onTurn !== undefined ? { onTurn: input.onTurn as never } : {}),
     });
 
     // Before the window closes: unexpired fSIU still counts at the print.
     final = await snap("final");
+    checkWallets(final);
     contamination = windowContamination(1, result.capacityEvents, [endowmentIssuer], issuerAddress);
     if (contamination !== undefined) abortedBecause = contamination;
   } catch (err) {
@@ -554,6 +598,10 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
       ids: [...printPath.ids],
       reachableNano: reachable.map((x) => x.toString()),
     },
+    routeOrder: order,
+    toolListOrder: result?.toolOrderByAgent ?? {},
+    holdingsShown,
+    holdingsDisagreements,
     pool: {
       startingHeadroomMilliSiu: startingHeadroom.toString(),
       limitMilliSiu: input.issuerLimitMilliSiu.toString(),
@@ -585,7 +633,14 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
     spendByProvider: result?.spendByProvider ?? {},
     paymentMoments: result?.paymentMoments ?? [],
     waits: result !== undefined ? waitsOf(result.turnLogsByAgent) : [],
-    decisions: result !== undefined ? decisionsOf(Object.fromEntries(LAB_TRADERS.map((t) => [SEAT_OF[t], result!.turnLogsByAgent[SEAT_OF[t]] ?? []]))) : [],
+    decisions:
+      result !== undefined
+        ? decisionsOf(
+            Object.fromEntries(LAB_TRADERS.map((t) => [SEAT_OF[t], result!.turnLogsByAgent[SEAT_OF[t]] ?? []])),
+            (agentId, turn) => service?.eventAt(agentId, turn),
+          )
+        : [],
+    thinkingCapture: result !== undefined ? thinkingCaptureOf(result.turnLogsByAgent, SEAT_OF, input.models) : {},
     claimFlows: result?.claimFlows ?? {},
     capacityEvents: result?.capacityEvents ?? [],
     claimPositions: result?.claimPositions ?? [],

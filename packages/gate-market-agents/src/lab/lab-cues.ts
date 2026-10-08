@@ -72,12 +72,66 @@ export function unitsHeld(prompt: string): number | undefined {
   return m ? Number(m[1]) : undefined;
 }
 
-/** `Quotes you have received` with the amount each carries — what a buyer may now pay. */
-export function receivedQuotes(prompt: string): { requestId: string; sellerId: string; amountUsd: string }[] {
-  return sectionLines(prompt, /^Quotes you have received/)
-    .map((l) => /^\s+(qr-\d+): quote from seller (\S+?), amount_usd_max (\S+?),/.exec(l))
+/**
+ * `Open quote requests addressed to you` as the lab writes them (D50): `qr-3: TYPE-3 job asked for by TRADER-1, 1 SIU of work, price 1.2 SIU —
+ * settle … (print …)`. The gate configuration's own reader (`cues/prompt-cues.ts`) reads the other form.
+ */
+export function labOpenRequests(prompt: string): { requestId: string; from: TraderLabel }[] {
+  return sectionLines(prompt, /^Open quote requests addressed to you/)
+    .map((l) => /^\s+(qr-\d+): .+? asked for by (TRADER-[1-4]), /.exec(l))
     .filter((m): m is RegExpExecArray => m !== null)
-    .map((m) => ({ requestId: m[1], sellerId: m[2], amountUsd: m[3] }));
+    .map((m) => ({ requestId: m[1], from: m[2] as TraderLabel }));
+}
+
+/** One quote a buyer has been sent, as the lab writes it (D50): the work, its price in SIU, what settling it costs in each asset, and the print it was priced at. */
+export interface ReceivedQuote {
+  requestId: string;
+  /** Who issued it, as the board names them: a trader's label, or ISSUER-B. */
+  seller: Counterparty;
+  kind: "job" | "raw";
+  /** The quote's price in SIU, as written ("1.2"). */
+  priceSiu: string;
+  /** What settling it in USDC costs, in USD, as written ("0.001725"). */
+  amountUsd: string;
+  /** What settling it in fSIU costs, in mSIU. */
+  claimMilliSiu: bigint;
+  /** The print the quote was priced at, in nano-USD per SIU. */
+  printNano: bigint;
+}
+
+/**
+ * `Quotes you have received`, one line each: `qr-1: TYPE-3 job from TRADER-2, 1 SIU of work, price 1.2 SIU — settle 0.001725 USD or
+ * 1,200 mSIU of fSIU (print 0.001437 USD/SIU), expires …`. The two assets may come in either order: the lab lists them in a seeded order.
+ */
+export function receivedQuotes(prompt: string): ReceivedQuote[] {
+  const out: ReceivedQuote[] = [];
+  for (const l of sectionLines(prompt, /^Quotes you have received/)) {
+    const m = /^\s+(qr-\d+): (a unit of raw work|\S+ job) from (TRADER-[1-4]|ISSUER-B), [0-9.]+ SIU of work, price ([0-9.]+) SIU — settle (.+?) \(print ([0-9.]+) USD\/SIU\)/.exec(l);
+    if (m === null) continue;
+    const usd = /([0-9.]+) USD/.exec(m[5])?.[1];
+    const msiu = /([0-9,]+) mSIU of fSIU/.exec(m[5])?.[1];
+    if (usd === undefined || msiu === undefined) continue;
+    out.push({
+      requestId: m[1],
+      seller: m[3] as Counterparty,
+      kind: m[2] === "a unit of raw work" ? "raw" : "job",
+      priceSiu: m[4],
+      amountUsd: usd,
+      claimMilliSiu: BigInt(msiu.replaceAll(",", "")),
+      printNano: decimalToUnits(m[6], 9),
+    });
+  }
+  return out;
+}
+
+/** `YOU HOLD: 8,364 USDC minor units (= … mSIU at this print) and 4,400 mSIU of fSIU (= … USDC minor units at this print)`, in either order. */
+export function holdingsShown(prompt: string): { usdcMinor: bigint; fsiuMilliSiu: bigint } | undefined {
+  const line = /^\s+YOU HOLD: (.+)$/m.exec(prompt)?.[1];
+  if (line === undefined) return undefined;
+  const usdc = /([0-9,]+) USDC minor units \(= [0-9,]+ mSIU at this print\)/.exec(line)?.[1];
+  const fsiu = /([0-9,]+) mSIU of fSIU \(= [0-9,]+ USDC minor units at this print\)/.exec(line)?.[1];
+  if (usdc === undefined || fsiu === undefined) return undefined;
+  return { usdcMinor: BigInt(usdc.replaceAll(",", "")), fsiuMilliSiu: BigInt(fsiu.replaceAll(",", "")) };
 }
 
 /** One call in the history block, in the loop's own format: `Turn N — called tool({args}) -> {result}`. */

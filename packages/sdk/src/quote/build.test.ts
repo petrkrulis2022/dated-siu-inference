@@ -3,8 +3,11 @@ import {
   buildQuoteBody,
   QUOTE_SCHEMA_VERSION,
   MINIMUM_QUOTABLE_USD,
+  DEFAULT_QUOTE_AMOUNT_PRECISION,
+  roundQuoteAmount,
   type QuoteBuildInput,
 } from "./build.js";
+import { D } from "../money/index.js";
 
 const BASE: Omit<QuoteBuildInput, "pattern" | "siuMax"> = {
   siu: "1.000",
@@ -79,5 +82,32 @@ describe("buildQuoteBody", () => {
 describe("MINIMUM_QUOTABLE_USD", () => {
   it("is the smallest nonzero value representable at QUOTE_AMOUNT_DP's precision", () => {
     expect(MINIMUM_QUOTABLE_USD).toBe("0.0001");
+  });
+});
+
+describe("quote amount precision", () => {
+  const USDC: { decimals: number; rounding: "up" } = { decimals: 6, rounding: "up" };
+
+  it("defaults to build 1's rule: four decimals, half-up", () => {
+    expect(DEFAULT_QUOTE_AMOUNT_PRECISION).toEqual({ decimals: 4, rounding: "half-up" });
+    const body = buildQuoteBody({ ...BASE, siu: "1.200", pattern: "fixed", rateUsdPerSiu: "0.001437" });
+    expect(body.amount_usd_max).toBe("0.0017");
+  });
+
+  it("at USDC's six decimals, rounded up, quotes the dollars the SIU price comes to", () => {
+    // 1.2 SIU × 0.001437 = 0.0017244 → the next USDC minor unit up is 0.001725, owed as 1725 minor units.
+    const body = buildQuoteBody({ ...BASE, siu: "1.200", pattern: "fixed", rateUsdPerSiu: "0.001437" }, USDC);
+    expect(body.amount_usd_max).toBe("0.001725");
+    expect(body.settlement[0].amount_max).toBe("1725");
+  });
+
+  it("an exact product is not rounded further", () => {
+    const body = buildQuoteBody({ ...BASE, siu: "1.000", pattern: "fixed", rateUsdPerSiu: "0.001437" }, USDC);
+    expect(body.amount_usd_max).toBe("0.001437");
+  });
+
+  it("rounds up, never half-up, at the chosen precision", () => {
+    expect(roundQuoteAmount(new D("0.0000011"), USDC)).toBe("0.000002");
+    expect(roundQuoteAmount(new D("0.0000011"), { decimals: 6, rounding: "half-up" })).toBe("0.000001");
   });
 });

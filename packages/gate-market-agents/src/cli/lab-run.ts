@@ -20,7 +20,7 @@ import { AGENT_IDS, type AgentId } from "../identity/resolve.js";
 import { classIdFor, type MintContext } from "../loop/full-run.js";
 import { assertAllowancesForRun, readAllowances, RUN_MINIMUM_ALLOWANCE_MINOR_UNITS } from "./allowances.js";
 import { DEFAULT_PARAMS, LAB_TRADERS, type TraderLabel } from "../lab/economy.js";
-import { jobSiu, printNano, rawWorkRateUsdPerSiu, tradeRateUsdPerSiu } from "../lab/money.js";
+import { printNano } from "../lab/money.js";
 import { scriptedLabTraders, type ScriptedLabTraders } from "../lab/scripted-traders.js";
 import { renderWalk, verifyLabWalk, type WalkReport } from "../lab/verify-walk.js";
 import { renderOverview, type OverviewReport } from "../lab/overview.js";
@@ -159,9 +159,7 @@ async function main(): Promise<void> {
     const p = printNano(rateUsdPerSiu);
     scriptedTraders = scriptedLabTraders({
       print: { printId: commodityPrint.print_id, printHash: "0x00", rateUsdPerSiu, indexVersion: "SIU-2026a" },
-      rates: { trade: tradeRateUsdPerSiu(p, DEFAULT_PARAMS), raw: rawWorkRateUsdPerSiu(p) },
       params: DEFAULT_PARAMS,
-      sizeSiu: jobSiu(DEFAULT_PARAMS),
       chain: "base-sepolia",
       quoteExpirySeconds: windowSeconds,
       printNano: p,

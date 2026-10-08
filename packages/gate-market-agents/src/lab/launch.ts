@@ -18,7 +18,10 @@ export const ENDOWMENT_HEADROOM_SHARE_BPS = 8_000n;
 export interface EndowmentBound {
   /** The highest print the walk can reach (D41): USDC is sized at it, so USDC alone is enough however the print moves. */
   ceilingPrintNano: bigint;
-  /** One trader's opening, in fSIU and in USDC of equal value at the highest reachable print. */
+  /**
+   * One trader's opening: the fSIU that pays every quote it must pay, which does not move with the print (D50), and the USDC that
+   * pays them at the highest reachable print.
+   */
   perTraderMilliSiu: bigint;
   perTraderUsdcMinor: bigint;
   /** What one trader must pay to meet every need, in USDC minor units: either asset alone covers it. */
@@ -29,7 +32,7 @@ export interface EndowmentBound {
 
 /** `reachable` is every print the walk can reach (`lab/prints.ts`); a lab with a fixed print passes the one. */
 export function endowmentBound(reachable: readonly bigint[], params: LabParams): EndowmentBound {
-  const perTrader = openingMilliSiuPerTrader(reachable, params);
+  const perTrader = openingMilliSiuPerTrader(params);
   return {
     ceilingPrintNano: reachable.reduce((a, b) => (a > b ? a : b)),
     perTraderMilliSiu: perTrader,
@@ -47,8 +50,8 @@ export type EndowmentCheck = { ok: true; allowanceMilliSiu: bigint } | { ok: fal
 
 export function checkEndowmentFits(bound: EndowmentBound, issuerHeadroomMilliSiu: bigint): EndowmentCheck {
   const allowance = endowmentAllowance(issuerHeadroomMilliSiu);
-  // Either asset alone must cover every need. The USDC opening is the fSIU's value rounded up, so it can only fall short
-  // if that sizing is changed to something else; this is the check that would say so.
+  // Either asset alone must cover every need. The USDC opening is the larger of the fSIU's value at the ceiling and what the
+  // quotes cost there, so it can only fall short if that sizing is changed to something else; this is the check that would say so.
   if (bound.perTraderUsdcMinor < bound.perTraderUsdcNeededMinor) {
     return {
       ok: false,

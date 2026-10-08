@@ -9,9 +9,11 @@ import {
   compareArms,
   decide,
   decideH2,
+  H2_MIN_PAYMENTS_WITHOUT,
   labDisqualification,
   measureRun,
   pool,
+  poolH2,
   renderPooled,
   wilson,
   type H2Counts,
@@ -65,7 +67,7 @@ const moment = (agentId: string, tool: string, requestId: string | undefined, he
 });
 
 describe("what a run measured", () => {
-  // The claim a 0.0017 job quote needs is 1,184 mSIU; a 0.0014 raw-work quote, 975 (at 0.001437).
+  // From instrument v8 what is due in claims is the quote's price in SIU: 1,200 mSIU for a job, 1,000 for a unit of raw work (D50).
   const report = (): MeasureReport =>
     base({
       sales: [
@@ -77,10 +79,10 @@ describe("what a run measured", () => {
         sale("qr-6", "trade", "TRADER-4", "TRADER-1"), // a split, paid while holding some received fSIU
       ],
       paymentMoments: [
-        moment("ORCHESTRATOR", "transfer_claim", "qr-1", "1184"),
+        moment("ORCHESTRATOR", "transfer_claim", "qr-1", "1200"),
         moment("ORCHESTRATOR", "pay", "qr-2", "5000"),
         moment("WORKER-CODE", "transfer_claim", "qr-3", "0"),
-        moment("WORKER-CODE", "transfer_claim", "qr-4", "975", "0.0014"),
+        moment("WORKER-CODE", "transfer_claim", "qr-4", "1000", "0.001437"),
         moment("WORKER-EXTRACT", "pay", "qr-5", "0"),
         moment("ISSUER-A", "settle_split_held", "qr-6", "300"),
         moment("WORKER-CODE", "transfer_claim", undefined, "5000"), // names no quote: settles nothing
@@ -88,7 +90,7 @@ describe("what a run measured", () => {
       capacityEvents: [
         // The claim part of the split is recorded as the held-claim transfer it is.
         { kind: "transfer_claim", agentId: "ISSUER-A", quantityMilliSiu: "592", settlesRequestId: "qr-6" },
-        { kind: "transfer_claim", agentId: "ORCHESTRATOR", quantityMilliSiu: "1184" },
+        { kind: "transfer_claim", agentId: "ORCHESTRATOR", quantityMilliSiu: "1200" },
       ],
       needsMet: { "TRADER-1": 2, "TRADER-2": 1, "TRADER-3": 1, "TRADER-4": 1 },
       operatorActions: [
@@ -130,8 +132,8 @@ describe("what a run measured", () => {
   });
 
   it("reports what each trader disposed of: passed on, redeemed for raw work, expired", () => {
-    expect(of("TRADER-1").passedOnMilliSiu).toBe("1184");
-    expect(of("TRADER-2")).toMatchObject({ passedOnMilliSiu: "1184", redeemedForRawWorkMilliSiu: "975" });
+    expect(of("TRADER-1").passedOnMilliSiu).toBe("1200");
+    expect(of("TRADER-2")).toMatchObject({ passedOnMilliSiu: "1200", redeemedForRawWorkMilliSiu: "1000" });
     // The claim part of a split is a held claim passed on, by the quantity the loop recorded.
     expect(of("TRADER-4").passedOnMilliSiu).toBe("592");
     expect(of("TRADER-1").expiredMilliSiu).toBe("816");
@@ -140,7 +142,7 @@ describe("what a run measured", () => {
   });
 
   it("reports a split that spends received fSIU as partial reuse, apart from reuse, and does not count it as an opportunity it did not meet", () => {
-    // qr-6: 300 mSIU received against 1,184 due is not an opportunity, and the split is not a reuse; but 300 of its 592 mSIU
+    // qr-6: 300 mSIU received against 1,200 due is not an opportunity, and the split is not a reuse; but 300 of its 592 mSIU
     // claim part came from what the trader had received, so it is partial reuse.
     expect(m.partialReuse).toBe(1);
     expect(of("TRADER-4")).toMatchObject({ partialReuse: 1, partialReuseMilliSiu: "300", opportunities: 0, reuse: 0 });
@@ -168,7 +170,7 @@ describe("what a run measured", () => {
 
   it("states holdings against what each trader still has to buy, at every snapshot", () => {
     const row = m.holdings.find((h) => h.label === "opening" && h.trader === "TRADER-1")!;
-    expect(row).toMatchObject({ fsiuMilliSiu: "2000", unmetNeeds: 2, upcomingNeedsMilliSiu: "2368" }); // 2 jobs x 1,184
+    expect(row).toMatchObject({ fsiuMilliSiu: "2000", unmetNeeds: 2, upcomingNeedsMilliSiu: "2400" }); // 2 jobs x 1,200
     const last = m.holdings.find((h) => h.label === "final" && h.trader === "TRADER-1")!;
     expect(last.fsiuMilliSiu).toBe("1500");
   });
@@ -198,6 +200,7 @@ describe("which runs may be counted", () => {
     ["a run made before versions were stamped", { instrument: undefined }, /before versions were stamped.*current version/],
     ["a run made under an earlier version of the lab", { instrument: { version: LAB_INSTRUMENT_VERSION - 1 } }, new RegExp(`version ${LAB_INSTRUMENT_VERSION - 1}, not the current version ${LAB_INSTRUMENT_VERSION}`)],
     ["an aborted run", { abortedBecause: "the endowment was backed by ISSUER-A" }, /aborted: the endowment/],
+    ["a run whose shown wallet disagreed with the chain", { holdingsDisagreements: [{ label: "round 2 opened" }] }, /the wallet shown to a trader differed from the chain's at 1 snapshot\(s\)/],
     ["a contaminated run", { contamination: "a mint was backed by TRADER-4" }, /contaminated/],
     ["a harness failure", { infrastructureFailure: {} }, /harness failed/],
     ["bookkeeping errors", { labErrors: [{}] }, /bookkeeping/],
@@ -441,32 +444,119 @@ describe("what was paid to the issuer for raw work", () => {
   });
 });
 
-describe("an opportunity is judged at the print of the quote's round (D41)", () => {
-  // At round 3's print of 1,900,432 a job quote is $0.0023 and its claim 1,211 mSIU; at round 1's 1,437,000 the same $0.0023 would take 1,601.
-  const report = (heldReceived: string): MeasureReport =>
-    base({
-      prints: { byRound: ["1437000", "1652550", "1900432"], stepBps: 1500 },
-      sales: [{ requestId: "qr-1", round: 3, kind: "trade", buyer: "TRADER-1", seller: "TRADER-2", delivered: true }],
-      paymentMoments: [moment("ORCHESTRATOR", "transfer_claim", "qr-1", heldReceived, "0.0023")],
-    });
+describe("an opportunity is judged at the quote's price in SIU (D50), and by the earlier rule for a report made before it", () => {
+  const sales = [{ requestId: "qr-1", round: 3, kind: "trade" as const, buyer: "TRADER-1", seller: "TRADER-2", delivered: true }];
+  const prints = { byRound: ["1437000", "1652550", "1900432"], stepBps: 1500 };
+  const report = (heldReceived: string, over: Partial<MeasureReport> = {}): MeasureReport =>
+    base({ prints, sales, paymentMoments: [moment("ORCHESTRATOR", "transfer_claim", "qr-1", heldReceived, "0.002281")], ...over });
 
-  it("counts holding enough received fSIU for the quote at its own round's print as an opportunity", () => {
-    const m = measureRun(report("1211"));
+  it("counts holding received fSIU at least the quote's price in mSIU as an opportunity, whatever the round's print", () => {
+    const m = measureRun(report("1200"));
     expect(m.opportunities).toBe(1);
     expect(m.reuse).toBe(1);
   });
 
-  it("does not count holding less than that, even if it would have covered the quote at another round's print", () => {
-    expect(measureRun(report("1210")).opportunities).toBe(0);
+  it("does not count holding a mSIU less than the price, at any print", () => {
+    expect(measureRun(report("1199")).opportunities).toBe(0);
   });
 
-  it("falls back to the report's one print for a report that has none, as every earlier run did", () => {
-    const m = measureRun(base({ sales: [sale("qr-1", "trade", "TRADER-1", "TRADER-2")], paymentMoments: [moment("ORCHESTRATOR", "transfer_claim", "qr-1", "1184")] }));
-    expect(m.opportunities).toBe(1);
+  it("asks 1,000 mSIU of a payment for raw work", () => {
+    const raw = (held: string) =>
+      measureRun(base({ prints, sales: [{ requestId: "qr-1", round: 3, kind: "rawwork" as const, buyer: "TRADER-1", seller: "ISSUER", delivered: true }], paymentMoments: [moment("ORCHESTRATOR", "pay", "qr-1", held, "0.001901")] }));
+    expect(raw("1000").opportunities).toBe(1);
+    expect(raw("999").opportunities).toBe(0);
+  });
+
+  describe("a report made under v7 or earlier (read, never pooled)", () => {
+    // At round 3's print of 1,900,432 a job quote was $0.0023 and its claim 1,211 mSIU; at round 1's 1,437,000 the same $0.0023 would take 1,601.
+    const old = (heldReceived: string): MeasureReport => report(heldReceived, { instrument: { version: 7 }, paymentMoments: [moment("ORCHESTRATOR", "transfer_claim", "qr-1", heldReceived, "0.0023")] });
+
+    it("counts holding enough received fSIU for the quote at its own round's print", () => {
+      expect(measureRun(old("1211")).opportunities).toBe(1);
+      expect(measureRun(old("1210")).opportunities).toBe(0);
+    });
+
+    it("falls back to the report's one print for a report that has none, as every earlier run did", () => {
+      const m = measureRun(base({ instrument: { version: 7 }, sales: [sale("qr-1", "trade", "TRADER-1", "TRADER-2")], paymentMoments: [moment("ORCHESTRATOR", "transfer_claim", "qr-1", "1184")] }));
+      expect(m.opportunities).toBe(1);
+    });
   });
 });
 
-describe("H2 — fSIU held at each round's start against the raw work still to buy (D41)", () => {
+describe("H2 at the decision level (D51): every payment made while holding fSIU, by whether the payer still has raw work to buy", () => {
+  // TRADER-1 sells two jobs, so it must buy two units of raw work; TRADER-4 sells none.
+  const needs = [
+    { id: "a", buyer: "TRADER-2", seller: "TRADER-1", round: 1 },
+    { id: "b", buyer: "TRADER-3", seller: "TRADER-1", round: 2 },
+    { id: "c", buyer: "TRADER-1", seller: "TRADER-3", round: 1 },
+    { id: "d", buyer: "TRADER-1", seller: "TRADER-2", round: 3 },
+  ];
+  const held = (m: Moment, total: string | undefined): Moment => ({ ...m, ...(total !== undefined ? { heldTotalMilliSiu: total } : {}), turn: 1 });
+  const run = (moments: Moment[], kinds: Record<string, "trade" | "rawwork"> = {}): RunMeasures =>
+    measureRun(
+      base({
+        economy: { needs },
+        prints: { byRound: ["1437000", "1652550", "1900432"], stepBps: 1500 },
+        sales: moments
+          .filter((m) => m.requestId !== undefined)
+          .map((m, i) => ({ requestId: m.requestId!, round: 1 + (i % 3), kind: kinds[m.requestId!] ?? "trade", buyer: "TRADER-1", seller: kinds[m.requestId!] === "rawwork" ? "ISSUER" : "TRADER-3", delivered: true })),
+        paymentMoments: moments,
+      }),
+    );
+
+  it("puts a payment in the group with raw work still to buy until the last unit is paid for, and in the other from then on", () => {
+    const m = run(
+      [
+        held(moment("ORCHESTRATOR", "pay", "qr-1", "0"), "4400"), // a job: 2 units still to buy
+        held(moment("ORCHESTRATOR", "pay", "qr-2", "0", "0.001437"), "4400"), // unit 1: one still to buy
+        held(moment("ORCHESTRATOR", "transfer_claim", "qr-3", "0", "0.001437"), "3400"), // unit 2: none left
+        held(moment("ORCHESTRATOR", "transfer_claim", "qr-4", "0"), "2400"), // a job after: none left
+      ],
+      { "qr-2": "rawwork", "qr-3": "rawwork" },
+    );
+    expect(m.h2.rows.map((r) => [r.requestId, r.rawStillToBuy, r.route])).toEqual([
+      ["qr-1", 2, "usdc"],
+      ["qr-2", 1, "usdc"],
+      ["qr-3", 0, "held"],
+      ["qr-4", 0, "held"],
+    ]);
+    // withN: payments with raw work still to buy (2), withSum: of those paid in USDC (2). withoutN 2, withoutSum 0.
+    expect(m.h2.counts).toEqual({ withN: 2, withSum: 2, withoutN: 2, withoutSum: 0 });
+  });
+
+  it("counts a split as using fSIU: the outcome is paid wholly in USDC or not", () => {
+    const m = run([held(moment("ORCHESTRATOR", "settle_split_held", "qr-1", "0"), "4400")]);
+    expect(m.h2.counts).toEqual({ withN: 1, withSum: 0, withoutN: 0, withoutSum: 0 });
+  });
+
+  it("leaves out a payment made holding no fSIU, and one from a report that does not say what was held", () => {
+    const m = run([held(moment("ORCHESTRATOR", "pay", "qr-1", "0"), "0"), held(moment("ORCHESTRATOR", "pay", "qr-2", "0"), undefined)]);
+    expect(m.h2.rows).toEqual([]);
+    expect(m.h2.counts).toEqual({ withN: 0, withSum: 0, withoutN: 0, withoutSum: 0 });
+  });
+
+  it("records, beside each row and read by no rule, whether the fSIU held could have paid the quote in full", () => {
+    const m = run([held(moment("ORCHESTRATOR", "pay", "qr-1", "0"), "1199"), held(moment("ORCHESTRATOR", "pay", "qr-2", "0"), "1200")]);
+    expect(m.h2.rows.map((r) => [r.dueMilliSiu, r.coverable])).toEqual([["1200", false], ["1200", true]]);
+  });
+
+  it("has a payer who sells no job and so needs no raw work in the group without from its first payment", () => {
+    const m = measureRun(
+      base({
+        economy: { needs },
+        sales: [{ requestId: "qr-1", round: 1, kind: "trade", buyer: "TRADER-4", seller: "TRADER-3", delivered: true }],
+        paymentMoments: [held(moment("ISSUER-A", "pay", "qr-1", "0"), "4400")],
+      }),
+    );
+    expect(m.h2.rows[0]).toMatchObject({ trader: "TRADER-4", rawStillToBuy: 0 });
+  });
+
+  it("is registered with its thresholds in the plan and read from a pooled count of payments", () => {
+    expect(H2_MIN_PAYMENTS_WITHOUT).toBe(30);
+  });
+});
+
+describe("H2's holdings-level figures, kept as context (D41, D51)", () => {
   const needs = [
     { id: "a", buyer: "TRADER-2", seller: "TRADER-1", round: 1 },
     { id: "b", buyer: "TRADER-3", seller: "TRADER-1", round: 3 },
@@ -507,11 +597,11 @@ describe("H2 — fSIU held at each round's start against the raw work still to b
     expect([1, 2, 3].map((r) => units("TRADER-4", r))).toEqual([1, 0, 0]); // round 1
   });
 
-  it("states those units in mSIU at that round's print: about 1 SIU each whatever the print", () => {
+  it("states those units in mSIU: exactly 1,000 each, whatever the print (D50)", () => {
     const row = run().holdings.find((h) => h.trader === "TRADER-1" && h.round === 3 && h.label !== "final")!;
-    expect(row.upcomingRawWorkMilliSiu).toBe("1000"); // $0.0019 at 1,900,432 nano-USD per SIU
+    expect(row.upcomingRawWorkMilliSiu).toBe("1000");
     const first = run().holdings.find((h) => h.trader === "TRADER-1" && h.round === 1)!;
-    expect(first.upcomingRawWorkMilliSiu).toBe("1950"); // two units at 975 mSIU at round 1's print
+    expect(first.upcomingRawWorkMilliSiu).toBe("2000"); // two units at 1,000 mSIU
   });
 
   it("measures a holding as a fraction of what the trader opened with, and never the final row", () => {
@@ -520,11 +610,11 @@ describe("H2 — fSIU held at each round's start against the raw work still to b
     expect(row("TRADER-4", 2).heldFraction).toBe(0.5);
     expect(row("TRADER-3", 3).heldFraction).toBe(0.5);
     expect(m.holdings.find((h) => h.label === "final")!.heldFraction).toBeUndefined();
-    expect(m.h2.rows).toHaveLength(12);
+    expect(m.h2Holdings.rows).toHaveLength(12);
   });
 
   it("splits the trader-rounds into those with raw work still to buy and those without, and sums their holdings", () => {
-    const { counts } = run().h2;
+    const { counts } = run().h2Holdings;
     // with: round 1 all four; round 2 TRADER-1, -2, -3; round 3 TRADER-1.  without: TRADER-4 in round 2; TRADER-2, -3, -4 in round 3.
     expect(counts.withN).toBe(8);
     expect(counts.withoutN).toBe(4);
@@ -533,7 +623,8 @@ describe("H2 — fSIU held at each round's start against the raw work still to b
     expect(counts.withoutSum).toBeCloseTo(0.5 + 0.6643 + 0.5 + 0, 9);
   });
 
-  describe("the interval and the proposed rule", () => {
+  describe("the interval and the proposed rule, at the decision level (D51)", () => {
+    // `H2Counts` is a mean in each group: at the decision level, the share of payments paid wholly in USDC.
     const runs = (n: number, withMean: number, withoutMean: number): H2Counts[] =>
       Array.from({ length: n }, () => ({ withN: 8, withSum: 8 * withMean, withoutN: 4, withoutSum: 4 * withoutMean }));
 
@@ -558,26 +649,26 @@ describe("H2 — fSIU held at each round's start against the raw work still to b
       expect(bootstrapH2([]).runs).toBe(0);
     });
 
-    it("is inconclusive below 30 trader-rounds without raw work to buy, or below 10 runs contributing both groups", () => {
+    it("is inconclusive below 30 payments without raw work to buy, or below 10 runs contributing both groups", () => {
       const good = { delta: 0.5, lower: 0.4, upper: 0.6 };
-      expect(decideH2({ traderRoundsWithout: 29, runsWithBoth: 20, interval: good })).toBe("inconclusive");
-      expect(decideH2({ traderRoundsWithout: 80, runsWithBoth: 9, interval: good })).toBe("inconclusive");
-      expect(decideH2({ traderRoundsWithout: 30, runsWithBoth: 10, interval: good })).toBe("supported");
+      expect(decideH2({ paymentsWithout: 29, runsWithBoth: 20, interval: good })).toBe("inconclusive");
+      expect(decideH2({ paymentsWithout: 80, runsWithBoth: 9, interval: good })).toBe("inconclusive");
+      expect(decideH2({ paymentsWithout: 30, runsWithBoth: 10, interval: good })).toBe("supported");
     });
 
     it("is supported only with the lower bound at 0.10 or more and a difference of at least 0.20", () => {
-      const at = (delta: number, lower: number, upper: number) => decideH2({ traderRoundsWithout: 80, runsWithBoth: 20, interval: { delta, lower, upper } });
+      const at = (delta: number, lower: number, upper: number) => decideH2({ paymentsWithout: 80, runsWithBoth: 20, interval: { delta, lower, upper } });
       expect(at(0.3, 0.1, 0.5)).toBe("supported");
       expect(at(0.3, 0.09, 0.5)).toBe("no detectable effect at this sample size");
       expect(at(0.15, 0.1, 0.2)).toBe("no detectable effect at this sample size"); // lower bound met, but the difference is under 0.20
     });
 
     it("is not supported when the whole interval sits below 0.10", () => {
-      expect(decideH2({ traderRoundsWithout: 80, runsWithBoth: 20, interval: { delta: 0.02, lower: -0.05, upper: 0.09 } })).toBe("not supported");
-      expect(decideH2({ traderRoundsWithout: 80, runsWithBoth: 20, interval: { delta: 0.05, lower: -0.05, upper: 0.1 } })).toBe("no detectable effect at this sample size");
+      expect(decideH2({ paymentsWithout: 80, runsWithBoth: 20, interval: { delta: 0.02, lower: -0.05, upper: 0.09 } })).toBe("not supported");
+      expect(decideH2({ paymentsWithout: 80, runsWithBoth: 20, interval: { delta: 0.05, lower: -0.05, upper: 0.1 } })).toBe("no detectable effect at this sample size");
     });
 
-    it("pools runs, reads the rule, and puts the result beside H1's in the rendered report", () => {
+    it("pools runs, reads the rule, and puts the result beside H1's in the rendered report, with the holdings figures as context", () => {
       const reports = Array.from({ length: 2 }, (_, k) =>
         base({
           runId: `lab-h2-${k}`,
@@ -589,14 +680,33 @@ describe("H2 — fSIU held at each round's start against the raw work still to b
         }),
       );
       const pooled = pool(reports);
-      expect(pooled.h2.traderRoundsWith).toBe(16);
-      expect(pooled.h2.traderRoundsWithout).toBe(8);
-      expect(pooled.h2.runsWithBoth).toBe(2);
-      expect(pooled.h2.verdict).toBe("inconclusive"); // 8 trader-rounds without, 2 runs
+      // The holdings-level figures are context and carry no verdict.
+      expect(pooled.h2Holdings.traderRoundsWith).toBe(16);
+      expect(pooled.h2Holdings.traderRoundsWithout).toBe(8);
+      expect(pooled.h2Holdings.runsWithBoth).toBe(2);
+      expect(pooled.h2Holdings).not.toHaveProperty("verdict");
+      // The rule reads payments, and these runs made none.
+      expect(pooled.h2.paymentsWith).toBe(0);
+      expect(pooled.h2.verdict).toBe("inconclusive");
       const text = renderPooled(pooled);
-      expect(text).toContain("H2 (fSIU held at each round's start");
+      expect(text).toContain("H2 (payments made while holding fSIU: paid in USDC, by whether the payer still has raw work to buy");
       expect(text).toContain("verdict under the proposed rule: INCONCLUSIVE");
+      expect(text).toContain("Holdings at each round's start, as context");
       expect(text).toContain("verdict under the approved rule"); // H1's line is still there
+    });
+
+    it("pools the shares paid in USDC: a hedge shows as a large difference, inertia as none", () => {
+      const m = (withN: number, withUsdc: number, withoutN: number, withoutUsdc: number): RunMeasures =>
+        ({ h2: { counts: { withN, withSum: withUsdc, withoutN, withoutSum: withoutUsdc }, rows: [] } }) as unknown as RunMeasures;
+      const hedge = poolH2(Array.from({ length: 12 }, () => m(6, 6, 4, 1)));
+      expect(hedge).toMatchObject({ paymentsWith: 72, paymentsWithout: 48, usdcWith: 72, usdcWithout: 12, runsWithBoth: 12 });
+      expect(hedge.usdcShareWith).toBe(1);
+      expect(hedge.usdcShareWithout).toBeCloseTo(0.25, 9);
+      expect(hedge.interval.delta).toBeCloseTo(0.75, 9);
+      expect(hedge.verdict).toBe("supported");
+      const inertia = poolH2(Array.from({ length: 12 }, () => m(6, 6, 4, 4)));
+      expect(inertia.interval.delta).toBeCloseTo(0, 9);
+      expect(inertia.verdict).toBe("not supported");
     });
   });
 });

@@ -18,7 +18,7 @@ const input = (me: TraderLabel): LabBriefInput => ({
   me,
   economy,
   print: { printId: "print-illustrative", rateUsdPerSiu: "0.001437" }, // illustrative
-  opening: { fsiuMilliSiu: 4_516n, usdcMinor: 8_583n }, // what the walk's ceiling asks for at this print (launch.test.ts)
+  opening: { fsiuMilliSiu: 4_400n, usdcMinor: 8_364n }, // what the schedule and the walk's ceiling ask for at this print (launch.test.ts, D50)
   address: `0xADDR-${me}`,
   directory,
   claim: { tokenId: "777", classLabel: "extract", fromIso: "2026-10-06", untilIso: "2026-10-07" },
@@ -27,6 +27,7 @@ const input = (me: TraderLabel): LabBriefInput => ({
 });
 
 const briefs = Object.fromEntries(LAB_TRADERS.map((t) => [t, buildLabBrief(input(t))])) as Record<TraderLabel, string>;
+const text1 = briefs["TRADER-1"];
 
 /** The `{"tool": ...}` objects in a text, found by balanced braces — so a worked example that is not valid JSON fails. */
 function toolExamples(text: string): Array<{ tool: string; args: Record<string, unknown> }> {
@@ -82,18 +83,26 @@ describe("lab briefs — what they state", () => {
     }
   });
 
-  it("states the multiples, round 1's print, the credit and the opening balances; the amounts for a round come each turn (D41)", () => {
-    expect(text).toContain("A job is 1 SIU.");
-    // The brief is written before round 1 and the print moves, so it states how a price is made, not a price that goes stale.
-    expect(text).toContain("A job's\n  price is 1.2 times the print per SIU");
-    expect(text).toContain("a unit is 1 SIU at the\n  print, so its price is the print per SIU");
+  it("states each price in SIU, round 1's print, the credit and the opening balances; the dollars for a round come each turn (D41, D50)", () => {
+    const flat = text.replace(/\s+/g, " ");
+    expect(flat).toContain("A job is 1 SIU of work.");
+    // A quote is priced in SIU, so the brief states the price in SIU, which does not go stale as the print moves.
+    expect(flat).toContain("A job's price is 1.2 SIU (1.2 times its size)");
+    expect(flat).toContain("a unit is 1 SIU of work and its price is 1 SIU");
     expect(text).not.toContain("0.0017244");
     expect(text).not.toContain("a quote of 0.0014 USD");
     expect(text).toContain("Round 1's print is 0.001437 USD per SIU");
     expect(text).toContain("1.5 times the print for a job of 1 SIU");
     expect(text).toContain("150% of the current print per SIU of the job");
-    // The opening is derived (D31, D41): the larger of two figures the walk's ceiling asks for, as the runner passes it in.
-    expect(text).toContain("4.516 SIU of it (4516 mSIU) and 0.008583 USD in USDC");
+    // The opening is derived (D31, D50): the fSIU that pays every quote in claims, and the USDC that pays them at the walk's ceiling.
+    expect(flat).toContain("Each trader opened the lab holding 8,364 USDC minor units (0.008364 USD) and 4.4 SIU of fSIU (4,400 mSIU).");
+  });
+
+  it("tells a trader what a request names: the price in SIU as its siu and the print in force as its rate (D50)", () => {
+    const flat = text.replace(/\s+/g, " ");
+    expect(flat).toContain("A request's siu is the price in SIU of what you are buying (1.2 for a job, 1 for a unit of raw work), and its rateUsdPerSiu is the print of the round in force, which your turn states");
+    expect(text).toContain('"siu": "<the price in SIU>"');
+    expect(text).toContain('"rateUsdPerSiu": "<the print>"');
   });
 
   it("states that the print can move, that it is not the published index, and that each turn shows it (D41)", () => {
@@ -101,7 +110,9 @@ describe("lab briefs — what they state", () => {
     expect(text).toContain("published index.");
     expect(text).toContain("Your turn shows the print of every round so far");
     expect(text).toContain("and how much it moved.");
-    expect(text).toContain("A quote is priced from the print of the round it is asked for in, and keeps that price.");
+    expect(text.replace(/\s+/g, " ")).toContain(
+      "A quote is priced in SIU. What settling it costs in dollars is its price in SIU times the print of the round it is asked for in, and once it is asked for, its price in SIU and its dollars do not change.",
+    );
   });
 
   it("no longer offers get_print: the lab's print is not the published one, and each turn states it", () => {
@@ -109,13 +120,36 @@ describe("lab briefs — what they state", () => {
     expect(LAB_TRADER_TOOLS).not.toContain("get_print");
   });
 
-  it("states what every way of paying costs, side by side, in one parallel statement — no one route singled out (D21, D31)", () => {
-    expect(text).toContain(
-      "Paying in USDC costs USDC. Paying with fSIU you hold costs that fSIU. Paying with both costs the fSIU you give\n    and the rest of the price in USDC.",
+  it("states what every way of paying costs, side by side, in one parallel statement — no one route singled out (D21, D31, D50)", () => {
+    expect(text.replace(/\s+/g, " ")).toContain(
+      "A quote states what settling it costs in each asset. Paying in USDC costs the USD amount the quote states. Paying with fSIU you hold costs the mSIU of fSIU the quote states. Paying with both costs the mSIU of fSIU you give as the claim part, and the rest of the quote's USD amount in USDC, the claim part being valued at the print the quote was priced at.",
     );
     // Nothing is minted after the opening, so there is no mint to cost: the third sentence of v3 is gone.
     expect(text).not.toMatch(/mint/i);
     expect(text).not.toContain("paid to the issuer");
+  });
+
+  describe("the run's seeded order of routes and assets (D50)", () => {
+    const flipped: LabBriefInput["order"] = { assetFirst: "fsiu", tools: ["pay_split", "pay_with_usdc", "pay_with_held_claim"] };
+    const flippedText = buildLabBrief({ ...input("TRADER-1"), order: flipped });
+    const flat = flippedText.replace(/\s+/g, " ");
+
+    it("lists the three payment examples in the run's order, and every reader of one run sees the same order", () => {
+      const section = flippedText.slice(flippedText.indexOf("Step 3"), flippedText.indexOf("IF YOU ARE THE SELLER"));
+      expect(toolExamples(section).filter((e) => e.tool.startsWith("pay_")).map((e) => e.tool)).toEqual(["pay_split", "pay_with_usdc", "pay_with_held_claim"]);
+      expect(sharedPartOf(buildLabBrief({ ...input("TRADER-2"), order: flipped }))).toBe(sharedPartOf(flippedText));
+    });
+
+    it("names the assets in the run's order in the cost sentences and the opening", () => {
+      expect(flat).toContain("Paying with fSIU you hold costs the mSIU of fSIU the quote states. Paying in USDC costs the USD amount the quote states.");
+      expect(flat).toContain("Each trader opened the lab holding 4.4 SIU of fSIU (4,400 mSIU) and 8,364 USDC minor units (0.008364 USD).");
+    });
+
+    it("changes nothing else: the same words, the same facts, in another order", () => {
+      // A full stop moves with the last item of a list, so it is not part of a word.
+      const words = (t: string): string[] => t.split(/\s+/).map((w) => w.replace(/[.,;]+$/, "")).sort();
+      expect(words(flippedText)).toEqual(words(text1));
+    });
   });
 
   it("states that a payment reaches the seller at once and that the fSIU supply is the opening supply (D30, D31)", () => {
