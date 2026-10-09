@@ -1,0 +1,39 @@
+{
+  "id": "d5fd39dc-25dd-9d16-8bad-ac11706b0b4b",
+  "object": "chat.completion",
+  "created": 1791557186,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "F58A66\nBE9BCB\n9B86DF\nB4A510",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes in the document. The eastern annex is F58A66. The coastal annex is BE9BCB. The lower annex is 9B86DF. Another lower annex entry is B4A510.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21341,
+    "completion_tokens": 19,
+    "total_tokens": 21724,
+    "prompt_tokens_details": {
+      "text_tokens": 21341,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 364,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 442120000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

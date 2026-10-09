@@ -1,0 +1,39 @@
+{
+  "id": "3fd1fa7a-283b-9a3a-9d21-b96a636731f3",
+  "object": "chat.completion",
+  "created": 1791557184,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"tracking_id\": \"SH-CC9E93\",\n  \"origin_city\": \"Tallinn\",\n  \"destination_city\": \"Perth\",\n  \"weight_kg\": 143,\n  \"status\": \"in_transit\",\n  \"priority\": \"express\"\n}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nThe shipment SH-CC9E93 originated in Tallinn and is destined for Perth. It weighs 143 kilograms and has express priority. The current status is in_transit.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1540,
+    "completion_tokens": 65,
+    "total_tokens": 1892,
+    "prompt_tokens_details": {
+      "text_tokens": 1540,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 287,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 44240000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

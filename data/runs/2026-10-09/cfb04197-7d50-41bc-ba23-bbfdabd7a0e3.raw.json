@@ -1,0 +1,39 @@
+{
+  "id": "b9d11ce3-6f0a-959f-bdd0-6b99a3e96c2c",
+  "object": "chat.completion",
+  "created": 1791557185,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"tracking_id\":\"SH-D9D4E6\",\"origin_city\":\"Toronto\",\"destination_city\":\"Cebu\",\"weight_kg\":208,\"status\":\"delivered\",\"priority\":\"standard\"}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nThe shipment SH-D9D4E6 originated in Toronto and is destined for Cebu. It weighs 208 kilograms with standard priority and has been delivered.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1551,
+    "completion_tokens": 47,
+    "total_tokens": 1889,
+    "prompt_tokens_details": {
+      "text_tokens": 1551,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 291,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 43620000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

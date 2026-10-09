@@ -1,0 +1,39 @@
+{
+  "id": "49688b7b-fb4a-969b-8459-f513761d0576",
+  "object": "chat.completion",
+  "created": 1791557191,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "E6A09E\n592AAD\n3D9B5C\n783893",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes in the log. The central annex has E6A09E and 3D9B5C. The eastern annex has 592AAD and 783893.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 22094,
+    "completion_tokens": 19,
+    "total_tokens": 22426,
+    "prompt_tokens_details": {
+      "text_tokens": 22094,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 313,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 454120000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
