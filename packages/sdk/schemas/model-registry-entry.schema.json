@@ -35,6 +35,17 @@
       "type": "string",
       "minLength": 1
     },
+    "sampling": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The sampling this model is measured at, written down (docs/methodology.md, Sampling settings). `temperature` is a number the print sends as it is, or \"provider-default\" when the print sends no temperature at all because the model accepts no other value. The print sends exactly this and refuses a measurement whose request went out with anything else.",
+      "properties": {
+        "temperature": {
+          "anyOf": [{ "type": "number", "minimum": 0 }, { "type": "string", "enum": ["provider-default"] }]
+        }
+      },
+      "required": ["temperature"]
+    },
     "notes": {
       "type": "string"
     }

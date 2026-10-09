@@ -12,7 +12,7 @@ import {
 import { DEFAULT_BACKOFF, withBackoff, classifyFailure, type BackoffOptions, type FailureCategory } from "./retry.js";
 import { createLimiter } from "./concurrency.js";
 import { buildRunRecord } from "./run-record.js";
-import { AdapterHttpError } from "./adapters/types.js";
+import { AdapterHttpError, type AdapterParams, type AdapterResult } from "./adapters/types.js";
 
 export interface OrchestratorTask {
   registryEntry: ModelRegistryEntry;
@@ -50,6 +50,54 @@ export interface InstanceOutcome {
   infraFailureBody?: string;
 }
 
+/**
+ * Raised when a model's request went out with sampling other than what the registry declares for it (docs/methodology.md, Sampling settings). The print
+ * sends exactly the declared sampling, and a call that did not is not a measurement under the stated settings, so it is refused rather than priced.
+ */
+export class SamplingMismatchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SamplingMismatchError";
+  }
+}
+
+/**
+ * The request the print sends for a model: the task's own parameters with the sampling the registry declares for that model. A model declared at a number
+ * is sent that temperature; one declared at "provider-default" is sent none, because it accepts no other value, and so no request is ever sent that the
+ * provider will reject and the adapter has to change quietly. A model with no declaration is refused: admitting a model means writing its sampling down.
+ */
+export function declaredParams(entry: ModelRegistryEntry, params: AdapterParams): AdapterParams {
+  const declared = entry.sampling;
+  if (declared === undefined) {
+    throw new SamplingMismatchError(
+      `SAMPLING NOT DECLARED: ${entry.id} has no "sampling" in the registry. Write down the sampling this model is measured at (docs/methodology.md, Sampling settings).`,
+    );
+  }
+  return declared.temperature === "provider-default" ? { ...params, omit_temperature: true } : { ...params, temperature: declared.temperature };
+}
+
+/** What the adapter reports it sent, in the registry's own terms. */
+const sentAs = (result: AdapterResult): number | "provider-default" | undefined => result.sent?.temperature;
+
+/** Throws `SamplingMismatchError` unless the request went out with exactly the declared sampling. A result that does not say what it sent cannot be checked and is refused too. */
+export function checkSamplingSent(entry: ModelRegistryEntry, result: AdapterResult): void {
+  const declared = entry.sampling?.temperature;
+  const sent = sentAs(result);
+  if (declared === undefined) {
+    throw new SamplingMismatchError(`SAMPLING NOT DECLARED: ${entry.id} has no "sampling" in the registry.`);
+  }
+  if (sent === undefined) {
+    throw new SamplingMismatchError(`SAMPLING UNVERIFIED: ${entry.id}'s adapter did not report what it sent, so the declared temperature (${String(declared)}) cannot be checked.`);
+  }
+  if (sent !== declared) {
+    throw new SamplingMismatchError(
+      `SAMPLING MISMATCH: ${entry.id} is declared at temperature ${String(declared)} and its request went out at ${String(sent)}` +
+        (result.deviations.some((d) => /temperature/i.test(d)) ? ` (${result.deviations.filter((d) => /temperature/i.test(d)).join("; ")})` : "") +
+        ". The measurement is refused. Change the declaration only with a dated methodology note.",
+    );
+  }
+}
+
 /** T3 gets up to 3 graded attempts per build1-spec.md §3; T1/T2 are single-shot. */
 const MAX_ATTEMPTS: Record<string, number> = { T1: 1, T2: 1, T3: 3 };
 
@@ -75,6 +123,21 @@ async function runOneInstance(
 ): Promise<InstanceOutcome> {
   const maxAttempts = MAX_ATTEMPTS[task.instance.task_class] ?? 1;
   const records: RunRecord[] = [];
+  // Resolved once, before any call and outside the backoff: a model with no declared sampling is refused, never retried.
+  let params: AdapterParams;
+  try {
+    params = declaredParams(task.registryEntry, task.instance.params);
+  } catch (err) {
+    return {
+      registryEntry: task.registryEntry,
+      instance: task.instance,
+      records,
+      passed: false,
+      infraFailure: err instanceof Error ? err.message : String(err),
+      infraFailureCategory: "sampling_mismatch",
+      infraFailureRetries: 0,
+    };
+  }
   let passed = false;
   let attempt = 0;
 
@@ -85,7 +148,7 @@ async function runOneInstance(
     const retryErrors: string[] = [];
     try {
       adapterResult = await withBackoff(
-        () => adapter(task.registryEntry.model_string, task.instance.prompt, task.instance.params),
+        () => adapter(task.registryEntry.model_string, task.instance.prompt, params),
         {
           ...backoff,
           onRetry: (attemptNumber, err) => {
@@ -109,6 +172,22 @@ async function runOneInstance(
         infraFailureCategory: classifyFailure(err),
         infraFailureRetries: retryErrors.length,
         ...(err instanceof AdapterHttpError ? { infraFailureBody: JSON.stringify(err.body) } : {}),
+      };
+    }
+
+    // The request went out with the declared sampling or this is not a measurement (see SamplingMismatchError). Checked after the call and outside the backoff,
+    // so it is never retried, and reported as a failure of its own kind so it can neither pass as an outage nor be priced.
+    try {
+      checkSamplingSent(task.registryEntry, adapterResult);
+    } catch (err) {
+      return {
+        registryEntry: task.registryEntry,
+        instance: task.instance,
+        records,
+        passed: false,
+        infraFailure: err instanceof Error ? err.message : String(err),
+        infraFailureCategory: "sampling_mismatch",
+        infraFailureRetries: retryErrors.length,
       };
     }
 

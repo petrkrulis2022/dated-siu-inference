@@ -178,7 +178,10 @@ export async function writeRegistry(
 
   const byId = new Map(existing.map((e) => [e.id, e]));
   for (const entry of entries) {
-    byId.set(entry.id, entry);
+    // A re-seed resolves the model's endpoint and host afresh; it does not know the model's declared sampling (docs/methodology.md, Sampling settings), and
+    // must not drop it: the declaration is written by hand, with a dated note, and the print refuses a model that has none.
+    const kept = byId.get(entry.id)?.sampling;
+    byId.set(entry.id, entry.sampling === undefined && kept !== undefined ? { ...entry, sampling: kept } : entry);
   }
 
   const merged = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));

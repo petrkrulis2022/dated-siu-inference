@@ -7,6 +7,9 @@
     "tier": "open-weight-hosted",
     "open_weights": true,
     "host": "deepinfra",
+    "sampling": {
+      "temperature": 0
+    },
     "notes": "Catalog breadth: distinct model family from the Llama provider-spread trio."
   },
   {
@@ -17,6 +20,9 @@
     "tier": "open-weight-hosted",
     "open_weights": true,
     "host": "deepinfra",
+    "sampling": {
+      "temperature": 0
+    },
     "notes": "Was a provider-spread demo alongside llama-3.3-70b-cloudflare/novita (removed 2026-08-30 — see docs/methodology.md's registry inclusion policy, confirmed structural incapacity: both other hosts' context ceilings reject T2 outright). Same weights, still real provider spread against every other host still serving other models in this registry."
   },
   {
@@ -27,6 +33,9 @@
     "tier": "open-weight-hosted",
     "open_weights": true,
     "host": "parasail",
+    "sampling": {
+      "temperature": 0
+    },
     "notes": "Cheapest-tier contrast point in the registry."
   },
   {
@@ -37,6 +46,9 @@
     "tier": "open-weight-hosted",
     "open_weights": true,
     "host": "deepinfra",
+    "sampling": {
+      "temperature": 0
+    },
     "notes": "Catalog breadth: distinct model family from the Llama provider-spread trio. Host corrected from novita to deepinfra before the first real print run: OpenRouter serves this model from exactly two providers (deepinfra, novita), and novita rejected every real request with a structural 400 (\"does not support endpoint: completions\") — not congestion, confirmed by testing all four providers OpenRouter lists plus the two it actually serves from. deepinfra returns 200 on the identical request."
   },
   {
@@ -47,6 +59,9 @@
     "tier": "frontier",
     "open_weights": false,
     "host": "anthropic",
+    "sampling": {
+      "temperature": "provider-default"
+    },
     "notes": "Admitted 2026-08-30 — direct provider adapter, not routed through OpenRouter (real redundancy against the single-upstream failure mode that took out two other constituents the same week; see docs/methodology.md's \"Why not through OpenRouter\" reasoning). Evidence run: data/runs/admission-2026-08-30/, 15/15, $0.3809."
   },
   {
@@ -57,6 +72,9 @@
     "tier": "frontier",
     "open_weights": false,
     "host": "openai",
+    "sampling": {
+      "temperature": 0
+    },
     "notes": "Admitted 2026-08-30 — direct provider adapter. Evidence run: data/runs/admission-2026-08-30/, 15/15, $0.1506 — cheapest of the three frontier constituents by a wide margin."
   },
   {
@@ -67,6 +85,9 @@
     "tier": "frontier",
     "open_weights": false,
     "host": "google",
+    "sampling": {
+      "temperature": 0
+    },
     "notes": "Admitted 2026-08-30 — direct provider adapter. Mandatory reasoning (thinking cannot be disabled — confirmed live) required docs/methodology.md's reasoning-budget accommodation rule to admit correctly; without it, a real measurement artifact would have read as structural incapacity. Evidence run: data/runs/admission-2026-08-30/, 14/15 ($0.3871) — one T3 instance is a genuine bounded finding under the 3x reasoning cap, not an infrastructure failure."
   },
   {
@@ -77,6 +98,9 @@
     "tier": "frontier",
     "open_weights": false,
     "host": "xai",
+    "sampling": {
+      "temperature": 0
+    },
     "notes": "Admitted 2026-09-08 — direct provider adapter (xAI's OpenAI-compatible Chat Completions endpoint). The fourth major frontier lab represented (alongside Anthropic, OpenAI, Google) and, more to the point, a fourth independent provider: the 2026-09-08 incident that excluded claude-sonnet-5 and claude-haiku-4-5 from the same print was provider-level correlation (both Anthropic, a billing failure), not model-level — a fifth OpenAI or Google constituent would not have added the same resilience. Model resolved live against /v1/models, not assumed: grok-4.20's version number reads as newer but is actually the oldest of the five real text models by creation date (2026-03-09 vs grok-4.6's 2026-08-06) — grok-4.6 is the genuinely current flagship. Mandatory reasoning (thinking cannot be disabled — reasoning_effort:\"none\" explicitly rejected, confirmed live) is billed at the output rate but counted separately from max_tokens, unlike Anthropic/Google's reasoning models, where it trades off against the same completion budget — confirmed live, no accommodation retry needed (packages/harness/src/adapters/openai-compatible.ts). Evidence run: data/runs/admission-2026-09-08/, 15/15, $0.2750."
   },
   {
@@ -87,6 +111,9 @@
     "tier": "mid",
     "open_weights": false,
     "host": "anthropic",
+    "sampling": {
+      "temperature": 0
+    },
     "notes": "Admitted 2026-08-31 — direct provider adapter, resolved live against Anthropic's /v1/models (not hardcoded from memory; see docs/methodology.md's registry inclusion policy). Real cost lands in build1-spec.md §12's original 'Mid' cost band (~$0.15/print), distinct from Frontier (~$0.80) — objectively validating tier: \"mid\" independent of open_weights, which alone decides Frontier SIU membership (design-doc §4a). Evidence run: data/runs/admission-2026-08-31/, 15/15, $0.1236, zero deviations — cheaper than gpt-5.1's own admission cost."
   },
   {
@@ -97,6 +124,9 @@
     "tier": "mid",
     "open_weights": false,
     "host": "openai",
+    "sampling": {
+      "temperature": 0
+    },
     "notes": "Admitted 2026-08-31 — direct provider adapter. OpenAI's current mini-class model, resolved live against /v1/models: no gpt-5.1-mini exists (only gpt-5-mini, an older generation, and gpt-5.4-mini, the current one) — picked the current one, same principle as picking gpt-5.1 itself at its own admission over an older flagship. Evidence run: data/runs/admission-2026-08-31/, 15/15, $0.0866, zero deviations — the cheapest constituent in the frontier tier by a wide margin."
   }
 ]

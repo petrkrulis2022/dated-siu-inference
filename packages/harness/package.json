@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
     "test": "vitest run",
     "dry-run": "pnpm run build && node dist/cli/dry-run.js",
-    "run": "pnpm run build && node dist/cli/run.js"
+    "run": "pnpm run build && node dist/cli/run.js",
+    "verify-sampling": "pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/verify-sampling.js"
   },
   "dependencies": {
     "@touchstone/basket": "workspace:*",

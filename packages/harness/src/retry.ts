@@ -103,6 +103,7 @@ export type FailureCategory =
   | "malformed_response"
   | "billing_exhausted"
   | "policy_refusal"
+  | "sampling_mismatch"
   | "unknown";
 
 export function classifyFailure(err: unknown): FailureCategory {
