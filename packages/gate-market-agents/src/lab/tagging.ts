@@ -73,14 +73,40 @@ export function drawTagSample(sources: readonly TagSource[], n: number, seed: nu
 export const TAG_MEANINGS: Readonly<Record<(typeof REASON_CATEGORIES)[number], string>> = {
   earmarking: "The agent assigns one asset to a particular later use.",
   price_direction: "The direction the price is heading is part of the justification.",
-  balance_size: "Which asset the agent holds more of, or less of, and so spends or spares, is part of the justification. A remark that the payment is possible does not count.",
+  balance_size: "Which asset the agent holds more of, or less of, and so spends or spares, is part of the justification. A remark that the payment is possible is box A, not this one.",
   familiarity: "One asset is chosen because the agent finds it the obvious one, or knows it best.",
   following_brief: "The agent cites what it was told in its instructions about how results count.",
   keeping_options_open: "The agent avoids tying itself down, or wants other actions to stay possible later.",
   expiry: "The agent refers to time running out: the window ending, or a claim ceasing to be valid.",
   cost_efficiency: "What one route costs compared with the other is part of the justification.",
-  no_asset_reason: "The reason cites only the need, the obligation, or the order in which to take steps, and nothing about why one asset rather than the other.",
+  no_asset_reason: "The reason says nothing at all about the assets: only the need, the obligation, or the order in which to take steps.",
 };
+
+/**
+ * The tenth box, A (D68): added after the practice round and before any human tagging. "I have enough to pay" says the payment is possible, and in this design
+ * both assets always cover every payment, so a person had no box for it that was not category 3 (which it is not) or 9 (which it is not either, since it speaks
+ * of an asset). It is kept apart from the nine on purpose: the analysis maps A onto the frozen rules and onto the amended layer separately and reports both.
+ */
+export const AFFORDABILITY_MEANING = "The agent says it has enough of an asset to pay, and gives no other reason for using that asset.";
+
+/**
+ * What the tick boxes do to each other. `state` is `{ids: [categories], afford: bool, none: bool}` as the boxes stand after the change; `changed` is
+ * `{kind: "cat" | "afford" | "none", id?: category, on: bool}`. The box just ticked wins: A cannot stand with 9 or with "None of these", "None of these" clears
+ * everything, and A stands with any of 1 to 8. One source: the page runs this text and a test runs the same text.
+ */
+export const TAG_RULES_SOURCE = `
+function applyChoice(state, changed) {
+  var ids = state.ids.slice(), afford = !!state.afford, none = !!state.none;
+  if (changed.on) {
+    if (changed.kind === "none") { ids = []; afford = false; }
+    else if (changed.kind === "afford") { ids = ids.filter(function (c) { return c !== "no_asset_reason"; }); none = false; }
+    else if (changed.id === "no_asset_reason") { afford = false; none = false; }
+    else { none = false; }
+  }
+  return { ids: ids, afford: afford, none: none };
+}
+function isAnswered(t) { return !!t && (t.none || t.afford || t.ids.length > 0); }
+`;
 
 /** The category's short name, from the label the rules file keeps for it, and what it means. */
 const parts = (c: (typeof REASON_CATEGORIES)[number]): { name: string; rest: string } => ({ name: CATEGORY_LABELS[c].split(" — ")[0], rest: TAG_MEANINGS[c] });
@@ -189,24 +215,25 @@ export function renderTaggingPage(input: TaggingPageInput): string {
     <p>Names such as TYPE-2, TRADER-3, qr-1 and ISSUER-B are labels from the game. TYPE-1 to TYPE-4 are four kinds of job, and each trader can deliver only one kind. TRADER-1 to TRADER-4 are the agents. qr-1 is one quote. ISSUER-B sells raw work, the input every job uses up. You do not need to follow them. Read for why the agent chose what it chose.</p>
     <ol class="steps">
       <li>Read the reason.</li>
-      <li>Tick every category that fits. One reason can fit several.</li>
+      <li>Tick every box that fits. One reason can fit several.</li>
       <li>If none fits, tick <em>None of these</em>.</li>
       <li>Press <em>Next</em>. <em>Back</em> lets you change an earlier answer.</li>
       <li>After the last reason your tags are saved to Claude. You can also download them.</li>
     </ol>
-    <p>Go by what the reason means, not by whether it contains a particular word. Do not try to guess which agent wrote it or what answer is expected. It takes about 30 minutes. You can close the page and come back: answers are saved as you go and the page resumes at the first reason you have not tagged. Keys 1 to 9 tick a category, 0 ticks <em>None of these</em>, Enter moves on.</p>
-    <h2>The nine categories</h2>
+    <p>Go by what the reason means, not by whether it contains a particular word. Do not try to guess which agent wrote it or what answer is expected. It takes about 30 minutes. You can close the page and come back: answers are saved as you go and the page resumes at the first reason you have not tagged. Keys 1 to 9 tick a category, A ticks <em>Affordability only</em>, 0 ticks <em>None of these</em>, Enter moves on.</p>
+    <h2>The nine categories, and A</h2>
     <ul class="cats">
         ${catRows}
+        <li><span class="num">A</span><span><strong>Affordability only</strong><br><span class="def">${escapeHtml(AFFORDABILITY_MEANING)}</span></span></li>
     </ul>
-    <p class="hint" style="margin-top:10px">Number 9 is for a reason that cites only the need or the obligation, such as "to meet my round 2 need", or the order of steps that gets things moving, such as asking for one thing first so a delivery can follow, and nothing about why that asset. A remark that the agent can afford the payment is not number 3: tick 3 only when the agent compares what it holds of the two assets, or calls one plentiful or scarce, and that drives which one it uses. <em>None of these</em> is for a reason that says something about the choice that fits none of the nine.</p>
+    <p class="hint" style="margin-top:10px">Number 9 is for a reason that says nothing at all about the assets: only the need, the obligation, or the order of steps that gets things moving, such as asking for one thing first so a delivery can follow. A is for a reason whose only remark about an asset is that the agent has enough of it to pay. Tick A together with any of 1 to 8 that also fit, for example a reason that says it can afford one asset and also assigns the other to a later use. A cannot go with 9 or with <em>None of these</em>. Number 3 is only for comparing what is held of the two assets, or calling one plentiful or scarce, where that drives which one it uses. <em>None of these</em> is for a reason that says something about the choice of asset that fits none of 1 to 8 and is not A.</p>
   </details>
 
   <section class="card" id="card" aria-live="polite">
     <div class="meter"><span id="count">Reason 1 of ${n}</span><div class="bar"><i id="bar"></i></div><span class="rid" id="rid"></span></div>
     <blockquote id="reason"></blockquote>
     <fieldset id="options">
-      <legend>Tick every category that fits this reason</legend>
+      <legend>Tick every box that fits this reason</legend>
     </fieldset>
     <div class="row">
       <button type="button" id="back">Back</button>
@@ -228,15 +255,16 @@ export function renderTaggingPage(input: TaggingPageInput): string {
   </section>
 </div>
 
-<script type="application/json" id="data">${scriptJson({ mode: input.mode, items: input.items, categories: cats.map((c) => ({ id: c.id, name: c.name, rest: c.rest })) })}</script>
+<script type="application/json" id="data">${scriptJson({ mode: input.mode, items: input.items, categories: cats.map((c) => ({ id: c.id, name: c.name, rest: c.rest })), afford: { name: "Affordability only", rest: AFFORDABILITY_MEANING } })}</script>
 <script>
 (function () {
+  ${TAG_RULES_SOURCE}
   var data = JSON.parse(document.getElementById("data").textContent);
-  var items = data.items, cats = data.categories, mode = data.mode;
+  var items = data.items, cats = data.categories, mode = data.mode, afford = data.afford;
   var NONE = "none_of_these";
-  var tags = {};          // id -> { ids: [category ids], none: bool }
+  var tags = {};          // id -> { ids: [category ids], afford: bool, none: bool }
   var at = 0;
-  var db = null, dbWorking = false, queue = Promise.resolve(), saved = 0, saveFailed = "";
+  var db = null, queue = Promise.resolve(), saved = 0, saveFailed = "";
   var collectionName = "tags_" + mode;
   var storeKey = "reason-tagging-" + mode;
 
@@ -248,39 +276,45 @@ export function renderTaggingPage(input: TaggingPageInput): string {
     return null;
   }
 
-  // Build the ten options once.
+  function option(inputId, value, title, text, extraClass) {
+    var label = document.createElement("label"); label.className = "opt" + (extraClass ? " " + extraClass : "");
+    var input = document.createElement("input"); input.type = "checkbox"; input.id = inputId; input.value = value;
+    var t = document.createElement("div"); t.className = "t";
+    var strong = document.createElement("strong"); strong.textContent = title;
+    var span = document.createElement("span"); span.textContent = text;
+    t.appendChild(strong); t.appendChild(span); label.appendChild(input); label.appendChild(t); optsBox.appendChild(label);
+    return input;
+  }
+
+  // The twelve boxes: nine categories, then A, then None of these.
   var inputs = [];
   cats.forEach(function (c, i) {
-    var label = document.createElement("label"); label.className = "opt";
-    var input = document.createElement("input"); input.type = "checkbox"; input.id = "cat-" + c.id; input.value = c.id;
-    var t = document.createElement("div"); t.className = "t";
-    var strong = document.createElement("strong"); strong.textContent = (i + 1) + ". " + c.name;
-    var span = document.createElement("span"); span.textContent = c.rest;
-    t.appendChild(strong); t.appendChild(span); label.appendChild(input); label.appendChild(t); optsBox.appendChild(label);
-    input.addEventListener("change", function () { if (input.checked) noneInput.checked = false; refresh(); });
+    var input = option("cat-" + c.id, c.id, (i + 1) + ". " + c.name, c.rest);
+    input.addEventListener("change", function () { apply({ kind: "cat", id: c.id, on: input.checked }); });
     inputs.push(input);
   });
-  var noneLabel = document.createElement("label"); noneLabel.className = "opt none";
-  var noneInput = document.createElement("input"); noneInput.type = "checkbox"; noneInput.id = "cat-none"; noneInput.value = NONE;
-  var noneT = document.createElement("div"); noneT.className = "t";
-  var noneStrong = document.createElement("strong"); noneStrong.textContent = "0. None of these";
-  var noneSpan = document.createElement("span"); noneSpan.textContent = "It says something about the choice that fits none of the nine.";
-  noneT.appendChild(noneStrong); noneT.appendChild(noneSpan); noneLabel.appendChild(noneInput); noneLabel.appendChild(noneT); optsBox.appendChild(noneLabel);
-  noneInput.addEventListener("change", function () { if (noneInput.checked) inputs.forEach(function (i) { i.checked = false; }); refresh(); });
+  var affordInput = option("cat-afford", "affordability_only", "A. " + afford.name, afford.rest);
+  affordInput.addEventListener("change", function () { apply({ kind: "afford", on: affordInput.checked }); });
+  var noneInput = option("cat-none", NONE, "0. None of these", "It says something about the choice of asset that fits none of 1 to 8 and is not A.", "none");
+  noneInput.addEventListener("change", function () { apply({ kind: "none", on: noneInput.checked }); });
 
-  function current() { return { ids: inputs.filter(function (i) { return i.checked; }).map(function (i) { return i.value; }), none: noneInput.checked }; }
-  function answered(t) { return t && (t.none || t.ids.length > 0); }
-  function refresh() { el("next").disabled = !answered(current()); }
+  function current() { return { ids: inputs.filter(function (i) { return i.checked; }).map(function (i) { return i.value; }), afford: affordInput.checked, none: noneInput.checked }; }
+  function write(t) {
+    inputs.forEach(function (inp) { inp.checked = !!t && t.ids.indexOf(inp.value) !== -1; });
+    affordInput.checked = !!t && !!t.afford;
+    noneInput.checked = !!t && !!t.none;
+  }
+  function apply(changed) { write(applyChoice(current(), changed)); refresh(); }
+  function refresh() { el("next").disabled = !isAnswered(current()); }
 
   function show(i) {
     at = i;
-    var item = items[i], t = tags[item.id];
+    var item = items[i];
     el("reason").textContent = item.text;
     el("rid").textContent = item.id;
     el("count").textContent = "Reason " + (i + 1) + " of " + items.length;
     el("bar").style.width = (100 * i / items.length) + "%";
-    inputs.forEach(function (inp) { inp.checked = !!t && t.ids.indexOf(inp.value) !== -1; });
-    noneInput.checked = !!t && t.none;
+    write(tags[item.id]);
     el("back").disabled = i === 0;
     el("next").textContent = i === items.length - 1 ? "Finish" : "Next";
     el("status").textContent = ""; el("status").className = "status";
@@ -294,7 +328,7 @@ export function renderTaggingPage(input: TaggingPageInput): string {
     store(true, tags);
     if (db === null) return;
     queue = queue.then(function () {
-      return db.doc(collectionName + "/" + item.id).set({ ids: t.ids, none: t.none, at: new Date().toISOString() });
+      return db.doc(collectionName + "/" + item.id).set({ ids: t.ids, afford: t.afford, none: t.none, at: new Date().toISOString() });
     }).then(function () { saved += 1; el("status").textContent = "Saved."; }).catch(function (e) {
       saveFailed = (e && e.code) || "error";
       el("status").textContent = "Not saved to Claude (" + saveFailed + "). Your answers are kept in this browser; download them at the end.";
@@ -304,7 +338,7 @@ export function renderTaggingPage(input: TaggingPageInput): string {
 
   function finish() {
     el("card").hidden = true; el("done").hidden = false; el("bar").style.width = "100%";
-    var out = { mode: mode, taggedAt: new Date().toISOString(), tags: items.map(function (it) { var t = tags[it.id] || { ids: [], none: false }; return { id: it.id, categories: t.ids, none_of_these: t.none }; }) };
+    var out = { mode: mode, taggedAt: new Date().toISOString(), tags: items.map(function (it) { var t = tags[it.id] || { ids: [], afford: false, none: false }; return { id: it.id, categories: t.ids, affordability_only: t.afford, none_of_these: t.none }; }) };
     var text = JSON.stringify(out, null, 2);
     el("dump").value = text;
     queue.then(function () {
@@ -321,7 +355,7 @@ export function renderTaggingPage(input: TaggingPageInput): string {
     var item = items[at]; tags[item.id] = current(); persist(item);
     if (at === items.length - 1) finish(); else show(at + 1);
   });
-  el("back").addEventListener("click", function () { if (at > 0) { var item = items[at]; if (answered(current())) { tags[item.id] = current(); persist(item); } show(at - 1); } });
+  el("back").addEventListener("click", function () { if (at > 0) { var item = items[at]; if (isAnswered(current())) { tags[item.id] = current(); persist(item); } show(at - 1); } });
   el("copy").addEventListener("click", function () {
     var d = el("dump"); d.hidden = false; d.focus(); d.select();
     try { navigator.clipboard.writeText(d.value).then(function () { el("doneStatus").textContent = "Copied. Paste it to Claude."; }, function () {}); } catch (e) {}
@@ -331,15 +365,20 @@ export function renderTaggingPage(input: TaggingPageInput): string {
     if (el("card").hidden || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === "Enter" && !el("next").disabled && document.activeElement && document.activeElement.tagName !== "BUTTON") { el("next").click(); e.preventDefault(); return; }
     if (e.key >= "1" && e.key <= "9" && inputs[Number(e.key) - 1]) { inputs[Number(e.key) - 1].click(); e.preventDefault(); }
+    else if (e.key === "a" || e.key === "A") { affordInput.click(); e.preventDefault(); }
     else if (e.key === "0") { noneInput.click(); e.preventDefault(); }
   });
 
-  // Resume: what the saved copy has wins over this browser's copy.
+  // Resume: what the saved copy has wins over this browser's copy. An answer saved before box A existed has no afford field and reads as not ticked.
   function start(fromDb) {
     var local = store(false);
     var merged = {};
     [local, fromDb].forEach(function (src) { if (src) Object.keys(src).forEach(function (k) { merged[k] = src[k]; }); });
-    items.forEach(function (it) { if (!tags[it.id] && merged[it.id] && answered(merged[it.id])) tags[it.id] = { ids: merged[it.id].ids || [], none: !!merged[it.id].none }; });
+    items.forEach(function (it) {
+      var v = merged[it.id];
+      var t = v ? { ids: v.ids || [], afford: !!v.afford, none: !!v.none } : null;
+      if (!tags[it.id] && t && isAnswered(t)) tags[it.id] = t;
+    });
     var first = items.findIndex(function (it) { return !tags[it.id]; });
     if (first === -1) { finish(); } else show(first);
   }
@@ -350,7 +389,7 @@ export function renderTaggingPage(input: TaggingPageInput): string {
       db = d;
       return d.collection(collectionName).get().then(function (snap) {
         var got = {};
-        snap.docs.forEach(function (doc) { var v = doc.data(); if (v) got[doc.id] = { ids: v.ids || [], none: !!v.none }; });
+        snap.docs.forEach(function (doc) { var v = doc.data(); if (v) got[doc.id] = { ids: v.ids || [], afford: !!v.afford, none: !!v.none }; });
         start(got);
       }, function () { start(null); });
     }).catch(function () { start(null); });

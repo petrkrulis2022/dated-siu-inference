@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PRACTICE_SAMPLE_SIZE, TAGGING_TITLE, TAG_MEANINGS, TAG_SAMPLE_SIZE, drawTagSample, renderTaggingPage, type TagSource } from "./tagging.js";
+import { AFFORDABILITY_MEANING, PRACTICE_SAMPLE_SIZE, TAGGING_TITLE, TAG_MEANINGS, TAG_RULES_SOURCE, TAG_SAMPLE_SIZE, drawTagSample, renderTaggingPage, type TagSource } from "./tagging.js";
 import { CATEGORY_LABELS, REASON_CATEGORIES } from "./reason-codes.js";
 
 const sources = (n: number): TagSource[] =>
@@ -50,13 +50,25 @@ describe("the category descriptions", () => {
     }
   });
 
-  it("say that ordering steps counts as 9 and that being able to pay is not 3 (practice round, D65)", () => {
+  it("say that 9 means nothing at all about the assets, that ordering steps is 9, and that being able to pay is A and not 3 (D65, D68)", () => {
     const html = renderTaggingPage({ mode: "real", items: [{ id: "r-aaaa", text: "x" }] });
-    expect(html).toContain("the order of steps that gets things moving");
-    expect(html).toContain("A remark that the agent can afford the payment is not number 3");
+    expect(html).toContain("Number 9 is for a reason that says nothing at all about the assets: only the need, the obligation, or the order of steps that gets things moving");
+    expect(html).toContain("A is for a reason whose only remark about an asset is that the agent has enough of it to pay");
+    expect(html).toContain("Tick A together with any of 1 to 8 that also fit");
+    expect(html).toContain("A cannot go with 9 or with <em>None of these</em>");
     expect(html).not.toContain("or why now");
-    expect(TAG_MEANINGS.balance_size).toContain("does not count");
-    expect(TAG_MEANINGS.no_asset_reason).toContain("the order in which to take steps");
+    expect(TAG_MEANINGS.balance_size).toContain("box A");
+    expect(TAG_MEANINGS.no_asset_reason).toBe("The reason says nothing at all about the assets: only the need, the obligation, or the order in which to take steps.");
+  });
+
+  it("has a tenth box, A, with the wording it was asked for, and a key for it", () => {
+    const html = renderTaggingPage({ mode: "real", items: [{ id: "r-aaaa", text: "x" }] });
+    expect(AFFORDABILITY_MEANING).toBe("The agent says it has enough of an asset to pay, and gives no other reason for using that asset.");
+    expect(html).toContain(AFFORDABILITY_MEANING);
+    expect(html).toContain("Affordability only");
+    expect(html).toContain("A ticks <em>Affordability only</em>");
+    expect(html).toContain('e.key === "a" || e.key === "A"');
+    expect(html).toContain("affordability_only");
   });
 
   it("are the ones the page shows, not the rules file's labels", () => {
@@ -68,6 +80,44 @@ describe("the category descriptions", () => {
   });
 });
 
+describe("what the tick boxes do to each other (TAG_RULES_SOURCE)", () => {
+  const rules = new Function(`${TAG_RULES_SOURCE}; return { applyChoice: applyChoice, isAnswered: isAnswered };`)() as {
+    applyChoice: (s: { ids: string[]; afford: boolean; none: boolean }, c: { kind: string; id?: string; on: boolean }) => { ids: string[]; afford: boolean; none: boolean };
+    isAnswered: (t: { ids: string[]; afford: boolean; none: boolean } | undefined) => boolean;
+  };
+  const empty = { ids: [] as string[], afford: false, none: false };
+
+  it("lets A stand with any of categories 1 to 8, in either order", () => {
+    const first = rules.applyChoice({ ...empty, afford: true }, { kind: "afford", on: true });
+    expect(rules.applyChoice({ ...first, ids: ["earmarking"] }, { kind: "cat", id: "earmarking", on: true })).toEqual({ ids: ["earmarking"], afford: true, none: false });
+    const other = rules.applyChoice({ ...empty, ids: ["balance_size", "expiry"] }, { kind: "cat", id: "expiry", on: true });
+    expect(rules.applyChoice({ ...other, afford: true }, { kind: "afford", on: true })).toEqual({ ids: ["balance_size", "expiry"], afford: true, none: false });
+  });
+
+  it("does not let A stand with 9: the box ticked last wins", () => {
+    expect(rules.applyChoice({ ids: ["no_asset_reason"], afford: true, none: false }, { kind: "afford", on: true })).toEqual({ ids: [], afford: true, none: false });
+    expect(rules.applyChoice({ ids: ["no_asset_reason"], afford: true, none: false }, { kind: "cat", id: "no_asset_reason", on: true })).toEqual({ ids: ["no_asset_reason"], afford: false, none: false });
+  });
+
+  it("does not let A or any category stand with None of these, and None clears everything", () => {
+    expect(rules.applyChoice({ ids: ["expiry"], afford: true, none: true }, { kind: "none", on: true })).toEqual({ ids: [], afford: false, none: true });
+    expect(rules.applyChoice({ ids: [], afford: true, none: true }, { kind: "afford", on: true })).toEqual({ ids: [], afford: true, none: false });
+    expect(rules.applyChoice({ ids: ["expiry"], afford: false, none: true }, { kind: "cat", id: "expiry", on: true })).toEqual({ ids: ["expiry"], afford: false, none: false });
+  });
+
+  it("leaves the state alone when a box is unticked", () => {
+    expect(rules.applyChoice({ ids: ["expiry"], afford: false, none: false }, { kind: "cat", id: "expiry", on: false })).toEqual({ ids: ["expiry"], afford: false, none: false });
+  });
+
+  it("counts a reason as answered with A alone, with any category, or with None, and not with nothing", () => {
+    expect(rules.isAnswered({ ids: [], afford: true, none: false })).toBe(true);
+    expect(rules.isAnswered({ ids: ["expiry"], afford: false, none: false })).toBe(true);
+    expect(rules.isAnswered({ ids: [], afford: false, none: true })).toBe(true);
+    expect(rules.isAnswered(empty)).toBe(false);
+    expect(rules.isAnswered(undefined)).toBe(false);
+  });
+});
+
 describe("renderTaggingPage", () => {
   const items = drawTagSample(sources(100), PRACTICE_SAMPLE_SIZE, 1, "p").items;
   const html = renderTaggingPage({ mode: "practice", items });
@@ -76,7 +126,7 @@ describe("renderTaggingPage", () => {
     expect(html).toContain(`<title>${TAGGING_TITLE}</title>`);
     expect(html).toContain("Practice round");
     expect(html).toContain("How this works");
-    expect(html).toContain("Tick every category that fits");
+    expect(html).toContain("Tick every box that fits");
     for (const c of REASON_CATEGORIES) expect(html).toContain(CATEGORY_LABELS[c].split(" — ")[0]);
     expect(html).toContain("None of these");
     expect(html).toContain("TYPE-1 to TYPE-4 are four kinds of job");
