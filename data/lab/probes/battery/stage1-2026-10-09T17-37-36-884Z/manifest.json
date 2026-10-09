@@ -1,0 +1,372 @@
+{
+  "runId": "stage1-2026-10-09T17-37-36-884Z",
+  "kind": "stage1",
+  "createdAt": "2026-10-09T17:37:36.905Z",
+  "gitHead": "833008622f91dc7b453301b07121a98dcc321fbe",
+  "instrumentVersion": 9,
+  "capUsd": "13",
+  "rulesFingerprint": "6d718eb1185983e843240900a0ad936e3acb2eccf87fa34ad4a565744a4036e2",
+  "sampling": "Provider default sampling: no temperature, top_p or top_k is sent in any arm (docs/marketplace_plan.md §14.2). Thinking: none requested in arms A and B; arm C asks sonnet-5 for display \"summarized\" and haiku-4-5 for manual thinking, budget 2,048 tokens.",
+  "samplesPerCell": 12,
+  "plannedCalls": 780,
+  "cells": {
+    "P0": {
+      "change": "baseline: round 2, print up 15% on round 1, one unit of raw work still to buy, the opening wallet, one quote to pay, USDC listed first",
+      "against": [],
+      "trader": "TRADER-2",
+      "seed": 1,
+      "round": 2,
+      "printByRound": [
+        "1437000",
+        "1652550"
+      ],
+      "heldUsdcMinor": "6639",
+      "heldFsiuMilliSiu": "4400",
+      "promptSha256": {
+        "A": "0d85b9c295fad858a2dccfc9783381cf245afa27c074c05308b75cfbf31b07f7",
+        "B": "232c6d1f7b43495e9e17a4a7f2963de3ec5250bafbf7e706f530a5e15a2a8f8b",
+        "C": "0d85b9c295fad858a2dccfc9783381cf245afa27c074c05308b75cfbf31b07f7"
+      },
+      "notes": [
+        "need A (TYPE-2 from TRADER-3, round 1) is already bought and met, paid in USDC (1725 minor units, qr-1); the wallet is the opening wallet less that payment; with it open and unquoted, haiku never paid in the pilot (D62)",
+        "the trader has been paid for 1 job and holds no unit of raw work, so 1 unit of raw work is still to buy"
+      ]
+    },
+    "T3": {
+      "change": "six-round lab, screen at round 5, prints flat",
+      "against": [
+        "T1",
+        "T2"
+      ],
+      "trader": "TRADER-2",
+      "seed": 1,
+      "round": 5,
+      "printByRound": [
+        "1437000",
+        "1437000",
+        "1437000",
+        "1437000",
+        "1437000"
+      ],
+      "heldUsdcMinor": "10995",
+      "heldFsiuMilliSiu": "4400",
+      "promptSha256": {
+        "A": "83e9b90de8b96f173fa6cc0f9395f97bb92c036383c7bdd25d7b29f26f8bfe56",
+        "B": "7328d8d45886f10eb0c46c1c425f51308a6210e92ecb91a4247738d6a0e7b2a7",
+        "C": "83e9b90de8b96f173fa6cc0f9395f97bb92c036383c7bdd25d7b29f26f8bfe56"
+      },
+      "notes": [
+        "need A (TYPE-2 from TRADER-3, round 4) is already bought and met, paid in USDC (1725 minor units, qr-1); the wallet is the opening wallet less that payment; with it open and unquoted, haiku never paid in the pilot (D62)",
+        "six-round lab, screen at round 5, flat prints: 1437000 → 1437000 → 1437000 → 1437000 → 1437000 nano-USD per SIU; no history shown; the opening is sized by the lab's own rule for a six-round lab",
+        "the trader has been paid for 1 job and holds no unit of raw work, so 1 unit of raw work is still to buy"
+      ]
+    },
+    "P9": {
+      "change": "fSIU listed first (assets and routes)",
+      "against": [
+        "P0"
+      ],
+      "trader": "TRADER-2",
+      "seed": 1,
+      "round": 2,
+      "printByRound": [
+        "1437000",
+        "1652550"
+      ],
+      "heldUsdcMinor": "6639",
+      "heldFsiuMilliSiu": "4400",
+      "promptSha256": {
+        "A": "fd5c9373cf6da96a864bf286e75c01e4a9c99e4f9718d99ff97267ff778cc193",
+        "B": "1d21509cc25443c6b4a7c1eff0bceefe5f7b3c00f0437bdebd64657d8b3b579f",
+        "C": "fd5c9373cf6da96a864bf286e75c01e4a9c99e4f9718d99ff97267ff778cc193"
+      },
+      "notes": [
+        "need A (TYPE-2 from TRADER-3, round 1) is already bought and met, paid in USDC (1725 minor units, qr-1); the wallet is the opening wallet less that payment; with it open and unquoted, haiku never paid in the pilot (D62)",
+        "fSIU is named first wherever the lab names both assets, and the three payment routes and their tool descriptions are listed fSIU route first",
+        "the trader has been paid for 1 job and holds no unit of raw work, so 1 unit of raw work is still to buy"
+      ]
+    },
+    "T2": {
+      "change": "six-round lab, screen at round 5, prints falling 15% each step",
+      "against": [
+        "T1",
+        "T3"
+      ],
+      "trader": "TRADER-2",
+      "seed": 1,
+      "round": 5,
+      "printByRound": [
+        "1437000",
+        "1221450",
+        "1038232",
+        "882497",
+        "750122"
+      ],
+      "heldUsdcMinor": "11661",
+      "heldFsiuMilliSiu": "4400",
+      "promptSha256": {
+        "A": "b5cf6b526c98bd0a521710cda26c8644cee5fe2bdcdc54328c3bb0b4037e1c78",
+        "B": "2aecb73ba6c9e1721ef1f4bdfb71f57a83ea514954a65b62ea8e8c4f5d230038",
+        "C": "b5cf6b526c98bd0a521710cda26c8644cee5fe2bdcdc54328c3bb0b4037e1c78"
+      },
+      "notes": [
+        "need A (TYPE-2 from TRADER-3, round 4) is already bought and met, paid in USDC (1059 minor units, qr-1); the wallet is the opening wallet less that payment; with it open and unquoted, haiku never paid in the pilot (D62)",
+        "six-round lab, screen at round 5, falling prints: 1437000 → 1221450 → 1038232 → 882497 → 750122 nano-USD per SIU; no history shown; the opening is sized by the lab's own rule for a six-round lab",
+        "the trader has been paid for 1 job and holds no unit of raw work, so 1 unit of raw work is still to buy"
+      ]
+    },
+    "P3": {
+      "change": "no raw work still to buy",
+      "against": [
+        "P0"
+      ],
+      "trader": "TRADER-2",
+      "seed": 1,
+      "round": 2,
+      "printByRound": [
+        "1437000",
+        "1652550"
+      ],
+      "heldUsdcMinor": "6639",
+      "heldFsiuMilliSiu": "4400",
+      "promptSha256": {
+        "A": "99b00d07cfc29326aabac55f0b5804bf6dacf1a8587469a953b83937fb75ddfb",
+        "B": "955fad72106ecfdb1b16bf62eae44e2f454e981bdaceecb83b0e302be6fc8b08",
+        "C": "99b00d07cfc29326aabac55f0b5804bf6dacf1a8587469a953b83937fb75ddfb"
+      },
+      "notes": [
+        "need A (TYPE-2 from TRADER-3, round 1) is already bought and met, paid in USDC (1725 minor units, qr-1); the wallet is the opening wallet less that payment; with it open and unquoted, haiku never paid in the pilot (D62)",
+        "the trader owes no delivery, so it has no raw work still to buy"
+      ]
+    },
+    "P5": {
+      "change": "wallet weighted to USDC at equal total value",
+      "against": [
+        "P0"
+      ],
+      "trader": "TRADER-2",
+      "seed": 1,
+      "round": 2,
+      "printByRound": [
+        "1437000",
+        "1652550"
+      ],
+      "heldUsdcMinor": "11128",
+      "heldFsiuMilliSiu": "1683",
+      "promptSha256": {
+        "A": "219fe78561e54e00f474680a2bcae73e1c5c424fbbabf12be41c28649b33c6a1",
+        "B": "6c646b9d370c82e6dcda2de5554b49b654c3d356b3c44e70bffee0c74b1763f1",
+        "C": "219fe78561e54e00f474680a2bcae73e1c5c424fbbabf12be41c28649b33c6a1"
+      },
+      "notes": [
+        "need A (TYPE-2 from TRADER-3, round 1) is already bought and met, paid in USDC (1725 minor units, qr-1); the wallet is the opening wallet less that payment; with it open and unquoted, haiku never paid in the pilot (D62)",
+        "wallet: 80% USDC, 20% fSIU of the opening wallet's total value at this round's print (13910 USDC minor units)",
+        "the trader has been paid for 1 job and holds no unit of raw work, so 1 unit of raw work is still to buy"
+      ]
+    },
+    "P4": {
+      "change": "two units of raw work still to buy",
+      "against": [
+        "P0"
+      ],
+      "trader": "TRADER-2",
+      "seed": 1,
+      "round": 2,
+      "printByRound": [
+        "1437000",
+        "1652550"
+      ],
+      "heldUsdcMinor": "6639",
+      "heldFsiuMilliSiu": "4400",
+      "promptSha256": {
+        "A": "bdf1c42f2fbe8d4b104660e7285f2c9d71c8fd2bd52537ad927594a8d968a9f1",
+        "B": "62012d0beddcd716c8cca91220563ec82534be64e3a836b9f3c2a92e3da968bf",
+        "C": "bdf1c42f2fbe8d4b104660e7285f2c9d71c8fd2bd52537ad927594a8d968a9f1"
+      },
+      "notes": [
+        "need A (TYPE-2 from TRADER-3, round 1) is already bought and met, paid in USDC (1725 minor units, qr-1); the wallet is the opening wallet less that payment; with it open and unquoted, haiku never paid in the pilot (D62)",
+        "the trader has been paid for 2 jobs and holds no unit of raw work, so 2 units of raw work are still to buy"
+      ]
+    },
+    "P6": {
+      "change": "wallet weighted to fSIU at equal total value",
+      "against": [
+        "P0"
+      ],
+      "trader": "TRADER-2",
+      "seed": 1,
+      "round": 2,
+      "printByRound": [
+        "1437000",
+        "1652550"
+      ],
+      "heldUsdcMinor": "2782",
+      "heldFsiuMilliSiu": "6734",
+      "promptSha256": {
+        "A": "f41feb6da9db22d5aecc3892ba6a9fe76eb73139cfd80152f62e421ee6558344",
+        "B": "c924c5cb8d83e6dde117b8404b9847071fd039ec454d002a94f593f7bd497e49",
+        "C": "f41feb6da9db22d5aecc3892ba6a9fe76eb73139cfd80152f62e421ee6558344"
+      },
+      "notes": [
+        "need A (TYPE-2 from TRADER-3, round 1) is already bought and met, paid in USDC (1725 minor units, qr-1); the wallet is the opening wallet less that payment; with it open and unquoted, haiku never paid in the pilot (D62)",
+        "wallet: 20% USDC, 80% fSIU of the opening wallet's total value at this round's print (13910 USDC minor units)",
+        "the trader has been paid for 1 job and holds no unit of raw work, so 1 unit of raw work is still to buy"
+      ]
+    },
+    "T1": {
+      "change": "six-round lab, screen at round 5, prints rising 15% each step",
+      "against": [
+        "T2",
+        "T3"
+      ],
+      "trader": "TRADER-2",
+      "seed": 1,
+      "round": 5,
+      "printByRound": [
+        "1437000",
+        "1652550",
+        "1900432",
+        "2185496",
+        "2513320"
+      ],
+      "heldUsdcMinor": "10097",
+      "heldFsiuMilliSiu": "4400",
+      "promptSha256": {
+        "A": "21a8808d308896241cfe5d8a57e4f7672b42a9964a946a633b7e7947c6e328cc",
+        "B": "d1fed242f272494d029832af5c1cf1a1c3a6afae9179929140a8a4de3827edd3",
+        "C": "21a8808d308896241cfe5d8a57e4f7672b42a9964a946a633b7e7947c6e328cc"
+      },
+      "notes": [
+        "need A (TYPE-2 from TRADER-3, round 4) is already bought and met, paid in USDC (2623 minor units, qr-1); the wallet is the opening wallet less that payment; with it open and unquoted, haiku never paid in the pilot (D62)",
+        "six-round lab, screen at round 5, rising prints: 1437000 → 1652550 → 1900432 → 2185496 → 2513320 nano-USD per SIU; no history shown; the opening is sized by the lab's own rule for a six-round lab",
+        "the trader has been paid for 1 job and holds no unit of raw work, so 1 unit of raw work is still to buy"
+      ]
+    },
+    "P11": {
+      "change": "the history of P10, but no raw work left to buy",
+      "against": [
+        "P10"
+      ],
+      "trader": "TRADER-2",
+      "seed": 1,
+      "round": 2,
+      "printByRound": [
+        "1437000",
+        "1652550"
+      ],
+      "heldUsdcMinor": "6639",
+      "heldFsiuMilliSiu": "4400",
+      "promptSha256": {
+        "A": "e380a7803ce49785d1e321c16313b7077aee17f20e876c6148131d9db9188656",
+        "B": "4d0e09737f3e028530992b786b35f2763af03f098155a0c1c11ec75a3a669337",
+        "C": "e380a7803ce49785d1e321c16313b7077aee17f20e876c6148131d9db9188656"
+      },
+      "notes": [
+        "need A (TYPE-2 from TRADER-3, round 1) is already bought and met, paid in USDC (1725 minor units, qr-1); the wallet is the opening wallet less that payment; with it open and unquoted, haiku never paid in the pilot (D62)",
+        "history: those two turns are shown in the lab's own format, the quote request and qr-1 paid in USDC; the payment line is followed by the agent's stated reason \"preserve fSIU for raw work\", which the lab does not show; the tx hash is a fixed illustrative value, not a transaction",
+        "the trader owes no delivery, so it has no raw work still to buy"
+      ]
+    },
+    "P8": {
+      "change": "the score stated as counting expired fSIU for nothing",
+      "against": [
+        "P0"
+      ],
+      "trader": "TRADER-2",
+      "seed": 1,
+      "round": 2,
+      "printByRound": [
+        "1437000",
+        "1652550"
+      ],
+      "heldUsdcMinor": "6639",
+      "heldFsiuMilliSiu": "4400",
+      "promptSha256": {
+        "A": "eaed06ba832a7f14b782ca1a287f27657dcc4d43ea8066ac8f30ecdf764662ff",
+        "B": "4c018f7b2a2e0b4c184ffe478f414381f256fa4435957321769639a28318bef4",
+        "C": "eaed06ba832a7f14b782ca1a287f27657dcc4d43ea8066ac8f30ecdf764662ff"
+      },
+      "notes": [
+        "need A (TYPE-2 from TRADER-3, round 1) is already bought and met, paid in USDC (1725 minor units, qr-1); the wallet is the opening wallet less that payment; with it open and unquoted, haiku never paid in the pilot (D62)",
+        "counterfactual: the sentence \"Any fSIU you still hold when the window closes has expired and counts for nothing in your result.\" is added after the score paragraph. The lab measures results before the window closes and does not state this; the neutrality sentence stays, so the screen is partly at odds with itself, which is the point of reading what the agent does with it",
+        "the trader has been paid for 1 job and holds no unit of raw work, so 1 unit of raw work is still to buy"
+      ]
+    },
+    "P7": {
+      "change": "the \"converting changes nothing\" sentence removed",
+      "against": [
+        "P0"
+      ],
+      "trader": "TRADER-2",
+      "seed": 1,
+      "round": 2,
+      "printByRound": [
+        "1437000",
+        "1652550"
+      ],
+      "heldUsdcMinor": "6639",
+      "heldFsiuMilliSiu": "4400",
+      "promptSha256": {
+        "A": "2c522ff942c55e71a6c598040bb4e4d9841b86005ac91c7fca4fac2b3541f90e",
+        "B": "d1f5184b7399752fd59c6e2fb6fe15a76b79186c15e1fc879bb8523ce0cf6e08",
+        "C": "2c522ff942c55e71a6c598040bb4e4d9841b86005ac91c7fca4fac2b3541f90e"
+      },
+      "notes": [
+        "need A (TYPE-2 from TRADER-3, round 1) is already bought and met, paid in USDC (1725 minor units, qr-1); the wallet is the opening wallet less that payment; with it open and unquoted, haiku never paid in the pilot (D62)",
+        "the sentence \"Valued at the current print, converting between the two assets changes nothing about your result, and you are never required to convert.\" is removed from the brief",
+        "the trader has been paid for 1 job and holds no unit of raw work, so 1 unit of raw work is still to buy"
+      ]
+    },
+    "P10": {
+      "change": "history shows an earlier USDC payment with the stated purpose \"preserve fSIU for raw work\", one unit still to buy",
+      "against": [
+        "P0"
+      ],
+      "trader": "TRADER-2",
+      "seed": 1,
+      "round": 2,
+      "printByRound": [
+        "1437000",
+        "1652550"
+      ],
+      "heldUsdcMinor": "6639",
+      "heldFsiuMilliSiu": "4400",
+      "promptSha256": {
+        "A": "ed4df83d709b7c5ad9dbc0c8acb1119eede83bcbd8665c1298a6263a8b889881",
+        "B": "33fc1acf67837d38972328426c9d4c91852fb2db937d60ec0806f9b58c56df47",
+        "C": "ed4df83d709b7c5ad9dbc0c8acb1119eede83bcbd8665c1298a6263a8b889881"
+      },
+      "notes": [
+        "need A (TYPE-2 from TRADER-3, round 1) is already bought and met, paid in USDC (1725 minor units, qr-1); the wallet is the opening wallet less that payment; with it open and unquoted, haiku never paid in the pilot (D62)",
+        "history: those two turns are shown in the lab's own format, the quote request and qr-1 paid in USDC; the payment line is followed by the agent's stated reason \"preserve fSIU for raw work\", which the lab does not show; the tx hash is a fixed illustrative value, not a transaction",
+        "the trader has been paid for 1 job and holds no unit of raw work, so 1 unit of raw work is still to buy"
+      ]
+    }
+  },
+  "plan": {
+    "cells": [
+      "P0",
+      "T3",
+      "P9",
+      "T2",
+      "P3",
+      "P5",
+      "P4",
+      "P6",
+      "T1",
+      "P11",
+      "P8",
+      "P7",
+      "P10"
+    ],
+    "models": [
+      "claude-haiku-4-5",
+      "claude-sonnet-5"
+    ],
+    "arms": [
+      "A",
+      "C",
+      "B"
+    ]
+  }
+}

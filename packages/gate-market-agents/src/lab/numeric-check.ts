@@ -67,9 +67,11 @@ export interface NumericFlag {
   snippet: string;
 }
 
-const NUMBER = String.raw`(\d[\d,]*(?:\.\d+)?)`;
-const USD = new RegExp(String.raw`\$\s?${NUMBER}|${NUMBER}\s*(?:USD|usd|dollars?)\b`, "g");
-const MINOR = new RegExp(String.raw`${NUMBER}\s*(?:USDC\s+)?minor\s+units?`, "gi");
+// Not the tail of a longer token: not after a letter, digit or point, and not the exponent of scientific notation ("1e-6 USD" is not 6 USD).
+const NUMBER = String.raw`(?<![\w.]|[eE][-+])(\d[\d,]*(?:\.\d+)?)`;
+// "1,653 USD minor units" is a count of minor units written with the wrong unit word, not a dollar figure; the minor-unit pattern reads it.
+const USD = new RegExp(String.raw`\$\s?${NUMBER}|${NUMBER}\s*(?:USD|usd|dollars?)\b(?!\s+minor\s+units?)`, "g");
+const MINOR = new RegExp(String.raw`${NUMBER}\s*(?:USDC\s+|USD\s+)?minor\s+units?`, "gi");
 const MSIU = new RegExp(String.raw`${NUMBER}\s*mSIU`, "gi");
 
 /** A stated figure as an exact scaled integer; undefined for something that is not a plain figure. Digits beyond the twelfth decimal are dropped. */
@@ -126,6 +128,8 @@ export function numericFlags(text: string | undefined, figures: ScreenFigures): 
     for (const m of text.matchAll(re)) {
       const x = scaled(m[1]);
       if (x === undefined) continue;
+      // "1 minor unit" (singular) states what a unit is, not a holding or a price.
+      if (kind === "minor_scale" && x === 10n ** BigInt(SCALE) && /minor\s+unit(?!s)/i.test(m[0])) continue;
       const off = powerOff(x, known.map((k) => k * 10n ** BigInt(SCALE)));
       if (off !== undefined) flags.push({ kind, stated: m[1], nearest: show(off.k, SCALE), power: off.power, snippet: snippetAt(m.index ?? 0, m[0].length) });
     }

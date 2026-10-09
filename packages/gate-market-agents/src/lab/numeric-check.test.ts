@@ -58,6 +58,15 @@ describe("numericFlags", () => {
     expect(numericFlags("The quote is 30,160 USDC minor units.", t1)[0]).toMatchObject({ kind: "minor_scale", power: 1 });
   });
 
+  it("reads \"1,653 USD minor units\" as a count of minor units, and \"1 minor unit\" as a definition", () => {
+    expect(numericFlags("to cover the 1,653 USD minor units this will cost", figures)).toEqual([]);
+    expect(numericFlags("so 1 minor unit = 1e-6 USD", figures)).toEqual([]);
+    expect(numericFlags("a fee of 2.5e-3 USD", figures)).toEqual([]);
+    // but a real slip written the same way is still a slip
+    expect(numericFlags("to cover the 16,530 USD minor units this will cost", figures)[0]).toMatchObject({ kind: "minor_scale", power: 1 });
+    expect(numericFlags("that is ~$6.64 of USDC", figures)[0]).toMatchObject({ kind: "usd_scale" });
+  });
+
   it("states a limit it has: an arithmetic slip that lands off every power of ten is not caught", () => {
     expect(numericFlags("The quote is 1,456 mSIU.", figures)).toEqual([]);
   });

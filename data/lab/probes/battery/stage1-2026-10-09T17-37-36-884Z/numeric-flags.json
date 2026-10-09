@@ -1,0 +1,668 @@
+{
+  "check": "lab/numeric-check.ts, D65: a stated figure that is a power of ten away from a figure on the screen, or a dollar figure far larger than the whole wallet. It does not catch other arithmetic slips.",
+  "calls": 780,
+  "repliesWithAFlag": 41,
+  "flagged": [
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P10|A|claude-haiku-4-5|8",
+      "cell": "P10",
+      "arm": "A",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "6.64",
+          "nearest": "0.006639",
+          "power": 3,
+          "snippet": " I have sufficient USDC (6,639 units = ~$6.64) to cover the 0.001653 USD co"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T2|B|claude-haiku-4-5|6",
+      "cell": "T2",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "116.61",
+          "nearest": "0.011661",
+          "power": 4,
+          "snippet": "e sufficient USDC (11,661 minor units = $116.61) to pay for one unit of raw w"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P9|A|claude-haiku-4-5|10",
+      "cell": "P9",
+      "arm": "A",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "6.639",
+          "nearest": "0.006639",
+          "power": 3,
+          "snippet": "USD, and I hold 6,639 USDC minor units (6.639 USD)."
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P9|B|claude-haiku-4-5|12",
+      "cell": "P9",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "6.639",
+          "nearest": "0.006639",
+          "power": 3,
+          "snippet": "ve sufficient USDC (6,639 minor units = $6.639) to afford a unit of raw work"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T2|B|claude-haiku-4-5|4",
+      "cell": "T2",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "116.61",
+          "nearest": "0.011661",
+          "power": 4,
+          "snippet": "e sufficient USDC (11,661 minor units = $116.61) to cover both: a raw work un"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P11|B|claude-haiku-4-5|12",
+      "cell": "P11",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "minor_scale",
+          "stated": "2",
+          "nearest": "1984",
+          "power": -3,
+          "snippet": "y fSIU. Paying in USDC (0.001984 USD = ~2 USDC minor units) is affordable and preserves "
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P5|B|claude-haiku-4-5|7",
+      "cell": "P5",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "11.13",
+          "nearest": "0.011128",
+          "power": 3,
+          "snippet": "e sufficient USDC (11,128 minor units ≈ $11.13) to afford a raw work unit at"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P7|A|claude-haiku-4-5|8",
+      "cell": "P7",
+      "arm": "A",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "minor_scale",
+          "stated": "1.653",
+          "nearest": "1653",
+          "power": -3,
+          "snippet": "ettle at 0.001653 USD, which costs only 1.653 minor units."
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P4|B|claude-haiku-4-5|5",
+      "cell": "P4",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "6.64",
+          "nearest": "0.006639",
+          "power": 3,
+          "snippet": "ve sufficient USDC (6,639 minor units ≈ $6.64) to buy 2 units at 1 SIU each"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P8|A|claude-haiku-4-5|4",
+      "cell": "P8",
+      "arm": "A",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "6.64",
+          "nearest": "0.006639",
+          "power": 3,
+          "snippet": "ve sufficient USDC (6,639 minor units ≈ $6.64) to cover the ~$0.00165 cost."
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T1|A|claude-haiku-4-5|8",
+      "cell": "T1",
+      "arm": "A",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "100.97",
+          "nearest": "0.010097",
+          "power": 4,
+          "snippet": "e sufficient USDC (10,097 minor units ≈ $100.97) to cover the ~$0.0025 cost."
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T2|B|claude-haiku-4-5|5",
+      "cell": "T2",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "116.61",
+          "nearest": "0.011661",
+          "power": 4,
+          "snippet": "e sufficient USDC (11,661 minor units = $116.61) to pay for both the TYPE-1 j"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T3|B|claude-haiku-4-5|9",
+      "cell": "T3",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "110",
+          "nearest": "0.010995",
+          "power": 4,
+          "snippet": " sufficient USDC (10,995 minor units = ~$110) to pay the 0.001725 USD cost"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T2|C|claude-sonnet-5|6",
+      "cell": "T2",
+      "arm": "C",
+      "model": "claude-sonnet-5",
+      "source": "thinking",
+      "flags": [
+        {
+          "kind": "usd_implausible",
+          "stated": "001125183",
+          "nearest": "0.014961536",
+          "snippet": "ciding whether it's worth the expense. 001125183 USD credit for meeting the TYPE-1"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T1|B|claude-haiku-4-5|12",
+      "cell": "T1",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "100.97",
+          "nearest": "0.010097",
+          "power": 4,
+          "snippet": "d sufficient USDC (10,097 minor units = $100.97) to pay the 0.003016 USD cost"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P9|B|claude-haiku-4-5|2",
+      "cell": "P9",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "6.639",
+          "nearest": "0.006639",
+          "power": 3,
+          "snippet": "ve sufficient USDC (6,639 minor units ≈ $6.639) to cover both purchases at t"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T1|B|claude-haiku-4-5|7",
+      "cell": "T1",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "100.97",
+          "nearest": "0.010097",
+          "power": 4,
+          "snippet": "e sufficient USDC (10,097 minor units = $100.97) to pay the 0.003016 USD cost"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P9|A|claude-haiku-4-5|1",
+      "cell": "P9",
+      "arm": "A",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_implausible",
+          "stated": "4",
+          "nearest": "0.01391022",
+          "snippet": " I have sufficient USDC (6,639 units = ~4 USD) to cover the 1,653 USDC mino"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T3|B|claude-haiku-4-5|3",
+      "cell": "T3",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "minor_scale",
+          "stated": "1.725",
+          "nearest": "1725",
+          "power": -3,
+          "snippet": ". The quote costs either 0.001725 USD (≈1.725 USDC minor units) or 1,200 mSIU of fSIU. I hav"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P9|B|claude-haiku-4-5|1",
+      "cell": "P9",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "6.64",
+          "nearest": "0.006639",
+          "power": 3,
+          "snippet": "ve sufficient USDC (6,639 minor units ≈ $6.64) to buy raw work at 0.001653 "
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T2|A|claude-haiku-4-5|10",
+      "cell": "T2",
+      "arm": "A",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "116.61",
+          "nearest": "0.011661",
+          "power": 4,
+          "snippet": "e sufficient USDC (11,661 minor units ≈ $116.61) to pay for this unit at 0.00"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P11|B|claude-haiku-4-5|2",
+      "cell": "P11",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "6.639",
+          "nearest": "0.006639",
+          "power": 3,
+          "snippet": " currently hold 6,639 USDC minor units (6.639 USD) and 4,400 mSIU of fSIU. Payi"
+        },
+        {
+          "kind": "usd_scale",
+          "stated": "6.639",
+          "nearest": "0.006639",
+          "power": 3,
+          "snippet": "udent. However, I have sufficient USDC (6.639 USD >> 0.001984 USD needed), so I"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T3|B|claude-haiku-4-5|4",
+      "cell": "T3",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "109.95",
+          "nearest": "0.010995",
+          "power": 4,
+          "snippet": "ient USDC balance (10,995 minor units = $109.95) and the job costs only 0.001"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T2|B|claude-haiku-4-5|3",
+      "cell": "T2",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "116.61",
+          "nearest": "0.011661",
+          "power": 4,
+          "snippet": "e sufficient USDC (11,661 minor units ≈ $116.61) to cover both the TYPE-1 job"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T1|B|claude-haiku-4-5|10",
+      "cell": "T1",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "100.97",
+          "nearest": "0.010097",
+          "power": 4,
+          "snippet": "e sufficient USDC (10,097 minor units = $100.97) to pay for this job at 0.003"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P3|B|claude-haiku-4-5|8",
+      "cell": "P3",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "6.639",
+          "nearest": "0.006639",
+          "power": 3,
+          "snippet": "ve sufficient USDC (6,639 minor units = $6.639) to pay the settlement cost o"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T2|A|claude-haiku-4-5|12",
+      "cell": "T2",
+      "arm": "A",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "116.61",
+          "nearest": "0.011661",
+          "power": 4,
+          "snippet": "e sufficient USDC (11,661 minor units ≈ $116.61) to cover the 0.000751 USD co"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T1|B|claude-haiku-4-5|4",
+      "cell": "T1",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "100.97",
+          "nearest": "0.010097",
+          "power": 4,
+          "snippet": "e sufficient USDC (10,097 minor units = $100.97) to pay the 0.003016 USD cost"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T1|B|claude-haiku-4-5|6",
+      "cell": "T1",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "100.97",
+          "nearest": "0.010097",
+          "power": 4,
+          "snippet": "e my USDC balance (10,097 minor units = $100.97) is ample and the quote costs"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P7|B|claude-haiku-4-5|8",
+      "cell": "P7",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "minor_scale",
+          "stated": "1.984",
+          "nearest": "1984",
+          "power": -3,
+          "snippet": "fSIU. Settling qr-3 costs 0.001984 USD (1.984 USDC minor units) or 1,200 mSIU. I'll pay with"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P5|B|claude-haiku-4-5|6",
+      "cell": "P5",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "11.13",
+          "nearest": "0.011128",
+          "power": 3,
+          "snippet": " sufficient USDC (11,128 minor units = ~$11.13) to afford one unit at the cu"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T1|A|claude-haiku-4-5|4",
+      "cell": "T1",
+      "arm": "A",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "2.51",
+          "nearest": "0.002514",
+          "power": 3,
+          "snippet": "(10,097 minor units) to pay the quote (~2.51 USD)."
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T2|B|claude-haiku-4-5|11",
+      "cell": "T2",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "116.61",
+          "nearest": "0.011661",
+          "power": 4,
+          "snippet": "e sufficient USDC (11,661 minor units = $116.61) to purchase raw work at the "
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P6|B|claude-haiku-4-5|12",
+      "cell": "P6",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "1.683",
+          "nearest": "0.001653",
+          "power": 3,
+          "snippet": "SIU of fSIU and 2,782 USDC minor units (1.683 USD). A unit of raw work costs 1 "
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T2|B|claude-haiku-4-5|1",
+      "cell": "T2",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "116.61",
+          "nearest": "0.011661",
+          "power": 4,
+          "snippet": "d sufficient USDC (11,661 minor units ≈ $116.61) to purchase raw work at the "
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T3|B|claude-haiku-4-5|7",
+      "cell": "T3",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "minor_scale",
+          "stated": "1.725",
+          "nearest": "1725",
+          "power": -3,
+          "snippet": "SDC), and the quote costs 0.001725 USD (1.725 USDC minor units), well within my budget. This"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P7|A|claude-haiku-4-5|3",
+      "cell": "P7",
+      "arm": "A",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "6.639",
+          "nearest": "0.006639",
+          "power": 3,
+          "snippet": "bligation. My USDC (6,639 minor units ≈ 6.639 USD) comfortably covers the cost "
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P7|A|claude-haiku-4-5|10",
+      "cell": "P7",
+      "arm": "A",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "6.64",
+          "nearest": "0.006639",
+          "power": 3,
+          "snippet": "ve sufficient USDC (6,639 minor units ≈ $6.64) to pay the 0.001653 USD cost"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P3|B|claude-haiku-4-5|9",
+      "cell": "P3",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "6.639",
+          "nearest": "0.006639",
+          "power": 3,
+          "snippet": "ve sufficient USDC (6,639 minor units = $6.639) to pay the 0.001984 USD cost"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|T1|B|claude-haiku-4-5|2",
+      "cell": "T1",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "100.97",
+          "nearest": "0.010097",
+          "power": 4,
+          "snippet": "e sufficient USDC (10,097 minor units ≈ $100.97) to pay the 0.003016 USD cost"
+        }
+      ]
+    },
+    {
+      "key": "stage1-2026-10-09T17-37-36-884Z|P7|B|claude-haiku-4-5|6",
+      "cell": "P7",
+      "arm": "B",
+      "model": "claude-haiku-4-5",
+      "source": "stated_reason",
+      "flags": [
+        {
+          "kind": "usd_scale",
+          "stated": "6.64",
+          "nearest": "0.006639",
+          "power": 3,
+          "snippet": "es my limited USDC (6,639 minor units ≈ $6.64) for purchasing the raw work "
+        }
+      ]
+    }
+  ]
+}
