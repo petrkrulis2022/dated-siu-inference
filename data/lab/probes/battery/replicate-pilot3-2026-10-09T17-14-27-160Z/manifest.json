@@ -1,0 +1,72 @@
+{
+  "runId": "replicate-pilot3-2026-10-09T17-14-27-160Z",
+  "kind": "replicate",
+  "createdAt": "2026-10-09T17:14:27.170Z",
+  "gitHead": "d06aec5b86e64e5b798a714589ddf6e06aa3195d",
+  "instrumentVersion": 9,
+  "capUsd": "3",
+  "rulesFingerprint": "6d718eb1185983e843240900a0ad936e3acb2eccf87fa34ad4a565744a4036e2",
+  "sampling": "Provider default sampling: no temperature, top_p or top_k is sent in any arm (docs/marketplace_plan.md §14.2). Thinking: none requested in arms A and B; arm C asks sonnet-5 for display \"summarized\" and haiku-4-5 for manual thinking, budget 2,048 tokens.",
+  "samplesPerCell": 12,
+  "plannedCalls": 24,
+  "cells": {
+    "P3": {
+      "change": "no raw work still to buy",
+      "against": [
+        "P0"
+      ],
+      "trader": "TRADER-2",
+      "seed": 1,
+      "round": 2,
+      "printByRound": [
+        "1437000",
+        "1652550"
+      ],
+      "heldUsdcMinor": "6639",
+      "heldFsiuMilliSiu": "4400",
+      "promptSha256": {
+        "A": "99b00d07cfc29326aabac55f0b5804bf6dacf1a8587469a953b83937fb75ddfb",
+        "B": "955fad72106ecfdb1b16bf62eae44e2f454e981bdaceecb83b0e302be6fc8b08",
+        "C": "99b00d07cfc29326aabac55f0b5804bf6dacf1a8587469a953b83937fb75ddfb"
+      },
+      "notes": [
+        "need A (TYPE-2 from TRADER-3, round 1) is already bought and met, paid in USDC (1725 minor units, qr-1); the wallet is the opening wallet less that payment; with it open and unquoted, haiku never paid in the pilot (D62)",
+        "the trader owes no delivery, so it has no raw work still to buy"
+      ]
+    },
+    "P0": {
+      "change": "baseline: round 2, print up 15% on round 1, one unit of raw work still to buy, the opening wallet, one quote to pay, USDC listed first",
+      "against": [],
+      "trader": "TRADER-2",
+      "seed": 1,
+      "round": 2,
+      "printByRound": [
+        "1437000",
+        "1652550"
+      ],
+      "heldUsdcMinor": "6639",
+      "heldFsiuMilliSiu": "4400",
+      "promptSha256": {
+        "A": "0d85b9c295fad858a2dccfc9783381cf245afa27c074c05308b75cfbf31b07f7",
+        "B": "232c6d1f7b43495e9e17a4a7f2963de3ec5250bafbf7e706f530a5e15a2a8f8b",
+        "C": "0d85b9c295fad858a2dccfc9783381cf245afa27c074c05308b75cfbf31b07f7"
+      },
+      "notes": [
+        "need A (TYPE-2 from TRADER-3, round 1) is already bought and met, paid in USDC (1725 minor units, qr-1); the wallet is the opening wallet less that payment; with it open and unquoted, haiku never paid in the pilot (D62)",
+        "the trader has been paid for 1 job and holds no unit of raw work, so 1 unit of raw work is still to buy"
+      ]
+    }
+  },
+  "plan": {
+    "cells": [
+      "P3",
+      "P0"
+    ],
+    "models": [
+      "claude-haiku-4-5"
+    ],
+    "arms": [
+      "A"
+    ]
+  }
+}

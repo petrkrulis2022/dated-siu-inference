@@ -28,18 +28,26 @@ describe("the cells", () => {
     expect(six.needB.round).toBeLessThanOrEqual(5);
   });
 
-  it("makes P0 a real round-2 turn: print up 15%, one delivery owed, the opening wallet, one quote to pay, USDC first", () => {
+  it("makes P0 a real round-2 turn: print up 15%, one delivery owed, the opening wallet less the first need's payment, one quote to pay, USDC first", () => {
     const p0 = screens.P0;
     expect(p0.round).toBe(2);
     expect(p0.printByRound).toEqual(["1437000", "1652550"]);
     expect(p0.prompt).toContain("Round 2: 0.00165255 USD per SIU (up 15.0% on round 1)");
     expect(p0.prompt).toContain("You owe 1 delivery and hold 0 units of raw work.");
-    expect(p0.prompt).toContain("YOU HOLD: 8,364 USDC minor units");
+    expect(p0.prompt).toContain("YOU HOLD: 6,639 USDC minor units");
     expect(p0.prompt).toContain("Quotes you have received");
     expect(p0.prompt).toContain(NEUTRALITY);
     expect(p0.prompt).not.toContain(EXPIRY);
     expect(p0.prompt.indexOf("pay_with_usdc(requestId)")).toBeLessThan(p0.prompt.indexOf("pay_with_held_claim(requestId)"));
     expect(p0.prompt).toContain(`(no turns yet — this is your first turn)`);
+  });
+
+  it("has no open need to ask for in any cell: the first need is met, so the only thing to settle is the quote in front (D62)", () => {
+    for (const id of CELL_IDS) {
+      expect(screens[id].prompt).not.toContain("Needs you can buy now");
+      expect(screens[id].prompt).toContain("YOUR RESULT SO FAR: 1 of 2 needs met.");
+      expect(screens[id].prompt).toContain("Quotes you have received");
+    }
   });
 
   it("P3 has no delivery owed and P4 has two", () => {
@@ -83,8 +91,9 @@ describe("the cells", () => {
     for (const id of ["P10", "P11"] as const) {
       expect(screens[id].prompt).toContain("Turn 1 — called request_quote(");
       expect(screens[id].prompt).toMatch(/Turn 2 — called pay_with_usdc\(\{"requestId":"qr-1"\}\) -> \{"txHash":"0x[0-9a-f]{64}"\} — your reason then: "preserve fSIU for raw work"/);
-      expect(screens[id].held.usdcMinor).toBe(8_364n - 1_725n);
+      expect(screens[id].held).toEqual(screens.P0.held);
     }
+    expect(screens.P0.held.usdcMinor).toBe(8_364n - 1_725n);
     for (const id of CELL_IDS.filter((c) => c !== "P10" && c !== "P11")) expect(screens[id].prompt).not.toContain(EARMARK_REASON);
     expect(screens.P10.prompt).toContain("You owe 1 delivery");
     expect(screens.P11.prompt).not.toContain("You owe");

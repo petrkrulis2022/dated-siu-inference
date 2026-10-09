@@ -1,0 +1,49 @@
+{
+  "runId": "pilot-2026-10-09T17-11-12-049Z",
+  "kind": "pilot",
+  "createdAt": "2026-10-09T17:11:12.057Z",
+  "gitHead": "d06aec5b86e64e5b798a714589ddf6e06aa3195d",
+  "instrumentVersion": 9,
+  "capUsd": "0.30",
+  "rulesFingerprint": "6d718eb1185983e843240900a0ad936e3acb2eccf87fa34ad4a565744a4036e2",
+  "sampling": "Provider default sampling: no temperature, top_p or top_k is sent in any arm (docs/marketplace_plan.md §14.2). Thinking: none requested in arms A and B; arm C asks sonnet-5 for display \"summarized\" and haiku-4-5 for manual thinking, budget 2,048 tokens.",
+  "samplesPerCell": 12,
+  "plannedCalls": 6,
+  "cells": {
+    "P0": {
+      "change": "baseline: round 2, print up 15% on round 1, one unit of raw work still to buy, the opening wallet, one quote to pay, USDC listed first",
+      "against": [],
+      "trader": "TRADER-2",
+      "seed": 1,
+      "round": 2,
+      "printByRound": [
+        "1437000",
+        "1652550"
+      ],
+      "heldUsdcMinor": "8364",
+      "heldFsiuMilliSiu": "4400",
+      "promptSha256": {
+        "A": "124423aa4c4a05ab48a75dbe567dbf277a54c177b5a1345f21f5a9bc79cb1852",
+        "B": "06088174dabe668c777f347a3e70813cefff40e57ea5b0d578550d6d5c452c17",
+        "C": "124423aa4c4a05ab48a75dbe567dbf277a54c177b5a1345f21f5a9bc79cb1852"
+      },
+      "notes": [
+        "the trader has been paid for 1 job and holds no unit of raw work, so 1 unit of raw work is still to buy"
+      ]
+    }
+  },
+  "plan": {
+    "cells": [
+      "P0"
+    ],
+    "models": [
+      "claude-haiku-4-5",
+      "claude-sonnet-5"
+    ],
+    "arms": [
+      "A",
+      "B",
+      "C"
+    ]
+  }
+}

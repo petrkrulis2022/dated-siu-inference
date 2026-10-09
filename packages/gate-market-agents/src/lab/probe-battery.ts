@@ -114,7 +114,7 @@ export interface BatterySetup {
   /** The round the screen is taken at. */
   atRound: number;
   me: TraderLabel;
-  /** Its round-1 need (open and unquoted, or paid earlier in the history cells) and its round-2-or-later need (the quote in front). */
+  /** Its earlier need (bought and met before the screen, D62) and its later need (the quote in front). */
   needA: Need;
   needB: Need;
   /** Traders with an open need on `me` at the screen's round: each can have paid it for a job. */
@@ -251,30 +251,34 @@ export function buildCellScreen(id: CellId): CellScreen {
     return req.requestId;
   };
 
-  // History cells: the trader paid its round-1 need in USDC, in round 1, and said why.
-  let earlierPaymentUsdc = 0n;
+  // The trader's first need is already bought and met in every cell (D62): left open and unquoted, it was the action haiku took in 24 of 24 pilot replies,
+  // so no baseline reply was ever a payment. It paid for it in USDC at that round's print, which is why its wallet is the opening wallet less that payment.
+  const sellerA = setup.needA.seller;
+  for (let r = 1; r < setup.needA.round; r++) books.advanceRound();
+  const bodyA = quoteBodyFor("1.2", path.byRound[setup.needA.round - 1], ids.traders[sellerA], `model-of-${sellerA}`);
+  const ridA = post(me, sellerA, setup.needA.round, true);
+  books.attempted(ridA, true);
+  const earlierPaymentUsdc = quoteTerms("trade", path.byRound[setup.needA.round - 1], params).minorUnits;
+  notes.push(
+    `need A (${setup.needA.type} from ${sellerA}, round ${setup.needA.round}) is already bought and met, paid in USDC (${earlierPaymentUsdc} minor units, ${ridA}); the wallet is the opening wallet less that payment; with it open and unquoted, haiku never paid in the pilot (D62)`,
+  );
   if (v.history) {
-    const sellerA = setup.needA.seller;
-    const bodyA = quoteBodyFor("1.2", path.byRound[0], ids.traders[sellerA], `model-of-${sellerA}`);
-    const rid = post(me, sellerA, 1, true);
-    earlierPaymentUsdc = quoteTerms("trade", path.byRound[0], params).minorUnits;
-    const quote = { ...bodyA, expiry: "2026-10-08T12:00:00Z", print_id: "print-illustrative" };
     history.push(
       {
         turn: 1,
         jobId: "probe",
         toolName: "request_quote",
-        args: { siu: "1.2", model: `model-of-${sellerA}`, rateUsdPerSiu: printRate(path.byRound[0]), indexVersion: "SIU-2026a", printId: "print-illustrative", printHash: "0x00", sellerId: ids.traders[sellerA], chain: "base-sepolia", expiresInSeconds: 3600, pattern: "fixed" },
-        result: quote,
+        args: { siu: "1.2", model: `model-of-${sellerA}`, rateUsdPerSiu: printRate(path.byRound[setup.needA.round - 1]), indexVersion: "SIU-2026a", printId: "print-illustrative", printHash: "0x00", sellerId: ids.traders[sellerA], chain: "base-sepolia", expiresInSeconds: 3600, pattern: "fixed" },
+        result: { ...bodyA, expiry: "2026-10-08T12:00:00Z", print_id: "print-illustrative" },
       },
-      { turn: 2, jobId: "probe", toolName: "pay_with_usdc", args: { requestId: rid }, result: { txHash: ILLUSTRATIVE_TX } },
+      { turn: 2, jobId: "probe", toolName: "pay_with_usdc", args: { requestId: ridA }, result: { txHash: ILLUSTRATIVE_TX } },
     );
     notes.push(
-      `history: two turns shown in the lab's own format, a quote request and ${rid} paid in USDC (${earlierPaymentUsdc} minor units); the payment line is followed by the agent's stated reason "${EARMARK_REASON}", which the lab does not show; the tx hash is a fixed illustrative value, not a transaction; the wallet is the opening wallet less that payment`,
+      `history: those two turns are shown in the lab's own format, the quote request and ${ridA} paid in USDC; the payment line is followed by the agent's stated reason "${EARMARK_REASON}", which the lab does not show; the tx hash is a fixed illustrative value, not a transaction`,
     );
   }
 
-  for (let r = 1; r < setup.atRound; r++) books.advanceRound();
+  for (let r = setup.needA.round; r < setup.atRound; r++) books.advanceRound();
 
   // Deliveries owed to the trader: raw work still to buy. Each is a buyer's open need on it, paid in USDC.
   const owedBuyers = setup.buyers.filter((b) => b !== me).slice(0, v.owed);

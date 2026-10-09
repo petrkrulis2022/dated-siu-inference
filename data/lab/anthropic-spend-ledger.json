@@ -15,6 +15,21 @@
       "at": "2026-10-09T14:44:53Z",
       "usd": "0.048325",
       "what": "v9 comprehension probe, haiku-4-5 and sonnet-5"
+    },
+    {
+      "at": "2026-10-09T17:11:31.552Z",
+      "usd": "0.082806",
+      "what": "probe battery pilot-2026-10-09T17-11-12-049Z"
+    },
+    {
+      "at": "2026-10-09T17:12:57.799Z",
+      "usd": "0.126162",
+      "what": "probe battery replicate-pilot2-2026-10-09T17-12-34-975Z"
+    },
+    {
+      "at": "2026-10-09T17:14:45.750Z",
+      "usd": "0.116972",
+      "what": "probe battery replicate-pilot3-2026-10-09T17-14-27-160Z"
     }
   ]
 }
