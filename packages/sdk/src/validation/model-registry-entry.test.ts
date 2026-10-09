@@ -42,3 +42,19 @@ describe("validateModelRegistryEntry", () => {
     expect(result.valid).toBe(false);
   });
 });
+
+describe("validateModelRegistryEntry: sampling", () => {
+  const base = { id: "m", provider: "p", endpoint: "https://e.test", model_string: "m", tier: "mid", open_weights: true, host: "h" };
+  it("accepts a number or \"provider-default\" and no declaration at all", () => {
+    expect(validateModelRegistryEntry({ ...base, sampling: { temperature: 0 } }).valid).toBe(true);
+    expect(validateModelRegistryEntry({ ...base, sampling: { temperature: 0.3 } }).valid).toBe(true);
+    expect(validateModelRegistryEntry({ ...base, sampling: { temperature: "provider-default" } }).valid).toBe(true);
+    expect(validateModelRegistryEntry(base).valid).toBe(true);
+  });
+  it("rejects a negative temperature, another word, a missing temperature, and an unknown key", () => {
+    expect(validateModelRegistryEntry({ ...base, sampling: { temperature: -1 } }).valid).toBe(false);
+    expect(validateModelRegistryEntry({ ...base, sampling: { temperature: "default" } }).valid).toBe(false);
+    expect(validateModelRegistryEntry({ ...base, sampling: {} }).valid).toBe(false);
+    expect(validateModelRegistryEntry({ ...base, sampling: { temperature: 0, top_p: 1 } }).valid).toBe(false);
+  });
+});

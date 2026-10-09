@@ -27,7 +27,7 @@ async function callGoogle(
   maxOutputTokens: number,
 ): Promise<{ response: GoogleResponse; latencyMs: number }> {
   const generationConfig: Record<string, unknown> = { maxOutputTokens };
-  if (includeTemperature) {
+  if (includeTemperature && params.omit_temperature !== true) {
     generationConfig.temperature = params.temperature;
   }
 
@@ -136,6 +136,8 @@ export function createGoogleAdapter(apiKey: string): Adapter {
       latency_ms: latencyMs,
       raw: truncatedByReasoning ? { truncated: truncatedResult.response, final: response } : response,
       deviations,
+      // What the request was actually sent with (D65): the declared sampling is checked against this by the orchestrator.
+      sent: { temperature: includeTemperature && params.omit_temperature !== true ? params.temperature : ("provider-default" as const) },
       stopReason: response.candidates[0]?.finishReason,
       // `part.text` is the only field this file's own GoogleResponse type declares, but the real
       // API can return other part shapes (e.g. a `functionCall` part) this type doesn't model —

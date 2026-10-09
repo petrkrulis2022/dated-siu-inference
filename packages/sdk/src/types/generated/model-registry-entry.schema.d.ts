@@ -22,5 +22,11 @@ export interface ModelRegistryEntry {
   tier: "frontier" | "mid" | "open-weight-hosted";
   open_weights: boolean;
   host: string;
+  /**
+   * The sampling this model is measured at, written down (docs/methodology.md, Sampling settings). `temperature` is a number the print sends as it is, or "provider-default" when the print sends no temperature at all because the model accepts no other value. The print sends exactly this and refuses a measurement whose request went out with anything else.
+   */
+  sampling?: {
+    temperature: number | "provider-default";
+  };
   notes?: string;
 }

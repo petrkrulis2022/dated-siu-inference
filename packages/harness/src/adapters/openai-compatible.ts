@@ -38,7 +38,7 @@ async function callOpenAiCompatible(
     messages: [{ role: "user", content: prompt }],
     ...config.extraBody,
   };
-  if (includeTemperature) {
+  if (includeTemperature && params.omit_temperature !== true) {
     body.temperature = params.temperature;
   }
 
@@ -80,12 +80,14 @@ export function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): A
   return async (modelString, prompt, params) => {
     const deviations: string[] = [];
     let result: { response: OpenAiCompatibleResponse; latencyMs: number };
+    let includeTemperature = true;
     try {
       result = await callOpenAiCompatible(config, modelString, prompt, params, true);
     } catch (err) {
       if (!mentionsTemperature(err)) {
         throw err;
       }
+      includeTemperature = false;
       deviations.push(
         "temperature forced to provider default (request without temperature=0 was rejected)",
       );
@@ -124,6 +126,8 @@ export function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): A
       latency_ms: latencyMs,
       raw: response,
       deviations,
+      // What the request was actually sent with (D65): the declared sampling is checked against this by the orchestrator.
+      sent: { temperature: includeTemperature && params.omit_temperature !== true ? params.temperature : ("provider-default" as const) },
       stopReason: response.choices[0]?.finish_reason,
       contentBlockTypes: response.choices[0]
         ? Object.entries(response.choices[0].message)

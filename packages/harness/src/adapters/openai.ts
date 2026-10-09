@@ -31,7 +31,7 @@ async function callOpenAi(
     max_completion_tokens: maxCompletionTokens,
     messages: [{ role: "user", content: prompt }],
   };
-  if (includeTemperature) {
+  if (includeTemperature && params.omit_temperature !== true) {
     body.temperature = params.temperature;
   }
 
@@ -122,6 +122,8 @@ export function createOpenAiAdapter(apiKey: string): Adapter {
       latency_ms: latencyMs,
       raw: truncatedByReasoning ? { truncated: truncatedResult.response, final: response } : response,
       deviations,
+      // What the request was actually sent with (D65): the declared sampling is checked against this by the orchestrator.
+      sent: { temperature: includeTemperature && params.omit_temperature !== true ? params.temperature : ("provider-default" as const) },
       stopReason: response.choices[0]?.finish_reason,
       // OpenAiResponse's own type only models `content`/`refusal` — the real API can also return
       // `tool_calls` this type doesn't declare, if a model ever emits one despite this loop never

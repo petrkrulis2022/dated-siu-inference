@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ModelRegistryEntry, RunRecord } from "@touchstone/sdk";
 import type { Grader, TaskInstance } from "@touchstone/basket";
-import { runOrchestrator, type OrchestratorTask } from "./orchestrator.js";
+import { checkSamplingSent, declaredParams, runOrchestrator, SamplingMismatchError, type OrchestratorTask } from "./orchestrator.js";
 import { AdapterHttpError, type Adapter, type AdapterResult } from "./adapters/types.js";
 
 vi.mock("./adapters/index.js", async (importOriginal) => {
@@ -32,6 +32,7 @@ const registryEntry: ModelRegistryEntry = {
   tier: "mid",
   open_weights: true,
   host: "testhost",
+  sampling: { temperature: 0 },
 };
 
 function makeInstance(taskClass: "T1" | "T2" | "T3"): TaskInstance {
@@ -52,6 +53,7 @@ function fakeAdapterResult(text: string): AdapterResult {
     latency_ms: 42,
     raw: { text },
     deviations: [],
+    sent: { temperature: 0 },
   };
 }
 
@@ -192,3 +194,79 @@ describe("runOrchestrator", () => {
     expect(records).toHaveLength(2);
   });
 });
+
+describe("declared sampling (docs/methodology.md, Sampling settings)", () => {
+  const providerDefault: ModelRegistryEntry = { ...registryEntry, id: "default-model", sampling: { temperature: "provider-default" } };
+
+  it("sends the temperature the registry declares, and no omit flag", async () => {
+    const adapter: Adapter = vi.fn(async () => fakeAdapterResult("ok"));
+    vi.mocked(createAdapterFor).mockReturnValue(adapter);
+    const task: OrchestratorTask = { registryEntry, instance: makeInstance("T1"), grader: vi.fn(async () => ({ passed: true })) };
+    await runOrchestrator([task], { runsDir });
+    const sent = vi.mocked(adapter).mock.calls[0][2];
+    expect(sent.temperature).toBe(0);
+    expect(sent.omit_temperature).toBeUndefined();
+  });
+
+  it("sends no temperature for a model declared at the provider default, so no rejected request is ever made", async () => {
+    const adapter: Adapter = vi.fn(async () => ({ ...fakeAdapterResult("ok"), sent: { temperature: "provider-default" as const } }));
+    vi.mocked(createAdapterFor).mockReturnValue(adapter);
+    const task: OrchestratorTask = { registryEntry: providerDefault, instance: makeInstance("T1"), grader: vi.fn(async () => ({ passed: true })) };
+    const [outcome] = await runOrchestrator([task], { runsDir });
+    expect(vi.mocked(adapter).mock.calls[0][2].omit_temperature).toBe(true);
+    expect(outcome.infraFailure).toBeUndefined();
+    expect(outcome.records).toHaveLength(1);
+    expect(outcome.records[0].deviations).toEqual([]);
+  });
+
+  it("refuses the measurement when a declared temperature was changed by the adapter, and says why", async () => {
+    const adapter: Adapter = vi.fn(async () => ({
+      ...fakeAdapterResult("ok"),
+      deviations: ["temperature forced to provider default (request without temperature=0 was rejected)"],
+      sent: { temperature: "provider-default" as const },
+    }));
+    vi.mocked(createAdapterFor).mockReturnValue(adapter);
+    const grader: Grader = vi.fn(async () => ({ passed: true }));
+    const [outcome] = await runOrchestrator([{ registryEntry, instance: makeInstance("T1"), grader }], { runsDir });
+    expect(outcome.infraFailureCategory).toBe("sampling_mismatch");
+    expect(outcome.infraFailure).toMatch(/SAMPLING MISMATCH: test-model is declared at temperature 0 and its request went out at provider-default/);
+    expect(outcome.infraFailure).toMatch(/request without temperature=0 was rejected/);
+    expect(outcome.records).toEqual([]);
+    expect(grader).not.toHaveBeenCalled();
+    expect(await readRecords()).toEqual([]);
+  });
+
+  it("does not retry a mismatch", async () => {
+    const adapter: Adapter = vi.fn(async () => ({ ...fakeAdapterResult("ok"), sent: { temperature: 0.7 } }));
+    vi.mocked(createAdapterFor).mockReturnValue(adapter);
+    await runOrchestrator([{ registryEntry, instance: makeInstance("T3"), grader: vi.fn(async () => ({ passed: false })) }], { runsDir });
+    expect(adapter).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a result that does not say what it sent, and a model with no declaration, without calling the model", async () => {
+    const unreported: AdapterResult = fakeAdapterResult("ok");
+    delete unreported.sent;
+    const adapter: Adapter = vi.fn(async () => unreported);
+    vi.mocked(createAdapterFor).mockReturnValue(adapter);
+    const [a] = await runOrchestrator([{ registryEntry, instance: makeInstance("T1"), grader: vi.fn(async () => ({ passed: true })) }], { runsDir });
+    expect(a.infraFailureCategory).toBe("sampling_mismatch");
+    expect(a.infraFailure).toMatch(/SAMPLING UNVERIFIED/);
+
+    const calls = vi.mocked(adapter).mock.calls.length;
+    const undeclared: ModelRegistryEntry = { ...registryEntry };
+    delete undeclared.sampling;
+    const [b] = await runOrchestrator([{ registryEntry: undeclared, instance: makeInstance("T1"), grader: vi.fn(async () => ({ passed: true })) }], { runsDir });
+    expect(b.infraFailureCategory).toBe("sampling_mismatch");
+    expect(b.infraFailure).toMatch(/SAMPLING NOT DECLARED/);
+    expect(vi.mocked(adapter).mock.calls.length).toBe(calls);
+  });
+
+  it("declaredParams and checkSamplingSent behave the same on their own", () => {
+    expect(declaredParams(registryEntry, { temperature: 0, max_tokens: 9 })).toEqual({ temperature: 0, max_tokens: 9 });
+    expect(declaredParams(providerDefault, { temperature: 0, max_tokens: 9 })).toEqual({ temperature: 0, max_tokens: 9, omit_temperature: true });
+    expect(declaredParams({ ...registryEntry, sampling: { temperature: 0.3 } }, { temperature: 0, max_tokens: 9 }).temperature).toBe(0.3);
+    expect(() => checkSamplingSent(providerDefault, { ...fakeAdapterResult("x"), sent: { temperature: "provider-default" } })).not.toThrow();
+    expect(() => checkSamplingSent(providerDefault, fakeAdapterResult("x"))).toThrow(SamplingMismatchError);
+  });
+});
+

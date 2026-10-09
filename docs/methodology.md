@@ -497,6 +497,27 @@ drop today. Carry-forward is computed from each print's own real published histo
 invented figure — consistent with this document's evidence hierarchy (§2: executed runs and their
 own signed record outrank everything else, including a later recomputation of the same day).
 
+### Sampling settings
+
+_Disclosure dated 2026-10-09. Nothing here corrects a published price: every print measured what each constituent's work costs as it can actually be bought. What was missing was a statement of the sampling each constituent was measured at, and a rule that makes it impossible to change that quietly._
+
+**What each constituent is measured at.** Every entry in `data/registry/models.json` now carries a `sampling` field, and the print sends exactly what it says.
+
+| Constituent | Temperature |
+| --- | --- |
+| `claude-sonnet-5` | the provider's default; no temperature is sent |
+| the other nine (`claude-haiku-4-5`, `gpt-5.1`, `gpt-5.4-mini`, `gemini-3.1-pro-preview`, `grok-4.6`, `deepseek-v3.2`, `llama-3.3-70b-deepinfra`, `mistral-small-3.2-24b-instruct`, `qwen-2.5-72b-instruct`) | 0 |
+
+**Why `claude-sonnet-5` is different, and since when.** `claude-sonnet-5` accepts no temperature other than its default; a request that sets one is rejected with HTTP 400. Until now the harness's adapter answered that rejection by resending the request without a temperature and recording the deviation `temperature forced to provider default (request without temperature=0 was rejected)` on the run record. All 570 `claude-sonnet-5` run records (15 per print) carry it, and no other constituent's run record carries any temperature deviation. So `claude-sonnet-5` has been measured at its provider default in every print that includes it since it joined, the 38 prints dated 2026-08-30, 2026-08-31, 2026-09-01, 2026-09-02, 2026-09-03, 2026-09-04, 2026-09-05, 2026-09-06, 2026-09-07, 2026-09-09, 2026-09-10, 2026-09-11, 2026-09-12, 2026-09-13, 2026-09-14, 2026-09-15, 2026-09-16, 2026-09-17, 2026-09-18, 2026-09-19, 2026-09-20, 2026-09-21, 2026-09-22, 2026-09-23, 2026-09-24, 2026-09-25, 2026-09-26, 2026-09-27, 2026-09-28, 2026-09-29, 2026-09-30, 2026-10-01, 2026-10-02, 2026-10-03, 2026-10-04, 2026-10-05, 2026-10-06, 2026-10-09. (2026-09-08 has none: it was excluded that day, see the incident record. There were no prints on 2026-10-07 and 2026-10-08, see `data/prints/incidents/`.) The frontier-tier series includes it on all 35 of its prints, 2026-09-02 to 2026-10-09; the commodity-tier series never has.
+
+**The index mixes two sampling regimes.** Nine constituents are measured at temperature 0, which each provider's API accepted (no run record shows otherwise); one is measured at its provider default. Whether a provider applies an accepted temperature to a model's hidden reasoning cannot be observed from here, and is not claimed.
+
+**The position behind it.** Each constituent is measured as it can actually be bought. A model that cannot be run at temperature 0 is measured at its default and the fact is stated here, rather than being excluded or being changed without a record.
+
+**The rule.** (1) A registry entry without a `sampling` declaration is refused: admitting a model means writing its sampling down. (2) The print sends exactly the declared sampling: a model declared at `provider-default` is sent no temperature at all, so no request is made that the provider will reject and an adapter has to alter. (3) After each call the print checks what the request was actually sent with against the declaration. If they differ, or the adapter cannot say, the call is refused (failure category `sampling_mismatch`), it is never retried, no run record is written, and the model is not priced for that print. It is reported with the reason. (4) A declaration changes only with a dated note in this section.
+
+**Pending.** The enforcement in (1) to (3) is code on the branch `instrument/single-issuer` as of 2026-10-09 and has not been merged; until it is, prints still use the earlier adapter behaviour, which for `claude-sonnet-5` has the same effect as the declaration. The revision row that marks the first print produced under the enforcement is added to the table below, with its date, when it merges. This line is replaced then.
+
 ### Revision history
 
 `methodology_version` (published on every print) has never changed — it has read `"v0-draft"`
