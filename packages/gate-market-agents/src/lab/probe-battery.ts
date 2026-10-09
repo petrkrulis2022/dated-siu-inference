@@ -221,7 +221,7 @@ export function buildCellScreen(id: CellId): CellScreen {
   const path = sixRound ? trendPath(v.trend!, p1, params.rounds) : buildPrintPath(setup.seed, p1, params, "print-illustrative");
   const ids = {
     traders: Object.fromEntries(LAB_TRADERS.map((t) => [t, `erc8004:0x${t.replace("-", "")}`])) as Record<TraderLabel, string>,
-    issuer: "erc8004:0xISSUERB",
+    issuer: BATTERY_ISSUER_ID,
   };
   const books = new LabBooks(economy, ids, path);
   const guard = {
@@ -380,11 +380,22 @@ export function armPrompt(prompt: string, arm: Arm): string {
   return arm === "B" ? edit(prompt, RATIONALE_PARAGRAPH, REASONING_PARAGRAPH, "rationale paragraph") : prompt;
 }
 
+/** The issuer's id in every cell: a `request_quote` that names it is a request for raw work. */
+export const BATTERY_ISSUER_ID = "erc8004:0xISSUERB";
+
 export type Route = "usdc" | "fsiu" | "split";
+
+/**
+ * What a reply did, in one word, fixed before any stage-1 call (D63). A payment is `pay_*`. Every other reply is a "not a payment", and which kind it is
+ * is recorded rather than lumped: `request_raw_work` (a quote request addressed to the issuer, the trader putting the raw work it owes first),
+ * `request_job` (a quote request to a trader), and the rest. Nothing in the analysis decides afterwards which kind a reply was.
+ */
+export type Action = "pay_usdc" | "pay_fsiu" | "pay_split" | "request_raw_work" | "request_job" | "issue_quote" | "deliver_job" | "get_balances" | "other_tool" | "wait" | "done" | "unparsed";
 export type Outcome = "payment" | "not_payment" | "unparsed";
 
 export interface ParsedReply {
   outcome: Outcome;
+  action: Action;
   route?: Route;
   /** The tool the reply named, as written. */
   tool?: string;
@@ -400,14 +411,27 @@ export function parseBatteryReply(text: string, arm: Arm): ParsedReply {
   try {
     intent = parseModelResponse(text);
   } catch {
-    return { outcome: "unparsed" };
+    return { outcome: "unparsed", action: "unparsed" };
   }
   const reasoning = arm === "B" ? reasoningField(text) : undefined;
   const statedReason = arm === "B" ? reasoning : intent.rationale;
   const reason = statedReason === undefined ? {} : { statedReason };
-  if (!("tool" in intent)) return { outcome: "not_payment", ...reason };
+  if ("wait" in intent) return { outcome: "not_payment", action: "wait", ...reason };
+  if ("done" in intent) return { outcome: "not_payment", action: "done", ...reason };
   const route = ROUTE_OF[intent.tool];
-  return route === undefined ? { outcome: "not_payment", tool: intent.tool, ...reason } : { outcome: "payment", route, tool: intent.tool, ...reason };
+  if (route !== undefined) return { outcome: "payment", action: PAY_ACTION[route], route, tool: intent.tool, ...reason };
+  return { outcome: "not_payment", action: notPaymentAction(intent.tool, intent.args), tool: intent.tool, ...reason };
+}
+
+const PAY_ACTION: Readonly<Record<Route, Action>> = { usdc: "pay_usdc", fsiu: "pay_fsiu", split: "pay_split" };
+
+function notPaymentAction(tool: string, args: unknown): Action {
+  if (tool === "request_quote") {
+    const sellerId = typeof args === "object" && args !== null ? (args as { sellerId?: unknown }).sellerId : undefined;
+    return sellerId === BATTERY_ISSUER_ID ? "request_raw_work" : "request_job";
+  }
+  if (tool === "issue_quote" || tool === "deliver_job" || tool === "get_balances") return tool;
+  return "other_tool";
 }
 
 /** The `reasoning` string of the first JSON object in a reply, if it has one that is not blank. */

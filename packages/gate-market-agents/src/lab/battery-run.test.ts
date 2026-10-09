@@ -13,7 +13,7 @@ const call = (over: Partial<BatteryCall> = {}): BatteryCall => ({
   promptSha256: "x",
   latencyMs: 1,
   reply: "{}",
-  parsed: { outcome: "payment", route: "usdc", tool: "pay_with_usdc" },
+  parsed: { outcome: "payment", action: "pay_usdc", route: "usdc", tool: "pay_with_usdc" },
   usage: { input: 3000, output: 100, cached_input: 0, reasoning: 0 },
   usd: "0.0035",
   deviations: [],
@@ -110,7 +110,7 @@ describe("evaluateStop", () => {
   });
 
   it("stops when an arm fails to parse more than a fifth of at least twenty replies, and not before twenty", () => {
-    const bad = Array.from({ length: 6 }, (_, i) => call({ key: `b${i}`, parsed: { outcome: "unparsed" } }));
+    const bad = Array.from({ length: 6 }, (_, i) => call({ key: `b${i}`, parsed: { outcome: "unparsed", action: "unparsed" } }));
     const good = Array.from({ length: 14 }, (_, i) => call({ key: `g${i}` }));
     expect(evaluateStop([...bad, ...good], "10").stop).toBe(true);
     expect(evaluateStop([...bad.slice(0, 3), ...good.slice(0, 5)], "10").stop).toBe(false);

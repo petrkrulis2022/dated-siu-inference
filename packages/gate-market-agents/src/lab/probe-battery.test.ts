@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ARMS, CELLS, CELL_IDS, EARMARK_REASON, RATIONALE_PARAGRAPH, REASONING_PARAGRAPH, armPrompt, buildCellScreen, findBatterySetup, parseBatteryReply, toolListFor, trendPath, type CellId } from "./probe-battery.js";
+import { ARMS, BATTERY_ISSUER_ID, CELLS, CELL_IDS, EARMARK_REASON, RATIONALE_PARAGRAPH, REASONING_PARAGRAPH, armPrompt, buildCellScreen, findBatterySetup, parseBatteryReply, toolListFor, trendPath, type CellId } from "./probe-battery.js";
 import { milliSiuAsUsdcMinor } from "./money.js";
 import { FIXED_ROUTE_ORDER } from "./route-order.js";
 import { LAB_TRADER_TOOLS } from "./roster.js";
@@ -157,8 +157,8 @@ describe("the arms", () => {
 
 describe("parseBatteryReply", () => {
   it("reads the three routes", () => {
-    expect(parseBatteryReply('{"tool":"pay_with_usdc","args":{"requestId":"qr-3"},"rationale":"simple"}', "A")).toEqual({ outcome: "payment", route: "usdc", tool: "pay_with_usdc", statedReason: "simple" });
-    expect(parseBatteryReply('{"tool":"pay_with_held_claim","args":{"requestId":"qr-3"}}', "A")).toEqual({ outcome: "payment", route: "fsiu", tool: "pay_with_held_claim" });
+    expect(parseBatteryReply('{"tool":"pay_with_usdc","args":{"requestId":"qr-3"},"rationale":"simple"}', "A")).toEqual({ outcome: "payment", action: "pay_usdc", route: "usdc", tool: "pay_with_usdc", statedReason: "simple" });
+    expect(parseBatteryReply('{"tool":"pay_with_held_claim","args":{"requestId":"qr-3"}}', "A")).toEqual({ outcome: "payment", action: "pay_fsiu", route: "fsiu", tool: "pay_with_held_claim" });
     expect(parseBatteryReply('{"tool":"pay_split","args":{"requestId":"qr-3","claimQuantityMilliSiu":"600"}}', "C").route).toBe("split");
   });
 
@@ -170,14 +170,28 @@ describe("parseBatteryReply", () => {
   });
 
   it("counts any other tool, a wait and a done as not a payment, and keeps the reason", () => {
-    expect(parseBatteryReply('{"tool":"request_quote","args":{},"rationale":"ask first"}', "A")).toEqual({ outcome: "not_payment", tool: "request_quote", statedReason: "ask first" });
-    expect(parseBatteryReply('{"wait":true}', "A")).toEqual({ outcome: "not_payment" });
+    expect(parseBatteryReply('{"tool":"request_quote","args":{},"rationale":"ask first"}', "A")).toEqual({ outcome: "not_payment", action: "request_job", tool: "request_quote", statedReason: "ask first" });
+    expect(parseBatteryReply('{"wait":true}', "A")).toEqual({ outcome: "not_payment", action: "wait" });
     expect(parseBatteryReply('{"done":true,"summary":"x"}', "B").outcome).toBe("not_payment");
   });
 
   it("calls a reply that does not parse unparsed", () => {
-    expect(parseBatteryReply("I would pay with USDC.", "A")).toEqual({ outcome: "unparsed" });
-    expect(parseBatteryReply("{not json}", "A")).toEqual({ outcome: "unparsed" });
+    expect(parseBatteryReply("I would pay with USDC.", "A")).toEqual({ outcome: "unparsed", action: "unparsed" });
+    expect(parseBatteryReply("{not json}", "A")).toEqual({ outcome: "unparsed", action: "unparsed" });
+  });
+
+  it("records which kind of not-a-payment a reply was, fixed before any data (D63)", () => {
+    const kind = (text: string) => parseBatteryReply(text, "A").action;
+    expect(kind(`{"tool":"request_quote","args":{"sellerId":"${BATTERY_ISSUER_ID}","siu":"1"}}`)).toBe("request_raw_work");
+    expect(kind('{"tool":"request_quote","args":{"sellerId":"erc8004:0xTRADER3","siu":"1.2"}}')).toBe("request_job");
+    expect(kind('{"tool":"request_quote","args":{}}')).toBe("request_job");
+    expect(kind('{"tool":"issue_quote","args":{"requestId":"qr-1"}}')).toBe("issue_quote");
+    expect(kind('{"tool":"deliver_job","args":{"requestId":"qr-1"}}')).toBe("deliver_job");
+    expect(kind('{"tool":"get_balances","args":{}}')).toBe("get_balances");
+    expect(kind('{"tool":"something_else","args":{}}')).toBe("other_tool");
+    expect(kind('{"wait":true}')).toBe("wait");
+    expect(kind('{"done":true,"summary":"x"}')).toBe("done");
+    expect(kind('{"tool":"pay_split","args":{}}')).toBe("pay_split");
   });
 
   it("treats a blank reasoning or rationale as no reason", () => {

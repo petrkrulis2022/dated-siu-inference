@@ -22,6 +22,7 @@
     "lab-sweep": "pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/lab-sweep.js",
     "lab-probe": "pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/lab-probe.js",
     "lab-probe-battery": "pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/lab-probe-battery.js",
+    "lab-tagging": "pnpm run build && node dist/cli/lab-tagging.js",
     "lab-overview": "pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/lab-overview.js",
     "lab-report": "pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/lab-report.js",
     "approve-roster": "pnpm run build && node --env-file=../../.env --env-file=../../.env.gate-market-agents dist/cli/allowances.js"

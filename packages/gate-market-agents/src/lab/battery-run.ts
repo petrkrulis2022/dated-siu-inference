@@ -19,7 +19,7 @@ export const HAIKU_THINKING_BUDGET = 2_048;
 /** The lab's own output allowance for a turn (`roster.ts`): arm B's longer reply and the thinking both fit inside it. */
 export const BATTERY_MAX_TOKENS = 4_500;
 /** Caps, in USD, decimal strings (§14.4). */
-export const CAPS = { pilot: "0.30", stage1: "10", stage2: "4", replication: "3" } as const;
+export const CAPS = { pilot: "0.30", stage1: "13", stage2: "4", replication: "3" } as const;
 /** An arm that fails to parse more than this share of at least `PARSE_CHECK_FROM` replies stops the run (§14.8). */
 export const PARSE_FAILURE_LIMIT = 0.2;
 export const PARSE_CHECK_FROM = 20;

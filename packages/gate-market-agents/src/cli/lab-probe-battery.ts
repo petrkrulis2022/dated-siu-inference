@@ -255,7 +255,7 @@ async function main(): Promise<void> {
         deviations: r.deviations,
       };
     } catch (err) {
-      rec = { ...base, latencyMs: 0, reply: "", parsed: { outcome: "unparsed" }, usage: { input: 0, output: 0, cached_input: 0, reasoning: 0 }, usd: "0", deviations: [], error: err instanceof Error ? err.message : String(err) };
+      rec = { ...base, latencyMs: 0, reply: "", parsed: { outcome: "unparsed", action: "unparsed" }, usage: { input: 0, output: 0, cached_input: 0, reasoning: 0 }, usd: "0", deviations: [], error: err instanceof Error ? err.message : String(err) };
     }
     appendFileSync(callsPath, `${JSON.stringify(rec)}\n`);
     all.push(rec);
