@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CATEGORY_LABELS, REASON_CATEGORIES, cites, codeReason, rulesFingerprint, type ReasonCategory } from "./reason-codes.js";
+import { CATEGORY_LABELS, REASON_CATEGORIES, amendedCodes, amendmentFingerprint, cites, codeReason, readBalance, rulesFingerprint, type ReasonCategory } from "./reason-codes.js";
 
 /** Reasons written for the test, each with the categories it must carry. Several are the wording of the v8 run's stated reasons. */
 const CASES: readonly { text: string; codes: ReasonCategory[] }[] = [
@@ -110,3 +110,47 @@ describe("rulesFingerprint", () => {
     expect(rulesFingerprint()).toBe("6d718eb1185983e843240900a0ad936e3acb2eccf87fa34ad4a565744a4036e2");
   });
 });
+
+describe("reasons that only get things moving are category 9 under the frozen rules (practice round, D65)", () => {
+  it("codes the practice round's sequencing reasons as no asset reason", () => {
+    const p1 = "I need TYPE-2 from TRADER-3 (round 1 need). I also need to deliver the TYPE-3 job for TRADER-1 (qr-1), which requires raw work. Requesting TYPE-2 now opens the supply chain that will eventually let me acquire raw work to fulfill my delivery obligation.";
+    const p8 = "I need TYPE-2 from TRADER-3 (round 1 need, now available in round 2). I also hold a paid job qr-1 that I must deliver, requiring raw work. Buying TYPE-2 now and then raw work will allow me to fulfill my obligation and meet one of my two needs.";
+    expect(codeReason(p1)).toEqual(["no_asset_reason"]);
+    expect(codeReason(p8)).toEqual(["no_asset_reason"]);
+  });
+});
+
+describe("the balance-size amendment (D65)", () => {
+  const p3 = "I owe delivery of a TYPE-3 job (qr-2 to TRADER-1) but hold no raw work units. I must buy one unit from ISSUER-B to fulfill this obligation. I have sufficient USDC (6,639 minor units) to cover the ~1.653 USD cost.";
+  const p4 = "I need TYPE-2 from TRADER-3 (round 1 need, now available in round 2). I have sufficient fSIU (4,400 mSIU) to pay the 1,200 mSIU cost. Buying this fulfills my first need.";
+  const relative = "I hold more fSIU than USDC in value terms, so I spend the larger holding.";
+
+  it("reads 'I have enough' as affordability and not as a relative amount", () => {
+    for (const text of [p3, p4, "I have enough USDC to pay.", "Settle with the claim; I can afford it."]) {
+      expect(readBalance(text)).toEqual({ affordability: true, relative: false });
+    }
+  });
+
+  it("reads a comparison of what is held, or a plentiful or scarce asset, as relative", () => {
+    for (const text of [relative, "I have far more fSIU than I need, so I use it.", "USDC is running low, so I pay in fSIU.", "Most of my wallet is fSIU.", "I have plenty of fSIU, so spend it."]) {
+      expect(readBalance(text).relative).toBe(true);
+    }
+  });
+
+  it("leaves the frozen coding alone and changes only category 3", () => {
+    expect(codeReason(p3)).toEqual(["balance_size"]);
+    expect(amendedCodes(p3)).toEqual(["no_asset_reason"]);
+    expect(amendedCodes(p4)).toEqual(["no_asset_reason"]);
+    expect(codeReason(relative)).toEqual(["balance_size"]);
+    expect(amendedCodes(relative)).toEqual(["balance_size"]);
+    expect(amendedCodes("Paying in USDC preserves my fSIU for later needs, and I have enough USDC.")).toEqual(["earmarking"]);
+    expect(amendedCodes("USDC is running low, so I preserve it for raw work.")).toEqual(["earmarking", "balance_size"]);
+    expect(amendedCodes(undefined)).toEqual([]);
+  });
+
+  it("pins the amendment's own fingerprint, apart from the frozen rules'", () => {
+    expect(amendmentFingerprint()).toBe("550b16cbba385e9775cdc5544adbb79adbba41bf6379c9fbdaaa9a3af4c2460f");
+    expect(amendmentFingerprint()).not.toBe(rulesFingerprint());
+  });
+});
+

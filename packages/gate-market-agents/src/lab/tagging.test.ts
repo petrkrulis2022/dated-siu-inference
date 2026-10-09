@@ -50,6 +50,15 @@ describe("the category descriptions", () => {
     }
   });
 
+  it("say that ordering steps counts as 9 and that being able to pay is not 3 (practice round, D65)", () => {
+    const html = renderTaggingPage({ mode: "real", items: [{ id: "r-aaaa", text: "x" }] });
+    expect(html).toContain("the order of steps that gets things moving");
+    expect(html).toContain("A remark that the agent can afford the payment is not number 3");
+    expect(html).not.toContain("or why now");
+    expect(TAG_MEANINGS.balance_size).toContain("does not count");
+    expect(TAG_MEANINGS.no_asset_reason).toContain("the order in which to take steps");
+  });
+
   it("are the ones the page shows, not the rules file's labels", () => {
     const html = renderTaggingPage({ mode: "real", items: [{ id: "r-aaaa", text: "x" }] });
     for (const c of REASON_CATEGORIES) {

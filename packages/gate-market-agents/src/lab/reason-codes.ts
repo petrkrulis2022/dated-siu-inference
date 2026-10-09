@@ -115,3 +115,59 @@ export function rulesFingerprint(): string {
     .update(JSON.stringify([parts, NOT_EXPIRY.source, NOT_EXPIRY.flags]))
     .digest("hex");
 }
+
+// ---- The balance-size amendment (D65) -----------------------------------------------------------------------------------------------------------------
+//
+// Made after the pilot replies and the practice tagging round were seen, and before any stage-1 reply was read or coded; it is an addition, not a change:
+// the rules above, and `rulesFingerprint()`, are exactly as they were frozen. In this design both assets always cover every payment, so "I have enough X"
+// only says the payment is possible, and it turns up in every cell. What the P5 and P6 cells test is the other thing: the agent weighing how much it holds
+// of one asset against the other. `amendedCodes` is the frozen coding with category 3 meaning only that; the analysis reports it beside the frozen coding,
+// never in place of it, and says so.
+
+/** What a reason says about the amount held: that the payment is possible (`affordability`), or that one asset is held in a larger or smaller amount than the other, or is plentiful or scarce, so that it is the one to use or spare (`relative`). */
+export interface BalanceReading {
+  affordability: boolean;
+  relative: boolean;
+}
+
+const RELATIVE_BALANCE: readonly RegExp[] = [
+  /\b(?:more|less|most|larger|bigger|greater|smaller|fewer|much more|far more|a lot more)\b[^.;]{0,30}\b(?:fsiu|usdc|claims?|holdings?|balance|assets?)\b/i,
+  /\bi (?:hold|have|own)\b[^.;]{0,20}\b(?:more|less|most|much more|far more|a lot more)\b/i,
+  /\b(?:larger|bigger|largest|biggest|smaller|main|majority|bulk)\b[^.;]{0,15}\b(?:holdings?|balance|position|share|part)\b/i,
+  /\b(?:most|majority|bulk) of my\b/i,
+  /\b(?:plenty|abundant|surplus|excess|spare)\b[^.;]{0,25}\b(?:fsiu|usdc|claims?|holdings?|balance)\b/i,
+  /\b(?:fsiu|usdc|claims?|holdings?|balance)\b[^.;]{0,25}\b(?:plenty|abundant|surplus|excess|spare)\b/i,
+  /\b(?:running low|scarce|scarcer|short of|limited)\b[^.;]{0,25}\b(?:fsiu|usdc|claims?|holdings?|balance)\b/i,
+  /\b(?:fsiu|usdc|claims?|holdings?|balance)\b[^.;]{0,25}\b(?:running low|scarce|scarcer|limited)\b/i,
+];
+
+const AFFORDABILITY_BALANCE: readonly RegExp[] = [
+  /\b(?:enough|sufficient|adequate|ample|can afford|able to (?:pay|cover)|have the funds|affordable)\b/i,
+  /\bcovers? (?:the|this|that|it)\b/i,
+  /\bto cover\b/i,
+];
+
+export function readBalance(text: string | undefined): BalanceReading {
+  const t = normalise(text ?? "");
+  return { affordability: AFFORDABILITY_BALANCE.some((r) => r.test(t)), relative: RELATIVE_BALANCE.some((r) => r.test(t)) };
+}
+
+/** The frozen coding with category 3 (`balance_size`) meaning only a relative amount. A reason left with no category is coded 9. A blank reason has none. */
+export function amendedCodes(text: string | undefined): ReasonCategory[] {
+  const frozen = codeReason(text);
+  if (frozen.length === 0) return [];
+  const set = new Set<ReasonCategory>(frozen);
+  set.delete("no_asset_reason");
+  if (readBalance(text).relative) set.add("balance_size");
+  else set.delete("balance_size");
+  const out = REASON_CATEGORIES.filter((c) => set.has(c));
+  return out.length === 0 ? ["no_asset_reason"] : out;
+}
+
+/** A hash of the amendment's patterns; the analysis records it beside `rulesFingerprint()` and states which coding each table used. */
+export function amendmentFingerprint(): string {
+  return createHash("sha256")
+    .update(JSON.stringify([RELATIVE_BALANCE.map((r) => `${r.source}/${r.flags}`), AFFORDABILITY_BALANCE.map((r) => `${r.source}/${r.flags}`)]))
+    .digest("hex");
+}
+

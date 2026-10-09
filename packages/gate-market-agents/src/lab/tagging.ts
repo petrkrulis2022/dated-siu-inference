@@ -73,13 +73,13 @@ export function drawTagSample(sources: readonly TagSource[], n: number, seed: nu
 export const TAG_MEANINGS: Readonly<Record<(typeof REASON_CATEGORIES)[number], string>> = {
   earmarking: "The agent assigns one asset to a particular later use.",
   price_direction: "The direction the price is heading is part of the justification.",
-  balance_size: "The amount the agent holds of an asset is part of the justification.",
+  balance_size: "Which asset the agent holds more of, or less of, and so spends or spares, is part of the justification. A remark that the payment is possible does not count.",
   familiarity: "One asset is chosen because the agent finds it the obvious one, or knows it best.",
   following_brief: "The agent cites what it was told in its instructions about how results count.",
   keeping_options_open: "The agent avoids tying itself down, or wants other actions to stay possible later.",
   expiry: "The agent refers to time running out: the window ending, or a claim ceasing to be valid.",
   cost_efficiency: "What one route costs compared with the other is part of the justification.",
-  no_asset_reason: "The reason cites only the need or the obligation, and nothing about why one asset rather than the other.",
+  no_asset_reason: "The reason cites only the need, the obligation, or the order in which to take steps, and nothing about why one asset rather than the other.",
 };
 
 /** The category's short name, from the label the rules file keeps for it, and what it means. */
@@ -199,7 +199,7 @@ export function renderTaggingPage(input: TaggingPageInput): string {
     <ul class="cats">
         ${catRows}
     </ul>
-    <p class="hint" style="margin-top:10px">Number 9 is for a reason that cites only the need or the obligation, such as "to meet my round 2 need", and nothing about why that asset or why now. <em>None of these</em> is for a reason that says something about the choice that fits none of the nine.</p>
+    <p class="hint" style="margin-top:10px">Number 9 is for a reason that cites only the need or the obligation, such as "to meet my round 2 need", or the order of steps that gets things moving, such as asking for one thing first so a delivery can follow, and nothing about why that asset. A remark that the agent can afford the payment is not number 3: tick 3 only when the agent compares what it holds of the two assets, or calls one plentiful or scarce, and that drives which one it uses. <em>None of these</em> is for a reason that says something about the choice that fits none of the nine.</p>
   </details>
 
   <section class="card" id="card" aria-live="polite">
