@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PRACTICE_SAMPLE_SIZE, TAGGING_TITLE, TAG_SAMPLE_SIZE, drawTagSample, renderTaggingPage, type TagSource } from "./tagging.js";
+import { PRACTICE_SAMPLE_SIZE, TAGGING_TITLE, TAG_MEANINGS, TAG_SAMPLE_SIZE, drawTagSample, renderTaggingPage, type TagSource } from "./tagging.js";
 import { CATEGORY_LABELS, REASON_CATEGORIES } from "./reason-codes.js";
 
 const sources = (n: number): TagSource[] =>
@@ -24,12 +24,38 @@ describe("drawTagSample", () => {
     const s = drawTagSample(sources(100), 8, 3, "p");
     for (const i of s.items) {
       expect(Object.keys(i).sort()).toEqual(["id", "text"]);
-      expect(i.id).toMatch(/^p\d$/);
+      expect(i.id).toMatch(/^p-[bcdfghjkmnpqrstvwxz2-9]{4}$/);
     }
+  });
+
+  it("gives ids that carry no order: they do not count up through the draw", () => {
+    const ids = drawTagSample(sources(200), 40, 1, "r").items.map((i) => i.id);
+    expect([...ids].sort()).not.toEqual(ids);
+    expect(new Set(ids).size).toBe(40);
   });
 
   it("refuses when there are too few reasons", () => {
     expect(() => drawTagSample(sources(20), 40, 1, "r")).toThrow(/only/);
+  });
+});
+
+describe("the category descriptions", () => {
+  // Words the keyword rules fire on (docs/marketplace_plan.md §14.6). A description that uses them invites ticking by matching words.
+  const TRIGGERS = /preserv|reserv|keep|sav(e|es|ing)\b|set(s)? aside|earmark|plenty|enough|sufficient|ample|cheap|minimal|economic|efficien|liquid|flexib|rising|falling|trend|expir|lapse|deadline|hedg|diversif|simple|standard|safe|default|familiar|ordinary|brief|neutral|scoring rule|as stated|worthless/i;
+
+  it("say what each category means and use none of the rules' trigger words", () => {
+    for (const c of REASON_CATEGORIES) {
+      expect(TAG_MEANINGS[c].length).toBeGreaterThan(20);
+      expect(TAG_MEANINGS[c]).not.toMatch(TRIGGERS);
+    }
+  });
+
+  it("are the ones the page shows, not the rules file's labels", () => {
+    const html = renderTaggingPage({ mode: "real", items: [{ id: "r-aaaa", text: "x" }] });
+    for (const c of REASON_CATEGORIES) {
+      expect(html).toContain(TAG_MEANINGS[c]);
+      expect(html).not.toContain(CATEGORY_LABELS[c].split(" — ")[1]);
+    }
   });
 });
 

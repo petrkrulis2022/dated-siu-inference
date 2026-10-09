@@ -29,7 +29,9 @@ export interface DrawnSample {
   key: Record<string, { runId: string; callKey: string }>;
 }
 
-/** A seeded draw of `n` of the sources that have a stated reason, shown in a random order under ids `<prefix>01`, `<prefix>02`, … */
+const ID_ALPHABET = "bcdfghjkmnpqrstvwxz23456789";
+
+/** A seeded draw of `n` of the sources that have a stated reason, shown in a random order under random ids (`<prefix>-` and four characters) */
 export function drawTagSample(sources: readonly TagSource[], n: number, seed: number, prefix: string): DrawnSample {
   const eligible = sources.filter((s) => s.statedReason !== undefined && s.statedReason.trim() !== "");
   if (eligible.length < n) throw new Error(`only ${eligible.length} stated reasons to draw ${n} from`);
@@ -40,22 +42,48 @@ export function drawTagSample(sources: readonly TagSource[], n: number, seed: nu
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
   const picked = pool.slice(0, n);
-  const width = String(n).length;
+  // Ids are random, not a count: the order shown is already a random draw, but an id that counts up would still tell a reader where in the draw a reason sits.
+  const used = new Set<string>();
+  const nextId = (): string => {
+    for (;;) {
+      let tail = "";
+      for (let i = 0; i < 4; i++) tail += ID_ALPHABET[Math.floor(rng() * ID_ALPHABET.length)];
+      const id = `${prefix}-${tail}`;
+      if (!used.has(id)) {
+        used.add(id);
+        return id;
+      }
+    }
+  };
   const items: TagItem[] = [];
   const key: DrawnSample["key"] = {};
-  picked.forEach((s, i) => {
-    const id = `${prefix}${String(i + 1).padStart(width, "0")}`;
+  for (const s of picked) {
+    const id = nextId();
     items.push({ id, text: s.statedReason!.trim() });
     key[id] = { runId: s.runId, callKey: s.key };
-  });
+  }
   return { items, key };
 }
 
-/** The category's short name and what counts, split from the label the rules file keeps for it. */
-const parts = (c: (typeof REASON_CATEGORIES)[number]): { name: string; rest: string } => {
-  const [name, ...rest] = CATEGORY_LABELS[c].split(" — ");
-  return { name, rest: rest.join(" — ") };
+/**
+ * What each category means, in words that are not the rules' trigger words (the review of D63): a description that lists "preserve X for raw work" or
+ * "plenty" or "liquidity" would lead a reader to tick a box by matching words, which inflates the agreement the check exists to measure. These say what
+ * the reason is about and nothing about how it is likely to be phrased. A test keeps the rules' own words out of them.
+ */
+export const TAG_MEANINGS: Readonly<Record<(typeof REASON_CATEGORIES)[number], string>> = {
+  earmarking: "The agent assigns one asset to a particular later use.",
+  price_direction: "The direction the price is heading is part of the justification.",
+  balance_size: "The amount the agent holds of an asset is part of the justification.",
+  familiarity: "One asset is chosen because the agent finds it the obvious one, or knows it best.",
+  following_brief: "The agent cites what it was told in its instructions about how results count.",
+  keeping_options_open: "The agent avoids tying itself down, or wants other actions to stay possible later.",
+  expiry: "The agent refers to time running out: the window ending, or a claim ceasing to be valid.",
+  cost_efficiency: "What one route costs compared with the other is part of the justification.",
+  no_asset_reason: "The reason cites only the need or the obligation, and nothing about why one asset rather than the other.",
 };
+
+/** The category's short name, from the label the rules file keeps for it, and what it means. */
+const parts = (c: (typeof REASON_CATEGORIES)[number]): { name: string; rest: string } => ({ name: CATEGORY_LABELS[c].split(" — ")[0], rest: TAG_MEANINGS[c] });
 
 const escapeHtml = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 /** JSON that is safe inside a script element: `<` and the line separators are escaped. */
