@@ -664,5 +664,41 @@
     "date": "2026-10-05",
     "status": "provisional",
     "dated_siu": "0.01117"
+  },
+  {
+    "print_id": "2026-10-06-commodity",
+    "date": "2026-10-06",
+    "status": "provisional",
+    "dated_siu": "0.001436"
+  },
+  {
+    "print_id": "2026-10-06-frontier",
+    "date": "2026-10-06",
+    "status": "provisional",
+    "dated_siu": "0.01712"
+  },
+  {
+    "print_id": "2026-10-06",
+    "date": "2026-10-06",
+    "status": "provisional",
+    "dated_siu": "0.01085"
+  },
+  {
+    "print_id": "2026-10-09-commodity",
+    "date": "2026-10-09",
+    "status": "provisional",
+    "dated_siu": "0.001423"
+  },
+  {
+    "print_id": "2026-10-09-frontier",
+    "date": "2026-10-09",
+    "status": "provisional",
+    "dated_siu": "0.01711"
+  },
+  {
+    "print_id": "2026-10-09",
+    "date": "2026-10-09",
+    "status": "provisional",
+    "dated_siu": "0.01083"
   }
 ]

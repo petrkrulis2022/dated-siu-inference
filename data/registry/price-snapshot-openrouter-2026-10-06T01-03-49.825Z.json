@@ -1,0 +1,29 @@
+{
+  "snapshot_id": "2026-10-06T01:03:49.825Z",
+  "timestamp": "2026-10-06T01:03:49.825Z",
+  "source": "openrouter",
+  "entries": [
+    {
+      "model_id": "deepseek-v3.2",
+      "price_in_usd_per_1m": "0.26",
+      "price_out_usd_per_1m": "0.38",
+      "price_cached_in_usd_per_1m": "0.13"
+    },
+    {
+      "model_id": "llama-3.3-70b-deepinfra",
+      "price_in_usd_per_1m": "0.1",
+      "price_out_usd_per_1m": "0.32"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-instruct",
+      "price_in_usd_per_1m": "0.09",
+      "price_out_usd_per_1m": "0.3",
+      "price_cached_in_usd_per_1m": "0.05"
+    },
+    {
+      "model_id": "qwen-2.5-72b-instruct",
+      "price_in_usd_per_1m": "0.36",
+      "price_out_usd_per_1m": "0.4"
+    }
+  ]
+}

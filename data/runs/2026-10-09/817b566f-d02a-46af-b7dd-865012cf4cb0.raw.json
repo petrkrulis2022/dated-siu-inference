@@ -1,0 +1,39 @@
+{
+  "id": "ba703cef-88d8-9ea1-9053-94491d7b7fae",
+  "object": "chat.completion",
+  "created": 1791557196,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "20757A\n26CFA2\nFF8654\n420A5F",
+        "reasoning_content": "I will scan the archive log for access codes and list them in order.\n\nFour access codes were found: 20757A, 26CFA2, FF8654, and 420A5F.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21585,
+    "completion_tokens": 17,
+    "total_tokens": 21883,
+    "prompt_tokens_details": {
+      "text_tokens": 21585,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 281,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 441900000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

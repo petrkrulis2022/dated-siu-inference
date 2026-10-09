@@ -1,0 +1,39 @@
+{
+  "id": "da28f6ec-5ae3-92fa-bc88-f9f3d6ce4ce6",
+  "object": "chat.completion",
+  "created": 1791248815,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "B43E3B\nC05BCE\nEA9C39\n77D3C6",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes in the log. The western annex is B43E3B. The northern annex is C05BCE. The eastern annex is EA9C39. The southern annex is 77D3C6.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 22119,
+    "completion_tokens": 20,
+    "total_tokens": 22430,
+    "prompt_tokens_details": {
+      "text_tokens": 22119,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 291,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 453360000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
