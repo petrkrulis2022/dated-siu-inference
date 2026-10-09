@@ -19,20 +19,18 @@ import { ISSUER_SERVICE_TOOLS, issuerServiceAdapter } from "./issuer-service.js"
 import { FIXED_ROUTE_ORDER, type RouteOrder } from "./route-order.js";
 
 /**
- * Three families (instrument v7, D47): claude-haiku-4-5 on TRADER-1 and TRADER-3 (Anthropic), gpt-5.1 on TRADER-2 (OpenAI), grok-4.6 on
- * TRADER-4 (xAI) — all reached directly, with keys already in use, so no third-party router stands between a seat and its provider.
- * History: through v4 the second family was gpt-5.4-mini, whose two seats stalled in the v4 rerun (D38); D39 put haiku on all four; D40-D42
- * seated deepseek-v3.2 through OpenRouter, which ran out of credit mid-run in the first v6 run (D46) and had never been a provider of this
- * lab's; D47 replayed the two stalled screens through gpt-5.1 and grok-4.6 under the same bar and both acted correctly five times in five on
- * each. gpt-5.1 is a much larger OpenAI model than the gpt-5.4-mini that stalled, so seating it does not repeat the replaced family.
- * grok-4.6 thinks before every reply (about 1,000 to 2,400 tokens, billed as output) and takes about 23 seconds a reply, which the loop's
- * one-turn-at-a-time schedule absorbs in a 25-minute window.
+ * Anthropic only (instrument v9, D57): claude-haiku-4-5 on TRADER-1 and TRADER-3 and claude-sonnet-5 on TRADER-2 and TRADER-4, all direct, on the
+ * Anthropic credit the Team plan provides. Two models on two seats each keeps the seat and the model separable. The point of the change is spend: the
+ * daily print draws on OpenAI, xAI, Google and OpenRouter, and the lab no longer touches any of them.
+ * History: through v4 the second family was gpt-5.4-mini, whose two seats stalled in the v4 rerun (D38); D39 put haiku on all four; D40-D42 seated
+ * deepseek-v3.2 through OpenRouter, which ran out of credit mid-run in the first v6 run (D46); v7 (D47, D48) seated gpt-5.1 on TRADER-2 and grok-4.6 on
+ * TRADER-4, both direct, and the one v8 run was made with them (D56). Neither is in the roster from v9.
  */
 export const LAB_MODELS: Readonly<Record<TraderLabel, string>> = {
   "TRADER-1": "claude-haiku-4-5",
-  "TRADER-2": "gpt-5.1",
+  "TRADER-2": "claude-sonnet-5",
   "TRADER-3": "claude-haiku-4-5",
-  "TRADER-4": "grok-4.6",
+  "TRADER-4": "claude-sonnet-5",
 };
 
 /**

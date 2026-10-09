@@ -1,5 +1,5 @@
 /**
- * The comprehension probe, run once before a v8 run: `pnpm run lab-probe`. Criteria are fixed in docs/marketplace_plan.md D54 and in
+ * The comprehension probe, run before the first run under an instrument version whose screens or roster are new: `pnpm run lab-probe`. Criteria are fixed in docs/marketplace_plan.md D54 and in
  * `lab/probe.ts` before any call. Each roster model answers two factual questions about the real v8 screens, three samples each, at the lab's
  * own temperature and token allowance. The answers are saved to data/lab/probes/ and the run STOPS (exit 2) if any sample gets the print
  * direction wrong. A wrong answer to the second question is reported and is not a stop.
@@ -7,6 +7,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createAdapterFor, loadApiKeysFromEnv } from "@touchstone/harness";
+import { LAB_INSTRUMENT_VERSION } from "../lab/instrument.js";
 import { LAB_MODELS } from "../lab/roster.js";
 import { EXPECTED, buildProbeScreen, judge, parseProbeAnswer, sha256 } from "../lab/probe.js";
 import { PRICES, REPO_ROOT, withRetry } from "./p5-shared.js";
@@ -45,7 +46,7 @@ async function main(): Promise<void> {
 
   const dir = join(REPO_ROOT, "data/lab/probes");
   mkdirSync(dir, { recursive: true });
-  const path = join(dir, `v8-comprehension-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
+  const path = join(dir, `v${LAB_INSTRUMENT_VERSION}-comprehension-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
   writeFileSync(
     path,
     `${JSON.stringify({ criteria: "docs/marketplace_plan.md D54", expected: EXPECTED, screenSha256: sha256(screen.prompt), seed: 9, trader: screen.trader, printByRound: screen.printByRound, samplesPerModel: SAMPLES, totalUsd: totalUsd.toFixed(6), printDirectionWrong, quoteWrong, results }, null, 2)}\n`,
