@@ -22,6 +22,9 @@ export interface ModelCallRecord {
   latencyMs: number;
   /** The reasoning the provider returned with the reply, when it returned any (`loop/thinking.ts`). Never requested. */
   thinking?: string;
+  /** The sampling the request was actually sent with (`AdapterResult.sent`), and any forced deviation from what was asked for. */
+  sent?: { temperature: number | "provider-default"; thinking?: unknown };
+  deviations?: string[];
   parseError?: string;
   /** Present only when the turn was retried after an empty completion at the token budget (see
    *  loop/empty-completion.ts): which call of the turn this record is. The first call stays in

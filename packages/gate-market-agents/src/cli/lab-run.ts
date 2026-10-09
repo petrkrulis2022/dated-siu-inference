@@ -29,6 +29,7 @@ import { viemLabChain } from "../lab/operator-chain.js";
 import { LAB_MODELS } from "../lab/roster.js";
 import { LaunchRefused, runLab, type LabReport } from "../lab/run.js";
 import { checkProviders, renderProviderChecks } from "./provider-preflight.js";
+import { assertCreditGuard, recordSpend } from "./credit-ledger.js";
 import {
   LEDGER_PATH,
   PRICES,
@@ -92,6 +93,12 @@ async function main(): Promise<void> {
       : "=== CURRENCY LAB — MODEL RUN ===",
   );
   console.log(`Run ${runId}, seed ${seed}, window ${windowSeconds}s, at most ${maxTurns} turns per trader.\n`);
+  // The lab and the daily print draw on the same Anthropic credit (D60): a model run is refused if it would take the cycle's lab spend past the cap.
+  // A run costs about $0.5; $0.75 is projected. A scripted walk calls no model and spends nothing.
+  if (!scripted) {
+    const room = assertCreditGuard("0.75");
+    console.log(`Credit guard: this run fits under the cycle cap with $${room} to spare.\n`);
+  }
 
   const registry = JSON.parse(readFileSync(join(REPO_ROOT, "data/registry/models.json"), "utf-8")) as {
     id: string;
@@ -308,6 +315,10 @@ async function main(): Promise<void> {
     `${JSON.stringify(walk !== undefined ? { ...report, scriptedWalk: { ...walk, steps: scriptedTraders!.status() } } : report, null, 2)}\n`,
   );
   console.log(`\nMachine-readable report written to ${reportPath}`);
+  if (!scripted) {
+    const spent = (Number(report.totalRealizedUsd) + Number(report.workCostUsd)).toFixed(6);
+    recordSpend({ at: new Date().toISOString(), usd: spent, what: `model run ${runId}: seat inference and graded work` });
+  }
   // Every run's report carries the overview: who paid whom, for what, in which asset, and why in the agent's own words (the user's standing request).
   const overviewPath = join(LAB_RUNS_ROOT, `${runId}-overview.md`);
   writeFileSync(overviewPath, `${renderOverview(JSON.parse(JSON.stringify(report)) as unknown as OverviewReport)}\n`);

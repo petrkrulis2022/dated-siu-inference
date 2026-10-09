@@ -233,4 +233,60 @@ describe("createAnthropicAdapter", () => {
     expect(result.stopReason).toBe("max_tokens");
     expect(result.contentBlockTypes).toEqual(["thinking"]);
   });
+
+  describe("what a call actually sent (D59)", () => {
+    const ok = { ok: true, json: async () => ({ content: [{ type: "text", text: "ok" }], usage: { input_tokens: 10, output_tokens: 5 } }) };
+    const bodyOf = (fetchMock: ReturnType<typeof vi.fn>, call = 0) => JSON.parse((fetchMock.mock.calls[call][1] as RequestInit).body as string);
+
+    it("records the temperature it sent when the provider accepted it", async () => {
+      const f = vi.fn(async () => ok);
+      vi.stubGlobal("fetch", f);
+      const r = await createAnthropicAdapter("k")("claude-test", "p", { temperature: 0.7, max_tokens: 100 });
+      expect(bodyOf(f).temperature).toBe(0.7);
+      expect(r.sent).toEqual({ temperature: 0.7 });
+      expect(r.deviations).toEqual([]);
+    });
+
+    it("records the provider default, and the deviation, when the provider rejected the temperature and the call was retried without it", async () => {
+      let n = 0;
+      const f = vi.fn(async () => (++n === 1 ? { ok: false, status: 400, json: async () => ({ error: { message: "temperature may only be set to 1" } }) } : ok));
+      vi.stubGlobal("fetch", f);
+      const r = await createAnthropicAdapter("k")("claude-test", "p", { temperature: 0, max_tokens: 100 });
+      expect(r.sent).toEqual({ temperature: "provider-default" });
+      expect(r.deviations).toEqual(["temperature forced to provider default (request without temperature=0 was rejected)"]);
+    });
+
+    it("sends no temperature when asked not to, records the provider default, and needs no deviation because nothing was refused", async () => {
+      const f = vi.fn(async () => ok);
+      vi.stubGlobal("fetch", f);
+      const r = await createAnthropicAdapter("k")("claude-test", "p", { temperature: 0.7, max_tokens: 100, omit_temperature: true });
+      expect(f).toHaveBeenCalledTimes(1);
+      expect("temperature" in bodyOf(f)).toBe(false);
+      expect(r.sent).toEqual({ temperature: "provider-default" });
+      expect(r.deviations).toEqual([]);
+    });
+
+    it("asks for manual thinking as a budget, and records it", async () => {
+      const f = vi.fn(async () => ok);
+      vi.stubGlobal("fetch", f);
+      const r = await createAnthropicAdapter("k")("claude-test", "p", { temperature: 0, max_tokens: 4500, omit_temperature: true, thinking: { mode: "manual", budget_tokens: 2048 } });
+      expect(bodyOf(f).thinking).toEqual({ type: "enabled", budget_tokens: 2048 });
+      expect(r.sent).toEqual({ temperature: "provider-default", thinking: { mode: "manual", budget_tokens: 2048 } });
+    });
+
+    it("asks for a summary of the thinking a model already does, changing nothing else, and records it", async () => {
+      const f = vi.fn(async () => ok);
+      vi.stubGlobal("fetch", f);
+      const r = await createAnthropicAdapter("k")("claude-test", "p", { temperature: 0, max_tokens: 4500, omit_temperature: true, thinking: { mode: "summarized" } });
+      expect(bodyOf(f).thinking).toEqual({ type: "adaptive", display: "summarized" });
+      expect(r.sent?.thinking).toEqual({ mode: "summarized" });
+    });
+
+    it("sends no thinking field unless asked: the print's request is byte-for-byte what it was", async () => {
+      const f = vi.fn(async () => ok);
+      vi.stubGlobal("fetch", f);
+      await createAnthropicAdapter("k")("claude-test", "p", PARAMS);
+      expect(Object.keys(bodyOf(f)).sort()).toEqual(["max_tokens", "messages", "model", "temperature"]);
+    });
+  });
 });

@@ -558,6 +558,16 @@ describe("runLab", () => {
     expect(shown).toContain("1,000 mSIU of fSIU");
   });
 
+  it("records the sampling each request was actually sent with, per trader, so a model that cannot take the lab's temperature is not reported as having run at it (D59)", async () => {
+    const sonnetLike: Adapter = async () => ({ ...respond({ done: true, summary: "x" }), sent: { temperature: "provider-default" as const } });
+    const haikuLike: Adapter = async () => ({ ...respond({ done: true, summary: "x" }), sent: { temperature: 0.7 } });
+    const report = await runLab(input({ adapters: { ...adapters, "TRADER-1": haikuLike, "TRADER-2": sonnetLike } as Record<TraderLabel, Adapter> }));
+    expect(report.sampling["TRADER-1"]).toMatchObject({ temperatures: ["0.7"], turnsNotReported: 0 });
+    expect(report.sampling["TRADER-2"]).toMatchObject({ temperatures: ["provider-default"], turnsNotReported: 0 });
+    // An adapter that does not report what it sent is counted as not reported, never assumed.
+    expect(report.sampling["TRADER-3"].turnsNotReported).toBe(report.sampling["TRADER-3"].turns);
+  });
+
   it("records the order of routes the lab used, drawn from the seed, and the order each agent's tools were listed in", async () => {
     const report = await runLab(input());
     expect(report.routeOrder).toEqual(routeOrderFor(9));

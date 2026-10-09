@@ -4,6 +4,7 @@ import {
   type Adapter,
   type AdapterParams,
   type AdapterResult,
+  type AdapterThinking,
 } from "./types.js";
 
 const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
@@ -38,8 +39,13 @@ async function callAnthropic(
     max_tokens: maxTokens,
     messages: [{ role: "user", content: prompt }],
   };
-  if (includeTemperature) {
+  if (includeTemperature && params.omit_temperature !== true) {
     body.temperature = params.temperature;
+  }
+  if (params.thinking?.mode === "manual") {
+    body.thinking = { type: "enabled", budget_tokens: params.thinking.budget_tokens };
+  } else if (params.thinking?.mode === "summarized") {
+    body.thinking = { type: "adaptive", display: "summarized" };
   }
 
   const start = Date.now();
@@ -112,6 +118,11 @@ export function createAnthropicAdapter(apiKey: string): Adapter {
     }
 
     const { response, latencyMs } = result;
+    const thinking: AdapterThinking | undefined = params.thinking;
+    const sent = {
+      temperature: includeTemperature && params.omit_temperature !== true ? params.temperature : ("provider-default" as const),
+      ...(thinking !== undefined ? { thinking } : {}),
+    };
     const text = response.content
       .filter((block) => block.type === "text" && block.text)
       .map((block) => block.text)
@@ -138,6 +149,7 @@ export function createAnthropicAdapter(apiKey: string): Adapter {
       latency_ms: latencyMs,
       raw: truncatedByReasoning ? { truncated: truncatedResult.response, final: response } : response,
       deviations,
+      sent,
       stopReason: response.stop_reason,
       contentBlockTypes: response.content.map((block) => block.type),
     };

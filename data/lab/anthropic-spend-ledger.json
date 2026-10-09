@@ -1,0 +1,20 @@
+{
+  "note": "Anthropic spend by the lab and its probes, for the credit guard (lab/credit-guard.ts, D60). Seeded 2026-10-09 from the three spends since the Team credit was linked or just before it; the print's own spend is not recorded here.",
+  "entries": [
+    {
+      "at": "2026-10-08T15:30:00Z",
+      "usd": "0.012729",
+      "what": "v8 comprehension probe, the haiku-4-5 samples (the others were OpenAI and xAI)"
+    },
+    {
+      "at": "2026-10-08T17:01:00Z",
+      "usd": "0.156433",
+      "what": "v8 model run lab-2026-10-08T16-36-04-480Z, the Anthropic seats (haiku-4-5 on TRADER-1 and -3); graded work is not split by provider and is left out"
+    },
+    {
+      "at": "2026-10-09T14:44:53Z",
+      "usd": "0.048325",
+      "what": "v9 comprehension probe, haiku-4-5 and sonnet-5"
+    }
+  ]
+}

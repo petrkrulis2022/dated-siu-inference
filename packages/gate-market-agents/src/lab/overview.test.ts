@@ -41,6 +41,10 @@ function report(over: Partial<OverviewReport> = {}): OverviewReport {
       "TRADER-2": { model: "gpt-5.1", turns: 4, turnsWithReasoningText: 0, reasoningTokensBilled: 900, reasoningCharsReturned: 0 },
       "TRADER-4": { model: "grok-4.6", turns: 2, turnsWithReasoningText: 1, reasoningTokensBilled: 1_400, reasoningCharsReturned: 52 },
     },
+    sampling: {
+      "TRADER-1": { model: "claude-haiku-4-5", turns: 3, temperatures: ["0.7"], turnsNotReported: 0 },
+      "TRADER-2": { model: "claude-sonnet-5", turns: 4, temperatures: ["provider-default"], turnsNotReported: 1 },
+    },
     opening: { fsiuMilliSiuPerTrader: "4400" },
     economy: { needs: [
       { id: "a", buyer: "TRADER-1", seller: "TRADER-2", round: 1, type: "TYPE-3" } as never,
@@ -182,6 +186,11 @@ describe("the overview every run carries", () => {
     expect(text).toContain("| Payer | Round | For | Held before paying (mSIU) | Raw work still to buy | Could the fSIU have paid it in full | Paid in |");
     expect(text).toContain("| TRADER-1 | 1 | a job | 4,400 | 0 | yes | USDC |");
     expect(text).toContain("Hedging predicts the first group pays USDC and the second spends fSIU; inertia predicts USDC from both.");
+  });
+
+  it("states the sampling each request was actually sent with, and what 'provider-default' means (D59)", () => {
+    expect(text).toContain("Sampling each request was actually sent with: TRADER-1 0.7; TRADER-2 provider-default (1 of 4 turns not reported).");
+    expect(text).toContain('"provider-default" means no temperature was sent: the model does not accept the lab\'s 0.7.');
   });
 
   it("states per model what its provider returned of its reasoning, and what it did not (D52)", () => {

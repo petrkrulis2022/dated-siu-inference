@@ -62,7 +62,7 @@ import {
 } from "./operator.js";
 import { buildLabRoster } from "./roster.js";
 import { routeOrderFor, type RouteOrder } from "./route-order.js";
-import { thinkingCaptureOf, type ThinkingCapture } from "./thinking-report.js";
+import { samplingOf, thinkingCaptureOf, type SamplingUsed, type ThinkingCapture } from "./thinking-report.js";
 import { LabService, labQuoteBoard, type LabOperatorAction } from "./service.js";
 import { openingMatches, snapshotToJson, takeSnapshot, type Snapshot } from "./scoring.js";
 
@@ -213,6 +213,8 @@ export interface LabReport {
   decisions: DecisionRecord[];
   /** Per trader: what its model returned of its own reasoning at the lab's settings (D52). Nothing is switched on to get more. */
   thinkingCapture: Record<string, ThinkingCapture>;
+  /** Per trader: the sampling its requests were actually sent with (D59). A model that cannot take the lab's 0.7 shows "provider-default". */
+  sampling: Record<string, SamplingUsed>;
   claimFlows: unknown;
   capacityEvents: unknown;
   claimPositions: unknown;
@@ -641,6 +643,7 @@ export async function runLab(input: LabRunInput): Promise<LabReport> {
           )
         : [],
     thinkingCapture: result !== undefined ? thinkingCaptureOf(result.turnLogsByAgent, SEAT_OF, input.models) : {},
+    sampling: result !== undefined ? samplingOf(result.turnLogsByAgent, SEAT_OF, input.models) : {},
     claimFlows: result?.claimFlows ?? {},
     capacityEvents: result?.capacityEvents ?? [],
     claimPositions: result?.claimPositions ?? [],

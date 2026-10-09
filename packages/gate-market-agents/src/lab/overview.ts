@@ -15,7 +15,7 @@ import { LAB_INSTRUMENT_VERSION } from "./instrument.js";
 import { claimValueMinorUnits } from "../tools/settle-split.js";
 import { measureRun, labDisqualification, type MeasureReport, type RunMeasures } from "./measure.js";
 import { isPayment, rationaleCoverage, type DecisionRecord } from "./decisions.js";
-import { describeCapture, type ThinkingCapture } from "./thinking-report.js";
+import { describeCapture, type SamplingUsed, type ThinkingCapture } from "./thinking-report.js";
 
 /** A report as `runLab` writes it, with everything beyond what measurement needs optional, so an older report renders too. */
 export interface OverviewReport extends Omit<MeasureReport, "sales"> {
@@ -30,6 +30,7 @@ export interface OverviewReport extends Omit<MeasureReport, "sales"> {
   decisions?: DecisionRecord[];
   routeOrder?: { assetFirst: string; tools: string[] };
   thinkingCapture?: Record<string, ThinkingCapture>;
+  sampling?: Record<string, SamplingUsed>;
   opening?: { usdcMinorPerTrader?: string; fsiuMilliSiuPerTrader: string };
 }
 
@@ -104,6 +105,13 @@ export function renderOverview(r: OverviewReport, options: OverviewOptions = {})
     `- **Pooled with runs under the current instrument (v${LAB_INSTRUMENT_VERSION}): ${poolReason === null ? "yes" : ownReason === null ? "no — made under another version" : "no"}.**`,
     ...(!siuPriced ? ["- **Made before instrument v8: no agent in this run saw a quote in SIU or its own fSIU holdings, so it is not a test of H1 or H2.**"] : []),
     ...(r.models !== undefined ? [`- Models: ${Object.entries(r.models).map(([t, mo]) => `${t} ${mo}`).join("; ")}.`] : []),
+    ...(r.sampling !== undefined && Object.keys(r.sampling).length > 0
+      ? [
+          `- Sampling each request was actually sent with: ${Object.entries(r.sampling)
+            .map(([t, s]) => `${t} ${s.temperatures.length === 0 ? "not reported" : s.temperatures.join(" and ")}${s.turnsNotReported > 0 ? ` (${s.turnsNotReported} of ${s.turns} turns not reported)` : ""}`)
+            .join("; ")}. "provider-default" means no temperature was sent: the model does not accept the lab's 0.7.`,
+        ]
+      : []),
     ...(r.routeOrder !== undefined ? [`- Order in which the lab listed the routes and assets this run (drawn from the seed): ${r.routeOrder.assetFirst === "usdc" ? "USDC" : "fSIU"} first; routes ${r.routeOrder.tools.join(", ")}.`] : []),
     ...(r.prints !== undefined
       ? [`- Print by round (nano-USD per SIU; a scenario value, step ${r.prints.stepBps} bps): ${r.prints.byRound.map((p, i) => `round ${i + 1} ${p}`).join(", ")}.`]

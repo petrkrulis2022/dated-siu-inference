@@ -5,10 +5,31 @@ export interface AdapterUsage {
   reasoning: number;
 }
 
+/**
+ * Thinking, as the Anthropic adapter can ask for it. Optional and read only by that adapter; nothing in the print's path sets it.
+ *  - `manual`: `thinking: {type: "enabled", budget_tokens}` — the only thinking claude-haiku-4-5 has, off unless asked for, and incompatible with
+ *    setting a temperature. `budget_tokens` must be at least 1,024 and below `max_tokens`.
+ *  - `summarized`: `thinking: {type: "adaptive", display: "summarized"}` — for the models whose adaptive thinking is already on (claude-sonnet-5),
+ *    which hides its text by default: this asks for a summary of it and does not change what the model does.
+ */
+export type AdapterThinking = { mode: "manual"; budget_tokens: number } | { mode: "summarized" };
+
 export interface AdapterParams {
   temperature: number;
   max_tokens: number;
   cache_control?: "disabled";
+  /** Send no temperature at all, so the provider's default sampling applies. For comparisons in which one arm cannot set a temperature. */
+  omit_temperature?: true;
+  /** Ask for thinking (Anthropic adapter only; see `AdapterThinking`). */
+  thinking?: AdapterThinking;
+}
+
+/** What a call actually sent, as opposed to what was asked for: the sampling the result was produced under. */
+export interface AdapterSent {
+  /** The temperature sent, or "provider-default" when none was (asked not to send one, or the provider rejected the one requested). */
+  temperature: number | "provider-default";
+  /** The thinking configuration sent, if any. */
+  thinking?: AdapterThinking;
 }
 
 export interface AdapterResult {
@@ -18,6 +39,11 @@ export interface AdapterResult {
   raw: unknown;
   /** Every forced deviation from the requested execution settings — build1-spec.md §3. */
   deviations: string[];
+  /**
+   * The sampling the successful request was actually sent with. Optional so every existing mocked result stays valid; the Anthropic adapter fills it.
+   * It is the record of what ran, whether or not a deviation was needed to get there.
+   */
+  sent?: AdapterSent;
   /** The provider's own real reason the completion ended (e.g. "end_turn"/"stop_reason" for
    * Anthropic, "finish_reason" for OpenAI-shaped APIs, "finishReason" for Google) — never
    * inferred. Added 2026-09-26: a real live call (claude-sonnet-5, P5 window 1) returned no text

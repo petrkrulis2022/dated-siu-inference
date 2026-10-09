@@ -11,6 +11,7 @@ import { LAB_INSTRUMENT_VERSION } from "../lab/instrument.js";
 import { LAB_MODELS } from "../lab/roster.js";
 import { EXPECTED, buildProbeScreen, judge, parseProbeAnswer, sha256 } from "../lab/probe.js";
 import { PRICES, REPO_ROOT, withRetry } from "./p5-shared.js";
+import { assertCreditGuard, recordSpend } from "./credit-ledger.js";
 
 const SAMPLES = 3;
 
@@ -18,6 +19,8 @@ async function main(): Promise<void> {
   const registry = JSON.parse(readFileSync(join(REPO_ROOT, "data/registry/models.json"), "utf-8")) as { id: string; provider: string; host: string; model_string?: string }[];
   const keys = loadApiKeysFromEnv();
   const screen = buildProbeScreen();
+  // About $0.10 for the comprehension probe; the lab and the print share the Anthropic credit (D60).
+  assertCreditGuard("0.15");
   const models = [...new Set(Object.values(LAB_MODELS))];
   console.log(`Probe screen: round 2, trader ${screen.trader}, print by round ${screen.printByRound.join(" → ")} nano-USD per SIU, ${screen.prompt.length} characters, sha256 ${sha256(screen.prompt).slice(0, 16)}.\n`);
 
@@ -52,6 +55,7 @@ async function main(): Promise<void> {
     `${JSON.stringify({ criteria: "docs/marketplace_plan.md D54", expected: EXPECTED, screenSha256: sha256(screen.prompt), seed: 9, trader: screen.trader, printByRound: screen.printByRound, samplesPerModel: SAMPLES, totalUsd: totalUsd.toFixed(6), printDirectionWrong, quoteWrong, results }, null, 2)}\n`,
   );
   console.log(`\nCost about $${totalUsd.toFixed(3)}. Saved ${path}.`);
+  recordSpend({ at: new Date().toISOString(), usd: totalUsd.toFixed(6), what: `v${LAB_INSTRUMENT_VERSION} comprehension probe` });
   console.log(`Print direction wrong in ${printDirectionWrong} of ${results.length} samples; the quote question wrong in ${quoteWrong}.`);
   if (printDirectionWrong > 0) {
     console.log("STOP: a model got the print direction wrong. Report this instead of running (D54).");

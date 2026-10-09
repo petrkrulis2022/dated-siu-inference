@@ -498,6 +498,11 @@ export interface TurnLog {
   /** The reasoning the provider returned with this turn's reply, if it returned any (`loop/thinking.ts`); never requested. */
   thinking?: string;
   /**
+   * The sampling the turn's request was actually sent with, as the adapter reports it (`AdapterResult.sent`): the temperature, or "provider-default" when
+   * none was sent (a model that rejects the one requested is retried without it, and a deviation is logged). Absent for an adapter that does not report it.
+   */
+  sent?: { temperature: number | "provider-default"; thinking?: unknown };
+  /**
    * The two prompt sections that were genuinely shown to this agent but recorded nowhere, so
    * "did it see the offer?" could not be answered from the record — the exact question that
    * decided whether P5 run 3's "0 of 2 forward offers taken" was a real decision or a missing
@@ -989,7 +994,7 @@ export async function runFullRunWindow(
   const paymentMoments: PaymentMoment[] = [];
   // What a turn carries beyond its log: where it fell in the run's one order of turns, and any reasoning the provider returned. Attached to the
   // turn's log when the window ends, so the sites that write a log need not each know about either.
-  const turnExtras = new Map<string, { seq: number; thinking?: string }>();
+  const turnExtras = new Map<string, { seq: number; thinking?: string; sent?: TurnLog["sent"] }>();
   let turnSeq = 0;
   const usdcSettlements: UsdcSettlement[] = [];
   const testingPurchaseRequired = options.requireTestingPurchase === true;
@@ -1807,7 +1812,11 @@ export async function runFullRunWindow(
       // parse failure re-writes this same file below with `parseError` filled in; if the process
       // dies in between, the call itself is already on disk. See ModelCallRecord.
       const thinking = extractThinking(result.raw);
-      turnExtras.set(`${agent.agentId}#${turn}`, { seq: ++turnSeq, ...(thinking !== undefined ? { thinking } : {}) });
+      turnExtras.set(`${agent.agentId}#${turn}`, {
+        seq: ++turnSeq,
+        ...(thinking !== undefined ? { thinking } : {}),
+        ...(result.sent !== undefined ? { sent: result.sent } : {}),
+      });
       recorder.recordMessage(agent.agentId, turn, {
         prompt,
         rawText: result.text,
@@ -1816,6 +1825,8 @@ export async function runFullRunWindow(
         contentBlockTypes: result.contentBlockTypes,
         latencyMs: result.latency_ms,
         ...(thinking !== undefined ? { thinking } : {}),
+        ...(result.sent !== undefined ? { sent: result.sent } : {}),
+        ...(result.deviations.length > 0 ? { deviations: result.deviations } : {}),
         ...(attempt > 1 ? { attempt } : {}),
       });
       return { result, realizedUsd: callUsd };

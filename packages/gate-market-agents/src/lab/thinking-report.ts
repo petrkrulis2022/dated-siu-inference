@@ -38,6 +38,37 @@ export function thinkingCaptureOf(
   return out;
 }
 
+/**
+ * The sampling each trader's requests were actually sent with, over the run, from what the adapter reported (D59): the temperatures seen ("provider-default"
+ * where none was sent) and how many turns reported nothing. A model that cannot take the temperature the lab asks for (claude-sonnet-5) shows
+ * "provider-default" here, which is the record of what ran; the lab's stated 0.7 applies only where this says 0.7.
+ */
+export interface SamplingUsed {
+  model: string;
+  turns: number;
+  temperatures: string[];
+  turnsNotReported: number;
+}
+
+export function samplingOf(
+  turnLogsByAgent: Readonly<Record<string, readonly Pick<TurnLog, "sent" | "rawText">[]>>,
+  seatOf: Readonly<Record<string, string>>,
+  models: Readonly<Record<string, string>>,
+): Record<string, SamplingUsed> {
+  const out: Record<string, SamplingUsed> = {};
+  for (const [trader, seat] of Object.entries(seatOf)) {
+    const replied = (turnLogsByAgent[seat] ?? []).filter((l) => l.rawText !== undefined);
+    const temps = new Set<string>();
+    let notReported = 0;
+    for (const l of replied) {
+      if (l.sent === undefined) notReported += 1;
+      else temps.add(String(l.sent.temperature));
+    }
+    out[trader] = { model: models[trader] ?? "?", turns: replied.length, temperatures: [...temps].sort(), turnsNotReported: notReported };
+  }
+  return out;
+}
+
 /** One sentence per model: what was and was not captured. */
 export function describeCapture(c: ThinkingCapture): string {
   if (c.turnsWithReasoningText > 0) {
