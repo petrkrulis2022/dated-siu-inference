@@ -158,6 +158,7 @@ export function renderTaggingPage(input: TaggingPageInput): string {
   <details class="how" open>
     <summary>How this works</summary>
     <p>Each reason below is a line an AI agent wrote about what it was doing in a small market, mostly about how to pay: in USDC (dollars) or in fSIU (a claim for work). A keyword rule, written before any of these reasons were collected, sorts reasons like these into nine categories. You tag ${real ? `${n} of them` : "a few practice ones"} by hand, so we can see how far the rule agrees with a person reading the same words. Nobody looks at the rule's answers for these reasons until you have finished, and nothing on this page says which agent wrote what.</p>
+    <p>Names such as TYPE-2, TRADER-3, qr-1 and ISSUER-B are labels from the game. TYPE-1 to TYPE-4 are four kinds of job, and each trader can deliver only one kind. TRADER-1 to TRADER-4 are the agents. qr-1 is one quote. ISSUER-B sells raw work, the input every job uses up. You do not need to follow them. Read for why the agent chose what it chose.</p>
     <ol class="steps">
       <li>Read the reason.</li>
       <li>Tick every category that fits. One reason can fit several.</li>

@@ -44,6 +44,7 @@ describe("renderTaggingPage", () => {
     expect(html).toContain("Tick every category that fits");
     for (const c of REASON_CATEGORIES) expect(html).toContain(CATEGORY_LABELS[c].split(" — ")[0]);
     expect(html).toContain("None of these");
+    expect(html).toContain("TYPE-1 to TYPE-4 are four kinds of job");
   });
 
   it("says Real round for the real one", () => {
