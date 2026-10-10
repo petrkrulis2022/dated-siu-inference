@@ -1,0 +1,39 @@
+{
+  "id": "df109d89-eaa1-91c0-9c4d-d6e1638f9eee",
+  "object": "chat.completion",
+  "created": 1791594524,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "E8490D\n012418\nB59597\n930767",
+        "reasoning_content": "I will scan the archive log for access codes and list them in order.\n\nI found four access codes so far: E8490D, 012418, B59597, and 930767. I am checking for more.\n\nI re-scanned the document and found no additional access codes. The four listed are complete.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 22003,
+    "completion_tokens": 14,
+    "total_tokens": 22361,
+    "prompt_tokens_details": {
+      "text_tokens": 22003,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 344,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 453860000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

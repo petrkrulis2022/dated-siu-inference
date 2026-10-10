@@ -1,0 +1,38 @@
+{
+  "id": "598597e0-d398-9090-89fc-c3e40f20c428",
+  "object": "chat.completion",
+  "created": 1791594511,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"tracking_id\":\"SH-8B169B\",\"origin_city\":\"Auckland\",\"destination_city\":\"Tallinn\",\"weight_kg\":66,\"status\":\"delivered\",\"priority\":\"standard\"}",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1572,
+    "completion_tokens": 45,
+    "total_tokens": 1847,
+    "prompt_tokens_details": {
+      "text_tokens": 1572,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 230,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 40260000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
