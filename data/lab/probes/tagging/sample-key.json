@@ -1,0 +1,166 @@
+{
+  "runId": "stage1-2026-10-09T17-37-36-884Z",
+  "seed": 4040,
+  "key": {
+    "r-ksp3": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P7|B|claude-haiku-4-5|1"
+    },
+    "r-q778": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|T2|A|claude-sonnet-5|2"
+    },
+    "r-49rt": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P3|B|claude-sonnet-5|10"
+    },
+    "r-6wk4": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P8|B|claude-sonnet-5|2"
+    },
+    "r-z6wv": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|T2|A|claude-sonnet-5|11"
+    },
+    "r-fgwn": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|T1|A|claude-haiku-4-5|9"
+    },
+    "r-w6tq": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|T2|B|claude-sonnet-5|1"
+    },
+    "r-9nc5": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P3|B|claude-sonnet-5|5"
+    },
+    "r-csmb": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|T1|A|claude-sonnet-5|8"
+    },
+    "r-sw2c": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P9|A|claude-haiku-4-5|12"
+    },
+    "r-78bp": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P7|A|claude-sonnet-5|5"
+    },
+    "r-3j2d": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P9|A|claude-haiku-4-5|11"
+    },
+    "r-nr7g": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P9|C|claude-sonnet-5|7"
+    },
+    "r-ddnc": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|T1|B|claude-haiku-4-5|7"
+    },
+    "r-t6q6": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|T2|B|claude-sonnet-5|10"
+    },
+    "r-rxj3": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P4|A|claude-haiku-4-5|10"
+    },
+    "r-vtp4": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P5|B|claude-haiku-4-5|5"
+    },
+    "r-jfjs": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P5|C|claude-sonnet-5|12"
+    },
+    "r-cndc": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P4|A|claude-haiku-4-5|7"
+    },
+    "r-qvvc": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P7|B|claude-haiku-4-5|4"
+    },
+    "r-x5sh": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P6|B|claude-sonnet-5|7"
+    },
+    "r-f98x": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P7|A|claude-haiku-4-5|8"
+    },
+    "r-6pt3": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P5|B|claude-sonnet-5|3"
+    },
+    "r-dp9m": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|T3|C|claude-sonnet-5|9"
+    },
+    "r-vk6w": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P0|B|claude-haiku-4-5|6"
+    },
+    "r-dq6s": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P3|A|claude-sonnet-5|3"
+    },
+    "r-x436": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P5|A|claude-haiku-4-5|12"
+    },
+    "r-kbg5": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|T2|A|claude-sonnet-5|5"
+    },
+    "r-t3mq": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P4|B|claude-haiku-4-5|10"
+    },
+    "r-wzg9": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P4|B|claude-sonnet-5|10"
+    },
+    "r-fz23": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P7|A|claude-sonnet-5|8"
+    },
+    "r-dqdm": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P8|B|claude-sonnet-5|4"
+    },
+    "r-bzdg": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P5|C|claude-sonnet-5|8"
+    },
+    "r-r8r6": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P11|C|claude-sonnet-5|6"
+    },
+    "r-9ncm": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P6|B|claude-haiku-4-5|5"
+    },
+    "r-6vhf": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|T1|C|claude-sonnet-5|7"
+    },
+    "r-46fh": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P8|C|claude-sonnet-5|5"
+    },
+    "r-839f": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|T2|B|claude-sonnet-5|11"
+    },
+    "r-6xq3": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P9|B|claude-sonnet-5|7"
+    },
+    "r-vt3k": {
+      "runId": "stage1-2026-10-09T17-37-36-884Z",
+      "callKey": "stage1-2026-10-09T17-37-36-884Z|P6|A|claude-sonnet-5|5"
+    }
+  }
+}

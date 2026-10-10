@@ -13,7 +13,10 @@ export interface TaggedReason {
   text: string;
   /** The categories the person ticked (never includes A or "none of these"). */
   categories: readonly ReasonCategory[];
-  /** Box A. */
+  /**
+   * Box A. Labelled "Affordability only" on the page but allowed alongside categories 1 to 8, which contradict each other; the person used it to mean "the
+   * reason mentions affordability" and combined it with other categories. It is therefore analysed as an affordability FLAG, never as "only" (D69).
+   */
   affordabilityOnly: boolean;
   noneOfThese: boolean;
 }
@@ -44,12 +47,37 @@ export interface AffordabilityMapping {
   notTickedButAffordabilityFired: number;
 }
 
+/** The person's A flag against the amended layer's affordability reading: a 2x2 of counts. */
+export interface FlagAgreement {
+  both: number;
+  humanOnly: number;
+  ruleOnly: number;
+  neither: number;
+}
+
+export interface Clash {
+  id: string;
+  /** What was ticked, as recorded: the clash is reported, never corrected. */
+  categories: readonly ReasonCategory[];
+  affordabilityOnly: boolean;
+  noneOfThese: boolean;
+  why: string;
+}
+
 export interface AgreementReport {
   reasons: number;
   noneOfThese: number;
   frozen: CodingAgreement;
   amended: CodingAgreement;
   affordability: AffordabilityMapping;
+  /** A read as a flag: against the amended layer's affordability reading (exploratory). */
+  affordabilityFlag: FlagAgreement;
+  /** Of the reasons A was ticked on, how many also carry at least one of categories 1 to 8, and how many carry 9. */
+  aWithOtherCategories: { ticked: number; withOneToEight: number; withNine: number };
+  /** Reasons the person ticked both of two categories, for the pairs asked about. */
+  coTicks: { a: ReasonCategory; b: ReasonCategory; both: number; aOnly: number; bOnly: number }[];
+  /** Tags that contradict each other as recorded. */
+  clashes: Clash[];
 }
 
 const percent = (num: number, den: number): number => (den === 0 ? 0 : Math.floor((num * 200 + den) / (den * 2)));
@@ -78,6 +106,9 @@ function agreement(reasons: readonly TaggedReason[], label: string, code: (text:
 export const FROZEN_LABEL = "frozen (primary)";
 export const AMENDED_LABEL = "amended balance coding (exploratory)";
 
+/** The pairs whose overlap the person flagged: 6 with earmarking, balance with affordability is the A table. */
+const CO_TICK_PAIRS: readonly [ReasonCategory, ReasonCategory][] = [["keeping_options_open", "earmarking"]];
+
 export function agreementReport(reasons: readonly TaggedReason[]): AgreementReport {
   const ticked = reasons.filter((r) => r.affordabilityOnly);
   const frozenCodes = (r: TaggedReason): readonly ReasonCategory[] => codeReason(r.text);
@@ -104,5 +135,40 @@ export function agreementReport(reasons: readonly TaggedReason[]): AgreementRepo
       },
       notTickedButAffordabilityFired: reasons.filter((r) => !r.affordabilityOnly && readBalance(r.text).affordability).length,
     },
+    affordabilityFlag: {
+      both: reasons.filter((r) => r.affordabilityOnly && readBalance(r.text).affordability).length,
+      humanOnly: reasons.filter((r) => r.affordabilityOnly && !readBalance(r.text).affordability).length,
+      ruleOnly: reasons.filter((r) => !r.affordabilityOnly && readBalance(r.text).affordability).length,
+      neither: reasons.filter((r) => !r.affordabilityOnly && !readBalance(r.text).affordability).length,
+    },
+    aWithOtherCategories: {
+      ticked: ticked.length,
+      withOneToEight: ticked.filter((r) => r.categories.some((c) => c !== "no_asset_reason")).length,
+      withNine: ticked.filter((r) => r.categories.includes("no_asset_reason")).length,
+    },
+    coTicks: CO_TICK_PAIRS.map(([a, b]) => ({
+      a,
+      b,
+      both: reasons.filter((r) => r.categories.includes(a) && r.categories.includes(b)).length,
+      aOnly: reasons.filter((r) => r.categories.includes(a) && !r.categories.includes(b)).length,
+      bOnly: reasons.filter((r) => !r.categories.includes(a) && r.categories.includes(b)).length,
+    })),
+    clashes: clashesOf(reasons),
   };
+}
+
+/** Tags that cannot all be true as recorded: category 9 (says nothing at all about the assets) with any of 1 to 8, A with 9, "none of these" with anything. */
+export function clashesOf(reasons: readonly TaggedReason[]): Clash[] {
+  const out: Clash[] = [];
+  for (const r of reasons) {
+    const others = r.categories.filter((c) => c !== "no_asset_reason");
+    if (r.categories.includes("no_asset_reason") && others.length > 0) {
+      out.push({ id: r.id, categories: r.categories, affordabilityOnly: r.affordabilityOnly, noneOfThese: r.noneOfThese, why: "category 9 (says nothing at all about the assets) ticked with a category that is about an asset" });
+    } else if (r.categories.includes("no_asset_reason") && r.affordabilityOnly) {
+      out.push({ id: r.id, categories: r.categories, affordabilityOnly: r.affordabilityOnly, noneOfThese: r.noneOfThese, why: "A (mentions affordability, an asset) ticked with category 9" });
+    } else if (r.noneOfThese && (r.categories.length > 0 || r.affordabilityOnly)) {
+      out.push({ id: r.id, categories: r.categories, affordabilityOnly: r.affordabilityOnly, noneOfThese: r.noneOfThese, why: "none of these ticked with another box" });
+    }
+  }
+  return out;
 }

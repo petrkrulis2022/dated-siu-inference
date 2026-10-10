@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AMENDED_LABEL, FROZEN_LABEL, agreementReport, type TaggedReason } from "./tag-agreement.js";
+import { AMENDED_LABEL, FROZEN_LABEL, agreementReport, clashesOf, type TaggedReason } from "./tag-agreement.js";
 
 const r = (id: string, text: string, over: Partial<TaggedReason> = {}): TaggedReason => ({ id, text, categories: [], affordabilityOnly: false, noneOfThese: false, ...over });
 
@@ -58,5 +58,33 @@ describe("agreementReport", () => {
     const rep = agreementReport([r("n", "Something odd.", { noneOfThese: true }), r("m", EARMARK, { categories: ["earmarking"] }), r("o", SEQUENCE, { categories: [] })]);
     expect(rep.noneOfThese).toBe(1);
     for (const c of rep.frozen.perCategory) expect(Number.isInteger(c.agreementPercent)).toBe(true);
+  });
+});
+
+describe("A as an affordability flag, co-ticks and clashes (D69)", () => {
+  const reasons: TaggedReason[] = [
+    r("a", "I have sufficient USDC to cover the cost.", { affordabilityOnly: true, categories: ["earmarking", "keeping_options_open"] }),
+    r("b", "I have sufficient fSIU to pay. Paying with USDC preserves fSIU for raw work.", { affordabilityOnly: true, categories: ["earmarking"] }),
+    r("c", "Paying with fSIU preserves USDC for raw work purchases.", { categories: ["earmarking", "keeping_options_open"] }),
+    r("d", "I need TYPE-2 now, then raw work.", { categories: ["no_asset_reason", "earmarking"] }),
+    r("e", "Settle the quote.", { categories: ["no_asset_reason"] }),
+  ];
+  const rep = agreementReport(reasons);
+
+  it("reads A against the affordability reading as a 2x2, not as 'only'", () => {
+    expect(rep.affordabilityFlag).toEqual({ both: 2, humanOnly: 0, ruleOnly: 0, neither: 3 });
+    expect(rep.aWithOtherCategories).toEqual({ ticked: 2, withOneToEight: 2, withNine: 0 });
+  });
+
+  it("counts the co-ticks of the pair asked about", () => {
+    expect(rep.coTicks).toEqual([{ a: "keeping_options_open", b: "earmarking", both: 2, aOnly: 0, bOnly: 2 }]);
+  });
+
+  it("reports a clash as recorded and does not alter the tags", () => {
+    expect(rep.clashes).toHaveLength(1);
+    expect(rep.clashes[0]).toMatchObject({ id: "d", categories: ["no_asset_reason", "earmarking"] });
+    expect(clashesOf([r("x", "t", { categories: ["no_asset_reason"], affordabilityOnly: true })])[0].why).toMatch(/A .* with category 9/);
+    expect(clashesOf([r("y", "t", { noneOfThese: true, categories: ["expiry"] })])[0].why).toMatch(/none of these/);
+    expect(clashesOf([r("z", "t", { categories: ["no_asset_reason"] })])).toEqual([]);
   });
 });

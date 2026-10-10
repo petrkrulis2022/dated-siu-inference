@@ -1,0 +1,1167 @@
+{
+  "runId": "stage1-2026-10-09T17-37-36-884Z",
+  "influenced": [
+    "r-fz23",
+    "r-kbg5",
+    "r-vtp4"
+  ],
+  "all": {
+    "reasons": 40,
+    "noneOfThese": 0,
+    "frozen": {
+      "label": "frozen (primary)",
+      "perCategory": [
+        {
+          "category": "earmarking",
+          "both": 7,
+          "humanOnly": 12,
+          "ruleOnly": 3,
+          "neither": 18,
+          "agreementPercent": 63
+        },
+        {
+          "category": "price_direction",
+          "both": 5,
+          "humanOnly": 0,
+          "ruleOnly": 0,
+          "neither": 35,
+          "agreementPercent": 100
+        },
+        {
+          "category": "balance_size",
+          "both": 6,
+          "humanOnly": 1,
+          "ruleOnly": 9,
+          "neither": 24,
+          "agreementPercent": 75
+        },
+        {
+          "category": "familiarity",
+          "both": 1,
+          "humanOnly": 0,
+          "ruleOnly": 1,
+          "neither": 38,
+          "agreementPercent": 98
+        },
+        {
+          "category": "following_brief",
+          "both": 0,
+          "humanOnly": 0,
+          "ruleOnly": 2,
+          "neither": 38,
+          "agreementPercent": 95
+        },
+        {
+          "category": "keeping_options_open",
+          "both": 4,
+          "humanOnly": 19,
+          "ruleOnly": 0,
+          "neither": 17,
+          "agreementPercent": 53
+        },
+        {
+          "category": "expiry",
+          "both": 3,
+          "humanOnly": 0,
+          "ruleOnly": 0,
+          "neither": 37,
+          "agreementPercent": 100
+        },
+        {
+          "category": "cost_efficiency",
+          "both": 2,
+          "humanOnly": 10,
+          "ruleOnly": 0,
+          "neither": 28,
+          "agreementPercent": 75
+        },
+        {
+          "category": "no_asset_reason",
+          "both": 4,
+          "humanOnly": 0,
+          "ruleOnly": 5,
+          "neither": 31,
+          "agreementPercent": 88
+        }
+      ]
+    },
+    "amended": {
+      "label": "amended balance coding (exploratory)",
+      "perCategory": [
+        {
+          "category": "earmarking",
+          "both": 7,
+          "humanOnly": 12,
+          "ruleOnly": 3,
+          "neither": 18,
+          "agreementPercent": 63
+        },
+        {
+          "category": "price_direction",
+          "both": 5,
+          "humanOnly": 0,
+          "ruleOnly": 0,
+          "neither": 35,
+          "agreementPercent": 100
+        },
+        {
+          "category": "balance_size",
+          "both": 2,
+          "humanOnly": 5,
+          "ruleOnly": 0,
+          "neither": 33,
+          "agreementPercent": 88
+        },
+        {
+          "category": "familiarity",
+          "both": 1,
+          "humanOnly": 0,
+          "ruleOnly": 1,
+          "neither": 38,
+          "agreementPercent": 98
+        },
+        {
+          "category": "following_brief",
+          "both": 0,
+          "humanOnly": 0,
+          "ruleOnly": 2,
+          "neither": 38,
+          "agreementPercent": 95
+        },
+        {
+          "category": "keeping_options_open",
+          "both": 4,
+          "humanOnly": 19,
+          "ruleOnly": 0,
+          "neither": 17,
+          "agreementPercent": 53
+        },
+        {
+          "category": "expiry",
+          "both": 3,
+          "humanOnly": 0,
+          "ruleOnly": 0,
+          "neither": 37,
+          "agreementPercent": 100
+        },
+        {
+          "category": "cost_efficiency",
+          "both": 2,
+          "humanOnly": 10,
+          "ruleOnly": 0,
+          "neither": 28,
+          "agreementPercent": 75
+        },
+        {
+          "category": "no_asset_reason",
+          "both": 4,
+          "humanOnly": 0,
+          "ruleOnly": 15,
+          "neither": 21,
+          "agreementPercent": 63
+        }
+      ]
+    },
+    "affordability": {
+      "ticked": 15,
+      "frozen": {
+        "label": "frozen (primary)",
+        "inCategory3": 12,
+        "inCategory9": 2,
+        "inOtherCategoriesOnly": 1
+      },
+      "amended": {
+        "label": "amended balance coding (exploratory)",
+        "affordabilityFired": 13,
+        "relativeFired": 2,
+        "inCategory9": 10,
+        "inCategory3": 2
+      },
+      "notTickedButAffordabilityFired": 2
+    },
+    "affordabilityFlag": {
+      "both": 13,
+      "humanOnly": 2,
+      "ruleOnly": 2,
+      "neither": 23
+    },
+    "aWithOtherCategories": {
+      "ticked": 15,
+      "withOneToEight": 15,
+      "withNine": 0
+    },
+    "coTicks": [
+      {
+        "a": "keeping_options_open",
+        "b": "earmarking",
+        "both": 11,
+        "aOnly": 12,
+        "bOnly": 8
+      }
+    ],
+    "clashes": [
+      {
+        "id": "r-qvvc",
+        "categories": [
+          "earmarking",
+          "no_asset_reason"
+        ],
+        "affordabilityOnly": false,
+        "noneOfThese": false,
+        "why": "category 9 (says nothing at all about the assets) ticked with a category that is about an asset"
+      }
+    ]
+  },
+  "withoutInfluenced": {
+    "reasons": 37,
+    "noneOfThese": 0,
+    "frozen": {
+      "label": "frozen (primary)",
+      "perCategory": [
+        {
+          "category": "earmarking",
+          "both": 7,
+          "humanOnly": 12,
+          "ruleOnly": 3,
+          "neither": 15,
+          "agreementPercent": 59
+        },
+        {
+          "category": "price_direction",
+          "both": 3,
+          "humanOnly": 0,
+          "ruleOnly": 0,
+          "neither": 34,
+          "agreementPercent": 100
+        },
+        {
+          "category": "balance_size",
+          "both": 5,
+          "humanOnly": 1,
+          "ruleOnly": 9,
+          "neither": 22,
+          "agreementPercent": 73
+        },
+        {
+          "category": "familiarity",
+          "both": 1,
+          "humanOnly": 0,
+          "ruleOnly": 0,
+          "neither": 36,
+          "agreementPercent": 100
+        },
+        {
+          "category": "following_brief",
+          "both": 0,
+          "humanOnly": 0,
+          "ruleOnly": 2,
+          "neither": 35,
+          "agreementPercent": 95
+        },
+        {
+          "category": "keeping_options_open",
+          "both": 4,
+          "humanOnly": 17,
+          "ruleOnly": 0,
+          "neither": 16,
+          "agreementPercent": 54
+        },
+        {
+          "category": "expiry",
+          "both": 3,
+          "humanOnly": 0,
+          "ruleOnly": 0,
+          "neither": 34,
+          "agreementPercent": 100
+        },
+        {
+          "category": "cost_efficiency",
+          "both": 1,
+          "humanOnly": 9,
+          "ruleOnly": 0,
+          "neither": 27,
+          "agreementPercent": 76
+        },
+        {
+          "category": "no_asset_reason",
+          "both": 4,
+          "humanOnly": 0,
+          "ruleOnly": 5,
+          "neither": 28,
+          "agreementPercent": 86
+        }
+      ]
+    },
+    "amended": {
+      "label": "amended balance coding (exploratory)",
+      "perCategory": [
+        {
+          "category": "earmarking",
+          "both": 7,
+          "humanOnly": 12,
+          "ruleOnly": 3,
+          "neither": 15,
+          "agreementPercent": 59
+        },
+        {
+          "category": "price_direction",
+          "both": 3,
+          "humanOnly": 0,
+          "ruleOnly": 0,
+          "neither": 34,
+          "agreementPercent": 100
+        },
+        {
+          "category": "balance_size",
+          "both": 1,
+          "humanOnly": 5,
+          "ruleOnly": 0,
+          "neither": 31,
+          "agreementPercent": 86
+        },
+        {
+          "category": "familiarity",
+          "both": 1,
+          "humanOnly": 0,
+          "ruleOnly": 0,
+          "neither": 36,
+          "agreementPercent": 100
+        },
+        {
+          "category": "following_brief",
+          "both": 0,
+          "humanOnly": 0,
+          "ruleOnly": 2,
+          "neither": 35,
+          "agreementPercent": 95
+        },
+        {
+          "category": "keeping_options_open",
+          "both": 4,
+          "humanOnly": 17,
+          "ruleOnly": 0,
+          "neither": 16,
+          "agreementPercent": 54
+        },
+        {
+          "category": "expiry",
+          "both": 3,
+          "humanOnly": 0,
+          "ruleOnly": 0,
+          "neither": 34,
+          "agreementPercent": 100
+        },
+        {
+          "category": "cost_efficiency",
+          "both": 1,
+          "humanOnly": 9,
+          "ruleOnly": 0,
+          "neither": 27,
+          "agreementPercent": 76
+        },
+        {
+          "category": "no_asset_reason",
+          "both": 4,
+          "humanOnly": 0,
+          "ruleOnly": 15,
+          "neither": 18,
+          "agreementPercent": 59
+        }
+      ]
+    },
+    "affordability": {
+      "ticked": 14,
+      "frozen": {
+        "label": "frozen (primary)",
+        "inCategory3": 11,
+        "inCategory9": 2,
+        "inOtherCategoriesOnly": 1
+      },
+      "amended": {
+        "label": "amended balance coding (exploratory)",
+        "affordabilityFired": 12,
+        "relativeFired": 1,
+        "inCategory9": 10,
+        "inCategory3": 1
+      },
+      "notTickedButAffordabilityFired": 2
+    },
+    "affordabilityFlag": {
+      "both": 12,
+      "humanOnly": 2,
+      "ruleOnly": 2,
+      "neither": 21
+    },
+    "aWithOtherCategories": {
+      "ticked": 14,
+      "withOneToEight": 14,
+      "withNine": 0
+    },
+    "coTicks": [
+      {
+        "a": "keeping_options_open",
+        "b": "earmarking",
+        "both": 11,
+        "aOnly": 10,
+        "bOnly": 8
+      }
+    ],
+    "clashes": [
+      {
+        "id": "r-qvvc",
+        "categories": [
+          "earmarking",
+          "no_asset_reason"
+        ],
+        "affordabilityOnly": false,
+        "noneOfThese": false,
+        "why": "category 9 (says nothing at all about the assets) ticked with a category that is about an asset"
+      }
+    ]
+  },
+  "trend": [
+    {
+      "model": "claude-haiku-4-5",
+      "arm": "A",
+      "cell": "P0",
+      "direction": "rising",
+      "replies": 12,
+      "payments": 0,
+      "usdc": 0,
+      "fsiu": 0,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 0,
+      "citesDirectionPayments": 0,
+      "assumesContinuation": 0,
+      "assumesContinuationPayments": 0,
+      "choiceAll": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceCiting": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "C",
+      "cell": "T3",
+      "direction": "flat",
+      "replies": 12,
+      "payments": 11,
+      "usdc": 7,
+      "fsiu": 4,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 0,
+      "citesDirectionPayments": 0,
+      "assumesContinuation": 0,
+      "assumesContinuationPayments": 0,
+      "choiceAll": {
+        "follows": 0,
+        "against": 0,
+        "neither": 11
+      },
+      "choiceCiting": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "C",
+      "cell": "T2",
+      "direction": "falling",
+      "replies": 12,
+      "payments": 12,
+      "usdc": 5,
+      "fsiu": 7,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 3,
+      "citesDirectionPayments": 3,
+      "assumesContinuation": 1,
+      "assumesContinuationPayments": 1,
+      "choiceAll": {
+        "follows": 7,
+        "against": 5,
+        "neither": 0
+      },
+      "choiceCiting": {
+        "follows": 3,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 1,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "A",
+      "cell": "T2",
+      "direction": "falling",
+      "replies": 12,
+      "payments": 12,
+      "usdc": 6,
+      "fsiu": 6,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 5,
+      "citesDirectionPayments": 5,
+      "assumesContinuation": 3,
+      "assumesContinuationPayments": 3,
+      "choiceAll": {
+        "follows": 6,
+        "against": 6,
+        "neither": 0
+      },
+      "choiceCiting": {
+        "follows": 5,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 3,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "A",
+      "cell": "P0",
+      "direction": "rising",
+      "replies": 12,
+      "payments": 12,
+      "usdc": 4,
+      "fsiu": 8,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 0,
+      "citesDirectionPayments": 0,
+      "assumesContinuation": 0,
+      "assumesContinuationPayments": 0,
+      "choiceAll": {
+        "follows": 4,
+        "against": 8,
+        "neither": 0
+      },
+      "choiceCiting": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-haiku-4-5",
+      "arm": "A",
+      "cell": "T1",
+      "direction": "rising",
+      "replies": 12,
+      "payments": 0,
+      "usdc": 0,
+      "fsiu": 0,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 0,
+      "citesDirectionPayments": 0,
+      "assumesContinuation": 0,
+      "assumesContinuationPayments": 0,
+      "choiceAll": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceCiting": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "C",
+      "cell": "P0",
+      "direction": "rising",
+      "replies": 12,
+      "payments": 10,
+      "usdc": 9,
+      "fsiu": 1,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 1,
+      "citesDirectionPayments": 1,
+      "assumesContinuation": 0,
+      "assumesContinuationPayments": 0,
+      "choiceAll": {
+        "follows": 9,
+        "against": 1,
+        "neither": 0
+      },
+      "choiceCiting": {
+        "follows": 1,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "A",
+      "cell": "T3",
+      "direction": "flat",
+      "replies": 12,
+      "payments": 12,
+      "usdc": 6,
+      "fsiu": 6,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 0,
+      "citesDirectionPayments": 0,
+      "assumesContinuation": 0,
+      "assumesContinuationPayments": 0,
+      "choiceAll": {
+        "follows": 0,
+        "against": 0,
+        "neither": 12
+      },
+      "choiceCiting": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-haiku-4-5",
+      "arm": "A",
+      "cell": "T2",
+      "direction": "falling",
+      "replies": 12,
+      "payments": 0,
+      "usdc": 0,
+      "fsiu": 0,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 0,
+      "citesDirectionPayments": 0,
+      "assumesContinuation": 0,
+      "assumesContinuationPayments": 0,
+      "choiceAll": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceCiting": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-haiku-4-5",
+      "arm": "B",
+      "cell": "T1",
+      "direction": "rising",
+      "replies": 12,
+      "payments": 12,
+      "usdc": 8,
+      "fsiu": 4,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 0,
+      "citesDirectionPayments": 0,
+      "assumesContinuation": 0,
+      "assumesContinuationPayments": 0,
+      "choiceAll": {
+        "follows": 8,
+        "against": 4,
+        "neither": 0
+      },
+      "choiceCiting": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "B",
+      "cell": "T3",
+      "direction": "flat",
+      "replies": 12,
+      "payments": 12,
+      "usdc": 6,
+      "fsiu": 6,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 0,
+      "citesDirectionPayments": 0,
+      "assumesContinuation": 0,
+      "assumesContinuationPayments": 0,
+      "choiceAll": {
+        "follows": 0,
+        "against": 0,
+        "neither": 12
+      },
+      "choiceCiting": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "B",
+      "cell": "T2",
+      "direction": "falling",
+      "replies": 12,
+      "payments": 11,
+      "usdc": 5,
+      "fsiu": 6,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 3,
+      "citesDirectionPayments": 3,
+      "assumesContinuation": 2,
+      "assumesContinuationPayments": 2,
+      "choiceAll": {
+        "follows": 6,
+        "against": 5,
+        "neither": 0
+      },
+      "choiceCiting": {
+        "follows": 3,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 2,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "A",
+      "cell": "T1",
+      "direction": "rising",
+      "replies": 12,
+      "payments": 12,
+      "usdc": 7,
+      "fsiu": 5,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 0,
+      "citesDirectionPayments": 0,
+      "assumesContinuation": 0,
+      "assumesContinuationPayments": 0,
+      "choiceAll": {
+        "follows": 7,
+        "against": 5,
+        "neither": 0
+      },
+      "choiceCiting": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-haiku-4-5",
+      "arm": "B",
+      "cell": "P0",
+      "direction": "rising",
+      "replies": 12,
+      "payments": 2,
+      "usdc": 2,
+      "fsiu": 0,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 0,
+      "citesDirectionPayments": 0,
+      "assumesContinuation": 0,
+      "assumesContinuationPayments": 0,
+      "choiceAll": {
+        "follows": 2,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceCiting": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "C",
+      "cell": "T1",
+      "direction": "rising",
+      "replies": 12,
+      "payments": 12,
+      "usdc": 8,
+      "fsiu": 4,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 2,
+      "citesDirectionPayments": 2,
+      "assumesContinuation": 1,
+      "assumesContinuationPayments": 1,
+      "choiceAll": {
+        "follows": 8,
+        "against": 4,
+        "neither": 0
+      },
+      "choiceCiting": {
+        "follows": 2,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 1,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-haiku-4-5",
+      "arm": "B",
+      "cell": "T2",
+      "direction": "falling",
+      "replies": 12,
+      "payments": 6,
+      "usdc": 3,
+      "fsiu": 3,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 0,
+      "citesDirectionPayments": 0,
+      "assumesContinuation": 0,
+      "assumesContinuationPayments": 0,
+      "choiceAll": {
+        "follows": 3,
+        "against": 3,
+        "neither": 0
+      },
+      "choiceCiting": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-haiku-4-5",
+      "arm": "B",
+      "cell": "T3",
+      "direction": "flat",
+      "replies": 12,
+      "payments": 12,
+      "usdc": 6,
+      "fsiu": 6,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 0,
+      "citesDirectionPayments": 0,
+      "assumesContinuation": 0,
+      "assumesContinuationPayments": 0,
+      "choiceAll": {
+        "follows": 0,
+        "against": 0,
+        "neither": 12
+      },
+      "choiceCiting": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "B",
+      "cell": "T1",
+      "direction": "rising",
+      "replies": 12,
+      "payments": 12,
+      "usdc": 8,
+      "fsiu": 4,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 3,
+      "citesDirectionPayments": 3,
+      "assumesContinuation": 3,
+      "assumesContinuationPayments": 3,
+      "choiceAll": {
+        "follows": 8,
+        "against": 4,
+        "neither": 0
+      },
+      "choiceCiting": {
+        "follows": 3,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 3,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-haiku-4-5",
+      "arm": "A",
+      "cell": "T3",
+      "direction": "flat",
+      "replies": 12,
+      "payments": 0,
+      "usdc": 0,
+      "fsiu": 0,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 0,
+      "citesDirectionPayments": 0,
+      "assumesContinuation": 0,
+      "assumesContinuationPayments": 0,
+      "choiceAll": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceCiting": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 0,
+        "against": 0,
+        "neither": 0
+      }
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "B",
+      "cell": "P0",
+      "direction": "rising",
+      "replies": 12,
+      "payments": 12,
+      "usdc": 6,
+      "fsiu": 6,
+      "split": 0,
+      "withReason": 12,
+      "citesDirection": 1,
+      "citesDirectionPayments": 1,
+      "assumesContinuation": 1,
+      "assumesContinuationPayments": 1,
+      "choiceAll": {
+        "follows": 6,
+        "against": 6,
+        "neither": 0
+      },
+      "choiceCiting": {
+        "follows": 1,
+        "against": 0,
+        "neither": 0
+      },
+      "choiceAssuming": {
+        "follows": 1,
+        "against": 0,
+        "neither": 0
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "model": "claude-haiku-4-5",
+      "arm": "A",
+      "pair": "T1 rising against T3 flat",
+      "readable": false,
+      "crossesThreshold": false
+    },
+    {
+      "model": "claude-haiku-4-5",
+      "arm": "A",
+      "pair": "T2 falling against T3 flat",
+      "readable": false,
+      "crossesThreshold": false
+    },
+    {
+      "model": "claude-haiku-4-5",
+      "arm": "A",
+      "pair": "T2 falling against T1 rising",
+      "readable": false,
+      "crossesThreshold": false
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "C",
+      "pair": "T1 rising against T3 flat",
+      "deltaPoints": -3,
+      "readable": true,
+      "crossesThreshold": false
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "C",
+      "pair": "T2 falling against T3 flat",
+      "deltaPoints": 22,
+      "readable": true,
+      "crossesThreshold": false
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "C",
+      "pair": "T2 falling against T1 rising",
+      "deltaPoints": 25,
+      "readable": true,
+      "crossesThreshold": false,
+      "signAsExtrapolationPredicts": true
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "A",
+      "pair": "T1 rising against T3 flat",
+      "deltaPoints": -8,
+      "readable": true,
+      "crossesThreshold": false
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "A",
+      "pair": "T2 falling against T3 flat",
+      "deltaPoints": 0,
+      "readable": true,
+      "crossesThreshold": false
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "A",
+      "pair": "T2 falling against T1 rising",
+      "deltaPoints": 8,
+      "readable": true,
+      "crossesThreshold": false,
+      "signAsExtrapolationPredicts": true
+    },
+    {
+      "model": "claude-haiku-4-5",
+      "arm": "B",
+      "pair": "T1 rising against T3 flat",
+      "deltaPoints": -17,
+      "readable": true,
+      "crossesThreshold": false
+    },
+    {
+      "model": "claude-haiku-4-5",
+      "arm": "B",
+      "pair": "T2 falling against T3 flat",
+      "deltaPoints": 0,
+      "readable": true,
+      "crossesThreshold": false
+    },
+    {
+      "model": "claude-haiku-4-5",
+      "arm": "B",
+      "pair": "T2 falling against T1 rising",
+      "deltaPoints": 17,
+      "readable": true,
+      "crossesThreshold": false,
+      "signAsExtrapolationPredicts": true
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "B",
+      "pair": "T1 rising against T3 flat",
+      "deltaPoints": -17,
+      "readable": true,
+      "crossesThreshold": false
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "B",
+      "pair": "T2 falling against T3 flat",
+      "deltaPoints": 5,
+      "readable": true,
+      "crossesThreshold": false
+    },
+    {
+      "model": "claude-sonnet-5",
+      "arm": "B",
+      "pair": "T2 falling against T1 rising",
+      "deltaPoints": 22,
+      "readable": true,
+      "crossesThreshold": false,
+      "signAsExtrapolationPredicts": true
+    }
+  ]
+}
