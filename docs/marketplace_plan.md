@@ -375,6 +375,7 @@ third party, never the Assay.
 - Per-turn holdings snapshots (phase 1 records them per round).
 - A seeded invoice generator, if invoices rather than shipment records matter.
 - Admit a Google or xAI cheap-tier model to the registry for a third family.
+- Prompt caching for the Anthropic calls in the probe battery and market loop, **deferred by the owner on 2026-10-13**; never for the daily print. Needs a cost-accounting fix first. See `docs/prompt-caching-note.md` for the findings and when to revisit.
 
 ---
 
