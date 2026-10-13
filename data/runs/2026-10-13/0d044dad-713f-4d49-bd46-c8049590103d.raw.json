@@ -1,0 +1,39 @@
+{
+  "id": "2342c398-fa5a-9c2e-828e-60e83b9a2fa3",
+  "object": "chat.completion",
+  "created": 1791853945,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```javascript\nexport function cappedRunningTotal(nums, cap) {\n  const result = [];\n  let total = 0;\n  for (const num of nums) {\n    total = Math.min(total + num, cap);\n    result.push(total);\n  }\n  return result;\n}\n```",
+        "reasoning_content": "I need to implement a JavaScript function that computes a running total of an array of non-negative numbers, capped at a given positive limit. Once the running total reaches the cap, it should remain fixed for all subsequent positions.\n\nThe implementation can be simplified to a single loop using `Math.min(total + num, cap)`.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 778,
+    "completion_tokens": 62,
+    "total_tokens": 1235,
+    "prompt_tokens_details": {
+      "text_tokens": 778,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 395,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 35300000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

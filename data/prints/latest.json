@@ -1,48 +1,48 @@
 {
   "version": "SIU-2026a",
-  "print_id": "2026-10-12",
-  "date": "2026-10-12",
+  "print_id": "2026-10-13",
+  "date": "2026-10-13",
   "status": "provisional",
   "basket_costs": [
     {
       "model_id": "deepseek-v3.2",
-      "cost_usd": "0.001830"
+      "cost_usd": "0.001816"
     },
     {
       "model_id": "llama-3.3-70b-deepinfra",
-      "cost_usd": "0.000713"
+      "cost_usd": "0.000702"
     },
     {
       "model_id": "mistral-small-3.2-24b-instruct",
-      "cost_usd": "0.000658"
+      "cost_usd": "0.000655"
     },
     {
       "model_id": "qwen-2.5-72b-instruct",
-      "cost_usd": "0.002513"
+      "cost_usd": "0.002494"
     },
     {
       "model_id": "claude-sonnet-5",
-      "cost_usd": "0.023412"
+      "cost_usd": "0.023264"
     },
     {
       "model_id": "gpt-5.1",
-      "cost_usd": "0.009106"
+      "cost_usd": "0.009039"
     },
     {
       "model_id": "gemini-3.1-pro-preview",
-      "cost_usd": "0.040571"
+      "cost_usd": "0.039820"
     },
     {
       "model_id": "grok-4.6",
-      "cost_usd": "0.017205"
+      "cost_usd": "0.017059"
     },
     {
       "model_id": "claude-haiku-4-5",
-      "cost_usd": "0.007677"
+      "cost_usd": "0.007619"
     },
     {
       "model_id": "gpt-5.4-mini",
-      "cost_usd": "0.005331"
+      "cost_usd": "0.005291"
     }
   ],
   "weights": {
@@ -90,74 +90,74 @@
       }
     ]
   },
-  "dated_siu": "0.01090",
+  "dated_siu": "0.01078",
   "exchange_rate_table": [
     {
       "model_id": "deepseek-v3.2",
       "usd_per_siu": "0.0018",
-      "spread_to_index": "-0.8321",
-      "siu_per_usd": "546.4"
+      "spread_to_index": "-0.8315",
+      "siu_per_usd": "550.7"
     },
     {
       "model_id": "llama-3.3-70b-deepinfra",
       "usd_per_siu": "0.0007",
-      "spread_to_index": "-0.9346",
-      "siu_per_usd": "1402.5"
+      "spread_to_index": "-0.9349",
+      "siu_per_usd": "1424.5"
     },
     {
       "model_id": "mistral-small-3.2-24b-instruct",
       "usd_per_siu": "0.0007",
-      "spread_to_index": "-0.9396",
-      "siu_per_usd": "1519.0"
+      "spread_to_index": "-0.9392",
+      "siu_per_usd": "1527.2"
     },
     {
       "model_id": "qwen-2.5-72b-instruct",
       "usd_per_siu": "0.0025",
-      "spread_to_index": "-0.7695",
-      "siu_per_usd": "397.9"
+      "spread_to_index": "-0.7686",
+      "siu_per_usd": "400.9"
     },
     {
       "model_id": "claude-sonnet-5",
-      "usd_per_siu": "0.0234",
-      "spread_to_index": "1.1476",
-      "siu_per_usd": "42.7"
+      "usd_per_siu": "0.0233",
+      "spread_to_index": "1.1590",
+      "siu_per_usd": "42.9"
     },
     {
       "model_id": "gpt-5.1",
-      "usd_per_siu": "0.0091",
-      "spread_to_index": "-0.1647",
-      "siu_per_usd": "109.8"
+      "usd_per_siu": "0.0090",
+      "spread_to_index": "-0.1612",
+      "siu_per_usd": "110.6"
     },
     {
       "model_id": "gemini-3.1-pro-preview",
-      "usd_per_siu": "0.0406",
-      "spread_to_index": "2.7216",
-      "siu_per_usd": "24.6"
+      "usd_per_siu": "0.0398",
+      "spread_to_index": "2.6953",
+      "siu_per_usd": "25.1"
     },
     {
       "model_id": "grok-4.6",
-      "usd_per_siu": "0.0172",
-      "spread_to_index": "0.5782",
-      "siu_per_usd": "58.1"
+      "usd_per_siu": "0.0171",
+      "spread_to_index": "0.5830",
+      "siu_per_usd": "58.6"
     },
     {
       "model_id": "claude-haiku-4-5",
-      "usd_per_siu": "0.0077",
-      "spread_to_index": "-0.2958",
-      "siu_per_usd": "130.2"
+      "usd_per_siu": "0.0076",
+      "spread_to_index": "-0.2929",
+      "siu_per_usd": "131.2"
     },
     {
       "model_id": "gpt-5.4-mini",
       "usd_per_siu": "0.0053",
-      "spread_to_index": "-0.5110",
-      "siu_per_usd": "187.5"
+      "spread_to_index": "-0.5090",
+      "siu_per_usd": "189.0"
     }
   ],
   "sensitivity_block": [
     {
       "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
-      "dated_siu": "0.007878",
-      "delta": "-0.2773",
+      "dated_siu": "0.007781",
+      "delta": "-0.2779",
       "applies_to": [
         "deepseek-v3.2",
         "llama-3.3-70b-deepinfra",
@@ -173,7 +173,7 @@
     },
     {
       "policy_variant": "batch-discount: 50% off input and output",
-      "dated_siu": "0.005520",
+      "dated_siu": "0.005457",
       "delta": "-0.4936",
       "applies_to": [
         "deepseek-v3.2",
@@ -199,17 +199,17 @@
     "siu_per_usd_mode": "ROUND_DOWN",
     "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. dated_siu rounds to significant figures, not a fixed decimal-place count, so its precision scales with the price rather than being lost as it falls (found live, 2026-09-25 — see docs/methodology.md's Rounding section). basket_cost carries more decimal places than dated_siu needs at any price level so the published print stays reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
   },
-  "cost_of_production_usd": "1.7370",
-  "price_snapshot_ref": "price-snapshot-merged-2026-10-12T01-14-18.128Z.json",
+  "cost_of_production_usd": "1.7212",
+  "price_snapshot_ref": "price-snapshot-merged-2026-10-13T01-09-57.656Z.json",
   "methodology_version": "v0-draft",
-  "dated_siu_median_diagnostic": "0.006504",
+  "dated_siu_median_diagnostic": "0.006455",
   "methodology_revision": "rules-2026-09-26",
-  "signature": "0x4dc71d5c39ba40ff1f7a99cd60097f540381571365a7784248dea31f5766867e0a68acfc3129fdbea1b1e091b38c5f2b189444bf7fa62399cd597ff70f91f528",
+  "signature": "0x3f643f365fd80f5e3f95453aa7e72cf988f1c480d32f5fa1337e980e17237643781073b003801ea171cc630771ffd7eebc5fadefd19f925fe8d46d5a9dcb14a4",
   "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
   "anchor": {
     "chain": "base-sepolia",
     "status": "anchored",
-    "tx_hash": "0xc717c8e7a6d230296a560a60c8d5bf3cc63ed8531619b9bd1d39c118dd4f9282",
-    "posted_at": "2026-10-12T01:17:48.000Z"
+    "tx_hash": "0x603512b4b0af7fd6ccb25f2c7f776f0dc4b6e9e727a14687a7c8406bb9e61b40",
+    "posted_at": "2026-10-13T01:12:56.000Z"
   }
 }
