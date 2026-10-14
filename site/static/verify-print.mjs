@@ -10,10 +10,13 @@
 //      superseded_by, correction_notes. (anchor, superseded_by and correction_notes are added after signing, so they cannot be in the hash.)
 //   2. Canonicalise what is left with RFC 8785 (JCS): keys sorted, no whitespace, numbers and strings as JSON writes them.
 //   3. keccak256 of the UTF-8 bytes. This is the print's body hash, "0x" plus 64 lowercase hex digits.
-//   4. For the chain named in the print's anchor, ask that chain's block explorer for the anchor transaction's logs and look for a
-//      PrintPosted(bodyHash, version, timestamp) event from the TouchstoneAttestation contract carrying your hash.
+//   4. For every chain the print was anchored on (the print's own `anchor`, then each entry of `anchor.additional_anchors`), ask that chain's block
+//      explorer for the anchor transaction's logs and look for a PrintPosted(bodyHash, version, timestamp) event from that chain's
+//      TouchstoneAttestation contract carrying your hash.
 // It does NOT check the signature (see the page, or packages/print in the repository, for that).
-// Exit code 0: the hash was computed, and any anchor it could check matched. 1: a mismatch, no anchor found, or a lookup failed.
+// Exit code 0: the hash was computed, at least one anchor was found carrying it, and no anchor the print claims was missing or different.
+// 1: a mismatch, no anchor found, or a lookup failed. A further chain recorded as "failed" or "skipped" is printed as recorded and is not an error:
+// anchoring on a further chain is best-effort by design, and the print and its first anchor stand without it.
 
 /* global fetch, TextEncoder */
 import { readFileSync, existsSync } from "node:fs";
@@ -126,6 +129,72 @@ export function findPrintPosted(logs, contract, hash) {
   return undefined;
 }
 
+const anchorsOf = (print) => {
+  const first = print?.anchor;
+  if (!first) return [];
+  return [first, ...(Array.isArray(first.additional_anchors) ? first.additional_anchors : [])];
+};
+
+/**
+ * Check every anchor a print carries against its chain's explorer. Returns the lines to show, how many anchors were found carrying the hash, and the problems.
+ * `fetchFn` is injectable so a test can run it without a network.
+ */
+export async function checkAnchors(print, hash, fetchFn = fetch) {
+  const lines = [];
+  const problems = [];
+  let verified = 0;
+  const anchors = anchorsOf(print);
+  if (anchors.length === 0) {
+    lines.push("no anchor in this print (not anchored)");
+    problems.push("no anchor");
+    return { lines, verified, problems };
+  }
+  for (const [index, anchor] of anchors.entries()) {
+    const chain = CHAINS[anchor.chain];
+    const label = chain?.name ?? anchor.chain;
+    const required = index === 0;
+    if (anchor.status === "anchored" && anchor.tx_hash) {
+      if (!chain) {
+        lines.push(`${label}: the print names a chain this script has no contract for`);
+        problems.push(`${label}: unknown chain`);
+        continue;
+      }
+      let res;
+      try {
+        res = await fetchFn(`${chain.explorer}/api/v2/transactions/${anchor.tx_hash}/logs`);
+      } catch (err) {
+        lines.push(`${label}: explorer lookup failed: ${err instanceof Error ? err.message : err}`);
+        problems.push(`${label}: lookup failed`);
+        continue;
+      }
+      if (!res.ok) {
+        lines.push(`${label}: explorer lookup failed: HTTP ${res.status} for ${chain.explorer}`);
+        problems.push(`${label}: lookup failed`);
+        continue;
+      }
+      const found = findPrintPosted(await res.json(), chain.contract, hash);
+      if (!found) {
+        lines.push(`${label}: NOT FOUND: no PrintPosted event carrying this hash in ${anchor.tx_hash} from ${chain.contract}`);
+        problems.push(`${label}: not found`);
+        continue;
+      }
+      verified += 1;
+      lines.push(`ANCHORED on ${label}: tx ${anchor.tx_hash}, block ${found.block}, ${new Date(found.timestamp * 1000).toISOString()}, version ${found.version}`);
+      lines.push(`  contract ${chain.contract} (publisher ${chain.publisher})`);
+    } else if (anchor.status === "already-anchored") {
+      lines.push(
+        `${label}: recorded as already anchored by an earlier run, with no transaction recorded. Check it with postedAt(bodyHash) on ${chain?.contract ?? "the contract"}; this script does not.`,
+      );
+    } else if (required) {
+      lines.push(`${label}: the print's own anchor is "${anchor.status}", not anchored`);
+      problems.push(`${label}: not anchored`);
+    } else {
+      lines.push(`${label}: recorded as ${anchor.status}${anchor.notes ? ` (${anchor.notes})` : ""}. Best-effort by design; the print stands without it.`);
+    }
+  }
+  return { lines, verified, problems };
+}
+
 async function main() {
   const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
   const noNetwork = process.argv.includes("--no-network");
@@ -149,28 +218,9 @@ async function main() {
   console.log(`body hash ${hash}`);
   if (noNetwork) return;
 
-  const anchor = print.anchor;
-  if (!anchor || anchor.status !== "anchored" || !anchor.tx_hash) {
-    console.log("no anchor transaction in this print (not anchored)");
-    process.exit(1);
-  }
-  const chain = CHAINS[anchor.chain];
-  if (!chain) {
-    console.log(`the print names chain "${anchor.chain}", which this script has no contract for`);
-    process.exit(1);
-  }
-  const res = await fetch(`${chain.explorer}/api/v2/transactions/${anchor.tx_hash}/logs`);
-  if (!res.ok) {
-    console.log(`explorer lookup failed: HTTP ${res.status} for ${chain.explorer}`);
-    process.exit(1);
-  }
-  const found = findPrintPosted(await res.json(), chain.contract, hash);
-  if (!found) {
-    console.log(`NOT FOUND: no PrintPosted event carrying this hash in ${anchor.tx_hash} from ${chain.contract} on ${chain.name}`);
-    process.exit(1);
-  }
-  console.log(`ANCHORED on ${chain.name}: tx ${anchor.tx_hash}, block ${found.block}, ${new Date(found.timestamp * 1000).toISOString()}, version ${found.version}`);
-  console.log(`contract ${chain.contract} (publisher ${chain.publisher})`);
+  const { lines, verified, problems } = await checkAnchors(print, hash);
+  for (const line of lines) console.log(line);
+  if (verified === 0 || problems.length > 0) process.exit(1);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

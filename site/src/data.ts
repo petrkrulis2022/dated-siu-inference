@@ -158,6 +158,8 @@ export interface ChainInfo {
    * anchors that do not exist: a chain that is not live shows its contract and says no print has been anchored on it yet.
    */
   anchoringLive?: boolean;
+  /** The date of the oldest print that carries an anchor on this chain: anchoring there began with it. Derived from the prints, never typed in. */
+  anchoringStartedOn?: string;
 }
 
 interface DeploymentRecord {
@@ -193,3 +195,20 @@ export async function loadChainInfo(deploymentFile: string): Promise<ChainInfo> 
 export async function loadChains(deploymentsDir: string): Promise<ChainInfo[]> {
   return Promise.all(["base-sepolia", "arc-testnet"].map((slug) => loadChainInfo(join(deploymentsDir, `${slug}.json`))));
 }
+
+/**
+ * Whether anchoring on each chain is live, and since when, read from the prints themselves: a chain other than the first is live once some print carries an anchor on it
+ * that landed. Nothing is typed in, so a page can never claim anchors that do not exist, nor go on saying "not started" after they do.
+ */
+export function withAnchoringFromPrints(chains: ChainInfo[], prints: Pick<Print, "date" | "anchor">[]): ChainInfo[] {
+  return chains.map((chain, index) => {
+    if (index === 0) return chain;
+    const slug = chain.slug;
+    const landed = prints
+      .filter((p) => p.anchor?.additional_anchors?.some((a) => a.chain === slug && (a.status === "anchored" || a.status === "already-anchored")))
+      .map((p) => p.date)
+      .sort();
+    return landed.length === 0 ? { ...chain, anchoringLive: false } : { ...chain, anchoringLive: true, anchoringStartedOn: landed[0] };
+  });
+}
+

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { printBodyHashHex, printBodyOf } from "@touchstone/print";
 import type { Print } from "@touchstone/sdk";
 // @ts-expect-error: a plain JavaScript file, published as a script people download and run; it has no type declarations on purpose.
-import { CHAINS, EXCLUDED_FIELDS, bodyHashOf, canonicalJson, findPrintPosted, keccak256Hex } from "../static/verify-print.mjs";
+import { CHAINS, EXCLUDED_FIELDS, bodyHashOf, canonicalJson, checkAnchors, findPrintPosted, keccak256Hex } from "../static/verify-print.mjs";
 import { EXCLUDED_FIELDS as RECIPE_FIELDS } from "./verify-recipe.js";
 
 const REPO = resolve(process.cwd(), "..");
@@ -63,5 +63,95 @@ describe("verify-print.mjs: the script anyone downloads and runs", () => {
     expect(findPrintPosted(logs, CHAINS["arc-testnet"].contract, hash)).toBeUndefined();
     expect(findPrintPosted(logs, CHAINS["base-sepolia"].contract, "0x" + "00".repeat(32))).toBeUndefined();
     expect(findPrintPosted({}, CHAINS["base-sepolia"].contract, hash)).toBeUndefined();
+  });
+
+  describe("checkAnchors: every chain the print carries", () => {
+    const hash = "0x1bc31661ace7ee155ae5e2fd4d1a7e4a6a47c844457abea9c5ee1f3ff0bcaa5a";
+    const BASE_TX = "0x" + "ba".repeat(32);
+    const ARC_TX = "0x" + "ac".repeat(32);
+    const logsFor = (contract: string, bodyHash: string) => ({
+      items: [{ address: { hash: contract }, block_number: 7, decoded: { parameters: [{ name: "bodyHash", value: bodyHash }, { name: "version", value: "SIU-2026a" }, { name: "timestamp", value: "1791939532" }] } }],
+    });
+    /** A fake explorer: answers by host and transaction, and records which URLs were asked for. */
+    const fakeFetch = (answers: Record<string, unknown>) => {
+      const asked: string[] = [];
+      const fn = async (url: string) => {
+        asked.push(url);
+        const hit = Object.entries(answers).find(([k]) => url.includes(k));
+        if (!hit) return { ok: false, status: 404, json: async () => ({}) };
+        return { ok: true, status: 200, json: async () => hit[1] };
+      };
+      return { fn, asked };
+    };
+    const base = (extra: Record<string, unknown> = {}) => ({ chain: "base-sepolia", status: "anchored", tx_hash: BASE_TX, ...extra });
+    const arcAnchored = { chain: "arc-testnet", status: "anchored", tx_hash: ARC_TX };
+
+    it("checks both chains, each against its own explorer and contract, and passes when both carry the hash", async () => {
+      const { fn, asked } = fakeFetch({
+        [`${CHAINS["base-sepolia"].explorer}/api/v2/transactions/${BASE_TX}`]: logsFor(CHAINS["base-sepolia"].contract, hash),
+        [`${CHAINS["arc-testnet"].explorer}/api/v2/transactions/${ARC_TX}`]: logsFor(CHAINS["arc-testnet"].contract, hash),
+      });
+      const r = await checkAnchors({ anchor: base({ additional_anchors: [arcAnchored] }) }, hash, fn);
+      expect(r.verified).toBe(2);
+      expect(r.problems).toEqual([]);
+      expect(asked).toHaveLength(2);
+      expect(r.lines.join("\n")).toContain("ANCHORED on Base Sepolia");
+      expect(r.lines.join("\n")).toContain("ANCHORED on Arc Testnet");
+    });
+
+    it("does not accept an Arc event emitted by the wrong contract, or carrying another hash", async () => {
+      const wrongContract = fakeFetch({ [ARC_TX]: logsFor(CHAINS["base-sepolia"].contract, hash), [BASE_TX]: logsFor(CHAINS["base-sepolia"].contract, hash) });
+      const a = await checkAnchors({ anchor: base({ additional_anchors: [arcAnchored] }) }, hash, wrongContract.fn);
+      expect(a.verified).toBe(1);
+      expect(a.problems).toEqual(["Arc Testnet: not found"]);
+      const otherHash = fakeFetch({ [ARC_TX]: logsFor(CHAINS["arc-testnet"].contract, "0x" + "00".repeat(32)), [BASE_TX]: logsFor(CHAINS["base-sepolia"].contract, hash) });
+      const b = await checkAnchors({ anchor: base({ additional_anchors: [arcAnchored] }) }, hash, otherHash.fn);
+      expect(b.problems).toEqual(["Arc Testnet: not found"]);
+    });
+
+    it("prints a further chain recorded as failed or skipped as recorded, and is not an error: that chain is best-effort", async () => {
+      const { fn } = fakeFetch({ [BASE_TX]: logsFor(CHAINS["base-sepolia"].contract, hash) });
+      for (const status of ["failed", "skipped"]) {
+        const r = await checkAnchors({ anchor: base({ additional_anchors: [{ chain: "arc-testnet", status, notes: "rpc down" }] }) }, hash, fn);
+        expect(r.verified).toBe(1);
+        expect(r.problems).toEqual([]);
+        expect(r.lines.join("\n")).toContain(`recorded as ${status} (rpc down)`);
+      }
+    });
+
+    it("does not pass on an unchecked claim alone: 'already-anchored' with no transaction is printed, never counted as verified", async () => {
+      const r = await checkAnchors({ anchor: { chain: "arc-testnet", status: "already-anchored" } }, hash, fakeFetch({}).fn);
+      expect(r.verified).toBe(0);
+      expect(r.lines.join("\n")).toContain("postedAt(bodyHash)");
+    });
+
+    it("fails when the print's own (first) anchor is missing or not anchored, even if a further chain verified", async () => {
+      const { fn } = fakeFetch({ [ARC_TX]: logsFor(CHAINS["arc-testnet"].contract, hash) });
+      const none = await checkAnchors({}, hash, fn);
+      expect(none.problems).toEqual(["no anchor"]);
+      const pending = await checkAnchors({ anchor: { chain: "base-sepolia", status: "failed", notes: "x", additional_anchors: [arcAnchored] } }, hash, fn);
+      expect(pending.verified).toBe(1);
+      expect(pending.problems).toEqual(["Base Sepolia: not anchored"]);
+    });
+
+    it("reports an explorer outage, whether it answers with an error or throws, as a problem rather than a pass", async () => {
+      const down = async () => ({ ok: false, status: 503, json: async () => ({}) });
+      const a = await checkAnchors({ anchor: base() }, hash, down);
+      expect(a.problems).toEqual(["Base Sepolia: lookup failed"]);
+      const throws = async () => {
+        throw new Error("getaddrinfo ENOTFOUND");
+      };
+      const b = await checkAnchors({ anchor: base() }, hash, throws);
+      expect(b.problems).toEqual(["Base Sepolia: lookup failed"]);
+      expect(b.lines.join("\n")).toContain("ENOTFOUND");
+    });
+
+    it("an older print with no additional_anchors is checked on its one chain exactly as before", async () => {
+      const { fn, asked } = fakeFetch({ [BASE_TX]: logsFor(CHAINS["base-sepolia"].contract, hash) });
+      const r = await checkAnchors({ anchor: base() }, hash, fn);
+      expect(r.verified).toBe(1);
+      expect(r.problems).toEqual([]);
+      expect(asked).toHaveLength(1);
+    });
   });
 });

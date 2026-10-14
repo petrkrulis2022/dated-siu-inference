@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EXCLUDED_FIELDS, RAW_PRINT_URL, VERIFY_SCRIPT_URL, buildVerificationSpec } from "./verify-recipe.js";
+import { EXCLUDED_FIELDS, RAW_PRINT_URL, VERIFY_SCRIPT_URL, buildVerificationSpec, verificationExampleOf } from "./verify-recipe.js";
 import type { ChainInfo } from "./data.js";
 
 const BASE: ChainInfo = { slug: "base-sepolia", name: "Base Sepolia", chainId: 84532, attestationAddress: "0xF60701793eD168ffd6e818e1DCcb600393297190", publisherAddress: "0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a", explorerBaseUrl: "https://base-sepolia.blockscout.com", anchoringLive: true };
@@ -37,6 +37,21 @@ describe("buildVerificationSpec", () => {
     expect(spec.chains[1].anchoring).toMatch(/^not yet live/);
   });
 
+  it("says where each chain's anchor lives, so an agent reads the Arc entry from the right field", () => {
+    const view = spec as unknown as { anchor_field: { location: string; status_values: string[]; hash_recipe_unchanged: string }; steps: string[] };
+    expect(view.anchor_field.location).toContain("anchor.additional_anchors");
+    expect(view.anchor_field.status_values).toEqual(["anchored", "already-anchored", "failed", "skipped"]);
+    expect(view.anchor_field.hash_recipe_unchanged).toMatch(/never changes the body hash/);
+    expect(view.steps.join(" ")).toContain("anchor.additional_anchors");
+  });
+
+  it("words a live further chain from its start date and as best-effort, with no date when none is known", () => {
+    const live = buildVerificationSpec({ chains: [BASE, { ...ARC, anchoringLive: true, anchoringStartedOn: "2026-10-15" }] }) as SpecView;
+    expect(live.chains[1].anchoring).toMatch(/^live: prints dated 2026-10-15 and later/);
+    expect(live.chains[1].anchoring).toMatch(/best-effort/);
+    expect(live.chains[0].anchoring).toBe("live: every print is anchored here");
+  });
+
   it("points at the raw print, the one-command script and carries a worked example", () => {
     expect(spec.print.raw_url_template).toBe(`${RAW_PRINT_URL}{print_id}.json`);
     expect(spec.run_it_for_you.script_url).toBe(VERIFY_SCRIPT_URL);
@@ -52,3 +67,28 @@ describe("buildVerificationSpec", () => {
     expect("worked_example" in (buildVerificationSpec({ chains: [BASE] }) as object)).toBe(false);
   });
 });
+
+describe("verificationExampleOf", () => {
+  const H = "0x" + "cd".repeat(32);
+  const T1 = "0x" + "11".repeat(32);
+  const T2 = "0x" + "22".repeat(32);
+
+  it("carries the first chain's anchor and each further anchor that landed, and nothing for one that did not", () => {
+    const ex = verificationExampleOf(
+      { print_id: "2026-10-15", anchor: { chain: "base-sepolia", status: "anchored", tx_hash: T1, additional_anchors: [{ chain: "arc-testnet", status: "anchored", tx_hash: T2 }, { chain: "other", status: "failed" }, { chain: "x", status: "skipped" }] } },
+      H,
+    );
+    expect(ex).toEqual({ print_id: "2026-10-15", body_hash: H, anchor: { chain: "base-sepolia", tx_hash: T1 }, additional_anchors: [{ chain: "arc-testnet", tx_hash: T2 }] });
+  });
+
+  it("is just id and hash for a print with no anchor, and has no additional_anchors key when none landed", () => {
+    expect(verificationExampleOf({ print_id: "p" }, H)).toEqual({ print_id: "p", body_hash: H });
+    const ex = verificationExampleOf({ print_id: "p", anchor: { chain: "base-sepolia", status: "anchored", tx_hash: T1, additional_anchors: [{ chain: "arc-testnet", status: "failed", tx_hash: T2 }] } }, H);
+    expect("additional_anchors" in ex).toBe(false);
+  });
+
+  it("does not present an anchor whose status is not 'anchored' as one to test against", () => {
+    expect("anchor" in verificationExampleOf({ print_id: "p", anchor: { chain: "base-sepolia", status: "failed", tx_hash: T1 } }, H)).toBe(false);
+  });
+});
+

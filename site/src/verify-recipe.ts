@@ -28,6 +28,33 @@ export interface VerificationExample {
   body_hash: string;
   /** The anchor the print itself carries, so an agent can test its own implementation end to end. */
   anchor?: { chain: string; tx_hash: string };
+  /** The same print's anchors on further chains, where they landed. */
+  additional_anchors?: { chain: string; tx_hash: string }[];
+}
+
+/** What a chain's anchoring is, as the data shows it: the first chain anchors every print; a further chain is best-effort and has a start date once one landed. */
+export function anchoringText(c: ChainInfo): string {
+  if (c.anchoringLive === false) return "not yet live: the contract is deployed and no print has been anchored on it";
+  if (c.anchoringStartedOn !== undefined) {
+    return `live: prints dated ${c.anchoringStartedOn} and later are anchored here on a best-effort basis (a print may record "failed" or "skipped" for this chain; it is still valid)`;
+  }
+  return "live: every print is anchored here";
+}
+
+/** The worked example for a print: its id and body hash, and each anchor of its that landed, on any chain, so an agent can test its own implementation against real transactions. */
+export function verificationExampleOf(
+  print: { print_id: string; anchor?: { chain: string; status: string; tx_hash?: string; additional_anchors?: { chain: string; status: string; tx_hash?: string }[] } },
+  bodyHash: string,
+): VerificationExample {
+  const landed = (a: { chain: string; status: string; tx_hash?: string }): a is { chain: string; status: string; tx_hash: string } => a.status === "anchored" && a.tx_hash !== undefined;
+  const first = print.anchor !== undefined && landed(print.anchor) ? { chain: print.anchor.chain, tx_hash: print.anchor.tx_hash } : undefined;
+  const further = (print.anchor?.additional_anchors ?? []).filter(landed).map((a) => ({ chain: a.chain, tx_hash: a.tx_hash }));
+  return {
+    print_id: print.print_id,
+    body_hash: bodyHash,
+    ...(first ? { anchor: first } : {}),
+    ...(further.length > 0 ? { additional_anchors: further } : {}),
+  };
 }
 
 /** The machine-readable counterpart to the page's "Verify this yourself" section. Everything an agent needs to check a print with no human in the loop. */
@@ -55,6 +82,16 @@ export function buildVerificationSpec(input: { chains: readonly ChainInfo[]; exa
       expected_signer:
         "keccak256 of the uncompressed public key, last 20 bytes, must equal each chain's publisher address below. The signature carries no recovery id, so try both and accept if either recovers that address.",
     },
+    anchor_field: {
+      location:
+        "The print's `anchor` object. It describes the print's first chain (base-sepolia): chain, status, tx_hash, posted_at. " +
+        "Each further chain is an entry of `anchor.additional_anchors`, an array of {chain, status, tx_hash?, posted_at?, notes?}.",
+      status_values: ["anchored", "already-anchored", "failed", "skipped"],
+      meaning:
+        "anchored: tx_hash is the transaction that recorded the hash. already-anchored: the hash was already recorded by an earlier run and no transaction is recorded here. " +
+        "failed or skipped (further chains only): the attempt did not land and `notes` says why; the print is valid without it.",
+      hash_recipe_unchanged: "`anchor` is one of the five removed fields, so adding or changing anchor entries never changes the body hash.",
+    },
     chains: input.chains.map((c) => ({
       slug: chainSlug(c),
       name: chainName(c),
@@ -64,7 +101,7 @@ export function buildVerificationSpec(input: { chains: readonly ChainInfo[]; exa
       contract_url: `${c.explorerBaseUrl}/address/${c.attestationAddress}`,
       publisher: c.publisherAddress,
       publisher_immutable: true,
-      anchoring: c.anchoringLive === false ? "not yet live: the contract is deployed and no print has been anchored on it" : "live: every print is anchored here",
+      anchoring: anchoringText(c),
       abi: [...ATTESTATION_ABI],
     })),
     steps: [
@@ -72,7 +109,7 @@ export function buildVerificationSpec(input: { chains: readonly ChainInfo[]; exa
       "2. Remove body_hash.remove_fields. Keep every other field exactly as published.",
       "3. Canonicalise the rest as JCS, then take keccak256 of its UTF-8 bytes. That is the body hash.",
       "4. Optional: check the signature as described under signature.",
-      "5. For each chain in which the print has an anchor transaction (the print's own anchor field names the chain and tx_hash): " +
+      "5. For each chain in which the print has an anchored entry (anchor, then each of anchor.additional_anchors, each naming chain and tx_hash): " +
         "GET {explorer}/api/v2/transactions/{tx_hash}/logs. Find the log whose address equals that chain's attestation_contract and whose decoded " +
         "PrintPosted event has bodyHash equal to yours. Its timestamp parameter is the block time (Unix seconds) at which the hash was first recorded.",
       "6. Alternatively call postedAt(bodyHash) on the contract through any RPC for that chain: a non-zero value is the same timestamp, zero means never anchored.",
@@ -80,7 +117,7 @@ export function buildVerificationSpec(input: { chains: readonly ChainInfo[]; exa
     run_it_for_you: {
       script_url: VERIFY_SCRIPT_URL,
       command: "curl -O " + VERIFY_SCRIPT_URL + " && node verify-print.mjs {print_id}",
-      requirements: "Node 18 or later. No npm install, no keys. Exit code 0 only if the hash was computed and an anchor it could check matched.",
+      requirements: "Node 18 or later. No npm install, no keys. Checks every chain the print carries. Exit code 0 only if the hash was computed, at least one anchor carrying it was found, and no anchor the print claims was missing or different; a further chain recorded as failed or skipped is printed, not an error.",
       does_not_check: "the signature",
     },
     ...(input.example !== undefined ? { worked_example: input.example } : {}),

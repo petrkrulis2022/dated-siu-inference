@@ -111,12 +111,12 @@ export function renderForAgentsPage(chains: ChainInfo[] = []): string {
     <li>GET the print JSON: <code>${esc(RAW_PRINT_URL)}{print_id}.json</code> (the index of every print is <code>${esc(RAW_PRINT_URL)}index.json</code>).</li>
     <li>Remove exactly these fields and keep the rest as published: ${EXCLUDED_FIELDS.map((f) => `<code>${esc(f)}</code>`).join(", ")}.</li>
     <li>Canonicalise the rest with RFC 8785 (JCS), then take the keccak256 hash of its UTF-8 bytes (original Keccak padding, as Ethereum uses). That is the body hash.</li>
-    <li>For the chain the print's <code>anchor</code> names, GET <code>{explorer}/api/v2/transactions/{tx_hash}/logs</code> and find the <code>PrintPosted</code> event from that chain's contract whose <code>bodyHash</code> equals yours. Its <code>timestamp</code> is when the hash was first recorded.</li>
+    <li>For each chain the print was anchored on — the print's <code>anchor</code> (Base Sepolia), then each entry of <code>anchor.additional_anchors</code> (Arc Testnet) — GET <code>{explorer}/api/v2/transactions/{tx_hash}/logs</code> and find the <code>PrintPosted</code> event from that chain's contract whose <code>bodyHash</code> equals yours. Its <code>timestamp</code> is when the hash was first recorded. An entry recorded as <code>failed</code> or <code>skipped</code> has no transaction to check; the print is valid without it.</li>
   </ol>
   <div class="code-block">
     <pre>curl -O ${esc(VERIFY_SCRIPT_URL)}
 node verify-print.mjs 2026-10-14</pre>
-    <div class="annotation">The script does all four steps with plain Node 18 or later: no install, no keys. Exit code 0 only if the hash was computed and the anchor it checked matched. It does not check the signature.</div>
+    <div class="annotation">The script does all four steps, for every chain the print carries, with plain Node 18 or later: no install, no keys. Exit code 0 only if the hash was computed, at least one anchor carrying it was found, and no anchor the print claims was missing or different. It does not check the signature.</div>
   </div>
   ${
     chains.length === 0
@@ -127,7 +127,7 @@ node verify-print.mjs 2026-10-14</pre>
       <tbody>${chains
         .map(
           (c) =>
-            `<tr><td>${esc(chainName(c))}</td><td><a href="${esc(c.explorerBaseUrl)}/address/${esc(c.attestationAddress)}"><code>${esc(c.attestationAddress)}</code></a></td><td><code>${esc(c.publisherAddress)}</code></td><td>${c.anchoringLive === false ? "not yet live" : "live"}</td></tr>`,
+            `<tr><td>${esc(chainName(c))}</td><td><a href="${esc(c.explorerBaseUrl)}/address/${esc(c.attestationAddress)}"><code>${esc(c.attestationAddress)}</code></a></td><td><code>${esc(c.publisherAddress)}</code></td><td>${c.anchoringLive === false ? "not yet live" : c.anchoringStartedOn !== undefined ? `live from the print dated ${esc(c.anchoringStartedOn)}` : "live"}</td></tr>`,
         )
         .join("\n      ")}</tbody>
     </table>

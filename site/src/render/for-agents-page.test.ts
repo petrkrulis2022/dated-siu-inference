@@ -80,6 +80,18 @@ describe("renderForAgentsPage: verify a print yourself", () => {
     expect(html).toContain("not yet live");
   });
 
+  it("tells an agent where the further chain's anchor is, and that a failed or skipped entry is not an error", () => {
+    const html = renderForAgentsPage(CHAINS);
+    expect(html).toContain("anchor.additional_anchors");
+    expect(html).toContain("<code>failed</code> or <code>skipped</code>");
+  });
+
+  it("says live from the print an Arc anchor first landed on, when the data says so", () => {
+    const html = renderForAgentsPage([CHAINS[0], { ...CHAINS[1], anchoringLive: true, anchoringStartedOn: "2026-10-15" }]);
+    expect(html).toContain("live from the print dated 2026-10-15");
+    expect(html).not.toContain("not yet live");
+  });
+
   it("still renders without any chain table when none is given", () => {
     const html = renderForAgentsPage();
     expect(html).toContain('id="verify-a-print"');

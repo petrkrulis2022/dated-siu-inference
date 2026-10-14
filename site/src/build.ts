@@ -9,6 +9,7 @@ import {
   loadIncidents,
   loadRunRecordsFor,
   recomputeDatedSiu,
+  withAnchoringFromPrints,
   type PrintIndexEntry,
 } from "./data.js";
 import { renderLayout } from "./render/layout.js";
@@ -17,7 +18,7 @@ import { renderSeriesPage } from "./render/series-page.js";
 import { renderPrintsList } from "./render/prints-list.js";
 import { renderModelsPage, type ModelGatePoint } from "./render/models-page.js";
 import { renderForAgentsPage } from "./render/for-agents-page.js";
-import { buildVerificationSpec } from "./verify-recipe.js";
+import { buildVerificationSpec, verificationExampleOf } from "./verify-recipe.js";
 import { printBodyHashHex } from "@touchstone/print";
 
 // pnpm --filter site run build => cwd = site/, which sits directly at the repo root.
@@ -95,7 +96,7 @@ async function main(): Promise<void> {
   const allPublishedPrints = await loadAllPrints(PRINTS_DIR);
   const incidents = await loadIncidents(INCIDENTS_DIR);
   // Both chains' TouchstoneAttestation, Base Sepolia first. `chain` (the first) is what the list pages use; the print pages and the for-agents page show every chain.
-  const chains = await loadChains(DEPLOYMENTS_DIR);
+  const chains = withAnchoringFromPrints(await loadChains(DEPLOYMENTS_DIR), allPublishedPrints);
   const chain = chains[0];
   // docs/methodology.md §7: a print is "final" when a signed reconciliation record exists for
   // it, never by reading its own status field (which stays "provisional" forever, by design).
@@ -257,16 +258,7 @@ async function main(): Promise<void> {
   // VERIFY.JSON — the machine-readable counterpart to every print page's "Verify this yourself" block, built from the same recipe module so the two cannot disagree.
   // The worked example is the latest headline print, so an agent can test its own implementation against a real hash and a real anchor today.
   const latestHeadline = [...allPublishedPrints].filter((p) => p.series === undefined).sort((a, b) => a.date.localeCompare(b.date)).at(-1);
-  const example =
-    latestHeadline === undefined
-      ? undefined
-      : {
-          print_id: latestHeadline.print_id,
-          body_hash: printBodyHashHex(latestHeadline),
-          ...(latestHeadline.anchor?.status === "anchored" && latestHeadline.anchor.tx_hash
-            ? { anchor: { chain: latestHeadline.anchor.chain, tx_hash: latestHeadline.anchor.tx_hash } }
-            : {}),
-        };
+  const example = latestHeadline === undefined ? undefined : verificationExampleOf(latestHeadline, printBodyHashHex(latestHeadline));
   await writeFile(join(OUT_DIR, "verify.json"), `${JSON.stringify(buildVerificationSpec({ chains, ...(example ? { example } : {}) }), null, 2)}\n`, "utf-8");
 
   console.log(

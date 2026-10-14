@@ -136,25 +136,47 @@ function renderSensitivityBlock(print: Print): string {
   </section>`;
 }
 
+/** An anchor as the page reads it: the first chain's own, or an entry of `anchor.additional_anchors`. */
+interface AnchorView {
+  chain: string;
+  status: string;
+  tx_hash?: string;
+  posted_at?: string;
+  notes?: string;
+}
+
 /**
- * The anchor this print carries on `chain`. Every published print carries exactly one, on the first chain (Base Sepolia), whatever label it was given; no print
- * carries a second yet, so the other chains find none. The lookup widens when the print format does.
+ * The anchor this print carries on `chain`. The first chain's is the print's own `anchor`, whatever label an old print gave it. Any other chain's is its entry in
+ * `anchor.additional_anchors`, found by the chain's name; a print published before anchoring on that chain began has none.
  */
-function anchorOn(print: Print, chains: ChainInfo[], chain: ChainInfo): Print["anchor"] | undefined {
-  return chain === chains[0] ? print.anchor : undefined;
+function anchorOn(print: Print, chains: ChainInfo[], chain: ChainInfo): AnchorView | undefined {
+  if (chain === chains[0]) return print.anchor;
+  const slug = chainSlug(chain);
+  return print.anchor?.additional_anchors?.find((a) => a.chain === slug);
 }
 
 /** The anchor transaction as a row value: a link to the chain's explorer, or an honest statement of why there is none. */
-function anchorLine(anchor: Print["anchor"] | undefined, chain: ChainInfo, chains: ChainInfo[], full = false): string {
+function anchorLine(print: Print, anchor: AnchorView | undefined, chain: ChainInfo, chains: ChainInfo[], full = false): string {
+  const name = esc(chainName(chain));
   if (!anchor) {
     if (chain === chains[0]) return "not yet submitted";
+    if (chain.anchoringStartedOn !== undefined && print.date < chain.anchoringStartedOn) {
+      return `not anchored: anchoring on ${name} began with the print dated ${esc(chain.anchoringStartedOn)}`;
+    }
     return chain.anchoringLive === false
-      ? `not anchored: no print has been anchored on ${esc(chainName(chain))} yet`
-      : `not anchored on ${esc(chainName(chain))}`;
+      ? `not anchored: no print has been anchored on ${name} yet`
+      : `not anchored on ${name}`;
   }
-  return anchor.status === "anchored" && anchor.tx_hash
-    ? `<a href="${esc(chain.explorerBaseUrl)}/tx/${esc(anchor.tx_hash)}" title="${esc(anchor.tx_hash)}">${esc(full ? anchor.tx_hash : truncateHex(anchor.tx_hash))}</a> (${esc(anchor.chain)})`
-    : `not yet anchored — ${esc(anchor.notes ?? anchor.status)}`;
+  if (anchor.status === "anchored" && anchor.tx_hash) {
+    return `<a href="${esc(chain.explorerBaseUrl)}/tx/${esc(anchor.tx_hash)}" title="${esc(anchor.tx_hash)}">${esc(full ? anchor.tx_hash : truncateHex(anchor.tx_hash))}</a> (${esc(anchor.chain)})`;
+  }
+  if (anchor.status === "already-anchored") {
+    return `anchored${anchor.posted_at ? ` ${esc(anchor.posted_at)}` : ""}; the transaction was sent by an earlier run and is not recorded here`;
+  }
+  if (chain !== chains[0]) {
+    return `not anchored on ${name}: ${esc(anchor.status)}${anchor.notes ? ` — ${esc(anchor.notes)}` : ""}. The print was published anyway; this chain is best-effort`;
+  }
+  return `not yet anchored — ${esc(anchor.notes ?? anchor.status)}`;
 }
 
 function renderMethodologyAndSigning(print: Print, runsUrl: string, chains: ChainInfo[]): string {
@@ -173,7 +195,7 @@ function renderMethodologyAndSigning(print: Print, runsUrl: string, chains: Chai
   const anchorRows = chains
     .map(
       (chain) =>
-        `<dt>Anchor tx${chains.length > 1 ? ` — ${esc(chainName(chain))}` : ""}</dt><dd>${anchorLine(anchorOn(print, chains, chain), chain, chains)}</dd>`,
+        `<dt>Anchor tx${chains.length > 1 ? ` — ${esc(chainName(chain))}` : ""}</dt><dd>${anchorLine(print, anchorOn(print, chains, chain), chain, chains)}</dd>`,
     )
     .join("\n      ");
 
@@ -205,24 +227,26 @@ function renderChainAnchor(print: Print, chains: ChainInfo[], chain: ChainInfo, 
     ? "the recovered signer above is this publisher"
     : "does NOT match the recovered signer above — treat this print as unverified";
   const chainIdLine = chain.chainId === undefined ? "" : ` · chain id ${chain.chainId}`;
-  const anchored = anchor?.status === "anchored" && anchor.tx_hash;
+  const anchored = (anchor?.status === "anchored" && anchor.tx_hash) || anchor?.status === "already-anchored";
   const notLiveNote =
     !anchored && chain !== chains[0] && chain.anchoringLive === false
       ? `<p class="note">Anchoring on ${esc(name)} has not started: the contract is deployed (above) and no print has been anchored on it yet. Anchors will appear here from the first print anchored on it.</p>`
-      : "";
+      : !anchored && chain !== chains[0] && chain.anchoringStartedOn !== undefined && print.date >= chain.anchoringStartedOn
+        ? `<p class="note">Anchoring on ${esc(name)} is best-effort: this print is anchored on ${esc(chainName(chains[0]))}, and ${anchor ? "the reason it is not anchored here is above" : "it carries no record of an attempt on this chain"}.</p>`
+        : "";
   // The contract-check steps show for a chain that has an anchor, and always for the first chain, as before; a later chain with nothing anchored on it has nothing to check.
   const steps = anchored || chain === chains[0]
     ? `<ol class="verify-steps">
       <li>Open the contract link above on its explorer, go to "Read Contract", call <code>publisher()</code>, and confirm it equals the recovered signer shown above.</li>
       <li>On the same "Read Contract" tab, call <code>postedAt(bytes32)</code> with the body hash above and confirm it returns a non-zero timestamp: the Unix time, in seconds, at which this hash was first recorded.</li>
-      <li>Open the anchor transaction, go to its Logs tab, and confirm a <code>PrintPosted</code> event whose <code>bodyHash</code> equals the body hash above.</li>
+      ${anchor?.tx_hash ? '<li>Open the anchor transaction, go to its Logs tab, and confirm a <code>PrintPosted</code> event whose <code>bodyHash</code> equals the body hash above.</li>' : ""}
     </ol>`
     : "";
   return `<h3>Anchored on ${esc(name)}</h3>
     <dl class="kv">
       <dt>TouchstoneAttestation</dt><dd><a href="${esc(contractUrl)}">${esc(chain.attestationAddress)}</a> (${esc(chainSlug(chain))}${esc(chainIdLine)})</dd>
       <dt>Publisher (fixed in the contract)</dt><dd>${esc(info.publisherAddress)} — ${esc(matchLine)}</dd>
-      <dt>Anchor tx</dt><dd>${anchorLine(anchor, chain, chains, true)}</dd>
+      <dt>Anchor tx</dt><dd>${anchorLine(print, anchor, chain, chains, true)}</dd>
     </dl>
     ${notLiveNote}
     ${steps}`;

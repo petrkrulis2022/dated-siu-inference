@@ -736,4 +736,65 @@ describe("renderPrintPage: the verification recipe and one section per chain", (
     expect(html).not.toContain("Arc Testnet");
     expect(html).toContain("<dt>Anchor tx</dt>");
   });
+
+  describe("Arc Testnet anchors, read from anchor.additional_anchors", () => {
+    const ARC_TX = `0x${"22".repeat(32)}`;
+    const ARC_LIVE = { ...ARC_CHAIN, anchoringLive: true, anchoringStartedOn: "2026-08-15" };
+    const withArc = (entry: Record<string, unknown>, date = "2026-08-15"): Print =>
+      basePrint({ date, print_id: date, anchor: { chain: "base-sepolia", status: "anchored", tx_hash: TX, additional_anchors: [{ chain: "arc-testnet", ...entry }] } } as Partial<Print>);
+    const arcSection = (html: string) => html.slice(html.indexOf("Anchored on Arc Testnet"), html.indexOf("All prints"));
+
+    it("links the Arc anchor transaction in full to Arc's explorer and shows the on-chain steps, as for Base Sepolia", () => {
+      const html = render(withArc({ status: "anchored", tx_hash: ARC_TX }), [BASE_CHAIN, ARC_LIVE]);
+      expect(html).toContain(`<a href="https://testnet.arcscan.app/tx/${ARC_TX}" title="${ARC_TX}">${ARC_TX}</a>`);
+      expect(arcSection(html)).toContain("PrintPosted");
+      expect(html).not.toContain("Anchoring on Arc Testnet has not started");
+      // Base's own anchor is still shown in Base's section and is not mistaken for Arc's.
+      expect(html).toContain(`https://base-sepolia.blockscout.com/tx/${TX}`);
+      expect(arcSection(html)).not.toContain(TX);
+    });
+
+    it("says a print published before Arc anchoring began was not anchored there, and names the print it began with", () => {
+      const early = basePrint({ date: "2026-08-10", print_id: "2026-08-10", anchor: { chain: "base-sepolia", status: "anchored", tx_hash: TX } } as Partial<Print>);
+      const html = render(early, [BASE_CHAIN, ARC_LIVE]);
+      expect(html).toContain("not anchored: anchoring on Arc Testnet began with the print dated 2026-08-15");
+      expect(arcSection(html)).not.toContain("/tx/");
+      expect(html).not.toContain("best-effort: this print");
+    });
+
+    it("on or after the start date, a print with no Arc entry is described as having no record of an attempt, not as having a reason above", () => {
+      const html = render(anchored(), [BASE_CHAIN, ARC_LIVE]);
+      expect(html).toContain("not anchored on Arc Testnet");
+      expect(arcSection(html)).toContain("carries no record of an attempt on this chain");
+      expect(arcSection(html)).not.toContain("the reason it is not anchored here is above");
+    });
+
+    it("says a failed or skipped Arc attempt did not land, gives the recorded reason, and that the print stands", () => {
+      for (const status of ["failed", "skipped"]) {
+        const html = render(withArc({ status, notes: "balance below the minimum" }), [BASE_CHAIN, ARC_LIVE]);
+        const arc = arcSection(html);
+        expect(arc).toContain(`not anchored on Arc Testnet: ${status}`);
+        expect(arc).toContain("balance below the minimum");
+        expect(arc).toContain("best-effort");
+        expect(arc).not.toContain("/tx/");
+        // The page never presents the failed chain's block as an anchor.
+        expect(arc).not.toContain("PrintPosted");
+      }
+    });
+
+    it("describes an already-anchored Arc entry honestly: anchored, with no transaction to link", () => {
+      const html = render(withArc({ status: "already-anchored", posted_at: "2026-08-15T00:20:01.000Z" }), [BASE_CHAIN, ARC_LIVE]);
+      const arc = arcSection(html);
+      expect(arc).toContain("anchored 2026-08-15T00:20:01.000Z");
+      expect(arc).toContain("not recorded here");
+      expect(arc).not.toContain("/tx/");
+    });
+
+    it("escapes everything it prints from the anchor entry", () => {
+      const html = render(withArc({ status: "failed", notes: "<script>alert(1)</script>" }), [BASE_CHAIN, ARC_LIVE]);
+      expect(html).not.toContain("<script>alert(1)</script>");
+      expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    });
+  });
 });
+

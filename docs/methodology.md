@@ -840,8 +840,24 @@ that time and nothing about whether its numbers are right. Each print's page on 
 site gives the recipe, the full body hash and the contract addresses, and
 `https://prints.touchstoneassay.com/verify-print.mjs` (plain Node, no install) performs the
 whole check; `https://prints.touchstoneassay.com/verify.json` is the same procedure in machine-readable
-form. Prints are anchored on Base Sepolia, a test network; an Arc Testnet contract is deployed
-and is shown on every print page as a second section, empty until anchoring there starts.
+form. Both chains are test networks.
+
+**Two anchors, one of them required.** Every print is anchored on Base Sepolia, and the print is
+not published if that anchor fails. From the first print that carries one, it is also anchored on
+Arc Testnet, a second `TouchstoneAttestation` contract with the same publisher. The Arc anchor is
+**best-effort by design**: it is attempted with a time limit, over two independent RPC providers, and
+only if the publisher's Arc balance can pay for it; if it cannot be made, the print and its Base
+Sepolia anchor are published regardless and the print records why. It is written into the print's
+`anchor` object, the first chain's anchor in `anchor` itself and each further chain as an entry of
+`anchor.additional_anchors` (`chain`, `status`, and, when it landed, `tx_hash` and `posted_at`;
+`status` is `anchored`, `already-anchored`, `failed` or `skipped`, with `notes` on the last two).
+`anchor` is one of the five removed fields, so **adding Arc anchors changes no body hash, no
+signature, and no number in any print, and the recipe above is unchanged.** A print published
+before the first Arc anchor was never anchored there, and its page says so; each print page shows
+one section per chain, with the transaction link where one exists and the recorded reason where it
+does not. Which print was the first anchored on Arc is read from the prints themselves, not stated
+here. `verify-print.mjs` checks every anchor a print carries; a further chain recorded as `failed`
+or `skipped` is shown as recorded and is not treated as an error, because the print stands without it.
 
 ## 9. Cost of producing the index
 

@@ -52,14 +52,17 @@ Assay publishes a measurement, not an instrument.
 ## Verifying a print yourself
 
 Every print is signed and its body hash is recorded on chain in a TouchstoneAttestation
-contract (Base Sepolia today; Arc Testnet's contract is deployed and not yet anchored on).
-You can check one without trusting this site:
+contract: on Base Sepolia (the print's `anchor`) and also on Arc Testnet (an entry of
+`anchor.additional_anchors`; best-effort, so an entry may say `failed` or `skipped` and the
+print is still valid). Prints from before Arc anchoring began carry no Arc entry. Which chains
+are live, and from which print, is in verify.json. You can check one without trusting this site:
 
 - The whole procedure, with contract addresses, publisher address and a worked example
   you can test your implementation against, is machine-readable at
   https://prints.touchstoneassay.com/verify.json
 - Or run it: `curl -O https://prints.touchstoneassay.com/verify-print.mjs && node verify-print.mjs <print_id>`
-  (plain Node 18+, no install, no keys; exit code 0 only if the hash matched an anchor).
+  (plain Node 18+, no install, no keys; checks every chain the print carries; exit code 0 only if
+  an anchor matched and none the print claims was missing or different).
 - The recipe in one line: take the print JSON, remove `signature`, `public_key`, `anchor`,
   `superseded_by` and `correction_notes`, canonicalise the rest with RFC 8785 (JCS), keccak256
   the UTF-8 bytes. That 0x… value is the body hash the contract records.

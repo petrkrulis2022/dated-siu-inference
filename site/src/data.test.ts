@@ -127,3 +127,33 @@ describe("loadChains", () => {
     expect(chains[1].publisherAddress).toBe(chains[0].publisherAddress);
   });
 });
+
+describe("withAnchoringFromPrints: whether a further chain is live comes from the prints, never from a typed-in flag", () => {
+  const base = { slug: "base-sepolia", attestationAddress: "0xa", publisherAddress: "0xp", explorerBaseUrl: "https://b", anchoringLive: true };
+  const arc = { slug: "arc-testnet", attestationAddress: "0xb", publisherAddress: "0xp", explorerBaseUrl: "https://a" };
+  const onBase = { chain: "base-sepolia", status: "anchored" as const, tx_hash: "0x1" };
+  const withArc = (date: string, status: string) => ({ date, anchor: { ...onBase, additional_anchors: [{ chain: "arc-testnet", status, tx_hash: "0x2" }] } }) as never;
+
+  it("is not live while no print carries a landed Arc anchor, and leaves the first chain alone", async () => {
+    const { withAnchoringFromPrints } = await import("./data.js");
+    const [b, a] = withAnchoringFromPrints([base, arc], [{ date: "2026-10-14", anchor: onBase } as never, withArc("2026-10-15", "failed"), withArc("2026-10-16", "skipped")]);
+    expect(b).toEqual(base);
+    expect(a.anchoringLive).toBe(false);
+    expect(a.anchoringStartedOn).toBeUndefined();
+  });
+
+  it("is live from the OLDEST print with a landed anchor, whatever order the prints come in", async () => {
+    const { withAnchoringFromPrints } = await import("./data.js");
+    const prints = [withArc("2026-10-17", "anchored"), withArc("2026-10-16", "failed"), withArc("2026-10-15", "already-anchored"), { date: "2026-10-14", anchor: onBase } as never];
+    const [, a] = withAnchoringFromPrints([base, arc], prints);
+    expect(a).toMatchObject({ anchoringLive: true, anchoringStartedOn: "2026-10-15" });
+  });
+
+  it("does not mistake an anchor recorded for some other chain for an Arc anchor", async () => {
+    const { withAnchoringFromPrints } = await import("./data.js");
+    const other = { date: "2026-10-15", anchor: { ...onBase, additional_anchors: [{ chain: "somewhere-else", status: "anchored", tx_hash: "0x3" }] } } as never;
+    const [, a] = withAnchoringFromPrints([base, arc], [other]);
+    expect(a.anchoringLive).toBe(false);
+  });
+});
+
