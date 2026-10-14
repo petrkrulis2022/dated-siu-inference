@@ -1,4 +1,6 @@
+import type { ChainInfo } from "../data.js";
 import { esc } from "../format.js";
+import { EXCLUDED_FIELDS, RAW_PRINT_URL, VERIFY_JSON_URL, VERIFY_SCRIPT_URL, chainName } from "../verify-recipe.js";
 
 const MCP_URL = "https://mcp.touchstoneassay.com/mcp";
 const MCP_JSON_URL = "https://prints.touchstoneassay.com/mcp.json";
@@ -56,7 +58,7 @@ const TRY_IT_HERE_TOOLS: TryItHereTool[] = [
  * script-count invariant, which this page doesn't affect) powering the "Try it here" section
  * below; every other section here is still plain text meant to be copied, not a live widget.
  */
-export function renderForAgentsPage(): string {
+export function renderForAgentsPage(chains: ChainInfo[] = []): string {
   const rows = TOOLS.map(
     (t) =>
       `<tr><td><code>${esc(t.name)}</code></td><td><code>${esc(t.args)}</code></td><td>${esc(t.price)}</td></tr>`,
@@ -99,6 +101,39 @@ export function renderForAgentsPage(): string {
   never an oracle, nothing for sale. <code>verify_receipt</code>'s on-chain read is live, reading
   the real deployed <code>TouchstoneEscrow</code> — see the <a href="index.html">Series</a> page
   for the current print and the full methodology.</p>
+</section>
+
+<section class="block" id="verify-a-print">
+  <h2>Verify a print yourself</h2>
+  <p class="note">Every print is signed and its fingerprint is recorded on chain. You can check one with no human in the loop.
+  The whole procedure, with the contract addresses, is machine-readable at <a href="verify.json">${esc(VERIFY_JSON_URL)}</a>.</p>
+  <ol class="verify-steps">
+    <li>GET the print JSON: <code>${esc(RAW_PRINT_URL)}{print_id}.json</code> (the index of every print is <code>${esc(RAW_PRINT_URL)}index.json</code>).</li>
+    <li>Remove exactly these fields and keep the rest as published: ${EXCLUDED_FIELDS.map((f) => `<code>${esc(f)}</code>`).join(", ")}.</li>
+    <li>Canonicalise the rest with RFC 8785 (JCS), then take the keccak256 hash of its UTF-8 bytes (original Keccak padding, as Ethereum uses). That is the body hash.</li>
+    <li>For the chain the print's <code>anchor</code> names, GET <code>{explorer}/api/v2/transactions/{tx_hash}/logs</code> and find the <code>PrintPosted</code> event from that chain's contract whose <code>bodyHash</code> equals yours. Its <code>timestamp</code> is when the hash was first recorded.</li>
+  </ol>
+  <div class="code-block">
+    <pre>curl -O ${esc(VERIFY_SCRIPT_URL)}
+node verify-print.mjs 2026-10-14</pre>
+    <div class="annotation">The script does all four steps with plain Node 18 or later: no install, no keys. Exit code 0 only if the hash was computed and the anchor it checked matched. It does not check the signature.</div>
+  </div>
+  ${
+    chains.length === 0
+      ? ""
+      : `<div class="table-scroll">
+    <table>
+      <thead><tr><th>Chain</th><th>TouchstoneAttestation</th><th>Publisher</th><th>Anchoring</th></tr></thead>
+      <tbody>${chains
+        .map(
+          (c) =>
+            `<tr><td>${esc(chainName(c))}</td><td><a href="${esc(c.explorerBaseUrl)}/address/${esc(c.attestationAddress)}"><code>${esc(c.attestationAddress)}</code></a></td><td><code>${esc(c.publisherAddress)}</code></td><td>${c.anchoringLive === false ? "not yet live" : "live"}</td></tr>`,
+        )
+        .join("\n      ")}</tbody>
+    </table>
+  </div>`
+  }
+  <p class="note">These contracts are on test networks. Anchoring proves that a print existed in this exact form by a given time; it does not prove the print's numbers are right.</p>
 </section>
 
 <section class="block" id="try-it-here">

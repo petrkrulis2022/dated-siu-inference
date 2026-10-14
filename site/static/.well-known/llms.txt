@@ -48,3 +48,21 @@ link above resolves correctly; if you checked the apex domain's own
 
 Never "backed by," never a peg, never an oracle, never for sale. Touchstone
 Assay publishes a measurement, not an instrument.
+
+## Verifying a print yourself
+
+Every print is signed and its body hash is recorded on chain in a TouchstoneAttestation
+contract (Base Sepolia today; Arc Testnet's contract is deployed and not yet anchored on).
+You can check one without trusting this site:
+
+- The whole procedure, with contract addresses, publisher address and a worked example
+  you can test your implementation against, is machine-readable at
+  https://prints.touchstoneassay.com/verify.json
+- Or run it: `curl -O https://prints.touchstoneassay.com/verify-print.mjs && node verify-print.mjs <print_id>`
+  (plain Node 18+, no install, no keys; exit code 0 only if the hash matched an anchor).
+- The recipe in one line: take the print JSON, remove `signature`, `public_key`, `anchor`,
+  `superseded_by` and `correction_notes`, canonicalise the rest with RFC 8785 (JCS), keccak256
+  the UTF-8 bytes. That 0x… value is the body hash the contract records.
+
+These are test networks. Anchoring proves a print existed in this exact form by a given time;
+it does not prove its numbers are right.

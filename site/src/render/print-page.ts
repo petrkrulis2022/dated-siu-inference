@@ -3,6 +3,7 @@ import { computeDatedSiu, D, resolveWeights, type DecimalValue } from "@touchsto
 import type { ChainInfo, PrintIndexEntry } from "../data.js";
 import { esc, formatDate, percent, truncateHex, usd } from "../format.js";
 import { buildVerifyInfo } from "../verify.js";
+import { EXCLUDED_FIELDS, RAW_PRINT_URL, VERIFY_JSON_URL, VERIFY_SCRIPT_URL, chainName, chainSlug } from "../verify-recipe.js";
 
 export interface PrintPageOptions {
   print: Print;
@@ -14,6 +15,11 @@ export interface PrintPageOptions {
   runsBaseUrl: string;
   /** TouchstoneAttestation address/publisher/explorer — for the anchor link and verify block. */
   chain: ChainInfo;
+  /**
+   * Every chain prints are, or are about to be, anchored on, in the order the sections follow (Base Sepolia, then Arc Testnet). Defaults to `[chain]`, so a
+   * caller that knows of one chain renders exactly what it always did.
+   */
+  chains?: ChainInfo[];
 }
 
 function findPreviousPrint(
@@ -130,7 +136,28 @@ function renderSensitivityBlock(print: Print): string {
   </section>`;
 }
 
-function renderMethodologyAndSigning(print: Print, runsUrl: string, chain: ChainInfo): string {
+/**
+ * The anchor this print carries on `chain`. Every published print carries exactly one, on the first chain (Base Sepolia), whatever label it was given; no print
+ * carries a second yet, so the other chains find none. The lookup widens when the print format does.
+ */
+function anchorOn(print: Print, chains: ChainInfo[], chain: ChainInfo): Print["anchor"] | undefined {
+  return chain === chains[0] ? print.anchor : undefined;
+}
+
+/** The anchor transaction as a row value: a link to the chain's explorer, or an honest statement of why there is none. */
+function anchorLine(anchor: Print["anchor"] | undefined, chain: ChainInfo, chains: ChainInfo[], full = false): string {
+  if (!anchor) {
+    if (chain === chains[0]) return "not yet submitted";
+    return chain.anchoringLive === false
+      ? `not anchored: no print has been anchored on ${esc(chainName(chain))} yet`
+      : `not anchored on ${esc(chainName(chain))}`;
+  }
+  return anchor.status === "anchored" && anchor.tx_hash
+    ? `<a href="${esc(chain.explorerBaseUrl)}/tx/${esc(anchor.tx_hash)}" title="${esc(anchor.tx_hash)}">${esc(full ? anchor.tx_hash : truncateHex(anchor.tx_hash))}</a> (${esc(anchor.chain)})`
+    : `not yet anchored — ${esc(anchor.notes ?? anchor.status)}`;
+}
+
+function renderMethodologyAndSigning(print: Print, runsUrl: string, chains: ChainInfo[]): string {
   // The rule set this print was computed under, as distinct from `methodology_version` (which has
   // read "v0-draft" on every print ever published and so distinguishes nothing). A replicator
   // recomputing an old print needs to know which revision's rules applied on the day — it is what
@@ -143,11 +170,12 @@ function renderMethodologyAndSigning(print: Print, runsUrl: string, chain: Chain
     ? `<a href="${esc(print.methodology_url)}">${esc(print.methodology_version)}</a>`
     : esc(print.methodology_version);
 
-  const anchorLine = !print.anchor
-    ? "not yet submitted"
-    : print.anchor.status === "anchored" && print.anchor.tx_hash
-      ? `<a href="${esc(chain.explorerBaseUrl)}/tx/${esc(print.anchor.tx_hash)}" title="${esc(print.anchor.tx_hash)}">${esc(truncateHex(print.anchor.tx_hash))}</a> (${esc(print.anchor.chain)})`
-      : `not yet anchored — ${esc(print.anchor.notes ?? print.anchor.status)}`;
+  const anchorRows = chains
+    .map(
+      (chain) =>
+        `<dt>Anchor tx${chains.length > 1 ? ` — ${esc(chainName(chain))}` : ""}</dt><dd>${anchorLine(anchorOn(print, chains, chain), chain, chains)}</dd>`,
+    )
+    .join("\n      ");
 
   return `<section class="block">
     <h2>Methodology, signature &amp; anchor</h2>
@@ -157,39 +185,81 @@ function renderMethodologyAndSigning(print: Print, runsUrl: string, chain: Chain
       <dt>Cost of production</dt><dd>${esc(usd(print.cost_of_production_usd))}</dd>
       <dt>Signature</dt><dd title="${esc(print.signature)}">${esc(truncateHex(print.signature))}</dd>
       <dt>Public key</dt><dd title="${esc(print.public_key)}">${esc(truncateHex(print.public_key))}</dd>
-      <dt>Anchor tx</dt><dd>${anchorLine}</dd>
+      ${anchorRows}
       <dt>Raw runs</dt><dd><a href="${esc(runsUrl)}">${esc(runsUrl)}</a></dd>
     </dl>
     <p class="note">Dated SIU is an assessment of qualifying inference work under this basket version, model/provider configuration and quality gate — not a prediction of production agent costs, which vary with workflow design, tool reliability, retry policy and context handling.</p>
   </section>`;
 }
 
-/**
- * A reader shouldn't have to trust this page's own "verified" claim — the point of anchoring is
- * that anyone can check it independently. bodyHash/recoveredSigner are computed offline at
- * build time (buildVerifyInfo); the three numbered steps let a reader re-derive the same check
- * live against the contract itself, the same thing verify-onchain.ts / the console check.
- */
-function renderVerifyBlock(print: Print, chain: ChainInfo): string {
-  const info = buildVerifyInfo(print, chain.publisherAddress);
-  const contractUrl = `${chain.explorerBaseUrl}/address/${chain.attestationAddress}`;
-  const matchLine = info.matchesPublisher
-    ? "matches the TouchstoneAttestation publisher below"
-    : "does NOT match the TouchstoneAttestation publisher below — treat this print as unverified";
+/** A full value in a monospace cell that wraps, with a copy button the page script reveals: a reader pastes these into an explorer, so none is shortened. */
+function copyable(value: string): string {
+  return `<code class="hash">${esc(value)}</code> <button type="button" class="copy" data-copy="${esc(value)}" hidden>Copy</button>`;
+}
 
-  return `<section class="block">
-    <h2>Verify this yourself</h2>
-    <p class="note">Don't take this page's word for it — every value below is checkable independently.</p>
+function renderChainAnchor(print: Print, chains: ChainInfo[], chain: ChainInfo, info: ReturnType<typeof buildVerifyInfo>): string {
+  const name = chainName(chain);
+  const contractUrl = `${chain.explorerBaseUrl}/address/${chain.attestationAddress}`;
+  const anchor = anchorOn(print, chains, chain);
+  const matchLine = info.matchesPublisher
+    ? "the recovered signer above is this publisher"
+    : "does NOT match the recovered signer above — treat this print as unverified";
+  const chainIdLine = chain.chainId === undefined ? "" : ` · chain id ${chain.chainId}`;
+  const anchored = anchor?.status === "anchored" && anchor.tx_hash;
+  const notLiveNote =
+    !anchored && chain !== chains[0] && chain.anchoringLive === false
+      ? `<p class="note">Anchoring on ${esc(name)} has not started: the contract is deployed (above) and no print has been anchored on it yet. Anchors will appear here from the first print anchored on it.</p>`
+      : "";
+  // The contract-check steps show for a chain that has an anchor, and always for the first chain, as before; a later chain with nothing anchored on it has nothing to check.
+  const steps = anchored || chain === chains[0]
+    ? `<ol class="verify-steps">
+      <li>Open the contract link above on its explorer, go to "Read Contract", call <code>publisher()</code>, and confirm it equals the recovered signer shown above.</li>
+      <li>On the same "Read Contract" tab, call <code>postedAt(bytes32)</code> with the body hash above and confirm it returns a non-zero timestamp: the Unix time, in seconds, at which this hash was first recorded.</li>
+      <li>Open the anchor transaction, go to its Logs tab, and confirm a <code>PrintPosted</code> event whose <code>bodyHash</code> equals the body hash above.</li>
+    </ol>`
+    : "";
+  return `<h3>Anchored on ${esc(name)}</h3>
     <dl class="kv">
-      <dt>Body hash</dt><dd title="${esc(info.bodyHash)}">${esc(truncateHex(info.bodyHash))}</dd>
-      <dt>Recovered signer</dt><dd title="${esc(info.recoveredSigner)}">${esc(truncateHex(info.recoveredSigner))} — ${esc(matchLine)}</dd>
-      <dt>TouchstoneAttestation</dt><dd><a href="${esc(contractUrl)}" title="${esc(chain.attestationAddress)}">${esc(truncateHex(chain.attestationAddress))}</a> (${esc(print.anchor?.chain ?? "base-sepolia")})</dd>
+      <dt>TouchstoneAttestation</dt><dd><a href="${esc(contractUrl)}">${esc(chain.attestationAddress)}</a> (${esc(chainSlug(chain))}${esc(chainIdLine)})</dd>
+      <dt>Publisher (fixed in the contract)</dt><dd>${esc(info.publisherAddress)} — ${esc(matchLine)}</dd>
+      <dt>Anchor tx</dt><dd>${anchorLine(anchor, chain, chains, true)}</dd>
     </dl>
+    ${notLiveNote}
+    ${steps}`;
+}
+
+/**
+ * A reader shouldn't have to trust this page's own "verified" claim — the point of anchoring is that anyone can check it independently. bodyHash/recoveredSigner
+ * are computed offline at build time (buildVerifyInfo). The page gives the exact recipe (which fields come out, how it is canonicalised and hashed), a one-command
+ * script that does it with plain Node, and, for each chain, the steps to check the contract itself. Nothing here is shortened: a value is meant to be pasted.
+ */
+function renderVerifyBlock(print: Print, chains: ChainInfo[]): string {
+  const primary = chains[0];
+  const info = buildVerifyInfo(print, primary.publisherAddress);
+  const rawUrl = `${RAW_PRINT_URL}${print.print_id}.json`;
+  const fields = EXCLUDED_FIELDS.map((f) => `<code>${esc(f)}</code>`).join(", ");
+  return `<section class="block" id="verify">
+    <h2>Verify this yourself</h2>
+    <p class="note">Don't take this page's word for it — every value below is checkable independently. Read the steps, run one command, or have an agent read <a href="${esc(VERIFY_JSON_URL)}">verify.json</a>.</p>
+    <h3>The body hash</h3>
+    <dl class="kv">
+      <dt>Body hash</dt><dd>${copyable(info.bodyHash)}</dd>
+      <dt>Recovered signer</dt><dd>${esc(info.recoveredSigner)}</dd>
+    </dl>
+    <p class="note">The body hash is made like this:</p>
     <ol class="verify-steps">
-      <li>Recompute this print's body hash from the published JSON (JCS-canonicalised, signature fields excluded) and confirm it matches the body hash shown above.</li>
-      <li>Open the contract link above on Blockscout, go to "Read Contract", call <code>publisher()</code>, and confirm it matches the recovered signer shown above.</li>
-      <li>On the same "Read Contract" tab, call <code>postedAt(bytes32)</code> with the body hash shown above and confirm it returns a non-zero timestamp.</li>
+      <li>Download this print's JSON: <a href="${esc(rawUrl)}">${esc(rawUrl)}</a>.</li>
+      <li>Remove exactly these five fields and keep everything else as published: ${fields}. The last three are added after signing, which is why they cannot be part of the hash.</li>
+      <li>Canonicalise what is left with RFC 8785 (JCS): keys sorted, no whitespace, numbers and strings as JSON writes them.</li>
+      <li>Take the keccak256 hash of the UTF-8 bytes of that text (the original Keccak padding Ethereum uses, not NIST SHA3-256). Written as 0x and 64 hex digits, it equals the body hash above.</li>
     </ol>
+    <details class="run-it">
+      <summary>Or run one command</summary>
+      <pre>curl -O ${esc(VERIFY_SCRIPT_URL)}
+node verify-print.mjs ${esc(print.print_id)}</pre>
+      <p class="note">Plain Node 18 or later, nothing to install, no keys. It does the four steps above, then looks the anchor transaction up on the chain's explorer and looks for a <code>PrintPosted</code> event carrying your hash. Exit code 0 means it matched. It does not check the signature: see the recovered signer above and the publisher below.</p>
+    </details>
+    ${chains.map((chain) => renderChainAnchor(print, chains, chain, buildVerifyInfo(print, chain.publisherAddress))).join("\n    ")}
   </section>`;
 }
 
@@ -472,7 +542,9 @@ export function renderPrintPage({
   basePath,
   runsBaseUrl,
   chain,
+  chains: chainList,
 }: PrintPageOptions): string {
+  const chains = chainList ?? [chain];
   const previous = findPreviousPrint(allPrints, print);
   const runsUrl = `${runsBaseUrl}/${print.print_id}`;
   // docs/methodology.md §7: print.status stays "provisional" on every print's own signed body
@@ -499,7 +571,8 @@ export function renderPrintPage({
 ${renderExchangeRateTable(print)}
 ${renderFloorSection(print)}
 ${renderSensitivityBlock(print)}
-${renderMethodologyAndSigning(print, runsUrl, chain)}
-${renderVerifyBlock(print, chain)}
-${renderPrintArchive(allPrints, print.print_id, basePath)}`;
+${renderMethodologyAndSigning(print, runsUrl, chains)}
+${renderVerifyBlock(print, chains)}
+${renderPrintArchive(allPrints, print.print_id, basePath)}
+<script type="module" src="${basePath}client/copy-hash.js"></script>`;
 }

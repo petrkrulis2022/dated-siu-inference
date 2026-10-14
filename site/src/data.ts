@@ -1,5 +1,5 @@
 import { readFile, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { Print, RunRecord } from "@touchstone/sdk";
 import { D, NON_RUN_RECORD_FILES, roundSignificantFigures, sum } from "@touchstone/print";
 
@@ -148,14 +148,27 @@ export interface ChainInfo {
   attestationAddress: string;
   publisherAddress: string;
   explorerBaseUrl: string;
+  /** The name a print's `anchor.chain` uses and the deployment file carries: "base-sepolia", "arc-testnet". Unset in a bare fixture, which reads as Base Sepolia. */
+  slug?: string;
+  /** "Base Sepolia", "Arc Testnet". */
+  name?: string;
+  chainId?: number;
+  /**
+   * Whether prints are being anchored on this chain. The contract can be deployed long before the first anchor, and a page must not imply
+   * anchors that do not exist: a chain that is not live shows its contract and says no print has been anchored on it yet.
+   */
+  anchoringLive?: boolean;
 }
 
 interface DeploymentRecord {
-  network: { explorer: string };
+  network: { name?: string; chainId?: number; explorer: string };
   contracts: {
     TouchstoneAttestation: { address: string; constructorArgs: { publisher_: string } };
   };
 }
+
+/** The chains prints are anchored on today. Arc Testnet's contract is deployed but is not anchored on yet; it is added here when anchoring there starts. */
+export const ANCHORING_LIVE: ReadonlySet<string> = new Set(["base-sepolia"]);
 
 /**
  * The TouchstoneAttestation address and its immutable publisher, read from the checked-in
@@ -164,9 +177,19 @@ interface DeploymentRecord {
  */
 export async function loadChainInfo(deploymentFile: string): Promise<ChainInfo> {
   const record: DeploymentRecord = JSON.parse(await readFile(deploymentFile, "utf-8"));
+  const slug = basename(deploymentFile, ".json");
   return {
     attestationAddress: record.contracts.TouchstoneAttestation.address,
     publisherAddress: record.contracts.TouchstoneAttestation.constructorArgs.publisher_,
     explorerBaseUrl: record.network.explorer,
+    slug,
+    ...(record.network.name !== undefined ? { name: record.network.name } : {}),
+    ...(record.network.chainId !== undefined ? { chainId: record.network.chainId } : {}),
+    anchoringLive: ANCHORING_LIVE.has(slug),
   };
+}
+
+/** Both chains' TouchstoneAttestation, Base Sepolia first: the order the page's sections follow. */
+export async function loadChains(deploymentsDir: string): Promise<ChainInfo[]> {
+  return Promise.all(["base-sepolia", "arc-testnet"].map((slug) => loadChainInfo(join(deploymentsDir, `${slug}.json`))));
 }

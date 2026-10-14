@@ -836,3 +836,52 @@ ol.roadmap .roadmap-body p {
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
+/* ---- print page: the "Verify this yourself" block ---- */
+
+section.block h3 {
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.5rem;
+}
+
+code.hash {
+  font-family: var(--mono);
+  word-break: break-all;
+}
+
+button.copy {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--rule);
+  padding: 0.1rem 0.55rem;
+  margin-left: 0.4rem;
+  cursor: pointer;
+}
+
+button.copy:hover {
+  border-color: var(--accent);
+}
+
+details.run-it {
+  margin: 1rem 0;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  padding: 0.6rem 1rem;
+}
+
+details.run-it summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+details.run-it pre {
+  margin: 0.75rem 0;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  overflow-x: auto;
+}

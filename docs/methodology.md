@@ -821,14 +821,27 @@ the rate is right is not the same as confirming the formula that rate feeds into
 
 ## 8. Signing and anchoring
 
-A print's body is canonicalised (RFC 8785 JCS, every field except `signature`/`public_key`
-excluded from the hash), hashed with keccak256, and signed with secp256k1 by
+A print's body is canonicalised (RFC 8785 JCS, with exactly five fields removed first:
+`signature`, `public_key`, `anchor`, `superseded_by` and `correction_notes`; the last three are
+written after signing, so they cannot be part of what was signed — `packages/print`'s
+`printBodyOf`), hashed with keccak256 (the original Keccak padding Ethereum uses, not NIST
+SHA3-256), and signed with secp256k1 by
 `TOUCHSTONE_PUBLISHER_KEY`. The signed print carries its own `signature` and `public_key`, so it is
 internally self-consistent — but a print's own fields proving internal consistency is not the
 same as proving the signer is really Touchstone Assay's key rather than an impersonator's who signed a
 self-consistent but fabricated file. Closing that gap is exactly what §"Publisher identity and
 verification" below does, and is why the publisher key is coupled to an on-chain contract rather
 than distributed out of band.
+
+**Anyone can recompute the hash and check the anchor.** The body hash is what
+`TouchstoneAttestation.postPrint` records on chain, with the block timestamp; the contract
+never computes or checks a print, so the anchor proves a print existed in this exact form by
+that time and nothing about whether its numbers are right. Each print's page on the prints
+site gives the recipe, the full body hash and the contract addresses, and
+`https://prints.touchstoneassay.com/verify-print.mjs` (plain Node, no install) performs the
+whole check; `https://prints.touchstoneassay.com/verify.json` is the same procedure in machine-readable
+form. Prints are anchored on Base Sepolia, a test network; an Arc Testnet contract is deployed
+and is shown on every print page as a second section, empty until anchoring there starts.
 
 ## 9. Cost of producing the index
 

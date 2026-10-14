@@ -1,6 +1,6 @@
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadRunRecordsFor, recomputeDatedSiu } from "./data.js";
 
@@ -113,5 +113,17 @@ describe("recomputeDatedSiu", () => {
       basket_costs: [{ model_id: "missing-model", excluded_reason: "failed T3" }],
     };
     expect(recomputeDatedSiu(print)).toBeUndefined();
+  });
+});
+
+describe("loadChains", () => {
+  it("reads Base Sepolia then Arc Testnet from the deployment records, with name, chain id and whether anchoring is live", async () => {
+    const { loadChains } = await import("./data.js");
+    const chains = await loadChains(resolve(process.cwd(), "../data/deployments"));
+    expect(chains.map((c) => c.slug)).toEqual(["base-sepolia", "arc-testnet"]);
+    expect(chains[0]).toMatchObject({ name: "Base Sepolia", chainId: 84532, anchoringLive: true });
+    expect(chains[1]).toMatchObject({ name: "Arc Testnet", chainId: 5042002, anchoringLive: false });
+    expect(chains[1].attestationAddress).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    expect(chains[1].publisherAddress).toBe(chains[0].publisherAddress);
   });
 });

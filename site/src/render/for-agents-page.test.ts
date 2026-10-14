@@ -56,3 +56,37 @@ describe("renderForAgentsPage", () => {
     expect(html.toLowerCase()).not.toContain("wsiu");
   });
 });
+
+describe("renderForAgentsPage: verify a print yourself", () => {
+  const CHAINS = [
+    { slug: "base-sepolia", name: "Base Sepolia", chainId: 84532, attestationAddress: "0xF60701793eD168ffd6e818e1DCcb600393297190", publisherAddress: "0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a", explorerBaseUrl: "https://base-sepolia.blockscout.com", anchoringLive: true },
+    { slug: "arc-testnet", name: "Arc Testnet", chainId: 5042002, attestationAddress: "0x12b886b043feABc3d90bBae3ae206d22b208160d", publisherAddress: "0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a", explorerBaseUrl: "https://testnet.arcscan.app", anchoringLive: false },
+  ];
+
+  it("gives an agent the whole procedure, the one-command script and the machine-readable spec", () => {
+    const html = renderForAgentsPage(CHAINS);
+    expect(html).toContain('id="verify-a-print"');
+    expect(html).toContain("verify.json");
+    expect(html).toContain("curl -O https://prints.touchstoneassay.com/verify-print.mjs");
+    for (const field of ["signature", "public_key", "anchor", "superseded_by", "correction_notes"]) expect(html).toContain(`<code>${field}</code>`);
+    expect(html).toContain("/api/v2/transactions/{tx_hash}/logs");
+    expect(html).toContain("PrintPosted");
+  });
+
+  it("lists each chain's contract and whether anchoring there is live", () => {
+    const html = renderForAgentsPage(CHAINS);
+    expect(html).toContain(CHAINS[0].attestationAddress);
+    expect(html).toContain(CHAINS[1].attestationAddress);
+    expect(html).toContain("not yet live");
+  });
+
+  it("still renders without any chain table when none is given", () => {
+    const html = renderForAgentsPage();
+    expect(html).toContain('id="verify-a-print"');
+    expect(html).not.toContain("<th>Anchoring</th>");
+  });
+
+  it("adds no script of its own", () => {
+    expect((renderForAgentsPage(CHAINS).match(/<script[^>]*>/gi) ?? []).length).toBe(1);
+  });
+});

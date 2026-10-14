@@ -663,3 +663,77 @@ describe("renderPrintPage", () => {
     expect(html).not.toContain("Equal weighting, disclosed");
   });
 });
+
+describe("renderPrintPage: the verification recipe and one section per chain", () => {
+  const BASE_CHAIN = { ...CHAIN, slug: "base-sepolia", name: "Base Sepolia", chainId: 84532, anchoringLive: true };
+  const ARC_CHAIN = {
+    slug: "arc-testnet",
+    name: "Arc Testnet",
+    chainId: 5042002,
+    attestationAddress: "0x12b886b043feABc3d90bBae3ae206d22b208160d",
+    publisherAddress: "0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a",
+    explorerBaseUrl: "https://testnet.arcscan.app",
+    anchoringLive: false,
+  };
+  const TX = `0x${"11".repeat(32)}`;
+  const anchored = (): Print => basePrint({ anchor: { chain: "base-sepolia", status: "anchored", tx_hash: TX } });
+  const render = (print: Print, chains?: (typeof BASE_CHAIN)[]) =>
+    renderPrintPage({ print, allPrints: [], basePath: "../", runsBaseUrl: RUNS_BASE, chain: BASE_CHAIN, ...(chains ? { chains } : {}) });
+
+  it("shows the full body hash, never shortened, with a copy button the page script reveals", () => {
+    const html = render(anchored(), [BASE_CHAIN, ARC_CHAIN]);
+    const hash = /<dt>Body hash<\/dt><dd><code class="hash">(0x[0-9a-f]{64})<\/code> <button type="button" class="copy" data-copy="\1" hidden>Copy<\/button>/.exec(html);
+    expect(hash).not.toBeNull();
+    expect(html).toContain('<script type="module" src="../client/copy-hash.js"></script>');
+  });
+
+  it("states the exact five fields to remove, how to canonicalise and hash, and where to get the print", () => {
+    const html = render(anchored());
+    for (const field of ["signature", "public_key", "anchor", "superseded_by", "correction_notes"]) expect(html).toContain(`<code>${field}</code>`);
+    expect(html).toContain("RFC 8785");
+    expect(html).toContain("keccak256");
+    expect(html).toContain("not NIST SHA3-256");
+    expect(html).toContain("https://raw.githubusercontent.com/petrkrulis2022/dated-siu-inference/main/data/prints/2026-08-15.json");
+  });
+
+  it("offers the one-command check and the machine-readable spec", () => {
+    const html = render(anchored());
+    expect(html).toContain("curl -O https://prints.touchstoneassay.com/verify-print.mjs");
+    expect(html).toContain("node verify-print.mjs 2026-08-15");
+    expect(html).toContain("https://prints.touchstoneassay.com/verify.json");
+    expect(html).toContain("It does not check the signature");
+  });
+
+  it("gives each chain its own section, Base Sepolia then Arc Testnet, with that chain's contract in full", () => {
+    const html = render(anchored(), [BASE_CHAIN, ARC_CHAIN]);
+    expect(html.indexOf("Anchored on Base Sepolia")).toBeGreaterThan(-1);
+    expect(html.indexOf("Anchored on Arc Testnet")).toBeGreaterThan(html.indexOf("Anchored on Base Sepolia"));
+    expect(html).toContain(`<a href="https://base-sepolia.blockscout.com/address/${BASE_CHAIN.attestationAddress}">${BASE_CHAIN.attestationAddress}</a>`);
+    expect(html).toContain(`<a href="https://testnet.arcscan.app/address/${ARC_CHAIN.attestationAddress}">${ARC_CHAIN.attestationAddress}</a>`);
+    expect(html).toContain("chain id 5042002");
+  });
+
+  it("says plainly that nothing is anchored on Arc Testnet yet, rather than implying an anchor", () => {
+    const html = render(anchored(), [BASE_CHAIN, ARC_CHAIN]);
+    expect(html).toContain("not anchored: no print has been anchored on Arc Testnet yet");
+    expect(html).toContain("Anchoring on Arc Testnet has not started");
+    // The Arc section carries no anchor link and no transaction steps.
+    const arc = html.slice(html.indexOf("Anchored on Arc Testnet"), html.indexOf("All prints"));
+    expect(arc).not.toContain("/tx/");
+    expect(arc).not.toContain("PrintPosted");
+  });
+
+  it("shows the Base Sepolia anchor transaction in full inside its section and as a row in the methodology block", () => {
+    const html = render(anchored(), [BASE_CHAIN, ARC_CHAIN]);
+    expect(html).toContain(`<a href="https://base-sepolia.blockscout.com/tx/${TX}" title="${TX}">${TX}</a>`);
+    expect(html).toContain("<dt>Anchor tx — Base Sepolia</dt>");
+    expect(html).toContain("<dt>Anchor tx — Arc Testnet</dt>");
+  });
+
+  it("renders as before for a caller that knows of one chain: a single section, no Arc anywhere", () => {
+    const html = render(anchored());
+    expect(html).toContain("Anchored on Base Sepolia");
+    expect(html).not.toContain("Arc Testnet");
+    expect(html).toContain("<dt>Anchor tx</dt>");
+  });
+});
