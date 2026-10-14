@@ -283,7 +283,23 @@
         "status": { "type": "string", "enum": ["anchored", "already-anchored", "stub", "failed"] },
         "tx_hash": { "type": "string" },
         "posted_at": { "type": "string" },
-        "notes": { "type": "string" }
+        "notes": { "type": "string" },
+        "additional_anchors": {
+          "type": "array",
+          "description": "The same body hash anchored on further chains (Arc Testnet). Best-effort by design: the chain above is the one a print must be anchored on to publish; one of these that fails or is skipped is recorded here with the reason and never blocks the print. The whole `anchor` object, this list included, is outside the signed body (build1-spec.md §6 anchors after signing), so adding a chain changes no hash and the five removed fields stay five.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "chain": { "type": "string", "minLength": 1 },
+              "status": { "type": "string", "enum": ["anchored", "already-anchored", "failed", "skipped"] },
+              "tx_hash": { "type": "string" },
+              "posted_at": { "type": "string" },
+              "notes": { "type": "string" }
+            },
+            "required": ["chain", "status"]
+          }
+        }
       },
       "required": ["chain", "status"]
     },

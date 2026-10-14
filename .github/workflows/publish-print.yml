@@ -89,6 +89,13 @@ jobs:
           TOUCHSTONE_PUBLISHER_KEY: ${{ secrets.TOUCHSTONE_PUBLISHER_KEY }}
           TOUCHSTONE_PUBLISHER_ADDRESS: ${{ secrets.TOUCHSTONE_PUBLISHER_ADDRESS }}
           BASE_SEPOLIA_RPC_URL: ${{ secrets.BASE_SEPOLIA_RPC_URL }}
+          # Arc Testnet is a second, best-effort anchor (packages/print/src/cli/publish-unattended.ts):
+          # unset, or unreachable, or an under-funded publisher wallet records "skipped"/"failed" in the
+          # print's anchor.additional_anchors and never blocks the print or its Base Sepolia anchor. The
+          # URL embeds a provider key, so it stays a secret and the code redacts it from every message.
+          # _2 is the failover provider.
+          ARC_TESTNET_RPC_URL: ${{ secrets.ARC_TESTNET_RPC_URL }}
+          ARC_TESTNET_RPC_URL_2: ${{ secrets.ARC_TESTNET_RPC_URL_2 }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           # Frontier adapters (packages/harness/src/adapters/{anthropic,openai,google}.ts) —
           # wired through now so this workflow needs no further change once the registry
@@ -310,6 +317,14 @@ jobs:
               echo "**Aborted — nothing was committed.** Check the failed step above for which guard fired (already-published no-op excepted, every other early exit is a real failure: insufficient publisher balance, no RPC configured, price fetch failure, below the minimum qualifying-set size, over the spend ceiling, or a failed anchor)."
             fi
             echo ""
+            # A further-chain (Arc Testnet) anchor that did not land never fails the run, so say so here where it is seen.
+            if [ -f publish.log ] && grep -qE "^(ARC_ANCHOR_SKIPPED|ADDITIONAL_ANCHOR_PROBLEM) " publish.log; then
+              echo "**Arc Testnet anchor did not land** (best-effort; the print and its Base Sepolia anchor are unaffected):"
+              echo '```'
+              grep -E "^(ARC_ANCHOR_SKIPPED|ADDITIONAL_ANCHOR_PROBLEM) " publish.log
+              echo '```'
+              echo ""
+            fi
             echo '```'
             cat publish.log 2>/dev/null || echo "(no publish.log — failed before the publish step ran)"
             echo '```'

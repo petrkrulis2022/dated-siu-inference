@@ -87,6 +87,8 @@ export interface OnChainAttestationOptions {
   privateKeyHex: string;
   /** Recorded verbatim into the print's `anchor.chain`, e.g. "base-sepolia". */
   chainName: string;
+  /** The chain's gas currency, which viem only uses for display. Defaults to ETH; Arc's gas currency is USDC with 18 decimals. */
+  nativeCurrency?: { name: string; symbol: string; decimals: number };
 }
 
 export class OnChainAttestationClient implements AttestationClient {
@@ -126,7 +128,7 @@ export class OnChainAttestationClient implements AttestationClient {
           chain: {
             id: chainId,
             name: options.chainName,
-            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+            nativeCurrency: options.nativeCurrency ?? { name: "Ether", symbol: "ETH", decimals: 18 },
             rpcUrls: { default: { http: [options.rpcUrl] } },
           },
         });

@@ -60,6 +60,28 @@ describe("validatePrint", () => {
     expect(result.valid).toBe(true);
   });
 
+  describe("anchor.additional_anchors (a second chain, best-effort)", () => {
+    const base = { chain: "base-sepolia", status: "anchored", tx_hash: `0x${"11".repeat(32)}`, posted_at: "2026-10-15T00:58:52.000Z" };
+    it("accepts an anchor with no additional anchors, as every published print has", () => {
+      expect(validatePrint({ ...validPrint, anchor: base }).valid).toBe(true);
+    });
+    it("accepts an Arc anchor that landed, one that failed with its reason, and one that was skipped", () => {
+      for (const extra of [
+        { chain: "arc-testnet", status: "anchored", tx_hash: `0x${"22".repeat(32)}`, posted_at: "2026-10-15T00:58:54.000Z" },
+        { chain: "arc-testnet", status: "failed", notes: "timed out after 90s; the hash may still land and is checked again on the next run" },
+        { chain: "arc-testnet", status: "skipped", notes: "publisher balance below the minimum for an anchor" },
+        { chain: "arc-testnet", status: "already-anchored", posted_at: "2026-10-15T00:58:54.000Z" },
+      ]) {
+        expect(validatePrint({ ...validPrint, anchor: { ...base, additional_anchors: [extra] } }).valid, JSON.stringify(extra)).toBe(true);
+      }
+    });
+    it("rejects an additional anchor with no chain, an unknown status (a stub is never an additional anchor), or an unknown field", () => {
+      for (const bad of [{ status: "anchored" }, { chain: "arc-testnet", status: "stub" }, { chain: "arc-testnet", status: "anchored", rpc_url: "x" }]) {
+        expect(validatePrint({ ...validPrint, anchor: { ...base, additional_anchors: [bad] } }).valid, JSON.stringify(bad)).toBe(false);
+      }
+    });
+  });
+
   it("accepts a print with methodology_revision absent — every historical print stays valid", () => {
     // validPrint itself already omits it; asserted explicitly here so a future edit to validPrint
     // that accidentally adds it wouldn't silently stop covering this case.

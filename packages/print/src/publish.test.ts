@@ -130,6 +130,87 @@ describe("publishPrint", () => {
     expect(result.print.anchor?.tx_hash).toMatch(/^0x[0-9a-f]{64}$/);
   });
 
+  describe("further chains (Arc Testnet): best-effort, recorded, never blocking", () => {
+    const base: AttestationClient = {
+      async postPrint(): Promise<AnchorResult> {
+        return { chain: "base-sepolia", status: "anchored", tx_hash: `0x${"ab".repeat(32)}`, posted_at: "2026-10-15T00:58:52.000Z" };
+      },
+    };
+    const arcOk: AttestationClient = {
+      async postPrint(): Promise<AnchorResult> {
+        return { chain: "arc-testnet", status: "anchored", tx_hash: `0x${"cd".repeat(32)}`, posted_at: "2026-10-15T00:58:54.000Z" };
+      },
+    };
+
+    it("records an Arc anchor inside the print's anchor, and the print still validates and verifies", async () => {
+      const { verifyPrintSignature } = await import("./sign/sign.js");
+      const { validatePrint } = await import("@touchstone/sdk");
+      const result = await publishPrint(dir, publishInput({ attestationClient: base, secondaryAttestations: [{ chainName: "arc-testnet", client: arcOk }] }));
+      expect(result.print.anchor?.chain).toBe("base-sepolia");
+      expect(result.print.anchor?.additional_anchors).toEqual([
+        { chain: "arc-testnet", status: "anchored", tx_hash: `0x${"cd".repeat(32)}`, posted_at: "2026-10-15T00:58:54.000Z" },
+      ]);
+      expect(validatePrint(result.print).valid).toBe(true);
+      expect(verifyPrintSignature(result.print).valid).toBe(true);
+      expect(JSON.parse(await readFile(result.write.path, "utf-8")).anchor.additional_anchors).toHaveLength(1);
+    });
+
+    it("changes no hash: the body hash is the same with and without an additional anchor", async () => {
+      const { printBodyHashHex } = await import("./sign/canonicalise.js");
+      const without = await publishPrint(dir, publishInput({ attestationClient: base }));
+      const dir2 = await mkdtemp(join(tmpdir(), "touchstone-print-publish-b-"));
+      try {
+        const withArc = await publishPrint(dir2, publishInput({ attestationClient: base, secondaryAttestations: [{ chainName: "arc-testnet", client: arcOk }] }));
+        expect(printBodyHashHex(withArc.print)).toBe(printBodyHashHex(without.print));
+        expect(withArc.print.signature).toBe(without.print.signature);
+      } finally {
+        await rm(dir2, { recursive: true, force: true });
+      }
+    });
+
+    it("publishes anyway when Arc throws, and records why, with no URL or key in the print", async () => {
+      const down: AttestationClient = {
+        async postPrint(): Promise<AnchorResult> {
+          throw new Error("HTTP request failed.\nURL: https://arc-testnet-rpc.crouton.digital/0123456789abcdef0123456789abcdef0123456789abcdef\nDetails: fetch failed");
+        },
+      };
+      const result = await publishPrint(dir, publishInput({ attestationClient: base, secondaryAttestations: [{ chainName: "arc-testnet", client: down }] }));
+      expect(result.print.anchor?.status).toBe("anchored");
+      const arc = result.print.anchor?.additional_anchors?.[0];
+      expect(arc?.status).toBe("failed");
+      expect(JSON.stringify(result.print)).not.toContain("0123456789abcdef0123456789abcdef");
+      expect(await readFile(result.write.path, "utf-8")).not.toContain("crouton.digital/0123");
+    });
+
+    it("records a skip with its reason, and a late answer as a failure that does not stall the print", async () => {
+      const { SkippingAttestationClient } = await import("./anchor/attestation.js");
+      const never: AttestationClient = { postPrint: () => new Promise<AnchorResult>(() => undefined) };
+      const result = await publishPrint(
+        dir,
+        publishInput({
+          attestationClient: base,
+          secondaryAttestations: [
+            { chainName: "arc-testnet", client: new SkippingAttestationClient("publisher balance too low") },
+            { chainName: "another-chain", client: never, timeoutMs: 30 },
+          ],
+        }),
+      );
+      expect(result.print.anchor?.additional_anchors?.map((a) => [a.chain, a.status])).toEqual([["arc-testnet", "skipped"], ["another-chain", "failed"]]);
+      expect(result.print.anchor?.additional_anchors?.[0].notes).toBe("publisher balance too low");
+      expect(result.print.anchor?.additional_anchors?.[1].notes).toMatch(/no confirmation within/);
+    });
+
+    it("still refuses to publish when the REQUIRED chain fails, whatever Arc did", async () => {
+      const failedBase: AttestationClient = { async postPrint(): Promise<AnchorResult> { return { chain: "base-sepolia", status: "failed", notes: "reverted" }; } };
+      await expect(publishPrint(dir, publishInput({ attestationClient: failedBase, secondaryAttestations: [{ chainName: "arc-testnet", client: arcOk }] }))).rejects.toThrow(/anchoring failed/);
+    });
+
+    it("leaves the anchor exactly as before when no further chain is configured", async () => {
+      const result = await publishPrint(dir, publishInput({ attestationClient: base }));
+      expect("additional_anchors" in (result.print.anchor ?? {})).toBe(false);
+    });
+  });
+
   it("produces a print whose signature survives its own anchor", async () => {
     const { verifyPrintSignature } = await import("./sign/sign.js");
     const result = await publishPrint(dir, publishInput());

@@ -12,6 +12,9 @@ import {
   StubAttestationClient,
   type AnchorResult,
   type AttestationClient,
+  anchorBestEffort,
+  type AdditionalAnchor,
+  type SecondaryAttestation,
 } from "./anchor/attestation.js";
 
 export interface InvalidRecordReport {
@@ -174,6 +177,11 @@ export function computeConstituentChangesForSeries(
 export interface PublishInput extends Omit<PrintInput, "status"> {
   privateKeyHex: string;
   attestationClient?: AttestationClient;
+  /**
+   * Further chains to anchor the same body hash on, after the required one has landed (Arc Testnet). Best-effort: each result, including a failure or a skip with its reason,
+   * is recorded in `anchor.additional_anchors` and none of them can stop the print being published. `anchor` is outside the signed body, so this changes no hash.
+   */
+  secondaryAttestations?: SecondaryAttestation[];
   /** Refuse before signing or anchoring if the real spend for this print (every recorded
    * attempt across every registered model, per computeCostOfProduction) exceeds this — a
    * runaway-spend guard for unattended runs. Omit for manual publishing, where a human
@@ -341,7 +349,11 @@ export async function publishPrint(printsDir: string, input: PublishInput): Prom
     );
   }
 
-  const print: Print = { ...signed, anchor };
+  // The required chain has landed, so the print is publishable whatever happens next. Each further chain is tried in turn and its outcome recorded, never thrown.
+  const hash = printBodyHashHex(signed);
+  const additional: AdditionalAnchor[] = [];
+  for (const secondary of input.secondaryAttestations ?? []) additional.push(await anchorBestEffort(secondary, hash, signed.version));
+  const print: Print = { ...signed, anchor: additional.length > 0 ? { ...anchor, additional_anchors: additional } : anchor };
 
   // signPrintBody already validated `signed`; anchor is new since, so validate the final
   // object too rather than assume adding it can't have broken anything.

@@ -1,7 +1,7 @@
 import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createPublicClient, http, parseEther, type Hex } from "viem";
-import { loadDeployment } from "@touchstone/sdk";
+import { loadDeployment, type Print } from "@touchstone/sdk";
 import {
   BASKET_VERSION,
   TASK_CLASSES,
@@ -24,6 +24,7 @@ import {
 import { batchDiscountVariant, cachePolicyVariant } from "../compute/sensitivity.js";
 import { loadPublisherKeyFromEnv } from "../sign/sign.js";
 import { OnChainAttestationClient } from "../anchor/on-chain.js";
+import { FallbackAttestationClient, SkippingAttestationClient, type SecondaryAttestation } from "../anchor/attestation.js";
 import { D } from "../decimal.js";
 import {
   computeConstituentChanges,
@@ -115,6 +116,14 @@ if (priorIncident) {
 // anchored anyway. Same 0.01 ETH floor the operator console's health panel already flags as
 // low.
 const MIN_PUBLISHER_ETH = parseEther("0.01");
+
+/**
+ * Arc Testnet is a second place each print's hash is anchored, best-effort: a failure there is recorded in the print and never stops it. Its gas currency is USDC
+ * (18 decimals at the protocol level), and an anchor costs about 0.0012 of it, so a day's three anchors need about 0.0036. Below this the anchors are skipped, with the
+ * reason in the print and a greppable line in the log, rather than sent to fail.
+ */
+const ARC_CHAIN_NAME = "arc-testnet";
+const MIN_ARC_BALANCE_WEI = 4_000_000_000_000_000n;
 const publisherAddress = process.env.TOUCHSTONE_PUBLISHER_ADDRESS;
 if (!publisherAddress) {
   console.error("TOUCHSTONE_PUBLISHER_ADDRESS is not set — cannot check the gas balance.");
@@ -170,6 +179,51 @@ const attestationClient = new OnChainAttestationClient({
   privateKeyHex,
   chainName,
 });
+
+// Arc Testnet, a second anchor. Two providers are configured (ARC_TESTNET_RPC_URL, then ARC_TESTNET_RPC_URL_2 as failover). The URLs carry an access key and are never logged.
+const arcRpcUrls = [process.env.ARC_TESTNET_RPC_URL, process.env.ARC_TESTNET_RPC_URL_2].filter((u): u is string => Boolean(u));
+let secondaryAttestations: SecondaryAttestation[] = [];
+if (arcRpcUrls.length === 0) {
+  console.log("Arc Testnet anchoring: not configured (ARC_TESTNET_RPC_URL is not set); anchoring on Base Sepolia only.");
+} else {
+  const arcContract = loadDeployment(ARC_CHAIN_NAME).contracts.TouchstoneAttestation.address;
+  const arcClients = arcRpcUrls.map(
+    (url) =>
+      new OnChainAttestationClient({
+        rpcUrl: url,
+        contractAddress: arcContract,
+        privateKeyHex,
+        chainName: ARC_CHAIN_NAME,
+        nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
+      }),
+  );
+  let arcBalance: bigint | undefined;
+  for (const url of arcRpcUrls) {
+    try {
+      arcBalance = await createPublicClient({ transport: http(url) }).getBalance({ address: publisherAddress as Hex });
+      break;
+    } catch {
+      // This provider did not answer; try the next.
+    }
+  }
+  if (arcBalance !== undefined && arcBalance < MIN_ARC_BALANCE_WEI) {
+    const reason = `publisher balance on Arc Testnet is ${arcBalance} wei, below the ${MIN_ARC_BALANCE_WEI} wei an anchor run needs; top it up from the Arc faucet`;
+    console.log(`ARC_ANCHOR_SKIPPED ${JSON.stringify({ reason })}`);
+    secondaryAttestations = [{ chainName: ARC_CHAIN_NAME, client: new SkippingAttestationClient(reason) }];
+  } else {
+    if (arcBalance === undefined) console.log("Arc Testnet: the publisher's balance could not be read from any configured provider; trying to anchor anyway.");
+    else console.log(`Arc Testnet anchoring: configured with ${arcRpcUrls.length} provider(s); publisher balance ${arcBalance} wei.`);
+    secondaryAttestations = [{ chainName: ARC_CHAIN_NAME, client: new FallbackAttestationClient(arcClients) }];
+  }
+}
+
+/** One line per further anchor, and a greppable line for any that did not land, so a workflow step can raise it. Never throws. */
+function logAdditionalAnchors(label: string, print: Pick<Print, "print_id" | "anchor">): void {
+  for (const a of print.anchor?.additional_anchors ?? []) {
+    console.log(`${label} additional anchor: ${a.status} (${a.chain})${a.tx_hash ? ` ${a.tx_hash}` : ""}`);
+    if (a.status === "failed" || a.status === "skipped") console.log(`ADDITIONAL_ANCHOR_PROBLEM ${JSON.stringify({ print_id: print.print_id, ...a })}`);
+  }
+}
 
 const snapshotFile = await latestPriceSnapshotFile("merged");
 const registry = await loadRegistry();
@@ -297,6 +351,7 @@ try {
     methodology_revision: METHODOLOGY_REVISION,
     privateKeyHex,
     attestationClient,
+    secondaryAttestations,
     spendCeilingUsd: effectiveSpendCeilingUsd,
     runsDirPath: runsDirFor(printId),
     priorAttempts,
@@ -317,6 +372,7 @@ try {
   console.log(`Dated SIU ${result.print.dated_siu} (${result.print.status})`);
   console.log(`Cost of production: $${result.print.cost_of_production_usd}`);
   console.log(`Anchor: ${result.anchor.status} (${result.anchor.chain})`);
+  logAdditionalAnchors("Dated SIU", result.print);
 
   // Per-provider daily spend summary, sibling to the run manifest — never part of the signed
   // print body. Written from the same `records`/prices already loaded for this run, so a real
@@ -393,6 +449,7 @@ try {
         methodology_revision: METHODOLOGY_REVISION,
         privateKeyHex,
         attestationClient,
+        secondaryAttestations,
         series,
         constituentChanges: seriesConstituentChanges,
         sensitivityVariants: [
@@ -408,6 +465,7 @@ try {
       console.log(
         `${series} SIU: published ${seriesResult.print.dated_siu} (${seriesResult.print.print_id})`,
       );
+      logAdditionalAnchors(`${series} SIU`, seriesResult.print);
     } catch (seriesErr) {
       if (seriesErr instanceof QualifyingSetError) {
         console.log(
