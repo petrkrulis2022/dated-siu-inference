@@ -191,14 +191,19 @@ jobs:
           Automated daily run. Cadence and cut-off: docs/methodology.md, Index governance."
           git push origin main
 
-      # Deliberately continue-on-error: a Twitter/X API hiccup must never mark a successful,
-      # already signed-and-anchored, already-pushed print's run as failed — same reasoning this
-      # workflow's own header comment gives for why site publication isn't gated on the JS/
-      # Solidity suite. Only ever fires for the headline Dated SIU print (this step's own
-      # PRINT_ID), never the same day's -frontier/-commodity sub-prints, so this is one tweet a
-      # day. Verified live, 2026-09-13, against the real API before this step was added —
+      # continue-on-error stays, so a Twitter/X failure cannot stop the steps after this one (the
+      # billing-exhaustion check, the job summary) from running, and cannot make the run look like
+      # the PRINT failed: it is already signed, anchored and pushed by here. But continue-on-error
+      # on its own also means GitHub never emails anyone, because the job ends green. That is how
+      # tweets stopped on 2026-10-13 (X API 402 "credits depleted") with no notice for three days.
+      # So the "Fail loudly on tweet failure" step below turns a failed tweet into a failed run,
+      # which is what produces GitHub's failure email, the same way billing exhaustion does.
+      # Only ever fires for the headline Dated SIU print (this step's own PRINT_ID), never the same
+      # day's -frontier/-commodity sub-prints, so this is one tweet a day. Verified live,
+      # 2026-09-13, against the real API before this step was added —
       # https://x.com/touchstoneassay/status/2099389774620450981.
       - name: Tweet the print
+        id: tweet
         if: steps.publish.outputs.status == 'published'
         continue-on-error: true
         env:
@@ -207,7 +212,9 @@ jobs:
           X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
           X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
           PRINT_ID: ${{ steps.resolve.outputs.print_id }}
-        run: pnpm --filter @touchstone/print exec node dist/cli/tweet.js "$PRINT_ID"
+        run: |
+          set -o pipefail
+          pnpm --filter @touchstone/print exec node dist/cli/tweet.js "$PRINT_ID" 2>&1 | tee tweet.log
 
       # Real, greppable disclosure: our own prepaid provider credit ran out for at least one
       # constituent today (packages/harness/src/retry.ts's billing_exhausted category — see
@@ -225,6 +232,22 @@ jobs:
             grep "^BILLING_EXHAUSTED_SUMMARY " publish.log | sed 's/^BILLING_EXHAUSTED_SUMMARY //'
             exit 1
           fi
+
+      # Fails the run when the tweet did not post, so GitHub emails the failure. `outcome` is the
+      # step's result BEFORE continue-on-error is applied (`conclusion` would read "success"), and
+      # always() so this still runs when the billing step above already failed the job. Skipped, not
+      # failed, when there was no tweet to send (a no-op retry), so the 04:17 retry never repeats
+      # the email. Deliberately placed after everything that publishes, verifies, commits and pushes
+      # the print, and it does not touch "Record a failed run": that step only fires when no print
+      # was published, so a tweet failure can never be recorded as a missed day.
+      - name: Fail loudly on tweet failure
+        if: always() && steps.tweet.outcome == 'failure'
+        run: |
+          REASON=$(grep -m1 -E "^(Error: )?Tweet failed: |^Error: " tweet.log 2>/dev/null | sed -E 's/^Error: //' | cut -c1-300)
+          [ -n "$REASON" ] || REASON="no reason captured; see the 'Tweet the print' step in this run's log"
+          echo "::error title=Tweet not posted::The print is published, signed and anchored, but today's tweet did not post: ${REASON}"
+          echo "A 402 'credits depleted' means the X API account is out of credits: top them up in the X developer console, then post today's tweet (the print itself needs nothing)."
+          exit 1
 
       # A missed day is disclosed on the public site (site/src/data.ts's loadIncidents), not
       # silently absent — the same "the record must tell the truth" principle the supersession
@@ -303,6 +326,7 @@ jobs:
           PRINT_ID: ${{ steps.resolve.outputs.print_id }}
           JOB_STATUS: ${{ job.status }}
           PUBLISH_STATUS: ${{ steps.publish.outputs.status }}
+          TWEET_OUTCOME: ${{ steps.tweet.outcome }}
         run: |
           {
             echo "## Print: $PRINT_ID"
@@ -312,7 +336,14 @@ jobs:
             elif [ "$JOB_STATUS" = "success" ]; then
               echo "Published, verified, and pushed. See publish.log below for the run's own summary."
             elif [ "$PUBLISH_STATUS" = "published" ]; then
-              echo "Published, verified, committed and pushed — **but this run is marked failed** because at least one constituent hit billing_exhausted (our own prepaid provider credit ran out). The print itself is real and already on \`main\`; see the \"Fail loudly on billing exhaustion\" step above for which model(s), then top up the affected provider before the next scheduled run."
+              echo "Published, verified, committed and pushed — **but this run is marked failed**, after the print was already safely on \`main\`. Why:"
+              echo ""
+              if [ -f publish.log ] && grep -q "^BILLING_EXHAUSTED_SUMMARY " publish.log; then
+                echo "- **Provider credit.** At least one constituent hit billing_exhausted (our own prepaid provider credit ran out). See the \"Fail loudly on billing exhaustion\" step above for which model(s), then top up the affected provider before the next scheduled run."
+              fi
+              if [ "$TWEET_OUTCOME" = "failure" ]; then
+                echo "- **Tweet.** Today's tweet did not post (\"Fail loudly on tweet failure\" step above has the API's reason; a 402 means the X API account is out of credits). The print is unaffected."
+              fi
             else
               echo "**Aborted — nothing was committed.** Check the failed step above for which guard fired (already-published no-op excepted, every other early exit is a real failure: insufficient publisher balance, no RPC configured, price fetch failure, below the minimum qualifying-set size, over the spend ceiling, or a failed anchor)."
             fi
