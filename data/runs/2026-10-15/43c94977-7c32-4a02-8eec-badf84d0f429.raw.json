@@ -1,0 +1,39 @@
+{
+  "id": "26b75ee1-a7fe-9411-a9c7-01e61cfd2cf4",
+  "object": "chat.completion",
+  "created": 1792025845,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"tracking_id\":\"SH-22C5BC\",\"origin_city\":\"Osaka\",\"destination_city\":\"Gdansk\",\"weight_kg\":38,\"status\":\"delivered\",\"priority\":\"standard\"}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nThe shipment SH-22C5BC originated in Osaka and is destined for Gdansk. It weighs 38 kilograms with standard priority and has been delivered.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1561,
+    "completion_tokens": 45,
+    "total_tokens": 1924,
+    "prompt_tokens_details": {
+      "text_tokens": 1561,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 318,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 45320000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
