@@ -1,0 +1,12 @@
+{
+  "note": "The trial's budgets (docs/marketplace_plan.md D72, D73, §16.11). A provider's trial budget is its balance minus printReserveUsd. A provider with no entry under balances has NO budget and the spend guard refuses to spend there. printReserveUsd is 30 days of the print's measured spend per provider (7 days of real runs priced from the 2026-10-15 snapshot). Record a balance, with the time it was read, after each top-up.",
+  "dailyCapUsd": "9",
+  "printReserveUsd": {
+    "anthropic": "15.09",
+    "openai": "7.02",
+    "google": "18.78",
+    "xai": "8.25",
+    "openrouter": "2.76"
+  },
+  "balances": {}
+}

@@ -38,3 +38,7 @@ data/.cache/
 .astro/
 .wrangler/
 marketing/logs/
+
+# Blockworks trial (lab series CR): LICENSED data, public repo. Responses, snapshots, raw model output that may restate data and the MCP login live under
+# data/private/ and nowhere else; the committed side of the trial is data/lab/cr/ (hashes, spend, budgets only). A test fails if anything here is tracked.
+data/private/

@@ -163,6 +163,16 @@ importers:
         specifier: ^8.2.1
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.9.0)
 
+  packages/cr-lab:
+    dependencies:
+      '@touchstone/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+    devDependencies:
+      '@types/node':
+        specifier: ^26.2.0
+        version: 26.2.0
+
   packages/gate-market-agents:
     dependencies:
       '@touchstone/agents':
