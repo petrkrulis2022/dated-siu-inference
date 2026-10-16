@@ -1,0 +1,87 @@
+/**
+ * Runs the data desk end to end on the FIXTURES backend: pulls one query from each dataset family the four tasks use, shows the hashes, then pulls them all again and checks
+ * that nothing was requested twice. Uses the real desk, governor, store and manifest at their default fixture paths (all under `data/private/`, never committed).
+ * Spends nothing, reads no key, calls no network. `pnpm --filter @touchstone/cr-lab run desk-smoke [YYYY-MM-DD]`
+ */
+import { completeMonthsWindow, quarterWindow } from "../data-desk/dates.js";
+import { DataDesk, type Snapshot } from "../data-desk/desk.js";
+import { FixtureBackend } from "../data-desk/fixtures/backend.js";
+import { FIXTURE_AS_OF } from "../data-desk/fixtures/world.js";
+import { RateGovernor } from "../data-desk/governor.js";
+import { catalog } from "../data-desk/queries.js";
+import { SnapshotStore, defaultStoreOptions } from "../data-desk/snapshots.js";
+import type { Json } from "../data-desk/json-decimal.js";
+import { addDays } from "../data-desk/dates.js";
+import type { Query } from "../data-desk/types.js";
+
+const window = process.argv[2] ?? FIXTURE_AS_OF;
+const backend = new FixtureBackend();
+const store = new SnapshotStore(defaultStoreOptions("fixtures"));
+// Fixtures have no real rate limit, so no spacing; the live desk keeps the governor's defaults.
+const governor = new RateGovernor({
+  overrides: { "data-api": { minIntervalMs: 0 }, "token-unlocks": { minIntervalMs: 0 } },
+});
+const desk = new DataDesk({ backend, store, governor, log: (line) => console.log(`  ${line}`) });
+
+const rows = (s: Snapshot): Record<string, Json>[] =>
+  (s.json as { data: Record<string, Json>[] }).data;
+const str = (v: Json | undefined): string => String(v);
+
+async function pullAll(): Promise<Snapshot[]> {
+  const out: Snapshot[] = [];
+  const pull = async (q: Query) => {
+    const s = await desk.pull(q, { window });
+    out.push(s);
+    return s;
+  };
+  // CR-VS: venues, then three venues' daily volume over the last 12 complete months
+  const venues = rows(await pull(catalog.perpVenues())).map((r) => str(r.id));
+  const months = completeMonthsWindow(window);
+  await pull(catalog.perpVolume(venues.slice(0, 3), months.start, months.end));
+  // CR-PL: lending protocols, then one protocol's last complete quarter
+  const protocols = rows(await pull(catalog.lendingProtocols())).map((r) => str(r.id));
+  const q = quarterWindow(
+    Number(window.slice(0, 4)),
+    Math.ceil(Number(window.slice(5, 7)) / 3) - 1 || 4,
+  );
+  await pull(catalog.lendingFinancials(protocols[0] as string, q.start, q.end));
+  // CR-UO: the token list, one token's id, its events for the next 90 days and its circulating supply
+  const tokens = rows(await pull(catalog.tokenUnlockAssets()));
+  const slug = str(tokens[0]?.slug);
+  const assetId = str(rows(await pull(catalog.assetBySlug(slug)))[0]?.assetID);
+  await pull(catalog.tokenUnlockEvents(slug, window, addDays(window, 90)));
+  await pull(catalog.assetSupply(assetId, window, addDays(window, 1)));
+  // CR-SM: the stablecoin contracts, then the first and last supply and price of three over 90 days
+  const contracts = rows(await pull(catalog.stablecoinContracts(1))).map((r) => str(r.id));
+  await pull(
+    catalog.stablecoinSupply(contracts.slice(0, 3), addDays(window, -90), addDays(window, 1)),
+  );
+  return out;
+}
+
+console.log(`data desk on fixtures, window ${window}`);
+const first = await pullAll();
+const requestsFirst = backend.requests.length;
+console.log(`first pass: ${first.length} snapshots, ${requestsFirst} requests`);
+const second = await pullAll();
+const extra = backend.requests.length - requestsFirst;
+console.log(
+  `second pass: ${second.length} snapshots, ${extra} new requests, ${second.filter((s) => s.fromStore).length} served from the store`,
+);
+const manifest = store.manifest(window);
+console.log(
+  `manifest: ${manifest?.entries.length ?? 0} entries (hashes only), backend ${manifest?.entries[0]?.backend}`,
+);
+for (const r of governor.report())
+  console.log(
+    `governor ${r.group}: ${r.requestsToday} requests today of ${r.limit}, ${r.backoffs} back-offs`,
+  );
+if (
+  extra !== 0 ||
+  second.some((s) => !s.fromStore) ||
+  (manifest?.entries.length ?? 0) !== first.length
+) {
+  console.error("FAILED: a query was pulled twice, or the manifest does not list every snapshot");
+  process.exit(1);
+}
+console.log("ok: every query pulled once, then served from the store");

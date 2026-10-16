@@ -17,14 +17,23 @@ export const PRIVATE_DIR = resolve(REPO_ROOT, PRIVATE_DIR_REL);
 export const CR_PUBLIC_DIR_REL = "data/lab/cr";
 export const CR_PUBLIC_DIR = resolve(REPO_ROOT, CR_PUBLIC_DIR_REL);
 
+/** An absolute path inside `root`. Throws if `segments` are absolute or climb out (`..`). */
+export function pathWithin(root: string, ...segments: string[]): string {
+  const target = resolve(root, ...segments);
+  const rel = relative(root, target);
+  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+    throw new Error(`refusing a path outside ${root}: ${segments.join("/")}`);
+  }
+  return target;
+}
+
 /** An absolute path inside `PRIVATE_DIR`. Throws if `segments` are absolute or climb out (`..`), so a bug cannot write licensed data to a tracked path. */
 export function privatePath(...segments: string[]): string {
-  const target = resolve(PRIVATE_DIR, ...segments);
-  const rel = relative(PRIVATE_DIR, target);
-  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+  try {
+    return pathWithin(PRIVATE_DIR, ...segments);
+  } catch {
     throw new Error(
       `refusing a path outside the private Blockworks directory (${PRIVATE_DIR_REL}): ${segments.join("/")}`,
     );
   }
-  return target;
 }
