@@ -1,0 +1,39 @@
+{
+  "id": "41aefa31-c139-98c1-a3f7-05616ad0fe7a",
+  "object": "chat.completion",
+  "created": 1792112244,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "FFC8EF\nFC3D72\n5E39EB\n88A2CD",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nFour access codes were found: FFC8EF for the western annex, FC3D72 for the coastal annex, 5E39EB for the central annex, and 88A2CD for the northern annex.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21800,
+    "completion_tokens": 19,
+    "total_tokens": 22192,
+    "prompt_tokens_details": {
+      "text_tokens": 21800,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 373,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 451840000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

@@ -1,0 +1,39 @@
+{
+  "id": "7d028f29-3b38-96b2-935f-dbb0f153bd79",
+  "object": "chat.completion",
+  "created": 1792112241,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "A15DAD\n91527F\n8F3557\n192A2A",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes so far: A15DAD, 91527F, 8F3557, and 192A2A.\n\nNo additional access codes were found.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21818,
+    "completion_tokens": 17,
+    "total_tokens": 22301,
+    "prompt_tokens_details": {
+      "text_tokens": 21818,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 466,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 457660000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
