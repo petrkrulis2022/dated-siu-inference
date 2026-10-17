@@ -3,7 +3,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { SnapshotRunResult } from "../data-desk/snapshot-run.js";
-import { MemoryAlertSink, FileAlertSink, ToastAlertSink } from "./alert.js";
+import {
+  CompositeAlertSink,
+  EMAIL_ENV,
+  EmailAlertFailed,
+  EmailAlertSink,
+  FileAlertSink,
+  MemoryAlertSink,
+  ToastAlertSink,
+  emailSinkFromEnv,
+} from "./alert.js";
+import { Secret } from "../keys.js";
 import {
   ALERT_GAP_MS,
   REQUEST_CEILING,
@@ -307,5 +317,110 @@ describe("alert sinks", () => {
       attempts: [],
       alerts: {},
     });
+  });
+});
+
+describe("the email alert sink", () => {
+  const alert = {
+    at: "2026-10-18T04:00:00.000Z",
+    kind: "pull-failed" as const,
+    window: "2026-10-18",
+    message: "2 steps of the snapshot failed (lending batch 3); it will be retried",
+  };
+  const TOKEN = "cf-test-token-0123456789";
+  const cfg = () => ({
+    accountId: "acct123",
+    apiToken: new Secret("CR_ALERT_CF_API_TOKEN", TOKEN),
+    from: "alerts@touchstoneassay.com",
+    to: "inbox@example.com",
+  });
+  const reply = (status: number, body: unknown): typeof fetch =>
+    (async () =>
+      new Response(typeof body === "string" ? body : JSON.stringify(body), {
+        status,
+      })) as typeof fetch;
+
+  it("posts the alert to Cloudflare's send endpoint for the account, with the token as a bearer and the sentence as the text", async () => {
+    const seen: { url: string; init: RequestInit }[] = [];
+    const f = (async (url: string, init: RequestInit) => {
+      seen.push({ url, init });
+      return new Response(
+        JSON.stringify({ success: true, errors: [], result: { delivered: ["inbox@example.com"] } }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+    await new EmailAlertSink(cfg(), f).send(alert);
+    expect(seen[0]?.url).toBe(
+      "https://api.cloudflare.com/client/v4/accounts/acct123/email/sending/send",
+    );
+    expect((seen[0]?.init.headers as Record<string, string>).authorization).toBe(`Bearer ${TOKEN}`);
+    const body = JSON.parse(seen[0]?.init.body as string);
+    expect(body).toMatchObject({
+      from: "alerts@touchstoneassay.com",
+      to: "inbox@example.com",
+      subject: "[Touchstone CR] pull-failed, 2026-10-18",
+    });
+    expect(body.text).toContain(alert.message);
+    expect(body.text).toContain("holds no Blockworks data");
+  });
+
+  it("a refusal says the status and Cloudflare's codes, and nothing from the response body or the token", async () => {
+    const f = reply(403, {
+      success: false,
+      errors: [{ code: 10102, message: `token ${TOKEN} lacks permission` }],
+      result: null,
+    });
+    const err = await new EmailAlertSink(cfg(), f).send(alert).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(EmailAlertFailed);
+    expect(String(err)).toContain("HTTP 403");
+    expect(String(err)).toContain("codes 10102");
+    expect(String(err)).not.toContain(TOKEN);
+    expect(String(err)).not.toContain("lacks permission");
+  });
+
+  it("treats a 200 that is not success, a body that is not JSON, and a network error as failures", async () => {
+    await expect(
+      new EmailAlertSink(cfg(), reply(200, { success: false, errors: [] })).send(alert),
+    ).rejects.toBeInstanceOf(EmailAlertFailed);
+    await expect(
+      new EmailAlertSink(cfg(), reply(200, "<html>")).send(alert),
+    ).rejects.toBeInstanceOf(EmailAlertFailed);
+    const down = (async () => {
+      throw new TypeError("fetch failed");
+    }) as unknown as typeof fetch;
+    await expect(new EmailAlertSink(cfg(), down).send(alert)).rejects.toThrow();
+  });
+
+  it("is built from the four .env settings only when all four are present, and names the missing ones, never a value", () => {
+    const all = {
+      [EMAIL_ENV.accountId]: "acct123",
+      [EMAIL_ENV.apiToken]: TOKEN,
+      [EMAIL_ENV.from]: "alerts@touchstoneassay.com",
+      [EMAIL_ENV.to]: "inbox@example.com",
+    };
+    expect(emailSinkFromEnv(all).sink).toBeInstanceOf(EmailAlertSink);
+    const partial = { ...all, [EMAIL_ENV.apiToken]: "  " };
+    const r = emailSinkFromEnv(partial);
+    expect(r.sink).toBeUndefined();
+    expect(r.missing).toEqual([EMAIL_ENV.apiToken]);
+    expect(JSON.stringify(r)).not.toContain(TOKEN);
+    expect(emailSinkFromEnv({}).missing).toHaveLength(4);
+  });
+
+  it("the token cannot leak through the config: it prints and serialises as a placeholder", () => {
+    expect(JSON.stringify(cfg())).not.toContain(TOKEN);
+    expect(String(cfg().apiToken)).not.toContain(TOKEN);
+  });
+
+  it("a failing channel is reported by name and reason while the others still run", async () => {
+    const reported: [string, string][] = [];
+    const good = new MemoryAlertSink();
+    const bad = new EmailAlertSink(
+      cfg(),
+      reply(403, { success: false, errors: [{ code: 10102 }] }),
+    );
+    await new CompositeAlertSink([bad, good], (n, r) => reported.push([n, r])).send(alert);
+    expect(good.alerts).toHaveLength(1);
+    expect(reported).toEqual([["EmailAlertSink", "alert email refused: HTTP 403, codes 10102"]]);
   });
 });
