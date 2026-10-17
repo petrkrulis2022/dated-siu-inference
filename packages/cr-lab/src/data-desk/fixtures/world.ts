@@ -108,7 +108,6 @@ export interface Contract {
   chain: string;
   issuerID: string;
   networkID: string;
-  category: "stablecoins" | "defi";
   /** native units (6 decimals) at the as-of date, and the daily change in them */
   baseSupply: bigint;
   dailyDrift: bigint;
@@ -186,7 +185,6 @@ export class FixtureWorld {
             chain,
             issuerID: issuer,
             networkID: chain,
-            category: "stablecoins",
             baseSupply: base,
             dailyDrift: drift,
           });
@@ -194,16 +192,6 @@ export class FixtureWorld {
       }
     }
     out[2] = { ...(out[2] as Contract), depegFrom: addDays(this.asOf, -9) }; // one contract that has lost its peg
-    for (let i = 0; i < 6; i++)
-      out.push({
-        id: `fixture-chain-a_0xdefi${i}`,
-        chain: "fixture-chain-a",
-        issuerID: "fixture-issuer-1",
-        networkID: "fixture-chain-a",
-        category: "defi",
-        baseSupply: 1_000_000_000_000n,
-        dailyDrift: 0n,
-      });
     return out;
   }
 
@@ -309,19 +297,50 @@ export class FixtureWorld {
     };
   }
 
-  contractPoint(c: Contract, day: string): Point {
+  /** A contract's supply on `day`, in millionths of a token, never below one unit. */
+  contractSupply(c: Contract, day: string): bigint {
     const raw = c.baseSupply + c.dailyDrift * BigInt(daysBetween(this.asOf, day));
-    const supply = raw < 1n ? 1n : raw;
+    return raw < 1n ? 1n : raw;
+  }
+
+  /** A contract's price on `day`, in millionths of a dollar: near one dollar, and 0.62 from the day a contract loses its peg. */
+  contractPriceMicro(c: Contract, day: string): bigint {
     const depegged = c.depegFrom !== undefined && daysBetween(c.depegFrom, day) >= 0;
-    const priceMicro = depegged
-      ? 620_000n
-      : BigInt(999_000 + draw(this.seed, c.id, dayNo(day), 2_000));
+    return depegged ? 620_000n : BigInt(999_000 + draw(this.seed, c.id, dayNo(day), 2_000));
+  }
+
+  /** Circulating supply in USD (millionths) of a set of contracts on `day`: supply times that day's price, summed. */
+  #usd(cs: readonly Contract[], day: string): bigint {
+    return cs.reduce(
+      (sum, c) =>
+        sum + (this.contractSupply(c, day) * this.contractPriceMicro(c, day)) / 1_000_000n,
+      0n,
+    );
+  }
+
+  /** A chain's daily point: the stablecoins deployed on it, summed across issuers. */
+  chainPoint(chain: string, day: string): Point | undefined {
+    const cs = this.contracts.filter((c) => c.chain === chain);
+    if (cs.length === 0) return undefined;
     return {
       t: unixAt(day),
       v: {
-        supplyTotal: decimalText(supply, 6),
-        supplyIssued: decimalText(supply, 6),
-        priceUSD: decimalText(priceMicro, 6),
+        stablecoinCount: String(cs.length),
+        circulatingSupplyUSD: decimalText(this.#usd(cs, day), 6),
+      },
+    };
+  }
+
+  /** An issuer's daily point: its stablecoins, summed across chains. */
+  issuerPoint(issuer: string, day: string): Point | undefined {
+    const cs = this.contracts.filter((c) => c.issuerID === issuer);
+    if (cs.length === 0) return undefined;
+    return {
+      t: unixAt(day),
+      v: {
+        chainCount: String(new Set(cs.map((c) => c.chain)).size),
+        stablecoinCount: String(cs.length),
+        circulatingSupplyUSD: decimalText(this.#usd(cs, day), 6),
       },
     };
   }

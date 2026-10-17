@@ -156,7 +156,7 @@ say(`   lending protocols found: ${lendIds.length}`);
 for (const id of lendIds.slice(0, 2)) {
   const fin = await pull(
     `lending financials, one protocol, last complete quarter (${quarter.start} to ${quarter.end})`,
-    catalog.lendingFinancials(id, quarter.start, quarter.end),
+    catalog.lendingFinancials([id], quarter.start, quarter.end),
   );
   const lv = view(fin);
   const pts = lv?.series[0]?.points ?? [];
@@ -340,7 +340,7 @@ for (const f of (withRate.length > 0 ? withRate : found).slice(0, 2)) {
   if (idv !== undefined)
     await pull(
       "circulating supply, the last two days",
-      catalog.assetSupply(idv, addDays(today, -2), today),
+      catalog.assetSupply([idv], addDays(today, -2), today),
     );
 }
 

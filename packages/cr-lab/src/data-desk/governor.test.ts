@@ -288,4 +288,35 @@ describe("RateGovernor", () => {
       at: expect.stringMatching(/^2026-10-20T12:00:0/),
     });
   });
+
+  it("waits out the hourly limit instead of stopping when told to, and reports the wait", async () => {
+    const c = fake();
+    const g = new RateGovernor({
+      now: c.now,
+      sleep: c.sleep,
+      overrides: {
+        "data-api": { minIntervalMs: 0, maxRequestsPerHour: 2, waitOnHourlyLimit: true },
+      },
+    });
+    const call = async () => ok(1);
+    await g.run("data-api", call);
+    await g.run("data-api", call);
+    expect(c.slept).toEqual([]);
+    await g.run("data-api", call); // the third has to wait for the first to be an hour old
+    expect(c.slept).toEqual([3_601_000]);
+    expect(g.events.filter((e) => e.kind === "hourly-wait")).toHaveLength(1);
+    expect(g.report()[0]?.waitedMs).toBe(3_601_000);
+  });
+
+  it("does not wait by default: the hourly limit stops a caller unless it chose to wait", async () => {
+    const c = fake();
+    const g = new RateGovernor({
+      now: c.now,
+      sleep: c.sleep,
+      overrides: { "data-api": { minIntervalMs: 0, maxRequestsPerHour: 1 } },
+    });
+    await g.run("data-api", async () => ok(1));
+    await expect(g.run("data-api", async () => ok(1))).rejects.toBeInstanceOf(HourlyRequestLimit);
+    expect(c.slept).toEqual([]);
+  });
 });

@@ -16,6 +16,8 @@ export interface GovernorConfig {
   /** The most the spacing is allowed to grow to after repeated 429s. */
   maxSpacingMs: number;
   maxRequestsPerHour: number;
+  /** At the hourly limit: false throws `HourlyRequestLimit` (the default, so nothing waits for an hour unawares); true sleeps until the oldest request is an hour old, for a long batch. */
+  waitOnHourlyLimit: boolean;
   maxRequestsPerDay: number;
   maxRetries: number;
   baseBackoffMs: number;
@@ -28,6 +30,7 @@ export const DEFAULT_GOVERNOR: GovernorConfig = {
   minIntervalMs: 5_000,
   maxSpacingMs: 60_000,
   maxRequestsPerHour: 30,
+  waitOnHourlyLimit: false,
   maxRequestsPerDay: 200,
   maxRetries: 4,
   baseBackoffMs: 30_000,
@@ -46,6 +49,7 @@ export type GovernorEvent =
       attempt: number;
       waitedMs: number;
     }
+  | { kind: "hourly-wait"; group: string; at: string; waitedMs: number }
   | { kind: "hourly-limit"; group: string; at: string; limit: number }
   | { kind: "daily-limit"; group: string; at: string; limit: number };
 
@@ -195,6 +199,17 @@ export class RateGovernor {
           throw new DailyRequestLimit(group, s.config.maxRequestsPerDay);
         }
         s.recent = s.recent.filter((t) => t > this.#now() - 3_600_000);
+        while (s.config.waitOnHourlyLimit && s.recent.length >= s.config.maxRequestsPerHour) {
+          const waitedMs = (s.recent[0] as number) + 3_600_000 - this.#now() + 1_000;
+          this.events.push({
+            kind: "hourly-wait",
+            group,
+            at: new Date(this.#now()).toISOString(),
+            waitedMs,
+          });
+          await this.#sleep(waitedMs);
+          s.recent = s.recent.filter((t) => t > this.#now() - 3_600_000);
+        }
         if (s.recent.length >= s.config.maxRequestsPerHour) {
           this.events.push({
             kind: "hourly-limit",

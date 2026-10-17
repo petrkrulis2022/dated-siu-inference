@@ -133,16 +133,16 @@ export const catalog = {
 
   /** CR-PL: lending protocols (D89), then one protocol's daily fees, interest and revenue. */
   lendingProtocols: (): Query => tabular("lending-protocols", { pageSize: String(MAX_PAGE_SIZE) }),
-  lendingFinancials: (protocolId: string, start: string, end: string): Query =>
+  lendingFinancials: (protocolIds: readonly string[], start: string, end: string): Query =>
     timeseries({
       model: "lending-protocols",
-      series: [protocolId],
+      series: protocolIds,
       selections: ["fees-usd", "revenue-usd", "interest-usd", "net-interest-income-usd"],
       start,
       end,
     }),
 
-  /** CR-UO: the token list, one token's identifier, its unlock events or schedule, and its circulating supply. */
+  /** CR-UO: the token list, one token's identifier, its unlock events or schedule, and its circulating supply (a batch of up to 10 tokens in one call). */
   tokenUnlockAssets: (): Query => ({
     api: "token-unlocks",
     path: "/token-unlocks/v1/assets",
@@ -167,34 +167,38 @@ export const catalog = {
       path: `/token-unlocks/v1/assets/${segment(assetId, "assetId")}/unlocks`,
       params: { interval, startTime: rfc3339(start), endTime: rfc3339(end) },
     }),
-  assetSupply: (assetId: string, start: string, end: string): Query =>
+  assetSupply: (assetIds: readonly string[], start: string, end: string): Query =>
     timeseries({
       model: "asset-supply",
-      series: [assetId],
+      series: assetIds,
       selections: ["circulating-supply"],
       start,
       end,
     }),
 
   /**
-   * CR-SM option A (D90) -- NOT AVAILABLE with this key. Calibration (2026-10-17) found `project-tokens` holds only the categories `projects` and `blockchains` (196 rows): no
-   * stablecoin contracts, so `categoryEq=stablecoins` returns no rows. Kept only because the fixtures and their tests still exercise it; CR-SM uses option B until Blockworks says otherwise.
-   * The stablecoin contracts by chain and issuer, then their supply and price at the two ends of the window.
+   * CR-SM, option B (D90, D94): stablecoins are ranked among chains and, separately, among issuers. Option A (chain x issuer pairs from `project-tokens`) is not available with this key:
+   * calibration on 2026-10-17 found that model holds only the categories `projects` and `blockchains`. The tabular models are `stablecoin-chains` and `stablecoin-issuers`; the
+   * timeseries models `stablecoins-by-chain` and `stablecoins-by-issuer` (daily only, keyed by `id`, each summed across the other dimension). `bounds` returns just the first and
+   * last day, which is all a 90-day change needs. Not yet requested live: the first daily snapshot is its first real run.
    */
-  stablecoinContracts: (page: number): Query => {
-    if (!Number.isInteger(page) || page < 1)
-      throw new RangeError(`page must be a positive integer, got ${page}`);
-    return tabular("project-tokens", {
-      categoryEq: "stablecoins",
-      page: String(page),
-      pageSize: String(MAX_PAGE_SIZE),
-    });
-  },
-  stablecoinSupply: (contractIds: readonly string[], start: string, end: string): Query =>
+  stablecoinChains: (): Query => tabular("stablecoin-chains", { pageSize: String(MAX_PAGE_SIZE) }),
+  stablecoinIssuers: (): Query =>
+    tabular("stablecoin-issuers", { pageSize: String(MAX_PAGE_SIZE) }),
+  stablecoinsByChain: (chainIds: readonly string[], start: string, end: string): Query =>
     timeseries({
-      model: "project-tokens",
-      series: contractIds,
-      selections: ["supplyTotal", "priceUSD"],
+      model: "stablecoins-by-chain",
+      series: chainIds,
+      selections: ["circulatingSupplyUSD"],
+      start,
+      end,
+      bounds: true,
+    }),
+  stablecoinsByIssuer: (issuerIds: readonly string[], start: string, end: string): Query =>
+    timeseries({
+      model: "stablecoins-by-issuer",
+      series: issuerIds,
+      selections: ["circulatingSupplyUSD"],
       start,
       end,
       bounds: true,

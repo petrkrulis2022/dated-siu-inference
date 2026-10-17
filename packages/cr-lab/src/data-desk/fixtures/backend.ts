@@ -14,9 +14,10 @@ import {
 } from "../queries.js";
 import type { BackendResponse, DataBackend, Query } from "../types.js";
 import {
+  CHAINS,
   FixtureWorld,
+  ISSUERS,
   decimalText,
-  type Contract,
   type LendingProtocol,
   type PerpVenue,
   type Point,
@@ -115,15 +116,15 @@ export class FixtureBackend implements DataBackend {
         w.lending.map((p) => ({ id: p.id, name: p.name })),
         params,
       );
-    if (path === "/query/tabular/project-tokens") {
+    if (path === "/query/tabular/stablecoin-chains") {
       return this.#page(
-        w.contracts.map((c) => ({
-          id: c.id,
-          chain: c.chain,
-          issuerID: c.issuerID,
-          networkID: c.networkID,
-          category: c.category,
-        })),
+        CHAINS.map((c) => ({ id: c, name: c, slug: c, networkID: c })),
+        params,
+      );
+    }
+    if (path === "/query/tabular/stablecoin-issuers") {
+      return this.#page(
+        ISSUERS.map((i) => ({ id: i, name: i, slug: i, projectID: null })),
         params,
       );
     }
@@ -142,7 +143,7 @@ export class FixtureBackend implements DataBackend {
     return fail(404, "not found");
   }
 
-  /** A tabular response: the filter `categoryEq`, `page` and `pageSize`, and the two metadata fields the docs state. */
+  /** A tabular response: `page` and `pageSize`, and the two metadata fields the docs state. (No filter is implemented; any `*Eq` parameter is refused.) */
   #page(rows: Row[], params: Readonly<Record<string, string>>): BackendResponse {
     const pageSize = Number(params.pageSize ?? "100");
     const page = Number(params.page ?? "1");
@@ -150,16 +151,14 @@ export class FixtureBackend implements DataBackend {
       return fail(400, "pageSize must be 1 to 1000");
     if (!Number.isInteger(page) || page < 1) return fail(400, "page must be a positive integer");
     for (const k of Object.keys(params))
-      if (k.endsWith("Eq") && k !== "categoryEq") return fail(400, `unknown filter ${k}`);
-    const filtered =
-      params.categoryEq === undefined ? rows : rows.filter((r) => r.category === params.categoryEq);
-    const slice = filtered.slice((page - 1) * pageSize, page * pageSize);
+      if (k.endsWith("Eq")) return fail(400, `unknown filter ${k}`);
+    const slice = rows.slice((page - 1) * pageSize, page * pageSize);
     return respond(200, {
       error: null,
       data: slice,
       metadata: {
-        totalRows: new Num(String(filtered.length)),
-        totalPages: new Num(String(Math.ceil(filtered.length / pageSize))),
+        totalRows: new Num(String(rows.length)),
+        totalPages: new Num(String(Math.ceil(rows.length / pageSize))),
       },
     });
   }
@@ -212,12 +211,18 @@ export class FixtureBackend implements DataBackend {
             name: t.name,
             point: (d: string) => w.supplyPoint(t, d),
           }))[0];
-    } else if (model === "project-tokens") {
-      fields = ["supplyTotal", "supplyIssued", "priceUSD"];
+    } else if (model === "stablecoins-by-chain") {
+      fields = ["stablecoinCount", "circulatingSupplyUSD"];
       lookup = (k) =>
-        w.contracts
-          .filter((c: Contract) => c.id === k)
-          .map((c) => ({ key: c.id, name: c.id, point: (d: string) => w.contractPoint(c, d) }))[0];
+        (CHAINS as readonly string[]).includes(k)
+          ? { key: k, name: k, point: (d: string) => w.chainPoint(k, d) }
+          : undefined;
+    } else if (model === "stablecoins-by-issuer") {
+      fields = ["chainCount", "stablecoinCount", "circulatingSupplyUSD"];
+      lookup = (k) =>
+        (ISSUERS as readonly string[]).includes(k)
+          ? { key: k, name: k, point: (d: string) => w.issuerPoint(k, d) }
+          : undefined;
     } else return fail(404, `unknown model ${model}`);
 
     const selections = (params.selections ?? fields.join(",")).split(",");

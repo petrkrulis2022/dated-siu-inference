@@ -66,43 +66,52 @@ describe("tabular responses", () => {
     });
   });
 
-  it("filters stablecoin contracts by category and pages them with totals for the whole filtered set", async () => {
+  it("lists the stablecoin chains and issuers, and pages them with the totals the docs state", async () => {
     const b = new FixtureBackend();
-    const all = (await ask(b, catalog.stablecoinContracts(1))).json;
-    const rows = all.data as Obj[];
-    const total = Number((all.metadata as Obj).totalRows?.toString());
-    expect(rows.every((r) => r.category === "stablecoins")).toBe(true);
-    expect(rows.length).toBe(total);
-    expect(total).toBeGreaterThan(10);
-    // The same set in pages of 5 adds up, and a page past the end is empty rather than an error.
+    const chains = (await ask(b, catalog.stablecoinChains())).json;
+    expect((chains.data as Obj[]).map((r) => r.id)).toEqual([
+      "fixture-chain-a",
+      "fixture-chain-b",
+      "fixture-chain-c",
+      "fixture-chain-d",
+      "fixture-chain-e",
+    ]);
+    expect(Object.keys((chains.data as Obj[])[0] as Obj)).toEqual([
+      "id",
+      "name",
+      "slug",
+      "networkID",
+    ]);
+    const issuers = (await ask(b, catalog.stablecoinIssuers())).json;
+    expect((issuers.data as Obj[]).map((r) => r.id)).toHaveLength(4);
+    expect(Object.keys((issuers.data as Obj[])[0] as Obj)).toEqual([
+      "id",
+      "name",
+      "slug",
+      "projectID",
+    ]);
+    // pages of 2: three pages for five chains, and a page past the end is empty rather than an error
     const paged: Query = {
       api: "data",
-      path: "/query/tabular/project-tokens",
-      params: { categoryEq: "stablecoins", pageSize: "5", page: "1" },
+      path: "/query/tabular/stablecoin-chains",
+      params: { pageSize: "2", page: "1" },
     };
     const first = (await ask(b, paged)).json;
-    expect((first.data as Obj[]).length).toBe(5);
-    expect((first.metadata as Obj).totalPages?.toString()).toBe(String(Math.ceil(total / 5)));
-    const beyond = (await ask(b, { ...paged, params: { ...paged.params, page: "99" } })).json;
-    expect(beyond.data).toEqual([]);
-    // Without the filter the non-stablecoin rows are there too.
-    const unfiltered = (
-      await ask(b, {
-        api: "data",
-        path: "/query/tabular/project-tokens",
-        params: { pageSize: "1000" },
-      })
-    ).json;
-    expect((unfiltered.data as Obj[]).some((r) => r.category === "defi")).toBe(true);
+    expect((first.data as Obj[]).length).toBe(2);
+    expect((first.metadata as Obj).totalRows?.toString()).toBe("5");
+    expect((first.metadata as Obj).totalPages?.toString()).toBe("3");
+    expect((await ask(b, { ...paged, params: { ...paged.params, page: "99" } })).json.data).toEqual(
+      [],
+    );
   });
 
-  it("rejects an unknown filter and a bad page size, as the real API rejects a bare field", async () => {
+  it("rejects a filter it does not implement and a bad page size, as the real API rejects a bare field", async () => {
     const b = new FixtureBackend();
     expect(
       (
         await ask(b, {
           api: "data",
-          path: "/query/tabular/project-tokens",
+          path: "/query/tabular/stablecoin-chains",
           params: { chainEq: "x" },
         })
       ).status,
@@ -111,7 +120,7 @@ describe("tabular responses", () => {
       (
         await ask(b, {
           api: "data",
-          path: "/query/tabular/project-tokens",
+          path: "/query/tabular/stablecoin-chains",
           params: { pageSize: "5000" },
         })
       ).status,
@@ -200,7 +209,7 @@ describe("timeseries responses", () => {
   it("answers with only the selected fields, in the order asked", async () => {
     const { json } = await ask(
       new FixtureBackend(),
-      catalog.lendingFinancials("fixture-lend-1", "2026-07-01", "2026-07-03"),
+      catalog.lendingFinancials(["fixture-lend-1"], "2026-07-01", "2026-07-03"),
     );
     expect((data(json).point_schema as Obj[]).map((s) => s.field)).toEqual([
       "time",
@@ -220,19 +229,59 @@ describe("timeseries responses", () => {
     expect(pointsOf(seriesOf(json)[0]!)).toEqual([]);
   });
 
-  it("returns only the first and last point with bounds, including both prices for a depegged stablecoin", async () => {
+  it("returns only the first and last day with bounds, and the chains and issuers add up to the same total", async () => {
     const b = new FixtureBackend();
-    const depegged = b.world.contracts[2]!;
-    const { json } = await ask(
-      b,
-      catalog.stablecoinSupply([depegged.id], addDays(FIXTURE_AS_OF, -90), END),
-    );
-    const pts = pointsOf(seriesOf(json)[0]!);
-    expect(pts).toHaveLength(2);
-    expect(daysBetween(addDays(FIXTURE_AS_OF, -90), FIXTURE_AS_OF)).toBe(90);
-    const price = (p: Json[]) => d(p[2])!; // columns: time, supplyTotal, priceUSD
-    expect(price(pts[0]!).gt("0.99")).toBe(true); // at the start of the window it held its peg
-    expect(price(pts[1]!).lt("0.7")).toBe(true); // by the end it had not: valuing both ends at the end price (D90) is what keeps this from reading as a supply move
+    const start = addDays(FIXTURE_AS_OF, -90);
+    const chains = (await ask(b, catalog.stablecoinChains())).json.data as Obj[];
+    const issuers = (await ask(b, catalog.stablecoinIssuers())).json.data as Obj[];
+    const byChain = (
+      await ask(
+        b,
+        catalog.stablecoinsByChain(
+          chains.map((r) => String(r.id)),
+          start,
+          END,
+        ),
+      )
+    ).json;
+    const byIssuer = (
+      await ask(
+        b,
+        catalog.stablecoinsByIssuer(
+          issuers.map((r) => String(r.id)),
+          start,
+          END,
+        ),
+      )
+    ).json;
+    expect((data(byChain).point_schema as Obj[]).map((x) => x.field)).toEqual([
+      "time",
+      "circulatingSupplyUSD",
+    ]);
+    const ends = (j: Obj, which: 0 | 1) =>
+      seriesOf(j).reduce((sum, ser) => {
+        const pts = pointsOf(ser);
+        expect(pts).toHaveLength(2); // bounds: the first and last day only
+        return sum.plus(d(pts[which]![1])!);
+      }, new D(0));
+    // Summed across issuers, a chain's supply; summed across chains, an issuer's. Both partitions of the same contracts, so the grand totals must agree exactly, on both days.
+    expect(ends(byChain, 0).toFixed(6)).toBe(ends(byIssuer, 0).toFixed(6));
+    expect(ends(byChain, 1).toFixed(6)).toBe(ends(byIssuer, 1).toFixed(6));
+    const first = pointsOf(seriesOf(byChain)[0]!)[0]![0] as Num;
+    expect(first.text).toBe(String(unixAt(start)));
+    expect(daysBetween(start, FIXTURE_AS_OF)).toBe(90);
+  });
+
+  it("values supply at each day's price, so a contract that loses its peg shows up as a fall in its chain's USD supply", async () => {
+    const b = new FixtureBackend();
+    const c = b.world.contracts[2]!; // the contract that has lost its peg
+    const before = addDays(FIXTURE_AS_OF, -20);
+    const same = (day: string) => b.world.contractSupply(c, day);
+    expect(b.world.contractPriceMicro(c, before)).toBeGreaterThan(990_000n);
+    expect(b.world.contractPriceMicro(c, FIXTURE_AS_OF)).toBe(620_000n);
+    const usd = (day: string) => (same(day) * b.world.contractPriceMicro(c, day)) / 1_000_000n;
+    expect(usd(before)).toBeGreaterThan((same(before) * 990_000n) / 1_000_000n); // held its peg: worth about its token count in dollars
+    expect(usd(FIXTURE_AS_OF)).toBeLessThan((same(FIXTURE_AS_OF) * 700_000n) / 1_000_000n); // lost it: worth well under 70 cents on the dollar
   });
 
   it("enforces the documented limits, so the catalog cannot drift past them: 10 series, 9,000 points, a window", async () => {
@@ -438,7 +487,7 @@ describe("token unlocks", () => {
     expect(snaps).toHaveLength(121);
     const unlocked = snaps.reduce((s, x) => s.plus(d(x.unlockedInPeriodNative)!), new D(0));
     const sup = (
-      await ask(b, catalog.assetSupply(tok.assetID, addDays(start, -1), addDays(end, 1)))
+      await ask(b, catalog.assetSupply([tok.assetID], addDays(start, -1), addDays(end, 1)))
     ).json;
     const pts = pointsOf(seriesOf(sup)[0]!);
     const before = d(pts[0]![1])!;

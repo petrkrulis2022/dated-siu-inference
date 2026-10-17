@@ -17,7 +17,8 @@
     "test": "vitest run",
     "spend-report": "pnpm run build && node dist/cli/spend-report.js",
     "desk-smoke": "pnpm run build && node dist/cli/desk-smoke.js",
-    "calibrate": "pnpm run build && node --env-file=../../.env dist/cli/calibrate.js"
+    "calibrate": "pnpm run build && node --env-file=../../.env dist/cli/calibrate.js",
+    "snapshot-day": "pnpm run build && node --env-file=../../.env dist/cli/snapshot-day.js"
   },
   "dependencies": {
     "@touchstone/sdk": "workspace:*"

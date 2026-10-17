@@ -52,7 +52,7 @@ async function pullAll(): Promise<Snapshot[]> {
     Number(window.slice(0, 4)),
     Math.ceil(Number(window.slice(5, 7)) / 3) - 1 || 4,
   );
-  await pull(catalog.lendingFinancials(protocols[0] as string, q.start, q.end));
+  await pull(catalog.lendingFinancials(protocols.slice(0, 3), q.start, q.end));
   // CR-UO: the token list, one token's id, its events for the next 90 days and its circulating supply
   const tokens = rows(await pull(catalog.tokenUnlockAssets()));
   const slug = str(tokens[0]?.slug);
@@ -60,11 +60,15 @@ async function pullAll(): Promise<Snapshot[]> {
     ((await pull(catalog.assetBySlug(slug))).json as { data: Record<string, Json> }).data.assetID,
   ); // a single row comes back as one object
   await pull(catalog.tokenUnlockEvents(slug, window, addDays(window, 90)));
-  await pull(catalog.assetSupply(assetId, window, addDays(window, 1)));
-  // CR-SM: the stablecoin contracts, then the first and last supply and price of three over 90 days
-  const contracts = rows(await pull(catalog.stablecoinContracts(1))).map((r) => str(r.id));
+  await pull(catalog.assetSupply([assetId], window, addDays(window, 1)));
+  // CR-SM (option B): the stablecoin chains and issuers, then the first and last day's supply of each over 90 days
+  const chains = rows(await pull(catalog.stablecoinChains())).map((r) => str(r.id));
   await pull(
-    catalog.stablecoinSupply(contracts.slice(0, 3), addDays(window, -90), addDays(window, 1)),
+    catalog.stablecoinsByChain(chains.slice(0, 10), addDays(window, -90), addDays(window, 1)),
+  );
+  const issuers = rows(await pull(catalog.stablecoinIssuers())).map((r) => str(r.id));
+  await pull(
+    catalog.stablecoinsByIssuer(issuers.slice(0, 10), addDays(window, -90), addDays(window, 1)),
   );
   return out;
 }
