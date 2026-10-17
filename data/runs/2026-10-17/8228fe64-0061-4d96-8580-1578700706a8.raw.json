@@ -1,0 +1,39 @@
+{
+  "id": "47e44b5d-9e9d-9ab1-bc35-8cea21179b68",
+  "object": "chat.completion",
+  "created": 1792198661,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "9C0411\n92F21A\nADF36D\nCCDB0D",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes: 9C0411, 92F21A, ADF36D, and CCDB0D.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 22171,
+    "completion_tokens": 18,
+    "total_tokens": 22623,
+    "prompt_tokens_details": {
+      "text_tokens": 22171,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 434,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 462860000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

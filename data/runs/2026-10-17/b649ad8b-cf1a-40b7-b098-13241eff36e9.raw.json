@@ -1,0 +1,39 @@
+{
+  "id": "188b4aaf-2966-9726-bc0c-6e1263aa808c",
+  "object": "chat.completion",
+  "created": 1792198668,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "FFD178\nD76813\n6FFD0E\nBE8297",
+        "reasoning_content": "I will scan the archive log for access codes and list them in order.\n\nFour access codes were found so far: FFD178, D76813, 6FFD0E, and BE8297. I am scanning for additional codes.\n\nNo additional access codes were found. The four codes are complete.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21755,
+    "completion_tokens": 17,
+    "total_tokens": 22148,
+    "prompt_tokens_details": {
+      "text_tokens": 21755,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 376,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 451000000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

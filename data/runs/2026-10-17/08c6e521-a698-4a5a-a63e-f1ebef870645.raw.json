@@ -1,0 +1,39 @@
+{
+  "id": "c886d427-c0fe-9181-9ece-5e2d53175de0",
+  "object": "chat.completion",
+  "created": 1792198664,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "C5BA6F\n652069\n201536\n7BA572",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nFour access codes were found in the document:\n\n- C5BA6F\n- 652069\n- 201536\n- 7BA572",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21911,
+    "completion_tokens": 15,
+    "total_tokens": 22419,
+    "prompt_tokens_details": {
+      "text_tokens": 21911,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 493,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 461020000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
