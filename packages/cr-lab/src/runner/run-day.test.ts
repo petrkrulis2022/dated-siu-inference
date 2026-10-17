@@ -40,6 +40,7 @@ const world = (
     publicDir: join(tmp, "pub"),
     privateDir: join(tmp, "priv"),
     now: () => NOW,
+    newSeed: () => "a1".repeat(32),
   }),
   records: new MemoryRecordStore(),
 });

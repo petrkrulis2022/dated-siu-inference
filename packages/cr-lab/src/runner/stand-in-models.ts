@@ -71,10 +71,22 @@ export function solverFromPrompt(prompt: string): Record<string, unknown> {
 
 export type StandIn = "solver" | "sloppy" | "fenced" | "silent" | "failing" | "truncating";
 
-/** Damages a correct answer in the way a given task makes easy; every damage maps to one taxonomy class. */
+/**
+ * Damages a correct answer in the way a given task makes easy; every damage maps to one taxonomy class. A damage must always bite, whatever instance a seed draws: scaling a figure that is
+ * zero changes nothing, so a zero is skipped for the next figure, and only if every figure is zero is a fixed wrong one written.
+ */
 function damage(prompt: string, answer: Record<string, unknown>): Record<string, unknown> {
-  if (prompt.includes("Task: unlock overhang"))
-    return { ...answer, unlock30_pct: new D(answer.unlock30_pct as string).times(10).toFixed() };
+  const nonzero = (v: unknown): boolean => !new D(v as string).isZero();
+  if (prompt.includes("Task: unlock overhang")) {
+    const field = nonzero(answer.unlock30_pct)
+      ? "unlock30_pct"
+      : nonzero(answer.unlock90_pct)
+        ? "unlock90_pct"
+        : undefined;
+    return field === undefined
+      ? { ...answer, unlock30_pct: "10" }
+      : { ...answer, [field]: new D(answer[field] as string).times(10).toFixed() };
+  }
   if (prompt.includes("Task: stablecoin movers")) {
     const top = [...(answer.top5 as unknown[])];
     [top[0], top[1]] = [top[1], top[0]];
@@ -82,12 +94,13 @@ function damage(prompt: string, answer: Record<string, unknown>): Record<string,
   }
   if (prompt.includes("Task: perpetual-futures DEX volume share"))
     return { ...answer, venues: (answer.venues as string[]).slice(0, 4) };
-  const payouts = new D(answer.payouts as string).times("1.03");
-  return {
-    fees: answer.fees,
-    payouts: r6(payouts),
-    revenue: new D(answer.fees as string).minus(r6(payouts)).toFixed(),
-  };
+  // lending: scale a figure that is not zero, and keep revenue equal to the answer's own fees minus payouts, so only the value is wrong
+  let fees = answer.fees as string;
+  let payouts = answer.payouts as string;
+  if (nonzero(payouts)) payouts = r6(new D(payouts).times("1.03"));
+  else if (nonzero(fees)) fees = r6(new D(fees).times("1.03"));
+  else payouts = "1";
+  return { fees, payouts, revenue: new D(fees).minus(payouts).toFixed() };
 }
 
 /** An adapter that answers from the prompt as `kind` says. `usage` follows the sizes, so costs are real arithmetic on made-up token counts. */

@@ -27,11 +27,21 @@ export class SeedBook {
   readonly #publicDir: string;
   readonly #privateDir: string;
   readonly #now: () => Date;
+  readonly #newSeed: () => string;
 
-  constructor(opts: { publicDir?: string; privateDir?: string; now?: () => Date } = {}) {
+  constructor(
+    opts: {
+      publicDir?: string;
+      privateDir?: string;
+      now?: () => Date;
+      /** where a new day's seed comes from; random in real use, fixed in tests so a test never depends on which questions a seed happens to draw */
+      newSeed?: () => string;
+    } = {},
+  ) {
     this.#publicDir = opts.publicDir ?? join(CR_PUBLIC_DIR, "seeds");
     this.#privateDir = opts.privateDir ?? privatePath("seeds");
     this.#now = opts.now ?? (() => new Date());
+    this.#newSeed = opts.newSeed ?? (() => randomBytes(32).toString("hex"));
   }
 
   #publicFile(window: string): string {
@@ -52,7 +62,7 @@ export class SeedBook {
   commit(window: string): SeedRecord {
     const existing = this.record(window);
     if (existing !== undefined) return existing;
-    const seed = randomBytes(32).toString("hex");
+    const seed = this.#newSeed();
     mkdirSync(dirname(this.#privateFile(window)), { recursive: true });
     writeFileSync(this.#privateFile(window), `${seed}\n`, { mode: 0o600 });
     const rec: SeedRecord = {
