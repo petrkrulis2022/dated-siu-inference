@@ -60,12 +60,29 @@ export function priceFor(modelId: string, snapshot: PriceSnapshot): ModelPrice {
   };
 }
 
-/** The dollar cost of a finished call, exact. */
-export function usageCostUsd(usage: UsageTokens, price: ModelPrice): DecimalValue {
+/**
+ * Whether the provider's reported `output` ALREADY contains its reasoning tokens, so that adding `reasoning` would bill them twice.
+ *  - anthropic: yes. Verified on the first live dry run (2026-10-17): on every call the thinking tokens were fewer than the output tokens, and the difference was the size of the JSON answer
+ *    (a call with 20,324 thinking tokens reported 21,067 output tokens; the answer itself was about 740). The print never sees this: its Claude runs report 0 reasoning tokens.
+ *  - every other provider: not established for the trial. The print adds reasoning to output for them (Google and xAI report it separately, confirmed there), so the trial does the same,
+ *    which can only over-count, never under-count; the B5 smoke test per provider must check this before any of them is funded.
+ */
+export const REASONING_IN_OUTPUT: Readonly<Record<string, boolean>> = { anthropic: true };
+
+/** The dollar cost of a finished call, exact. Reasoning tokens are billed at the output rate; they are added only where the provider reports them apart from `output`. */
+export function usageCostUsd(
+  usage: UsageTokens,
+  price: ModelPrice,
+  provider?: string,
+): DecimalValue {
+  const outputTokens =
+    provider !== undefined && REASONING_IN_OUTPUT[provider] === true
+      ? usage.output
+      : usage.output + usage.reasoning;
   let total = new D(usage.input)
     .div(MILLION)
     .times(price.priceInUsdPer1M)
-    .plus(new D(usage.output + usage.reasoning).div(MILLION).times(price.priceOutUsdPer1M));
+    .plus(new D(outputTokens).div(MILLION).times(price.priceOutUsdPer1M));
   if (usage.cached_input > 0 && price.priceCachedInUsdPer1M !== undefined)
     total = total.plus(new D(usage.cached_input).div(MILLION).times(price.priceCachedInUsdPer1M));
   return total;

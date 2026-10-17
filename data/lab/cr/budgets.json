@@ -8,5 +8,11 @@
     "xai": "8.25",
     "openrouter": "2.76"
   },
-  "balances": {}
+  "balances": {
+    "anthropic": {
+      "usd": "67.78",
+      "asOf": "2026-10-17T17:30:00Z",
+      "source": "Claude Console dashboard, organization credits, from the owner's screenshot on 2026-10-17"
+    }
+  }
 }

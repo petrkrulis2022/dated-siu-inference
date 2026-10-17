@@ -93,7 +93,7 @@ export async function runAnswer(input: RunAnswerInput): Promise<AnswerRecord> {
       { part, model: seat.modelId, key: seat.keyName, what: instance.id },
       async () => {
         const res = await seat.adapter(seat.modelString, bundle.text, params);
-        return { usd: usageCostUsd(res.usage, seat.price).toFixed(), res };
+        return { usd: usageCostUsd(res.usage, seat.price, seat.provider).toFixed(), res };
       },
     );
     outcome = out.res;

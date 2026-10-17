@@ -1,0 +1,10 @@
+{"at":"2026-10-17T17:30:40.793Z","provider":"anthropic","usd":"0.009629","part":"dry-run","model":"claude-haiku-4-5","key":"CR_ANTHROPIC_API_KEY","what":"CR-VS-2026-10-17-1"}
+{"at":"2026-10-17T17:34:41.365Z","provider":"anthropic","usd":"0.315738","part":"dry-run","model":"claude-sonnet-5","key":"CR_ANTHROPIC_API_KEY","what":"CR-VS-2026-10-17-1"}
+{"at":"2026-10-17T17:34:42.538Z","provider":"anthropic","usd":"0.005492","part":"dry-run","model":"claude-haiku-4-5","key":"CR_ANTHROPIC_API_KEY","what":"CR-PL-2026-10-17-1"}
+{"at":"2026-10-17T17:35:10.291Z","provider":"anthropic","usd":"0.045078","part":"dry-run","model":"claude-sonnet-5","key":"CR_ANTHROPIC_API_KEY","what":"CR-PL-2026-10-17-1"}
+{"at":"2026-10-17T17:35:11.248Z","provider":"anthropic","usd":"0.002053","part":"dry-run","model":"claude-haiku-4-5","key":"CR_ANTHROPIC_API_KEY","what":"CR-UO-2026-10-17-1"}
+{"at":"2026-10-17T17:35:15.919Z","provider":"anthropic","usd":"0.009446","part":"dry-run","model":"claude-sonnet-5","key":"CR_ANTHROPIC_API_KEY","what":"CR-UO-2026-10-17-1"}
+{"at":"2026-10-17T17:39:38.735Z","provider":"anthropic","usd":"0.007348","part":"dry-run","model":"claude-haiku-4-5","key":"CR_ANTHROPIC_API_KEY","what":"CR-SM-2026-10-17-1"}
+{"at":"2026-10-17T17:39:53.391Z","provider":"anthropic","usd":"0.031314","part":"dry-run","model":"claude-sonnet-5","key":"CR_ANTHROPIC_API_KEY","what":"CR-SM-2026-10-17-1"}
+{"at":"2026-10-17T17:39:55.461Z","provider":"anthropic","usd":"0.002173","part":"dry-run","model":"claude-haiku-4-5","key":"CR_ANTHROPIC_API_KEY","what":"CR-SM-2026-10-17-2"}
+{"at":"2026-10-17T17:40:04.515Z","provider":"anthropic","usd":"0.014076","part":"dry-run","model":"claude-sonnet-5","key":"CR_ANTHROPIC_API_KEY","what":"CR-SM-2026-10-17-2"}

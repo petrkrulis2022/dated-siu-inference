@@ -13,7 +13,7 @@ import { addDays, daysBetween } from "../data-desk/dates.js";
 import type { DayData } from "../tasks/day-data.js";
 import type { Instance } from "../tasks/instances.js";
 import type { SMReference, UOReference, VSReference } from "../tasks/solve.js";
-import { vsMonthly } from "../tasks/solve.js";
+import { smRows, vsMonthly } from "../tasks/solve.js";
 
 export interface PromptBundle {
   /** the complete prompt, sent as one user message */
@@ -123,30 +123,16 @@ function pieces(
     }
     case "CR-SM": {
       const { dimension } = instance.params;
-      const startDay = addDays(day.window, -90);
-      const rows: string[] = [];
-      for (const [id, b] of [...day.stablecoins[dimension].entries()].sort((a, b) =>
-        a[0].localeCompare(b[0]),
-      )) {
-        if (
-          b.first.usd === null ||
-          b.last.usd === null ||
-          b.first.day !== startDay ||
-          b.last.day !== day.window
-        )
-          continue;
-        rows.push(
-          line({
-            id,
-            supply_usd_start: b.first.usd.toFixed(),
-            supply_usd_end: b.last.usd.toFixed(),
-          }),
+      const { start, end, rows: usable } = smRows(day, dimension);
+      const rows = [...usable]
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .map((r) =>
+          line({ id: r.id, supply_usd_start: r.first.toFixed(), supply_usd_end: r.last.toFixed() }),
         );
-      }
       return {
         task: [
-          `Task: stablecoin movers by ${dimension}, ${startDay} to ${day.window}.`,
-          `Each row gives the circulating supply of the stablecoins of one ${dimension}, in USD, on ${startDay} (supply_usd_start) and on ${day.window} (supply_usd_end), as valued by the data provider (a stablecoin that trades below one dollar is valued below its token count, so it can show as a fall).`,
+          `Task: stablecoin movers by ${dimension}, ${start} to ${end}.`,
+          `Each row gives the circulating supply of the stablecoins of one ${dimension}, in USD, on ${start} (supply_usd_start) and on ${end} (supply_usd_end), as valued by the data provider (a stablecoin that trades below one dollar is valued below its token count, so it can show as a fall). ${end} is the latest day the data provider had published when the data was pulled.`,
           `The change of a row is supply_usd_end minus supply_usd_start, signed. Find the five ${dimension}s with the largest absolute change, in order from largest to smallest absolute change (break ties by id, ascending), and give each one's signed change in USD.`,
           "Only ids that have a figure on both dates are listed.",
         ].join("\n"),

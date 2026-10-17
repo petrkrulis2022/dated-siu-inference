@@ -8,7 +8,8 @@
  *  - CR-PL's "payout to depositors and liquidity providers" is interest minus net interest income (D89): the identity fees - revenue = interest - net interest income held on
  *    every day calibrated, so the three figures agree; whether Blockworks means exactly this is question 2 in §16.12.
  *  - CR-UO's "next 30 days" is the 30 daily snapshots beginning with the snapshot day, and "next 90 days" the first 90; the percentage is of the circulating supply on the snapshot day.
- *  - CR-SM ranks by the absolute change in circulating supply in USD between 90 days before the snapshot day and the snapshot day, among chains or among issuers.
+ *  - CR-SM ranks by the absolute change in circulating supply in USD between 90 days before the snapshot day and the latest day the series reaches (the snapshot day, or the day before:
+ *    Blockworks publishes with a one-day lag), among chains or among issuers.
  *    That figure is price-valued by Blockworks, so a stablecoin that falls below one dollar shows as a fall; the task states it.
  * Results are rounded to 6 decimals, half up, only here at the end (invariant 4).
  */
@@ -190,19 +191,37 @@ export interface SMReference {
   top5: { id: string; changeUsd: string }[];
 }
 
-export function solveSM(day: DayData, dimension: Dimension): SMReference | undefined {
+/**
+ * The rows CR-SM ranks, and the two dates they are compared on. The start is 90 days before the snapshot day. The end is the latest day the stablecoin series reaches, which Blockworks
+ * publishes with a one-day lag: on the first live day (2026-10-17) every series ended on the 16th. So the end is the snapshot day or the day before, whichever most series end on (the
+ * later one if they tie); a series that ends elsewhere, starts elsewhere or has no figure at an end is left out. The prompt shows these rows and these dates, so the question and the key
+ * cannot differ.
+ */
+export function smRows(
+  day: DayData,
+  dimension: Dimension,
+): { start: string; end: string; rows: { id: string; first: DecimalValue; last: DecimalValue }[] } {
   const start = addDays(day.window, -90);
-  const rows: { id: string; change: DecimalValue }[] = [];
-  for (const [id, b] of day.stablecoins[dimension]) {
-    if (
-      b.first.usd === null ||
-      b.last.usd === null ||
-      b.first.day !== start ||
-      b.last.day !== day.window
-    )
-      continue;
-    rows.push({ id, change: b.last.usd.minus(b.first.usd) });
-  }
+  const allowedEnds = [day.window, addDays(day.window, -1)];
+  const usable = [...day.stablecoins[dimension]].filter(
+    ([, b]) => b.first.usd !== null && b.last.usd !== null && b.first.day === start,
+  );
+  const count = (d: string) => usable.filter(([, b]) => b.last.day === d).length;
+  const [latest, earlier] = allowedEnds as [string, string];
+  const end = count(latest) >= count(earlier) ? latest : earlier;
+  const rows = usable
+    .filter(([, b]) => b.last.day === end)
+    .map(([id, b]) => ({
+      id,
+      first: b.first.usd as DecimalValue,
+      last: b.last.usd as DecimalValue,
+    }));
+  return { start, end, rows };
+}
+
+export function solveSM(day: DayData, dimension: Dimension): SMReference | undefined {
+  const { rows: usable } = smRows(day, dimension);
+  const rows = usable.map((r) => ({ id: r.id, change: r.last.minus(r.first) }));
   if (rows.length < 5) return undefined;
   rows.sort((a, b) => b.change.abs().comparedTo(a.change.abs()) || a.id.localeCompare(b.id));
   return { dimension, top5: rows.slice(0, 5).map((r) => ({ id: r.id, changeUsd: fmt(r.change) })) };
