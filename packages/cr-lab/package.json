@@ -16,7 +16,8 @@
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
     "test": "vitest run",
     "spend-report": "pnpm run build && node dist/cli/spend-report.js",
-    "desk-smoke": "pnpm run build && node dist/cli/desk-smoke.js"
+    "desk-smoke": "pnpm run build && node dist/cli/desk-smoke.js",
+    "calibrate": "pnpm run build && node --env-file=../../.env dist/cli/calibrate.js"
   },
   "dependencies": {
     "@touchstone/sdk": "workspace:*"

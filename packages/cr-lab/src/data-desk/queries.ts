@@ -110,6 +110,16 @@ function timeseries(input: {
 const rfc3339 = (date: string): string => `${assertDate(date)}T00:00:00Z`;
 
 export const catalog = {
+  /** Calibration only (day 1): a timeseries pull with any selections, to check a field's meaning. The tasks use the builders below, never this. */
+  probeTimeseries: (
+    model: string,
+    seriesKeys: readonly string[],
+    selections: readonly string[],
+    start: string,
+    end: string,
+    bounds = false,
+  ): Query => timeseries({ model, series: seriesKeys, selections, start, end, bounds }),
+
   /** CR-VS: the perp venues, then their daily volume. */
   perpVenues: (): Query => tabular("perp-dex-protocols", { pageSize: String(MAX_PAGE_SIZE) }),
   perpVolume: (seriesKeys: readonly string[], start: string, end: string): Query =>
@@ -166,7 +176,11 @@ export const catalog = {
       end,
     }),
 
-  /** CR-SM (option A, D90): the stablecoin contracts by chain and issuer, then their supply and price at the two ends of the window. */
+  /**
+   * CR-SM option A (D90) -- NOT AVAILABLE with this key. Calibration (2026-10-17) found `project-tokens` holds only the categories `projects` and `blockchains` (196 rows): no
+   * stablecoin contracts, so `categoryEq=stablecoins` returns no rows. Kept only because the fixtures and their tests still exercise it; CR-SM uses option B until Blockworks says otherwise.
+   * The stablecoin contracts by chain and issuer, then their supply and price at the two ends of the window.
+   */
   stablecoinContracts: (page: number): Query => {
     if (!Number.isInteger(page) || page < 1)
       throw new RangeError(`page must be a positive integer, got ${page}`);
@@ -188,16 +202,26 @@ export const catalog = {
 };
 
 /**
- * What the fixtures assume beyond what the public docs state. Day 1's calibration checks each against the live API; a mismatch is then a one-file fix in the extractors,
- * not a redesign. (`ASSUMED_SHAPES` is also what the fixtures' own test lists, so the list cannot drift from the code.)
+ * What day-1 calibration confirmed against the LIVE API (2026-10-17, `docs/marketplace_plan.md` D94). The fixtures are built to these, and tests keep them so.
  */
+export const CONFIRMED_SHAPES: readonly string[] = [
+  "tabular: `data` is an array of row objects and `metadata` holds `totalRows` and `totalPages`; a single-row endpoint (`/query/tabular/assets/{slug}`) returns `data` as ONE OBJECT and `metadata.matchedField`",
+  "timeseries: `data.point_schema` lists the time first and then each selected field by name; each series is `{key, entity, points}`, points are `[unix seconds, value, ...]`, one per day; `start` is inclusive and `end` exclusive",
+  "the perp venues' `id` is always present; `slug` and `projectID` are null for some venues (8 of 31): key on `id`",
+  "numbers arrive as float64 text with up to about 19 decimal digits; zeros can be written as plain integers",
+  "lending: fees - revenue = interest - net interest income holds on every day tested to within 1e-9 relative (float noise); a protocol can have a partial quarter (61 of 92 days)",
+  "Token Unlocks `GET /assets` returns `data` as an array (254 assets), each with a `slug`",
+  "Token Unlocks `/events`: `data` is `{asset, unlockEvents[]}`; an empty window is an empty list, not `data: null`; a `cliff` has amountNative, amountUSD, percentOfTotalAllocation, allocations",
+  "a `dailyLinearRateChange` has `dailyAmountNative` (the rate before), `nextDailyAmountNative` (the rate after), percentChangeOfRate and allocations, and NO `amountNative`; the rate in effect on a day is the `nextDailyAmountNative` of the latest such event on or before it (it reproduced the schedule on 31 of 31 days)",
+  "Token Unlocks `/unlocks`: `endTime` is INCLUSIVE (31 calendar days give 31 daily snapshots), future periods are included, and a window that starts before genesis or after `projectedEndDate` is a 400",
+  "`asset-supply` is keyed by the asset's UUID (`assetID`) and carries `circulating-supply`",
+  "the API answers `429 Too Many Requests` (body `{error}`, no `Retry-After`, no rate-limit headers) after bursts; the limit is not known",
+];
+
+/** Still assumed, not yet seen on the live API. */
 export const ASSUMED_SHAPES: readonly string[] = [
-  "tabular response: `data` is an array of row objects and `metadata` holds `totalRows` and `totalPages` (stated); the row field names (`id`, `name`, `slug`, `projectID`, `chain`, `issuerID`, `category`, `networkID`) are from the per-model pages",
-  "tabular single-row endpoint `/query/tabular/assets/{slug}`: `data` is assumed to be a one-element array (it may be an object)",
-  "timeseries `point_schema`: the first entry is the time (stated); the other entries' `field` names equal the `selections` asked for",
-  "`GET /token-unlocks/v1/assets`: assumed `data` is an array of asset objects with `id`, `slug`, `symbol`",
-  "`/token-unlocks/v1/assets/{id}/events`: `data.unlockEvents[]` with `timestamp` and one of `cliff` or `dailyLinearRateChange` (stated); how a `dailyLinearRateChange` converts to an amount over a window is NOT stated",
-  "`/token-unlocks/v1/assets/{id}/unlocks`: `data.totalSnapshots[]` with `timestamp`, `unlockedInPeriodNative`, `unlockedInPeriodUSD` (stated); that future periods are included is assumed",
-  "`bounds=true` returns only the first and last point of each series (stated); that `end` stays exclusive with it is assumed",
-  "`project-tokens` rows for stablecoins carry `chain`, `issuerID` and a `category` that equals `stablecoins` under the `categoryEq` filter (filter syntax stated)",
+  "stablecoins by chain and by issuer (CR-SM option B): the model names, series keys and field names (`circulatingSupplyUSD`) are from the docs, not yet requested",
+  "`bounds=true` returns only the first and last point of each series, and `end` stays exclusive with it",
+  "whether a null figure ever appears in a perp or lending point (none was seen in the venues and protocols tested)",
+  "the MCP server's tool list and result shapes (the MCP needs a browser sign-in, D91)",
 ];

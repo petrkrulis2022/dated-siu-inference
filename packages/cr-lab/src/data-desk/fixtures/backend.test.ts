@@ -118,15 +118,21 @@ describe("tabular responses", () => {
     ).toBe(400);
   });
 
-  it("resolves a token slug to its assetID, and an unknown slug to no rows", async () => {
+  it("resolves a token slug to its assetID as one object, with the column that matched, and an unknown slug to a 404", async () => {
     const b = new FixtureBackend();
     const tok = b.world.tokens[0]!;
-    expect(((await ask(b, catalog.assetBySlug(tok.slug))).json.data as Obj[])[0]).toEqual({
-      assetID: tok.assetID,
-      name: tok.name,
-      symbol: tok.symbol,
-    });
-    expect((await ask(b, catalog.assetBySlug("fixture-token-nope"))).json.data).toEqual([]);
+    const r = (await ask(b, catalog.assetBySlug(tok.slug))).json;
+    expect(r.data).toEqual({ assetID: tok.assetID, name: tok.name, symbol: tok.symbol });
+    expect(r.metadata).toEqual({ matchedField: "slug" });
+    expect((await ask(b, catalog.assetBySlug("fixture-token-nope"))).status).toBe(404);
+  });
+
+  it("leaves slug and projectID null for some perp venues, as the real model does: the id is the key", async () => {
+    const rows = ((await ask(new FixtureBackend(), catalog.perpVenues())).json.data as Obj[]).map(
+      (r) => r,
+    );
+    expect(rows.some((r) => r.slug === null && r.projectID === null)).toBe(true);
+    expect(rows.every((r) => typeof r.id === "string")).toBe(true);
   });
 });
 
@@ -280,6 +286,7 @@ describe("timeseries responses", () => {
 describe("token unlocks", () => {
   const b = new FixtureBackend();
   const tok = b.world.tokens[0]!;
+  const withStream = b.world.tokens.find((t) => t.streams.length > 0)!;
 
   it("lists the assets, and finds events by slug or by id", async () => {
     expect(
@@ -294,40 +301,145 @@ describe("token unlocks", () => {
     );
   });
 
-  it("gives each event one of cliff or dailyLinearRateChange, never both, each with the documented amounts", async () => {
-    const { json } = await ask(b, catalog.tokenUnlockEvents(tok.slug, "2025-01-01", "2028-01-01"));
+  it("answers with the asset and an unlockEvents list; each event has one of cliff or dailyLinearRateChange, in the live API's field names", async () => {
+    const { json } = await ask(
+      b,
+      catalog.tokenUnlockEvents(withStream.slug, "2020-01-01", "2030-01-01"),
+    );
+    expect(Object.keys(data(json))).toEqual(["asset", "unlockEvents"]);
+    expect(Object.keys(data(json).asset as Obj)).toEqual(["id", "name", "slug", "symbol"]);
     const events = data(json).unlockEvents as Obj[];
     expect(events.length).toBeGreaterThan(2);
+    let sawRate = false;
     for (const e of events) {
       expect((e.cliff === null) !== (e.dailyLinearRateChange === null)).toBe(true);
-      const t = (e.cliff ?? e.dailyLinearRateChange) as Obj;
-      expect(Object.keys(t)).toEqual([
-        "amountNative",
-        "amountUSD",
-        "percentOfTotalAllocation",
-        "allocations",
-      ]);
+      if (e.cliff !== null)
+        expect(Object.keys(e.cliff as Obj)).toEqual([
+          "amountNative",
+          "amountUSD",
+          "percentOfTotalAllocation",
+          "allocations",
+        ]);
+      else {
+        sawRate = true;
+        expect(Object.keys(e.dailyLinearRateChange as Obj)).toEqual([
+          "dailyAmountNative",
+          "dailyAmountUSD",
+          "nextDailyAmountNative",
+          "nextDailyAmountUSD",
+          "percentOfTotalAllocation",
+          "nextPercentOfTotalAllocation",
+          "percentChangeOfRate",
+          "allocations",
+        ]);
+      }
       expect(typeof (e.timestamp as string)).toBe("string");
     }
+    expect(sawRate).toBe(true);
     const dates = events.map((e) => e.timestamp as string);
     expect([...dates].sort()).toEqual(dates);
   });
 
-  it("returns data: null, with status 200, for a window with no events", async () => {
+  it("returns a data object with an EMPTY unlockEvents list, with status 200, for a window with no events", async () => {
     const r = await ask(b, catalog.tokenUnlockEvents(tok.slug, "2010-01-01", "2010-02-01"));
     expect(r.status).toBe(200);
-    expect(r.json.data).toBeNull();
     expect(r.json.error).toBeNull();
+    expect(data(r.json).unlockEvents).toEqual([]);
+    expect(Object.keys(data(r.json).asset as Obj)).toEqual(["id", "name", "slug", "symbol"]);
   });
 
-  it("keeps the schedule, the supply series and the events consistent: supply rises by exactly what unlocks", async () => {
+  it("includes the end day of a schedule: 31 calendar days give 31 daily snapshots", async () => {
+    const start = "2026-10-20";
+    const sched = (
+      await ask(b, catalog.tokenUnlockSchedule(withStream.slug, "DAILY", start, addDays(start, 30)))
+    ).json;
+    expect(Object.keys(data(sched))).toEqual([
+      "asset",
+      "genesisDate",
+      "projectedEndDate",
+      "startDate",
+      "endDate",
+      "interval",
+      "totalSnapshots",
+      "allocations",
+    ]);
+    expect(data(sched).totalSnapshots as Obj[]).toHaveLength(31);
+  });
+
+  it("refuses a schedule that starts before genesis or after the projected end, in the live API's words", async () => {
+    const { genesis, projectedEnd } = b.world.span(tok);
+    const late = await ask(
+      b,
+      catalog.tokenUnlockSchedule(
+        tok.slug,
+        "DAILY",
+        addDays(projectedEnd, 1),
+        addDays(projectedEnd, 10),
+      ),
+    );
+    expect(late.status).toBe(400);
+    expect(late.json.error).toMatch(
+      /start time cannot be before genesis date \[.*\] or after the projected end date \[.*\]/,
+    );
+    expect(
+      (
+        await ask(
+          b,
+          catalog.tokenUnlockSchedule(tok.slug, "DAILY", addDays(genesis, -5), addDays(genesis, 5)),
+        )
+      ).status,
+    ).toBe(400);
+  });
+
+  it("reads the daily rate from nextDailyAmountNative: the rate in effect on each day, plus that day's cliffs, reproduces the schedule on every day", async () => {
+    const { genesis: start, projectedEnd: end } = b.world.span(withStream); // the whole span the schedule endpoint allows
+    const events = (
+      data(
+        (await ask(b, catalog.tokenUnlockEvents(withStream.slug, "2000-01-01", addDays(end, 1))))
+          .json,
+      ).unlockEvents as Obj[]
+    ).map((e) => ({
+      day: (e.timestamp as string).slice(0, 10),
+      cliff: e.cliff as Obj | null,
+      rate: e.dailyLinearRateChange as Obj | null,
+    }));
+    const snaps = data(
+      (await ask(b, catalog.tokenUnlockSchedule(withStream.slug, "DAILY", start, end))).json,
+    ).totalSnapshots as Obj[];
+    let rateReading = 0;
+    let wrongReading = 0;
+    for (const snap of snaps) {
+      const day = (snap.timestamp as string).slice(0, 10);
+      let cliff = new D(0);
+      let next = new D(0);
+      let prior = new D(0);
+      for (const e of events) {
+        if (e.day > day) continue;
+        if (e.cliff !== null && e.day === day)
+          cliff = cliff.plus(d((e.cliff as Obj).amountNative)!);
+        if (e.rate !== null) {
+          next = d(e.rate.nextDailyAmountNative)!;
+          prior = d(e.rate.dailyAmountNative)!;
+        }
+      }
+      const actual = d(snap.unlockedInPeriodNative)!;
+      if (cliff.plus(next).eq(actual)) rateReading++;
+      if (cliff.plus(prior).eq(actual)) wrongReading++;
+    }
+    expect(rateReading).toBe(snaps.length);
+    expect(wrongReading).toBeLessThan(snaps.length); // dailyAmountNative, the rate BEFORE the change, is not what the schedule uses
+  });
+
+  it("keeps the schedule and the supply series consistent: supply rises by exactly what unlocks", async () => {
     const start = addDays(FIXTURE_AS_OF, -30);
-    const end = addDays(FIXTURE_AS_OF, 91);
+    const end = addDays(FIXTURE_AS_OF, 90);
     const sched = (await ask(b, catalog.tokenUnlockSchedule(tok.slug, "DAILY", start, end))).json;
     const snaps = data(sched).totalSnapshots as Obj[];
     expect(snaps).toHaveLength(121);
     const unlocked = snaps.reduce((s, x) => s.plus(d(x.unlockedInPeriodNative)!), new D(0));
-    const sup = (await ask(b, catalog.assetSupply(tok.assetID, addDays(start, -1), end))).json;
+    const sup = (
+      await ask(b, catalog.assetSupply(tok.assetID, addDays(start, -1), addDays(end, 1)))
+    ).json;
     const pts = pointsOf(seriesOf(sup)[0]!);
     const before = d(pts[0]![1])!;
     const after = d(pts[pts.length - 1]![1])!;
@@ -341,11 +453,12 @@ describe("token unlocks", () => {
 
   it("aggregates the same unlocks weekly and monthly without losing or inventing any", async () => {
     const start = "2026-10-20";
-    const end = "2027-02-01";
+    const end = "2027-01-31";
     const total = async (interval: "DAILY" | "WEEKLY" | "MONTHLY") =>
       (
-        data((await ask(b, catalog.tokenUnlockSchedule(tok.slug, interval, start, end))).json)
-          .totalSnapshots as Obj[]
+        data(
+          (await ask(b, catalog.tokenUnlockSchedule(withStream.slug, interval, start, end))).json,
+        ).totalSnapshots as Obj[]
       )
         .reduce((s, x) => s.plus(d(x.unlockedInPeriodNative)!), new D(0))
         .toFixed(6);
@@ -357,7 +470,7 @@ describe("token unlocks", () => {
   it("requires an interval on the schedule", async () => {
     const q: Query = {
       api: "token-unlocks",
-      path: `/token-unlocks/v1/assets/${tok.slug}/unlocks`,
+      path: `/token-unlocks/v1/assets/${withStream.slug}/unlocks`,
       params: { startTime: "2026-10-20T00:00:00Z", endTime: "2026-11-20T00:00:00Z" },
     };
     expect((await ask(b, q)).status).toBe(400);

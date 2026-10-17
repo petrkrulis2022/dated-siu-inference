@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ASSUMED_SHAPES,
+  CONFIRMED_SHAPES,
   MAX_POINTS_PER_CALL,
   MAX_SERIES_PER_CALL,
   canonicalQuery,
@@ -122,7 +123,10 @@ describe("catalog builders", () => {
     expect(() => catalog.stablecoinContracts(0)).toThrow(RangeError);
   });
 
-  it("keeps a list of what the fixtures assume beyond the docs, for day 1's calibration", () => {
-    expect(ASSUMED_SHAPES.length).toBeGreaterThanOrEqual(6);
+  it("keeps what calibration confirmed against the live API, and what is still only assumed", () => {
+    expect(CONFIRMED_SHAPES.length).toBeGreaterThanOrEqual(10);
+    expect(ASSUMED_SHAPES.length).toBeGreaterThanOrEqual(3);
+    expect(CONFIRMED_SHAPES.join(" ")).toContain("nextDailyAmountNative");
+    expect(CONFIRMED_SHAPES.join(" ")).toContain("INCLUSIVE");
   });
 });

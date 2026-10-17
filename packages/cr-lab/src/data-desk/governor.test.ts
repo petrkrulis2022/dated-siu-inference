@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { DailyRequestLimit, RateGovernor, RateLimited, type GovernedResult } from "./governor.js";
+import {
+  DEFAULT_GOVERNOR,
+  DailyRequestLimit,
+  HourlyRequestLimit,
+  RateGovernor,
+  RateLimited,
+  type GovernedResult,
+} from "./governor.js";
 
 /** A clock that only moves when something sleeps, so tests are instant and exact. */
 function fake(startIso = "2026-10-20T12:00:00Z") {
@@ -20,12 +27,25 @@ const ok = <T>(value: T): GovernedResult<T> => ({ status: 200, value });
 describe("RateGovernor", () => {
   it("spaces requests at least minIntervalMs apart, and does not wait for the first", async () => {
     const c = fake();
-    const g = new RateGovernor({ now: c.now, sleep: c.sleep });
+    const g = new RateGovernor({
+      now: c.now,
+      sleep: c.sleep,
+      overrides: { "data-api": { minIntervalMs: 1000 } },
+    });
     const starts: number[] = [];
     for (let i = 0; i < 3; i++) await g.run("data-api", async () => (starts.push(c.now()), ok(i)));
     expect(starts[1]! - starts[0]!).toBe(1000);
     expect(starts[2]! - starts[1]!).toBe(1000);
     expect(c.slept).toEqual([1000, 1000]);
+  });
+
+  it("defaults to a conservative pace, because the live API rate-limits and does not say where", () => {
+    expect(DEFAULT_GOVERNOR).toMatchObject({
+      maxConcurrent: 1,
+      minIntervalMs: 5_000,
+      maxRequestsPerHour: 30,
+      maxRequestsPerDay: 200,
+    });
   });
 
   it("never has two requests in flight when maxConcurrent is 1, and serves callers in the order they asked", async () => {
@@ -83,7 +103,15 @@ describe("RateGovernor", () => {
     const g = new RateGovernor({
       now: c.now,
       sleep: c.sleep,
-      overrides: { "data-api": { minIntervalMs: 0 } },
+      overrides: {
+        "data-api": {
+          minIntervalMs: 0,
+          maxSpacingMs: 0,
+          baseBackoffMs: 2_000,
+          maxBackoffMs: 60_000,
+          maxRetries: 4,
+        },
+      },
     });
     const answers: GovernedResult<string>[] = [
       { status: 429, value: "x", retryAfterSeconds: 10 },
@@ -97,7 +125,12 @@ describe("RateGovernor", () => {
     expect(
       g.events.filter((e) => e.kind === "backoff").map((e) => e.kind === "backoff" && e.status),
     ).toEqual([429, 503, 429]);
-    expect(g.report()[0]).toMatchObject({ group: "data-api", requestsToday: 4, backoffs: 3 });
+    expect(g.report()[0]).toMatchObject({
+      group: "data-api",
+      requestsToday: 4,
+      backoffs: 3,
+      tooManyRequests: 2,
+    });
   });
 
   it("gives up after maxRetries with RateLimited, instead of sending more", async () => {
@@ -163,5 +196,96 @@ describe("RateGovernor", () => {
       "boom",
     );
     await expect(g.run("data-api", async () => ok("next"))).resolves.toBe("next");
+  });
+
+  it("doubles its spacing after a 429, up to the ceiling, and halves it again after ten calm answers", async () => {
+    const c = fake();
+    const g = new RateGovernor({
+      now: c.now,
+      sleep: c.sleep,
+      overrides: {
+        "data-api": {
+          minIntervalMs: 1_000,
+          maxSpacingMs: 4_000,
+          baseBackoffMs: 1,
+          maxBackoffMs: 1,
+          maxRetries: 9,
+          maxRequestsPerHour: 1_000,
+        },
+      },
+    });
+    const answers: GovernedResult<number>[] = [
+      { status: 429, value: 0 },
+      { status: 429, value: 0 },
+      { status: 429, value: 0 },
+      ok(1),
+    ];
+    await g.run("data-api", async () => answers.shift()!);
+    expect(g.report()[0]?.spacingMs).toBe(4_000); // 1s, doubled to 2s, then 4s, held at the 4s ceiling
+    for (let i = 0; i < 10; i++) await g.run("data-api", async () => ok(i));
+    expect(g.report()[0]?.spacingMs).toBe(2_000); // ten answers that were not 429: halved
+    for (let i = 0; i < 10; i++) await g.run("data-api", async () => ok(i));
+    expect(g.report()[0]?.spacingMs).toBe(1_000); // and back to the configured pace, never below it
+    for (let i = 0; i < 10; i++) await g.run("data-api", async () => ok(i));
+    expect(g.report()[0]?.spacingMs).toBe(1_000);
+  });
+
+  it("really waits the wider spacing after a 429: the next request is not sent at the old pace", async () => {
+    const c = fake();
+    const g = new RateGovernor({
+      now: c.now,
+      sleep: c.sleep,
+      overrides: {
+        "data-api": {
+          minIntervalMs: 1_000,
+          maxSpacingMs: 60_000,
+          baseBackoffMs: 1,
+          maxBackoffMs: 1,
+        },
+      },
+    });
+    const starts: number[] = [];
+    const answers: GovernedResult<number>[] = [{ status: 429, value: 0 }, ok(1), ok(2)];
+    await g.run("data-api", async () => (starts.push(c.now()), answers.shift()!));
+    await g.run("data-api", async () => (starts.push(c.now()), answers.shift()!));
+    expect(starts[2]! - starts[1]!).toBeGreaterThanOrEqual(2_000);
+  });
+
+  it("stops at the hourly limit, counting only the last hour, and carries on once the hour has moved on", async () => {
+    const c = fake();
+    const g = new RateGovernor({
+      now: c.now,
+      sleep: c.sleep,
+      overrides: { "data-api": { minIntervalMs: 0, maxRequestsPerHour: 3 } },
+    });
+    const call = async () => ok(1);
+    await g.run("data-api", call);
+    c.advance(10 * 60_000);
+    await g.run("data-api", call);
+    await g.run("data-api", call);
+    await expect(g.run("data-api", call)).rejects.toBeInstanceOf(HourlyRequestLimit);
+    expect(g.events.some((e) => e.kind === "hourly-limit")).toBe(true);
+    c.advance(51 * 60_000); // the first request is now more than an hour old
+    await expect(g.run("data-api", call)).resolves.toBe(1);
+  });
+
+  it("keeps every attempt's status, with the time, so a rate-limit episode can be reconstructed afterwards", async () => {
+    const c = fake();
+    const g = new RateGovernor({
+      now: c.now,
+      sleep: c.sleep,
+      overrides: { "data-api": { minIntervalMs: 0, baseBackoffMs: 1, maxBackoffMs: 1 } },
+    });
+    const answers: GovernedResult<string>[] = [
+      { status: 429, value: "x" },
+      { status: 503, value: "x" },
+      ok("y"),
+    ];
+    await g.run("data-api", async () => answers.shift()!);
+    expect(g.attempts.map((a) => a.status)).toEqual([429, 503, 200]);
+    expect(g.attempts[0]).toMatchObject({
+      group: "data-api",
+      at: expect.stringMatching(/^2026-10-20T12:00:0/),
+    });
   });
 });

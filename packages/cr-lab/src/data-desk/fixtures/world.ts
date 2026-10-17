@@ -60,8 +60,9 @@ const PERP_BASE_USD = [
 export interface PerpVenue {
   id: string;
   name: string;
-  slug: string;
-  projectID: string;
+  /** null for some venues, as in the real model (8 of 31 on 2026-10-17): `id` is the key, never `slug` */
+  slug: string | null;
+  projectID: string | null;
   launchDay: string;
 }
 
@@ -127,8 +128,8 @@ export class FixtureWorld {
     this.venues = PERP_BASE_USD.map((_, i) => ({
       id: `fixture-perp-${"abcdefgh"[i]}`,
       name: `Fixture Perp ${"ABCDEFGH"[i]}`,
-      slug: `fixture-perp-${"abcdefgh"[i]}`,
-      projectID: uuid(seed, `perp${i}`),
+      slug: i >= 6 ? null : `fixture-perp-${"abcdefgh"[i]}`,
+      projectID: i >= 6 ? null : uuid(seed, `perp${i}`),
       launchDay: i === 7 ? addDays(asOf, -200) : addDays(asOf, -900),
     }));
     this.lending = LEND_BASE_CENTS.map((_, i) => ({
@@ -272,6 +273,26 @@ export class FixtureWorld {
       sum += s.daily * BigInt(days);
     }
     return sum;
+  }
+
+  /** The first and last days the token's schedule covers: the Token Unlocks API refuses a schedule window that starts outside them. */
+  span(tok: Token): { genesis: string; projectedEnd: string } {
+    const days = [
+      ...tok.cliffs.map((c) => c.day),
+      ...tok.streams.flatMap((s) => [s.start, s.end]),
+    ].sort();
+    return {
+      genesis: addDays(days[0] as string, -30),
+      projectedEnd: days[days.length - 1] as string,
+    };
+  }
+
+  /** The aggregate daily amount unlocking by linear streams on `day` (the "daily rate in effect"), in the same units as the cliffs. */
+  rateOn(tok: Token, day: string): bigint {
+    let r = 0n;
+    for (const s of tok.streams)
+      if (daysBetween(s.start, day) >= 0 && daysBetween(day, s.end) > 0) r += s.daily;
+    return r;
   }
 
   totalAllocation(tok: Token): bigint {

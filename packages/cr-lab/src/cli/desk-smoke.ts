@@ -1,22 +1,30 @@
 /**
  * Runs the data desk end to end on the FIXTURES backend: pulls one query from each dataset family the four tasks use, shows the hashes, then pulls them all again and checks
- * that nothing was requested twice. Uses the real desk, governor, store and manifest at their default fixture paths (all under `data/private/`, never committed).
- * Spends nothing, reads no key, calls no network. `pnpm --filter @touchstone/cr-lab run desk-smoke [YYYY-MM-DD]`
+ * that nothing was requested twice. Uses the real desk, governor, store and manifest, in a fresh temporary directory each run (a store left over from an older version of the
+ * fixtures would be served as if it were current). Spends nothing, reads no key, calls no network. `pnpm --filter @touchstone/cr-lab run desk-smoke [YYYY-MM-DD]`
  */
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { completeMonthsWindow, quarterWindow } from "../data-desk/dates.js";
 import { DataDesk, type Snapshot } from "../data-desk/desk.js";
 import { FixtureBackend } from "../data-desk/fixtures/backend.js";
 import { FIXTURE_AS_OF } from "../data-desk/fixtures/world.js";
 import { RateGovernor } from "../data-desk/governor.js";
 import { catalog } from "../data-desk/queries.js";
-import { SnapshotStore, defaultStoreOptions } from "../data-desk/snapshots.js";
+import { SnapshotStore } from "../data-desk/snapshots.js";
 import type { Json } from "../data-desk/json-decimal.js";
 import { addDays } from "../data-desk/dates.js";
 import type { Query } from "../data-desk/types.js";
 
 const window = process.argv[2] ?? FIXTURE_AS_OF;
 const backend = new FixtureBackend();
-const store = new SnapshotStore(defaultStoreOptions("fixtures"));
+const root = mkdtempSync(join(tmpdir(), "cr-desk-smoke-"));
+const store = new SnapshotStore({
+  privateRoot: join(root, "snapshots"),
+  manifestDir: join(root, "manifests"),
+  backend: "fixtures",
+});
 // Fixtures have no real rate limit, so no spacing; the live desk keeps the governor's defaults.
 const governor = new RateGovernor({
   overrides: { "data-api": { minIntervalMs: 0 }, "token-unlocks": { minIntervalMs: 0 } },
@@ -48,7 +56,9 @@ async function pullAll(): Promise<Snapshot[]> {
   // CR-UO: the token list, one token's id, its events for the next 90 days and its circulating supply
   const tokens = rows(await pull(catalog.tokenUnlockAssets()));
   const slug = str(tokens[0]?.slug);
-  const assetId = str(rows(await pull(catalog.assetBySlug(slug)))[0]?.assetID);
+  const assetId = str(
+    ((await pull(catalog.assetBySlug(slug))).json as { data: Record<string, Json> }).data.assetID,
+  ); // a single row comes back as one object
   await pull(catalog.tokenUnlockEvents(slug, window, addDays(window, 90)));
   await pull(catalog.assetSupply(assetId, window, addDays(window, 1)));
   // CR-SM: the stablecoin contracts, then the first and last supply and price of three over 90 days
@@ -76,6 +86,7 @@ for (const r of governor.report())
   console.log(
     `governor ${r.group}: ${r.requestsToday} requests today of ${r.limit}, ${r.backoffs} back-offs`,
   );
+rmSync(root, { recursive: true, force: true });
 if (
   extra !== 0 ||
   second.some((s) => !s.fromStore) ||

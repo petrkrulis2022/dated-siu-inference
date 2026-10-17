@@ -129,13 +129,12 @@ export class FixtureBackend implements DataBackend {
     }
     if ((m = /^\/query\/tabular\/assets\/([^/]+)$/.exec(path)) !== null) {
       const t = w.tokens.find((x) => x.slug === m![1]);
+      if (t === undefined) return fail(404, "asset not found");
+      // A single row comes back as an object, with `metadata.matchedField` saying which column matched (seen on the live API, 2026-10-17).
       return respond(200, {
         error: null,
-        data: t === undefined ? [] : [{ assetID: t.assetID, name: t.name, symbol: t.symbol }],
-        metadata: {
-          totalRows: new Num(t === undefined ? "0" : "1"),
-          totalPages: new Num(t === undefined ? "0" : "1"),
-        },
+        data: { assetID: t.assetID, name: t.name, symbol: t.symbol },
+        metadata: { matchedField: "slug" },
       });
     }
     if ((m = /^\/query\/timeseries\/([^/]+)\/1d$/.exec(path)) !== null)
@@ -287,6 +286,41 @@ export class FixtureBackend implements DataBackend {
     };
   }
 
+  #asset(tok: Token): Json {
+    return { id: tok.assetID, name: tok.name, slug: tok.slug, symbol: tok.symbol };
+  }
+
+  /** The aggregate linear rate changing on `day`: the rate before and after, and the streams involved, in the live API's field names. */
+  #rateChange(tok: Token, day: string): Json {
+    const before = this.world.rateOn(tok, addDays(day, -1));
+    const after = this.world.rateOn(tok, day);
+    const total = this.world.totalAllocation(tok);
+    const usd = (a: bigint) => decimalText((a * tok.priceMicroUsd) / 1_000_000n, 6);
+    const pct = (a: bigint) => decimalText((a * 100_000_000n) / total, 8);
+    const involved = tok.streams.filter((s) => s.start === day || s.end === day);
+    return {
+      dailyAmountNative: new Num(decimalText(before, 6)),
+      dailyAmountUSD: new Num(usd(before)),
+      nextDailyAmountNative: new Num(decimalText(after, 6)),
+      nextDailyAmountUSD: new Num(usd(after)),
+      percentOfTotalAllocation: new Num(pct(before)),
+      nextPercentOfTotalAllocation: new Num(pct(after)),
+      percentChangeOfRate:
+        before === 0n ? null : new Num(decimalText(((after - before) * 100_000_000n) / before, 8)),
+      allocations: involved.map((s) => {
+        const sb = this.world.rateOn({ ...tok, streams: [s] }, addDays(day, -1));
+        const sa = this.world.rateOn({ ...tok, streams: [s] }, day);
+        return {
+          allocationRecipient: s.recipient,
+          dailyAmountNative: new Num(decimalText(sb, 6)),
+          nextDailyAmountNative: new Num(decimalText(sa, 6)),
+          percentChangeOfRate:
+            sb === 0n ? null : new Num(decimalText(((sa - sb) * 100_000_000n) / sb, 8)),
+        };
+      }),
+    };
+  }
+
   #events(tok: Token, params: Readonly<Record<string, string>>): BackendResponse {
     const start = (params.startTime ?? "").slice(0, 10);
     const end = (params.endTime ?? "").slice(0, 10);
@@ -304,30 +338,22 @@ export class FixtureBackend implements DataBackend {
             dailyLinearRateChange: null,
           },
         });
-    for (const s of tok.streams) {
-      if (inWin(s.start))
-        events.push({
-          day: s.start,
-          json: {
-            timestamp: `${s.start}T00:00:00Z`,
-            cliff: null,
-            dailyLinearRateChange: this.#tranche(tok, s.daily, s.recipient),
-          },
-        });
-      if (inWin(s.end))
-        events.push({
-          day: s.end,
-          json: {
-            timestamp: `${s.end}T00:00:00Z`,
-            cliff: null,
-            dailyLinearRateChange: this.#tranche(tok, -s.daily, s.recipient),
-          },
-        });
-    }
+    // one event on each day the aggregate linear rate changes (a stream starting or ending)
+    const boundaries = [...new Set(tok.streams.flatMap((s) => [s.start, s.end]))].filter(inWin);
+    for (const day of boundaries)
+      events.push({
+        day,
+        json: {
+          timestamp: `${day}T00:00:00Z`,
+          cliff: null,
+          dailyLinearRateChange: this.#rateChange(tok, day),
+        },
+      });
     events.sort((a, b) => a.day.localeCompare(b.day));
+    // An empty window is an empty list inside a data object, as the live API answers (not `data: null`).
     return respond(200, {
       error: null,
-      data: events.length === 0 ? null : { unlockEvents: events.map((e) => e.json) },
+      data: { asset: this.#asset(tok), unlockEvents: events.map((e) => e.json) },
     });
   }
 
@@ -337,17 +363,26 @@ export class FixtureBackend implements DataBackend {
       return fail(400, "interval is required: DAILY, WEEKLY or MONTHLY");
     const start = (params.startTime ?? "").slice(0, 10);
     const end = (params.endTime ?? "").slice(0, 10);
-    if (daysBetween(assertDate(start, "startTime"), assertDate(end, "endTime")) <= 0)
-      return fail(400, "endTime must be after startTime");
+    if (daysBetween(assertDate(start, "startTime"), assertDate(end, "endTime")) < 0)
+      return fail(400, "endTime must not be before startTime");
+    const { genesis, projectedEnd } = this.world.span(tok);
+    if (daysBetween(genesis, start) < 0 || daysBetween(start, projectedEnd) < 0) {
+      return fail(
+        400,
+        `start time cannot be before genesis date [${genesis}T00:00:00Z] or after the projected end date [${projectedEnd}T00:00:00Z]`,
+      );
+    }
+    // The end day is INCLUDED: a window from the 17th to the 47th has 31 daily snapshots (seen on the live API, 2026-10-17).
+    const last = addDays(end, 1);
     const snaps: Json[] = [];
-    for (let p = start; daysBetween(p, end) > 0;) {
+    for (let p = start; daysBetween(p, last) > 0;) {
       const next =
         interval === "DAILY"
           ? addDays(p, 1)
           : interval === "WEEKLY"
             ? addDays(p, 7)
             : monthsBefore(firstOfMonth(p), -1);
-      const stop = daysBetween(next, end) < 0 ? end : next;
+      const stop = daysBetween(next, last) < 0 ? last : next;
       let native = 0n;
       for (let d = p; daysBetween(d, stop) > 0; d = addDays(d, 1))
         native += this.world.unlockedOn(tok, d);
@@ -358,6 +393,21 @@ export class FixtureBackend implements DataBackend {
       });
       p = stop;
     }
-    return respond(200, { error: null, data: { totalSnapshots: snaps } });
+    const recipients = [
+      ...new Set([...tok.cliffs.map((c) => c.recipient), ...tok.streams.map((x) => x.recipient)]),
+    ];
+    return respond(200, {
+      error: null,
+      data: {
+        asset: this.#asset(tok),
+        genesisDate: `${genesis}T00:00:00Z`,
+        projectedEndDate: `${projectedEnd}T00:00:00Z`,
+        startDate: `${start}T00:00:00Z`,
+        endDate: `${end}T00:00:00Z`,
+        interval,
+        totalSnapshots: snaps,
+        allocations: recipients.map((r) => ({ allocationRecipient: r, dailySnapshots: [] })),
+      },
+    });
   }
 }
