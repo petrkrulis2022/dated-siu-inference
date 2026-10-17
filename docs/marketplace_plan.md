@@ -1,9 +1,9 @@
 # Marketplace plan — the currency lab
 
-*Created 2026-10-06. This file is the single reference for the currency-lab work. **Every change of
+_Created 2026-10-06. This file is the single reference for the currency-lab work. **Every change of
 scope goes into this file first.** Ideas outside phase 1's scope go to §10 Backlog, not into the build.
 Where this file and `CLAUDE.md` disagree on vocabulary, invariants or build boundaries, `CLAUDE.md`
-wins; where this file and the earlier gate-attack plans disagree about the currency test, this file wins.*
+wins; where this file and the earlier gate-attack plans disagree about the currency test, this file wins._
 
 ---
 
@@ -17,28 +17,32 @@ they receive instead of minting new.
 ## 2. Phase 1 design
 
 ### 2.1 Task
+
 T1 shipment records — the seeded generator and grader already in the basket
 (`generateT1Instance`, `gradeT1`). **Four job types**, made from T1 variants (different seed streams,
 labelled TYPE-1 to TYPE-4), each checked by its deterministic grader. No code writing, no gate
 authoring, no adversary, no attacks.
 
 ### 2.2 Issuer
+
 ISSUER-B as an **automatic service**, not a model-driven seat: a deterministic policy on ISSUER-B's own
 key that answers requests (from instrument v4 every payment is a direct transfer, so there is no escrow for it to settle, D30). It sells **raw work**: one unit per job, bought with a
 quote that is paid in USDC or in fSIU — paying the issuer in fSIU is the redemption (the claim goes back
 to the issuer that owes the work). The two routes must cost exactly the same (price parity, §5). See D8.
 
 ### 2.3 Traders
+
 Four model-driven traders on the existing seat IDs, shown to agents as TRADER-1 to TRADER-4. Two on
-claude-haiku-4-5, two on gpt-5.4-mini (the cheapest registered tier of each family). *Through instrument v4; v5 put all four on claude-haiku-4-5 (D39), v6 seated deepseek-v3.2 on two (D42), from v7 the roster was claude-haiku-4-5 (TRADER-1, -3), gpt-5.1 (TRADER-2) and grok-4.6 (TRADER-4), all direct (D47, D48), and from v9 it is Anthropic only: claude-haiku-4-5 (TRADER-1, -3) and claude-sonnet-5 (TRADER-2, -4), all direct (D57).* **No `AgentId`
+claude-haiku-4-5, two on gpt-5.4-mini (the cheapest registered tier of each family). _Through instrument v4; v5 put all four on claude-haiku-4-5 (D39), v6 seated deepseek-v3.2 on two (D42), from v7 the roster was claude-haiku-4-5 (TRADER-1, -3), gpt-5.1 (TRADER-2) and grok-4.6 (TRADER-4), all direct (D47, D48), and from v9 it is Anthropic only: claude-haiku-4-5 (TRADER-1, -3) and claude-sonnet-5 (TRADER-2, -4), all direct (D57)._ **No `AgentId`
 widening.** Three traders stand on existing seats and wallets; **TRADER-4 has a wallet of its own**, kept
 under the seat ID `ISSUER-A` so nothing in the loop widens, and not ISSUER-A's wallet (D4, superseded by D22).
 
 ### 2.4 Economy
+
 Every number below is a **default**; tune if needed and record the final values in the table in §2.11.
 
 - Each trader has **one skill**: it can deliver exactly one job type.
-- Each trader has **needs**: a schedule of jobs of *other* types it must obtain, spread across rounds.
+- Each trader has **needs**: a schedule of jobs of _other_ types it must obtain, spread across rounds.
 - To meet a need, a trader buys the job from the trader holding that skill, in USDC or fSIU. **Price
   fixed at 1.2 × print per job; no negotiation in phase 1.**
 - To deliver a job it has sold, the seller buys **one unit of raw work** from ISSUER-B (redeeming fSIU
@@ -49,7 +53,8 @@ Every number below is a **default**; tune if needed and record the final values 
   either asset, so neither asset is favoured.
 
 ### 2.5 Opening balances
-*As revised for instrument v4 (D31); the v1 to v3 text was "equal value in USDC and fSIU, 2,000 mSIU each".*
+
+_As revised for instrument v4 (D31); the v1 to v3 text was "equal value in USDC and fSIU, 2,000 mSIU each"._
 Each trader starts every run with **equal value in USDC and fSIU, sized so that either alone meets every need**:
 the claim for each job it buys and for each unit of raw work it buys to deliver the jobs it sells (a balanced
 schedule makes both counts `needsPerTrader`), and USDC of the same value at the print, rounded up. The figures are
@@ -59,30 +64,35 @@ together. The operator resets each trader's USDC to the opening figure before ev
 Claims are valid for the whole window.
 
 ### 2.6 Window and rounds
+
 **One window, several rounds.** No forward-dating, no window transitions, no drain. A round opens when
 the previous one has gone quiet (nobody can act); needs of a round become purchasable when it opens.
 
 ### 2.7 The board
+
 Every trader sees every trader's needs by round, which trader holds which skill, and its own open
 sales and raw-work units. One list builds it (the schedule is generated once per run from the seed and
 read by the board, the guards and the report).
 
 ### 2.8 Scoring (stated in every brief)
+
 A trader's result is its USDC, plus its fSIU valued at the current print, plus the credit for needs
 met. Results are measured before the window closes, so unexpired fSIU counts at the print. Converting
 between the two assets does not change the result, and a trader is never required to convert fSIU to
 USDC.
 
-*Which of this a brief states (D35): the brief says how a result is counted, and no more. The last sentence above
+_Which of this a brief states (D35): the brief says how a result is counted, and no more. The last sentence above
 describes the structure; the brief does not carry it, because D15 keeps "convert" out of the brief's wording. The
-lab has no route from fSIU to USDC and v4 adds none.*
+lab has no route from fSIU to USDC and v4 adds none._
 
 ### 2.9 Briefs
+
 Facts only, identical wording across traders except each trader's own skill and needs. The canonical
 asset text for redemption and expiry. No instruction to hold, spend, convert or prefer either asset.
 The context validator stays on.
 
 ### 2.10 What is reused and what is new
+
 **Unchanged:** the contracts and the sixth-trio deployment (extract-class lots: ISSUER-B 32,000 mSIU,
 ISSUER-A 48,000, 1 USDC bond each); the quote, payment, claim-transfer, redemption and serve tools; the
 loop; the claim-position tracker; price parity; the claim ledger; scripted mode and its verifier; the
@@ -92,30 +102,35 @@ confirmed-write retry; the debug disqualification; the carried-forward settlemen
 issuer service; briefs and roster; a lab runner; scoring and measurement; a scripted lab walk.
 
 ### 2.12 The print moves (instrument v6, D41)
-*Through v5 the print was one number for the whole run.* It is now a **scenario value used inside the lab only** — never published, never
+
+_Through v5 the print was one number for the whole run._ It is now a **scenario value used inside the lab only** — never published, never
 the index, never an input to a print; round 1 starts from the real print. Each round after the first it goes **up or down by 15% with equal
 probability**, drawn from the run's seed (so a run is reproduced from its seed alone). Up multiplies by 1.15 and down by 0.85, so the
 expected print stays where it started. Three rounds reach 0.7225× to 1.3225× of the start, in six possible prints (`lab/prints.ts`).
+
 - **Prices follow the round's print:** a job is 1.2 × it, a unit of raw work is 1 × it, so the USDC price moves with the print. A quote **keeps the price of the round it was asked for in**, and a claim paid against it is sized there: about 1.2 SIU for a job and 1 SIU for a unit whatever the print (the quote's $0.0001 rounding moves it between 1,156 and 1,229 mSIU for a job and 964 and 1,029 for a unit across the six prints).
 - **Shown, never advised:** the brief says the print can move, that it is a scenario value and not the index, and that each turn shows it; each turn lists the print of every round so far and how far it moved ("up 15.0% on round 1"), and nothing about a round that has not opened. `get_print` is removed from a trader's tools: it reads the published print, which is not the lab's.
 - **Scoring unchanged:** USDC + fSIU at the current print + a credit (1.5 × the current print per job), measured before the window closes, at the print then in force.
 - **Either asset alone is still enough:** fSIU is sized at the largest claim any reachable print asks for (4,516 mSIU per trader), and USDC at the value of that fSIU at the **highest print the walk can reach** (8,583 minor units against 8,400 for every quote at that print). **The consequence, stated plainly:** at round 1's print the USDC is worth about a third more than the fSIU (8,583 against 6,489), which is what guaranteeing a dollar shortage never forces fSIU use costs. Four endowments are 18,064 mSIU, 56% of ISSUER-B's 32,000 headroom.
 - **A quote can be paid in a later round**, in either asset, at the price it was asked for at; the two assets are treated alike.
 
-*From v8 (§2.13) a quote is priced in SIU and the bullets above about a claim's size, the $0.0001 rounding and the opening are superseded; they describe v6 and v7.*
+_From v8 (§2.13) a quote is priced in SIU and the bullets above about a claim's size, the $0.0001 rounding and the opening are superseded; they describe v6 and v7._
 
 ### 2.13 Quotes in SIU, holdings shown, routes in a seeded order (instrument v8, D50)
-*Through v7 a quote read `amount_usd_max 0.0017` and nothing else: the agents never saw the work's price in SIU, and never saw what they held.*
+
+_Through v7 a quote read `amount_usd_max 0.0017` and nothing else: the agents never saw the work's price in SIU, and never saw what they held._
+
 - **A quote is denominated in SIU, as `docs/datum-quote.md` specifies.** A job is **1 SIU of work, priced at 1.2 SIU**; a unit of raw work is **1 SIU of work, priced at 1 SIU**. In every round. A request names that price as its `siu` and the print of the round as its `rate_usd_per_siu`; the quote's dollars are `siu × rate`, derived by the SDK at **USDC's own six decimals, rounded up** to the next minor unit (an explicit option, `QuoteAmountPrecision`; the SDK's default of four decimals, half-up, is unchanged and a quote at six decimals fails its default validation, tested). So the dollars follow the print and the price in SIU does not. **Paying in fSIU costs exactly the price in mSIU — 1,200 for a job and 1,000 for a unit of raw work — at every print.** Paying in USDC costs the dollars, which round up by less than one minor unit.
-- **Each quote line leads with the work and its price in SIU, then what settling costs in each asset at the round's print:** `qr-1: TYPE-3 job from TRADER-2, 1 SIU of work, price 1.2 SIU — settle 0.001725 USD or 1,200 mSIU of fSIU (print 0.001437 USD/SIU), expires …` (that example's figures are those of round 1's real print; later rounds' follow their prints). The seller's line for a request is the same with "asked for by TRADER-n". *Beyond your example I kept the seller and the expiry, which the old line carried; say if you want them out.*
+- **Each quote line leads with the work and its price in SIU, then what settling costs in each asset at the round's print:** `qr-1: TYPE-3 job from TRADER-2, 1 SIU of work, price 1.2 SIU — settle 0.001725 USD or 1,200 mSIU of fSIU (print 0.001437 USD/SIU), expires …` (that example's figures are those of round 1's real print; later rounds' follow their prints). The seller's line for a request is the same with "asked for by TRADER-n". _Beyond your example I kept the seller and the expiry, which the old line carried; say if you want them out._
 - **Holdings, every turn, both assets, each in the other's terms at the print in force**, from the lab's own account of each wallet (opening, moved by exactly what each payment moves), checked against the chain at every snapshot — a run in which the two ever differ is not countable (D55): `YOU HOLD: 8,364 USDC minor units (= 5,820 mSIU at this print) and 4,400 mSIU of fSIU (= 6,323 USDC minor units at this print)` (round-1 figures for an unspent opening, converted to the nearest unit). Without an account the line is left out and nothing is guessed. Every line shown is recorded in the report (`holdingsShown`).
-- **The order of the routes is seeded per run** (`lab/route-order.ts`): which asset is named first wherever the lab names both (each quote line, the holdings line, the opening sentence, the cost sentence), and the order of the three payment examples in the brief. It is recorded in the report. *The order of the tool descriptions in each agent's own prompt was already a seeded shuffle per agent per run (the loop's `shuffledToolOrder`, in the run's manifest); it is now also copied into the report.*
-- **The opening follows the prices.** fSIU per trader is exactly what its quotes come to in claims: 2 jobs and 2 units, 2 × (1,200 + 1,000) = **4,400 mSIU** (17,600 for four, 55% of ISSUER-B's 32,000 headroom; the 80% bound is 25,600). USDC per trader is the larger of that fSIU's value at the highest print the walk can reach (1,900,432 nano-USD per SIU) and what every quote costs there: **8,364 USDC minor units** against 8,362 for the value, because each quote's dollars round up. Either asset alone still meets every need at every print. *Your example holdings (8,583, 5,973, 4,516) were v7's figures; v8's differ and the example quote line above is exact.*
+- **The order of the routes is seeded per run** (`lab/route-order.ts`): which asset is named first wherever the lab names both (each quote line, the holdings line, the opening sentence, the cost sentence), and the order of the three payment examples in the brief. It is recorded in the report. _The order of the tool descriptions in each agent's own prompt was already a seeded shuffle per agent per run (the loop's `shuffledToolOrder`, in the run's manifest); it is now also copied into the report._
+- **The opening follows the prices.** fSIU per trader is exactly what its quotes come to in claims: 2 jobs and 2 units, 2 × (1,200 + 1,000) = **4,400 mSIU** (17,600 for four, 55% of ISSUER-B's 32,000 headroom; the 80% bound is 25,600). USDC per trader is the larger of that fSIU's value at the highest print the walk can reach (1,900,432 nano-USD per SIU) and what every quote costs there: **8,364 USDC minor units** against 8,362 for the value, because each quote's dollars round up. Either asset alone still meets every need at every print. _Your example holdings (8,583, 5,973, 4,516) were v7's figures; v8's differ and the example quote line above is exact._
 - **Unchanged:** the three payment routes, the print's walk, scoring (USDC + fSIU at the current print + the credit), and the D35 line, word for word. `pay_split`'s claim part is valued at the print the quote was priced at and the USDC part is the quote's dollars less that value (rounded down), as before.
 - **Written so a numeral is the same everywhere:** every lab sentence that states a price or a balance writes whole numbers with thousands separators ("1,200 mSIU", "8,364 USDC minor units"); a call's own arguments stay plain digits.
 
 ### 2.11 Final values (record here once tuned)
 
+<!-- prettier-ignore-start -->
 | parameter | default | final |
 | --- | --- | --- |
 | job size | 1 SIU (1,000 mSIU) | |
@@ -132,13 +147,14 @@ expected print stays where it started. Three rounds reach 0.7225× to 1.3225× o
 | roster | two haiku, two gpt-5.4-mini | **v9 (D57): Anthropic only, all direct — claude-haiku-4-5 (TRADER-1, -3), claude-sonnet-5 (TRADER-2, -4).** *(v7, D47, D48: two haiku, gpt-5.1, grok-4.6.)* |
 | settlement | USDC through the escrow, fSIU direct | **direct transfer in both assets from v4 (D30)** |
 | decision turns per run | about 50 | |
+<!-- prettier-ignore-end -->
 
-*Endowment check (enforced at launch, §5; `lab/launch.ts`), v4:* at the illustrative print of 0.001437 USD/SIU a job
+_Endowment check (enforced at launch, §5; `lab/launch.ts`), v4:_ at the illustrative print of 0.001437 USD/SIU a job
 quote is 1,700 minor units, so a job claim is 1,184 mSIU, and a raw-work quote is 1,400, so its claim is 975. Each
 trader buys two jobs and two units of raw work: 2 × (1,184 + 975) = **4,318 mSIU, or 6,200 USDC minor units** (6,205 is
 the same value rounded up). Four endowments are **17,272 mSIU, 54% of ISSUER-B's 32,000 mSIU headroom** (the bound is
-80%, 25,600). *Why minting was removed (D31):* with it, the worst case adds eight job claims and eight raw-work claims,
-8 × (1,184 + 975) = 17,272, for **34,544 mSIU, more than the whole headroom**. *History (v1 to v3, D16):* with an
+80%, 25,600). _Why minting was removed (D31):_ with it, the worst case adds eight job claims and eight raw-work claims,
+8 × (1,184 + 975) = 17,272, for **34,544 mSIU, more than the whole headroom**. _History (v1 to v3, D16):_ with an
 opening of 2,000 each the worst case was 8,000 + 17,272 = 25,272 mSIU, 79% of the headroom; the first draft's note said
 25,600 for a 4,000 mSIU endowment and left the raw-work claims out, which with them was 33,272.
 
@@ -146,21 +162,22 @@ opening of 2,000 each the worst case was 8,000 + 17,272 = 25,272 mSIU, 79% of th
 
 ## 3. Hypothesis and decision rule — **APPROVED 2026-10-06, with two changes (D20)**
 
-*Registered before any model has run. Thresholds are the proposals as made, chosen to be stated before any
-result exists, not derived from data.*
+_Registered before any model has run. Thresholds are the proposals as made, chosen to be stated before any
+result exists, not derived from data._
 
 **Hypothesis (H1) — re-registered 2026-10-07 for instrument v4 (D30–D33), before any counted run exists.** When paying
 with fSIU costs the same as paying with USDC, both settle the same way (a direct transfer at payment, no escrow), either
 asset alone is enough to meet every need, and nothing in the lab creates fSIU after the opening, traders pass on fSIU
-they have *received* rather than paying in USDC. *(Version 3 read: "…rather than only minting new fSIU". Minting is
-removed in v4, so the alternative to reusing received fSIU is now paying in USDC. Runs under v1 to v3 stay out of the pool.)*
+they have _received_ rather than paying in USDC. _(Version 3 read: "…rather than only minting new fSIU". Minting is
+removed in v4, so the alternative to reusing received fSIU is now paying in USDC. Runs under v1 to v3 stay out of the pool.)_
 
 **Definitions (v4).**
-- *fSIU use*: a payment to a trader, or a raw-work purchase, made from a held fSIU balance — wholly (`pay_with_held_claim`)
+
+- _fSIU use_: a payment to a trader, or a raw-work purchase, made from a held fSIU balance — wholly (`pay_with_held_claim`)
   or in the claim part of a split (`pay_split`). There is no minting to count.
-- *Opportunity*: any payment or raw-work purchase, in any asset, made while the trader held **received** fSIU at least as
+- _Opportunity_: any payment or raw-work purchase, in any asset, made while the trader held **received** fSIU at least as
   large as the amount due. Declining to use it counts. (Unchanged.)
-- *Reuse*: an opportunity paid wholly from the held fSIU, the claim being taken from what the trader received first.
+- _Reuse_: an opportunity paid wholly from the held fSIU, the claim being taken from what the trader received first.
   A split that spends received fSIU in part is reported as **partial reuse**, apart, and is not read by the rule.
 
 **H1 under instrument v6 (D41): unchanged, word for word.** The print now moves between rounds; an opportunity is judged at the print of the
@@ -171,19 +188,21 @@ start of each round tracks the raw work its schedule says it will still need —
 moves between rounds while a claim for a unit of it stays about 1 SIU.
 
 **Definitions (H2).**
-- *Unit of analysis*: a trader at the start of a round. Round 1 is the opening; rounds 2 and 3 are the snapshots taken when they open. The final snapshot is the end of the run, not a round's start, and is never a row.
-- *Raw work still to buy*: one unit for each job the schedule has this trader selling in this round or a later one. The schedule is public to every trader (EVERY TRADER'S NEEDS, BY ROUND), so a trader can see it. A trader **with** such needs has at least one; **without**, none.
-- *Held fraction*: the fSIU the trader holds at that moment ÷ the fSIU it opened with (1.00 is none spent). Reported per trader per round, beside the raw work still to buy in units and in mSIU at that round's print.
-- *Estimand*: Δ = the mean held fraction of trader-rounds with raw work still to buy, minus the mean of those without, pooled over the runs.
+
+- _Unit of analysis_: a trader at the start of a round. Round 1 is the opening; rounds 2 and 3 are the snapshots taken when they open. The final snapshot is the end of the run, not a round's start, and is never a row.
+- _Raw work still to buy_: one unit for each job the schedule has this trader selling in this round or a later one. The schedule is public to every trader (EVERY TRADER'S NEEDS, BY ROUND), so a trader can see it. A trader **with** such needs has at least one; **without**, none.
+- _Held fraction_: the fSIU the trader holds at that moment ÷ the fSIU it opened with (1.00 is none spent). Reported per trader per round, beside the raw work still to buy in units and in mSIU at that round's print.
+- _Estimand_: Δ = the mean held fraction of trader-rounds with raw work still to buy, minus the mean of those without, pooled over the runs.
 
 **Proposed thresholds (to be changed only before the block; fixed here before any result).** The interval is a 95% bootstrap over **runs**,
 as H1's (10,000 draws, the same fixed seed; a draw with an empty group is left out and counted).
-- **Inconclusive** if fewer than 30 trader-rounds *without* raw work still to buy are pooled, **or** fewer than 10 runs contribute trader-rounds to both groups.
+
+- **Inconclusive** if fewer than 30 trader-rounds _without_ raw work still to buy are pooled, **or** fewer than 10 runs contribute trader-rounds to both groups.
 - **Supported** if the interval's lower bound ≥ 0.10 **and** Δ ≥ 0.20: traders with raw work ahead hold at least a fifth more of their opening than traders without, and not by chance.
 - **Not supported** if the interval's upper bound < 0.10.
 - Otherwise **no detectable effect at this sample size** — never "no effect".
 
-*What the walk does and does not give an agent a reason to do (a note, not a rule).* A unit of raw work costs about 1 SIU in fSIU at every
+_What the walk does and does not give an agent a reason to do (a note, not a rule)._ A unit of raw work costs about 1 SIU in fSIU at every
 print, and its USDC price is the print; scoring values fSIU at the current print. The walk has no drift in the expected print, so neither
 asset is expected to be cheaper to pay with, and the one reason to hold fSIU for work still to buy is to take the print's variance out of
 what that work costs. An agent that expects the print to rise has a reason to hold fSIU; one that expects it to fall, to spend it first. The
@@ -192,18 +211,20 @@ scenario gives no basis for either expectation beyond the moves it has shown, an
 **Hypothesis (H2) — re-registered 2026-10-07 at the decision level for instrument v8 (D51), before any run exists under v8.** When a trader holds
 fSIU and still has raw work to buy, it pays in USDC and keeps the fSIU; when it has none left to buy, it spends the fSIU. Under v8 a unit of raw
 work costs exactly 1,000 mSIU at every print while its price in USDC follows the print, so fSIU held for work still to buy takes the print out of
-what that work costs. *Hedging* predicts the first group pays USDC and the second spends fSIU. *Inertia* predicts USDC from both.
+what that work costs. _Hedging_ predicts the first group pays USDC and the second spends fSIU. _Inertia_ predicts USDC from both.
 
 **Definitions (H2, decision level).**
-- *Unit of analysis*: a payment — to a trader for a job or to ISSUER-B for raw work — made by a trader **while it holds fSIU** (its holding in the loop's own ledger, opening supply included, is more than zero before the payment).
-- *Raw work still to buy*: the jobs the schedule has this trader selling, less the units of raw work it has paid for, counting this payment if it buys a unit. The schedule is public to every trader. A payer **with** such work has at least one unit left to buy after this payment; **without**, none.
-- *Outcome*: the payment is settled wholly in USDC (`pay_with_usdc`) — against any use of fSIU, whole or in the claim part of a split.
-- *Estimand*: Δ = the share of payments paid wholly in USDC by payers **with** raw work still to buy, minus the share by payers **without**, pooled over the runs.
-- *Context columns, read by no rule*: whether the fSIU the payer held would have paid that quote in full (a payer holding less than the price cannot spend fSIU alone), and the holdings table of v6.
+
+- _Unit of analysis_: a payment — to a trader for a job or to ISSUER-B for raw work — made by a trader **while it holds fSIU** (its holding in the loop's own ledger, opening supply included, is more than zero before the payment).
+- _Raw work still to buy_: the jobs the schedule has this trader selling, less the units of raw work it has paid for, counting this payment if it buys a unit. The schedule is public to every trader. A payer **with** such work has at least one unit left to buy after this payment; **without**, none.
+- _Outcome_: the payment is settled wholly in USDC (`pay_with_usdc`) — against any use of fSIU, whole or in the claim part of a split.
+- _Estimand_: Δ = the share of payments paid wholly in USDC by payers **with** raw work still to buy, minus the share by payers **without**, pooled over the runs.
+- _Context columns, read by no rule_: whether the fSIU the payer held would have paid that quote in full (a payer holding less than the price cannot spend fSIU alone), and the holdings table of v6.
 
 **Proposed thresholds (to be changed only before the block; fixed here before any result).** The interval is a 95% bootstrap over **runs**, as H1's
 (10,000 draws, the same fixed seed; a draw with an empty group is left out and counted).
-- **Inconclusive** if fewer than 30 payments *without* raw work still to buy are pooled, **or** fewer than 10 runs contribute payments to both groups.
+
+- **Inconclusive** if fewer than 30 payments _without_ raw work still to buy are pooled, **or** fewer than 10 runs contribute payments to both groups.
 - **Supported** if the interval's lower bound ≥ 0.10 **and** Δ ≥ 0.20.
 - **Not supported** if the interval's upper bound < 0.10.
 - Otherwise **no detectable effect at this sample size** — never "no effect".
@@ -227,6 +248,7 @@ Wilson interval is reported beside it for comparison and **is not read by the ru
 and as the share of runs with at least one opportunity in which a majority of opportunities were reused.
 
 **Decision rule.**
+
 - **Inconclusive** if fewer than 30 opportunity events are pooled over the runs, **or** if fewer than 10 of
   the 20 runs contribute at least one opportunity — so a few busy runs cannot decide the result.
 - Otherwise, run-resampled lower bound ≥ 0.50 → fSIU **circulates as money in this setting**; phase 2
@@ -252,13 +274,13 @@ effect only if the intervals do not overlap; otherwise "no detectable effect at 
 
 a. **Build phase 1.**
 b. **Scripted lab walk, fork then live**, through every route: paying in each asset, passing on received
-   fSIU, buying raw work in each asset, a partial use, expiry at window close, and the score computation.
+fSIU, buying raw work in each asset, a partial use, expiry at window close, and the score computation.
 c. **STOP:** send the draft decision rule (§3) for approval.
 d. **One model run. STOP:** report its cost and anything odd — and lead with how many opportunities arose.
 d2. **Instrument v4 and one rerun (D30 to D36), STOP.** Report needs met, opportunities, reuse, and whether any trader
-   waited while it had something it could do. If the rerun meets most needs and shows a handful of opportunities, freeze
-   the instrument and run the twenty; if not, the question is whether the economy gives agents enough reasons to trade,
-   and that is a conversation before anything more is spent.
+waited while it had something it could do. If the rerun meets most needs and shows a handful of opportunities, freeze
+the instrument and run the twenty; if not, the question is whether the economy gives agents enough reasons to trade,
+and that is a conversation before anything more is spent.
 e. **On your go: 20 runs**, same seeds per comparison, around 40–50 decision turns each.
 
 **Also stop** if any contract change becomes necessary. A debug or scripted run never counts.
@@ -269,8 +291,8 @@ e. **On your go: 20 runs**, same seeds per comparison, around 40–50 decision t
 
 - **Price parity on every route**, including buying raw work from the issuer.
 - **No escrow, no fee (v4, D30).** Every payment is a transfer to the seller at the moment it is made, in either asset,
-  so neither route carries a fee, a rebate, a release step or buyer protection the other lacks. *Through v3 the escrow took
-  50 bps on the dollar route and the operator rebated it after each settlement; that safeguard is gone with the escrow.*
+  so neither route carries a fee, a rebate, a release step or buyer protection the other lacks. _Through v3 the escrow took
+  50 bps on the dollar route and the operator rebated it after each settlement; that safeguard is gone with the escrow._
   The report's check that replaces it: USDC and fSIU are conserved across the four traders and the issuer, from the opening
   to the final snapshot, so a fee, money left in an escrow or a mint after the opening would show as a total that moved.
 - **Headroom.** The endowment, which is the whole fSIU supply of the run (nothing is minted after it, D31), is held to 80% of ISSUER-B's extract headroom (§2.11), checked at launch against the headroom actually read; a run that would exceed it does not start. The contamination check (a mint backed by anyone but ISSUER-B aborts the run) stays as the backstop.
@@ -303,7 +325,7 @@ e. **On your go: 20 runs**, same seeds per comparison, around 40–50 decision t
 
 ## 7. Phase 2 plan — hybrid fSIU (plan only)
 
-*Design note: "Hybrid fSIU Design: Issuer-Specific Claims With Variable Issuance Rates" (2026-10-06).*
+_Design note: "Hybrid fSIU Design: Issuer-Specific Claims With Variable Issuance Rates" (2026-10-06)._
 
 A second serving issuer at a different measured rate, plus an issuer that fails some deliveries, so
 enforcement returns. **Seed traders with both issuers' claims**, because minting picks the issuer by
@@ -319,16 +341,17 @@ fSIU. Giving agents a choice of issuer at mint needs a contract change and a red
 point. Not in phase 1.
 
 **What building phase 1 changes about this plan (2026-10-06, P11).**
-- *The seat conflict is gone.* TRADER-4 has a wallet of its own (D22), so ISSUER-A's wallet and identity are free
+
+- _The seat conflict is gone._ TRADER-4 has a wallet of its own (D22), so ISSUER-A's wallet and identity are free
   to become the second, failing issuer without a trader's receipts appearing under it.
-- *A failing issuer is a service policy, not a model.* The phase 1 issuer is a deterministic service on its own
+- _A failing issuer is a service policy, not a model._ The phase 1 issuer is a deterministic service on its own
   key (P5). A second one with a different measured rate, and a failing one, are the same kind of seat with a
   different policy: the failing one credits a unit of raw work late or not at all after it has been paid.
   `LabBooks` credits a unit on payment (D9), so that needs a rule for a paid unit that is never delivered.
-- *Seeding is an operator mint, and it routes first-fit.* An endowment of a second issuer's claims has to be
+- _Seeding is an operator mint, and it routes first-fit._ An endowment of a second issuer's claims has to be
   minted while the first issuer's headroom is too small to take the mint, which is the drain the gate
   configuration built and parked (§9). Minting is paid for in USDC (D17), so the operator funds the seeding.
-- *The launch bound generalises.* `lab/launch.ts` bounds the worst-case mint against one issuer's headroom
+- _The launch bound generalises._ `lab/launch.ts` bounds the worst-case mint against one issuer's headroom
   (D16); with two issuers it bounds each, and the contamination check names which issuer backed a mint.
 
 ---
@@ -341,12 +364,13 @@ that Touchstone was the counterparty to every dealer trade. In production the de
 third party, never the Assay.
 
 **What building phase 1 changes about this plan (2026-10-06, P11).**
+
 - The dealer needs its own wallet, a USDC float and a claim inventory: a new wallet (a decision for you), and
   the same allowance and gas launch checks `lab/run.ts` already makes for traders.
 - A dealer's price for fSIU in USDC is the first place the print and a market price can differ. Minting is paid
   for in USDC at the print (D17), so a dealer who sells a claim below the print is selling below what it costs
   to make one; the report must state the print beside every dealer price.
-- Circulation is already measured as reuse of *received* fSIU (§3). Phase 3 keeps that definition and counts
+- Circulation is already measured as reuse of _received_ fSIU (§3). Phase 3 keeps that definition and counts
   only trades between non-dealers, which needs the dealer's address list in the report, as `seats` is today.
 
 ---
@@ -366,7 +390,7 @@ third party, never the Assay.
 
 ## 10. Backlog
 
-*Not in phase 1. Add here; do not build.*
+_Not in phase 1. Add here; do not build._
 
 - Visible-versus-hidden schedule as a `--arm` flag.
 - Verify each "catchable" row of `docs/test-audit-2026-10-03.md` against pre-fix code.
@@ -381,6 +405,7 @@ third party, never the Assay.
 
 ## 11. Decisions log
 
+<!-- prettier-ignore-start -->
 | # | date | decision | by |
 | --- | --- | --- | --- |
 | D1 | 2026-10-06 | Gate-attack retired from the currency test; step c stopped; the engine stays. | user |
@@ -486,6 +511,7 @@ third party, never the Assay.
 | D62 | 2026-10-09 | **The pilot (§14.8) ran, found a defect in the baseline screen and a design question, and corrected the cost estimate. Pilot data are kept under `data/lab/probes/battery/` (`pilot-…`, `replicate-pilot2-…`, `replicate-pilot3-…`), are not stage-1 data, and no analysis ever reads them; they spent $0.33 of the credit (ledger entries made).** **What worked:** all six pilot calls parsed; every request was accepted (sonnet with `display: "summarized"`, haiku with manual thinking 2,048); each call's record says the sampling sent was the provider's default; arm B's `reasoning` field was written first; sonnet's thinking summary came back in arm C. **Defect found and fixed (rules unchanged, nothing coded):** in the baseline P0, with the trader's first need open and not yet asked for, **claude-haiku-4-5 chose `request_quote` and never a payment, 24 of 24 times** (12 on P0, 12 on P3), so no baseline reply was a payment decision. **Fix, applied to every cell:** the first need is already bought and met (paid in USDC, 1,725 minor units, at round 1's print), so the only thing to settle is the quote in front; the trader's wallet is the opening wallet less that payment (6,639 USDC minor units, 4,400 mSIU) in every cell, and P10 and P11 now differ from P0 and from each other **only** in what the plan says (the history, and the raw work), which removes the wallet confound D61 recorded for P10. The screen says `YOUR RESULT SO FAR: 1 of 2 needs met` under `(no turns yet — this is your first turn)`; that mismatch is stated here and was judged harmless. **Recheck, 24 haiku calls on the corrected screens:** P3 (nothing owed) **12 of 12 paid, every one in fSIU**, 8 of 12 stated reasons "preserving USDC for raw work purchases"; P0 (one delivery owed) **12 of 12 asked ISSUER-B for raw work**, no payment. Pilot observations only; one unreplicated cell. **OPEN DESIGN QUESTION, needs your decision before stage 1:** a trader that owes a delivery and holds no raw work **buys raw work first**, so in every cell where a delivery is owed (P0, P4 to P10, T1 to T3) haiku produces no payment to read, and only P3 and P11 do; sonnet paid first in 3 of 3 pilot calls. Options: **(1) leave the cells as they are:** sonnet is fully readable, haiku only on P3 and P11, and Q1 to Q3 cannot be answered for haiku (fewer than six cells); I would then run haiku on P3 and P11 only, which saves about $1.2. **(2) put the raw-work quote already issued by ISSUER-B in front** in the owed cells (one per unit owed), so both models reach a payment; the choice becomes the route of the reply's first payment, with the quote's kind (job or raw work) recorded beside it, and the plan's "still to buy" becomes "quoted and waiting to be paid"; this changes the cell semantics and the Q2 to Q4 definitions, so it needs a plan revision and a short second pilot (about $0.30). **(3) both:** (1) now for sonnet and the cells that work, (2) as a second battery after. **Recommended: (2)**, because in the v8 run it is exactly at a raw-work quote in hand that the earmark language appeared ("settle with fSIU … preserves USDC for raw work"). **Cost, corrected:** per call, haiku $0.005 (A), $0.006 (B), $0.009 (C); sonnet about $0.021 (n = 3, each $0.019 to $0.024, hidden thinking is 600 to 1,300 tokens). **Stage 1 comes to about $11.5, not $8.5**, which would have hit the $10 cap at about 85% of the calls; **I propose a stage-1 cap of $13**; stage 2 about $1.4 (below the $2.5 estimate); replications $3 each. The cycle total with all of it is inside the $30 guard. **Not done:** stage 1 (needs your word on the options and the cap). |
 | D61 | 2026-10-09 | **The battery is built (§14.9); these are the readings I had to make while building it, stated before any model call.** **Code:** `lab/reason-codes.ts` (frozen, fingerprint in §14.6, committed as 6f5d5c4c), `lab/probe-battery.ts` (cells to real lab turns), `lab/battery-run.ts` (plans, arms, stop rules, cost), `cli/lab-probe-battery.ts` (runner: resumable, appends every call to disk, ledger entries as it goes), 77 new tests; the lab, loop and cli suites pass (1,237). **(1) The cells are real turns, rendered by the lab's own code** from seed 1 (the smallest seed whose economy gives a trader two open needs and two buyers, and whose print rises in round 2; the same seed serves the six-round trend cells at round 5): TRADER-2 holds a quote for its round-2 need from TRADER-4 and has one open round-1 need not yet asked for. P0 has one delivery owed to it (so one unit of raw work to buy); P3 none; P4 two. **(2) What the fSIU share is:** `pay_with_held_claim` calls ÷ payment calls; a `pay_split` counts as a payment that is not wholly fSIU and its count is reported per cell. A reply that calls any other tool is "not a payment", left out, and counted. **(3) Edits I made that the plan did not spell out:** *P7* removes the sentence "Valued at the current print, converting between the two assets changes nothing about your result, and you are never required to convert." and nothing else. *P8* **adds** one sentence at the end of the score paragraph: "Any fSIU you still hold when the window closes has expired and counts for nothing in your result." The lab does not score that way (results are measured before the window closes), and the neutrality sentence stays, so P8's screen is partly at odds with itself; that is a counterfactual read for what the agent does with it, never a lab rule. *P9* lists fSIU first in the holdings line, each quote line, the brief's cost sentences and examples, and the tool list. *P10/P11* show two history turns in the lab's own format (the quote request, and `pay_with_usdc` on qr-1, a USDC payment of 1,725 minor units) with `— your reason then: "preserve fSIU for raw work"` after the payment line, which the lab does not show; the transaction hash is a fixed illustrative value, not a transaction. **A limit the plan did not state:** P10 differs from P0 by the earlier payment *and* the stated purpose together, and by a wallet 1,725 USDC minor units lower, so **Q3's clean contrast is P11 against P10** (same history, only the raw work differs); P10 against P0 is read as "an earlier earmarked payment is on the page", not as the earmark alone. **(4) Wallets:** P5 holds 12,508 USDC minor units and 1,892 mSIU, P6 3,127 and 7,569, against P0's 8,364 and 4,400, each at 15,635 minor units of total value at round 2's print (rounding, 2 either way); both assets can pay the quote (1,984 minor units, 1,200 mSIU). The trend cells show the opening wallet of a six-round lab (the lab's own sizing at that lab's highest reachable print: 12,720 USDC minor units, 4,400 mSIU), the same in all three, and no history. **(5) Arm B** swaps exactly one paragraph, the optional one-line `rationale`, for a `reasoning` field written before `tool`; the stated reason is the `reasoning` field in B and the `rationale` line in A and C. **(6) No arm sends a temperature**, haiku's A and B included, as §14.2 says; haiku arm C sends manual thinking (2,048) and no temperature; sonnet arm C sends only `display: "summarized"`. Output allowance 4,500 tokens, the lab's own. **(7) Runner:** four calls at a time, in a seeded random order that is a function of the run's label; stops on the cap, on an error that is not a reply, on a refusal, or on an arm failing to parse more than a fifth of at least twenty replies; the Anthropic spend is entered in the ledger as it goes, and a resumed run enters only what the ledger lacks. **(8) The pilot:** six calls on P0 (A, B and C for sonnet; A, B and C for haiku, so the one request that is new to this build, haiku's manual thinking, is tried once), cap $0.30; every reply is read before anything else is run. | user |
 | D60 | 2026-10-09 | **Go-ahead for the probe battery (§14), and the three conditions that came with it, done before the build.** **Go-ahead:** your messages "ok i tag it" and "keep going", after the second review. **(1) Record the sampling actually sent.** Done for the lab: the Anthropic adapter now reports what each request was really sent with (`sent`: the temperature, or "provider-default"; any thinking), the loop keeps it per turn and in the recorder, and each lab report and overview states it per trader (the v9 stamp now says the sonnet seats run at provider-default sampling). Added as optional fields only; a test pins that the print's request is byte-for-byte what it was. **For the print I did not make it fail loudly, on purpose:** the print asks every model for temperature 0, claude-sonnet-5 rejects it, and failing loudly would stop sonnet-5 from ever being priced. Making that strict first needs the registry to *declare* sonnet-5's sampling, which is a print-path and methodology change; it is not made here and is not merged anywhere until you decide. **(2) Check the print.** I did. The adapter's retry is not silent: every affected run record carries the deviation "temperature forced to provider default". **525 claude-sonnet-5 run records, from 2026-08-30 to 2026-10-05, carry it, and no other model's do; 36 published prints include claude-sonnet-5.** But `docs/methodology.md` never states a sampling temperature, or that sonnet-5 ran at its default, and the print files do not say so; the basket's own task parameters say temperature 0. The effect on the prints is unquantified (sonnet-5 is one constituent of up to ten at equal weight). **Proposed, needs your decision:** (a) a plain statement in the methodology that sonnet-5 is sampled at its provider default; (b) a `correction_notes` entry on each of those 36 prints, as earlier corrections did, with nothing recomputed. **No v9 lab run exists yet,** so no run record carries wrong settings; the v9 roster note and stamp are corrected here. **(3) Protect the print's credit.** Done: a ledger of the lab's and probes' Anthropic spend (`data/lab/anthropic-spend-ledger.json`, seeded from the three spends so far), a cap of **$30 per billing cycle** (the credit renews on the 18th; `LAB_CYCLE_CAP_USD` changes it), and a guard that refuses a model run or a probe that would pass it, wired into `lab-run` and the probes. **The arithmetic:** the pool is $40 promotional plus $4.56 bought, $44.56; the print's Anthropic spend is about $0.51 a day, so about $4.6 until the 18th; $30 leaves about $10 above that. **The limit, said plainly:** no provider shows a balance to an API key, so the guard works from the ledger, cannot see the print's own spend, and the Console balance stays the authority; the battery's worst case across stage 1 and its replications is $13, inside the cap. **Blind coding:** you tag the 40 reasons yourself. | user |
+<!-- prettier-ignore-end -->
 
 ---
 
@@ -493,6 +519,7 @@ third party, never the Assay.
 
 ### 12.1 Your points — where each stands
 
+<!-- prettier-ignore-start -->
 | Your point | State | What happens |
 | --- | --- | --- |
 | Test fSIU vs USDC; marketplace still not runnable after two weeks | **Engine done and proven; vehicle being replaced.** | The contracts and payment tools are proven on the live chain: the scripted walk `DEBUG-p5-three-window-2026-10-05T18-55-26-808Z` passed all 14 checks. The task and roster on top are being replaced by this lab. Estimate in §13. |
@@ -507,9 +534,11 @@ third party, never the Assay.
 | About €100 spent | **Cannot be fully reconciled from this repository.** | The experiment ledger records **$22.93 realized inference spend** and $42.79 projected, as of 2026-10-05; it is a lower bound because 10 crashed run directories never wrote their spend. Anything beyond that is not in this repo's records. **Nothing has been spent on the lab so far:** the scripted walks call no model and cost fork gas only. Model runs are estimated at $0.30 to $0.60 each (§13) until the first one is costed. |
 | Going up and down; fixing in small bits | **Changing how we work.** | This file is the reference. Scope changes go here first; new ideas go to §10; the two stop points in §4 are where you see something before money is spent. |
 | Parked | **See §9.** | Blockworks; gate-attack; dollar exit; visible-versus-hidden schedule. |
+<!-- prettier-ignore-end -->
 
 Items from the stopped step c, for completeness:
 
+<!-- prettier-ignore-start -->
 | Item | State |
 | --- | --- |
 | 1 Drain ordering | Parked (§9, §10). |
@@ -518,6 +547,7 @@ Items from the stopped step c, for completeness:
 | 4 Wire `assertCountableForF1` | Carried: P8. |
 | 5 Verify the test audit | Parked (§10). |
 | 6 Scripted drain walk | Parked (§9). |
+<!-- prettier-ignore-end -->
 
 ### 12.2 Phase 1 build
 
@@ -540,7 +570,7 @@ Items from the stopped step c, for completeness:
 - [x] P14 — **instrument v6** (D41 to D44), built and walked 2026-10-07: the print moves between rounds (±15%, equal odds, seeded; lab-only); prices follow the round's print and a claim is sized at the print of the round the quote was asked for in (`LabHooks.printForQuote`); each turn shows the print of every round so far and how far it moved; opening sized at the highest reachable print (4,516 mSIU and 8,583 USDC minor units); `get_print` removed; the D35 line added with its qualifier; deepseek-v3.2 on TRADER-2 and -4 (D42); H2 registered with proposed thresholds (§3). The full gate set passes (build, typecheck, lint with 0 errors, docs check, `test:all`: 108 files and 1,291 tests in the lab's package). **The scripted walk passed all 24 checks on a fork (`lab-scripted-2026-10-07T09-02-18-423Z`) and live on Base Sepolia (`lab-scripted-2026-10-07T09-11-47-683Z`): 8 of 8 needs, the print path equal to the seed's (1,437,000 → 1,652,550 → 1,404,667), every held claim sized at its quote's round's print, USDC (513,280 minor units) and fSIU (18,064 mSIU) exactly conserved across the five wallets.**
 - [x] v6 run — **STOP reached 2026-10-07** (D46): clean harness except one seat stopped by its provider (OpenRouter 402), so **NOT COUNTED**; **7 of 8 needs, 1 opportunity, 0 reuse, 15 of 16 payments in USDC**, H2 difference 0.0 points (no verdict, n = 1), no stated reason weighs the assets or mentions a hedge; $0.185. The OpenRouter account needs credit before deepseek can run again.
 - [x] P15 — **the overview in every run's report, and roster v7** (D47 to D49), 2026-10-07: `lab/decisions.ts` (every trader decision and its stated reason, read from the raw reply by the loop's own parser, into the report's `decisions`), `lab/overview.ts` and `cli/lab-overview.ts` (`<run>-overview.md`, written by `lab-run` after every run and regenerable for any past one), the emphasis check computed per run, and TRADER-2 gpt-5.1 / TRADER-4 grok-4.6 in place of deepseek (stamp v7). Full gate set green: build, typecheck, lint with 0 errors, docs check, `test:all` (110 files and 1,321 tests in the lab's package). **No run has been made with v7 yet; the preflight will call Anthropic, OpenAI and xAI, all direct.**
-- [x] P16 — **instrument v8** (D50 to D56), built, probed, gated, walked fork and live, pushed (branch `instrument/single-issuer` at 75444975), and run once (D56): the SDK precision option and tests; quotes in SIU with exact claims; the holdings line; the seeded route order; the opening from the schedule; decision-level H2; the overview of every transaction and decision with reasons and raw replies; reasoning capture per model; instrument stamp v8. *Plan registered before the probe or any run (5823e751). Done in order: the comprehension probe (9 of 9 correct, $0.053), the gate set (build, typecheck, lint with 0 errors, docs check, `test:all`; 111 files, 1,390+ tests in the lab's package), the fork walk (third attempt) and the live walk, push, the v8 run and its overview.*
+- [x] P16 — **instrument v8** (D50 to D56), built, probed, gated, walked fork and live, pushed (branch `instrument/single-issuer` at 75444975), and run once (D56): the SDK precision option and tests; quotes in SIU with exact claims; the holdings line; the seeded route order; the opening from the schedule; decision-level H2; the overview of every transaction and decision with reasons and raw replies; reasoning capture per model; instrument stamp v8. _Plan registered before the probe or any run (5823e751). Done in order: the comprehension probe (9 of 9 correct, $0.053), the gate set (build, typecheck, lint with 0 errors, docs check, `test:all`; 111 files, 1,390+ tests in the lab's package), the fork walk (third attempt) and the live walk, push, the v8 run and its overview._
 - [x] P17 — **instrument v9: the lab on Anthropic models only** (D57), 2026-10-09: haiku-4-5 (TRADER-1, -3) and sonnet-5 (TRADER-2, -4); lab tests green, probe 6 of 6. No run made yet.
 - [ ] P18 — **the reasoning probe battery** (D58 to D61, §14): approved (D60), **built** (D61), **piloted** (D62): the baseline defect is fixed, and one design question (haiku buys raw work before paying) and the corrected cost (stage 1 about $11.5, proposed cap $13) wait on you. The not-a-payment coding and counting rules are fixed (D63), the stage-1 cap is set to $13, a second battery is proposed (§15), and the tagging page is on the web in practice mode. **Not pushed, stage 1 not run: both wait for your explicit go.** Nothing coded or analysed.
 - [ ] Phase 1: 20 runs, on your go — **held**: the v4 rerun did not meet the freeze condition (D38)
@@ -549,10 +579,11 @@ Items from the stopped step c, for completeness:
 
 ## 13. Estimate in days per piece
 
-*Focused working days, Claude Code's estimate. Each piece includes its tests. The earlier "6 to 8 days"
+_Focused working days, Claude Code's estimate. Each piece includes its tests. The earlier "6 to 8 days"
 was before the raw-work economy, the issuer service, the fee rebate and opening-balance resets were
-added to the design; those are the difference.*
+added to the design; those are the difference._
 
+<!-- prettier-ignore-start -->
 | piece | days |
 | --- | --- |
 | P1 economy module | 0.75 |
@@ -568,6 +599,7 @@ added to the design; those are the difference.*
 | P11 phase 2 and 3 plans | 0.5 |
 | P12 first model run and fixes | 0.75 |
 | **Total** | **about 11** |
+<!-- prettier-ignore-end -->
 
 With the cuts in §10 (holdings per round not per turn, one live scripted run if the fork is clean,
 minimal aggregator) this is **about 9 days**. The largest uncertainty is P4, because it modifies a
@@ -591,33 +623,41 @@ run, and should be set to what a run actually takes once the presentation proble
 
 ## 14. The reasoning probe battery — APPROVED (D60), built (D61)
 
-*Approved by D60; built in D61 (readings made while building are recorded there). The commit that records the approval is 3a5b06ad; no model call has been made under it yet.*
+_Approved by D60; built in D61 (readings made while building are recorded there). The commit that records the approval is 3a5b06ad; no model call has been made under it yet._
 
 ### 14.1 What it is for, and what it is not
+
 **For:** reading why an agent pays in fSIU or in USDC, and finding out whether the reason it gives is what moved the choice. **Not for:** deciding whether fSIU works as money. H1 and H2 are untouched, the market instrument stays **v9**, probes are not lab runs and are never pooled with them.
 
 ### 14.2 Facts that shape the arms (from Anthropic's docs, 2026-10-09; see D59)
+
 - **claude-sonnet-5:** any non-default `temperature`, `top_p` or `top_k` is a 400. Thinking is already on (adaptive) and its text is hidden by default (`display: "omitted"`); `display: "summarized"` returns a summary and **does not change what the model does**. Thinking tokens are billed either way.
 - **claude-haiku-4-5:** temperature can be set; thinking is off by default; the only thinking is manual (`budget_tokens` at least 1,024 and below `max_tokens`), and with it on no temperature can be set.
 - So **no arm sends a temperature, for either model**: every arm uses the provider's default sampling. That is not the lab's 0.7 for haiku, and the later market runs are what show whether the patterns hold at the market's settings. The first pilot call confirms each request is accepted.
 
 ### 14.3 The three arms (each model compared only with itself)
+
+<!-- prettier-ignore-start -->
 | Arm | What the model is asked and given | What we can read |
 |---|---|---|
 | **A: control** | The lab's own turn prompt and reply format: one JSON tool call with the optional one-line `rationale` written after the call. No temperature sent. | The choice, and the after-the-fact line. |
 | **B: reasoning first** | Identical screen. One changed paragraph in the reply instructions: the object starts with a `"reasoning"` field, written *before* the tool is chosen. | The choice, and reasoning written before it. |
 | **C: native thinking made visible** | **Sonnet-5:** arm A with `display: "summarized"` and nothing else, so its behaviour is the same as A by construction and **A against C for sonnet measures sampling noise**. **Haiku-4-5:** arm A with manual thinking (`budget_tokens` 2,048), which does change its behaviour. | The choice, the rationale, and the provider's thinking summary. |
+<!-- prettier-ignore-end -->
 
 **Why a control:** asking for reasoning can change the choice; without arm A we could not tell whether arm B revealed the thinking or altered it. **Why not compare models in arm C:** the two models' thinking modes differ in kind.
 
 ### 14.4 Stages
+
 - **Stage 1:** arms A and B for both models, plus arm C for sonnet (it costs about what A costs). 12 samples per cell. Cap **$13** (corrected from $10 by the pilot, D62; the proposal in D63).
 - **Stage 2, after the 18 October credit renewal:** arm C for haiku, 12 samples per cell, so its uncertain cost cannot eat stage 1's cap. Cap **$4**.
 - **Replication batches** (§14.7) have their own cap of **$3** in each stage.
 
 ### 14.5 The screen, the cells, and what each is compared against
+
 The baseline **P0** is the round-2 screen of the comprehension probe (print up 15% on round 1, one unit of raw work still to buy, the opening wallet, one quote to pay, the "converting changes nothing" sentence present, USDC listed first). Each other cell changes one thing. A cell that shows a different wallet keeps the total value at that screen's print and keeps **both assets able to pay the quote in front of the trader**.
 
+<!-- prettier-ignore-start -->
 | ID | The one change | Compared against |
 |---|---|---|
 | P3 | no raw work still to buy | **P0** |
@@ -630,10 +670,12 @@ The baseline **P0** is the round-2 screen of the comprehension probe (print up 1
 | P10 | history shows an earlier USDC payment with the stated purpose "preserve fSIU for raw work", one unit still to buy | **P0** (does an earlier earmark persist?) |
 | P11 | the same history as P10, but no raw work left to buy | **P10** (does it persist when its purpose is gone?) |
 | T1, T2, T3 | a **six-round lab**, the screen at round 5 with **five prints**: rising (+15% each step), falling (-15% each step), flat | **each other** (not P0, which is a three-round screen) |
+<!-- prettier-ignore-end -->
 
 P0 plus nine cells plus three trend cells: **13 cells**. The one-step price cells of the first draft are dropped; Q5 now tests a sustained trend, not a reaction to one move. Neutral asset labels ("Asset A / Asset B") are not in this battery, so **familiarity with USDC is untested until a neutral-label probe exists**.
 
 ### 14.6 Reason categories, fixed before any result
+
 Each stated reason and each thinking summary is coded by **keyword and phrase rules written down and committed before any probe data exists** (`lab/reason-codes.ts`). No model codes another model's reasons. A reason may carry several codes.
 
 1. **Earmarking:** one asset assigned to a purpose ("preserve X for raw work", "keep X for later needs").
@@ -646,22 +688,25 @@ Each stated reason and each thinking summary is coded by **keyword and phrase ru
 8. **Cost or efficiency:** cheaper, minimal, economical.
 9. **No asset reason:** the need or the obligation only, with nothing about which asset.
 
-**Rules frozen (2026-10-09, before any probe data):** `lab/reason-codes.ts`, rules fingerprint `6d718eb1185983e843240900a0ad936e3acb2eccf87fa34ad4a565744a4036e2` (sha256 of every pattern; each battery file records it and the analysis refuses a file whose fingerprint differs). The patterns were written from the plain meaning of each category and the wording of the v8 run's stated reasons, then checked against about forty reasons written for the tests (three gaps found that way were closed before the fingerprint was taken); no probe reply existed. Two build-time readings, both stated here so they are not found later: **(a)** category 9 is coded when a non-empty reason fires none of 1 to 8, so "settle the quote using USDC to meet my need" is category 9 (it says nothing about *why* USDC); a reason that cites an asset in words the patterns miss would also land in 9, which is what the blind check measures; **(b)** a quote's own expiry ("before the quote expires", `expiresInSeconds`) is not category 7, which is the fSIU's or the window's expiry. **Which text is coded for Q2:** the *stated reason* (arm A and C: the `rationale` line; arm B: the `reasoning` field); thinking summaries (arm C) are coded by the same rules and shown in a separate table, never mixed into the Q2 counts.
+**Rules frozen (2026-10-09, before any probe data):** `lab/reason-codes.ts`, rules fingerprint `6d718eb1185983e843240900a0ad936e3acb2eccf87fa34ad4a565744a4036e2` (sha256 of every pattern; each battery file records it and the analysis refuses a file whose fingerprint differs). The patterns were written from the plain meaning of each category and the wording of the v8 run's stated reasons, then checked against about forty reasons written for the tests (three gaps found that way were closed before the fingerprint was taken); no probe reply existed. Two build-time readings, both stated here so they are not found later: **(a)** category 9 is coded when a non-empty reason fires none of 1 to 8, so "settle the quote using USDC to meet my need" is category 9 (it says nothing about _why_ USDC); a reason that cites an asset in words the patterns miss would also land in 9, which is what the blind check measures; **(b)** a quote's own expiry ("before the quote expires", `expiresInSeconds`) is not category 7, which is the fSIU's or the window's expiry. **Which text is coded for Q2:** the _stated reason_ (arm A and C: the `rationale` line; arm B: the `reasoning` field); thinking summaries (arm C) are coded by the same rules and shown in a separate table, never mixed into the Q2 counts.
 
-**Amended after the practice round (D65), additively:** category 9 explicitly includes a reason that only orders steps so that needs are met or deliveries made; category 3 is also read under an amended definition (a *relative* amount only: one asset held in a larger or smaller amount than the other, or plentiful or scarce, so that it is the one to use or spare; "I have enough to pay" is not it), by an added layer with its own fingerprint (`amendmentFingerprint`, pinned), and the Q2 balance pairs and the category-3 agreement are reported under both the frozen and the amended coding, **the frozen one as the primary result and the amended one labelled exploratory** (made after pilot replies were seen). The frozen rules and `rulesFingerprint` are unchanged.
+**Amended after the practice round (D65), additively:** category 9 explicitly includes a reason that only orders steps so that needs are met or deliveries made; category 3 is also read under an amended definition (a _relative_ amount only: one asset held in a larger or smaller amount than the other, or plentiful or scarce, so that it is the one to use or spare; "I have enough to pay" is not it), by an added layer with its own fingerprint (`amendmentFingerprint`, pinned), and the Q2 balance pairs and the category-3 agreement are reported under both the frozen and the amended coding, **the frozen one as the primary result and the amended one labelled exploratory** (made after pilot replies were seen). The frozen rules and `rulesFingerprint` are unchanged.
 
 **Box A (D68), added before any human tagging:** the person's tagging page has a tenth box, A ("affordability only"), which stands with any of 1 to 8 but not with 9 or "None of these"; category 9 on the page means a reason that says nothing at all about the assets. The agreement report maps A onto the frozen rules and onto the amended layer separately, as counts, and does not fold it into 3 or 9.
 
 **Blind check:** a random sample of **40** stated reasons is coded **by you, blind, before seeing the rules' output**; agreement is reported per category. **How:** a web page (`data/lab/probes/tagging/`, generated by `pnpm run lab-tagging`, published as a private artifact; the practice round is already up, D63). It shows one reason at a time, with no condition, model or rule output, the nine categories as tick boxes plus "none of these", and the instructions on the page; each answer saves to the artifact's own database, so there is no file to hand back (a download is the backup). The real 40 are drawn after stage 1 and the same page is republished with them. About 30 minutes. A model coder would be used only to measure agreement and the report would say so.
 
 ### 14.7 Questions and decision rules (all fixed now)
+
 Sampling: **12 per cell per arm per model**, arms interleaved in a seeded random order. A choice is the payment route the reply calls; a reply that calls another tool is "not a payment" and left out of the share, with its count reported. **The noise this must live with:** two cells with the same true 50% rate differ by 4 of 12 (0.33) or more 15.2% of the time (at 8 a cell it was 21.0%), so a single crossing is never a finding.
+
 - **Replication rule:** any cell that crosses a threshold for Q2 to Q5 gets a **fresh batch of 12** and counts as a finding only if it crosses again **in the same direction**. Two independent crossings by chance is about 2%.
-- **Q1: does asking for reasoning change the choice?** For each model, the fSIU share in B against A, and in C against A (haiku in stage 2). **Leave out cells that sit at 0 of 12 or 12 of 12 in both arms** (they cannot move). Among the rest, *yes for that model and arm* if at least **5 of 6** (about 83%, rounded up for other counts) have the same sign **and** their mean difference is at least 0.15; with fewer than 6 cells left, "cannot tell". Reported per model. Sonnet's A against C is reported as its noise reference, not as a hypothesis.
-- **Q2: are stated reasons what moved the choice?** For each pair (P3 against P0; P11 against P10; P7 against P0; P5 and P6 against P0; the three trend cells against each other), among replies that cite the category in the first cell, a **2x2 per pair: did the citation fall by at least half, and did the fSIU share move by at least 0.30.** Both: *consistent with a reason that drives the choice.* Neither: *consistent with a reason that was not the cause either way.* **The mismatched cases are reported separately and read most closely:** reason still cited but choice changed, or reason dropped but choice unchanged. Counts only; no p-values.
+- **Q1: does asking for reasoning change the choice?** For each model, the fSIU share in B against A, and in C against A (haiku in stage 2). **Leave out cells that sit at 0 of 12 or 12 of 12 in both arms** (they cannot move). Among the rest, _yes for that model and arm_ if at least **5 of 6** (about 83%, rounded up for other counts) have the same sign **and** their mean difference is at least 0.15; with fewer than 6 cells left, "cannot tell". Reported per model. Sonnet's A against C is reported as its noise reference, not as a hypothesis.
+- **Q2: are stated reasons what moved the choice?** For each pair (P3 against P0; P11 against P10; P7 against P0; P5 and P6 against P0; the three trend cells against each other), among replies that cite the category in the first cell, a **2x2 per pair: did the citation fall by at least half, and did the fSIU share move by at least 0.30.** Both: _consistent with a reason that drives the choice._ Neither: _consistent with a reason that was not the cause either way._ **The mismatched cases are reported separately and read most closely:** reason still cited but choice changed, or reason dropped but choice unchanged. Counts only; no p-values.
 - **Q3:** does earmarking survive losing its purpose? (P3 against P0; P11 against P10.) **Q4:** does the neutrality sentence drive the choice? (P7 against P0.) **Q5:** does the choice follow a sustained trend? (T1, T2, T3 against each other.)
 
 ### 14.8 Procedure and safeguards
+
 - Screens are built by the lab's own code (the comprehension probe's builder, extended; the trend cells use a six-round lab as a probe-only parameter), so nothing is hand-written; every prompt is hashed and every raw reply and thinking summary saved under `data/lab/probes/`.
 - A **pilot of one call per arm per model** (a few cents) checks that each arm parses and each request is accepted; anything it changes is recorded here before the real run.
 - **Estimates, not measured:** the comprehension probe cost $0.0042 a call on haiku and $0.0119 on sonnet; arm B adds about 250 output tokens a call; haiku's manual thinking adds up to 2,048. **Stage 1: 13 cells x 12 samples x (A and B for two models, C for sonnet) = 780 calls, about $8.5.** **Stage 2: 156 calls, about $2.5.** Replications extra, inside their caps. The runner stops and reports at each cap.
@@ -669,42 +714,51 @@ Sampling: **12 per cell per arm per model**, arms interleaved in a seeded random
 - No analysis before every stage-1 call is made and the coding rules are frozen. Anything found by looking at the data is labelled exploratory.
 
 ### 14.9 What gets built
+
 `lab/probe-battery.ts` (cells to screens, the arm B paragraph, the six-round variant), `lab/reason-codes.ts` and its tests, `cli/lab-probe-battery.ts` (runner, caps, saving), `lab/probe-analysis.ts` and tests (the Q1 to Q5 tables and the replication rule), and **two additive, optional fields** on the shared adapter's parameters, read only by the Anthropic adapter and never set by the print: one to send no temperature, and one to select the thinking mode (manual budget, or `display: "summarized"`). The print's calls and its cost accounting are untouched. About a day to build and test, 30 to 40 minutes to run stage 1.
 
 ### 14.10 After it
+
 The results decide which capture method, if any, goes into the market instrument as v10; then 3 to 5 market runs check whether the probe patterns hold in live play, which is where earmarking across rounds can show up.
 
 ## 15. The second battery: quote in hand — PROPOSED (D63), not built, awaiting your approval
 
-*A planned contrast, written before stage 1 so that it is not a patch made after seeing stage-1 haiku data. Nothing here is built or run.*
+_A planned contrast, written before stage 1 so that it is not a patch made after seeing stage-1 haiku data. Nothing here is built or run._
 
 ### 15.1 Why, and what it is not
-In the pilot a trader that owes a delivery and holds no raw work asked the issuer for raw work first, 12 of 12 times for haiku (D62). In the first battery that is a result (*raw work first*, counted per D63). It leaves haiku with no payment to read in those cells. The second battery gives the trader the raw-work quote **already issued**, so both models reach a payment. **It is not a replacement:** the two batteries differ in one factor, *a raw-work quote is in hand*, and comparing them tests whether having it is what brings the "preserve one asset for raw work" reasoning. Neither battery alone can.
+
+In the pilot a trader that owes a delivery and holds no raw work asked the issuer for raw work first, 12 of 12 times for haiku (D62). In the first battery that is a result (_raw work first_, counted per D63). It leaves haiku with no payment to read in those cells. The second battery gives the trader the raw-work quote **already issued**, so both models reach a payment. **It is not a replacement:** the two batteries differ in one factor, _a raw-work quote is in hand_, and comparing them tests whether having it is what brings the "preserve one asset for raw work" reasoning. Neither battery alone can.
 
 ### 15.2 Cells
+
 For each cell of the first battery in which a delivery is owed (P0, P4, P5, P6, P7, P8, P9, P10), the same screen with **one change**: the board also lists the raw-work quote issued by ISSUER-B at that round's print, one per unit owed (P4 has two), in the lab's own format. Named **Q0, Q4, Q5, Q6, Q7, Q8, Q9, Q10**. Each is compared with its first-battery cell (the quote in hand is the factor) and, within the second battery, in the same pairs as the first (Q5 and Q6 against Q0, and so on). The trend cells and the cells with nothing owed are not repeated.
 
 ### 15.3 What is counted
+
 The reply's `action` as in D63. The unit is the **first payment**: its route, and the **kind of quote it pays** (a job or raw work), read from the `requestId` it names. The fSIU share is reported **separately for payments of the job quote and payments of the raw-work quote**, never pooled; payment reach and "which quote first" are tabulated too. The same thresholds, the same replication rule, the same "too few to read" rule as D63, and the same frozen reason rules.
 
 ### 15.4 Arms, samples, cost
+
 Arms A and B for both models and C for sonnet (haiku's C waits for the credit renewal as in §14.4); 12 samples a cell. **8 cells x 12 x 5 arm-model pairs = 480 calls, about $7 (sonnet about $0.021, haiku about $0.0055 a call); cap $9.** Its own pilot first: 6 calls on Q0 and a 24-call haiku check, about $0.30 (cap $0.50). Replications inside the same $3 batches.
 
 ### 15.5 What it needs from you
+
 Your approval of this section as written, and your go to build it. It is built and piloted after stage 1, in the same cycle if the guard arithmetic of D63 holds, otherwise in the next one.
 
 ---
 
 ## 16. The Blockworks trial — lab series CR (crypto research) — ACCEPTED 2026-10-16 with changes (D70–D103); B0 to B3 built, day-1 calibration done, daily snapshots running and scheduled
 
-*Written 2026-10-16, before any code or spend. Source: your build brief and its additions (pasted 2026-10-16), the design note sent to Blockworks (a reference copy kept under `data/private/blockworks/`, D88), and your decisions in your own words that day. **Where the brief and the design note differ, the brief governs** (D79). You accepted all of it on 2026-10-16 with the changes recorded in D92.*
+_Written 2026-10-16, before any code or spend. Source: your build brief and its additions (pasted 2026-10-16), the design note sent to Blockworks (a reference copy kept under `data/private/blockworks/`, D88), and your decisions in your own words that day. **Where the brief and the design note differ, the brief governs** (D79). You accepted all of it on 2026-10-16 with the changes recorded in D92._
 
 ### 16.1 What it is, and the three goals
+
 Blockworks has cleared a free trial of its API and MCP: two weeks, extendable by one. The key arrives by email and the clock probably starts then, so everything that needs no Blockworks data is built **before** the key, against the public documentation and fixtures. Day 1 is calibration, not building.
 
 Three goals, in your words: **(1)** what it costs agents to do research on Blockworks data, model by model (the measurement product); **(2)** reselling that work to our own demand agents (D76: "external" means our own demand agents, which is what Blockworks agreed); **(3)** paying for it in our own unit, AGU-lab (§16.9).
 
 ### 16.2 Boundaries (hard, from the brief)
+
 - **Licensed data, public repo.** Blockworks data, snapshots, raw responses and any row-level derivative live only under `data/private/blockworks/` (gitignored), never in a commit, a CI artifact or a log. The daily manifest holds **hashes only** and may be committed. A test fails if anything under that path is tracked (D71).
 - **Keys.** The Blockworks key is `CR_BLOCKWORKS_API_KEY` in `.env`; only the data desk reads it, and no model, agent or package ever sees it. Models reach Blockworks only through our harness. Trial model keys are separate from the print's: `CR_ANTHROPIC_API_KEY`, `CR_OPENAI_API_KEY`, `CR_GOOGLE_API_KEY`, `CR_XAI_API_KEY`, `CR_OPENROUTER_API_KEY`. The print never reads a `CR_` name and trial code never reads the print's names; a test enforces both directions (D72).
 - **Separate series.** Nothing from the trial enters Dated SIU or any published print. Its lab print is the **CR lab print**, computed from snapshot-mode results only (D70).
@@ -713,32 +767,38 @@ Three goals, in your words: **(1)** what it costs agents to do research on Block
 - **Product-only to Blockworks.** Anything Blockworks will see never mentions fSIU, AGU-lab or the currency. Part 5 (§16.9) is internal only.
 
 ### 16.3 Priority order (earlier parts may not slip)
+
 1. **Measurement, snapshot mode** — ready on day 1.
 2. **MCP mode** — by day 4.
 3. **Agent chain and internal economy** — by day 6 at the latest, then counted windows.
 
 ### 16.4 Models
-- **Build and development: Anthropic only** (D74, your words: *"we build first on anthropic models only make it work and then we go for other models"*): claude-sonnet-5 and claude-haiku-4-5, against fixtures.
+
+- **Build and development: Anthropic only** (D74, your words: _"we build first on anthropic models only make it work and then we go for other models"_): claude-sonnet-5 and claude-haiku-4-5, against fixtures.
 - **The measurement product ends at all ten registry models**, the ten promised to Blockworks: claude-sonnet-5, claude-haiku-4-5, gpt-5.1, gpt-5.4-mini, gemini-3.1-pro-preview, grok-4.6, deepseek-v3.2, qwen-2.5-72b-instruct, llama-3.3-70b-deepinfra, mistral-small-3.2-24b-instruct, through the print's existing adapters and purchase paths. **All ten run in snapshot mode from day 1** (D83); a model that joins late is re-run on the stored snapshots of the days it missed, so no day is lost.
 - **MCP mode:** built on Anthropic first, then the cross-provider five (D92): claude-sonnet-5, gpt-5.1, gemini-3.1-pro-preview, deepseek-v3.2, qwen-2.5-72b-instruct; gpt-5.4-mini replaces gemini if the Google top-up is delayed. Before day 4, each non-Anthropic MCP model gets a tool-calling smoke test on one fixture task (D83).
 - **Agent seats:** development windows on claude-haiku-4-5 (D92); counted windows rotate claude-sonnet-5 with gpt-5.1 by day (D75).
 - **Issuers** (D84): ISSUER-F claude-sonnet-5, ISSUER-C1 deepseek-v3.2, ISSUER-C2 qwen-2.5-72b-instruct, ISSUER-X claude-haiku-4-5. While building on Anthropic only, C1 and C2 run on claude-haiku-4-5.
 
 ### 16.5 Part 1 — the data desk
+
 - **One interface** over the Blockworks API (and later the MCP), with two backends: **live** (the key) and **fixtures**, built to the shape of the public API, so every later part is testable before the key arrives.
 - **Snapshots.** Each query is pulled **once per window**. Every response is stored with its sha256, timestamp, query and API version under `data/private/blockworks/snapshots/<date>/`; the day's manifest (`data/lab/cr/manifests/<date>.json`, committed) lists the hashes only.
 - **Rate-limit governor**, configured per endpoint from the limits in the provisioning email (conservative defaults until then). It backs off and reports; it never exceeds a limit.
 - **Datasets:** perp DEX volume; protocol financials and REV (fees and supply-side payouts); token unlocks and circulating supply; stablecoin supply by chain and issuer. The exact endpoints and fields, and every field whose meaning is ambiguous, are in §16.12.
 
 ### 16.6 Part 2 — tasks and gates (class family CR)
+
 Each task has a **seeded instance generator** picking from an agreed list, a **deterministic reference solver** working from the snapshot, a **JSON output schema**, and a **gate** comparing the model's output with the reference. Output that fails the schema fails the gate. Graders and solvers carry mandatory tests.
 
+<!-- prettier-ignore-start -->
 | Task | The model produces | Gate |
 | --- | --- | --- |
 | **CR-VS** perp DEX volume share | The five largest perp DEXes by trailing-12-month volume; for each of the last 12 complete months, each venue's share of the five's combined volume, in percent | The venue set matches; each share within 0.01 percentage points; each month sums to 100 ± 0.01 |
 | **CR-PL** protocol P&L | For a named protocol (a lending protocol, D89) and quarter: fees paid by users, payouts to depositors and liquidity providers, protocol revenue | Fees and payouts within 0.1% relative; the model's revenue equals **its own** fees minus payouts exactly, and is within 0.1% of the reference |
 | **CR-UO** unlock overhang | For a named token at snapshot time: tokens unlocking in the next 30 and 90 days as a percentage of circulating supply | Within 0.01 percentage points |
 | **CR-SM** stablecoin movers (data source D90) | The five (chain, issuer) pairs with the largest absolute 90-day supply change, in order, with the change | Exact pair set and order; each value within 0.1% |
+<!-- prettier-ignore-end -->
 
 - **Instance lists:** one draft per task (for example the top 50 protocols by fees, the top 100 tokens with unlock schedules), for you to send Blockworks to confirm (D80).
 - **Seeds:** a hash of each day's seed is committed before the run; the seed is revealed after; both are stored (D80).
@@ -746,6 +806,7 @@ Each task has a **seeded instance generator** picking from an agreed list, a **d
 - **Money maths:** decimal strings throughout (invariant 4); tolerances are compared in decimals, never floats.
 
 ### 16.7 Part 3 — the runner, snapshot mode
+
 - **One attempt per instance per model, no retries; a failure counts zero.**
 - **Prompt per task:** fixed instructions, the output schema, and only the snapshot fields the task needs, trimmed to keep input cost down.
 - **Recorded per answer:** model, task, instance, snapshot hash, billed cost from the provider's usage report (reasoning tokens included, priced at the output rate as the print does), tokens in and out, latency, raw output (under the private path: it may restate data), and the gate verdict. Every record also names the key it used (`CR_*`) and the part it belongs to, for the daily reconciliation against each provider's per-key usage.
@@ -754,6 +815,7 @@ Each task has a **seeded instance generator** picking from an agreed list, a **d
 - **Volume:** 3 instances per task per model per day (120 answers a day on ten models), adjusted once calibration has measured real costs (D79). The design note told Blockworks five; the brief governs.
 
 ### 16.8 Part 4 — MCP mode, from day 4
+
 - **New build, not reuse:** no adapter sends native tool definitions today (the lab's agents reply in JSON text), so MCP mode needs a tool-calling loop per provider. Anthropic is built first; each other provider's tool-call format is the main technical risk, which is what the smoke tests (D83) are for.
 - Each model gets the Blockworks MCP tools **through our harness**: the harness holds the key and forwards tool calls. The model gets the task instructions and schema and must find and pull the data itself.
 - **Answer key (D101, replacing the before-and-after pulls):** the harness relays every tool result to the model, so the gate recomputes the answer from exactly the data the model received (its tool-call log); a separate check against the day's snapshot catches a model that fetched the wrong dataset. No extra requests, and no refresh tolerance.
@@ -762,8 +824,10 @@ Each task has a **seeded instance generator** picking from an agreed list, a **d
 - Before the key, a **fake MCP server over the fixtures** lets the loop be built and tested. The live server signs in by OAuth in a browser, once, by you (D91); every day's run first checks that the stored login still works and alerts you if it does not, so MCP mode cannot break silently (D92).
 
 ### 16.9 Part 5 — agent chain and internal economy, once parts 1 and 2 work
+
 **Internal only; never in anything Blockworks sees.** Blockworks agreed that our own agents may resell its data to each other during the trial.
 
+<!-- prettier-ignore-start -->
 | Agent | Count | Runs on | What it does |
 | --- | --- | --- | --- |
 | Data agent | 1 | code | Wraps the data desk; sells query results per query, in USDC only, at a declared **shadow price** (the data is free during the trial) |
@@ -772,6 +836,7 @@ Each task has a **seeded instance generator** picking from an agreed list, a **d
 | Hedger | 1 | model | Sold 10 briefs on day 1 at a fixed USDC price, deliverable over the counted windows; may buy forward claims to cover them |
 | Issuers F, C1, C2, X | 4 | code; the task work uses a model | Our API accounts. Each bonds testnet USDC (`CapacityBond`). Capacity is a committed inference budget per window; measured rate is accepted SIU per dollar, from snapshot mode. X fails a published share of presentations |
 | Roll participant | 1 | code | Creates and redeems AGU-lab at about the day's CR lab print, rolls the reserve |
+<!-- prettier-ignore-end -->
 
 - **Issuance** is the lower of deliverability (budget after haircut × rate × 0.5) and recoverability (what the bond covers at its tier). **Haircut:** budget ÷ (1 + the 95th-percentile rise in that issuer's own cost per SIU across past windows), seeded from the calibration days. Issuer models: §16.4 (D84).
 - **AGU-lab, the inside unit:** a wrapper token on testnet (D86). Undated. Its NAV **starts** at 1 SIU per AGU-lab, a starting value and not a promise; NAV floats (D92). It is held against a reserve of issuer claims (`WorkClaim`) laddered over the next windows and rolled every window by the roll participant, which creates AGU-lab at about the CR lab print (never Dated SIU), with a published spread and a buyback cap of 10% of supply per window. **Redemption is in kind and pro rata:** redeeming AGU-lab returns its share of the reserve claims, not a fixed amount of SIU (D92).
@@ -785,6 +850,7 @@ Each task has a **seeded instance generator** picking from an agreed list, a **d
 - **One window per real day.** Model families rotate across seats by day (D75), two identical seats size the noise, and the display alternates between SIU first and dollars first by day.
 
 **Pre-registration**, written before the first counted window (D87):
+
 - **Thesis:** agents exit only for sweeps and dollar costs. 20% or more of exits for price moves or fear counts against it.
 - **Circulation:** received units are spent onward in at least half of opportunities.
 - **Buying ahead:** the hedger and demand agents cover at least a quarter of the next window's known needs in most windows.
@@ -792,6 +858,8 @@ Each task has a **seeded instance generator** picking from an agreed list, a **d
 - **Kill criteria, any two of:** near-universal conversion to USDC on receipt; median hops of one; quoting in dollars when free to choose; no buying ahead for visible needs.
 
 ### 16.10 Build order with dates (targets; the key may arrive any day)
+
+<!-- prettier-ignore-start -->
 | Step | Target | What | Spend |
 | --- | --- | --- | --- |
 | B0 | 16–17 Oct | Guards: the private path and its tracked-file test; `CR_` key loading and the two-way isolation test; the spend ledger with per-provider budgets and the $9 cap, with a test that it stops | none |
@@ -803,14 +871,17 @@ Each task has a **seeded instance generator** picking from an agreed list, a **d
 | B6 | days 4–6 | Part 5: the economy, AGU-lab, escrow, receipts; development windows on Haiku | about $1.13 a window |
 | — | day 1–3 | Live data, field mapping, calibration, daily snapshot mode; real cost per answer measured, volumes and caps proposed | §16.11 |
 | — | day 7–13 | Counted windows from the first passing dry run; day 13 re-runs anything unusual; day 14 the report | §16.11 |
+<!-- prettier-ignore-end -->
 
 If the key arrives before B3 is done, day 1 runs whatever of part 1 works, in the priority order of §16.3.
 
 ### 16.11 Budget and the print's protection
+
 **Cap: $9 a day for the trial (D73, your words), the print separate.** The cap covers snapshot mode, calibration re-runs, MCP mode, the economy's model turns and the issuers' task work, the mirrored sample, day-13 re-runs and dry runs. It does not cover the daily print (about $1.73), Blockworks data (free in the trial) or testnet gas.
 
 **Estimates per part per day** (prices from the 2026-10-15 snapshot; tokenizer ratios and reasoning habits measured on seven days of print runs; per-turn agent costs measured in the lab: Sonnet $0.0218, Haiku $0.0055, GPT-5.1 $0.0066. CR payload sizes, MCP turns and turns per window are assumptions until days 1–3 measure them):
 
+<!-- prettier-ignore-start -->
 | Part | Anthropic only (build) | Full trial |
 | --- | --- | --- |
 | Snapshot mode, 3 per task | $0.20 (2 models) | $1.05 (10 models) |
@@ -819,6 +890,7 @@ If the key arrives before B3 is done, day 1 runs whatever of part 1 works, in th
 | Development window (Haiku seats + issuers) | $1.13 | $1.13 |
 | Counted window (Sonnet $1.95 + GPT-5.1 $0.59 + issuers $0.15) | — | $2.69 |
 | Before the key, once: dry runs and smoke tests | about $1.56 | about $2.22 |
+<!-- prettier-ignore-end -->
 
 By day: about $2.10 on days 1–3, $5.37 on days 4–6, and **$6.93 on days 7–13, the peak**, under the cap. **Fourteen days: about $74 expected**; the cap's ceiling is about $119. By provider, expected: Anthropic $33.18, Google $24.91, OpenAI $10.27, OpenRouter $2.66, xAI $2.61. MCP mode is the least certain line (its high case is several times the central one), and it is the largest single item on Anthropic and Google.
 
@@ -829,24 +901,27 @@ Balances on 2026-10-16 (your screenshots): Anthropic $28.28 (then $40 on 18 Oct)
 ### 16.12 Endpoint and field mapping (public documentation read 2026-10-16; checked against the live API 2026-10-17, D94)
 
 **Checked live 2026-10-17 (D94).** The corrections below override the documentation: a single-row lookup is one object; an events window with nothing is an empty list; Token Unlocks `endTime` is inclusive; `project-tokens` has no stablecoins; the API rate-limits (undocumented).
-*From docs.blockworks.com and its OpenAPI specs (Data API `info.version` 0.1.0, Token Unlocks 1.0.0), and the MCP launch post of 2026-10-01. No endpoint was called. The four points the plan depends on most were re-read directly: MCP sign-in, stablecoin keying, rate limits, and the lending financials fields.*
+_From docs.blockworks.com and its OpenAPI specs (Data API `info.version` 0.1.0, Token Unlocks 1.0.0), and the MCP launch post of 2026-10-01. No endpoint was called. The four points the plan depends on most were re-read directly: MCP sign-in, stablecoin keying, rate limits, and the lending financials fields._
 
 **Shared grammar.** `GET https://api.blockworks.com/query/timeseries/{model}/{granularity}[/{seriesKey}]`, parameters `timeframe` (e.g. `90d`, `ytd`, `YYYY-MM`) or `start`/`end` (start inclusive, end exclusive), `series` (a comma list), `selections`, `bounds` (first and last point only), `acceptFormat`. At most 9,000 points per request; an unknown series key returns 200 with no points. Response: `data.point_schema[]` (`name, field, description, type, unit?`) and `data.series[{key, entity, points[[unixSeconds, v1, …]]}]`. **Values are JSON numbers (float64)**, so the data desk keeps each number's source text as a decimal string and never parses it into a float (invariant 4). Timestamps are unix seconds, UTC. Tabular endpoints page with `page` and `pageSize` (≤ 1,000).
 
+<!-- prettier-ignore-start -->
 | Task | Endpoint and fields | Notes |
 | --- | --- | --- |
 | **CR-VS** | `perp-dex-protocols/1d`, field `volumeUSD` ("Total perp trading volume in USD"); venue keys from `/query/tabular/perp-dex-protocols` (`id`, `name`, `slug`, `projectID`) | Daily only: months are summed by us. One call without `series` returns every venue |
 | **CR-PL** | `lending-market-financials/1d` (per market) or `lending-protocols/1d` (per protocol): `interestUSD` / `interest-usd`, `netInterestIncomeUSD` ("the interest kept by the protocol"), `feesUSD` (interest plus flash-loan, liquidation and royalty fees), `revenueUSD` (net interest income plus the same fees) | **No field states the payout to depositors.** Payout = interest − net interest income, which equals fees − revenue (D89, accepted D92; confirmed with Blockworks' data contact first). No quarterly granularity: a quarter is the sum of daily points |
 | **CR-UO** | Token Unlocks API `GET /token-unlocks/v1/assets/{assetId}/unlocks?interval=DAILY` (`startTime`, `endTime` INCLUSIVE): sum `totalSnapshots[].unlockedInPeriodNative` over the next 30 and 90 days; circulating supply from `asset-supply/1d?series=<assetID>`, field `circulating-supply` (last point). The `/events` endpoint agrees with the schedule (a `dailyLinearRateChange` sets the rate to `nextDailyAmountNative`) and is not needed. Token list: `GET /token-unlocks/v1/assets` (254 assets, each with a `slug`); one token's id: `/query/tabular/assets/{slug}` (an object with `assetID`) | The schedule is a 400 for a token whose `projectedEndDate` falls inside the window: exclude those from the instance list. Unlock percentages are 0 to 1 in the Token Unlocks API and 0 to 100 in the Data API's `token-unlocks` model; the task states its own scale |
 | **CR-SM** | **Option A is not available** (D94): `project-tokens` holds no stablecoins with this key (196 rows, categories `projects` and `blockchains`). Option B: `stablecoins-by-chain` and `stablecoins-by-issuer` (each summed across the other dimension), series keys from their tabular models, field `circulatingSupplyUSD`; not yet requested live | Needs Blockworks' answer on question 12; until then CR-SM is two tasks, chains and issuers. `timeframe=90d&bounds=true` returns just the two points a 90-day change needs (not yet tested live) |
+<!-- prettier-ignore-end -->
 
 **Auth, limits, versioning.** Header `X-Blockworks-API-Key`; one key covers the Data API, Token Unlocks and the MCP. 401 without a key, 403 for a bad key or a missing dataset permission (`perp-dex-protocols-dataset`, `lending-protocols-dataset`, `stablecoins-dataset`, `token-unlocks`, `assets-dataset`, …). **The Data API documents no rate limit and sends no `RateLimit-*` or `Retry-After` headers, but it does answer `429 Too Many Requests`** (seen 2026-10-17, D94); responses are cached for 30 minutes. No limit is documented for the Token Unlocks API or the MCP. The governor therefore starts at one request every 5 seconds and widens after each 429 until Blockworks gives limits (question 11). There is **no version header** and no version in `/query/…` paths (Token Unlocks has `/v1`), and **no as-of date** in responses; each snapshot stores the path version, the day's public OpenAPI `info.version`, and the response's `Cache-Control`, `Cache-Status` and `X-Request-Id`. The launch post says data refreshes daily; whether history is ever restated is not documented, which the hashed snapshots guard against.
 
 **MCP.** `https://mcp.blockworks.com/mcp`, remote over HTTP. **Sign-in is OAuth 2.0 in a browser** in which the API key is entered; the client stores the OAuth credentials, not the key (D91; daily login check, D92). Tools: `search_documents`, `tabular_catalog`, `tabular_data` (`model`, `selections`, `filters`, `sortBy`, `page`, `pageSize` ≤ 200), `timeseries_catalog`, `timeseries_data` (`model`, `granularity`, `series` ≤ 20, `selections`, `timeframe` defaulting to `90d`, `start`, `end`, `bounds`; over 20 series or 5,000 points the call is **rejected, not truncated**). The docs say the list a client sees is authoritative, so the harness records the live tool list each day.
 
 **Ambiguous fields, for Blockworks' data contact** (the list to send):
+
 1. `volumeUSD` versus `marketLevelVolumeUSD` (and `core` plus `hip3`): which is the canonical total, and is volume notional, one side, or both sides? The docs warn that most protocols fill only some columns.
-2. Lending: is the payout to depositors exactly interest minus net interest income (equivalently fees minus revenue)? What are "royalties"? Is there a protocol-financials model beyond the public reference (the launch post's quarterly P&L)? *The email also tells Blockworks that the protocol P&L task is now lending protocols only (D92).*
+2. Lending: is the payout to depositors exactly interest minus net interest income (equivalently fees minus revenue)? What are "royalties"? Is there a protocol-financials model beyond the public reference (the launch post's quarterly P&L)? _The email also tells Blockworks that the protocol P&L task is now lending protocols only (D92)._
 3. Series keys: `id` is called both a "short name" and a "Project ID", and `projectID` is a separate column. Which identifier is stable?
 4. `circulating-supply`: its method and source, whether vesting tokens are excluded consistently with the unlock schedules, and which circulating supply `pct-of-circulating-supply-unlocked` uses.
 5. Unlock USD values: priced at the event date or today?
@@ -859,6 +934,7 @@ Balances on 2026-10-16 (your screenshots): Anthropic $28.28 (then $40 on 18 Oct)
 12. **Stablecoins.** `project-tokens` holds no stablecoin contracts with our key. Is there a chain-by-issuer supply series or table behind the key, or a dataset we are not yet enabled for? Otherwise we will compare chains and issuers separately.
 
 ### 16.13 What it needs from you
+
 1. **Google top-up, first:** the print needs it too. About $45 for the trial with gemini in MCP mode, about $30 without.
 2. The other top-ups: OpenAI $25, Anthropic $10 or more, xAI $5, OpenRouter $10.
 3. The `CR_` keys pasted into `.env`, each in its own workspace or project with a spend limit where the provider offers one.
