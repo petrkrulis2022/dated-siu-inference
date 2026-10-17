@@ -43,9 +43,16 @@ export function vsEndMonths(window: string): string[] {
   return Array.from({ length: 6 }, (_, k) => monthsBefore(first, k));
 }
 
-export function solveVS(day: DayData, endMonth: string): VSReference | undefined {
+/**
+ * Each venue's volume in each of the twelve calendar months before `endMonth` (UTC), summed from its daily points; a null day adds nothing, and a venue with no
+ * figure at all in the twelve months is left out. The solver ranks these sums, and the snapshot-mode prompt shows the same sums, so the two cannot disagree.
+ */
+export function vsMonthly(
+  day: DayData,
+  endMonth: string,
+): { months: ReturnType<typeof monthsOf>; venues: Map<string, DecimalValue[]> } {
   const months = monthsOf(monthsBefore(endMonth, 12), endMonth);
-  const monthly = new Map<string, DecimalValue[]>();
+  const venues = new Map<string, DecimalValue[]>();
   for (const [venue, points] of day.perp) {
     let anyPoint = false;
     const sums = months.map((m) => {
@@ -59,8 +66,13 @@ export function solveVS(day: DayData, endMonth: string): VSReference | undefined
       }
       return s;
     });
-    if (anyPoint) monthly.set(venue, sums);
+    if (anyPoint) venues.set(venue, sums);
   }
+  return { months, venues };
+}
+
+export function solveVS(day: DayData, endMonth: string): VSReference | undefined {
+  const { months, venues: monthly } = vsMonthly(day, endMonth);
   const ranked = [...monthly.entries()]
     .map(([venue, sums]) => ({ venue, total: sums.reduce((a, b) => a.plus(b), new D(0)), sums }))
     .sort((a, b) => b.total.comparedTo(a.total) || a.venue.localeCompare(b.venue));

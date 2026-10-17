@@ -18,9 +18,12 @@
     "spend-report": "pnpm run build && node dist/cli/spend-report.js",
     "desk-smoke": "pnpm run build && node dist/cli/desk-smoke.js",
     "calibrate": "pnpm run build && node --env-file=../../.env dist/cli/calibrate.js",
-    "snapshot-day": "pnpm run build && node --env-file=../../.env dist/cli/snapshot-day.js"
+    "snapshot-day": "pnpm run build && node --env-file=../../.env dist/cli/snapshot-day.js",
+    "run-day": "pnpm run build && node --env-file=../../.env dist/cli/run-day.js",
+    "daily-snapshot": "pnpm run build && node --env-file=../../.env dist/cli/daily-snapshot.js"
   },
   "dependencies": {
+    "@touchstone/harness": "workspace:*",
     "@touchstone/sdk": "workspace:*"
   },
   "devDependencies": {

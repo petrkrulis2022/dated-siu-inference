@@ -165,6 +165,9 @@ importers:
 
   packages/cr-lab:
     dependencies:
+      '@touchstone/harness':
+        specifier: workspace:*
+        version: link:../harness
       '@touchstone/sdk':
         specifier: workspace:*
         version: link:../sdk

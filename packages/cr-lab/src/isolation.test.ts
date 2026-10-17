@@ -53,6 +53,16 @@ describe("the trial never reads what the print reads", () => {
     }
   });
 
+  it("never calls the print's key loader: keys reach the adapters only through trialKey", () => {
+    // `loadApiKeysFromEnv` (packages/harness) reads the print's variable names, so trial code may use the print's adapters but must pass them keys explicitly.
+    for (const f of walk(crSrc, isTrialSource)) {
+      const text = readFileSync(f, "utf-8");
+      expect(text.includes("loadApiKeysFromEnv"), `${rel(f)} calls the print's key loader`).toBe(
+        false,
+      );
+    }
+  });
+
   it("recognises the check: a CR_ name that contains a print name is not a hit, a bare print name is", () => {
     expect(named("CR_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY")).toBe(false);
     expect(named("process.env.ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY")).toBe(true);
