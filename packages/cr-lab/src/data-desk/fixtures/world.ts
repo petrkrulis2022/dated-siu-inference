@@ -96,12 +96,16 @@ export const CHAINS = [
   "fixture-chain-c",
   "fixture-chain-d",
   "fixture-chain-e",
+  "fixture-chain-f",
+  "fixture-chain-g",
 ] as const;
 export const ISSUERS = [
   "fixture-issuer-1",
   "fixture-issuer-2",
   "fixture-issuer-3",
   "fixture-issuer-4",
+  "fixture-issuer-5",
+  "fixture-issuer-6",
 ] as const;
 export interface Contract {
   id: string;
@@ -111,7 +115,7 @@ export interface Contract {
   /** native units (6 decimals) at the as-of date, and the daily change in them */
   baseSupply: bigint;
   dailyDrift: bigint;
-  depegFrom?: string;
+  belowParFrom?: string;
 }
 
 export class FixtureWorld {
@@ -145,7 +149,7 @@ export class FixtureWorld {
     const cliffs = Array.from({ length: 3 + (i % 4) }, (_, c) => ({
       day: addDays(this.asOf, draw(this.seed, `${key}c${c}`, 0, 520) - 200),
       amount: BigInt(1 + draw(this.seed, `${key}c${c}`, 1, 40)) * 1_000_000n,
-      recipient: ["Team", "Investors", "Treasury", "Ecosystem"][c % 4] as string,
+      recipient: ["Team", "Early holders", "Treasury", "Ecosystem"][c % 4] as string,
     }));
     const streams = Array.from({ length: 1 + (i % 2) }, (_, s) => {
       const start = addDays(this.asOf, draw(this.seed, `${key}s${s}`, 0, 200) - 60);
@@ -153,7 +157,7 @@ export class FixtureWorld {
         start,
         end: addDays(start, 120 + draw(this.seed, `${key}s${s}`, 1, 400)),
         daily: BigInt(1 + draw(this.seed, `${key}s${s}`, 2, 30)) * 1_000n,
-        recipient: ["Team", "Investors"][s % 2] as string,
+        recipient: ["Team", "Early holders"][s % 2] as string,
       };
     });
     return {
@@ -191,7 +195,7 @@ export class FixtureWorld {
         }
       }
     }
-    out[2] = { ...(out[2] as Contract), depegFrom: addDays(this.asOf, -9) }; // one contract that has lost its peg
+    out[2] = { ...(out[2] as Contract), belowParFrom: addDays(this.asOf, -9) }; // one contract that has fallen below one dollar
     return out;
   }
 
@@ -303,10 +307,10 @@ export class FixtureWorld {
     return raw < 1n ? 1n : raw;
   }
 
-  /** A contract's price on `day`, in millionths of a dollar: near one dollar, and 0.62 from the day a contract loses its peg. */
+  /** A contract's price on `day`, in millionths of a dollar: near one dollar, and 0.62 from the day a contract falls below par. */
   contractPriceMicro(c: Contract, day: string): bigint {
-    const depegged = c.depegFrom !== undefined && daysBetween(c.depegFrom, day) >= 0;
-    return depegged ? 620_000n : BigInt(999_000 + draw(this.seed, c.id, dayNo(day), 2_000));
+    const belowPar = c.belowParFrom !== undefined && daysBetween(c.belowParFrom, day) >= 0;
+    return belowPar ? 620_000n : BigInt(999_000 + draw(this.seed, c.id, dayNo(day), 2_000));
   }
 
   /** Circulating supply in USD (millionths) of a set of contracts on `day`: supply times that day's price, summed. */

@@ -9,7 +9,14 @@
  * whose bytes no longer match their hash is an integrity failure and throws; the desk never quietly refetches over it.
  */
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname } from "node:path";
 import { CR_PUBLIC_DIR, pathWithin, privatePath } from "../paths.js";
 import { isDate } from "./dates.js";
@@ -172,6 +179,18 @@ export class SnapshotStore {
       entry,
     ].sort((a, b) => (a.tag + a.queryId).localeCompare(b.tag + b.queryId));
     this.#writeManifest({ ...manifest, entries });
+  }
+
+  /** Every snapshot stored for a window and tag, each verified against its hash as `read` does. Empty if the window has none. */
+  list(window: string, tag = "daily"): { meta: SnapshotMeta; body: Uint8Array }[] {
+    assertWindowAndTag(window, tag);
+    const dir = pathWithin(this.#opts.privateRoot, window, tag);
+    if (!existsSync(dir)) return [];
+    return readdirSync(dir)
+      .filter((f) => f.endsWith(".meta.json"))
+      .sort()
+      .map((f) => this.read(window, tag, f.slice(0, -".meta.json".length)))
+      .filter((x): x is { meta: SnapshotMeta; body: Uint8Array } => x !== undefined);
   }
 
   manifest(window: string): Manifest | undefined {

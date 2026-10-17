@@ -5,7 +5,7 @@ import { Num, parseJsonDecimal, type Json } from "../json-decimal.js";
 import { MAX_SERIES_PER_CALL, catalog, queryId } from "../queries.js";
 import type { Query } from "../types.js";
 import { FixtureBackend } from "./backend.js";
-import { FIXTURE_AS_OF, FixtureWorld, decimalText } from "./world.js";
+import { CHAINS, FIXTURE_AS_OF, FixtureWorld, ISSUERS, decimalText } from "./world.js";
 
 type Obj = { [k: string]: Json };
 const dec = new TextDecoder();
@@ -69,13 +69,7 @@ describe("tabular responses", () => {
   it("lists the stablecoin chains and issuers, and pages them with the totals the docs state", async () => {
     const b = new FixtureBackend();
     const chains = (await ask(b, catalog.stablecoinChains())).json;
-    expect((chains.data as Obj[]).map((r) => r.id)).toEqual([
-      "fixture-chain-a",
-      "fixture-chain-b",
-      "fixture-chain-c",
-      "fixture-chain-d",
-      "fixture-chain-e",
-    ]);
+    expect((chains.data as Obj[]).map((r) => r.id)).toEqual(CHAINS);
     expect(Object.keys((chains.data as Obj[])[0] as Obj)).toEqual([
       "id",
       "name",
@@ -83,14 +77,14 @@ describe("tabular responses", () => {
       "networkID",
     ]);
     const issuers = (await ask(b, catalog.stablecoinIssuers())).json;
-    expect((issuers.data as Obj[]).map((r) => r.id)).toHaveLength(4);
+    expect((issuers.data as Obj[]).map((r) => r.id)).toEqual(ISSUERS);
     expect(Object.keys((issuers.data as Obj[])[0] as Obj)).toEqual([
       "id",
       "name",
       "slug",
       "projectID",
     ]);
-    // pages of 2: three pages for five chains, and a page past the end is empty rather than an error
+    // pages of 2: four pages for seven chains, and a page past the end is empty rather than an error
     const paged: Query = {
       api: "data",
       path: "/query/tabular/stablecoin-chains",
@@ -98,8 +92,10 @@ describe("tabular responses", () => {
     };
     const first = (await ask(b, paged)).json;
     expect((first.data as Obj[]).length).toBe(2);
-    expect((first.metadata as Obj).totalRows?.toString()).toBe("5");
-    expect((first.metadata as Obj).totalPages?.toString()).toBe("3");
+    expect((first.metadata as Obj).totalRows?.toString()).toBe(String(CHAINS.length));
+    expect((first.metadata as Obj).totalPages?.toString()).toBe(
+      String(Math.ceil(CHAINS.length / 2)),
+    );
     expect((await ask(b, { ...paged, params: { ...paged.params, page: "99" } })).json.data).toEqual(
       [],
     );
@@ -272,16 +268,16 @@ describe("timeseries responses", () => {
     expect(daysBetween(start, FIXTURE_AS_OF)).toBe(90);
   });
 
-  it("values supply at each day's price, so a contract that loses its peg shows up as a fall in its chain's USD supply", async () => {
+  it("values supply at each day's price, so a contract that falls below one dollar shows up as a fall in its chain's USD supply", async () => {
     const b = new FixtureBackend();
-    const c = b.world.contracts[2]!; // the contract that has lost its peg
+    const c = b.world.contracts[2]!; // the contract that has fallen below one dollar
     const before = addDays(FIXTURE_AS_OF, -20);
     const same = (day: string) => b.world.contractSupply(c, day);
     expect(b.world.contractPriceMicro(c, before)).toBeGreaterThan(990_000n);
     expect(b.world.contractPriceMicro(c, FIXTURE_AS_OF)).toBe(620_000n);
     const usd = (day: string) => (same(day) * b.world.contractPriceMicro(c, day)) / 1_000_000n;
-    expect(usd(before)).toBeGreaterThan((same(before) * 990_000n) / 1_000_000n); // held its peg: worth about its token count in dollars
-    expect(usd(FIXTURE_AS_OF)).toBeLessThan((same(FIXTURE_AS_OF) * 700_000n) / 1_000_000n); // lost it: worth well under 70 cents on the dollar
+    expect(usd(before)).toBeGreaterThan((same(before) * 990_000n) / 1_000_000n); // at par: worth about its token count in dollars
+    expect(usd(FIXTURE_AS_OF)).toBeLessThan((same(FIXTURE_AS_OF) * 700_000n) / 1_000_000n); // below par: worth well under 70 cents on the dollar
   });
 
   it("enforces the documented limits, so the catalog cannot drift past them: 10 series, 9,000 points, a window", async () => {
