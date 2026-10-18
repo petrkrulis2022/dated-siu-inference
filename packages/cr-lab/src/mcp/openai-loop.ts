@@ -60,7 +60,7 @@ export function openAiChatApi(
           body: JSON.stringify(body),
           redirect: "error",
         });
-        let json: unknown = null;
+        let json: unknown;
         try {
           json = await res.json();
         } catch {

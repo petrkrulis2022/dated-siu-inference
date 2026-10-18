@@ -13,6 +13,11 @@
       "usd": "67.78",
       "asOf": "2026-10-17T17:30:00Z",
       "source": "Claude Console dashboard, organization credits, from the owner's screenshot on 2026-10-17"
+    },
+    "openai": {
+      "usd": "5.51",
+      "asOf": "2026-10-16T09:00:00Z",
+      "source": "OpenAI billing page, from the owner's screenshot on 2026-10-16 (the provider mapping was inferred); stale, below the print's own 30-day need"
     }
   }
 }

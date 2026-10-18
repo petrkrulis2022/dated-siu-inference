@@ -190,7 +190,7 @@ export async function runToolLoop(input: RunLoopInput): Promise<SessionResult> {
     }
     const turnStart = now();
     let sent: ChatTurn;
-    let costUsd = "0";
+    let costUsd: string;
     try {
       const out = await input.ledger.guard(
         provider,

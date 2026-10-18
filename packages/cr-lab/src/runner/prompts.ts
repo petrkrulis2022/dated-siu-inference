@@ -60,8 +60,11 @@ function pieces(
 ): { task: string; schema: string; data: string } | undefined {
   switch (instance.task) {
     case "CR-VS": {
-      const { months, venues } = vsMonthly(day, instance.params.endMonth);
-      const ref = instance.reference as VSReference;
+      const { months, venues } = vsMonthly(
+        day,
+        instance.params.endMonth,
+        instance.params.months ?? 12,
+      );
       const first = months[0]?.month ?? "";
       const last = months[months.length - 1]?.month ?? "";
       const rows = [...venues.entries()]

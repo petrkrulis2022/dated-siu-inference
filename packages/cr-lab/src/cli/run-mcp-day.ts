@@ -3,7 +3,7 @@
  *
  *   pnpm --filter @touchstone/cr-lab run run-mcp-day
  *       FIXTURES, scripted stand-in agents on synthetic data: spends and calls nothing.
- *   pnpm --filter @touchstone/cr-lab run run-mcp-day -- --models claude-haiku-4-5,claude-sonnet-5 --yes-spend [--tasks CR-VS,CR-PL,CR-SM] [--max-sessions 6] [--session-usd 1.00]
+ *   pnpm --filter @touchstone/cr-lab run run-mcp-day -- --models claude-haiku-4-5,claude-sonnet-5 --yes-spend [--tasks CR-VS,CR-PL,CR-SM] [--max-sessions 6] [--session-usd 1.00] [--max-tokens 32000]
  *       REAL MODELS (Anthropic, the trial key) against the FAKE MCP server over SYNTHETIC fixture data: this tests how real models use the tools. It spends money (the spend guard still stops it at the
  *       cap or at a budget, and each session has its own cap) but makes NO Blockworks request and uses no Blockworks data. Records stay in memory and are printed, never written as the trial's.
  *
@@ -47,7 +47,14 @@ const tasks = (opt("tasks") ?? MCP_TASKS.join(",")).split(",").map((t) => {
 });
 const maxSessions = opt("max-sessions") !== undefined ? Number(opt("max-sessions")) : undefined;
 const sessionUsd = opt("session-usd");
-const limits = sessionUsd !== undefined ? { maxSessionUsd: sessionUsd } : undefined;
+const maxTokens = opt("max-tokens") !== undefined ? Number(opt("max-tokens")) : undefined;
+const limits =
+  sessionUsd !== undefined || maxTokens !== undefined
+    ? {
+        ...(sessionUsd !== undefined ? { maxSessionUsd: sessionUsd } : {}),
+        ...(maxTokens !== undefined ? { maxTokensPerTurn: maxTokens } : {}),
+      }
+    : undefined;
 
 // fixtures that behave like the live data where it matters: the stablecoin series publish a day late
 const f = await fixtureDay(undefined, {}, LIVE_LAG);

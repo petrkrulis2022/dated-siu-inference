@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { D } from "@touchstone/sdk";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { FixtureBackend } from "../data-desk/fixtures/backend.js";
 import { Secret } from "../keys.js";
 import { MemoryRecordStore } from "../runner/records.js";
 import { standInSeat } from "../runner/stand-in-models.js";
