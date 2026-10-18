@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { addDays } from "../data-desk/dates.js";
 import { FixtureBackend } from "../data-desk/fixtures/backend.js";
 import { FIXTURE_AS_OF } from "../data-desk/fixtures/world.js";
-import { FakeMcp } from "./fake-mcp.js";
+import { FakeMcp, MCP_MAX_POINTS, MCP_MAX_SERIES } from "./fake-mcp.js";
 import { MCP_DATA_TOOLS, MCP_WITHHELD_TOOLS } from "./types.js";
 
 let backend: FixtureBackend;
@@ -14,110 +14,190 @@ beforeAll(() => {
 afterAll(() => undefined);
 
 const venues = () => backend.world.venues.map((v) => v.id);
+const read = (args: Record<string, unknown>) =>
+  mcp.call("timeseries_data", { model: "perp-dex-protocols", ...args });
+const parse = (text: string) =>
+  JSON.parse(text) as {
+    data: { point_schema: { field: string }[]; series: { key: string; points: unknown[][] }[] };
+  };
+const dayOf = (t: unknown) => new Date((t as number) * 1000).toISOString().slice(0, 10);
 
-describe("the fake MCP server", () => {
+describe("the fake MCP server: tools and catalogs", () => {
   it("offers exactly the four data tools and none of the withheld ones", async () => {
     const names = (await mcp.tools()).map((t) => t.name);
     expect(names.sort()).toEqual([...MCP_DATA_TOOLS].sort());
     for (const w of MCP_WITHHELD_TOOLS) expect(names).not.toContain(w);
   });
 
-  it("lists the models in its catalogs, as JSON text", async () => {
-    const ts = JSON.parse((await mcp.call("timeseries_catalog", {})).text);
-    expect(ts.models.map((m: { model: string }) => m.model)).toContain("perp-dex-protocols");
-    const tab = JSON.parse((await mcp.call("tabular_catalog", {})).text);
-    expect(tab.models.map((m: { model: string }) => m.model)).toContain("lending-protocols");
+  it("lists models as the live catalog does: slug, access, metric count, intervals and allowAllSeries", async () => {
+    const ts = JSON.parse((await mcp.call("timeseries_catalog", {})).text).models as Record<
+      string,
+      unknown
+    >[];
+    const perp = ts.find((m) => m.slug === "perp-dex-protocols");
+    expect(perp).toMatchObject({
+      metricCount: 96,
+      intervals: ["1d"],
+      allowAllSeries: true,
+      access: { permissionSlug: "projects_protocols_unified" },
+    });
+    expect(ts.find((m) => m.slug === "asset-supply")).toMatchObject({
+      allowAllSeries: false,
+      intervals: ["1d", "1w"],
+    });
+    const tab = JSON.parse((await mcp.call("tabular_catalog", {})).text).models as {
+      slug: string;
+    }[];
+    expect(tab.map((m) => m.slug)).toContain("lending-protocols");
   });
 
-  it("reads a table page and refuses a page size over 200", async () => {
-    const r = await mcp.call("tabular_data", { model: "perp-dex-protocols", pageSize: 5 });
+  it("describes one model in full, and narrows a list by search", async () => {
+    const one = JSON.parse(
+      (await mcp.call("timeseries_catalog", { model: "perp-dex-protocols" })).text,
+    );
+    expect(one.metrics).toHaveLength(96);
+    expect(one.metrics[0].field).toBe("volumeUSD");
+    const found = JSON.parse((await mcp.call("timeseries_catalog", { search: "stablecoin" })).text)
+      .models as { slug: string }[];
+    expect(found.map((m) => m.slug).sort()).toEqual([
+      "stablecoins-by-chain",
+      "stablecoins-by-issuer",
+    ]);
+    expect((await mcp.call("timeseries_catalog", { model: "nope" })).isError).toBe(true);
+  });
+});
+
+describe("the fake MCP server: reading series", () => {
+  it("leaving out `series` reads every series, for a model that allows it, and refuses for one that does not", async () => {
+    const r = await read({ timeframe: "10d" });
     expect(r.isError).toBe(false);
-    expect(JSON.parse(r.text).data).toHaveLength(5);
+    expect(
+      parse(r.text)
+        .data.series.map((s) => s.key)
+        .sort(),
+    ).toEqual(venues().sort());
+    const no = await mcp.call("timeseries_data", { model: "asset-supply", timeframe: "10d" });
+    expect(no.isError).toBe(true);
+    expect(no.text).toMatch(/allowAllSeries is false/);
+  });
+
+  it("takes up to 20 series, and refuses more", async () => {
+    const twenty = Array.from({ length: MCP_MAX_SERIES }, (_, i) => `entity-${i}`);
+    expect((await read({ series: twenty, timeframe: "5d" })).isError).toBe(false);
+    const tooMany = await read({ series: [...twenty, "one-more"], timeframe: "5d" });
+    expect(tooMany.isError).toBe(true);
+    expect(tooMany.text).toMatch(/at most 20 series/);
+  });
+
+  it("refuses a call over 5,000 points across all series, and never shortens it", async () => {
+    const days = Math.floor(MCP_MAX_POINTS / venues().length) + 1;
+    const big = await read({ timeframe: `${days}d` });
+    expect(big.isError).toBe(true);
+    expect(big.text).toMatch(/over the 5000-point limit/);
+    const justUnder = await read({ timeframe: `${Math.floor(MCP_MAX_POINTS / venues().length)}d` });
+    expect(justUnder.isError).toBe(false);
+    // bounds counts two points a series, so it fits whatever the window
+    expect((await read({ timeframe: "ytd", bounds: true })).isError).toBe(false);
+    expect(
+      parse((await read({ timeframe: "ytd", bounds: true })).text).data.series[0]?.points,
+    ).toHaveLength(2);
+  });
+
+  it("a window is a timeframe or a start and end, never both, and is the last 90 days if neither", async () => {
+    const both = await read({ timeframe: "30d", start: "2026-09-01", end: "2026-09-10" });
+    expect(both.isError).toBe(true);
+    expect(both.text).toMatch(/never both/);
+    expect((await read({ start: "2026-09-01" })).isError).toBe(true);
+    const dflt = parse((await read({ series: [venues()[0]] })).text);
+    expect(dflt.data.series[0]?.points).toHaveLength(90);
+    const range = parse(
+      (await read({ series: [venues()[0]], start: addDays(FIXTURE_AS_OF, -9), end: FIXTURE_AS_OF }))
+        .text,
+    );
+    expect(range.data.series[0]?.points).toHaveLength(9); // end is exclusive
+  });
+
+  it("understands the documented timeframes: days, weeks, to-date, and calendar periods", async () => {
+    const len = async (timeframe: string) =>
+      parse((await read({ series: [venues()[0]], timeframe })).text).data.series[0]?.points.length;
+    expect(await len("10d")).toBe(10);
+    expect(await len("2w")).toBe(14);
+    expect(await len("dtd")).toBe(1);
+    expect(await len("2026-09")).toBe(30);
+    expect(await len("2026-09-15")).toBe(1);
+    expect(await len("mtd")).toBe(Number(FIXTURE_AS_OF.slice(8, 10)));
+    const last = parse(
+      (await read({ series: [venues()[0]], timeframe: "5d" })).text,
+    ).data.series[0]?.points.at(-1)?.[0];
+    expect(dayOf(last)).toBe(FIXTURE_AS_OF);
+    expect((await read({ series: ["a"], timeframe: "forever" })).isError).toBe(true);
+  });
+
+  it("returns every metric when none are named, padded to the live count, and only those asked for otherwise", async () => {
+    const all = parse((await read({ series: [venues()[0]], timeframe: "3d" })).text);
+    expect(all.data.point_schema).toHaveLength(1 + 96); // the time and 96 metrics
+    expect(all.data.series[0]?.points[0]).toHaveLength(1 + 96);
+    const one = parse(
+      (await read({ series: [venues()[0]], timeframe: "3d", selections: ["volumeUSD"] })).text,
+    );
+    expect(one.data.point_schema.map((s) => s.field)).toEqual(["time", "volumeUSD"]);
+    expect(one.data.series[0]?.points[0]).toHaveLength(2);
+    const bad = await read({ series: [venues()[0]], timeframe: "3d", selections: ["nope"] });
+    expect(bad.isError).toBe(true);
+    // the padding makes an unselective read far bigger: that is the point
+    expect((await read({ series: [venues()[0]], timeframe: "30d" })).text.length).toBeGreaterThan(
+      10 *
+        (await read({ series: [venues()[0]], timeframe: "30d", selections: ["volumeUSD"] })).text
+          .length,
+    );
+  });
+
+  it("reads a calendar month by name, only the bounds when asked, and refuses what is malformed", async () => {
+    const id = venues()[0] as string;
+    expect(
+      parse((await read({ series: [id], timeframe: "2026-09", selections: ["volumeUSD"] })).text)
+        .data.series[0]?.points,
+    ).toHaveLength(30);
+    const b = await mcp.call("timeseries_data", {
+      model: "stablecoins-by-chain",
+      series: ["fixture-chain-a"],
+      timeframe: "90d",
+      bounds: true,
+      selections: ["circulatingSupplyUSD"],
+    });
+    expect(b.isError).toBe(false);
+    expect(parse(b.text).data.series[0]?.points).toHaveLength(2);
+    for (const bad of [
+      { granularity: "1h", series: ["a"] },
+      { series: [] },
+      { series: ["a"], start: "soon", end: "later" },
+      { model: "nope" },
+    ])
+      expect(
+        (await mcp.call("timeseries_data", { model: "perp-dex-protocols", ...bad })).isError,
+        JSON.stringify(bad),
+      ).toBe(true);
+    expect((await mcp.call("search_documents", { query: "x" })).isError).toBe(true);
+  });
+});
+
+describe("the fake MCP server: tables", () => {
+  it("reads 25 rows by default and at most 200, and says it does not do filters", async () => {
+    const r = await mcp.call("tabular_data", { model: "perp-dex-protocols" });
+    expect(r.isError).toBe(false);
+    expect(JSON.parse(r.text).data).toHaveLength(venues().length);
+    expect(
+      (await mcp.call("tabular_data", { model: "perp-dex-protocols", pageSize: 5 })).isError,
+    ).toBe(false);
     expect(
       (await mcp.call("tabular_data", { model: "perp-dex-protocols", pageSize: 201 })).isError,
     ).toBe(true);
     expect((await mcp.call("tabular_data", { model: "nope" })).isError).toBe(true);
-  });
-
-  it("reads a timeseries over an explicit window, and over a timeframe ending on the snapshot day", async () => {
-    const ids = venues().slice(0, 2);
-    const a = await mcp.call("timeseries_data", {
+    const f = await mcp.call("tabular_data", {
       model: "perp-dex-protocols",
-      granularity: "1d",
-      series: ids,
-      start: addDays(FIXTURE_AS_OF, -9),
-      end: FIXTURE_AS_OF,
+      filters: [{ field: "id", operator: "Equals", values: ["x"] }],
     });
-    expect(a.isError).toBe(false);
-    const pts = JSON.parse(a.text).data.series[0].points as unknown[];
-    expect(pts).toHaveLength(9);
-    const b = await mcp.call("timeseries_data", {
-      model: "perp-dex-protocols",
-      granularity: "1d",
-      series: ids,
-      timeframe: "10d",
-    });
-    expect(b.isError).toBe(false);
-    expect(JSON.parse(b.text).data.series[0].points).toHaveLength(10);
-    const last = JSON.parse(b.text).data.series[0].points.at(-1)[0] as number;
-    expect(new Date(last * 1000).toISOString().slice(0, 10)).toBe(FIXTURE_AS_OF);
-  });
-
-  it("reads a calendar month by name, and only the bounds when asked", async () => {
-    const id = venues()[0] as string;
-    const m = await mcp.call("timeseries_data", {
-      model: "perp-dex-protocols",
-      granularity: "1d",
-      series: [id],
-      timeframe: "2026-09",
-    });
-    expect(m.isError).toBe(false);
-    expect(JSON.parse(m.text).data.series[0].points).toHaveLength(30);
-    const b = await mcp.call("timeseries_data", {
-      model: "stablecoins-by-chain",
-      granularity: "1d",
-      series: [backend.world.tokens.length ? "fixture-chain-a" : "x"],
-      timeframe: "90d",
-      bounds: true,
-    });
-    expect(b.isError).toBe(false);
-    expect(JSON.parse(b.text).data.series[0].points).toHaveLength(2);
-  });
-
-  it("refuses, and never shortens, a call that is too big or malformed", async () => {
-    const many = Array.from({ length: 11 }, (_, i) => `entity-${i}`);
-    expect(many.length).toBeGreaterThan(10);
-    const tooMany = await mcp.call("timeseries_data", {
-      model: "perp-dex-protocols",
-      granularity: "1d",
-      series: many,
-      timeframe: "30d",
-    });
-    expect(tooMany.isError).toBe(true);
-    expect(tooMany.text).toMatch(/at most 10 series/);
-    const tooBig = await mcp.call("timeseries_data", {
-      model: "perp-dex-protocols",
-      granularity: "1d",
-      series: venues().slice(0, 10),
-      start: "2020-01-01",
-      end: FIXTURE_AS_OF,
-    });
-    expect(tooBig.isError).toBe(true);
-    for (const bad of [
-      { model: "perp-dex-protocols", granularity: "1h", series: ["a"] },
-      { model: "perp-dex-protocols", granularity: "1d", series: [] },
-      { model: "perp-dex-protocols", granularity: "1d", series: ["a"], timeframe: "forever" },
-      { model: "perp-dex-protocols", granularity: "1d", series: ["a"], start: "2026-09-01" },
-      {
-        model: "perp-dex-protocols",
-        granularity: "1d",
-        series: ["a"],
-        start: "soon",
-        end: "later",
-      },
-    ])
-      expect((await mcp.call("timeseries_data", bad)).isError, JSON.stringify(bad)).toBe(true);
-    expect((await mcp.call("search_documents", { query: "x" })).isError).toBe(true);
+    expect(f.isError).toBe(true);
   });
 
   it("records every call it receives", async () => {

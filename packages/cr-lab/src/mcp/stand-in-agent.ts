@@ -58,8 +58,11 @@ const chunks = <T>(xs: readonly T[], n: number): T[][] =>
 export function readPlan(
   instance: Instance,
   day: DayData,
-  opts: { drop?: string } = {},
+  opts: { drop?: string; careless?: boolean } = {},
 ): Planned[] {
+  /** a careful agent names the metric fields it needs; a careless one leaves `selections` out and is sent every metric the model has (96 for the volume model) */
+  const pick = (fields: string[]): Record<string, unknown> =>
+    opts.careless === true ? {} : { selections: fields };
   switch (instance.task) {
     case "CR-VS": {
       const { months } = vsMonthly(day, instance.params.endMonth, instance.params.months ?? 12);
@@ -73,6 +76,7 @@ export function readPlan(
             model: "perp-dex-protocols",
             granularity: "1d",
             series,
+            ...pick(["volumeUSD"]),
             start: (months[0] as { start: string }).start,
             end: (months[months.length - 1] as { end: string }).end,
           },
@@ -92,6 +96,7 @@ export function readPlan(
             model: "lending-protocols",
             granularity: "1d",
             series: [id],
+            ...pick(["fees-usd", "revenue-usd", "interest-usd", "net-interest-income-usd"]),
             start: instance.params.start,
             end: instance.params.end,
           },
@@ -110,6 +115,7 @@ export function readPlan(
           model,
           granularity: "1d",
           series,
+          ...pick(["circulatingSupplyUSD"]),
           start: addDays(day.window, -90),
           end: addDays(day.window, 1),
           bounds: true,
@@ -121,7 +127,7 @@ export function readPlan(
   }
 }
 
-export type AgentKind = "researcher" | "partial" | "lazy" | "looper" | "chatty";
+export type AgentKind = "researcher" | "partial" | "careless" | "lazy" | "looper" | "chatty";
 
 const toolUse = (n: number, [name, input]: Planned): Block => ({
   type: "tool_use",
@@ -152,9 +158,11 @@ function agentFor(kind: AgentKind, instance: Instance, day: DayData) {
   const plan: Planned[] =
     kind === "researcher"
       ? readPlan(instance, day)
-      : kind === "partial"
-        ? readPlan(instance, day, dropTop !== undefined ? { drop: dropTop } : {})
-        : [];
+      : kind === "careless"
+        ? readPlan(instance, day, { careless: true })
+        : kind === "partial"
+          ? readPlan(instance, day, dropTop !== undefined ? { drop: dropTop } : {})
+          : [];
   return (turn: number, relayed: () => RelayedCall[]): Decision => {
     if (kind === "looper") return { use: ["tabular_catalog", {}], outputTokens: 80 };
     if (kind === "chatty") return { use: ["tabular_catalog", {}], outputTokens: 15_000 };

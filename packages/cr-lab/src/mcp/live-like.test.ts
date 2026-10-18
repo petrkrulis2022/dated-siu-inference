@@ -15,8 +15,8 @@ import { smRows, solveVS, vsMonthly } from "../tasks/solve.js";
 import { FakeMcp, LIVE_LAG } from "./fake-mcp.js";
 import { buildMcpPrompt } from "./prompts.js";
 import { dayFromRelayed, gradeMcpAnswer, type RelayedCall } from "./relayed.js";
-import { runMcpDay } from "./session.js";
-import { readPlan, routedStandInApi } from "./stand-in-agent.js";
+import { runMcpAnswer, runMcpDay } from "./session.js";
+import { readPlan, routedStandInApi, standInMessagesApi } from "./stand-in-agent.js";
 import { MCP_VS_MONTHS, toMcpInstance } from "./variants.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -169,6 +169,56 @@ describe("a day of MCP mode on the live-like fixtures", () => {
       const rows = records.forWindow(W());
       expect(rows.find((r) => r.task === "CR-VS")?.mcp?.variant).toBe("vs-3-months");
       expect(rows.find((r) => r.task === "CR-PL")?.mcp?.variant).toBeUndefined();
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("the cost trap: a read that names no metrics", () => {
+  it("brings back every metric the model has, and the volume read is many times bigger and dearer than a careful one", async () => {
+    const vs = all.find((i) => i.task === "CR-VS") as Instance;
+    const inst = toMcpInstance(vs, f.day)?.instance as Extract<Instance, { task: "CR-VS" }>;
+    const tmp = mkdtempSync(join(tmpdir(), "cr-trap-"));
+    try {
+      const NOW = new Date("2026-10-20T12:00:00Z");
+      const session = async (kind: "researcher" | "careless") => {
+        const api = standInMessagesApi(kind, inst, f.day);
+        return runMcpAnswer({
+          api,
+          mcp: mcp(),
+          ledger: new SpendLedger({
+            store: new MemoryLedgerStore(),
+            policy: {
+              dailyCapUsd: "9",
+              providers: { anthropic: { budgetUsd: "100", since: "2026-10-01T00:00:00Z" } },
+            },
+            now: () => NOW,
+          }),
+          seat: standInSeat("solver", {
+            id: "claude-sonnet-5",
+            provider: "anthropic",
+            price: { priceInUsdPer1M: "2", priceOutUsdPer1M: "10" },
+          }),
+          instance: inst,
+          window: W(),
+          daySha256: "d".repeat(64),
+          sessionsDir: tmp,
+          now: () => NOW,
+        });
+      };
+      const careful = (await session("researcher")).record;
+      const careless = (await session("careless")).record;
+      const bytes = (r: typeof careful) =>
+        (r.mcp?.tool_calls ?? [])
+          .filter((c) => c.tool === "timeseries_data")
+          .reduce((n, c) => n + c.result_bytes, 0);
+      expect(careful.passed).toBe(true);
+      expect(bytes(careless)).toBeGreaterThan(20 * bytes(careful));
+      // so large that the session ends on the size of the conversation before it can answer
+      expect(careless.passed).toBe(false);
+      expect(careless.mcp?.limit).toBe("context-limit");
+      expect(careless.primary_failure).toBe("session-limit");
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

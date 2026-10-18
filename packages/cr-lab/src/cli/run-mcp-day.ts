@@ -89,7 +89,7 @@ try {
 
   if (opt("models") === undefined) {
     // ---- scripted stand-ins: nothing real is touched ----
-    const kinds: AgentKind[] = ["researcher", "partial", "lazy", "looper"];
+    const kinds: AgentKind[] = ["researcher", "partial", "careless", "lazy", "looper"];
     const seats = kinds.map((k) =>
       standInSeat("solver", { id: `stand-in-${k}`, provider: "anthropic" }),
     );
