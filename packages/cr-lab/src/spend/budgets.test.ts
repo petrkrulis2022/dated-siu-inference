@@ -55,18 +55,36 @@ describe("policyFromBudgets", () => {
   });
 });
 
+/** The print's measured 30 days of spend per provider (D72). */
+const MEASURED_30_DAY = {
+  anthropic: "15.09",
+  openai: "7.02",
+  google: "18.78",
+  xai: "8.25",
+  openrouter: "2.76",
+};
+/** Reserves the owner chose to hold below the measured need, each with its date: 2026-10-18, to test GPT on the OpenAI balance as it is (the print then has about 15 days there). */
+const OWNER_LOWERED = { openai: "3.51" };
+
 describe("the committed budgets file", () => {
-  it("is valid, sets the $9 daily cap (D73) and the print's reserves, and records no balance until one is read", () => {
+  it("is valid, sets the $9 daily cap (D73) and the print's reserves, and gives the trial no budget where no balance is recorded", () => {
     const f = loadBudgets(BUDGETS_PATH);
     expect(f.dailyCapUsd).toBe("9");
-    expect(f.printReserveUsd).toEqual({
-      anthropic: "15.09",
-      openai: "7.02",
-      google: "18.78",
-      xai: "8.25",
-      openrouter: "2.76",
-    });
+    expect(f.printReserveUsd).toEqual({ ...MEASURED_30_DAY, ...OWNER_LOWERED });
     // Until a balance is recorded the trial may not spend anywhere: the guard fails closed. Record balances with the time they were read, after each top-up.
     expect(Object.keys(policyFromBudgets(f).providers)).toEqual(Object.keys(f.balances));
+  });
+
+  it("never holds a reserve above the measured need, and a lowered one is a recorded owner decision", () => {
+    const f = loadBudgets(BUDGETS_PATH);
+    for (const [p, usd] of Object.entries(f.printReserveUsd))
+      expect(Number(usd), p).toBeLessThanOrEqual(
+        Number(MEASURED_30_DAY[p as keyof typeof MEASURED_30_DAY]),
+      );
+    for (const p of Object.keys(OWNER_LOWERED))
+      expect(
+        f.balances[p as "openai"]?.source ?? "",
+        `${p}'s balance record says why its reserve is lowered`,
+      ).toMatch(/owner chose|lowered/);
   });
 });
