@@ -93,6 +93,33 @@ describe("a day built from what the model received", () => {
   });
 });
 
+describe("a read that leaves out the optional granularity", () => {
+  it("is read as daily, the tool's own default, so an agent that omits it is not marked as having fetched nothing", async () => {
+    const i = by["CR-PL"] as Extract<Instance, { task: "CR-PL" }>;
+    const m = mcp();
+    const args = {
+      model: "lending-protocols",
+      series: [i.params.protocolId],
+      start: i.params.start,
+      end: i.params.end,
+    };
+    const call: RelayedCall = {
+      tool: "timeseries_data",
+      args,
+      ...(await m.call("timeseries_data", args)),
+    };
+    expect(call.isError).toBe(false);
+    expect("granularity" in call.args).toBe(false);
+    const g = gradeMcpAnswer({
+      instance: i,
+      text: answerFor(i),
+      relayed: dayFromRelayed(W(), [call]),
+    });
+    expect(g.snapshotCheck).toBe("same");
+    expect(g.passed).toBe(true);
+  });
+});
+
 describe("grading an MCP answer from the data the model received", () => {
   it("CR-VS: reading every venue for the right twelve months, and answering correctly, passes", async () => {
     const i = by["CR-VS"] as Extract<Instance, { task: "CR-VS" }>;

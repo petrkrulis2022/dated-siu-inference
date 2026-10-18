@@ -32,11 +32,12 @@ export function dayFromRelayed(window: string, calls: readonly RelayedCall[]): D
     const model = c.args.model;
     if (typeof model !== "string" || !/^[A-Za-z0-9._~-]+$/.test(model)) continue;
     let path: string | undefined;
-    if (c.tool === "timeseries_data" && typeof c.args.granularity === "string")
-      path = /^[A-Za-z0-9._~-]+$/.test(c.args.granularity)
-        ? `/query/timeseries/${model}/${c.args.granularity}`
-        : undefined;
-    else if (c.tool === "tabular_data") path = `/query/tabular/${model}`;
+    if (c.tool === "timeseries_data") {
+      // `granularity` is optional and defaults to 1d (the live tool description says so): a call that leaves it out is a daily read
+      const granularity = c.args.granularity ?? "1d";
+      if (typeof granularity === "string" && /^[A-Za-z0-9._~-]+$/.test(granularity))
+        path = `/query/timeseries/${model}/${granularity}`;
+    } else if (c.tool === "tabular_data") path = `/query/tabular/${model}`;
     if (path === undefined) continue;
     try {
       ingest(day, seen, { path }, parseJsonDecimal(c.text));
