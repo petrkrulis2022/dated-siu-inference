@@ -37,3 +37,15 @@ export function privatePath(...segments: string[]): string {
     );
   }
 }
+
+/** A path the caller supplied (a command-line `--dir`), resolved, if it is inside `PRIVATE_DIR`; otherwise an error. For tools that write into a directory the person names. */
+export function assertInPrivate(p: string): string {
+  const abs = resolve(p);
+  const rel = relative(PRIVATE_DIR, abs);
+  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+    throw new Error(
+      `refusing ${p}: it is outside the private Blockworks directory (${PRIVATE_DIR_REL}), and this tool writes reasoning that can restate licensed data`,
+    );
+  }
+  return abs;
+}

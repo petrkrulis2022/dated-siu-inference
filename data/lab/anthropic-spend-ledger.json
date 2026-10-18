@@ -70,6 +70,11 @@
       "at": "2026-10-09T18:08:23.251Z",
       "usd": "1.220705",
       "what": "probe battery stage1-2026-10-09T17-37-36-884Z"
+    },
+    {
+      "at": "2026-10-18T12:07:27.925Z",
+      "usd": "0.557364",
+      "what": "probe battery replicate-p0-sonnet-ac-rep1-2026-10-18T12-05-42-111Z"
     }
   ]
 }

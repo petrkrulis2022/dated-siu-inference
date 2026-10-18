@@ -11,6 +11,7 @@ import { pathWithin, privatePath } from "../paths.js";
 import type { Part } from "../spend/types.js";
 import type { Failure } from "../tasks/gates.js";
 import type { TaskId } from "../tasks/instances.js";
+import type { ReasoningRequest } from "./reasoning.js";
 import type { FailureClass } from "./taxonomy.js";
 
 export interface AnswerRecord {
@@ -44,8 +45,31 @@ export interface AnswerRecord {
   error?: string;
   /** the model's raw reply, private */
   raw_output: string;
+  /**
+   * What the provider returned of the model's reasoning, as the provider returned it (D107). Absent on a record written before reasoning was captured, which is not the same as
+   * "none returned": a record with this field and `turns_with_reasoning: 0` says the provider returned none.
+   */
+  reasoning?: ReasoningStats;
+  /** Snapshot mode only: the reasoning text itself, private like `raw_output`. In MCP mode the ordered transcript, reasoning included, is in the session file. */
+  reasoning_text?: string;
   /** MCP mode only: the shape of the research session behind the answer (the tool results themselves are in `session_file`, privately) */
   mcp?: McpSessionSummary;
+}
+
+/** The text side of a model's reasoning in one answer, counted from what the provider returned (never from a judgement of it). */
+export interface ReasoningStats {
+  /** what was asked of the provider about reasoning in this answer: its summary (Sonnet, D107) or nothing, the provider's defaults */
+  requested: ReasoningRequest;
+  /** turns (one in snapshot mode) on which the provider returned reasoning text */
+  turns_with_reasoning: number;
+  reasoning_chars: number;
+  /** `redacted_thinking` blocks: returned by the provider, not readable */
+  redacted_blocks: number;
+  /** thinking blocks returned with no text: the model thought and the text was not offered */
+  empty_blocks: number;
+  /** turns on which the model wrote visible text alongside a tool call (MCP mode: what it said about what it was doing) */
+  narration_turns: number;
+  narration_chars: number;
 }
 
 export interface McpSessionSummary {

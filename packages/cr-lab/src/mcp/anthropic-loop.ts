@@ -4,6 +4,7 @@
  * (verified on the first live dry run, 2026-10-17), so a turn is priced on output alone.
  */
 import type { Secret } from "../keys.js";
+import { reasoningOfBlocks, requestsThinkingSummary } from "../runner/reasoning.js";
 import type { ChatReply, ChatTurn, ToolChat } from "./tool-loop.js";
 import type { McpToolDef } from "./types.js";
 
@@ -15,6 +16,8 @@ interface ApiUsage {
   output_tokens?: number;
   cache_creation_input_tokens?: number;
   cache_read_input_tokens?: number;
+  /** reported by the API when thinking happened; already inside `output_tokens` */
+  output_tokens_details?: { thinking_tokens?: number };
 }
 interface ApiResponse {
   content?: Block[];
@@ -77,16 +80,31 @@ const textOf = (blocks: Block[]): string =>
     .join("\n")
     .trim();
 
-/** The `ToolChat` for Claude over a `MessagesApi`. */
-export function anthropicChat(api: MessagesApi, modelString: string): ToolChat {
+/**
+ * The `ToolChat` for Claude over a `MessagesApi`. For a model whose thinking text is hidden by default (Sonnet), every request asks for its summary, `thinking: {type: "adaptive", display:
+ * "summarized"}`, the one setting touched (D107, D59): it asks for a summary of thinking already happening. `summary: false` turns it off, for the tests that compare the two.
+ */
+export function anthropicChat(
+  api: MessagesApi,
+  modelString: string,
+  opts: { summary?: boolean } = {},
+): ToolChat {
   type Message = { role: "user" | "assistant"; content: string | Block[] };
+  const summary = opts.summary ?? requestsThinkingSummary(modelString);
   return {
     provider: "anthropic",
+    reasoningRequest: summary ? "summary" : "default",
     init: (prompt) => [{ role: "user", content: prompt } satisfies Message],
     toolSpecs: (tools: McpToolDef[]) =>
       tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.inputSchema })),
     async send(messages, tools, maxTokens): Promise<ChatTurn> {
-      const r = await api.send({ model: modelString, max_tokens: maxTokens, messages, tools });
+      const r = await api.send({
+        model: modelString,
+        max_tokens: maxTokens,
+        messages,
+        tools,
+        ...(summary ? { thinking: { type: "adaptive", display: "summarized" } } : {}),
+      });
       if (r.status !== 200) return { status: r.status, attempts: r.attempts };
       const resp = (r.json ?? {}) as ApiResponse;
       const content = resp.content ?? [];
@@ -108,8 +126,13 @@ export function anthropicChat(api: MessagesApi, modelString: string): ToolChat {
           input: (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0),
           output: usage.output_tokens ?? 0,
           cachedInput: usage.cache_read_input_tokens ?? 0,
+          // diagnostic only (already inside `output`): left out when the API does not report it, so "not reported" and "zero" stay different
+          ...(usage.output_tokens_details?.thinking_tokens !== undefined
+            ? { reasoning: usage.output_tokens_details.thinking_tokens }
+            : {}),
         },
         assistant: content,
+        reasoning: reasoningOfBlocks(content),
       };
       return { status: 200, attempts: r.attempts, reply };
     },

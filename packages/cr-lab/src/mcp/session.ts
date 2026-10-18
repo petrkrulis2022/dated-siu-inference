@@ -100,7 +100,7 @@ export async function runMcpAnswer(
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(
     file,
-    `${JSON.stringify({ instance: instance.id, model: seat.modelId, prompt: prompt.text, relayed: session.relayed, final: session.finalText }, null, 2)}\n`,
+    `${JSON.stringify({ instance: instance.id, model: seat.modelId, prompt: prompt.text, relayed: session.relayed, final: session.finalText, reasoning_requested: session.reasoning.requested, transcript: session.transcript }, null, 2)}\n`,
     { mode: 0o600 },
   );
 
@@ -134,6 +134,7 @@ export async function runMcpAnswer(
     deviations: [],
     ...(session.error !== undefined ? { error: session.error } : {}),
     raw_output: session.finalText,
+    reasoning: session.reasoning,
     mcp: {
       ...(input.variant !== undefined ? { variant: input.variant } : {}),
       ...(grade.lenientPassed !== undefined ? { lenient_passed: grade.lenientPassed } : {}),

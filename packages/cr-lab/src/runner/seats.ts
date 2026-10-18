@@ -7,6 +7,7 @@ import { createAdapterFor, type Adapter } from "@touchstone/harness";
 import type { ModelRegistryEntry } from "@touchstone/sdk";
 import { TRIAL_KEY_NAMES, trialKey, type Provider, type Secret } from "../keys.js";
 import { loadRegistryAndPrices, priceFor } from "./prices.js";
+import { requestsThinkingSummary } from "./reasoning.js";
 import type { Seat } from "./run-answer.js";
 
 /** Registry providers the trial has a key for. */
@@ -66,7 +67,13 @@ export function buildSeats(modelIds: readonly string[], opts: BuildSeatsOptions 
       keyName: TRIAL_KEY_NAMES[provider],
       price: priceFor(entry.id, snapshot),
       adapter,
-      params: samplingFor(entry),
+      params: {
+        ...samplingFor(entry),
+        // D107: Sonnet's thinking summary is requested in every session, snapshot mode included, so MCP mode and snapshot mode run under the same setting
+        ...(requestsThinkingSummary(entry.model_string)
+          ? { thinking: { mode: "summarized" as const } }
+          : {}),
+      },
       entry: { id: entry.id, provider: entry.provider },
     };
   });

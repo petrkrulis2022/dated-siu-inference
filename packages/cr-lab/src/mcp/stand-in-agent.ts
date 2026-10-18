@@ -143,6 +143,8 @@ interface Decision {
   outputTokens: number;
   /** a thinking block before the first call (Claude's wire format only), to show it is carried back unchanged */
   thinkFirst?: boolean;
+  /** visible text written beside the call: what the agent says it is doing */
+  narrate?: string;
 }
 
 /** The plan and the choices of a stand-in agent, independent of any provider's wire format. */
@@ -168,7 +170,14 @@ function agentFor(kind: AgentKind, instance: Instance, day: DayData) {
     if (kind === "chatty") return { use: ["tabular_catalog", {}], outputTokens: 15_000 };
     if (kind === "lazy") return { text: "{}", outputTokens: 80 };
     if (turn < plan.length)
-      return { use: plan[turn] as Planned, outputTokens: 80, thinkFirst: turn === 0 };
+      return {
+        use: plan[turn] as Planned,
+        outputTokens: 80,
+        thinkFirst: turn === 0,
+        ...(turn === 0
+          ? { narrate: "I will list what the server holds, then read what the question needs." }
+          : {}),
+      };
     const key = referenceFor(instance, dayFromRelayed(day.window, relayed()));
     const text =
       key === undefined ? "{}" : referenceAnswerJson({ ...instance, reference: key } as Instance);
@@ -196,9 +205,17 @@ export function standInMessagesApi(
         d.use !== undefined
           ? {
               content: [
+                // thinking text comes back only when a summary was asked for, as Sonnet does; otherwise the block is there and its text is not
                 ...(d.thinkFirst
-                  ? [{ type: "thinking", thinking: "plan the reads", signature: "sig-1" }]
+                  ? [
+                      {
+                        type: "thinking",
+                        thinking: body.thinking === undefined ? "" : "plan the reads",
+                        signature: "sig-1",
+                      },
+                    ]
                   : []),
+                ...(d.narrate !== undefined ? [{ type: "text", text: d.narrate }] : []),
                 toolUse(turn, d.use),
               ],
               stop_reason: "tool_use",
@@ -267,7 +284,7 @@ export function standInChatCompletionsApi(
         d.use !== undefined
           ? {
               role: "assistant",
-              content: null,
+              content: d.narrate ?? null,
               tool_calls: [
                 {
                   id: `call_${turn}`,

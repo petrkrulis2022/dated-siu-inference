@@ -150,7 +150,27 @@ describe("an MCP-mode session", () => {
       messages: { role: string; content: { type: string }[] }[];
     };
     const assistant = second.messages.find((m) => m.role === "assistant");
-    expect(assistant?.content.map((b) => b.type)).toEqual(["thinking", "tool_use"]);
+    // thinking, what the agent said beside its call, then the call: all carried back as returned. This seat asks for no summary, so the thinking block has no text but keeps its signature.
+    expect(assistant?.content.map((b) => b.type)).toEqual(["thinking", "text", "tool_use"]);
+    expect(assistant?.content[0]).toEqual({ type: "thinking", thinking: "", signature: "sig-1" });
+  });
+
+  it("carries a thinking summary back unchanged too, when the model is asked for one", async () => {
+    const instance = by["CR-PL"] as Instance;
+    const api = standInMessagesApi("researcher", instance, f.day);
+    await runMcpAnswer({
+      api,
+      mcp: mcp(),
+      ledger: ledgerWith(),
+      seat: { ...seat(), modelString: "claude-sonnet-5" },
+      instance,
+      window: f.day.window,
+      daySha256: "d".repeat(64),
+      sessionsDir: tmp,
+      now: () => NOW,
+    });
+    const second = api.requests[1] as { messages: { role: string; content: unknown[] }[] };
+    const assistant = second.messages.find((m) => m.role === "assistant");
     expect(assistant?.content[0]).toEqual({
       type: "thinking",
       thinking: "plan the reads",

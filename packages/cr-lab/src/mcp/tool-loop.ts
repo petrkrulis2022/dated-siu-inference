@@ -17,6 +17,9 @@ import { projectedTurnCostUsd, usageCostUsd, type ModelPrice } from "../runner/p
 import type { McpBackend, McpToolDef } from "./types.js";
 import { MCP_DATA_TOOLS, MCP_WITHHELD_TOOLS } from "./types.js";
 import type { RelayedCall } from "./relayed.js";
+import type { ExtractedReasoning, ReasoningRequest } from "../runner/reasoning.js";
+import type { ReasoningStats } from "../runner/records.js";
+import { reasoningStats, type TranscriptEvent } from "./transcript.js";
 
 export interface LoopLimits {
   maxTurns: number;
@@ -49,6 +52,8 @@ export interface ChatReply {
   usage: { input: number; output: number; cachedInput: number; reasoning?: number };
   /** the assistant turn exactly as returned, to be sent back */
   assistant: unknown;
+  /** the reasoning the provider returned with this turn, if it returns any (`runner/reasoning.ts`); absent where a chat does not read it */
+  reasoning?: ExtractedReasoning;
 }
 
 export interface ChatTurn {
@@ -60,6 +65,8 @@ export interface ChatTurn {
 
 export interface ToolChat {
   readonly provider: Provider;
+  /** what this chat asks the provider about reasoning (D107); recorded with the session. Absent means nothing is asked. */
+  readonly reasoningRequest?: ReasoningRequest;
   /** a conversation that starts with the prompt */
   init(prompt: string): unknown[];
   /** the provider's own description of the tools */
@@ -114,6 +121,10 @@ export interface SessionResult {
   toolCalls: ToolCallLog[];
   /** exactly what the model was shown, in order: the grader reads this */
   relayed: RelayedCall[];
+  /** what happened, in order: reasoning returned, narration, calls, result sizes, the end (private; the session file keeps it) */
+  transcript: TranscriptEvent[];
+  /** counted from the transcript */
+  reasoning: ReasoningStats;
   usd: string;
   tokens: { input: number; output: number };
   latencyMs: number;
@@ -158,6 +169,8 @@ export async function runToolLoop(input: RunLoopInput): Promise<SessionResult> {
     turns: [],
     toolCalls: [],
     relayed: [],
+    transcript: [],
+    reasoning: reasoningStats([], input.chat.reasoningRequest ?? "default"),
     usd: "0",
     tokens: { input: 0, output: 0 },
     latencyMs: 0,
@@ -168,6 +181,13 @@ export async function runToolLoop(input: RunLoopInput): Promise<SessionResult> {
   const finish = (): SessionResult => {
     result.usd = spent.toFixed();
     result.latencyMs = now() - started;
+    result.transcript.push({
+      turn: result.turns.length,
+      kind: "end",
+      ...(result.limit !== undefined ? { limit: result.limit } : {}),
+      ...(result.error !== undefined ? { error: result.error } : {}),
+    });
+    result.reasoning = reasoningStats(result.transcript, input.chat.reasoningRequest ?? "default");
     return result;
   };
   let lastInput = 0;
@@ -244,18 +264,30 @@ export async function runToolLoop(input: RunLoopInput): Promise<SessionResult> {
       ...(reply.usage.reasoning !== undefined ? { reasoning_tokens: reply.usage.reasoning } : {}),
     });
     input.chat.appendAssistant(messages, reply.assistant);
+    const rs = reply.reasoning;
+    if (rs !== undefined && (rs.text !== "" || rs.redactedBlocks > 0 || rs.emptyBlocks > 0))
+      result.transcript.push({
+        turn,
+        kind: "reasoning",
+        text: rs.text,
+        redacted_blocks: rs.redactedBlocks,
+        empty_blocks: rs.emptyBlocks,
+      });
     if (!reply.wantsTools) {
+      if (reply.text !== "") result.transcript.push({ turn, kind: "final", text: reply.text });
       result.finalText = reply.text;
       if (reply.stopReason !== undefined) result.stopReason = reply.stopReason;
       return finish();
     }
 
+    if (reply.text !== "") result.transcript.push({ turn, kind: "narration", text: reply.text });
     const results: { id: string; text: string; isError: boolean }[] = [];
     for (const use of reply.toolUses) {
       if (result.toolCalls.length >= limits.maxToolCalls) {
         result.limit = "max-tool-calls";
         return finish();
       }
+      result.transcript.push({ turn, kind: "tool_call", tool: use.name, args: use.args });
       const t0 = now();
       let res: { isError: boolean; text: string };
       if (!MCP_DATA_TOOLS.includes(use.name))
@@ -276,6 +308,13 @@ export async function runToolLoop(input: RunLoopInput): Promise<SessionResult> {
         isError: res.isError,
         result_bytes: new TextEncoder().encode(res.text).length,
         latency_ms: now() - t0,
+      });
+      result.transcript.push({
+        turn,
+        kind: "tool_result",
+        tool: use.name,
+        is_error: res.isError,
+        result_bytes: new TextEncoder().encode(res.text).length,
       });
       result.relayed.push({ tool: use.name, args: use.args, isError: res.isError, text: res.text });
       results.push({ id: use.id, text: res.text, isError: res.isError });

@@ -31,6 +31,7 @@ import { buildMcpPrompt } from "../mcp/prompts.js";
 import { MCP_TASKS, runMcpDay } from "../mcp/session.js";
 import { toMcpInstance } from "../mcp/variants.js";
 import { routedStandInApi, type AgentKind } from "../mcp/stand-in-agent.js";
+import { buildReasoningOverview, fileSessionLoader } from "../reasoning/overview.js";
 
 const argv = process.argv.slice(2);
 const flag = (n: string): boolean => argv.includes(`--${n}`);
@@ -118,6 +119,10 @@ try {
     console.log(
       `\n${dailyTable(all, f.day.window, "MCP mode")}\n${cumulativeTable(all, "MCP mode")}\n${failureReport(all, f.day.window)}`,
     );
+    // synthetic data only, so the reasoning overview can be printed whole
+    console.log(
+      `\n${buildReasoningOverview(all, fileSessionLoader(), { window: f.day.window }).markdown}`,
+    );
   } else {
     // ---- real Anthropic models against the fake MCP on synthetic data ----
     if (!flag("yes-spend")) {
@@ -156,6 +161,9 @@ try {
     );
     console.log(
       `\n${dailyTable(all, f.day.window, "MCP mode")}\n${failureReport(all, f.day.window)}`,
+    );
+    console.log(
+      `\n${buildReasoningOverview(all, fileSessionLoader(), { window: f.day.window }).markdown}`,
     );
     // SYNTHETIC data only, so the details can be shown: what each session did and what it finally said
     for (const r of all) {

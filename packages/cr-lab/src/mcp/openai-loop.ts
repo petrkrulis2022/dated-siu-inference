@@ -7,6 +7,7 @@
  * contains the cached tokens, which are billed at the cached rate, so they are taken out of the plain input and priced on their own.
  */
 import type { Secret } from "../keys.js";
+import { extractReasoning } from "../runner/reasoning.js";
 import type { ChatReply, ChatTurn, ToolChat } from "./tool-loop.js";
 import type { McpToolDef } from "./types.js";
 
@@ -137,6 +138,8 @@ export function openAiChat(api: ChatCompletionsApi, modelString: string): ToolCh
           content: msg.content ?? null,
           ...(calls.length > 0 ? { tool_calls: calls } : {}),
         },
+        // Chat Completions returns no reasoning text, and gpt-5.1 does no reasoning at its default effort (none); read anyway, so a provider that does return some is captured
+        reasoning: extractReasoning(resp),
       };
       return { status: 200, attempts: r.attempts, reply };
     },

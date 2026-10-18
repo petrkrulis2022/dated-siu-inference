@@ -11,6 +11,7 @@ import type { Part } from "../spend/types.js";
 import type { Instance } from "../tasks/instances.js";
 import { gradeAnswer } from "./grade.js";
 import { projectedCostUsd, usageCostUsd, type ModelPrice } from "./prices.js";
+import { extractReasoning } from "./reasoning.js";
 import type { PromptBundle } from "./prompts.js";
 import type { AnswerRecord } from "./records.js";
 import { classify } from "./taxonomy.js";
@@ -114,6 +115,8 @@ export async function runAnswer(input: RunAnswerInput): Promise<AnswerRecord> {
     ...(verdict !== undefined ? { verdict } : {}),
   });
   const passed = verdict?.passed === true;
+  // only what the provider returned (D107): no rationale field is asked for here, so the output tokens, and the cost per correct answer, are what they were
+  const returned = extractReasoning(outcome?.raw);
   return {
     ...base,
     at: now().toISOString(),
@@ -134,5 +137,15 @@ export async function runAnswer(input: RunAnswerInput): Promise<AnswerRecord> {
     deviations: outcome?.deviations ?? [],
     ...(callError !== undefined ? { error: callError } : {}),
     raw_output: text,
+    reasoning: {
+      requested: seat.params.thinking?.mode === "summarized" ? "summary" : "default",
+      turns_with_reasoning: returned.text !== "" ? 1 : 0,
+      reasoning_chars: returned.text.length,
+      redacted_blocks: returned.redactedBlocks,
+      empty_blocks: returned.emptyBlocks,
+      narration_turns: 0,
+      narration_chars: 0,
+    },
+    ...(returned.text !== "" ? { reasoning_text: returned.text } : {}),
   };
 }
