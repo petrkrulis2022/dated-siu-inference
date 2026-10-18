@@ -21,7 +21,8 @@
     "snapshot-day": "pnpm run build && node --env-file=../../.env dist/cli/snapshot-day.js",
     "run-day": "pnpm run build && node --env-file=../../.env dist/cli/run-day.js",
     "daily-snapshot": "pnpm run build && node --env-file=../../.env dist/cli/daily-snapshot.js",
-    "test-alert": "pnpm run build && node --env-file=../../.env dist/cli/test-alert.js"
+    "test-alert": "pnpm run build && node --env-file=../../.env dist/cli/test-alert.js",
+    "run-mcp-day": "pnpm run build && node --env-file=../../.env dist/cli/run-mcp-day.js"
   },
   "dependencies": {
     "@touchstone/harness": "workspace:*",

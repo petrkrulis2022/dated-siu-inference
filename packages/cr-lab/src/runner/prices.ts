@@ -103,3 +103,17 @@ export function projectedCostUsd(
     usageCostUsd({ input: approxInputTokens, output: out, cached_input: 0, reasoning: 0 }, price);
   return attempt(maxOutputTokens).plus(attempt(maxOutputTokens * retryMultiple));
 }
+
+/** The most one MCP-mode turn could cost, reserved before it is made: the whole conversation so far as input plus the full output allowance. */
+export function projectedTurnCostUsd(
+  approxInputTokens: number,
+  maxOutputTokens: number,
+  price: ModelPrice,
+  provider?: string,
+): DecimalValue {
+  return usageCostUsd(
+    { input: approxInputTokens, output: maxOutputTokens, cached_input: 0, reasoning: 0 },
+    price,
+    provider,
+  );
+}

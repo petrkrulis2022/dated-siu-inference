@@ -173,7 +173,7 @@ export async function runDay(input: RunDayInput): Promise<RunDaySummary> {
 export function writeTables(
   records: RecordStore,
   window: string,
-  part: "snapshot" | "dry-run" = "snapshot",
+  part: "snapshot" | "dry-run" | "mcp" = "snapshot",
   dir: string = tablesDir(),
 ): string[] {
   const all: AnswerRecord[] = records
@@ -181,9 +181,10 @@ export function writeTables(
     .flatMap((w) => records.forWindow(w))
     .filter((r) => r.part === part);
   mkdirSync(dir, { recursive: true });
+  const label = part === "mcp" ? "MCP mode" : part === "dry-run" ? "Dry run" : "Snapshot mode";
   const files = [
-    [`daily-${part}-${window}.md`, dailyTable(all, window)],
-    [`cumulative-${part}.md`, cumulativeTable(all)],
+    [`daily-${part}-${window}.md`, dailyTable(all, window, label)],
+    [`cumulative-${part}.md`, cumulativeTable(all, label)],
     [`failures-${part}-${window}.md`, failureReport(all, window)],
   ] as const;
   for (const [name, text] of files) writeFileSync(`${dir}/${name}`, text);

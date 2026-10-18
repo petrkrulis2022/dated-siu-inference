@@ -71,10 +71,14 @@ function body(records: readonly AnswerRecord[]): string[] {
   return lines;
 }
 
-export function dailyTable(records: readonly AnswerRecord[], window: string): string {
+export function dailyTable(
+  records: readonly AnswerRecord[],
+  window: string,
+  label = "Snapshot mode",
+): string {
   const mine = records.filter((r) => r.window === window);
   return [
-    `## Snapshot mode, ${window}`,
+    `## ${label}, ${window}`,
     "",
     mine.length === 0
       ? "No answers recorded for this window."
@@ -83,10 +87,10 @@ export function dailyTable(records: readonly AnswerRecord[], window: string): st
   ].join("\n");
 }
 
-export function cumulativeTable(records: readonly AnswerRecord[]): string {
+export function cumulativeTable(records: readonly AnswerRecord[], label = "Snapshot mode"): string {
   const windows = [...new Set(records.map((r) => r.window))].sort();
   return [
-    "## Snapshot mode, cumulative",
+    `## ${label}, cumulative`,
     "",
     windows.length === 0
       ? "No answers recorded."

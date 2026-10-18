@@ -16,7 +16,7 @@ import type { FailureClass } from "./taxonomy.js";
 export interface AnswerRecord {
   schema: 1;
   window: string;
-  part: Extract<Part, "snapshot" | "dry-run">;
+  part: Extract<Part, "snapshot" | "dry-run" | "mcp">;
   task: TaskId;
   instance: string;
   model: string;
@@ -44,6 +44,36 @@ export interface AnswerRecord {
   error?: string;
   /** the model's raw reply, private */
   raw_output: string;
+  /** MCP mode only: the shape of the research session behind the answer (the tool results themselves are in `session_file`, privately) */
+  mcp?: McpSessionSummary;
+}
+
+export interface McpSessionSummary {
+  /** the key recomputed from the data the model received, against the day's snapshot key */
+  snapshot_check: "same" | "differs" | "insufficient";
+  /** why the session ended before an answer, if it did */
+  limit?: string;
+  tools_offered: string[];
+  tools_withheld: string[];
+  turns: {
+    turn: number;
+    input_tokens: number;
+    output_tokens: number;
+    usd: string;
+    stop_reason?: string;
+    latency_ms: number;
+    retries: number;
+  }[];
+  tool_calls: {
+    turn: number;
+    tool: string;
+    args: Record<string, unknown>;
+    is_error: boolean;
+    result_bytes: number;
+    latency_ms: number;
+  }[];
+  /** where what the model was shown is kept, relative to the private directory */
+  session_file: string;
 }
 
 export interface RecordStore {
