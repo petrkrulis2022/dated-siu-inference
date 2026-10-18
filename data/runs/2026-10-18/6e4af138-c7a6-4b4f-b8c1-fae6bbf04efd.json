@@ -1,0 +1,18 @@
+{
+  "run_id": "6e4af138-c7a6-4b4f-b8c1-fae6bbf04efd",
+  "model_id": "qwen-2.5-72b-instruct",
+  "task_class": "T1",
+  "instance_id": "T1-03",
+  "seed": 781580469,
+  "attempt": 1,
+  "usage": {
+    "input": 894,
+    "output": 64,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 93,
+  "gate_passed": true,
+  "raw_response_ref": "6e4af138-c7a6-4b4f-b8c1-fae6bbf04efd.raw.json",
+  "deviations": []
+}

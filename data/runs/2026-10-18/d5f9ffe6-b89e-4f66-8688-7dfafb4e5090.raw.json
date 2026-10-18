@@ -1,0 +1,39 @@
+{
+  "id": "0904fa13-d6d7-99a5-a2d9-5fcbf2432982",
+  "object": "chat.completion",
+  "created": 1792298066,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "2012EC\nB92FDA\n65A65A\nBAEFC5",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nFour access codes were found: 2012EC, B92FDA, 65A65A, and BAEFC5. A final check is underway for any additional codes.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 22266,
+    "completion_tokens": 17,
+    "total_tokens": 22640,
+    "prompt_tokens_details": {
+      "text_tokens": 22266,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 357,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 460080000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

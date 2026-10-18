@@ -1,0 +1,39 @@
+{
+  "id": "d17ed604-35fc-9b3d-8fa0-960bd93ec59d",
+  "object": "chat.completion",
+  "created": 1792298068,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "309579\n42C6F9\n7F8FEA\n04B8A7",
+        "reasoning_content": "I am scanning the document for archival access codes.\n\nI found four access codes in the document. The northern annex is 309579. The western annex is 42C6F9. The eastern annex is 7F8FEA. The western annex is 04B8A7.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21421,
+    "completion_tokens": 20,
+    "total_tokens": 21822,
+    "prompt_tokens_details": {
+      "text_tokens": 21421,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 381,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 444800000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
