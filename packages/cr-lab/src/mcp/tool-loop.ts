@@ -46,7 +46,7 @@ export interface ChatReply {
   wantsTools: boolean;
   /** the provider's own stop reason */
   stopReason?: string;
-  usage: { input: number; output: number; cachedInput: number };
+  usage: { input: number; output: number; cachedInput: number; reasoning?: number };
   /** the assistant turn exactly as returned, to be sent back */
   assistant: unknown;
 }
@@ -95,6 +95,8 @@ export interface TurnLog {
   latency_ms: number;
   /** tries beyond the first, for a 429 or a server error */
   retries: number;
+  /** reasoning tokens the provider reported inside the output count, where it reports them (diagnostic: confirms the output already contains them) */
+  reasoning_tokens?: number;
 }
 
 export type SessionLimit =
@@ -140,9 +142,15 @@ export async function runToolLoop(input: RunLoopInput): Promise<SessionResult> {
   const now = input.now ?? Date.now;
   const started = now();
   const provider = input.chat.provider;
-  const offered: McpToolDef[] = (await input.mcp.tools()).filter((t) =>
-    MCP_DATA_TOOLS.includes(t.name),
-  );
+  const listed = await input.mcp.tools();
+  const offered: McpToolDef[] = listed.filter((t) => MCP_DATA_TOOLS.includes(t.name));
+  // everything the server lists that a model is not offered, and the tools held back by name whether or not the server lists them
+  const withheld = [
+    ...new Set([
+      ...listed.filter((t) => !MCP_DATA_TOOLS.includes(t.name)).map((t) => t.name),
+      ...MCP_WITHHELD_TOOLS,
+    ]),
+  ].sort();
   const tools = input.chat.toolSpecs(offered);
   const messages = input.chat.init(input.prompt);
   const result: SessionResult = {
@@ -154,7 +162,7 @@ export async function runToolLoop(input: RunLoopInput): Promise<SessionResult> {
     tokens: { input: 0, output: 0 },
     latencyMs: 0,
     toolsOffered: offered.map((t) => t.name),
-    toolsWithheld: [...MCP_WITHHELD_TOOLS],
+    toolsWithheld: withheld,
   };
   let spent: DecimalValue = new D(0);
   const finish = (): SessionResult => {
@@ -233,6 +241,7 @@ export async function runToolLoop(input: RunLoopInput): Promise<SessionResult> {
       ...(reply.stopReason !== undefined ? { stop_reason: reply.stopReason } : {}),
       latency_ms: now() - turnStart,
       retries: sent.attempts - 1,
+      ...(reply.usage.reasoning !== undefined ? { reasoning_tokens: reply.usage.reasoning } : {}),
     });
     input.chat.appendAssistant(messages, reply.assistant);
     if (!reply.wantsTools) {

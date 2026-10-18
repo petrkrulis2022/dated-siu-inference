@@ -139,6 +139,12 @@ export function failureReport(records: readonly AnswerRecord[], window?: string)
         .map((c) => `${c} ${secondary.get(c)}`)
         .join(", ")}.`,
     );
+  const formatOnly = failed.filter((r) => r.mcp?.lenient_passed === true).length;
+  if (formatOnly > 0)
+    lines.push(
+      "",
+      `${formatOnly} of the failed answers would pass if the last JSON object in the reply were read: failures of format only (a diagnostic; they still count as failed).`,
+    );
   const fenced = mine.filter((r) => r.fenced).length;
   if (fenced > 0)
     lines.push(

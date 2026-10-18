@@ -64,6 +64,42 @@ export function referenceFor(instance: Instance, day: DayData): Instance["refere
   }
 }
 
+/**
+ * The last JSON object in a reply, as text, or undefined. A DIAGNOSTIC only: it shows whether a failed answer was only a failure of format (the model wrote its working before the answer).
+ * The counted gate stays strict, as the question says: reply with the JSON object and nothing else.
+ */
+export function lastJsonObject(text: string): string | undefined {
+  let last: string | undefined;
+  let skipUntil = -1;
+  for (let start = text.indexOf("{"); start >= 0; start = text.indexOf("{", start + 1)) {
+    if (start < skipUntil) continue; // inside an object already found: only top-level objects count
+    let depth = 0;
+    let inString = false;
+    for (let i = start; i < text.length; i++) {
+      const c = text[i];
+      if (inString) {
+        if (c === "\\") i++;
+        else if (c === '"') inString = false;
+      } else if (c === '"') inString = true;
+      else if (c === "{") depth++;
+      else if (c === "}" && --depth === 0) {
+        const candidate = text.slice(start, i + 1);
+        try {
+          const v = JSON.parse(candidate) as unknown;
+          if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+            last = candidate;
+            skipUntil = i + 1;
+          }
+        } catch {
+          /* not JSON: keep looking after this brace */
+        }
+        break;
+      }
+    }
+  }
+  return last;
+}
+
 export type SnapshotCheck = "same" | "differs" | "insufficient";
 
 export interface McpGrade {
@@ -72,6 +108,8 @@ export interface McpGrade {
   verdict?: Verdict;
   snapshotCheck: SnapshotCheck;
   classification: Classification;
+  /** DIAGNOSTIC, never counted: would the answer pass if the last JSON object in the reply were read? Only worked out when the strict reading failed on format. */
+  lenientPassed?: boolean;
 }
 
 /**
@@ -105,10 +143,23 @@ export function gradeMcpAnswer(input: {
     ...(input.sessionLimit !== undefined ? { sessionLimit: input.sessionLimit } : {}),
     snapshotCheck: check,
   });
+  let lenientPassed: boolean | undefined;
+  if (
+    !passed &&
+    relayedKey !== undefined &&
+    verdict?.failures.some((f) => f.code === "format") === true
+  ) {
+    const obj = lastJsonObject(text);
+    lenientPassed =
+      obj !== undefined &&
+      check === "same" &&
+      gradeAnswer({ ...instance, reference: relayedKey } as Instance, obj).passed;
+  }
   return {
     passed,
     ...(verdict !== undefined ? { verdict } : {}),
     snapshotCheck: check,
     classification,
+    ...(lenientPassed !== undefined ? { lenientPassed } : {}),
   };
 }

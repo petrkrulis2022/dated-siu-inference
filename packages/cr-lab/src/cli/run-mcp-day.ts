@@ -24,7 +24,8 @@ import { FileLedgerStore, MemoryLedgerStore } from "../spend/store.js";
 import { fixtureDay } from "../tasks/fixture-day.js";
 import { drawInstances, TASKS, type TaskId } from "../tasks/instances.js";
 import { SeedBook } from "../tasks/seeds.js";
-import { anthropicMessagesApi } from "../mcp/anthropic-loop.js";
+import { anthropicChat, anthropicMessagesApi } from "../mcp/anthropic-loop.js";
+import { openAiChat, openAiChatApi } from "../mcp/openai-loop.js";
 import { FakeMcp, LIVE_LAG } from "../mcp/fake-mcp.js";
 import { buildMcpPrompt } from "../mcp/prompts.js";
 import { MCP_TASKS, runMcpDay } from "../mcp/session.js";
@@ -120,13 +121,27 @@ try {
     }
     const modelIds = (opt("models") as string).split(",").filter((m) => m !== "");
     const seats = buildSeats(modelIds);
-    const api = anthropicMessagesApi(trialKey("anthropic"));
+    // each seat talks to its own provider with its own trial key (Claude: the Messages API; GPT: Chat Completions)
+    const claude = seats.some((x) => x.provider === "anthropic")
+      ? anthropicMessagesApi(trialKey("anthropic"))
+      : undefined;
+    const gpt = seats.some((x) => x.provider === "openai")
+      ? openAiChatApi(trialKey("openai"))
+      : undefined;
+    const chatFor = (seat: (typeof seats)[number]) => {
+      if (seat.provider === "anthropic" && claude !== undefined)
+        return anthropicChat(claude, seat.modelString);
+      if (seat.provider === "openai" && gpt !== undefined) return openAiChat(gpt, seat.modelString);
+      throw new Error(`MCP mode has no tool loop for ${seat.modelId} (${seat.provider}) yet`);
+    };
     const ledger = new SpendLedger({
       store: new FileLedgerStore(),
       policy: policyFromBudgets(loadBudgets()),
     });
-    log("REAL models, FAKE MCP on SYNTHETIC data: no Blockworks request, no Blockworks data");
-    const summary = await runMcpDay({ ...common, seats, ledger, apiFor: () => api });
+    log(
+      "REAL models (each on its own provider), FAKE MCP on SYNTHETIC data: no Blockworks request, no Blockworks data",
+    );
+    const summary = await runMcpDay({ ...common, seats, ledger, chatFor });
     const all = records.forWindow(f.day.window);
     console.log(`\n${JSON.stringify(summary)}`);
     console.log(

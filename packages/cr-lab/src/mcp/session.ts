@@ -136,6 +136,7 @@ export async function runMcpAnswer(
     raw_output: session.finalText,
     mcp: {
       ...(input.variant !== undefined ? { variant: input.variant } : {}),
+      ...(grade.lenientPassed !== undefined ? { lenient_passed: grade.lenientPassed } : {}),
       snapshot_check: grade.snapshotCheck,
       ...(session.limit !== undefined ? { limit: session.limit } : {}),
       tools_offered: session.toolsOffered,

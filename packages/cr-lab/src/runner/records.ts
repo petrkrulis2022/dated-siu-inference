@@ -51,6 +51,8 @@ export interface AnswerRecord {
 export interface McpSessionSummary {
   /** MCP mode's own version of the question, if it differs from snapshot mode's (D105) */
   variant?: string;
+  /** DIAGNOSTIC, never counted: a failed answer that would pass if the last JSON object in the reply were read (a failure of format only) */
+  lenient_passed?: boolean;
   /** the key recomputed from the data the model received, against the day's snapshot key */
   snapshot_check: "same" | "differs" | "insufficient";
   /** why the session ended before an answer, if it did */
@@ -65,6 +67,7 @@ export interface McpSessionSummary {
     stop_reason?: string;
     latency_ms: number;
     retries: number;
+    reasoning_tokens?: number;
   }[];
   tool_calls: {
     turn: number;

@@ -25,6 +25,7 @@ interface ChatResponse {
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
+    completion_tokens_details?: { reasoning_tokens?: number };
     prompt_tokens_details?: { cached_tokens?: number };
   };
 }
@@ -128,6 +129,7 @@ export function openAiChat(api: ChatCompletionsApi, modelString: string): ToolCh
           input: Math.max(0, prompt - cached),
           output: resp.usage?.completion_tokens ?? 0,
           cachedInput: cached,
+          reasoning: resp.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
         },
         // only the fields the API accepts back: the role, the text and the calls
         assistant: {
