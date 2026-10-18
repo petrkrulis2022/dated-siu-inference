@@ -3,7 +3,7 @@
   "dailyCapUsd": "9",
   "printReserveUsd": {
     "anthropic": "15.09",
-    "openai": "7.02",
+    "openai": "3.51",
     "google": "18.78",
     "xai": "8.25",
     "openrouter": "2.76"
@@ -17,7 +17,7 @@
     "openai": {
       "usd": "5.51",
       "asOf": "2026-10-16T09:00:00Z",
-      "source": "OpenAI billing page, from the owner's screenshot on 2026-10-16 (the provider mapping was inferred); stale, below the print's own 30-day need"
+      "source": "OpenAI billing page, from the owner's screenshot on 2026-10-16 (the provider mapping was inferred); the reading is stale. On 2026-10-18 the owner chose to test on the balance as it is: the print's OpenAI reserve is lowered from 7.02 (30 days) to 3.51 (about 15 days), leaving the trial 2.00. The print needs an OpenAI top-up within about two weeks either way."
     }
   }
 }
