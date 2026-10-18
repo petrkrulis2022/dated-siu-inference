@@ -17,6 +17,7 @@ import { anthropicMessagesApi, approxTokens } from "./anthropic-loop.js";
 import { FakeMcp } from "./fake-mcp.js";
 import { runMcpAnswer, runMcpDay } from "./session.js";
 import { standInMessagesApi } from "./stand-in-agent.js";
+import { toMcpInstance } from "./variants.js";
 import type { McpBackend } from "./types.js";
 
 const NOW = new Date("2026-10-18T12:00:00Z");
@@ -324,7 +325,8 @@ describe("a day of MCP mode", () => {
           : first.includes("lending protocol")
             ? "CR-PL"
             : "CR-SM";
-        const inst = by[task] as Instance;
+        // MCP mode asks its own version of the volume question (three months)
+        const inst = toMcpInstance(by[task] as Instance, f.day)?.instance as Instance;
         return standInMessagesApi("researcher", inst, f.day).send(body);
       },
     };

@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { addDays } from "../data-desk/dates.js";
 import { schemaFor } from "../runner/prompts.js";
 import type { Instance } from "../tasks/instances.js";
-import type { VSReference } from "../tasks/solve.js";
+import { monthsWord, type VSReference } from "../tasks/solve.js";
 
 export interface McpPrompt {
   text: string;
@@ -31,8 +31,8 @@ function taskText(instance: Instance, window: string): string {
       const last = months[months.length - 1] ?? "";
       return [
         `Task: perpetual-futures DEX volume share, ${first} to ${last}.`,
-        `Find the five perpetual-futures DEX protocols with the largest total trading volume over the twelve calendar months ${first} to ${last} (the sum of each protocol's daily USD volume; a day with no reported figure adds nothing).`,
-        "Then, for each of those twelve months, give each of the five protocols' share of the five protocols' combined volume in that month, as a percentage (so the five shares of a month add up to 100).",
+        `Find the five perpetual-futures DEX protocols with the largest total trading volume over the ${monthsWord(months.length)} calendar months ${first} to ${last} (the sum of each protocol's daily USD volume; a day with no reported figure adds nothing).`,
+        `Then, for each of those ${monthsWord(months.length)} months, give each of the five protocols' share of the five protocols' combined volume in that month, as a percentage (so the five shares of a month add up to 100).`,
       ].join("\n");
     }
     case "CR-PL": {

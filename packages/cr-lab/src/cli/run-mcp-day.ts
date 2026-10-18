@@ -25,9 +25,10 @@ import { fixtureDay } from "../tasks/fixture-day.js";
 import { drawInstances, TASKS, type TaskId } from "../tasks/instances.js";
 import { SeedBook } from "../tasks/seeds.js";
 import { anthropicMessagesApi } from "../mcp/anthropic-loop.js";
-import { FakeMcp } from "../mcp/fake-mcp.js";
+import { FakeMcp, LIVE_LAG } from "../mcp/fake-mcp.js";
 import { buildMcpPrompt } from "../mcp/prompts.js";
 import { MCP_TASKS, runMcpDay } from "../mcp/session.js";
+import { toMcpInstance } from "../mcp/variants.js";
 import { routedStandInApi, type AgentKind } from "../mcp/stand-in-agent.js";
 
 const argv = process.argv.slice(2);
@@ -47,11 +48,16 @@ const maxSessions = opt("max-sessions") !== undefined ? Number(opt("max-sessions
 const sessionUsd = opt("session-usd");
 const limits = sessionUsd !== undefined ? { maxSessionUsd: sessionUsd } : undefined;
 
-const f = await fixtureDay();
+// fixtures that behave like the live data where it matters: the stablecoin series publish a day late
+const f = await fixtureDay(undefined, {}, LIVE_LAG);
 const tmp = mkdtempSync(join(tmpdir(), "cr-mcp-day-"));
 try {
-  const mcp = new FakeMcp({ backend: f.backend, today: f.day.window });
-  const instances = drawInstances(f.day, "5".repeat(64), 1).filter((i) => tasks.includes(i.task));
+  const mcp = new FakeMcp({ backend: f.backend, today: f.day.window, lagByModel: LIVE_LAG });
+  // MCP mode asks its own version of the volume question (three months)
+  const instances = drawInstances(f.day, "5".repeat(64), 1)
+    .filter((i) => tasks.includes(i.task))
+    .map((i) => toMcpInstance(i, f.day)?.instance)
+    .filter((i): i is NonNullable<typeof i> => i !== undefined);
   const promptOf = (i: (typeof instances)[number]) => buildMcpPrompt(i, f.day.window).text;
   const records = new MemoryRecordStore();
   const seeds = new SeedBook({
@@ -129,10 +135,25 @@ try {
     console.log(
       `\n${dailyTable(all, f.day.window, "MCP mode")}\n${failureReport(all, f.day.window)}`,
     );
-    for (const r of all)
+    // SYNTHETIC data only, so the details can be shown: what each session did and what it finally said
+    for (const r of all) {
       console.log(
-        `${r.instance} ${r.model}: ${r.mcp?.tool_calls.length ?? 0} tool calls, ${r.mcp?.turns.length ?? 0} turns, snapshot check ${r.mcp?.snapshot_check}${r.mcp?.limit ? `, ended on ${r.mcp.limit}` : ""}, $${r.usd}`,
+        `\n${r.instance} ${r.model}: ${r.mcp?.tool_calls.length ?? 0} tool calls, ${r.mcp?.turns.length ?? 0} turns, snapshot check ${r.mcp?.snapshot_check}${r.mcp?.limit ? `, ended on ${r.mcp.limit}` : ""}${r.mcp?.variant ? `, variant ${r.mcp.variant}` : ""}, stop ${r.stop_reason ?? "-"}, $${r.usd}${r.passed ? "" : `, FAILED (${r.failure_classes.join(", ")})`}`,
       );
+      for (const c of r.mcp?.tool_calls ?? [])
+        console.log(
+          `    turn ${c.turn} ${c.tool} ${JSON.stringify(c.args).slice(0, 170)} -> ${c.is_error ? "ERROR " : ""}${c.result_bytes} bytes`,
+        );
+      for (const t of r.mcp?.turns ?? [])
+        console.log(
+          `    turn ${t.turn}: in ${t.input_tokens}, out ${t.output_tokens}, $${t.usd}, stop ${t.stop_reason ?? "-"}`,
+        );
+      if (!r.passed) {
+        for (const fl of r.failures.slice(0, 4))
+          console.log(`    gate: ${fl.code}: ${fl.detail.slice(0, 150)}`);
+        console.log(`    final text: ${JSON.stringify(r.raw_output.slice(0, 400))}`);
+      }
+    }
     if (summary.stopped !== undefined) process.exit(3);
   }
 } finally {

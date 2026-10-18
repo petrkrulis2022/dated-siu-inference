@@ -8,7 +8,13 @@
  */
 import { D, type DecimalValue } from "@touchstone/sdk";
 import { Num, parseJsonDecimal, type Json } from "../data-desk/json-decimal.js";
-import type { PLReference, SMReference, UOReference, VSReference } from "./solve.js";
+import {
+  monthsWord,
+  type PLReference,
+  type SMReference,
+  type UOReference,
+  type VSReference,
+} from "./solve.js";
 
 export type FailureCode = "format" | "schema" | "set" | "order" | "value" | "sum" | "identity";
 export interface Failure {
@@ -113,12 +119,16 @@ export function gateVS(value: Obj, ref: VSReference, fenced = false): Verdict {
   if (months.length !== ref.months.length || !ref.months.every((m) => m in shares)) {
     c.add(
       "schema",
-      `"shares" must have exactly the twelve months ${ref.months[0]} to ${ref.months[ref.months.length - 1]}`,
+      `"shares" must have exactly the ${monthsWord(ref.months.length)} months ${ref.months[0]} to ${ref.months[ref.months.length - 1]}`,
     );
     return verdict(c, fenced);
   }
   const sameSet = mine.length === ref.venues.length && ref.venues.every((v) => mine.includes(v));
-  if (!sameSet) c.add("set", "the five venues are not the five largest by twelve-month volume");
+  if (!sameSet)
+    c.add(
+      "set",
+      `the five venues are not the five largest by ${monthsWord(ref.months.length)}-month volume`,
+    );
   let schemaOk = true;
   for (const m of ref.months) {
     const row = (shares as Obj)[m];

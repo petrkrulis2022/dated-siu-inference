@@ -26,9 +26,10 @@ export interface FixtureDay {
 export async function fixtureDay(
   window: string = FIXTURE_AS_OF,
   faults: Record<string, number> = {},
+  lagByModel: Record<string, number> = {},
 ): Promise<FixtureDay> {
   const root = mkdtempSync(join(tmpdir(), "cr-day-"));
-  const backend = new FixtureBackend({ faults });
+  const backend = new FixtureBackend({ faults, lagByModel });
   const store = new SnapshotStore({
     privateRoot: join(root, "private"),
     manifestDir: join(root, "manifests"),

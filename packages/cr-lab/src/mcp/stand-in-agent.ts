@@ -9,6 +9,7 @@ import type { DayData } from "../tasks/day-data.js";
 import type { Instance } from "../tasks/instances.js";
 import { vsMonthly } from "../tasks/solve.js";
 import { approxTokens, type MessagesApi } from "./anthropic-loop.js";
+import type { ChatCompletionsApi } from "./openai-loop.js";
 import { dayFromRelayed, referenceFor, type RelayedCall } from "./relayed.js";
 
 type Block = { type: string; [k: string]: unknown };
@@ -61,7 +62,7 @@ export function readPlan(
 ): Planned[] {
   switch (instance.task) {
     case "CR-VS": {
-      const { months } = vsMonthly(day, instance.params.endMonth);
+      const { months } = vsMonthly(day, instance.params.endMonth, instance.params.months ?? 12);
       const ids = day.perpVenues.filter((v) => v !== opts.drop);
       return [
         ["timeseries_catalog", {}],
@@ -129,13 +130,17 @@ const toolUse = (n: number, [name, input]: Planned): Block => ({
   input,
 });
 
-/** A Messages API that plays `kind` for `instance`. `requests` records every request body it was sent. */
-export function standInMessagesApi(
-  kind: AgentKind,
-  instance: Instance,
-  day: DayData,
-): MessagesApi & { requests: Record<string, unknown>[] } {
-  const requests: Record<string, unknown>[] = [];
+/** What a stand-in agent does next: one tool call, or a final answer, and how many tokens it "wrote" doing it. */
+interface Decision {
+  use?: Planned;
+  text?: string;
+  outputTokens: number;
+  /** a thinking block before the first call (Claude's wire format only), to show it is carried back unchanged */
+  thinkFirst?: boolean;
+}
+
+/** The plan and the choices of a stand-in agent, independent of any provider's wire format. */
+function agentFor(kind: AgentKind, instance: Instance, day: DayData) {
   const dropTop =
     instance.task === "CR-VS"
       ? (instance.reference.venues[0] as string)
@@ -150,6 +155,27 @@ export function standInMessagesApi(
       : kind === "partial"
         ? readPlan(instance, day, dropTop !== undefined ? { drop: dropTop } : {})
         : [];
+  return (turn: number, relayed: () => RelayedCall[]): Decision => {
+    if (kind === "looper") return { use: ["tabular_catalog", {}], outputTokens: 80 };
+    if (kind === "chatty") return { use: ["tabular_catalog", {}], outputTokens: 15_000 };
+    if (kind === "lazy") return { text: "{}", outputTokens: 80 };
+    if (turn < plan.length)
+      return { use: plan[turn] as Planned, outputTokens: 80, thinkFirst: turn === 0 };
+    const key = referenceFor(instance, dayFromRelayed(day.window, relayed()));
+    const text =
+      key === undefined ? "{}" : referenceAnswerJson({ ...instance, reference: key } as Instance);
+    return { text, outputTokens: 600 };
+  };
+}
+
+/** A Messages API (Claude's wire format) that plays `kind` for `instance`. `requests` records every request body it was sent. */
+export function standInMessagesApi(
+  kind: AgentKind,
+  instance: Instance,
+  day: DayData,
+): MessagesApi & { requests: Record<string, unknown>[] } {
+  const requests: Record<string, unknown>[] = [];
+  const decide = agentFor(kind, instance, day);
   return {
     requests,
     async send(body) {
@@ -157,37 +183,104 @@ export function standInMessagesApi(
       requests.push(structuredClone(body));
       const turn = messages.filter((m) => m.role === "assistant").length;
       const input_tokens = approxTokens(messages, body.tools);
-      const reply = (content: Block[], stop_reason: string, output_tokens = 80): StepOut => ({
-        content,
-        stop_reason,
-        usage: { input_tokens, output_tokens },
-      });
-      let out: StepOut;
-      if (kind === "looper") out = reply([toolUse(turn, ["tabular_catalog", {}])], "tool_use");
-      else if (kind === "chatty")
-        out = reply([toolUse(turn, ["tabular_catalog", {}])], "tool_use", 15_000);
-      else if (kind === "lazy") out = reply([{ type: "text", text: "{}" }], "end_turn");
-      else if (turn < plan.length) {
-        // a thinking block before the first call, to show it is carried back unchanged
-        const blocks: Block[] = [toolUse(turn, plan[turn] as Planned)];
-        out = reply(
-          turn === 0
-            ? [{ type: "thinking", thinking: "plan the reads", signature: "sig-1" }, ...blocks]
-            : blocks,
-          "tool_use",
-        );
-      } else {
-        const key = referenceFor(
-          instance,
-          dayFromRelayed(day.window, relayedFromMessages(messages)),
-        );
-        const text =
-          key === undefined
-            ? "{}"
-            : referenceAnswerJson({ ...instance, reference: key } as Instance);
-        out = reply([{ type: "text", text }], "end_turn", 600);
-      }
+      const d = decide(turn, () => relayedFromMessages(messages));
+      const out: StepOut =
+        d.use !== undefined
+          ? {
+              content: [
+                ...(d.thinkFirst
+                  ? [{ type: "thinking", thinking: "plan the reads", signature: "sig-1" }]
+                  : []),
+                toolUse(turn, d.use),
+              ],
+              stop_reason: "tool_use",
+              usage: { input_tokens, output_tokens: d.outputTokens },
+            }
+          : {
+              content: [{ type: "text", text: d.text ?? "" }],
+              stop_reason: "end_turn",
+              usage: { input_tokens, output_tokens: d.outputTokens },
+            };
       return { status: 200, json: out, attempts: 1 };
+    },
+  };
+}
+
+type OpenAiMessage = {
+  role: string;
+  content?: string | null;
+  tool_calls?: { id: string; function: { name: string; arguments: string } }[];
+  tool_call_id?: string;
+};
+
+/** Rebuilds what the model was shown from an OpenAI-style conversation: each tool call paired with the `tool` message that answered it. */
+export function relayedFromOpenAiMessages(messages: readonly OpenAiMessage[]): RelayedCall[] {
+  const calls = new Map<string, { name: string; input: Record<string, unknown> }>();
+  const out: RelayedCall[] = [];
+  for (const m of messages) {
+    if (m.role === "assistant")
+      for (const c of m.tool_calls ?? [])
+        calls.set(c.id, {
+          name: c.function.name,
+          input: JSON.parse(c.function.arguments) as Record<string, unknown>,
+        });
+    if (m.role === "tool") {
+      const u = calls.get(String(m.tool_call_id));
+      const text = String(m.content ?? "");
+      if (u)
+        out.push({
+          tool: u.name,
+          args: u.input,
+          isError: text.startsWith("Error: "),
+          text: text.replace(/^Error: /, ""),
+        });
+    }
+  }
+  return out;
+}
+
+/** A Chat Completions API (GPT's wire format) that plays `kind` for `instance`. */
+export function standInChatCompletionsApi(
+  kind: AgentKind,
+  instance: Instance,
+  day: DayData,
+): ChatCompletionsApi & { requests: Record<string, unknown>[] } {
+  const requests: Record<string, unknown>[] = [];
+  const decide = agentFor(kind, instance, day);
+  return {
+    requests,
+    async send(body) {
+      const messages = structuredClone(body.messages) as OpenAiMessage[];
+      requests.push(structuredClone(body));
+      const turn = messages.filter((m) => m.role === "assistant").length;
+      const prompt_tokens = approxTokens(messages, body.tools);
+      const d = decide(turn, () => relayedFromOpenAiMessages(messages));
+      const message =
+        d.use !== undefined
+          ? {
+              role: "assistant",
+              content: null,
+              tool_calls: [
+                {
+                  id: `call_${turn}`,
+                  type: "function",
+                  function: { name: d.use[0], arguments: JSON.stringify(d.use[1]) },
+                },
+              ],
+            }
+          : { role: "assistant", content: d.text ?? "" };
+      return {
+        status: 200,
+        json: {
+          choices: [{ message, finish_reason: d.use !== undefined ? "tool_calls" : "stop" }],
+          usage: {
+            prompt_tokens,
+            completion_tokens: d.outputTokens,
+            prompt_tokens_details: { cached_tokens: 0 },
+          },
+        },
+        attempts: 1,
+      };
     },
   };
 }

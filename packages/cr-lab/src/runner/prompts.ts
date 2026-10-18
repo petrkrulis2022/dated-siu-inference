@@ -13,7 +13,7 @@ import { addDays, daysBetween } from "../data-desk/dates.js";
 import type { DayData } from "../tasks/day-data.js";
 import type { Instance } from "../tasks/instances.js";
 import type { SMReference, UOReference, VSReference } from "../tasks/solve.js";
-import { smRows, vsMonthly } from "../tasks/solve.js";
+import { monthsWord, smRows, vsMonthly } from "../tasks/solve.js";
 
 export interface PromptBundle {
   /** the complete prompt, sent as one user message */
@@ -41,8 +41,8 @@ export function schemaFor(instance: Instance): string {
   switch (instance.task) {
     case "CR-VS":
       return [
-        'Answer schema: {"venues": [five venue ids, largest total first], "shares": {"YYYY-MM": {"<venue id>": <percent>, ... five venues}, ... all twelve months}}',
-        `The twelve month keys are ${(instance.reference as VSReference).months.join(", ")}.`,
+        `Answer schema: {"venues": [five venue ids, largest total first], "shares": {"YYYY-MM": {"<venue id>": <percent>, ... five venues}, ... all ${monthsWord((instance.reference as VSReference).months.length)} months}}`,
+        `The ${monthsWord((instance.reference as VSReference).months.length)} month keys are ${(instance.reference as VSReference).months.join(", ")}.`,
       ].join("\n");
     case "CR-PL":
       return 'Answer schema: {"fees": <usd>, "payouts": <usd>, "revenue": <usd>}';

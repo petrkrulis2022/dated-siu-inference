@@ -20,7 +20,7 @@ beforeAll(async () => {
 afterAll(() => f.cleanup());
 
 const W = () => f.day.window;
-const mcp = (lagDays = 0) => new FakeMcp({ backend: f.backend, today: W(), lagDays });
+const mcp = () => new FakeMcp({ backend: f.backend, today: W() });
 const run = async (
   m: FakeMcp,
   calls: [string, Record<string, unknown>][],
@@ -215,13 +215,13 @@ describe("grading an MCP answer from the data the model received", () => {
     const good = gradeMcpAnswer({
       instance: i,
       text: answerFor(i),
-      relayed: dayFromRelayed(W(), await run(mcp(0), reads("91d"))),
+      relayed: dayFromRelayed(W(), await run(mcp(), reads("91d"))),
     });
     expect(good.passed).toBe(true);
     const short = gradeMcpAnswer({
       instance: i,
       text: answerFor(i),
-      relayed: dayFromRelayed(W(), await run(mcp(0), reads("90d"))),
+      relayed: dayFromRelayed(W(), await run(mcp(), reads("90d"))),
     });
     expect(short).toMatchObject({ passed: false, snapshotCheck: "insufficient" });
   });

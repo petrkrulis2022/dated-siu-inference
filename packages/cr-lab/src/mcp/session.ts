@@ -16,12 +16,15 @@ import type { DayData } from "../tasks/day-data.js";
 import { drawInstances, type Instance, type TaskId } from "../tasks/instances.js";
 import type { SeedBook } from "../tasks/seeds.js";
 import {
+  anthropicChat,
   runToolLoop,
   type LoopLimits,
   type MessagesApi,
   type SessionResult,
+  type ToolChat,
 } from "./anthropic-loop.js";
 import { buildMcpPrompt } from "./prompts.js";
+import { toMcpInstance } from "./variants.js";
 import { dayFromRelayed, gradeMcpAnswer } from "./relayed.js";
 import type { McpBackend } from "./types.js";
 
@@ -31,13 +34,17 @@ export const MCP_TASKS: readonly TaskId[] = ["CR-VS", "CR-PL", "CR-SM"];
 const sha = (s: string): string => createHash("sha256").update(s).digest("hex");
 
 export interface RunMcpAnswerInput {
-  api: MessagesApi;
+  /** the provider's chat for this seat; or, for Claude, just its Messages API */
+  chat?: ToolChat;
+  api?: MessagesApi;
   mcp: McpBackend;
   ledger: SpendLedger;
   seat: Seat;
   instance: Instance;
   window: string;
   daySha256: string;
+  /** MCP mode's variant of the question, recorded with the session */
+  variant?: string;
   limits?: Partial<LoopLimits>;
   /** where the session's relayed results are kept (private); defaults to the trial's private sessions directory */
   sessionsDir?: string;
@@ -48,19 +55,26 @@ export async function runMcpAnswer(
   input: RunMcpAnswerInput,
 ): Promise<{ record: AnswerRecord; stopped?: SpendStopped }> {
   const { seat, instance } = input;
-  if (seat.provider !== "anthropic")
+  const chat =
+    input.chat ??
+    (input.api !== undefined && seat.provider === "anthropic"
+      ? anthropicChat(input.api, seat.modelString)
+      : undefined);
+  if (chat === undefined)
     throw new Error(
-      "MCP mode is built for Anthropic first (D85, D92): other providers wait for B5",
+      `no tool chat for ${seat.modelId}: give \`chat\`, or \`api\` for a Claude seat`,
+    );
+  if (chat.provider !== seat.provider)
+    throw new Error(
+      `the chat is for ${chat.provider} but ${seat.modelId} is served by ${seat.provider}`,
     );
   const now = input.now ?? (() => new Date());
   const prompt = buildMcpPrompt(instance, input.window);
   const session: SessionResult = await runToolLoop({
-    api: input.api,
+    chat,
     mcp: input.mcp,
     ledger: input.ledger,
     modelId: seat.modelId,
-    modelString: seat.modelString,
-    provider: "anthropic",
     keyName: seat.keyName,
     price: seat.price,
     prompt: prompt.text,
@@ -121,6 +135,7 @@ export async function runMcpAnswer(
     ...(session.error !== undefined ? { error: session.error } : {}),
     raw_output: session.finalText,
     mcp: {
+      ...(input.variant !== undefined ? { variant: input.variant } : {}),
       snapshot_check: grade.snapshotCheck,
       ...(session.limit !== undefined ? { limit: session.limit } : {}),
       tools_offered: session.toolsOffered,
@@ -152,8 +167,10 @@ export interface RunMcpDayInput {
   seeds: SeedBook;
   records: RecordStore;
   mcp: McpBackend;
-  /** the Messages API for a seat (its trial key) */
-  apiFor: (seat: Seat) => MessagesApi;
+  /** the chat for a seat (its provider, its trial key) */
+  chatFor?: (seat: Seat) => ToolChat;
+  /** for Claude seats only: the Messages API for a seat (its trial key) */
+  apiFor?: (seat: Seat) => MessagesApi;
   /** instances per task, default 1 (D101: eight sessions a day to start) */
   perTask?: number;
   tasks?: readonly TaskId[];
@@ -180,9 +197,17 @@ export async function runMcpDay(input: RunMcpDayInput): Promise<RunMcpDaySummary
   input.seeds.commit(input.window);
   const seed = input.seeds.seedFor(input.window);
   const tasks = input.tasks ?? MCP_TASKS;
-  const instances = drawInstances(input.day, seed, input.perTask ?? 1).filter((i) =>
+  // MCP mode asks its own version of a question where it has one (the volume question over three months, D105)
+  const variants = new Map<string, string>();
+  const instances: Instance[] = [];
+  for (const drawn of drawInstances(input.day, seed, input.perTask ?? 1).filter((i) =>
     tasks.includes(i.task),
-  );
+  )) {
+    const v = toMcpInstance(drawn, input.day);
+    if (v === undefined) continue;
+    instances.push(v.instance);
+    if (v.variant !== undefined) variants.set(v.instance.id, v.variant);
+  }
   const done = new Set(
     input.records
       .forWindow(input.window)
@@ -207,11 +232,18 @@ export async function runMcpDay(input: RunMcpDayInput): Promise<RunMcpDaySummary
   for (const job of jobs) {
     if (input.maxSessions !== undefined && attempted >= input.maxSessions) break;
     const out = await runMcpAnswer({
-      api: input.apiFor(job.seat),
+      ...(input.chatFor !== undefined
+        ? { chat: input.chatFor(job.seat) }
+        : input.apiFor !== undefined
+          ? { api: input.apiFor(job.seat) }
+          : {}),
       mcp: input.mcp,
       ledger: input.ledger,
       seat: job.seat,
       instance: job.instance,
+      ...(variants.has(job.instance.id)
+        ? { variant: variants.get(job.instance.id) as string }
+        : {}),
       window: input.window,
       daySha256: input.daySha256,
       ...(input.limits !== undefined ? { limits: input.limits } : {}),

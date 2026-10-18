@@ -28,7 +28,11 @@ interface Base {
   window: string;
 }
 export type Instance =
-  | (Base & { task: "CR-VS"; params: { endMonth: string }; reference: VSReference })
+  | (Base & {
+      task: "CR-VS";
+      params: { endMonth: string; months?: number };
+      reference: VSReference;
+    })
   | (Base & {
       task: "CR-PL";
       params: { protocolId: string; quarter: string; start: string; end: string };

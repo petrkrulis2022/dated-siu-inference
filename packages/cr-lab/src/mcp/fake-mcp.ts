@@ -5,9 +5,16 @@
  *  - a tool result is the Data API's response body, as text;
  *  - the fake is stricter than the docs in two places because the fixtures backend is: `timeseries_data` needs named series (at most 10, where the docs say 10 or 20) and no call may run
  *    over 9,000 points; a refused call comes back as an error result and is never truncated.
- * `today` is the snapshot day. A `timeframe` such as `90d` is that many days ending on the latest published day, which is `today` less `lagDays` (0 by default; 1 mimics the live data, which
- * publishes a day late: on 2026-10-17 `90d` began on 2026-07-19 and ended on 2026-10-16).
+ * `today` is the snapshot day. A `timeframe` such as `90d` is that many days ending on the model's latest published day: `today` less its lag (`lagByModel`, none by default; `LIVE_LAG` mimics
+ * the live data, whose stablecoin series publish a day late: on 2026-10-17 `90d` began on 2026-07-19 and ended on 2026-10-16). Give the fixtures backend the same lag, or the snapshot and the
+ * server will disagree about what the latest day is.
  */
+
+/** The live data's publication lag by timeseries model, as seen on 2026-10-17. */
+export const LIVE_LAG: Readonly<Record<string, number>> = {
+  "stablecoins-by-chain": 1,
+  "stablecoins-by-issuer": 1,
+};
 import { addDays, assertDate, firstOfMonth, monthsBefore } from "../data-desk/dates.js";
 import { MAX_SERIES_PER_CALL } from "../data-desk/queries.js";
 import type { DataBackend, Query } from "../data-desk/types.js";
@@ -97,12 +104,16 @@ export class FakeMcp implements McpBackend {
   readonly calls: { name: string; args: Record<string, unknown> }[] = [];
   readonly #backend: DataBackend;
   readonly #today: string;
-  readonly #latest: string;
+  readonly #lag: Readonly<Record<string, number>>;
 
-  constructor(opts: { backend: DataBackend; today: string; lagDays?: number }) {
+  constructor(opts: {
+    backend: DataBackend;
+    today: string;
+    lagByModel?: Readonly<Record<string, number>>;
+  }) {
     this.#backend = opts.backend;
     this.#today = assertDate(opts.today, "today");
-    this.#latest = addDays(this.#today, -(opts.lagDays ?? 0));
+    this.#lag = opts.lagByModel ?? {};
   }
 
   async tools(): Promise<McpToolDef[]> {
@@ -179,11 +190,13 @@ export class FakeMcp implements McpBackend {
         const tf = typeof a.timeframe === "string" ? a.timeframe : "90d";
         let m: RegExpExecArray | null;
         if ((m = /^(\d{1,4})d$/.exec(tf)) !== null) {
-          start = addDays(this.#latest, -(Number(m[1]) - 1));
-          end = addDays(this.#latest, 1);
+          const latest = addDays(this.#today, -(this.#lag[model] ?? 0));
+          start = addDays(latest, -(Number(m[1]) - 1));
+          end = addDays(latest, 1);
         } else if (tf === "ytd") {
-          start = `${this.#latest.slice(0, 4)}-01-01`;
-          end = addDays(this.#latest, 1);
+          const latest = addDays(this.#today, -(this.#lag[model] ?? 0));
+          start = `${latest.slice(0, 4)}-01-01`;
+          end = addDays(latest, 1);
         } else if (/^\d{4}-\d{2}$/.test(tf)) {
           start = firstOfMonth(`${tf}-01`);
           end = monthsBefore(start, -1);

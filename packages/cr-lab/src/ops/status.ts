@@ -16,7 +16,12 @@ import { pathWithin, privatePath } from "../paths.js";
 import { assertWindowAndTag } from "../data-desk/snapshots.js";
 
 export type AlertKind =
-  "pull-failed" | "not-complete" | "yesterday-missing" | "lock-stuck" | "request-ceiling";
+  | "pull-failed"
+  | "not-complete"
+  | "yesterday-missing"
+  | "lock-stuck"
+  | "request-ceiling"
+  | "mcp-login-failed";
 
 export interface AttemptRecord {
   at: string;

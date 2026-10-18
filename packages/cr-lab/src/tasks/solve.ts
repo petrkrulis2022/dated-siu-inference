@@ -38,6 +38,10 @@ export interface VSReference {
   shares: Record<string, Record<string, string>>;
 }
 
+/** A month count in words, for prompts and messages. */
+export const monthsWord = (n: number): string =>
+  ({ 1: "one", 2: "two", 3: "three", 6: "six", 12: "twelve" })[n] ?? String(n);
+
 /** The end months a CR-VS instance can ask for: the last complete month and up to five before it (the plan pulls 17 months). */
 export function vsEndMonths(window: string): string[] {
   const first = completeMonthsWindow(window, 1).end;
@@ -51,8 +55,9 @@ export function vsEndMonths(window: string): string[] {
 export function vsMonthly(
   day: DayData,
   endMonth: string,
+  nMonths = 12,
 ): { months: ReturnType<typeof monthsOf>; venues: Map<string, DecimalValue[]> } {
-  const months = monthsOf(monthsBefore(endMonth, 12), endMonth);
+  const months = monthsOf(monthsBefore(endMonth, nMonths), endMonth);
   const venues = new Map<string, DecimalValue[]>();
   for (const [venue, points] of day.perp) {
     let anyPoint = false;
@@ -72,8 +77,8 @@ export function vsMonthly(
   return { months, venues };
 }
 
-export function solveVS(day: DayData, endMonth: string): VSReference | undefined {
-  const { months, venues: monthly } = vsMonthly(day, endMonth);
+export function solveVS(day: DayData, endMonth: string, nMonths = 12): VSReference | undefined {
+  const { months, venues: monthly } = vsMonthly(day, endMonth, nMonths);
   const ranked = [...monthly.entries()]
     .map(([venue, sums]) => ({ venue, total: sums.reduce((a, b) => a.plus(b), new D(0)), sums }))
     .sort((a, b) => b.total.comparedTo(a.total) || a.venue.localeCompare(b.venue));

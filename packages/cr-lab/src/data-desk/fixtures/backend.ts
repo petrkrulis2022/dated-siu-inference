@@ -15,6 +15,7 @@ import {
 import type { BackendResponse, DataBackend, Query } from "../types.js";
 import {
   CHAINS,
+  FIXTURE_AS_OF,
   FixtureWorld,
   ISSUERS,
   decimalText,
@@ -50,11 +51,22 @@ export class FixtureBackend implements DataBackend {
   readonly requests: Query[] = [];
   readonly world: FixtureWorld;
   readonly #faults: Readonly<Record<string, number>>;
+  readonly #lag: Readonly<Record<string, number>>;
 
-  /** `faults` maps a query's id (`queryId`) to an HTTP status to answer with instead, to test how callers handle a failure. */
-  constructor(opts: { world?: FixtureWorld; faults?: Record<string, number> } = {}) {
+  /**
+   * `faults` maps a query's id (`queryId`) to an HTTP status to answer with instead, to test how callers handle a failure. `lagByModel` maps a timeseries model to how many days late it
+   * publishes: its latest point is that many days before the as-of day (the live stablecoin series end a day early, `LIVE_LAG` in the MCP fake).
+   */
+  constructor(
+    opts: {
+      world?: FixtureWorld;
+      faults?: Record<string, number>;
+      lagByModel?: Record<string, number>;
+    } = {},
+  ) {
     this.world = opts.world ?? new FixtureWorld();
     this.#faults = opts.faults ?? {};
+    this.#lag = opts.lagByModel ?? {};
   }
 
   async specVersions(): Promise<Record<string, string>> {
@@ -248,9 +260,12 @@ export class FixtureBackend implements DataBackend {
       const src = lookup(key);
       let points: Point[] = [];
       if (src !== undefined) {
+        const lag = this.#lag[model];
+        const latest = lag === undefined ? undefined : addDays(FIXTURE_AS_OF, -lag);
         for (
           let d = params.start as string;
-          daysBetween(d, params.end as string) > 0;
+          daysBetween(d, params.end as string) > 0 &&
+          (latest === undefined || daysBetween(d, latest) >= 0);
           d = addDays(d, 1)
         ) {
           const p = src.point(d);

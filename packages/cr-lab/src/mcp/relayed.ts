@@ -51,7 +51,7 @@ export function dayFromRelayed(window: string, calls: readonly RelayedCall[]): D
 export function referenceFor(instance: Instance, day: DayData): Instance["reference"] | undefined {
   switch (instance.task) {
     case "CR-VS":
-      return solveVS(day, instance.params.endMonth);
+      return solveVS(day, instance.params.endMonth, instance.params.months ?? 12);
     case "CR-PL":
       return solvePL(day, instance.params.protocolId, {
         start: instance.params.start,

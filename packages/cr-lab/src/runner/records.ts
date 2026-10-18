@@ -49,6 +49,8 @@ export interface AnswerRecord {
 }
 
 export interface McpSessionSummary {
+  /** MCP mode's own version of the question, if it differs from snapshot mode's (D105) */
+  variant?: string;
   /** the key recomputed from the data the model received, against the day's snapshot key */
   snapshot_check: "same" | "differs" | "insufficient";
   /** why the session ended before an answer, if it did */
