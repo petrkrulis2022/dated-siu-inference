@@ -4,7 +4,9 @@
  *
  *   call-failed     the provider call itself failed (HTTP error, timeout); nothing was graded
  *   truncated       the provider ended the reply at its length limit (the provider's own stop reason, never inferred); ranks above no-output because it is the cause of an empty reply
+ *   session-limit   MCP mode: the session ended on a limit (turns, tool calls, context size or its own spend cap) before the model gave an answer
  *   no-output       the call finished but returned no text
+ *   wrong-dataset   MCP mode: the data the model fetched cannot answer the question, or the key recomputed from it differs from the day's snapshot beyond the gate's tolerance
  *   schema          the reply is not the task's JSON object, or has the wrong keys or types
  *   missing-items   the shape is right but items are missing: fewer than five entries, months absent, keys absent
  *   wrong-entity    the wrong venue, token, pair or id set was chosen
@@ -29,6 +31,8 @@ import type { PLReference, SMReference, UOReference, VSReference } from "../task
 export type FailureClass =
   | "call-failed"
   | "no-output"
+  | "session-limit"
+  | "wrong-dataset"
   | "truncated"
   | "schema"
   | "missing-items"
@@ -40,8 +44,10 @@ export type FailureClass =
 
 export const PRIORITY: readonly FailureClass[] = [
   "call-failed",
+  "session-limit",
   "truncated",
   "no-output",
+  "wrong-dataset",
   "schema",
   "missing-items",
   "wrong-entity",
@@ -177,6 +183,10 @@ export interface ClassifyInput {
   stopReason?: string;
   /** the gate's verdict, when the reply was gradeable */
   verdict?: Verdict;
+  /** MCP mode: why the session ended on a limit before an answer, if it did */
+  sessionLimit?: string;
+  /** MCP mode: how the key recomputed from the data the model received compares with the day's snapshot */
+  snapshotCheck?: "same" | "differs" | "insufficient";
 }
 
 export interface Classification {
@@ -198,6 +208,11 @@ export function classify(input: ClassifyInput): Classification {
     input.verdict?.passed !== true
   )
     found.add("truncated");
+
+  if (input.sessionLimit !== undefined && input.verdict?.passed !== true)
+    found.add("session-limit");
+  if (input.snapshotCheck !== undefined && input.snapshotCheck !== "same")
+    found.add("wrong-dataset");
 
   const v = input.verdict;
   if (v !== undefined && !v.passed) {

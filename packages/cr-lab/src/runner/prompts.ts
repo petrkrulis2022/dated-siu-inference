@@ -36,6 +36,23 @@ const COMMON = [
 
 const line = (o: unknown): string => JSON.stringify(o);
 
+/** The answer schema of a task, in the words both modes give the model; the schema does not depend on the data. */
+export function schemaFor(instance: Instance): string {
+  switch (instance.task) {
+    case "CR-VS":
+      return [
+        'Answer schema: {"venues": [five venue ids, largest total first], "shares": {"YYYY-MM": {"<venue id>": <percent>, ... five venues}, ... all twelve months}}',
+        `The twelve month keys are ${(instance.reference as VSReference).months.join(", ")}.`,
+      ].join("\n");
+    case "CR-PL":
+      return 'Answer schema: {"fees": <usd>, "payouts": <usd>, "revenue": <usd>}';
+    case "CR-UO":
+      return 'Answer schema: {"unlock30_pct": <percent>, "unlock90_pct": <percent>}';
+    case "CR-SM":
+      return `Answer schema: {"top5": [{"id": "<${instance.params.dimension} id>", "change_usd": <signed usd>}, ... five entries, largest absolute change first]}`;
+  }
+}
+
 /** Task text, schema and data block for one instance. */
 function pieces(
   instance: Instance,
@@ -64,10 +81,7 @@ function pieces(
           `Then, for each of those twelve months, give each of the five venues' share of the five venues' combined volume in that month, as a percentage (so the five shares of a month add up to 100).`,
           "The monthly figures below were summed by us from daily USD volume; a day with no reported figure adds nothing. Venues are listed alphabetically.",
         ].join("\n"),
-        schema: [
-          'Answer schema: {"venues": [five venue ids, largest total first], "shares": {"YYYY-MM": {"<venue id>": <percent>, ... five venues}, ... all twelve months}}',
-          `The twelve month keys are ${ref.months.join(", ")}.`,
-        ].join("\n"),
+        schema: schemaFor(instance),
         data: rows.join("\n"),
       };
     }
@@ -97,7 +111,7 @@ function pieces(
           "- payouts: what the protocol paid depositors and liquidity providers, which is the sum of interest_usd minus the sum of net_interest_income_usd;",
           "- revenue: fees minus payouts, computed from your own two figures (it must equal them exactly).",
         ].join("\n"),
-        schema: 'Answer schema: {"fees": <usd>, "payouts": <usd>, "revenue": <usd>}',
+        schema: schemaFor(instance),
         data: rows.join("\n"),
       };
     }
@@ -117,7 +131,7 @@ function pieces(
           `Below is the daily unlock schedule, one row per day starting with ${day.window}: the tokens that unlock on that day.`,
           `Give the tokens unlocking in the next 30 days (the first 30 rows) and in the next 90 days (the first 90 rows), each as a percentage of that circulating supply (so 1.5 means one and a half percent).`,
         ].join("\n"),
-        schema: 'Answer schema: {"unlock30_pct": <percent>, "unlock90_pct": <percent>}',
+        schema: schemaFor(instance),
         data: rows.join("\n"),
       };
     }
@@ -136,7 +150,7 @@ function pieces(
           `The change of a row is supply_usd_end minus supply_usd_start, signed. Find the five ${dimension}s with the largest absolute change, in order from largest to smallest absolute change (break ties by id, ascending), and give each one's signed change in USD.`,
           "Only ids that have a figure on both dates are listed.",
         ].join("\n"),
-        schema: `Answer schema: {"top5": [{"id": "<${dimension} id>", "change_usd": <signed usd>}, ... five entries, largest absolute change first]}`,
+        schema: schemaFor(instance),
         data: rows.join("\n"),
       };
     }

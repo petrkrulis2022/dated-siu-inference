@@ -95,8 +95,9 @@ export function readTimeseries(json: Json): {
   return { fields, series };
 }
 
-export function loadDay(store: SnapshotStore, window: string, tag = "daily"): DayData {
-  const day: DayData = {
+/** An empty day, to be filled by `ingest`. */
+export function emptyDay(window: string): DayData {
+  return {
     window,
     perpVenues: [],
     perp: new Map(),
@@ -108,102 +109,124 @@ export function loadDay(store: SnapshotStore, window: string, tag = "daily"): Da
     stablecoins: { chain: new Map(), issuer: new Map() },
     missing: [],
   };
+}
+
+/** The datasets a day is made of; `finishDay` lists the ones nothing was ingested for. */
+export const DATASETS = ["perp", "lending", "tokens", "stablecoins"] as const;
+
+export function finishDay(day: DayData, seen: ReadonlySet<string>): DayData {
+  day.missing = DATASETS.filter((d) => !seen.has(d));
+  return day;
+}
+
+export function loadDay(store: SnapshotStore, window: string, tag = "daily"): DayData {
+  const day = emptyDay(window);
   const seen = new Set<string>();
 
   for (const { meta, body } of store.list(window, tag)) {
     const q = parseCanonical(meta.query);
-    const json = parseJsonDecimal(new TextDecoder().decode(body));
-    const p = q.path;
-    if (p === "/query/tabular/perp-dex-protocols") {
-      seen.add("perp");
-      day.perpVenues = arr(obj(json)?.data)
-        .map((r) => str(obj(r)?.id))
-        .filter((x): x is string => x !== undefined);
-    } else if (p.startsWith("/query/timeseries/perp-dex-protocols/")) {
-      seen.add("perp");
-      const { fields, series } = readTimeseries(json);
-      const c = fields.indexOf("volumeUSD");
-      for (const [key, pts] of series) {
-        const m = day.perp.get(key) ?? new Map<string, DecimalValue | null>();
-        for (const pt of pts) m.set(dayOf(pt.t), c < 0 ? null : (pt.v[c] ?? null));
-        day.perp.set(key, m);
-      }
-    } else if (p === "/query/tabular/lending-protocols") {
-      seen.add("lending");
-      day.lendingProtocols = arr(obj(json)?.data)
-        .map((r) => str(obj(r)?.id))
-        .filter((x): x is string => x !== undefined);
-    } else if (p.startsWith("/query/timeseries/lending-protocols/")) {
-      seen.add("lending");
-      const { fields, series } = readTimeseries(json);
-      const idx = {
-        fees: fields.indexOf("fees-usd"),
-        revenue: fields.indexOf("revenue-usd"),
-        interest: fields.indexOf("interest-usd"),
-        nii: fields.indexOf("net-interest-income-usd"),
-      };
-      for (const [key, pts] of series) {
-        const m = day.lending.get(key) ?? new Map<string, LendingDay>();
-        for (const pt of pts) {
-          const at = (i: number) => (i < 0 ? null : (pt.v[i] ?? null));
-          m.set(dayOf(pt.t), {
-            fees: at(idx.fees),
-            revenue: at(idx.revenue),
-            interest: at(idx.interest),
-            nii: at(idx.nii),
-          });
-        }
-        day.lending.set(key, m);
-      }
-    } else if (p === "/token-unlocks/v1/assets") {
-      seen.add("tokens");
-      for (const r of arr(obj(json)?.data)) {
-        const slug = str(obj(r)?.slug);
-        const id = str(obj(r)?.id);
-        if (slug !== undefined && id !== undefined) day.tokenIds.set(slug, id);
-      }
-    } else if (/^\/token-unlocks\/v1\/assets\/[^/]+\/unlocks$/.test(p)) {
-      seen.add("tokens");
-      const slug = p.split("/")[4] as string;
-      const data = obj(obj(json)?.data);
-      const days = arr(data?.totalSnapshots).map((x) => ({
-        day: (str(obj(x)?.timestamp) ?? "").slice(0, 10),
-        native: dec(obj(x)?.unlockedInPeriodNative) ?? new D(0),
-      }));
-      day.schedules.set(slug, {
-        genesis: (str(data?.genesisDate) ?? "").slice(0, 10),
-        projectedEnd: (str(data?.projectedEndDate) ?? "").slice(0, 10),
-        days,
-      });
-    } else if (p.startsWith("/query/timeseries/asset-supply/")) {
-      seen.add("tokens");
-      const { fields, series } = readTimeseries(json);
-      const c = fields.indexOf("circulating-supply");
-      for (const [key, pts] of series) {
-        const m = day.supply.get(key) ?? new Map<string, DecimalValue | null>();
-        for (const pt of pts) m.set(dayOf(pt.t), c < 0 ? null : (pt.v[c] ?? null));
-        day.supply.set(key, m);
-      }
-    } else if (
-      p.startsWith("/query/timeseries/stablecoins-by-chain/") ||
-      p.startsWith("/query/timeseries/stablecoins-by-issuer/")
-    ) {
-      const dim = p.includes("by-chain") ? "chain" : "issuer";
-      seen.add("stablecoins");
-      const { fields, series } = readTimeseries(json);
-      const c = fields.indexOf("circulatingSupplyUSD");
-      for (const [key, pts] of series) {
-        if (pts.length < 2 || c < 0) continue;
-        const first = pts[0] as (typeof pts)[number];
-        const last = pts[pts.length - 1] as (typeof pts)[number];
-        day.stablecoins[dim].set(key, {
-          first: { day: dayOf(first.t), usd: first.v[c] ?? null },
-          last: { day: dayOf(last.t), usd: last.v[c] ?? null },
+    ingest(day, seen, q, parseJsonDecimal(new TextDecoder().decode(body)));
+  }
+  return finishDay(day, seen);
+}
+
+/**
+ * Adds one response to a day: `q` is the query it answers (its path says which dataset), `json` the parsed body. Used for stored snapshots and, in MCP mode, for the tool results a model
+ * was actually given, so the same parsing reads both. A response that is not one of the datasets is ignored.
+ */
+export function ingest(
+  day: DayData,
+  seen: Set<string>,
+  q: { path: string; params?: Record<string, string> },
+  json: Json,
+): void {
+  const p = q.path;
+  if (p === "/query/tabular/perp-dex-protocols") {
+    seen.add("perp");
+    day.perpVenues = arr(obj(json)?.data)
+      .map((r) => str(obj(r)?.id))
+      .filter((x): x is string => x !== undefined);
+  } else if (p.startsWith("/query/timeseries/perp-dex-protocols/")) {
+    seen.add("perp");
+    const { fields, series } = readTimeseries(json);
+    const c = fields.indexOf("volumeUSD");
+    for (const [key, pts] of series) {
+      const m = day.perp.get(key) ?? new Map<string, DecimalValue | null>();
+      for (const pt of pts) m.set(dayOf(pt.t), c < 0 ? null : (pt.v[c] ?? null));
+      day.perp.set(key, m);
+    }
+  } else if (p === "/query/tabular/lending-protocols") {
+    seen.add("lending");
+    day.lendingProtocols = arr(obj(json)?.data)
+      .map((r) => str(obj(r)?.id))
+      .filter((x): x is string => x !== undefined);
+  } else if (p.startsWith("/query/timeseries/lending-protocols/")) {
+    seen.add("lending");
+    const { fields, series } = readTimeseries(json);
+    const idx = {
+      fees: fields.indexOf("fees-usd"),
+      revenue: fields.indexOf("revenue-usd"),
+      interest: fields.indexOf("interest-usd"),
+      nii: fields.indexOf("net-interest-income-usd"),
+    };
+    for (const [key, pts] of series) {
+      const m = day.lending.get(key) ?? new Map<string, LendingDay>();
+      for (const pt of pts) {
+        const at = (i: number) => (i < 0 ? null : (pt.v[i] ?? null));
+        m.set(dayOf(pt.t), {
+          fees: at(idx.fees),
+          revenue: at(idx.revenue),
+          interest: at(idx.interest),
+          nii: at(idx.nii),
         });
       }
+      day.lending.set(key, m);
+    }
+  } else if (p === "/token-unlocks/v1/assets") {
+    seen.add("tokens");
+    for (const r of arr(obj(json)?.data)) {
+      const slug = str(obj(r)?.slug);
+      const id = str(obj(r)?.id);
+      if (slug !== undefined && id !== undefined) day.tokenIds.set(slug, id);
+    }
+  } else if (/^\/token-unlocks\/v1\/assets\/[^/]+\/unlocks$/.test(p)) {
+    seen.add("tokens");
+    const slug = p.split("/")[4] as string;
+    const data = obj(obj(json)?.data);
+    const days = arr(data?.totalSnapshots).map((x) => ({
+      day: (str(obj(x)?.timestamp) ?? "").slice(0, 10),
+      native: dec(obj(x)?.unlockedInPeriodNative) ?? new D(0),
+    }));
+    day.schedules.set(slug, {
+      genesis: (str(data?.genesisDate) ?? "").slice(0, 10),
+      projectedEnd: (str(data?.projectedEndDate) ?? "").slice(0, 10),
+      days,
+    });
+  } else if (p.startsWith("/query/timeseries/asset-supply/")) {
+    seen.add("tokens");
+    const { fields, series } = readTimeseries(json);
+    const c = fields.indexOf("circulating-supply");
+    for (const [key, pts] of series) {
+      const m = day.supply.get(key) ?? new Map<string, DecimalValue | null>();
+      for (const pt of pts) m.set(dayOf(pt.t), c < 0 ? null : (pt.v[c] ?? null));
+      day.supply.set(key, m);
+    }
+  } else if (
+    p.startsWith("/query/timeseries/stablecoins-by-chain/") ||
+    p.startsWith("/query/timeseries/stablecoins-by-issuer/")
+  ) {
+    const dim = p.includes("by-chain") ? "chain" : "issuer";
+    seen.add("stablecoins");
+    const { fields, series } = readTimeseries(json);
+    const c = fields.indexOf("circulatingSupplyUSD");
+    for (const [key, pts] of series) {
+      if (pts.length < 2 || c < 0) continue;
+      const first = pts[0] as (typeof pts)[number];
+      const last = pts[pts.length - 1] as (typeof pts)[number];
+      day.stablecoins[dim].set(key, {
+        first: { day: dayOf(first.t), usd: first.v[c] ?? null },
+        last: { day: dayOf(last.t), usd: last.v[c] ?? null },
+      });
     }
   }
-  for (const d of ["perp", "lending", "tokens", "stablecoins"])
-    if (!seen.has(d)) day.missing.push(d);
-  return day;
 }
