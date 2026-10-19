@@ -1,0 +1,39 @@
+{
+  "id": "2e9a18cb-030d-9c06-9b1e-3da6cd6b421b",
+  "object": "chat.completion",
+  "created": 1792371838,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"tracking_id\":\"SH-EB9A7F\",\"origin_city\":\"Auckland\",\"destination_city\":\"Toronto\",\"weight_kg\":425,\"status\":\"in_transit\",\"priority\":\"standard\"}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nI found the shipment details in the report. The record is SH-EB9A7F from Auckland to Toronto weighing 425 kg with standard priority and in_transit status.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1598,
+    "completion_tokens": 47,
+    "total_tokens": 1917,
+    "prompt_tokens_details": {
+      "text_tokens": 1598,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 272,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 43420000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

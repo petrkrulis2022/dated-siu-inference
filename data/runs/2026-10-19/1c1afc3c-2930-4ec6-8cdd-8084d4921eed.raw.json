@@ -1,0 +1,39 @@
+{
+  "id": "2905da99-8909-9345-b2d8-d3c0e2433509",
+  "object": "chat.completion",
+  "created": 1792371843,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "EAE15B\n73AFE7\n7F3CE7\n37939F",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes in the document. They are EAE15B for the coastal annex, 73AFE7 for the western annex, 7F3CE7 for the eastern annex, and 37939F for the eastern annex.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21160,
+    "completion_tokens": 19,
+    "total_tokens": 21609,
+    "prompt_tokens_details": {
+      "text_tokens": 21160,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 430,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 442460000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

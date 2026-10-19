@@ -1,0 +1,39 @@
+{
+  "id": "5664d501-e36d-9343-99fa-a93e8d6fb213",
+  "object": "chat.completion",
+  "created": 1792371842,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "33BB27\n75CE19\n7287F1\n24E423",
+        "reasoning_content": "I will scan the archive log for access codes and list them in order.\n\nI found four access codes so far: 33BB27, 75CE19, 7287F1, and 24E423. I am scanning the rest of the document for any additional codes.\n\nNo additional access codes were found. The final list is:\n\n33BB27\n75CE19\n7287F1\n24E423",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21876,
+    "completion_tokens": 16,
+    "total_tokens": 22452,
+    "prompt_tokens_details": {
+      "text_tokens": 21876,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 560,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 464400000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

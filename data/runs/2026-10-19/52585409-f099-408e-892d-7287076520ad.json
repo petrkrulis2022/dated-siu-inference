@@ -1,0 +1,20 @@
+{
+  "run_id": "52585409-f099-408e-892d-7287076520ad",
+  "model_id": "qwen-2.5-72b-instruct",
+  "task_class": "T1",
+  "instance_id": "T1-00",
+  "seed": 2233032257,
+  "attempt": 1,
+  "usage": {
+    "input": 809,
+    "output": 63,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 93,
+  "gate_passed": true,
+  "raw_response_ref": "52585409-f099-408e-892d-7287076520ad.raw.json",
+  "deviations": [
+    "retry 1: OpenAI-compatible request failed: 429"
+  ]
+}

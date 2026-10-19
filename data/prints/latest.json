@@ -1,16 +1,16 @@
 {
   "version": "SIU-2026a",
-  "print_id": "2026-10-18",
-  "date": "2026-10-18",
+  "print_id": "2026-10-19",
+  "date": "2026-10-19",
   "status": "provisional",
   "basket_costs": [
     {
       "model_id": "deepseek-v3.2",
-      "cost_usd": "0.001836"
+      "cost_usd": "0.001830"
     },
     {
       "model_id": "llama-3.3-70b-deepinfra",
-      "cost_usd": "0.000713"
+      "cost_usd": "0.000711"
     },
     {
       "model_id": "mistral-small-3.2-24b-instruct",
@@ -18,31 +18,31 @@
     },
     {
       "model_id": "qwen-2.5-72b-instruct",
-      "cost_usd": "0.002516"
+      "cost_usd": "0.002512"
     },
     {
       "model_id": "claude-sonnet-5",
-      "cost_usd": "0.023437"
+      "cost_usd": "0.023368"
     },
     {
       "model_id": "gpt-5.1",
-      "cost_usd": "0.009111"
+      "cost_usd": "0.009098"
     },
     {
       "model_id": "gemini-3.1-pro-preview",
-      "cost_usd": "0.040191"
+      "cost_usd": "0.041042"
     },
     {
       "model_id": "grok-4.6",
-      "cost_usd": "0.017264"
+      "cost_usd": "0.017383"
     },
     {
       "model_id": "claude-haiku-4-5",
-      "cost_usd": "0.007690"
+      "cost_usd": "0.007683"
     },
     {
       "model_id": "gpt-5.4-mini",
-      "cost_usd": "0.005338"
+      "cost_usd": "0.005288"
     }
   ],
   "weights": {
@@ -90,74 +90,74 @@
       }
     ]
   },
-  "dated_siu": "0.01088",
+  "dated_siu": "0.01096",
   "exchange_rate_table": [
     {
       "model_id": "deepseek-v3.2",
       "usd_per_siu": "0.0018",
-      "spread_to_index": "-0.8312",
-      "siu_per_usd": "544.7"
+      "spread_to_index": "-0.8330",
+      "siu_per_usd": "546.3"
     },
     {
       "model_id": "llama-3.3-70b-deepinfra",
       "usd_per_siu": "0.0007",
-      "spread_to_index": "-0.9344",
-      "siu_per_usd": "1402.3"
+      "spread_to_index": "-0.9351",
+      "siu_per_usd": "1405.5"
     },
     {
       "model_id": "mistral-small-3.2-24b-instruct",
       "usd_per_siu": "0.0007",
-      "spread_to_index": "-0.9394",
-      "siu_per_usd": "1516.9"
+      "spread_to_index": "-0.9398",
+      "siu_per_usd": "1516.8"
     },
     {
       "model_id": "qwen-2.5-72b-instruct",
       "usd_per_siu": "0.0025",
-      "spread_to_index": "-0.7686",
-      "siu_per_usd": "397.3"
+      "spread_to_index": "-0.7707",
+      "siu_per_usd": "398.0"
     },
     {
       "model_id": "claude-sonnet-5",
       "usd_per_siu": "0.0234",
-      "spread_to_index": "1.1550",
-      "siu_per_usd": "42.6"
+      "spread_to_index": "1.1326",
+      "siu_per_usd": "42.7"
     },
     {
       "model_id": "gpt-5.1",
       "usd_per_siu": "0.0091",
-      "spread_to_index": "-0.1622",
-      "siu_per_usd": "109.7"
+      "spread_to_index": "-0.1697",
+      "siu_per_usd": "109.9"
     },
     {
       "model_id": "gemini-3.1-pro-preview",
-      "usd_per_siu": "0.0402",
-      "spread_to_index": "2.6955",
-      "siu_per_usd": "24.8"
+      "usd_per_siu": "0.0410",
+      "spread_to_index": "2.7456",
+      "siu_per_usd": "24.3"
     },
     {
       "model_id": "grok-4.6",
-      "usd_per_siu": "0.0173",
-      "spread_to_index": "0.5874",
-      "siu_per_usd": "57.9"
+      "usd_per_siu": "0.0174",
+      "spread_to_index": "0.5864",
+      "siu_per_usd": "57.5"
     },
     {
       "model_id": "claude-haiku-4-5",
       "usd_per_siu": "0.0077",
-      "spread_to_index": "-0.2929",
-      "siu_per_usd": "130.0"
+      "spread_to_index": "-0.2988",
+      "siu_per_usd": "130.1"
     },
     {
       "model_id": "gpt-5.4-mini",
       "usd_per_siu": "0.0053",
-      "spread_to_index": "-0.5092",
-      "siu_per_usd": "187.3"
+      "spread_to_index": "-0.5174",
+      "siu_per_usd": "189.1"
     }
   ],
   "sensitivity_block": [
     {
       "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
-      "dated_siu": "0.007856",
-      "delta": "-0.2777",
+      "dated_siu": "0.007939",
+      "delta": "-0.2755",
       "applies_to": [
         "deepseek-v3.2",
         "llama-3.3-70b-deepinfra",
@@ -173,7 +173,7 @@
     },
     {
       "policy_variant": "batch-discount: 50% off input and output",
-      "dated_siu": "0.005507",
+      "dated_siu": "0.005548",
       "delta": "-0.4936",
       "applies_to": [
         "deepseek-v3.2",
@@ -199,33 +199,24 @@
     "siu_per_usd_mode": "ROUND_DOWN",
     "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. dated_siu rounds to significant figures, not a fixed decimal-place count, so its precision scales with the price rather than being lost as it falls (found live, 2026-09-25 — see docs/methodology.md's Rounding section). basket_cost carries more decimal places than dated_siu needs at any price level so the published print stays reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
   },
-  "cost_of_production_usd": "1.7234",
-  "price_snapshot_ref": "price-snapshot-merged-2026-10-18T04-32-02.107Z.json",
+  "cost_of_production_usd": "1.7568",
+  "price_snapshot_ref": "price-snapshot-merged-2026-10-19T01-01-14.563Z.json",
   "methodology_version": "v0-draft",
-  "dated_siu_median_diagnostic": "0.006514",
+  "dated_siu_median_diagnostic": "0.006486",
   "methodology_revision": "rules-2026-09-26",
-  "prior_attempts": [
-    {
-      "attempted_at": "2026-10-18T01:05:17Z",
-      "reason": "Refusing to publish: only 3 of 4 commodity-tier models qualified (minimum 4) — the overall qualifying count is high enough, but a blend that has lost an entire tier is a measurement of a different market, not a thinner measurement of the same one. See methodology.md's registry inclusion policy.",
-      "qualifying_models": 0,
-      "registered_models": 0,
-      "cost_usd": "0"
-    }
-  ],
-  "signature": "0x4de2c11f80e5814b5ec6d55d66c4fe35fcccf9112b43cc6fea0c74cdd1660ce77e706bc3099df128f17005f104c6097c2f77517eccbb47dbb27b5ccc3ada2e53",
+  "signature": "0xcc32a0872f5ae97c3f125cb16f2c04adf9a0f4d3e8c436a86c1495779b82858a352b6bf0843622ad667e9b7f497ad38f8e63695fd462392dee9a9815cb8c46f5",
   "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
   "anchor": {
     "chain": "base-sepolia",
     "status": "anchored",
-    "tx_hash": "0x00d7a6389b006c0324adb861ee9a54b2355dac3013fa7853775d096d7b048f67",
-    "posted_at": "2026-10-18T04:34:50.000Z",
+    "tx_hash": "0x7bc3d8c23110d3b4ff4571c68b6fd2cf7123058c69564a9be9d2206d11b74943",
+    "posted_at": "2026-10-19T01:05:26.000Z",
     "additional_anchors": [
       {
         "chain": "arc-testnet",
         "status": "anchored",
-        "tx_hash": "0xb8a3f4f70962a464f0c7a6c138941398593680dce82da5603172e65b96b9f9f3",
-        "posted_at": "2026-10-18T04:34:52.000Z"
+        "tx_hash": "0xda75ff32dba932ac8f5192f52a892fb45bdc23ef47306d2bd04bea2a36a8d7d3",
+        "posted_at": "2026-10-19T01:05:27.000Z"
       }
     ]
   }
