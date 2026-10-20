@@ -1,0 +1,39 @@
+{
+  "id": "aa6253b2-605d-939d-88fd-ffd9be5d038e",
+  "object": "chat.completion",
+  "created": 1792458004,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "DABF55\n57673D\n90DC66\n9B10FD",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes for the upper and lower annexes.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21784,
+    "completion_tokens": 17,
+    "total_tokens": 22197,
+    "prompt_tokens_details": {
+      "text_tokens": 21784,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 396,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 452780000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

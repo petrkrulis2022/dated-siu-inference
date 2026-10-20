@@ -1,0 +1,39 @@
+{
+  "id": "dda389bb-ea73-95ac-a8b9-69bdde982784",
+  "object": "chat.completion",
+  "created": 1792457994,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"tracking_id\":\"SH-D6E0EE\",\"origin_city\":\"Recife\",\"destination_city\":\"Marseille\",\"weight_kg\":47,\"status\":\"pending\",\"priority\":\"standard\"}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nI found the shipment details in the report. The tracking ID is SH-D6E0EE, originating from Recife and destined for Marseille. The consignment weighs 47 kilograms with standard priority and is currently pending.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1553,
+    "completion_tokens": 46,
+    "total_tokens": 1880,
+    "prompt_tokens_details": {
+      "text_tokens": 1553,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 281,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 43000000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
