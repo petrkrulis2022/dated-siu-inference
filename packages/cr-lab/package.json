@@ -21,11 +21,13 @@
     "snapshot-day": "pnpm run build && node --env-file=../../.env dist/cli/snapshot-day.js",
     "run-day": "pnpm run build && node --env-file=../../.env dist/cli/run-day.js",
     "daily-snapshot": "pnpm run build && node --env-file=../../.env dist/cli/daily-snapshot.js",
+    "daily-mcp": "pnpm run build && node --env-file=../../.env dist/cli/daily-mcp.js",
     "test-alert": "pnpm run build && node --env-file=../../.env dist/cli/test-alert.js",
     "run-mcp-day": "pnpm run build && node --env-file=../../.env dist/cli/run-mcp-day.js",
     "mcp-login": "pnpm run build && node --env-file=../../.env dist/cli/mcp-login.js",
     "reasoning-overview": "pnpm run build && node --env-file=../../.env dist/cli/reasoning-overview.js",
-    "reasoning-tagging": "pnpm run build && node --env-file=../../.env dist/cli/reasoning-tagging.js"
+    "reasoning-tagging": "pnpm run build && node --env-file=../../.env dist/cli/reasoning-tagging.js",
+    "derive-allowances": "pnpm run build && node --env-file=../../.env dist/cli/derive-allowances.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.31.0",

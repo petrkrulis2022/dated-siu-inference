@@ -6,7 +6,14 @@ import { drawInstances, type Instance } from "../tasks/instances.js";
 import { vsMonthly } from "../tasks/solve.js";
 import { FakeMcp } from "./fake-mcp.js";
 import { buildMcpPrompt } from "./prompts.js";
-import { dayFromRelayed, gradeMcpAnswer, referenceFor, type RelayedCall } from "./relayed.js";
+import {
+  asDataApiBody,
+  dayFromRelayed,
+  gradeMcpAnswer,
+  referenceFor,
+  type RelayedCall,
+} from "./relayed.js";
+import { parseJsonDecimal } from "../data-desk/json-decimal.js";
 
 let f: FixtureDay;
 let by: Record<string, Instance>;
@@ -275,5 +282,72 @@ describe("grading an MCP answer from the data the model received", () => {
       expect.arrayContaining(["session-limit", "no-output", "wrong-dataset"]),
     );
     expect(g.classification.primary).toBe("session-limit");
+  });
+});
+
+describe("the live MCP's own envelope (first live session, 2026-10-20, D116)", () => {
+  // the shape the live server returned, with invented values: no `data` wrapper, points as [seconds, value]
+  const live = JSON.stringify({
+    model: "stablecoins-by-issuer",
+    granularity: "1d",
+    point_schema: [
+      {
+        name: "Time",
+        field: "time",
+        description: "Timestamp of the data point.",
+        type: "time",
+        time: true,
+      },
+      {
+        name: "Circulating Supply (USD)",
+        field: "circulatingSupplyUSD",
+        description: "Circulating supply in USD.",
+        type: "float64",
+        time: false,
+      },
+    ],
+    series: [
+      {
+        key: "abcd",
+        entity: { name: "Example", slug: "abcd" },
+        points: [
+          [1784678400, 100.5],
+          [1784764800, 120.25],
+          [1784851200, 130.0],
+        ],
+      },
+    ],
+    totalPoints: 3,
+  });
+
+  it("reads a timeseries result as the same day a stored Data API body gives", () => {
+    const day = dayFromRelayed("2026-10-20", [
+      {
+        tool: "timeseries_data",
+        args: { model: "stablecoins-by-issuer", granularity: "1d" },
+        isError: false,
+        text: live,
+      },
+    ]);
+    const s = day.stablecoins.issuer.get("abcd");
+    expect(s?.first.day).toBe("2026-07-22");
+    expect(s?.last.day).toBe("2026-07-24");
+    expect(s?.last.usd?.toString()).toBe("130");
+    expect(day.missing).not.toContain("stablecoins");
+  });
+
+  it("reads a tabular result's rows, and leaves any other shape as it found it", () => {
+    const rows = asDataApiBody(
+      "tabular_data",
+      parseJsonDecimal(
+        '{"model":"lending-protocols","rows":[{"id":"a"},{"id":"b"}],"totalRows":2,"totalPages":1,"page":1,"pageSize":200}',
+      ),
+    ) as { data: unknown[] };
+    expect(rows.data).toHaveLength(2);
+    const other = parseJsonDecimal('{"data":[{"id":"a"}]}');
+    expect(asDataApiBody("tabular_data", other)).toBe(other);
+    expect(asDataApiBody("timeseries_data", parseJsonDecimal("[1,2]"))).toEqual(
+      parseJsonDecimal("[1,2]"),
+    );
   });
 });

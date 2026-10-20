@@ -2,9 +2,11 @@
  * The scheduled daily snapshot: the pull itself plus the three safeguards the owner asked for (D100).
  *
  *  - A LOCK, so two live Blockworks processes can never overlap (`blockworks-live.lock`, shared with every other live process).
- *  - A CATCH-UP: the schedule runs this every hour, and a run that finds the day already complete does nothing and sends no request. So if the machine was asleep at the fixed morning
- *    time, the first hourly run after it wakes pulls the day, still the same UTC day. A missed UTC day cannot be recovered (a snapshot is of the day it is pulled), and the run says so.
- *  - ALERTS, to a file always and to a desktop toast where there is one: a pull that fails, a day not complete at the evening check (`watchdog`), a yesterday that was never completed,
+ *  - A CATCH-UP: the schedule runs this every hour, and a run that finds the day already complete does nothing and sends no request. So if the machine was asleep at the pull time, the first
+ *    hourly run after it wakes pulls the day, still the same UTC day. A missed UTC day cannot be recovered (a snapshot is of the day it is pulled), and the run says so. A pull starts only
+ *    from `PULL_FROM_UTC_HOUR` (D115), because the provider publishes the previous day's figures through the morning.
+ *  - ALERTS, to a file always and to a desktop toast where there is one: a pull that fails, a day not complete at the evening check (`watchdog`: only from 20:00 UTC and never while a pull is
+ *    running), a yesterday that was never completed,
  *    a lock held by a stuck process, and the request ceiling. Each kind alerts at most once per `ALERT_GAP_MS` per window, so a failing day does not alert every hour.
  *
  * The governor counts requests per process, so across hourly retries this run keeps its own tally in the day's status file and stops at `REQUEST_CEILING` (below the governor's 200 a day)
@@ -27,14 +29,31 @@ export const REQUEST_CEILING = 150;
 export const ALERT_GAP_MS = 6 * 3_600_000;
 /** a lock held by a live process this long is reported as stuck */
 export const STUCK_LOCK_MS = 6 * 3_600_000;
+/**
+ * The evening check judges a day only from this UTC hour. It is scheduled for 23:00 local (21:00 or 22:00 UTC), but when the machine was off at that time Windows runs it as soon as the machine
+ * is next on, which can be the next morning. Judging then would call a day that has barely begun "not complete" and send an alert about a pull that is running (2026-10-19: the check ran six
+ * minutes into the morning pull, saw no finished attempt, and alerted; the day completed at 07:47Z). A morning catch-up run is harmless now: a day missed outright is still reported next
+ * run by `yesterday-missing`.
+ */
+export const WATCHDOG_FROM_UTC_HOUR = 20;
+/**
+ * A pull starts only from this UTC hour (your decision, 2026-10-19: "move the pull time to about 12:00 UTC"). The provider publishes each day's figures late: a snapshot pulled at 14:22Z on
+ * 2026-10-17 had the stablecoin series one day behind and the supply for the day itself, while those pulled at about 06:30Z on the 18th and 19th were two days behind with no supply for the
+ * day. Midday gives fresher data and still finishes within the UTC day, even at an hour and a half a pull. The hourly catch-up stays: a run after this hour that finds the day incomplete pulls.
+ * A run before it does nothing, sends no request and records nothing; a day missed outright is still reported by `yesterday-missing`.
+ */
+export const PULL_FROM_UTC_HOUR = 12;
 
 export type DailyOutcome =
   | "complete"
   | "already-complete"
+  | "before-pull-time"
   | "already-running"
   | "failed"
   | "request-ceiling"
   | "watchdog-ok"
+  | "watchdog-early"
+  | "watchdog-pull-running"
   | "watchdog-alert";
 
 /** Records one pull's outcome in the day's status (completing the day if nothing failed). Shared by the scheduled run and the hand-run command, so the schedule knows a day done by hand. */
@@ -119,6 +138,20 @@ export async function runDailySnapshot(
       log(`watchdog: ${window} is complete`);
       return { outcome: "watchdog-ok", window };
     }
+    if (now().getUTCHours() < WATCHDOG_FROM_UTC_HOUR) {
+      log(
+        `watchdog: it is ${now().toISOString().slice(11, 16)} UTC, before the evening check (${WATCHDOG_FROM_UTC_HOUR}:00 UTC): not judging ${window}, which can still be completed`,
+      );
+      return { outcome: "watchdog-early", window };
+    }
+    // an attempt is recorded when a pull ENDS, so a pull in progress shows no attempt yet; it is not a day that failed
+    const running = lockOwner(deps.lockPath, deps.lockDeps);
+    if (running !== undefined) {
+      log(
+        `watchdog: ${running.label} (pid ${running.pid}) is pulling since ${running.startedAt}: not judging ${window} while it runs`,
+      );
+      return { outcome: "watchdog-pull-running", window };
+    }
     await alert(
       "not-complete",
       window,
@@ -130,6 +163,13 @@ export async function runDailySnapshot(
   if (todays.state === "complete") {
     log(`${window} is already complete: nothing to do`);
     return { outcome: "already-complete", window };
+  }
+
+  if (now().getUTCHours() < PULL_FROM_UTC_HOUR) {
+    log(
+      `it is ${now().toISOString().slice(11, 16)} UTC, before the pull time (${PULL_FROM_UTC_HOUR}:00 UTC): not pulling ${window} yet, the provider is still publishing yesterday's figures`,
+    );
+    return { outcome: "before-pull-time", window };
   }
 
   if (requestsUsed(todays) >= REQUEST_CEILING) {

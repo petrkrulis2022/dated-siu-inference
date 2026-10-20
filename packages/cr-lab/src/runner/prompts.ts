@@ -122,7 +122,9 @@ function pieces(
       const sched = day.schedules.get(instance.params.slug);
       const id = day.tokenIds.get(instance.params.slug);
       if (sched === undefined || id === undefined) return undefined;
-      const supply = day.supply.get(id)?.get(day.window);
+      // the supply is as of the latest day the provider had published, which can be a day or two before the snapshot day: the key uses the same day, and the prompt says which
+      const supplyDay = instance.reference.supplyDay;
+      const supply = day.supply.get(id)?.get(supplyDay);
       if (supply === null || supply === undefined) return undefined;
       const rows = sched.days
         .slice(0, 90)
@@ -130,7 +132,7 @@ function pieces(
       return {
         task: [
           `Task: unlock overhang for the token "${instance.params.slug}" on ${day.window}.`,
-          `The token's circulating supply on ${day.window} is ${supply.toFixed()} tokens.`,
+          `The token's circulating supply on ${supplyDay} is ${supply.toFixed()} tokens${supplyDay === day.window ? "" : ` (the latest day the data provider had published; use it as the circulating supply for ${day.window})`}.`,
           `Below is the daily unlock schedule, one row per day starting with ${day.window}: the tokens that unlock on that day.`,
           `Give the tokens unlocking in the next 30 days (the first 30 rows) and in the next 90 days (the first 90 rows), each as a percentage of that circulating supply (so 1.5 means one and a half percent).`,
         ].join("\n"),

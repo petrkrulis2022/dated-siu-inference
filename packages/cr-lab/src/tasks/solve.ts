@@ -22,7 +22,7 @@ import {
   monthsOf,
   quarterWindow,
 } from "../data-desk/dates.js";
-import { quarterStart } from "../data-desk/snapshot-plan.js";
+import { MAX_PUBLICATION_LAG_DAYS, quarterStart } from "../data-desk/snapshot-plan.js";
 import type { DayData } from "./day-data.js";
 
 export const DP = 6;
@@ -155,6 +155,13 @@ export function solvePL(
   return { fees: fmt(fees), payouts: fmt(interest.minus(nii)), revenue: fmt(revenue) };
 }
 
+/**
+ * The provider publishes each day's figures late, by a lag that depends on the time of day the snapshot is pulled (the reasons and the live evidence are with `MAX_PUBLICATION_LAG_DAYS` in the
+ * snapshot plan). A solver that asked for the snapshot day itself, or one day back, offered no CR-UO and no CR-SM question on 2026-10-18 and 19. The tasks now use the latest day published,
+ * within that many days, and the prompt states which day that is.
+ */
+export { MAX_PUBLICATION_LAG_DAYS };
+
 // ---- CR-UO: unlock overhang --------------------------------------------------------------------------------------------------------------------
 export interface UOReference {
   unlock30Pct: string;
@@ -163,6 +170,8 @@ export interface UOReference {
   unlock30Tokens: string;
   unlock90Tokens: string;
   circulating: string;
+  /** the day that circulating supply is as of: the snapshot day, or the latest day before it the provider had published (at most `MAX_PUBLICATION_LAG_DAYS` back) */
+  supplyDay: string;
 }
 
 export function solveUO(day: DayData, slug: string): UOReference | undefined {
@@ -175,8 +184,20 @@ export function solveUO(day: DayData, slug: string): UOReference | undefined {
     sched.days[0]?.day !== day.window
   )
     return undefined;
-  const supply = day.supply.get(id)?.get(day.window);
-  if (supply === null || supply === undefined || !supply.gt(0)) return undefined;
+  const series = day.supply.get(id);
+  let supply: DecimalValue | undefined;
+  let supplyDay = day.window;
+  // the latest figure the provider had published, up to a few days back; a null is a missing figure, never a zero
+  for (let k = 0; k <= MAX_PUBLICATION_LAG_DAYS; k++) {
+    const d = addDays(day.window, -k);
+    const v = series?.get(d);
+    if (v !== null && v !== undefined) {
+      supply = v;
+      supplyDay = d;
+      break;
+    }
+  }
+  if (supply === undefined || !supply.gt(0)) return undefined;
   const sum = (n: number) => sched.days.slice(0, n).reduce((a, d) => a.plus(d.native), new D(0));
   const [t30, t90] = [sum(30), sum(90)];
   return {
@@ -185,6 +206,7 @@ export function solveUO(day: DayData, slug: string): UOReference | undefined {
     unlock30Tokens: fmt(t30),
     unlock90Tokens: fmt(t90),
     circulating: fmt(supply),
+    supplyDay,
   };
 }
 
@@ -198,22 +220,30 @@ export interface SMReference {
 
 /**
  * The rows CR-SM ranks, and the two dates they are compared on. The start is 90 days before the snapshot day. The end is the latest day the stablecoin series reaches, which Blockworks
- * publishes with a one-day lag: on the first live day (2026-10-17) every series ended on the 16th. So the end is the snapshot day or the day before, whichever most series end on (the
- * later one if they tie); a series that ends elsewhere, starts elsewhere or has no figure at an end is left out. The prompt shows these rows and these dates, so the question and the key
- * cannot differ.
+ * publishes late, by a lag that depends on when the snapshot is pulled (see `MAX_PUBLICATION_LAG_DAYS`: one day on 2026-10-17, two on the 18th and the 19th). So the end is the snapshot
+ * day or up to that many days before it, whichever most series end on (the later one if they tie); a series that ends elsewhere, starts elsewhere or has no figure at an end is left
+ * out. The prompt shows these rows and these dates, so the question and the key cannot differ.
  */
 export function smRows(
   day: DayData,
   dimension: Dimension,
 ): { start: string; end: string; rows: { id: string; first: DecimalValue; last: DecimalValue }[] } {
   const start = addDays(day.window, -90);
-  const allowedEnds = [day.window, addDays(day.window, -1)];
   const usable = [...day.stablecoins[dimension]].filter(
     ([, b]) => b.first.usd !== null && b.last.usd !== null && b.first.day === start,
   );
   const count = (d: string) => usable.filter(([, b]) => b.last.day === d).length;
-  const [latest, earlier] = allowedEnds as [string, string];
-  const end = count(latest) >= count(earlier) ? latest : earlier;
+  // the end most series reach, counting from the snapshot day back; the strict `>` keeps the later day on a tie
+  let end = day.window;
+  let best = -1;
+  for (let k = 0; k <= MAX_PUBLICATION_LAG_DAYS; k++) {
+    const d = addDays(day.window, -k);
+    const c = count(d);
+    if (c > best) {
+      best = c;
+      end = d;
+    }
+  }
   const rows = usable
     .filter(([, b]) => b.last.day === end)
     .map(([id, b]) => ({

@@ -212,6 +212,7 @@ describe("solveUO: unlock overhang", () => {
       unlock30Tokens: r6(sum(30)),
       unlock90Tokens: r6(sum(90)),
       circulating: r6(supply),
+      supplyDay: W,
     });
   });
 
@@ -242,9 +243,14 @@ describe("solveUO: unlock overhang", () => {
       ),
     ).toBeUndefined();
     const id = f.day.tokenIds.get(slug())!;
+    // a null at the snapshot day, with nothing earlier, is a missing figure and never a zero
     expect(
       solveUO(
-        changed((d) => d.supply.get(id)!.set(W, null)),
+        changed((d) => {
+          const m = d.supply.get(id)!;
+          m.clear();
+          m.set(W, null);
+        }),
         slug(),
       ),
     ).toBeUndefined();
@@ -261,6 +267,57 @@ describe("solveUO: unlock overhang", () => {
       ),
     ).toBeUndefined();
     expect(solveUO(f.day, "no-such-token")).toBeUndefined();
+  });
+});
+
+describe("solveUO when the provider has not yet published the snapshot day's supply", () => {
+  const slug = (): string => [...f.day.schedules.keys()][0]!;
+  const id = (): string => f.day.tokenIds.get(slug())!;
+  /** the same supply figure, but published only on the day `daysBack` days before the snapshot day (the fixture also holds the day before, so the series is cleared first) */
+  const lagged = (daysBack: number): DayData =>
+    changed((d) => {
+      const m = d.supply.get(id())!;
+      const v = m.get(W)!;
+      m.clear();
+      m.set(addDays(W, -daysBack), v);
+    });
+
+  it("uses the latest day published, up to three days back, and says which day it is", () => {
+    const ref = solveUO(f.day, slug())!;
+    for (const k of [1, 2, 3]) {
+      const r = solveUO(lagged(k), slug());
+      expect(r?.supplyDay, `${k} days back`).toBe(addDays(W, -k));
+      // the same figure on an earlier day gives the same answer: only the date it is as of changes
+      expect(r?.unlock30Pct).toBe(ref.unlock30Pct);
+      expect(r?.circulating).toBe(ref.circulating);
+    }
+  });
+
+  it("prefers the snapshot day itself when it is there, and the latest of several earlier days", () => {
+    expect(solveUO(f.day, slug())?.supplyDay).toBe(W);
+    const both = changed((d) => {
+      const m = d.supply.get(id())!;
+      const v = m.get(W)!;
+      m.clear();
+      m.set(addDays(W, -1), v);
+      m.set(addDays(W, -3), v.times(2));
+    });
+    expect(solveUO(both, slug())?.supplyDay).toBe(addDays(W, -1));
+  });
+
+  it("is not offered when the only figure is older than three days", () => {
+    expect(solveUO(lagged(4), slug())).toBeUndefined();
+  });
+
+  it("skips a null on the latest day and uses the day before, never reading a null as zero", () => {
+    const d = changed((x) => {
+      const m = x.supply.get(id())!;
+      const v = m.get(W)!;
+      m.clear();
+      m.set(W, null);
+      m.set(addDays(W, -2), v);
+    });
+    expect(solveUO(d, slug())?.supplyDay).toBe(addDays(W, -2));
   });
 });
 

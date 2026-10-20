@@ -339,6 +339,7 @@ const UO_REF: UOReference = {
   unlock30Tokens: "1",
   unlock90Tokens: "1",
   circulating: "1",
+  supplyDay: "2026-10-18",
 };
 const uo = (a: string, b: string) => obj(JSON.stringify({ unlock30_pct: a, unlock90_pct: b }));
 

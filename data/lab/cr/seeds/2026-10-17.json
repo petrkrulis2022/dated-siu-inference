@@ -1,5 +1,7 @@
 {
   "window": "2026-10-17",
   "commitment": "7aad03de4cf238595d951d79412786420240ea23bdbe9388746bc9a97bb51354",
-  "committedAt": "2026-10-17T17:30:32.830Z"
+  "committedAt": "2026-10-17T17:30:32.830Z",
+  "seed": "40e74773ed68996368ce9e30a8c6a7b42ad6973167f945aa351075fdd4a96006",
+  "revealedAt": "2026-10-19T10:36:28.464Z"
 }

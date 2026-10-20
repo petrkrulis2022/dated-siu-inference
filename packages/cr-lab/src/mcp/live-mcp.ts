@@ -11,6 +11,7 @@ import {
 } from "@modelcontextprotocol/sdk/client/auth.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import type { RateGovernor } from "../data-desk/governor.js";
 import type { McpBackend, McpCallResult, McpToolDef } from "./types.js";
 
@@ -21,6 +22,17 @@ export class McpLoginRequired extends Error {
   constructor() {
     super("the stored Blockworks MCP login no longer works: sign in again with mcp-login");
     this.name = "McpLoginRequired";
+  }
+}
+
+/**
+ * A tool call got no usable answer from the service (not a refusal, which is an error result a model may react to). Only the error's class is kept, never its message, which can echo a URL or
+ * a header. The scheduled run treats a session that met one as not a result about the model (D116).
+ */
+export class McpTransportFailure extends Error {
+  constructor(readonly errorClass: string) {
+    super(`the Blockworks MCP gave no usable answer (${errorClass})`);
+    this.name = "McpTransportFailure";
   }
 }
 
@@ -102,6 +114,14 @@ export class LiveMcp implements McpBackend {
       } catch (e) {
         if (e instanceof UnauthorizedError) throw new McpLoginRequired();
         const status = statusOf(e);
+        // the server answered with a protocol error (bad arguments, unknown model): a refusal about this call, relayed to the model as an error result
+        const refused =
+          e instanceof McpError &&
+          e.code !== ErrorCode.RequestTimeout &&
+          e.code !== ErrorCode.ConnectionClosed;
+        // no answer at all (no network, a dropped connection, a timeout, a result the client could not read): that is the service failing, not something the model did, so it is not relayed
+        if (!refused && status === undefined)
+          throw new McpTransportFailure(e instanceof Error ? e.name : "UnknownError");
         // an HTTP status the governor should back off on is passed to it; anything else is the server's refusal, relayed as an error result
         return {
           status: status ?? 200,

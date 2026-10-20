@@ -19,6 +19,7 @@ import {
   emailSinkFromEnv,
 } from "../ops/alert.js";
 import { LiveMcp, McpLoginRequired, BLOCKWORKS_MCP_URL } from "../mcp/live-mcp.js";
+import { runLoginCheck } from "../mcp/login-check.js";
 import { runLogin } from "../mcp/oauth-login.js";
 import { DEFAULT_LOGIN_PORT, TrialOAuthProvider } from "../mcp/oauth-store.js";
 import { MCP_DATA_TOOLS } from "../mcp/types.js";
@@ -71,14 +72,21 @@ if (flag("check")) {
   console.log(
     `stored login: registered ${state.registered}, signed in ${state.signedIn}, refresh token ${state.hasRefreshToken}`,
   );
-  try {
-    if (!state.signedIn) throw new McpLoginRequired();
-    await listTools(provider);
-  } catch (e) {
-    const why =
-      e instanceof McpLoginRequired
-        ? e.message
-        : `could not reach the MCP (${e instanceof Error ? e.name : "error"})`;
+  // a lapsed login is reported at once; "could not reach" is retried for about three and a half minutes first, so a machine that woke before its network is up does not email a false alarm (D114)
+  const result = await runLoginCheck({
+    attempt: async () => {
+      if (!state.signedIn) throw new McpLoginRequired();
+      await listTools(provider);
+    },
+    isLoginRequired: (e) => e instanceof McpLoginRequired,
+  });
+  if (result.attempts > 1)
+    console.log(`the check needed ${result.attempts} tries${result.ok ? " and passed" : ""}`);
+  if (!result.ok) {
+    const lapsed = result.kind === "login-required";
+    const why = lapsed
+      ? `the stored login no longer works: sign in again (pnpm --filter @touchstone/cr-lab run mcp-login; a browser opens and you enter the key on Blockworks' own page)`
+      : `could not reach the Blockworks MCP after ${result.attempts} tries (${result.why}); this is not necessarily a login problem, and the next daily check will try again`;
     console.log(`LOGIN CHECK FAILED: ${why}`);
     if (flag("alert")) {
       const email = emailSinkFromEnv();
@@ -91,7 +99,7 @@ if (flag("check")) {
         (sink, reason) => console.log(`alert sink ${sink} failed: ${reason}`),
       ).send({
         at: new Date().toISOString(),
-        kind: "mcp-login-failed",
+        kind: lapsed ? "mcp-login-failed" : "mcp-unreachable",
         window: new Date().toISOString().slice(0, 10),
         message: `the Blockworks MCP login check failed: ${why}`,
       });

@@ -10,6 +10,7 @@ import { SpendStopped, type SpendLedger } from "../spend/ledger.js";
 import type { Part } from "../spend/types.js";
 import type { Instance } from "../tasks/instances.js";
 import { gradeAnswer } from "./grade.js";
+import { loadAllowances } from "./allowance.js";
 import { projectedCostUsd, usageCostUsd, type ModelPrice } from "./prices.js";
 import { extractReasoning } from "./reasoning.js";
 import type { PromptBundle } from "./prompts.js";
@@ -55,6 +56,8 @@ export interface RunAnswerInput {
   window: string;
   daySha256: string;
   part?: Extract<Part, "snapshot" | "dry-run">;
+  /** the frozen output allowance per task (D113); defaults to `data/lab/cr/allowances.json` */
+  allowances?: Readonly<Record<Instance["task"], number>>;
   now?: () => Date;
 }
 
@@ -62,7 +65,9 @@ export async function runAnswer(input: RunAnswerInput): Promise<AnswerRecord> {
   const { ledger, seat, instance, bundle } = input;
   const part = input.part ?? "snapshot";
   const now = input.now ?? (() => new Date());
-  const params: AdapterParams = { ...seat.params, max_tokens: MAX_OUTPUT_TOKENS[instance.task] };
+  // the output allowance is the frozen rule of D113, the same for every model; `MAX_OUTPUT_TOKENS` is the print's own, kept as the floor and for the derivation of the print's method
+  const allowance = (input.allowances ?? loadAllowances())[instance.task];
+  const params: AdapterParams = { ...seat.params, max_tokens: allowance };
   const projected = projectedCostUsd(
     bundle.approxTokens,
     params.max_tokens,
@@ -136,6 +141,7 @@ export async function runAnswer(input: RunAnswerInput): Promise<AnswerRecord> {
     ...(outcome?.stopReason !== undefined ? { stop_reason: outcome.stopReason } : {}),
     deviations: outcome?.deviations ?? [],
     ...(callError !== undefined ? { error: callError } : {}),
+    allowance_tokens: allowance,
     raw_output: text,
     reasoning: {
       requested: seat.params.thinking?.mode === "summarized" ? "summary" : "default",

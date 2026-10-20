@@ -17,7 +17,21 @@ import type { SeedBook } from "../tasks/seeds.js";
 import { buildPrompt } from "./prompts.js";
 import { runAnswer, type Seat } from "./run-answer.js";
 import { recordKey, tablesDir, type AnswerRecord, type RecordStore } from "./records.js";
-import { cumulativeTable, dailyTable, failureReport } from "./tables.js";
+import { PriceNotFound, loadRegistryAndPrices, priceFor, type ModelPrice } from "./prices.js";
+import { costBasisTable, cumulativeTable, dailyTable, failureReport } from "./tables.js";
+
+/** A model's price from the merged price snapshot. Only a stand-in model has none; it gets a zero price, and as a stand-in never retries, the cost-basis table then equals the billed cost. */
+function priceOfModel(): (model: string) => ModelPrice {
+  const { snapshot } = loadRegistryAndPrices();
+  return (model) => {
+    try {
+      return priceFor(model, snapshot);
+    } catch (e) {
+      if (e instanceof PriceNotFound) return { priceInUsdPer1M: "0", priceOutUsdPer1M: "0" };
+      throw e;
+    }
+  };
+}
 
 /** sha256 over the sorted body hashes of the window's snapshots: one value naming the exact data a day's answers were graded against. */
 export function daySha256(store: SnapshotStore, window: string, tag = "daily"): string {
@@ -186,6 +200,14 @@ export function writeTables(
     [`daily-${part}-${window}.md`, dailyTable(all, window, label)],
     [`cumulative-${part}.md`, cumulativeTable(all, label)],
     [`failures-${part}-${window}.md`, failureReport(all, window)],
+    [
+      `cost-basis-${part}-${window}.md`,
+      costBasisTable(
+        all.filter((r) => r.window === window),
+        priceOfModel(),
+        label,
+      ),
+    ],
   ] as const;
   for (const [name, text] of files) writeFileSync(`${dir}/${name}`, text);
   return files.map(([name]) => `${dir}/${name}`);

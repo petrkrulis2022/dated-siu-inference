@@ -43,6 +43,8 @@ export interface AnswerRecord {
   deviations: string[];
   /** a sanitised reason when the call failed (error class and HTTP status only, never a message body) */
   error?: string;
+  /** the output allowance this call ran under, in tokens (D113). Absent on a record written before the rule, which ran under the print's allowance. */
+  allowance_tokens?: number;
   /** the model's raw reply, private */
   raw_output: string;
   /**

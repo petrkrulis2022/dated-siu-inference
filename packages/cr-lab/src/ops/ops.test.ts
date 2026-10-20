@@ -89,7 +89,8 @@ describe("the shared lock", () => {
   });
 });
 
-const T0 = new Date("2026-10-18T04:00:00Z");
+// the pull time (D115): a pull starts only from 12:00 UTC
+const T0 = new Date("2026-10-18T12:00:00Z");
 const clock = (start: Date) => {
   let t = start;
   return { now: () => t, advance: (ms: number) => (t = new Date(t.getTime() + ms)) };
@@ -159,10 +160,51 @@ describe("the scheduled daily snapshot", () => {
     expect(s.alerts.alerts).toEqual([]);
   });
 
-  it("catches up: a run at 11:00 after the machine slept through the morning still pulls that UTC day", async () => {
-    const s = setup(async () => okRun(), new Date("2026-10-18T11:07:00Z"));
+  it("catches up: a run late in the evening, after the machine was off all afternoon, still pulls that UTC day", async () => {
+    const s = setup(async () => okRun(), new Date("2026-10-18T22:30:00Z"));
     expect((await runDailySnapshot(s.deps())).outcome).toBe("complete");
     expect(s.calls.n).toBe(1);
+  });
+
+  it("does not pull before 12:00 UTC: no request, no status written, no alert, and it says why", async () => {
+    // the provider publishes the previous day's figures through the morning: pulls at 06:30Z on 18 and 19 October had no supply for the day and stablecoins two days behind
+    for (const at of ["2026-10-18T00:05:00Z", "2026-10-18T06:30:00Z", "2026-10-18T11:59:59Z"]) {
+      const s = setup(async () => okRun(), new Date(at));
+      const lines: string[] = [];
+      expect((await runDailySnapshot({ ...s.deps(), log: (l) => lines.push(l) })).outcome, at).toBe(
+        "before-pull-time",
+      );
+      expect(s.calls.n, at).toBe(0);
+      expect(s.status.read("2026-10-18"), at).toBeUndefined();
+      expect(s.alerts.alerts, at).toEqual([]);
+      expect(lines.join("\n"), at).toContain("before the pull time (12:00 UTC)");
+    }
+  });
+
+  it("pulls from 12:00:00 UTC, and the hourly catch-up after it still works", async () => {
+    const s = setup(async () => failRun(), new Date("2026-10-18T12:00:00Z"));
+    expect((await runDailySnapshot(s.deps())).outcome).toBe("failed");
+    s.c.advance(3_600_000);
+    await runDailySnapshot({ ...s.deps(), pull: async () => okRun() });
+    expect(s.status.read("2026-10-18")?.state).toBe("complete");
+  });
+
+  it("a morning run still reports a day that was never completed, even though it will not pull", async () => {
+    const s = setup(async () => okRun(), new Date("2026-10-18T12:00:00Z"));
+    await runDailySnapshot(s.deps()); // 18 October complete
+    s.c.advance(2 * 24 * 3_600_000 - 5 * 3_600_000); // 20 October, 07:00Z: the machine was off on the 19th
+    expect((await runDailySnapshot(s.deps())).outcome).toBe("before-pull-time");
+    expect(
+      s.alerts.alerts.filter((a) => a.kind === "yesterday-missing").map((a) => a.window),
+    ).toEqual(["2026-10-19"]);
+    expect(s.calls.n).toBe(1);
+  });
+
+  it("a complete day stays 'already complete' at any hour, including the morning", async () => {
+    const s = setup(async () => okRun());
+    await runDailySnapshot(s.deps());
+    s.c.advance(-8 * 3_600_000); // an earlier hour of the same UTC day
+    expect((await runDailySnapshot(s.deps())).outcome).toBe("already-complete");
   });
 
   it("holds the lock while pulling: a second run started during a pull does not pull, and the lock is released afterwards", async () => {
@@ -229,16 +271,64 @@ describe("the scheduled daily snapshot", () => {
   it("the evening watchdog is silent for a complete day and alerts for an incomplete one, without pulling", async () => {
     const s = setup(async () => okRun());
     await runDailySnapshot(s.deps());
-    s.c.advance(17 * 3_600_000);
+    s.c.advance(9 * 3_600_000); // 21:00Z, the evening check
     expect((await runDailySnapshot(s.deps("watchdog"))).outcome).toBe("watchdog-ok");
-    const t = setup(async () => okRun());
+    const t = setup(async () => okRun(), new Date("2026-10-18T21:00:00Z"));
     expect((await runDailySnapshot(t.deps("watchdog"))).outcome).toBe("watchdog-alert");
     expect(t.alerts.alerts[0]).toMatchObject({ kind: "not-complete", window: "2026-10-18" });
     expect(t.calls.n).toBe(0);
   });
 
+  it("a watchdog that runs in the morning, because Windows caught up last night's missed trigger, judges nothing", async () => {
+    // 2026-10-19: the machine woke at 06:27Z, the pull started, and six minutes in the missed 23:00 check ran: no attempt was recorded yet, and it alerted
+    for (const at of ["2026-10-19T00:05:00Z", "2026-10-19T06:33:12Z", "2026-10-19T19:59:59Z"]) {
+      const s = setup(async () => okRun(), new Date(at));
+      expect((await runDailySnapshot(s.deps("watchdog"))).outcome, at).toBe("watchdog-early");
+      expect(
+        s.alerts.alerts.filter((a) => a.kind === "not-complete"),
+        at,
+      ).toEqual([]);
+      expect(s.calls.n).toBe(0);
+    }
+  });
+
+  it("judges the day from 20:00 UTC, and a caught-up check late that evening still can", async () => {
+    for (const at of ["2026-10-19T20:00:00Z", "2026-10-19T22:00:00Z", "2026-10-19T23:40:00Z"]) {
+      const s = setup(async () => okRun(), new Date(at));
+      expect((await runDailySnapshot(s.deps("watchdog"))).outcome, at).toBe("watchdog-alert");
+    }
+  });
+
+  it("does not alert about a day while a pull is running, since an attempt is only recorded when a pull ends", async () => {
+    const s = setup(async () => okRun(), new Date("2026-10-18T21:00:00Z"));
+    const held = acquireLock(join(tmp, `world-${seq}`, "locks", "live.lock"), "daily-snapshot", {
+      now: s.c.now,
+      isAlive: () => true,
+      bootId: () => "b",
+    });
+    expect((await runDailySnapshot(s.deps("watchdog"))).outcome).toBe("watchdog-pull-running");
+    expect(s.alerts.alerts.filter((a) => a.kind === "not-complete")).toEqual([]);
+    held.release();
+    // the pull has ended and the day is still not complete: now it is a real alert
+    expect((await runDailySnapshot(s.deps("watchdog"))).outcome).toBe("watchdog-alert");
+  });
+
+  it("a lock left by a process that is gone does not hide a day that was never completed", async () => {
+    const s = setup(async () => okRun(), new Date("2026-10-18T21:00:00Z"));
+    acquireLock(join(tmp, `world-${seq}`, "locks", "live.lock"), "daily-snapshot", {
+      now: s.c.now,
+      isAlive: () => true,
+      bootId: () => "b",
+    });
+    const dead: DailyDeps = {
+      ...s.deps("watchdog"),
+      lockDeps: { isAlive: () => false, bootId: () => "b" },
+    };
+    expect((await runDailySnapshot(dead)).outcome).toBe("watchdog-alert");
+  });
+
   it("says a missed day cannot be recovered, once, for every day missed since the schedule first ran", async () => {
-    const s = setup(async () => okRun(), new Date("2026-10-18T04:00:00Z"));
+    const s = setup(async () => okRun(), new Date("2026-10-18T12:00:00Z"));
     await runDailySnapshot(s.deps()); // day 1 complete
     s.c.advance(3 * 24 * 3_600_000); // the machine was off on the 19th and the 20th; now it is the 21st
     await runDailySnapshot(s.deps());

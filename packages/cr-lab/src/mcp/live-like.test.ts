@@ -74,7 +74,7 @@ describe("stablecoin series that publish a day late", () => {
       series: [f.backend.world.venues[0]?.id],
       timeframe: "5d",
     });
-    const last = JSON.parse(r.text).data.series[0].points.at(-1)[0] as number;
+    const last = JSON.parse(r.text).series[0].points.at(-1)[0] as number;
     expect(new Date(last * 1000).toISOString().slice(0, 10)).toBe(W());
   });
 });

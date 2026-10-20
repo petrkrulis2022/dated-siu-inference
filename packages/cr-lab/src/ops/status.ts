@@ -21,7 +21,10 @@ export type AlertKind =
   | "yesterday-missing"
   | "lock-stuck"
   | "request-ceiling"
-  | "mcp-login-failed";
+  | "mcp-login-failed"
+  | "mcp-unreachable"
+  | "mcp-run-failed"
+  | "mcp-not-complete";
 
 export interface AttemptRecord {
   at: string;

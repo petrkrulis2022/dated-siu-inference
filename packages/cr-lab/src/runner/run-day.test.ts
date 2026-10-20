@@ -284,7 +284,10 @@ describe("tables and files", () => {
       `daily-snapshot-${f.day.window}.md`,
       "cumulative-snapshot.md",
       `failures-snapshot-${f.day.window}.md`,
+      `cost-basis-snapshot-${f.day.window}.md`,
     ]);
+    // the fourth table (D113) shows the headline cost per correct answer beside the print's method
+    expect(readFileSync(files[3] as string, "utf-8")).toContain("Print's method: cost per correct");
     const daily = readFileSync(files[0] as string, "utf-8");
     expect(daily).toContain("| stand-in-solver |");
     expect(daily).toContain("**all models**");

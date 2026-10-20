@@ -12,7 +12,6 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { trialKey } from "../keys.js";
 import { MemoryRecordStore } from "../runner/records.js";
 import { daySha256 } from "../runner/run-day.js";
 import { buildSeats } from "../runner/seats.js";
@@ -24,8 +23,7 @@ import { FileLedgerStore, MemoryLedgerStore } from "../spend/store.js";
 import { fixtureDay } from "../tasks/fixture-day.js";
 import { drawInstances, TASKS, type TaskId } from "../tasks/instances.js";
 import { SeedBook } from "../tasks/seeds.js";
-import { anthropicChat, anthropicMessagesApi } from "../mcp/anthropic-loop.js";
-import { openAiChat, openAiChatApi } from "../mcp/openai-loop.js";
+import { chatForSeats } from "../mcp/seat-chat.js";
 import { FakeMcp, LIVE_LAG } from "../mcp/fake-mcp.js";
 import { buildMcpPrompt } from "../mcp/prompts.js";
 import { MCP_TASKS, runMcpDay } from "../mcp/session.js";
@@ -134,18 +132,7 @@ try {
     const modelIds = (opt("models") as string).split(",").filter((m) => m !== "");
     const seats = buildSeats(modelIds);
     // each seat talks to its own provider with its own trial key (Claude: the Messages API; GPT: Chat Completions)
-    const claude = seats.some((x) => x.provider === "anthropic")
-      ? anthropicMessagesApi(trialKey("anthropic"))
-      : undefined;
-    const gpt = seats.some((x) => x.provider === "openai")
-      ? openAiChatApi(trialKey("openai"))
-      : undefined;
-    const chatFor = (seat: (typeof seats)[number]) => {
-      if (seat.provider === "anthropic" && claude !== undefined)
-        return anthropicChat(claude, seat.modelString);
-      if (seat.provider === "openai" && gpt !== undefined) return openAiChat(gpt, seat.modelString);
-      throw new Error(`MCP mode has no tool loop for ${seat.modelId} (${seat.provider}) yet`);
-    };
+    const chatFor = chatForSeats(seats);
     const ledger = new SpendLedger({
       store: new FileLedgerStore(),
       policy: policyFromBudgets(loadBudgets()),

@@ -6,6 +6,8 @@
 import { D, roundHalfUp, type DecimalValue } from "@touchstone/sdk";
 import { TASKS } from "../tasks/instances.js";
 import type { AnswerRecord } from "./records.js";
+import { headlineCost, printMethodCost } from "./allowance.js";
+import type { ModelPrice } from "./prices.js";
 import { PRIORITY, type FailureClass } from "./taxonomy.js";
 
 interface Agg {
@@ -161,4 +163,57 @@ export function failureReport(records: readonly AnswerRecord[], window?: string)
   }
   lines.push("");
   return lines.join("\n");
+}
+
+/**
+ * Cost per correct answer on the two bases of D113, side by side. The HEADLINE is the cost with no wasted cut-off call (an allowance that covers the answer); the PRINT'S METHOD is what the same
+ * answers would have cost under the print's own small allowance, a billed cut-off first call and a retry. Each answer was run once, so the two are derived from one run's token counts
+ * (`runner/allowance.ts`). An answer whose retry was itself cut off has no honest headline figure and is left out of the headline columns, and counted in the last column.
+ */
+export function costBasisTable(
+  records: readonly AnswerRecord[],
+  priceOf: (model: string) => ModelPrice,
+  label = "Snapshot mode",
+): string {
+  const models = [...new Set(records.map((r) => r.model))].sort();
+  const lines: string[] = [
+    `## ${label}: cost per correct answer, headline and the print's method`,
+    "",
+    "| Model | Task | Attempts | Headline: passed | Headline: cost per correct | Print's method: passed | Print's method: cost per correct | Left out of the headline |",
+    "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+  ];
+  for (const m of models)
+    for (const t of TASKS) {
+      const mine = records.filter((r) => r.model === m && r.task === t);
+      if (mine.length === 0) continue;
+      const price = priceOf(m);
+      const h = empty();
+      const a = empty();
+      let left = 0;
+      for (const r of mine) {
+        const b = headlineCost(r, price);
+        if (b.derivable) {
+          h.attempts += 1;
+          if (b.passed) h.passes += 1;
+          h.usd = h.usd.plus(b.usd);
+        } else left += 1;
+        const p = printMethodCost(r, price);
+        a.attempts += 1;
+        if (p.passed) a.passes += 1;
+        a.usd = a.usd.plus(p.usd);
+      }
+      lines.push(
+        row([
+          m,
+          t,
+          String(mine.length),
+          String(h.passes),
+          perCorrect(h),
+          String(a.passes),
+          perCorrect(a),
+          String(left),
+        ]),
+      );
+    }
+  return `${lines.join("\n")}\n`;
 }

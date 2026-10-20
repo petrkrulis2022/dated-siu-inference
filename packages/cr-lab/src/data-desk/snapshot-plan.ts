@@ -22,6 +22,13 @@ export const POOL_SALT = "cr-uo-pool-v1";
 export const DEFAULT_TOKEN_POOL = 20;
 /** A token is eligible only if its schedule runs well past the window's 90 days: the schedule endpoint refuses a window that starts after the projected end. */
 export const MIN_SCHEDULE_DAYS_AFTER = 100;
+/**
+ * How many days behind the snapshot day a series may end and still be used (the tasks' solvers read it from here). The provider publishes each day's figures late, by a lag that depends on
+ * the time of day the snapshot is pulled: on 2026-10-17 (pulled 14:22Z) the stablecoin series ended the day before and the supply series reached the snapshot day; on the 18th and the 19th
+ * (pulled about 06:30Z) the stablecoin series ended two days back and the supply series ended the day before. The circulating supply is therefore requested from this many days before the
+ * snapshot day, so that an earlier day is in the snapshot when the day itself is not published yet.
+ */
+export const MAX_PUBLICATION_LAG_DAYS = 3;
 
 export interface PlanStepResult {
   step: string;
@@ -162,7 +169,7 @@ export async function runDailyPlan(
   ).entries())
     await pull(
       `circulating supply batch ${i + 1}`,
-      catalog.assetSupply(b, addDays(window, -1), addDays(window, 1)),
+      catalog.assetSupply(b, addDays(window, -MAX_PUBLICATION_LAG_DAYS), addDays(window, 1)),
     );
 
   // CR-SM, option B

@@ -11,6 +11,7 @@ import { Num, type Json } from "./json-decimal.js";
 import { catalog, queryId } from "./queries.js";
 import {
   DEFAULT_TOKEN_POOL,
+  MAX_PUBLICATION_LAG_DAYS,
   MIN_SCHEDULE_DAYS_AFTER,
   eligibleToken,
   quarterStart,
@@ -77,8 +78,9 @@ describe("the daily plan", () => {
       startTime: `${W}T00:00:00Z`,
       endTime: `${addDays(W, 90)}T00:00:00Z`,
     });
+    // from three days back, so that an earlier day is in the snapshot when the provider has not published the snapshot day's supply yet (it had not on 2026-10-18 and 19)
     expect(q("/query/timeseries/asset-supply/1d")[0]?.params).toMatchObject({
-      start: addDays(W, -1),
+      start: addDays(W, -MAX_PUBLICATION_LAG_DAYS),
       end: addDays(W, 1),
     });
     for (const m of ["stablecoins-by-chain", "stablecoins-by-issuer"]) {

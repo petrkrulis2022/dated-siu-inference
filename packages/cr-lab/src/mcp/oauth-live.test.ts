@@ -4,10 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import {
+  CallToolRequestSchema,
+  ErrorCode,
+  ListToolsRequestSchema,
+  McpError,
+} from "@modelcontextprotocol/sdk/types.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { RateGovernor } from "../data-desk/governor.js";
-import { LiveMcp, MCP_GOVERNOR_GROUP } from "./live-mcp.js";
+import { LiveMcp, MCP_GOVERNOR_GROUP, McpTransportFailure } from "./live-mcp.js";
 import { LoginFailed, runLogin } from "./oauth-login.js";
 import { TrialOAuthProvider } from "./oauth-store.js";
 import { MCP_DATA_TOOLS } from "./types.js";
@@ -269,6 +274,8 @@ describe("the live MCP client", () => {
         return { isError: true, content: [{ type: "text", text: "no such table" }] };
       if (req.params.name === "search_documents")
         return { content: [{ type: "image", data: "AAAA", mimeType: "image/png" }] };
+      if (req.params.name === "bad_args")
+        throw new McpError(ErrorCode.InvalidParams, "no such model");
       return {
         content: [
           { type: "text", text: '{"data":{"series":[]}}' },
@@ -321,6 +328,20 @@ describe("the live MCP client", () => {
       text: "[image content omitted]",
     });
     await live.close();
+  });
+
+  it("relays a protocol error about the call (bad arguments) to the model as an error result, but reports no answer at all as a service failure that is not relayed", async () => {
+    const { live } = await connected();
+    // the server answered, with a refusal: the model's to handle
+    expect(await live.call("bad_args", {})).toMatchObject({ isError: true });
+    expect((await live.call("bad_args", {})).text).toContain("no such model");
+    // the connection is gone: nothing answered, so nothing is relayed (D116)
+    await live.close();
+    const failed = await live.call("timeseries_data", { model: "x" }).catch((e: unknown) => e);
+    expect(failed).toBeInstanceOf(McpTransportFailure);
+    // only the class is kept, never the message
+    expect((failed as Error).message).not.toContain("Not connected");
+    expect((failed as McpTransportFailure).errorClass).toBe("Error");
   });
 
   it("paces every call through the rate governor's mcp group, and counts them", async () => {

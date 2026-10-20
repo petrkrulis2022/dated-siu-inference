@@ -52,7 +52,7 @@ describe("CR-SM when the data publishes a day late", () => {
     expect(rows).toHaveLength(f.day.stablecoins.chain.size - 1);
   });
 
-  it("takes the later day on a tie, and ignores series that end two or more days early", () => {
+  it("takes the later day on a tie, and ignores series that end more than three days early", () => {
     // an even number of series, half ending on each day: a true tie
     const n = f.day.stablecoins.chain.size;
     const even = n - (n % 2);
@@ -62,9 +62,19 @@ describe("CR-SM when the data publishes a day late", () => {
     );
     const tie: DayData = { ...f.day, stablecoins: { ...f.day.stablecoins, chain } };
     expect(smRows(tie, "chain").end).toBe(W());
-    const stale = withEnds("chain", () => addDays(W(), -2));
+    const stale = withEnds("chain", () => addDays(W(), -4));
     expect(smRows(stale, "chain").rows).toHaveLength(0);
     expect(solveSM(stale, "chain")).toBeUndefined();
+  });
+
+  it("offers a question when every series ends two or three days before the snapshot day, as on 18 and 19 October", () => {
+    // 2026-10-18 and 19 were pulled about 06:30Z: the series ended on the 16th and the 17th, and the solver that allowed one day offered no CR-SM at all
+    for (const k of [2, 3]) {
+      const d = withEnds("chain", () => addDays(W(), -k));
+      expect(smRows(d, "chain").end, `${k} days back`).toBe(addDays(W(), -k));
+      expect(smRows(d, "chain").rows.length).toBeGreaterThanOrEqual(5);
+      expect(solveSM(d, "chain")).toBeDefined();
+    }
   });
 
   it("the prompt names the real end date, and a solver that sees only the prompt passes the gate", () => {
@@ -78,5 +88,45 @@ describe("CR-SM when the data publishes a day late", () => {
     expect(prompt.text).toContain("latest day the data provider had published");
     const answer = JSON.stringify(solverFromPrompt(prompt.text));
     expect(gradeAnswer(inst!, answer).passed).toBe(true);
+  });
+});
+
+/** A copy of the day whose circulating supply is published only `k` days before the snapshot day, for every token. */
+function supplyLate(k: number): DayData {
+  const supply = new Map(f.day.supply);
+  for (const [id, series] of supply) {
+    const v = series.get(W());
+    // the fixture also holds the day before, so the series is rebuilt with only the day `k` days back
+    const m = new Map<string, NonNullable<typeof v> | null>();
+    if (v !== undefined) m.set(addDays(W(), -k), v);
+    supply.set(id, m);
+  }
+  return { ...f.day, supply };
+}
+
+describe("CR-UO when the provider has not yet published the snapshot day's supply", () => {
+  it("is still offered, the prompt names the day the supply is as of, and a solver that sees only the prompt passes the gate", () => {
+    for (const k of [1, 2, 3]) {
+      const d = supplyLate(k);
+      const inst = drawInstances(d, "e".repeat(64)).find((i) => i.task === "CR-UO");
+      expect(inst, `${k} days late`).toBeDefined();
+      const prompt = buildPrompt(inst!, d)!;
+      expect(prompt.text).toContain(`circulating supply on ${addDays(W(), -k)} is`);
+      expect(prompt.text).toContain("the latest day the data provider had published");
+      expect(gradeAnswer(inst!, JSON.stringify(solverFromPrompt(prompt.text))).passed).toBe(true);
+    }
+  });
+
+  it("does not add the note when the supply is the snapshot day's own", () => {
+    const inst = drawInstances(f.day, "e".repeat(64)).find((i) => i.task === "CR-UO")!;
+    const prompt = buildPrompt(inst, f.day)!;
+    expect(prompt.text).toContain(`circulating supply on ${W()} is`);
+    expect(prompt.text).not.toContain("the latest day the data provider had published");
+  });
+
+  it("is not offered when no supply has been published for more than three days", () => {
+    expect(drawInstances(supplyLate(4), "e".repeat(64)).filter((i) => i.task === "CR-UO")).toEqual(
+      [],
+    );
   });
 });

@@ -1,0 +1,32 @@
+{
+  "rule": "Each task's output allowance covers almost all observed outputs: the most one call needed over every recorded answer (a call cut off again counts as at least its cap), times 6/5, rounded up to a multiple of 2,000, never below the print's own allowance. The same for every model. Frozen for the counted windows (D113).",
+  "frozenAt": "2026-10-20",
+  "observed": {
+    "CR-VS": {
+      "n": 20,
+      "maxNeed": 26259,
+      "censored": 0
+    },
+    "CR-PL": {
+      "n": 20,
+      "maxNeed": 16000,
+      "censored": 1
+    },
+    "CR-UO": {
+      "n": 20,
+      "maxNeed": 2848,
+      "censored": 0
+    },
+    "CR-SM": {
+      "n": 16,
+      "maxNeed": 1898,
+      "censored": 0
+    }
+  },
+  "allowance": {
+    "CR-VS": 32000,
+    "CR-PL": 20000,
+    "CR-UO": 4000,
+    "CR-SM": 4000
+  }
+}

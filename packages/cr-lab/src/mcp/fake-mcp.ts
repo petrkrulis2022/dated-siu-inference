@@ -6,8 +6,10 @@
  *  - a window is a `timeframe` (30d, 4w, ytd, qtd, mtd, dtd, or a calendar 2026, 2026-09, 2026-09-15) OR a `start` (inclusive) and `end` (exclusive), never both; with neither it is the last 90 days;
  *  - `selections` names the metric fields each point should carry; left out, a point carries EVERY metric the model has, which for the volume model is 96 (the live catalog's count). That is the big
  *    cost trap, so the fake pads points to the live metric counts with synthetic columns, to give tool results their live size (a padding value is about as long as a live float, since a live point of one metric is about 31 bytes);
- *  - the result is the Data API's JSON body as text (confirmed for catalogs; assumed for data until the first live data read).
- * ASSUMED, not seen live: the names of the padding metrics, the wording of an error, how `granularity` behaves for a model with one interval, and tabular filters (not implemented: refused).
+ *  - a data result is JSON text in the MCP's own envelope, not the Data API's body (seen on the first live data read, 2026-10-20, D116): `timeseries_data` gives `{model, granularity, point_schema,
+ *    series, totalPoints}` and `tabular_data` gives `{model, rows, totalRows, totalPages, page, pageSize}`. The catalogs here are flatter than the live ones (`{model: {...}}`); a catalog is never graded.
+ * ASSUMED, not seen live: the names of the padding metrics, how `granularity` behaves for a model with one interval, and tabular filters (not implemented: refused). SEEN live: a call that names more than
+ * 10 series is refused ("too many series requested: 20 exceeds the maximum of 10") although the tool description says 20; the fake keeps the documented 20 until the live limit is better understood.
  * `today` is the snapshot day. A relative timeframe ends on the model's latest published day: `today` less its lag (`lagByModel`; `LIVE_LAG` mimics the live stablecoin series, a day late).
  * Give the fixtures backend the same lag, or the snapshot and the server will disagree about the latest day.
  */
@@ -38,8 +40,9 @@ export const LIVE_LAG: Readonly<Record<string, number>> = {
   "stablecoins-by-issuer": 1,
 };
 
-/** What the live server limits one call to. */
+/** What the live server limits one call to. It ADVERTISES 20 series (schema and description) and applies 20 to a read that leaves out `series`, but refuses a call that NAMES more than 10 (seen live, 2026-10-20). */
 export const MCP_MAX_SERIES = 20;
+export const MCP_MAX_NAMED_SERIES = 10;
 export const MCP_MAX_POINTS = 5_000;
 
 interface TimeseriesModel {
@@ -203,7 +206,12 @@ const TOOLS: McpToolDef[] = [
       properties: {
         model: { type: "string" },
         granularity: { type: "string" },
-        series: { type: "array", items: { type: "string" }, maxItems: MCP_MAX_SERIES },
+        series: {
+          type: "array",
+          description:
+            "Series keys to read, at most 20. Omit for every series, which only models with allowAllSeries true support.",
+          items: { type: "string" },
+        },
         selections: { type: "array", items: { type: "string" } },
         timeframe: { type: "string" },
         start: { type: "string" },
@@ -339,7 +347,23 @@ export class FakeMcp implements McpBackend {
         return err("pageSize must be 1 to 200");
       params.pageSize = String(a.pageSize);
     }
-    return this.#get({ api: "data", path: `/query/tabular/${model}`, params });
+    const r = await this.#get({ api: "data", path: `/query/tabular/${model}`, params });
+    if (r.isError) return r;
+    // the live envelope (first live session, 2026-10-20): the rows and the paging at the top level, not `data` and `metadata`
+    const body = parseJsonDecimal(r.text) as {
+      data: Json;
+      metadata?: { totalRows?: Json; totalPages?: Json };
+    };
+    return ok(
+      stringifyJsonDecimal({
+        model,
+        rows: body.data,
+        totalRows: body.metadata?.totalRows ?? null,
+        totalPages: body.metadata?.totalPages ?? null,
+        page: new Num(params.page ?? "1"),
+        pageSize: new Num(params.pageSize ?? "25"),
+      } as Json),
+    );
   }
 
   /** The start (inclusive) and end (exclusive) of a window, from a `timeframe` or from `start` and `end`. */
@@ -415,6 +439,10 @@ export class FakeMcp implements McpBackend {
         );
       const all = await this.#allKeys(model);
       if (typeof all === "string") return err(all);
+      if (all.length > MCP_MAX_SERIES)
+        return err(
+          `Error: this read returned ${all.length} series, over the ${MCP_MAX_SERIES}-series limit for one call: name the specific series you need in the series argument`,
+        );
       series = all;
     } else {
       if (
@@ -423,8 +451,10 @@ export class FakeMcp implements McpBackend {
         !a.series.every((s) => typeof s === "string" && s !== "")
       )
         return err("series must be a non-empty list of series keys");
-      if (a.series.length > MCP_MAX_SERIES)
-        return err(`at most ${MCP_MAX_SERIES} series per call; this call named ${a.series.length}`);
+      if (a.series.length > MCP_MAX_NAMED_SERIES)
+        return err(
+          `Error: too many series requested: ${a.series.length} exceeds the maximum of ${MCP_MAX_NAMED_SERIES}`,
+        );
       series = a.series as string[];
     }
 
@@ -495,10 +525,18 @@ export class FakeMcp implements McpBackend {
         points: row.points.map((p) => [...p, ...pads.map(() => new Num("123456789.1234"))]),
       } as Json;
     });
+    // the live envelope (first live session, 2026-10-20): no `data` wrapper, and a count of the points
+    const totalPoints = padded.reduce(
+      (n, x) => n + (x as unknown as { points: Json[] }).points.length,
+      0,
+    );
     return ok(
       stringifyJsonDecimal({
-        error: null,
-        data: { point_schema: [...(schema ?? []), ...padSchema], series: padded },
+        model: model.slug,
+        granularity,
+        point_schema: [...(schema ?? []), ...padSchema],
+        series: padded,
+        totalPoints: new Num(String(totalPoints)),
       } as Json),
     );
   }

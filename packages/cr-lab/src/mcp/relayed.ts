@@ -3,9 +3,9 @@
  * not from a snapshot taken before or after: no refresh tolerance, no extra requests. A separate check then compares that key with the day's snapshot key, which catches a model that
  * fetched the wrong dataset, too little of it, or the wrong period. An answer passes only if it is right for the data it received AND that data gives the snapshot's answer.
  *
- * Assumption to confirm on the first live sign-in: a tool result is the Data API's JSON body as text, so the same parser (`ingest`) reads a stored snapshot and a relayed result.
+ * A tool result is JSON text in the MCP's own envelope (see `asDataApiBody`), which is put into the Data API's body shape so the same parser (`ingest`) reads a stored snapshot and a relayed result.
  */
-import { parseJsonDecimal } from "../data-desk/json-decimal.js";
+import { Num, parseJsonDecimal, type Json } from "../data-desk/json-decimal.js";
 import { gradeAnswer } from "../runner/grade.js";
 import { referenceAnswerJson } from "../runner/prompts.js";
 import { classify, type Classification } from "../runner/taxonomy.js";
@@ -21,6 +21,22 @@ export interface RelayedCall {
   isError: boolean;
   /** what the model was shown */
   text: string;
+}
+
+/**
+ * The live MCP's data tools do NOT return the Data API's body (seen on the first live session, 2026-10-20, D116). A `timeseries_data` result is `{model, granularity, point_schema, series,
+ * totalPoints}`, each series `{key, entity, points}` and each point `[time in seconds, value, ...]`; a `tabular_data` result is `{model, rows, totalRows, totalPages, page, pageSize}`. The
+ * Data API wraps the same content in `data`. This puts a tool result into the body shape `ingest` reads, so a stored snapshot and a relayed result are parsed by the same code. Anything
+ * else is returned as it is and, if it is not one of the datasets, adds nothing.
+ */
+export function asDataApiBody(tool: string, json: Json): Json {
+  if (typeof json !== "object" || json === null || Array.isArray(json) || json instanceof Num)
+    return json;
+  const o = json as { [key: string]: Json };
+  if (tool === "timeseries_data" && Array.isArray(o.series) && Array.isArray(o.point_schema))
+    return { data: { point_schema: o.point_schema, series: o.series } };
+  if (tool === "tabular_data" && Array.isArray(o.rows)) return { data: o.rows };
+  return json;
 }
 
 /** A day built only from what the model received. A result that is an error, or not JSON, or not one of the datasets, adds nothing. */
@@ -40,7 +56,7 @@ export function dayFromRelayed(window: string, calls: readonly RelayedCall[]): D
     } else if (c.tool === "tabular_data") path = `/query/tabular/${model}`;
     if (path === undefined) continue;
     try {
-      ingest(day, seen, { path }, parseJsonDecimal(c.text));
+      ingest(day, seen, { path }, asDataApiBody(c.tool, parseJsonDecimal(c.text)));
     } catch {
       /* not JSON: nothing to read */
     }

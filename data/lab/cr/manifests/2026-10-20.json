@@ -1,0 +1,513 @@
+{
+  "window": "2026-10-20",
+  "specVersions": {
+    "data-api": "0.1.0",
+    "token-unlocks": "1.0.0"
+  },
+  "entries": [
+    {
+      "tag": "daily",
+      "queryId": "03827df1f9b210fdf0c2babfb0beb5fe5b587836ebb077d6acc73c7c2454411c",
+      "bodySha256": "f4b7480af73f4ce92bc5470c5239d43f4ffac744402458196d19f58b44f56d7e",
+      "bytes": 1668,
+      "fetchedAt": "2026-10-20T05:19:43.458Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "0ffeddeb371609048fde7b94a4f6a433604a3fb9cddcc960023784d1cbf2cfba",
+      "bodySha256": "314b0f757bfcb8b2f7e8e47cfba35da8e578e5e95c614ddee309eab9ae9052ea",
+      "bytes": 2934,
+      "fetchedAt": "2026-10-20T05:00:18.384Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "1b098688d366738b3697ae77c63516754034bea29ad5957ebdfef1cea3bf40e8",
+      "bodySha256": "bb21d0979725d87fc13d852b55ac35e16c1fab619870b497ebd5bc8fe6bb5426",
+      "bytes": 58223,
+      "fetchedAt": "2026-10-20T05:08:31.489Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "1bab6c2f1e1135454924bc7b81946c9a7abf6da8d160779d455dea27ea50ae71",
+      "bodySha256": "daa21f6ab76601cce96339ebebcaf5583e77f687800b22f1e43a96e9762c3913",
+      "bytes": 65241,
+      "fetchedAt": "2026-10-20T05:01:33.568Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "256d042781529bce8c76a342e4acb2e215b92e19b9327e805d7a723c9b949e0d",
+      "bodySha256": "e9eb02f0908be61f141d076a08abf29e4456ac550f0373757cc5893786e1a315",
+      "bytes": 2378,
+      "fetchedAt": "2026-10-20T05:15:43.390Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "28748c19ff7ceac2033e10d1f38e9a03946ef11431a624dbf12357b708172317",
+      "bodySha256": "91bbdda1c827506a8d8418946dc8c29c29147ba936ef5d0c26d1d8d8d3fe1988",
+      "bytes": 52831,
+      "fetchedAt": "2026-10-20T05:01:53.723Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "2a29a564e6792e0c0fbbf48ebd9998d001866fb9c5f1757553a2f47fd4a9f64a",
+      "bodySha256": "63813e8b30e46517ee79c4f14328e0bdf57f8a6bbcccdfb2bd5286d3f8ce295a",
+      "bytes": 85132,
+      "fetchedAt": "2026-10-20T05:02:03.669Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "2ca8f4fd4b63d836f8d0db428966cc23e504e1c98033d0da33b5910107382e87",
+      "bodySha256": "2614e4a63f959f259a85500e1453138d1ddb48d3ee6f157418001ee4ba3c4bf9",
+      "bytes": 2460,
+      "fetchedAt": "2026-10-20T05:14:03.338Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "2ce7769b262ae41fbf431447708e6293e98f866145878dae36ced51614e3f4c7",
+      "bodySha256": "0400479ca2f7682ffef0fc3b8e08a111a9c10a2a6416d3f237c3d0be17c20abd",
+      "bytes": 1946,
+      "fetchedAt": "2026-10-20T05:00:43.366Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "2d3f4c4052757bd63663714491f93b24b0f0b8c1ffddf0d962c2a762e497fc34",
+      "bodySha256": "bc0345800f9bae51dd3f018be227bfd43ce9fe309bd6f6d822c54f83d09de379",
+      "bytes": 1596,
+      "fetchedAt": "2026-10-20T06:15:44.835Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "2e4b50aacbde3958df451e0a6e1b81bf14aec5570748a0a2a0527c5d6ab60b18",
+      "bodySha256": "4dda3c9d5a162f1bc65b48be33b99e608abc53ddcae9a777875a965b2457f264",
+      "bytes": 53168,
+      "fetchedAt": "2026-10-20T05:01:23.533Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "35bf1019bfa2df7f73c25d3020579912ab70af4843b68dd59e1c1bb96ae7dacc",
+      "bodySha256": "793fe0afb5679756c26b198f143706c1d60085f630ddef16ae5ade3e0b260b38",
+      "bytes": 73298,
+      "fetchedAt": "2026-10-20T05:01:48.791Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "4175ab9834a0f73eecd6685ef9d1b0ce2890eacded0a3af11d18b2933f8ca67f",
+      "bodySha256": "5826ec1927bedb5b64a34a9a52127b2726ce2a70bd2bbe5f76d68e66f4ce460c",
+      "bytes": 238023,
+      "fetchedAt": "2026-10-20T05:00:49.157Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "41b4d77328b288fb128094a97d635baf7583d653c4a9b6f80391b8816426fd65",
+      "bodySha256": "38e189bfc3d04625371b618b40491e6f8be5e5349247f3c7ac42c23127801373",
+      "bytes": 1616,
+      "fetchedAt": "2026-10-20T05:31:49.984Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "47cc15685fb77e19bd87a47e73533ebae4198857c52e6fefa3153526508d36e3",
+      "bodySha256": "bf88a89e7bcd17f3657e53947b4fa2a475bab0a8a9e95e77f4576f7a80734717",
+      "bytes": 95853,
+      "fetchedAt": "2026-10-20T05:02:08.771Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "49ce3c56f970c86bf567f31511c0aa6ceecaa1e079eeb191164fdf2d1d240d4d",
+      "bodySha256": "5eb1c0364f7468c417e341e5cc531f30fde24b4c26442b716bceab29abe75ec7",
+      "bytes": 48919,
+      "fetchedAt": "2026-10-20T05:01:39.533Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "4dc1a3ae90b8233c2d35c1ec292df9b81cfd9221c5aeecc5c497b91e55708c71",
+      "bodySha256": "b84003aadab362f1da42f27c742effa43791b3d5016229b75288aa29efae8372",
+      "bytes": 1599,
+      "fetchedAt": "2026-10-20T06:06:19.360Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "4fab607d39c55a4decda9a58759308bfc58cf227aff39ec9edb8941ad92fa49f",
+      "bodySha256": "735dd09e938c13af199160b504587a4bc69f13356ee365fe3b9543f81adde02d",
+      "bytes": 76699,
+      "fetchedAt": "2026-10-20T05:06:31.413Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "539e2d784fb019af051fa371c0ad2f56b7bffb008382889fe47bbc0d027b283b",
+      "bodySha256": "c77b989793c866abc2e1ccaf70ec6dfebd25d69cbf26c7f9932956a32208fd3d",
+      "bytes": 1571,
+      "fetchedAt": "2026-10-20T06:10:33.308Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "591e2910482326c6a41e6a5870a2dcc549a01e3b6d543b471d04a294810c20cc",
+      "bodySha256": "71400a87099b440ed09aa587f23558bb2518f70f87df3afb4792b7c9c984fd0d",
+      "bytes": 1663,
+      "fetchedAt": "2026-10-20T05:22:44.338Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "654f9ace59e1d3212fa800e839fad4503c9dd108c631772f031b5027b340e724",
+      "bodySha256": "2b3939d5b08fb441f4405c3d6dd11ad7294d4baf5f6e652cf3caade17429a687",
+      "bytes": 1636,
+      "fetchedAt": "2026-10-20T06:04:19.247Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "678c99b8946d37643b8f437a2d95a8d745bda8e31afd6220848103226366b2ce",
+      "bodySha256": "420dfb051a92e9b9d3adb53f8d0bdbea32e489ae5b6e024c5619630c5f5e29b2",
+      "bytes": 1646,
+      "fetchedAt": "2026-10-20T06:00:19.666Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "7a11372374f95ecd84b184caa744fcc55da8fe8b4435cae96fc80652d71b99cf",
+      "bodySha256": "f81ab95ee8c135e7785a8690c3abd47704e1694064759429e67d524d604953d4",
+      "bytes": 190945,
+      "fetchedAt": "2026-10-20T05:00:52.995Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "7c870401dd0902229273b08298704746a5b98ba06a83a0959fa1074086a4fde8",
+      "bodySha256": "a6eb0dda407a5e6775054caf87117e1df7136d0100e0026a72daa5279af10a5b",
+      "bytes": 100240,
+      "fetchedAt": "2026-10-20T05:01:03.943Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "7c8b5eacc31a9370b3f130e93b011f2fe100ae07cfcdee02ce2163ac7e5acd9c",
+      "bodySha256": "540348548ea2cffeab9557576defb48a357329e21bcfe4856409e6744c9a31ce",
+      "bytes": 127495,
+      "fetchedAt": "2026-10-20T05:00:24.018Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "7d9f9fff4815b9cda8c5edce27ac1278c26e461c843f40987ac01f22725c87dd",
+      "bodySha256": "7451ae6a5edc41e9a6145ec4ec93fc42cf4338ae78c15865b3342022197a06fc",
+      "bytes": 115503,
+      "fetchedAt": "2026-10-20T05:00:33.221Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "80d773718016a65631f2f6f014ec727d8f289920f7ca42b881866b5ff20dd74c",
+      "bodySha256": "0dc992044b6e49ded18a885a971edc3d59d7226d6e2b18fea4bae895108470d0",
+      "bytes": 125317,
+      "fetchedAt": "2026-10-20T05:01:29.554Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "82ee5a2062c19e766a9ec1733907829212ed61e366f53774623f6991ef8f9846",
+      "bodySha256": "e42a10516d485969d294f53e88e778b661f2a13d23efde14dd78420d24cb7bcc",
+      "bytes": 61642,
+      "fetchedAt": "2026-10-20T05:00:58.418Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "8349cec40d2012326d2ef81c18ad9624b25955a7c3448e320fdae71b84d2bebb",
+      "bodySha256": "33c944af0355430cad3ac4d15716a719b345dd47d9384909b502bf805c3ee707",
+      "bytes": 1620,
+      "fetchedAt": "2026-10-20T05:24:44.421Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "85baffc6407cc0521b2915b6c713cfeda3b8b4865784ab6420205f5b7c6ba249",
+      "bodySha256": "db8a3f9d8250635df1eb9f8678971eaf19c9106ddd7057fea39d4944c36fae4c",
+      "bytes": 56975,
+      "fetchedAt": "2026-10-20T05:02:13.659Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "88d7dc4b372e61d7d47cf0950830197f95accf7ee8ec0f64d516d3416e6acc43",
+      "bodySha256": "2892b171871aa3407d4e4dfb6c4f877dbf10a7bb4833120908de33bebcd5e326",
+      "bytes": 1659,
+      "fetchedAt": "2026-10-20T06:19:44.608Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "8e84020ffe5a028f3ec9aa78048466c1dda6743f0ee1d5faf8b293b103d03bf2",
+      "bodySha256": "29c0a69e72f4295e994b3be91a242d94e4920bb580f48a776de803b8a0ea261d",
+      "bytes": 49140,
+      "fetchedAt": "2026-10-20T05:01:13.956Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "95c81e46acf950e828ea11ed0902a2a7f227374ed317029ffcf0a0b29970d7c1",
+      "bodySha256": "c85f25eb761cf31e5def2cc45acdac3fc1814b1bd4a74238288639527431072d",
+      "bytes": 1590,
+      "fetchedAt": "2026-10-20T06:07:19.341Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "975e4a0f27b99a0194f747cf559bfcdbaffca3819537f75b7e178af00d532aaf",
+      "bodySha256": "f73c4a2a9fdf7e064a0183476dce004bade5979ae59ee5eb41e3f1c1755163d8",
+      "bytes": 13116,
+      "fetchedAt": "2026-10-20T05:29:45.291Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "99aa016a39204409060185ac66907a7117b382fefed5fcdc594ac4109f323135",
+      "bodySha256": "ebb128383496099ddf2a9697112d905c77511ae9cf76d3ac083ad414da30e3a9",
+      "bytes": 63037,
+      "fetchedAt": "2026-10-20T05:02:49.409Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "9c8977bb08384db4fcd00b3fc8c827499236c4825970564498d0609aade1b1c6",
+      "bodySha256": "52681296d8d73862e253b2cac24b95e66c573b375728c464db0a9e98edfc16a4",
+      "bytes": 1629,
+      "fetchedAt": "2026-10-20T06:16:44.438Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "9f1d54d4132e7baf1c1070c3c68e96a414c4a862212184a086442af29e2ce98f",
+      "bodySha256": "9b48e29e6fea1addc0da25dd6b6cdf889ef19ea960eb12a1f01e82aa51dc1a77",
+      "bytes": 1685,
+      "fetchedAt": "2026-10-20T06:05:19.301Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "a336605766021319f492cf104a67cd82bd6a393bae15a7d56672e5d5a0e11708",
+      "bodySha256": "27518a2fbce2ba2d15038025ff6bb6db9fcfd293b135ef380332515695706d1d",
+      "bytes": 1637,
+      "fetchedAt": "2026-10-20T06:11:03.419Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "af6594a69f2b84faa9fda1135bba0df5d84526f24f7557be6bc9dcc171374ca1",
+      "bodySha256": "1c4f739b3149288cced163722c6e07cce7535582b16b3f37038516407edba671",
+      "bytes": 1619,
+      "fetchedAt": "2026-10-20T06:14:44.384Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "b4dfd129224470d06575b22f18cd8ad2747ac7d5b3c479199cff144eac41f211",
+      "bodySha256": "b67a19d9ce2356d04b655c92ab7278709643e1c553e2e723c5518080c3377e6a",
+      "bytes": 89254,
+      "fetchedAt": "2026-10-20T05:01:44.079Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "b9ac7009f29d143685fc9e57ab713315c6268cb05756cc5620fb377d3ba3c0ef",
+      "bodySha256": "1ab787d2df93a4d53d4905067830ec7635763c012f02e6c876e34c0b317fbc48",
+      "bytes": 1554,
+      "fetchedAt": "2026-10-20T06:03:19.548Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "bfde8ad9b68ac6d686bd7addf9ca9dc865a832c568e45f1eb514aeee3e9e4e1b",
+      "bodySha256": "2db9164888e5bf4b794381f70ece3290b102fd1affec1c9795f87857f58e1605",
+      "bytes": 1619,
+      "fetchedAt": "2026-10-20T06:18:44.476Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "c2571d2803d080a233935f49448d92a7f4cd938551b88184bebd729c607129c9",
+      "bodySha256": "cce59077f510d2eee1fa8f8c5878b0360cd89bb55a37c9b00a9876af85c474ed",
+      "bytes": 1623,
+      "fetchedAt": "2026-10-20T06:01:19.261Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "c3caf556abc5cc64cdcda9ad81595237852b2ad73cc8e37b9abe5107df4c1642",
+      "bodySha256": "fc0adaf9c1aed326e39f996fd8399db5b8a5a93ef108a78987c69193f862b22d",
+      "bytes": 71423,
+      "fetchedAt": "2026-10-20T05:01:18.401Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "c72f706e52572706dea17de83a8daeb6cadce3d31a5beeaeaa35338d1443885e",
+      "bodySha256": "82ce0d2176265621baaebb8d9c9e534fe3579c1ff84d32b5d7a6e6a86100fcd4",
+      "bytes": 97142,
+      "fetchedAt": "2026-10-20T05:01:08.586Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "c9fc232270f3e7211dcb5052c8a403189e1db291644c655194faf180f2026f11",
+      "bodySha256": "d48523b12ac9cb058285f0b985ccc8a9a8c6badb18a96ec6d672ac1b44e99469",
+      "bytes": 81088,
+      "fetchedAt": "2026-10-20T05:01:58.710Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "cd97045e09a1908e4521fbd7b53bd0c7539977011281baa52e51a601c13f7f65",
+      "bodySha256": "a11245e476c62b4aed359d0eca96f7ea312fe1471b3df06d15d2a568839a2960",
+      "bytes": 6240,
+      "fetchedAt": "2026-10-20T05:00:38.030Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "d1103d3be6f81ffdf6b3be42210a6a41b652c5e663922c68adee62bdb3ac1b93",
+      "bodySha256": "7a10cc9effd44dce6e89b9929f9d93c072a5d5c06c5d481d55d1210d79681638",
+      "bytes": 3629,
+      "fetchedAt": "2026-10-20T05:17:43.441Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "d4b0324f51ca732fad95577171daebd8c79dd7aa64d048c80fc51d3591e19dfe",
+      "bodySha256": "deae861abc77703d7c4ceceb0ab5e364f8e49e363f8e13a28cb62d4963927096",
+      "bytes": 1589,
+      "fetchedAt": "2026-10-20T06:14:04.358Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "d88d2e59aba6fd20b118de5031ba34b096e22ed0473d3707f9ac5ac62e5feac6",
+      "bodySha256": "978bad2ea95abe20faf10c1b16bbb41086c87e41e801de79cb0fc7572e4b3473",
+      "bytes": 1223,
+      "fetchedAt": "2026-10-20T05:26:44.759Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "df85a951021e13c2cc703094631a4e3a7effdc1a7415829fb0c431625e0a9c67",
+      "bodySha256": "9f26628b9821e5f9f2e2775da074a240c854f23c1a7b3e07af54431fbb52be63",
+      "bytes": 79528,
+      "fetchedAt": "2026-10-20T05:00:54.068Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "e01fb4f6e588181fb1ef7cb42c76dc450a6705550abd1b7d76c6382fc594d7fb",
+      "bodySha256": "81446bf6c1c7963d5e72c6ffec491ecf180a8858f6622a441bdb7ddaa49cf180",
+      "bytes": 1647,
+      "fetchedAt": "2026-10-20T06:02:19.248Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "e7ec92bfe2030e784bd27f261ecdd20ddc8148dfd94d6009888e5375f4bf7c46",
+      "bodySha256": "9f6edfa797089351db8876a0fe320e0a4d2488814698d8e8cce74cd793ae89c7",
+      "bytes": 1622,
+      "fetchedAt": "2026-10-20T06:17:44.829Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "f8d5c96f007be525663d39edf4a6eab3ba11edf8ca54790b7049c378b205fd4f",
+      "bodySha256": "dc69731f03ed0eb19026c56f6dcab4c65f8a839a7c1255ee40ae6305c40adaee",
+      "bytes": 1645,
+      "fetchedAt": "2026-10-20T06:12:03.990Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "fd2aee95cce016d295fc619e41aa606fc72cd53bc759a8f03d8ff9919ad25b06",
+      "bodySha256": "f53acd0b2945082c1281e55f958c016d177ef0609fc93dc1d04dd85ef5cc8a7b",
+      "bytes": 117356,
+      "fetchedAt": "2026-10-20T05:00:28.506Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "daily",
+      "queryId": "fe9b98f0b329f98b08d3bc49fb1fcdd5965ed82148978f84e50fcb36b70bead3",
+      "bodySha256": "550fc3fccb4fd3e0c2bc01b355f479404fbca95ba93ac52a6da273e0e2c3799b",
+      "bytes": 33168,
+      "fetchedAt": "2026-10-20T05:10:31.528Z",
+      "backend": "live",
+      "httpStatus": 200
+    }
+  ]
+}
