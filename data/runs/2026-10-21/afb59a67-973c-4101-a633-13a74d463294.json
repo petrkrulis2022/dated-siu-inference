@@ -1,0 +1,18 @@
+{
+  "run_id": "afb59a67-973c-4101-a633-13a74d463294",
+  "model_id": "gpt-5.1",
+  "task_class": "T3",
+  "instance_id": "T3-03",
+  "seed": 2721610814,
+  "attempt": 1,
+  "usage": {
+    "input": 102,
+    "output": 84,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 1695,
+  "gate_passed": true,
+  "raw_response_ref": "afb59a67-973c-4101-a633-13a74d463294.raw.json",
+  "deviations": []
+}

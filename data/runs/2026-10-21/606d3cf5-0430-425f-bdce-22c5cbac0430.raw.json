@@ -1,0 +1,39 @@
+{
+  "id": "95e394e5-ed43-9066-af42-4e651133d719",
+  "object": "chat.completion",
+  "created": 1792544360,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"tracking_id\":\"SH-5BAE2B\",\"origin_city\":\"Recife\",\"destination_city\":\"Nairobi\",\"weight_kg\":299,\"status\":\"pending\",\"priority\":\"express\"}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nThe shipment record is SH-5BAE2B from Recife to Nairobi. It weighs 299 kg with express priority and pending status.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1551,
+    "completion_tokens": 46,
+    "total_tokens": 1884,
+    "prompt_tokens_details": {
+      "text_tokens": 1551,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 287,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 43320000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

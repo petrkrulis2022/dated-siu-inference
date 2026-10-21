@@ -898,5 +898,23 @@
     "date": "2026-10-20",
     "status": "provisional",
     "dated_siu": "0.01084"
+  },
+  {
+    "print_id": "2026-10-21-commodity",
+    "date": "2026-10-21",
+    "status": "provisional",
+    "dated_siu": "0.001431"
+  },
+  {
+    "print_id": "2026-10-21-frontier",
+    "date": "2026-10-21",
+    "status": "provisional",
+    "dated_siu": "0.01726"
+  },
+  {
+    "print_id": "2026-10-21",
+    "date": "2026-10-21",
+    "status": "provisional",
+    "dated_siu": "0.01093"
   }
 ]

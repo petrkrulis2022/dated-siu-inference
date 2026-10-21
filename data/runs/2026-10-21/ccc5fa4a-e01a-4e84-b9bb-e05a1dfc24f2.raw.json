@@ -1,0 +1,39 @@
+{
+  "id": "47fbf5d8-239f-93f4-a8f5-91ef8f1a994c",
+  "object": "chat.completion",
+  "created": 1792544365,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "FAE507\n9FC767\n7E5945\n66143B",
+        "reasoning_content": "I am scanning the archive log for internal notes that list archival access codes for named annexes.\n\nI found four access codes in the document: FAE507 for the western annex, 9FC767 for the southern annex, 7E5945 for the lower annex, and 66143B for the northern annex.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21537,
+    "completion_tokens": 16,
+    "total_tokens": 21967,
+    "prompt_tokens_details": {
+      "text_tokens": 21537,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 414,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 448860000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

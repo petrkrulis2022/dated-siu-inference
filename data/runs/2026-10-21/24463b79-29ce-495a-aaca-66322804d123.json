@@ -1,0 +1,18 @@
+{
+  "run_id": "24463b79-29ce-495a-aaca-66322804d123",
+  "model_id": "gpt-5.1",
+  "task_class": "T2",
+  "instance_id": "T2-03",
+  "seed": 767507173,
+  "attempt": 1,
+  "usage": {
+    "input": 21772,
+    "output": 27,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 2431,
+  "gate_passed": true,
+  "raw_response_ref": "24463b79-29ce-495a-aaca-66322804d123.raw.json",
+  "deviations": []
+}
