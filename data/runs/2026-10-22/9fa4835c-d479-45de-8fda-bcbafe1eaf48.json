@@ -1,0 +1,18 @@
+{
+  "run_id": "9fa4835c-d479-45de-8fda-bcbafe1eaf48",
+  "model_id": "claude-haiku-4-5",
+  "task_class": "T2",
+  "instance_id": "T2-00",
+  "seed": 949241507,
+  "attempt": 1,
+  "usage": {
+    "input": 22837,
+    "output": 25,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 1091,
+  "gate_passed": true,
+  "raw_response_ref": "9fa4835c-d479-45de-8fda-bcbafe1eaf48.raw.json",
+  "deviations": []
+}

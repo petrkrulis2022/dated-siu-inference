@@ -1,0 +1,46 @@
+{
+  "id": "gen-1792630597-ATMhzW7pa1NSdmoRp80Z",
+  "object": "chat.completion",
+  "created": 1792630597,
+  "model": "meta-llama/llama-3.3-70b-instruct",
+  "provider": "DeepInfra",
+  "system_fingerprint": null,
+  "service_tier": "default",
+  "choices": [
+    {
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": "stop",
+      "native_finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "Here are the archival access codes mentioned in the document:\n\n1. 29BB2D\n2. D1DE8A\n3. 3533F4\n4. 5C94DA",
+        "refusal": null,
+        "reasoning": null
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21279,
+    "completion_tokens": 43,
+    "total_tokens": 21322,
+    "cost": 0.00214166,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": 0.00214166,
+      "upstream_inference_prompt_cost": 0.0021279,
+      "upstream_inference_completions_cost": 0.00001376
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "image_tokens": 0,
+      "audio_tokens": 0
+    }
+  }
+}

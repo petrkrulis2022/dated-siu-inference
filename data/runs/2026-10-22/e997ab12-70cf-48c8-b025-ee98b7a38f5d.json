@@ -1,0 +1,18 @@
+{
+  "run_id": "e997ab12-70cf-48c8-b025-ee98b7a38f5d",
+  "model_id": "gpt-5.1",
+  "task_class": "T2",
+  "instance_id": "T2-02",
+  "seed": 982796745,
+  "attempt": 1,
+  "usage": {
+    "input": 21568,
+    "output": 26,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 3874,
+  "gate_passed": true,
+  "raw_response_ref": "e997ab12-70cf-48c8-b025-ee98b7a38f5d.raw.json",
+  "deviations": []
+}

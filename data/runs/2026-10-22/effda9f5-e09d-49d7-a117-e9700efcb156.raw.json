@@ -1,0 +1,35 @@
+{
+  "id": "chatcmpl-EbbPuWjc2f0b0ul2q9e3Wfw0gWuAK",
+  "object": "chat.completion",
+  "created": 1792630674,
+  "model": "gpt-5.1-2025-11-13",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "6D7A04\nE18DA3\nC0B89A\nC567C1",
+        "refusal": null,
+        "annotations": []
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21248,
+    "completion_tokens": 30,
+    "total_tokens": 21278,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    }
+  },
+  "service_tier": "default",
+  "system_fingerprint": null
+}
