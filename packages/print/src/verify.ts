@@ -1,6 +1,7 @@
 import type { Print } from "@touchstone/sdk";
 import { validatePrint } from "@touchstone/sdk";
 import { computePrint, type PrintInput } from "./compute/index.js";
+import { SUCCESSFUL_CALL_VARIANT_NAME } from "./compute/sensitivity.js";
 import { canonicalise, printBodyOf } from "./sign/canonicalise.js";
 import { verifyPrintSignature } from "./sign/sign.js";
 
@@ -126,6 +127,19 @@ export function verifyPrint(print: Print, input?: PrintInput): VerifyResult {
       row.siu_per_usd,
       discrepancies,
     );
+  }
+
+  // The successful-call basis (rules-2026-10-24) is published in the sensitivity block, and a published figure must reproduce like any other. Checked only when the print carries it: no
+  // earlier print published it, and none is held to a variant it never had.
+  const publishedSuccessful = print.sensitivity_block.find(
+    (v) => v.policy_variant === SUCCESSFUL_CALL_VARIANT_NAME,
+  );
+  if (publishedSuccessful !== undefined) {
+    const recomputedSuccessful = body.sensitivity_block.find(
+      (v) => v.policy_variant === SUCCESSFUL_CALL_VARIANT_NAME,
+    );
+    compare("sensitivity_block[successful-call].dated_siu", publishedSuccessful.dated_siu, recomputedSuccessful?.dated_siu, discrepancies);
+    compare("sensitivity_block[successful-call].delta", publishedSuccessful.delta, recomputedSuccessful?.delta, discrepancies);
   }
 
   const publishedWeights = new Map([...print.weights.values].map((w) => [w.model_id, w.weight]));

@@ -1,3 +1,4 @@
+import type { RunRecord } from "@touchstone/sdk";
 import { D } from "../decimal.js";
 import type { TaskClass } from "./basket-cost.js";
 import type { ModelPrice } from "./class-cost.js";
@@ -22,6 +23,11 @@ export interface PolicyVariant {
   /** Model ids the variant applies to; published alongside the delta. */
   appliesTo: string[];
   adjust: (modelId: string, taskClass: TaskClass) => PolicyAdjustment | undefined;
+  /**
+   * Optional: the usage a run record is priced on under this variant, where the policy changes WHAT is billed and not what a token costs (the successful-call basis below). Absent means every
+   * record keeps its own usage. It runs through the same cost, basket and index code as the headline, like the price adjustments do.
+   */
+  adjustUsage?: (modelId: string, record: RunRecord) => RunRecord["usage"];
 }
 
 export function applyAdjustment(price: ModelPrice, adjustment?: PolicyAdjustment): ModelPrice {
@@ -101,5 +107,47 @@ export function batchDiscountVariant(options: BatchDiscountOptions): PolicyVaria
       models.has(modelId) && (!classes || classes.has(taskClass))
         ? { inputMultiplier: multiplier, outputMultiplier: multiplier }
         : undefined,
+  };
+}
+
+/** The exact name the successful-call variant carries in a print's sensitivity block. Verification finds the variant by this name, so it never applies to a print that did not publish it. */
+export const SUCCESSFUL_CALL_VARIANT_NAME =
+  "successful-call-only: a retried run's discarded first call not priced (docs/methodology.md, rules-2026-10-24)";
+
+/**
+ * The usage of the discarded first call of a retried run, by run id. A run whose completion was cut off by its budget is retried with a larger one (`REASONING_BUDGET_MULTIPLE`); the provider
+ * bills both calls, and the record's usage is their sum. This is the cut-off call alone, taken from the saved raw response.
+ */
+export type DiscardedFirstCalls = ReadonlyMap<string, RunRecord["usage"]>;
+
+export interface SuccessfulCallOptions {
+  discarded: DiscardedFirstCalls;
+  /** The models that have at least one discarded call among these inputs; published with the delta. */
+  appliesTo: string[];
+  name?: string;
+}
+
+/**
+ * The successful-call basis (docs/methodology.md, rules-2026-10-24): what the print would be if each retried run were priced on its successful call alone, as a buyer who had set the right budget
+ * from the start would pay. Published beside the headline during the notice period, never in place of it. It changes no price: it takes the discarded call's tokens off the usage of the runs that
+ * have one, and everything else is the headline's own arithmetic.
+ */
+export function successfulCallVariant(options: SuccessfulCallOptions): PolicyVariant {
+  const models = new Set(options.appliesTo);
+  return {
+    name: options.name ?? SUCCESSFUL_CALL_VARIANT_NAME,
+    appliesTo: [...models],
+    adjust: () => undefined,
+    adjustUsage: (modelId, record) => {
+      const gone = models.has(modelId) ? options.discarded.get(record.run_id) : undefined;
+      if (gone === undefined) return record.usage;
+      const take = (have: number, off: number): number => Math.max(0, have - off);
+      return {
+        input: take(record.usage.input, gone.input),
+        output: take(record.usage.output, gone.output),
+        cached_input: take(record.usage.cached_input, gone.cached_input),
+        reasoning: take(record.usage.reasoning, gone.reasoning),
+      };
+    },
   };
 }

@@ -22,6 +22,7 @@ import {
   type OrchestratorTask,
 } from "@touchstone/harness";
 import { batchDiscountVariant, cachePolicyVariant } from "../compute/sensitivity.js";
+import { successfulCallVariants } from "./discarded-calls.js";
 import { loadPublisherKeyFromEnv } from "../sign/sign.js";
 import { OnChainAttestationClient } from "../anchor/on-chain.js";
 import { FallbackAttestationClient, SkippingAttestationClient, type SecondaryAttestation } from "../anchor/attestation.js";
@@ -80,7 +81,8 @@ const CARRY_FORWARD_ENABLED = process.env.TOUCHSTONE_CARRY_FORWARD_ENABLED === "
 /** docs/methodology.md's Revision history table — bump this when a future rule change alters
  * published values, and add the matching row there. Every print from this one onward states
  * which rule set produced it, forward-only; no historical print needs the field retroactively. */
-const METHODOLOGY_REVISION = CARRY_FORWARD_ENABLED ? "rules-2026-09-26" : "rules-2026-09-25";
+// rules-2026-10-24 is rules-2026-09-26 plus the successful-call basis published beside the headline (docs/methodology.md); the older id is kept for a run with carry-forward off, which publishes neither.
+const METHODOLOGY_REVISION = CARRY_FORWARD_ENABLED ? "rules-2026-10-24" : "rules-2026-09-25";
 
 const printId = process.argv[2] || new Date().toISOString().slice(0, 10);
 const printDate = DATE_PATTERN.test(printId) ? printId : new Date().toISOString().slice(0, 10);
@@ -333,6 +335,14 @@ console.log(
     ? `Carry-forward ENABLED: ${carryForwardHistory!.length} prior day(s) loaded.`
     : "Carry-forward disabled (TOUCHSTONE_CARRY_FORWARD_ENABLED is not \"true\").",
 );
+// The successful-call basis, published beside the headline (docs/methodology.md, rules-2026-10-24): every run record the blend prices (a carried-forward row's included) and where its raw file is.
+const blendSuccessfulCallVariants = CARRY_FORWARD_ENABLED
+  ? await successfulCallVariants(
+      [...records, ...(carryForwardHistory ?? []).flatMap((d) => [...d.records.values()].flat())],
+      [runsDirFor(printId), ...(carryForwardHistory ?? []).map((d) => runsDirFor(d.date))],
+      allModelIds,
+    )
+  : [];
 try {
   const result = await publishPrint(printsDir(), {
     version: BASKET_VERSION,
@@ -365,6 +375,7 @@ try {
         taskClasses: ["T2"],
       }),
       batchDiscountVariant({ discount: "0.50", appliesTo: allModelIds }),
+      ...blendSuccessfulCallVariants,
     ],
   });
 
@@ -460,6 +471,9 @@ try {
             taskClasses: ["T2"],
           }),
           batchDiscountVariant({ discount: "0.50", appliesTo: seriesModelIds }),
+          ...(CARRY_FORWARD_ENABLED
+            ? await successfulCallVariants(records, [runsDirFor(printId)], seriesModelIds)
+            : []),
         ],
       });
       console.log(

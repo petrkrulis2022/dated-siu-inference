@@ -132,6 +132,14 @@ export interface ComputedIndex {
   weights: Map<string, DecimalValue>;
 }
 
+/** The records as a variant prices them: each keeps its own usage unless the variant says what is billed differently (`PolicyVariant.adjustUsage`). */
+function usageUnder(modelId: string, records: RunRecord[], variant?: PolicyVariant): RunRecord[] {
+  const adjust = variant?.adjustUsage;
+  return adjust === undefined
+    ? records
+    : records.map((r) => ({ ...r, usage: adjust(modelId, r) }));
+}
+
 function computeIndex(
   models: ModelInput[],
   classWeights: ClassWeights,
@@ -147,7 +155,7 @@ function computeIndex(
   for (const model of models) {
     const byClass = {} as Record<TaskClass, ReturnType<typeof computeClassCost>>;
     for (const cls of TASK_CLASSES) {
-      const classRecords = model.records.filter((r) => r.task_class === cls);
+      const classRecords = usageUnder(model.model_id, model.records.filter((r) => r.task_class === cls), variant);
       const price = applyAdjustment(model.price, variant?.adjust(model.model_id, cls));
       byClass[cls] = computeClassCost(classRecords, price);
     }
@@ -166,7 +174,7 @@ function computeIndex(
       // measured usage itself is stale. Same per-class pipeline a real measurement goes through.
       const carriedByClass = {} as Record<TaskClass, ReturnType<typeof computeClassCost>>;
       for (const cls of TASK_CLASSES) {
-        const classRecords = carried.records.filter((r) => r.task_class === cls);
+        const classRecords = usageUnder(model.model_id, carried.records.filter((r) => r.task_class === cls), variant);
         const price = applyAdjustment(model.price, variant?.adjust(model.model_id, cls));
         carriedByClass[cls] = computeClassCost(classRecords, price);
       }

@@ -25,6 +25,7 @@ import {
   type OrchestratorTask,
 } from "@touchstone/harness";
 import { batchDiscountVariant, cachePolicyVariant } from "../compute/sensitivity.js";
+import { successfulCallVariants } from "./discarded-calls.js";
 import { loadPublisherKeyFromEnv } from "../sign/sign.js";
 import { OnChainAttestationClient } from "../anchor/on-chain.js";
 import {
@@ -200,6 +201,13 @@ if (CARRY_FORWARD_ENABLED) {
 } else {
   console.log("Carry-forward disabled (TOUCHSTONE_CARRY_FORWARD_ENABLED is not \"true\").");
 }
+const blendSuccessfulCallVariants = CARRY_FORWARD_ENABLED
+  ? await successfulCallVariants(
+      [...records, ...(carryForwardHistory ?? []).flatMap((d) => [...d.records.values()].flat())],
+      [runsDirFor(printId), ...(carryForwardHistory ?? []).map((d) => runsDirFor(d.date))],
+      allModelIds,
+    )
+  : [];
 const result = await publishPrint(printsDir(), {
   version: BASKET_VERSION,
   print_id: printId,
@@ -228,6 +236,7 @@ const result = await publishPrint(printsDir(), {
       taskClasses: ["T2"],
     }),
     batchDiscountVariant({ discount: "0.50", appliesTo: allModelIds }),
+    ...blendSuccessfulCallVariants,
   ],
 });
 
@@ -315,6 +324,9 @@ for (const { series, seriesModels, registryIds } of tierGroups) {
           taskClasses: ["T2"],
         }),
         batchDiscountVariant({ discount: "0.50", appliesTo: seriesModelIds }),
+        ...(CARRY_FORWARD_ENABLED
+          ? await successfulCallVariants(records, [runsDirFor(printId)], seriesModelIds)
+          : []),
       ],
     });
     console.log(

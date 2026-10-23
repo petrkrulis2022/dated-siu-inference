@@ -2,7 +2,12 @@ import { readdir } from "node:fs/promises";
 import type { Print } from "@touchstone/sdk";
 import { TASK_CLASSES, BASKET_VERSION } from "@touchstone/basket";
 import type { RoundingRules } from "../rounding.js";
-import { cachePolicyVariant, batchDiscountVariant } from "../compute/sensitivity.js";
+import {
+  SUCCESSFUL_CALL_VARIANT_NAME,
+  cachePolicyVariant,
+  batchDiscountVariant,
+} from "../compute/sensitivity.js";
+import { successfulCallVariants } from "./discarded-calls.js";
 import type { PrintInput, ModelInput } from "../compute/index.js";
 import type { Discrepancy } from "../verify.js";
 import { historicalPricingRulesFor } from "./historical-pricing-rules.js";
@@ -115,6 +120,21 @@ export async function buildVerifyInput(print: Print): Promise<BuiltVerifyInput> 
     // different qualifying set than the one actually signed — a false discrepancy, not a real one.
     const revisionDate = print.methodology_revision?.match(/^rules-(\d{4}-\d{2}-\d{2})/)?.[1];
     const carryForwardApplies = !print.series && revisionDate !== undefined && revisionDate >= "2026-09-26";
+    const carryForwardHistory = carryForwardApplies
+      ? await loadCarryForwardHistory(printsDir(), print.date)
+      : undefined;
+    // The successful-call basis (rules-2026-10-24) is verified only for a print that published it: found by the variant's own name in the print's sensitivity block, never by date, so no
+    // earlier print is recomputed with a variant it never carried.
+    const publishedSuccessfulCall = (print.sensitivity_block ?? []).some(
+      (v) => v.policy_variant === SUCCESSFUL_CALL_VARIANT_NAME,
+    );
+    const successfulCall = publishedSuccessfulCall
+      ? await successfulCallVariants(
+          [...records, ...(carryForwardHistory ?? []).flatMap((d) => [...d.records.values()].flat())],
+          [runsDirFor(baseRunsPrintId), ...(carryForwardHistory ?? []).map((d) => runsDirFor(d.date))],
+          allModelIds,
+        )
+      : [];
 
     const input: PrintInput = {
       version: BASKET_VERSION,
@@ -137,9 +157,7 @@ export async function buildVerifyInput(print: Print): Promise<BuiltVerifyInput> 
       // itself never enum-restricted them) — every real print's own field is one of the two
       // literal values RoundingRules actually requires, enforced at the point it was published.
       rounding: print.rounding as RoundingRules,
-      ...(carryForwardApplies
-        ? { carryForwardHistory: await loadCarryForwardHistory(printsDir(), print.date) }
-        : {}),
+      ...(carryForwardHistory !== undefined ? { carryForwardHistory } : {}),
       // Reproduce the same opt-in this print itself declares, not a revision-date guess — direct
       // and precise, since the published print is the ground truth for whether it carries the
       // field at all (see PrintInput.publishMedianDiagnostic's own doc comment).
@@ -154,6 +172,7 @@ export async function buildVerifyInput(print: Print): Promise<BuiltVerifyInput> 
           taskClasses: ["T2" as const],
         }),
         batchDiscountVariant({ discount: "0.50", appliesTo: allModelIds }),
+        ...successfulCall,
       ],
     };
 
