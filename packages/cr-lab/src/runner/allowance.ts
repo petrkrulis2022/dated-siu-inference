@@ -55,6 +55,19 @@ export function observationOf(r: AnswerRecord): Observation | undefined {
   };
 }
 
+/**
+ * The observations of an MCP-mode session: one per model call (a turn), because the allowance in MCP mode is per turn. A turn that stopped on `max_tokens` is cut off, so its need is only a lower
+ * bound. A session that never answers contributes its turns like any other; it also counts as zero in the results and is named in the MCP findings (D120).
+ */
+export function mcpObservationsOf(r: AnswerRecord): Observation[] {
+  if (r.part !== "mcp" || r.mcp === undefined) return [];
+  return r.mcp.turns.map((t) => ({
+    task: r.task,
+    need: t.output_tokens,
+    censored: t.stop_reason === "max_tokens",
+  }));
+}
+
 /** The rule: 6/5 of the largest need seen, rounded up to a multiple of 2,000, never below the print's allowance. A task with no observation keeps the print's allowance. */
 export function deriveAllowances(obs: readonly Observation[]): Record<TaskId, number> {
   const out = { ...PRINT_ALLOWANCE } as Record<TaskId, number>;
@@ -74,6 +87,8 @@ export interface AllowanceFile {
 }
 
 export const ALLOWANCES_PATH = join(CR_PUBLIC_DIR, "allowances.json");
+/** MCP mode's own frozen per-turn allowances, derived by the same rule from MCP-mode observations (D120). */
+export const MCP_ALLOWANCES_PATH = join(CR_PUBLIC_DIR, "allowances-mcp.json");
 
 /** The frozen allowances, read once. The file must give every task a whole multiple of 2,000 that is not below the print's own. */
 const cache = new Map<string, Record<TaskId, number>>();

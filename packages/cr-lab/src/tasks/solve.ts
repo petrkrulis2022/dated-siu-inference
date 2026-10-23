@@ -126,10 +126,17 @@ export function plQuarters(window: string): Quarter[] {
   });
 }
 
+/**
+ * `deriveRevenue` is for a day built from what a model read (MCP mode, D117). The question defines revenue as fees minus payouts, computed from the answer's own two figures, so a model that
+ * reads only the three fields it needs (fees, interest, net interest income) has read everything the question needs; requiring the `revenue-usd` field as well graded a correct session
+ * "insufficient" (the first live Sonnet session, 2026-10-20). A day's revenue the data does not hold is then fees minus (interest minus net interest income), the identity D89 calibrated
+ * (153 of 153 days, worst deviation 3e-16). A missing fees, interest or net-interest figure is still a gap. Snapshot mode keeps the field, as before.
+ */
 export function solvePL(
   day: DayData,
   protocolId: string,
   q: Pick<Quarter, "start" | "end">,
+  opts: { deriveRevenue?: boolean } = {},
 ): PLReference | undefined {
   const series = day.lending.get(protocolId);
   if (series === undefined) return undefined;
@@ -142,13 +149,13 @@ export function solvePL(
     if (
       p === undefined ||
       p.fees === null ||
-      p.revenue === null ||
+      (p.revenue === null && opts.deriveRevenue !== true) ||
       p.interest === null ||
       p.nii === null
     )
       return undefined; // a gap: not offered
     fees = fees.plus(p.fees);
-    revenue = revenue.plus(p.revenue);
+    revenue = revenue.plus(p.revenue ?? p.fees.minus(p.interest.minus(p.nii)));
     interest = interest.plus(p.interest);
     nii = nii.plus(p.nii);
   }

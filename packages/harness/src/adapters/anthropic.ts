@@ -1,5 +1,6 @@
 import {
   AdapterHttpError,
+  withBilledUsage,
   REASONING_BUDGET_MULTIPLE,
   type Adapter,
   type AdapterParams,
@@ -114,7 +115,18 @@ export function createAnthropicAdapter(apiKey: string): Adapter {
           `against a ${params.max_tokens}-token task budget) — retried with reasoning accommodated ` +
           `above the task budget, capped at ${REASONING_BUDGET_MULTIPLE}x (${accommodatedBudget} tokens total)`,
       );
-      result = await callAnthropic(apiKey, modelString, prompt, params, includeTemperature, accommodatedBudget);
+      try {
+        result = await callAnthropic(apiKey, modelString, prompt, params, includeTemperature, accommodatedBudget);
+      } catch (err) {
+        // the truncated first call was billed even though the retry failed: mark the error with its usage so the caller can still book it
+        const u = truncatedResult.response.usage;
+        throw withBilledUsage(err, {
+          input: u.input_tokens,
+          output: u.output_tokens,
+          cached_input: u.cache_read_input_tokens ?? 0,
+          reasoning: u.output_tokens_details?.thinking_tokens ?? 0,
+        });
+      }
     }
 
     const { response, latencyMs } = result;

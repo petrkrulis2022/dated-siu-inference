@@ -8,6 +8,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, relative } from "node:path";
 import { D, roundHalfUp } from "@touchstone/sdk";
 import { PRIVATE_DIR, pathWithin, privatePath } from "../paths.js";
+import { MCP_ALLOWANCES_PATH, loadAllowances } from "../runner/allowance.js";
 import { recordKey, type AnswerRecord, type RecordStore } from "../runner/records.js";
 import type { Seat } from "../runner/run-answer.js";
 import { SpendStopped, type SpendLedger } from "../spend/ledger.js";
@@ -25,7 +26,9 @@ import {
 } from "./anthropic-loop.js";
 import { buildMcpPrompt } from "./prompts.js";
 import { toMcpInstance } from "./variants.js";
-import { dayFromRelayed, gradeMcpAnswer } from "./relayed.js";
+import { classifyIncident, McpSessionsAborted } from "./incident-guard.js";
+import { KeyUnavailable, type SessionKey } from "./key-snapshot.js";
+import { dayFromRelayed, gradeMcpAnswer, referenceFor } from "./relayed.js";
 import type { McpBackend } from "./types.js";
 
 /** The tasks MCP mode runs for now: CR-UO waits for the live tool list, because where unlock schedules sit in the MCP's models is not known until the owner has signed in (D91). */
@@ -45,6 +48,11 @@ export interface RunMcpAnswerInput {
   daySha256: string;
   /** MCP mode's variant of the question, recorded with the session */
   variant?: string;
+  /**
+   * The answer key for this session, pulled just before it starts (D117). A pull that fails, or data that cannot answer the question, aborts the run BEFORE the model is called
+   * (`McpSessionsAborted`). Without it the instance's own key grades (the day's snapshot), which is what the fixtures and the dry-run command do.
+   */
+  keyFor?: (instance: Instance, seat: Seat) => Promise<SessionKey>;
   limits?: Partial<LoopLimits>;
   /** where the session's relayed results are kept (private); defaults to the trial's private sessions directory */
   sessionsDir?: string;
@@ -70,6 +78,28 @@ export async function runMcpAnswer(
     );
   const now = input.now ?? (() => new Date());
   const prompt = buildMcpPrompt(instance, input.window);
+  // the answer key at the session's own time, before any money is spent on the model
+  let graded: Instance = instance;
+  let key: SessionKey | undefined;
+  if (input.keyFor !== undefined) {
+    try {
+      key = await input.keyFor(instance, seat);
+    } catch (e) {
+      throw new McpSessionsAborted(classifyIncident(e), instance.id, seat.modelId);
+    }
+    const reference = referenceFor(instance, key.day);
+    if (reference === undefined)
+      throw new McpSessionsAborted(
+        classifyIncident(new KeyUnavailable(instance.id)),
+        instance.id,
+        seat.modelId,
+      );
+    graded = { ...instance, reference } as Instance;
+  }
+  // the per-turn output allowance of this task in MCP mode: the frozen rule of D120 (the same rule as snapshot mode, from MCP-mode turns); an explicit limit overrides it
+  const turnAllowance = loadAllowances(MCP_ALLOWANCES_PATH)[instance.task];
+  const limits: Partial<LoopLimits> = { maxTokensPerTurn: turnAllowance, ...(input.limits ?? {}) };
+  const startedAt = now();
   const session: SessionResult = await runToolLoop({
     chat,
     mcp: input.mcp,
@@ -79,12 +109,23 @@ export async function runMcpAnswer(
     price: seat.price,
     prompt: prompt.text,
     what: instance.id,
-    ...(input.limits !== undefined ? { limits: input.limits } : {}),
+    limits,
   });
 
+  // the model call itself failed for the provider's or the network's reasons: not a result about the model, not recorded, drawn again (D122). The money its earlier turns spent stays booked.
+  if (session.serviceFailure === true)
+    throw new McpSessionsAborted(
+      {
+        kind: "model-api-failure",
+        detail: `model call failed (${session.error ?? "no reason kept"})`,
+      },
+      instance.id,
+      seat.modelId,
+    );
+  const endedAt = now();
   const relayedDay = dayFromRelayed(input.window, session.relayed);
   const grade = gradeMcpAnswer({
-    instance,
+    instance: graded,
     text: session.finalText,
     relayed: relayedDay,
     ...(session.limit !== undefined ? { sessionLimit: session.limit } : {}),
@@ -134,11 +175,25 @@ export async function runMcpAnswer(
     deviations: [],
     ...(session.error !== undefined ? { error: session.error } : {}),
     raw_output: session.finalText,
+    allowance_tokens: limits.maxTokensPerTurn ?? turnAllowance,
     reasoning: session.reasoning,
     mcp: {
       ...(input.variant !== undefined ? { variant: input.variant } : {}),
       ...(grade.lenientPassed !== undefined ? { lenient_passed: grade.lenientPassed } : {}),
       snapshot_check: grade.snapshotCheck,
+      ...(key !== undefined
+        ? {
+            key: {
+              tag: key.tag,
+              sha256: key.sha256,
+              pulled_at: key.pulledAt,
+              requests: key.requests,
+              session_started_at: startedAt.toISOString(),
+              session_ended_at: endedAt.toISOString(),
+              gap_ms: endedAt.getTime() - new Date(key.pulledAt).getTime(),
+            },
+          }
+        : {}),
       ...(session.limit !== undefined ? { limit: session.limit } : {}),
       tools_offered: session.toolsOffered,
       tools_withheld: session.toolsWithheld,
@@ -173,6 +228,8 @@ export interface RunMcpDayInput {
   chatFor?: (seat: Seat) => ToolChat;
   /** for Claude seats only: the Messages API for a seat (its trial key) */
   apiFor?: (seat: Seat) => MessagesApi;
+  /** the answer key of a session, pulled at its own time (D117); see `RunMcpAnswerInput.keyFor` */
+  keyFor?: RunMcpAnswerInput["keyFor"];
   /** instances per task, default 1 (D101: eight sessions a day to start) */
   perTask?: number;
   tasks?: readonly TaskId[];
@@ -243,6 +300,7 @@ export async function runMcpDay(input: RunMcpDayInput): Promise<RunMcpDaySummary
       ledger: input.ledger,
       seat: job.seat,
       instance: job.instance,
+      ...(input.keyFor !== undefined ? { keyFor: input.keyFor } : {}),
       ...(variants.has(job.instance.id)
         ? { variant: variants.get(job.instance.id) as string }
         : {}),

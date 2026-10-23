@@ -2,9 +2,10 @@
  * The scheduled MCP-mode day (D116): what the scheduler runs, hourly, after the day's snapshot is in. Models research the day's questions through the live Blockworks MCP, and the answers
  * are graded from what they were shown (D101). The decisions here mirror the daily snapshot's (D100), because the failure modes are the same:
  *
- *  - It runs only when TODAY'S SNAPSHOT IS COMPLETE and was pulled from `PULL_FROM_UTC_HOUR` on (its status, read here, never written): the questions are drawn from the snapshot and each answer is also
- *    checked against it, and the provider publishes the previous day's figures through the morning. A snapshot pulled earlier is a day behind what the MCP serves later, so even a perfect session would
- *    fail the check against it (seen on the first live session, 2026-10-20: all 100 series the model read ended one day after the 06:19Z snapshot's).
+ *  - It runs only when TODAY'S SNAPSHOT IS COMPLETE (its status, read here, never written): the questions are drawn from it. It does not grade anything: each session is graded against its own
+ *    answer key, a REST pull taken just before it (`mcp/key-snapshot.ts`, D117), because the provider publishes through the morning and the day's one snapshot can be a day behind what the MCP
+ *    serves later (2026-10-20: all 100 series compared ended one day later through the MCP at 12:49Z than in the 06:19Z snapshot). D116 had restricted sessions to a snapshot pulled from 12:00 UTC;
+ *    that is replaced, because it does not keep the promise to Blockworks of an answer key taken at the same time.
  *  - One LOCK shared with the pull, so the two can never overlap; a run that finds it held does nothing.
  *  - A CATCH-UP: an hourly run that finds the day's sessions all recorded does nothing and sends no request; one that finds some missing runs the rest (a recorded session is never repeated).
  *    A session that met a SERVICE FAILURE is not recorded (`incident-guard.ts`), so it is drawn again; at `MAX_FAILED_ATTEMPTS` failed runs in a day it stops and says so.
@@ -26,12 +27,15 @@ import {
   type DayStatus,
   type StatusStore,
 } from "./status.js";
-import { ALERT_GAP_MS, PULL_FROM_UTC_HOUR } from "./daily-snapshot.js";
+import { ALERT_GAP_MS } from "./daily-snapshot.js";
 
 /** The two models of D101 and the tasks the MCP can run for now (CR-UO waits for its metric names). */
 export const MCP_MODELS: readonly string[] = ["claude-sonnet-5", "claude-haiku-4-5"];
-/** Live tool calls across a day's attempts: below the governor's own 200 a day, so retries cannot add up past it. A full day of six sessions is about 60. */
-export const MCP_REQUEST_CEILING = 120;
+/**
+ * Live requests across a day's attempts, the MCP's tool calls and the Data API pulls of the answer keys together: a full day of six sessions is about 60 to 80 tool calls and up to about 55 key
+ * pulls (my estimate, to be replaced by the first days' counts). Below 2 x the governor's 200 a group a day, so retries cannot add up past it.
+ */
+export const MCP_REQUEST_CEILING = 200;
 /** Runs that stopped on a failure, per day, after which no more are tried: each can spend a session's money before the failure shows. */
 export const MAX_FAILED_ATTEMPTS = 4;
 /** The evening check judges a day only from this UTC hour (same reasoning as the snapshot's watchdog, D110). */
@@ -42,7 +46,6 @@ export type DailyMcpOutcome =
   | "partial"
   | "already-complete"
   | "snapshot-not-complete"
-  | "snapshot-before-pull-time"
   | "already-running"
   | "failed"
   | "login-required"
@@ -51,7 +54,7 @@ export type DailyMcpOutcome =
   | "attempts-exhausted"
   | "watchdog-ok"
   | "watchdog-early"
-  | "watchdog-no-usable-snapshot"
+  | "watchdog-snapshot-not-complete"
   | "watchdog-running"
   | "watchdog-alert";
 
@@ -102,14 +105,7 @@ export async function runDailyMcp(
   };
 
   const todays = deps.status.read(window) ?? emptyStatus(window);
-  const snapshot = deps.snapshotStatus.read(window);
-  const snapshotDone = snapshot?.state === "complete";
-  // pulled from the pull hour on, or the live data is a day ahead of it (see the header)
-  const snapshotUsable =
-    snapshotDone &&
-    snapshot.completedAt !== undefined &&
-    new Date(snapshot.completedAt).getTime() >=
-      new Date(`${window}T${String(PULL_FROM_UTC_HOUR).padStart(2, "0")}:00:00Z`).getTime();
+  const snapshotDone = deps.snapshotStatus.read(window)?.state === "complete";
 
   if (deps.mode === "watchdog") {
     if (todays.state === "complete") {
@@ -122,10 +118,10 @@ export async function runDailyMcp(
       );
       return { outcome: "watchdog-early", window };
     }
-    if (!snapshotUsable) {
-      // no usable snapshot, so no MCP day is possible; the snapshot's own evening check reports a missing one
-      log(`watchdog: there is no usable snapshot for ${window}, so there is no MCP day to judge`);
-      return { outcome: "watchdog-no-usable-snapshot", window };
+    if (!snapshotDone) {
+      // no snapshot, so no MCP day is possible; the snapshot's own evening check reports that
+      log(`watchdog: the snapshot for ${window} is not complete, so there is no MCP day to judge`);
+      return { outcome: "watchdog-snapshot-not-complete", window };
     }
     const running = lockOwner(deps.lockPath, deps.lockDeps);
     if (running !== undefined) {
@@ -148,12 +144,6 @@ export async function runDailyMcp(
   if (!snapshotDone) {
     log(`the snapshot for ${window} is not complete yet: no MCP sessions without it`);
     return { outcome: "snapshot-not-complete", window };
-  }
-  if (!snapshotUsable) {
-    log(
-      `the snapshot for ${window} was pulled before ${PULL_FROM_UTC_HOUR}:00 UTC (at ${snapshot.completedAt ?? "an unknown time"}): the live data is a day ahead of it, so no MCP sessions on it`,
-    );
-    return { outcome: "snapshot-before-pull-time", window };
   }
   if (requestsUsed(todays) >= MCP_REQUEST_CEILING) {
     await alert(

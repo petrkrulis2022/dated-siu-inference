@@ -8,6 +8,8 @@ import {
   RateGovernor,
   RateLimited,
 } from "../data-desk/governor.js";
+import { DataDesk } from "../data-desk/desk.js";
+import { FixtureBackend } from "../data-desk/fixtures/backend.js";
 import { runLiveMcpDay, type LiveMcpRunDeps } from "../ops/mcp-live-run.js";
 import { MemoryRecordStore, type AnswerRecord } from "../runner/records.js";
 import { standInSeat } from "../runner/stand-in-models.js";
@@ -125,6 +127,14 @@ describe("the watch and the store", () => {
   });
 });
 
+const fastGovernor = () =>
+  new RateGovernor({
+    overrides: {
+      mcp: { minIntervalMs: 0 },
+      "data-api": { minIntervalMs: 0, baseBackoffMs: 1, maxBackoffMs: 1, maxRetries: 1 },
+    },
+  });
+
 describe("a scheduled day on the fake server: an outage is not a result about a model", () => {
   let f: FixtureDay;
   let tmp: string;
@@ -172,8 +182,16 @@ describe("a scheduled day on the fake server: an outage is not a result about a 
       }),
       seats: [seat],
       chatFor: (s) => anthropicChat(api, s.modelString),
-      connect: async () => backend,
-      governor: new RateGovernor({ overrides: { mcp: { minIntervalMs: 0 } } }),
+      // the key pull (D117) goes through the data desk the run is given, over the same governor, and sees the data a day later than the day's snapshot did
+      connect: async (g) => ({
+        mcp: backend,
+        desk: new DataDesk({
+          backend: new FixtureBackend({ lagByModel: LIVE_LAG }),
+          store: f.store,
+          governor: g,
+        }),
+      }),
+      governor: fastGovernor(),
       tasks: ["CR-SM"],
       sessionsDir: join(tmp, "sessions"),
     };
@@ -224,29 +242,50 @@ describe("a scheduled day on the fake server: an outage is not a result about a 
     expect(records.forWindow(f.day.window)).toHaveLength(0);
   });
 
-  it("counts the live tool calls even when the run ends on a failure, so retries cannot add up past the day's ceiling", async () => {
-    const records = new MemoryRecordStore();
-    const governor = new RateGovernor({ overrides: { mcp: { minIntervalMs: 0 } } });
-    const tally = { requests: 0 };
-    // the backend does its calls through the governor, as the live one does, and the service fails on the first (the scripted researcher makes one call for this question)
-    const inner = healthy();
-    let n = 0;
-    const counted: McpBackend & { close(): Promise<void> } = {
-      name: "fake",
-      tools: () => inner.tools(),
-      call: async (name, args) => {
-        const value = await governor.run("mcp", async () => ({
-          status: 200,
-          value: await inner.call(name, args),
-        }));
-        if (++n === 1) throw new RateLimited("mcp", 429, 5);
-        return value;
-      },
-      close: async () => {},
-    };
-    await expect(
-      runLiveMcpDay(f.day.window, { ...deps(records, counted), governor }, () => undefined, tally),
-    ).rejects.toBeInstanceOf(McpSessionsAborted);
-    expect(tally.requests).toBe(1);
+  it("counts the live requests, the MCP's tool calls and the Data API pulls of the answer key, even when the run ends on a failure, so retries cannot add up past the day's ceiling", async () => {
+    // a store of its own, so the answer key is pulled rather than found from an earlier test
+    const g = await fixtureDay(undefined, {}, LIVE_LAG);
+    try {
+      const records = new MemoryRecordStore();
+      const governor = fastGovernor();
+      const tally = { requests: 0 };
+      const keyBackend = new FixtureBackend({ lagByModel: LIVE_LAG });
+      // the MCP does its calls through the governor, as the live one does, and the service fails on the first
+      const inner = healthy();
+      let n = 0;
+      const counted: McpBackend & { close(): Promise<void> } = {
+        name: "fake",
+        tools: () => inner.tools(),
+        call: async (name, args) => {
+          const value = await governor.run("mcp", async () => ({
+            status: 200,
+            value: await inner.call(name, args),
+          }));
+          if (++n === 1) throw new RateLimited("mcp", 429, 5);
+          return value;
+        },
+        close: async () => {},
+      };
+      await expect(
+        runLiveMcpDay(
+          g.day.window,
+          {
+            ...deps(records, counted),
+            store: g.store,
+            governor,
+            connect: async (gov) => ({
+              mcp: counted,
+              desk: new DataDesk({ backend: keyBackend, store: g.store, governor: gov }),
+            }),
+          },
+          () => undefined,
+          tally,
+        ),
+      ).rejects.toBeInstanceOf(McpSessionsAborted);
+      expect(keyBackend.requests.length).toBeGreaterThan(0);
+      expect(tally.requests).toBe(1 + keyBackend.requests.length);
+    } finally {
+      g.cleanup();
+    }
   });
 });

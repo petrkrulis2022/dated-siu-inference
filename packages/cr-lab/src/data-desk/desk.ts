@@ -57,6 +57,7 @@ export class DataDesk {
   readonly #backend: DataBackend;
   readonly #store: SnapshotStore;
   readonly #governor: RateGovernor;
+  readonly #groupFor: (query: Query) => string;
   readonly #now: () => Date;
   readonly #log: (line: string) => void;
   readonly #inFlight = new Map<string, Promise<Snapshot>>();
@@ -65,12 +66,18 @@ export class DataDesk {
     backend: DataBackend;
     store: SnapshotStore;
     governor?: RateGovernor;
+    /**
+     * Which governor group paces a query. Default: the query's own (`data-api`, `token-unlocks`). A caller that talks to the provider by two routes at once can pass one group for both, so the two
+     * share one spacing, one back-off and one hourly count: the provider's limit is on the account's requests, not on the route (the MCP session and its REST answer key, D122).
+     */
+    groupFor?: (query: Query) => string;
     now?: () => Date;
     log?: (line: string) => void;
   }) {
     this.#backend = opts.backend;
     this.#store = opts.store;
     this.#governor = opts.governor ?? new RateGovernor();
+    this.#groupFor = opts.groupFor ?? governorGroup;
     this.#now = opts.now ?? (() => new Date());
     this.#log = opts.log ?? (() => undefined);
   }
@@ -108,7 +115,7 @@ export class DataDesk {
     if (stored !== undefined) return this.#snapshot(stored.meta, stored.body, true);
 
     const res = await this.#governor.run(
-      governorGroup(query),
+      this.#groupFor(query),
       async (): Promise<GovernedResult<Awaited<ReturnType<DataBackend["get"]>>>> => {
         const r = await this.#backend.get(query);
         const ra = retryAfter(r.headers["retry-after"]);

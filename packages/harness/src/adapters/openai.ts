@@ -1,5 +1,6 @@
 import {
   AdapterHttpError,
+  withBilledUsage,
   REASONING_BUDGET_MULTIPLE,
   type Adapter,
   type AdapterParams,
@@ -99,7 +100,18 @@ export function createOpenAiAdapter(apiKey: string): Adapter {
           `against a ${params.max_tokens}-token task budget) — retried with reasoning accommodated ` +
           `above the task budget, capped at ${REASONING_BUDGET_MULTIPLE}x (${accommodatedBudget} tokens total)`,
       );
-      result = await callOpenAi(apiKey, modelString, prompt, params, includeTemperature, accommodatedBudget);
+      try {
+        result = await callOpenAi(apiKey, modelString, prompt, params, includeTemperature, accommodatedBudget);
+      } catch (err) {
+        // the truncated first call was billed even though the retry failed: mark the error with its usage so the caller can still book it
+        const u = truncatedResult.response.usage;
+        throw withBilledUsage(err, {
+          input: u.prompt_tokens,
+          output: u.completion_tokens,
+          cached_input: u.prompt_tokens_details?.cached_tokens ?? 0,
+          reasoning: u.completion_tokens_details?.reasoning_tokens ?? 0,
+        });
+      }
     }
 
     const { response, latencyMs } = result;

@@ -508,6 +508,294 @@
       "fetchedAt": "2026-10-20T05:10:31.528Z",
       "backend": "live",
       "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-pl-2026-10-20-1-claude-haiku-4-5",
+      "queryId": "b867385ade382852cfe10672018c345c92c38baca9c856e2da2cb112f5716e63",
+      "bodySha256": "28c6f43688f6bf733934f262f1609cebc1f6a37ff9d3c2aece6ff7f858740b53",
+      "bytes": 8819,
+      "fetchedAt": "2026-10-20T13:54:35.555Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-pl-2026-10-20-1-claude-sonnet-5",
+      "queryId": "b867385ade382852cfe10672018c345c92c38baca9c856e2da2cb112f5716e63",
+      "bodySha256": "28c6f43688f6bf733934f262f1609cebc1f6a37ff9d3c2aece6ff7f858740b53",
+      "bytes": 8819,
+      "fetchedAt": "2026-10-20T13:56:22.042Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "2d3f4c4052757bd63663714491f93b24b0f0b8c1ffddf0d962c2a762e497fc34",
+      "bodySha256": "7dd4f1c6d83b307a058e2795a088ad6a5329c9e5ad0af7a05f19eefcdd8acd76",
+      "bytes": 1597,
+      "fetchedAt": "2026-10-20T16:07:36.938Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "41b4d77328b288fb128094a97d635baf7583d653c4a9b6f80391b8816426fd65",
+      "bodySha256": "0800ae65a200417ea16b83e5138b5a1ca2d7e921f1c59c579f7b9fbac834a8f1",
+      "bytes": 1617,
+      "fetchedAt": "2026-10-20T16:01:25.284Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "4dc1a3ae90b8233c2d35c1ec292df9b81cfd9221c5aeecc5c497b91e55708c71",
+      "bodySha256": "ab8b3c19704b5957d2bbb3f467ac57c62ec7bd36611d66905c4fc248bdc0d56d",
+      "bytes": 1605,
+      "fetchedAt": "2026-10-20T16:01:59.998Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "539e2d784fb019af051fa371c0ad2f56b7bffb008382889fe47bbc0d027b283b",
+      "bodySha256": "1e0e4a51696c53f624aee424c39113f02edad743ba6123a5d1577eae4c0a855b",
+      "bytes": 1570,
+      "fetchedAt": "2026-10-20T16:02:10.211Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "654f9ace59e1d3212fa800e839fad4503c9dd108c631772f031b5027b340e724",
+      "bodySha256": "4a49e8f30ae39fe626e15a7153faf45899421a3a81d092e8d626b462f9f82146",
+      "bytes": 1634,
+      "fetchedAt": "2026-10-20T16:01:49.942Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "678c99b8946d37643b8f437a2d95a8d745bda8e31afd6220848103226366b2ce",
+      "bodySha256": "90b1e3a7797d4eca28618707c15105722dc18f8378b182ae2be5df4383671e91",
+      "bytes": 1642,
+      "fetchedAt": "2026-10-20T16:01:29.920Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "88d7dc4b372e61d7d47cf0950830197f95accf7ee8ec0f64d516d3416e6acc43",
+      "bodySha256": "f0c1cabe35e718698b838d9d4b14f2deffd94c2a793b9e5a1eb0ac49d6c6eca7",
+      "bytes": 1657,
+      "fetchedAt": "2026-10-20T16:17:38.667Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "95c81e46acf950e828ea11ed0902a2a7f227374ed317029ffcf0a0b29970d7c1",
+      "bodySha256": "666545defbab5bc7bb67b7d1480630fc458b72f50708ab9563ca896a8ede835e",
+      "bytes": 1574,
+      "fetchedAt": "2026-10-20T16:02:05.371Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "975e4a0f27b99a0194f747cf559bfcdbaffca3819537f75b7e178af00d532aaf",
+      "bodySha256": "f73c4a2a9fdf7e064a0183476dce004bade5979ae59ee5eb41e3f1c1755163d8",
+      "bytes": 13116,
+      "fetchedAt": "2026-10-20T16:01:20.097Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "9c8977bb08384db4fcd00b3fc8c827499236c4825970564498d0609aade1b1c6",
+      "bodySha256": "9be27d8f7e01132d5d1ff6413e811d02f8bed0093eda218a6a59d3c8e7b7c998",
+      "bytes": 1629,
+      "fetchedAt": "2026-10-20T16:10:37.733Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "9f1d54d4132e7baf1c1070c3c68e96a414c4a862212184a086442af29e2ce98f",
+      "bodySha256": "6befd02537da29979aaeebb85acda8fc7f6316de2255b40599bdab5a37b9ff8b",
+      "bytes": 1688,
+      "fetchedAt": "2026-10-20T16:01:55.265Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "a336605766021319f492cf104a67cd82bd6a393bae15a7d56672e5d5a0e11708",
+      "bodySha256": "cf4e8695b7dfa5c2a62029e61fed825e2310e8a94a66b7c24d5727598973c536",
+      "bytes": 1639,
+      "fetchedAt": "2026-10-20T16:02:15.320Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "af6594a69f2b84faa9fda1135bba0df5d84526f24f7557be6bc9dcc171374ca1",
+      "bodySha256": "c7972345fdda3738b7791d27f4f19ac173ca57e732731d182dbb81f957355510",
+      "bytes": 1618,
+      "fetchedAt": "2026-10-20T16:06:36.874Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "b9ac7009f29d143685fc9e57ab713315c6268cb05756cc5620fb377d3ba3c0ef",
+      "bodySha256": "c21a858d839c113638bf8efe422f647af80b49ed57a8ad7e524893daac412ad0",
+      "bytes": 1557,
+      "fetchedAt": "2026-10-20T16:01:45.306Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "bfde8ad9b68ac6d686bd7addf9ca9dc865a832c568e45f1eb514aeee3e9e4e1b",
+      "bodySha256": "73d9134bed2624e16cc3873ff04ca76373ecaf8619f21388d2106b397b9d899d",
+      "bytes": 1619,
+      "fetchedAt": "2026-10-20T16:14:37.812Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "c2571d2803d080a233935f49448d92a7f4cd938551b88184bebd729c607129c9",
+      "bodySha256": "99a7f2d9452fde70a13be5b725d39f27e19af4171f7c2a3b7eeee02fa4258088",
+      "bytes": 1626,
+      "fetchedAt": "2026-10-20T16:01:34.966Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "d4b0324f51ca732fad95577171daebd8c79dd7aa64d048c80fc51d3591e19dfe",
+      "bodySha256": "f80e37035169ec0ce77ff862b2b6c3e5275c8c1cf135053ff8ad0bbda47a6422",
+      "bytes": 1589,
+      "fetchedAt": "2026-10-20T16:02:55.457Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "e01fb4f6e588181fb1ef7cb42c76dc450a6705550abd1b7d76c6382fc594d7fb",
+      "bodySha256": "fb3ae4ad3b3ed4206d2d970b2e55179337bd712d71d8e99b4df84417fd14ca84",
+      "bytes": 1639,
+      "fetchedAt": "2026-10-20T16:01:39.935Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "e7ec92bfe2030e784bd27f261ecdd20ddc8148dfd94d6009888e5375f4bf7c46",
+      "bodySha256": "8dbf260fed60736e45107db000bf6fa1a0a9e4878829161224744feb2ad137da",
+      "bytes": 1623,
+      "fetchedAt": "2026-10-20T16:12:37.803Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-sm-2026-10-20-1-claude-sonnet-5",
+      "queryId": "f8d5c96f007be525663d39edf4a6eab3ba11edf8ca54790b7049c378b205fd4f",
+      "bodySha256": "0cf1fa3ee8cbccfdbaf48f7fc15a060765e03587ca0a2c36705bb1fbac946cc6",
+      "bytes": 1647,
+      "fetchedAt": "2026-10-20T16:02:19.940Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-vs-2026-10-20-1-claude-haiku-4-5",
+      "queryId": "0ffeddeb371609048fde7b94a4f6a433604a3fb9cddcc960023784d1cbf2cfba",
+      "bodySha256": "314b0f757bfcb8b2f7e8e47cfba35da8e578e5e95c614ddee309eab9ae9052ea",
+      "bytes": 2934,
+      "fetchedAt": "2026-10-20T15:06:23.217Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-vs-2026-10-20-1-claude-haiku-4-5",
+      "queryId": "34de39e2c1965368c3c403ed79fd4b816d8a15440d0a0ec77df1b277bf439b71",
+      "bodySha256": "76b96d71edc3398481aee70eb641da775d842d08ce6b978957546c5b0ebd1c2f",
+      "bytes": 3219,
+      "fetchedAt": "2026-10-20T15:06:43.291Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-vs-2026-10-20-1-claude-haiku-4-5",
+      "queryId": "6cc9b16119b3d6df01d543fe2d7bf0a7e19d2303b7e2f33f11be97ec38da2201",
+      "bodySha256": "ecc3f111655ea6b62c0534318499ae5569c676acd1f35531f9d9f1b43ea5d187",
+      "bytes": 24687,
+      "fetchedAt": "2026-10-20T15:06:38.166Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-vs-2026-10-20-1-claude-haiku-4-5",
+      "queryId": "a2ed61cede2808ab414238af025d06c53bbf9b656e0499e08ec5c2b6f16fef94",
+      "bodySha256": "15d0608f930ae6b135fa2bc88ff62d85019121e1fd2f3b7375e540f19aa09ecf",
+      "bytes": 28372,
+      "fetchedAt": "2026-10-20T15:06:28.120Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-vs-2026-10-20-1-claude-haiku-4-5",
+      "queryId": "fd11a33030fa8da4ac62ffa4417e37945c3b13391eaef7ac06267d4b660c14c0",
+      "bodySha256": "9abb9cdfa9c3531dd127419047d131b87451fee11c44835553da50fb15751f03",
+      "bytes": 29585,
+      "fetchedAt": "2026-10-20T15:06:33.164Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-vs-2026-10-20-1-claude-sonnet-5",
+      "queryId": "0ffeddeb371609048fde7b94a4f6a433604a3fb9cddcc960023784d1cbf2cfba",
+      "bodySha256": "314b0f757bfcb8b2f7e8e47cfba35da8e578e5e95c614ddee309eab9ae9052ea",
+      "bytes": 2934,
+      "fetchedAt": "2026-10-20T15:00:06.620Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-vs-2026-10-20-1-claude-sonnet-5",
+      "queryId": "34de39e2c1965368c3c403ed79fd4b816d8a15440d0a0ec77df1b277bf439b71",
+      "bodySha256": "76b96d71edc3398481aee70eb641da775d842d08ce6b978957546c5b0ebd1c2f",
+      "bytes": 3219,
+      "fetchedAt": "2026-10-20T15:00:26.959Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-vs-2026-10-20-1-claude-sonnet-5",
+      "queryId": "6cc9b16119b3d6df01d543fe2d7bf0a7e19d2303b7e2f33f11be97ec38da2201",
+      "bodySha256": "ecc3f111655ea6b62c0534318499ae5569c676acd1f35531f9d9f1b43ea5d187",
+      "bytes": 24687,
+      "fetchedAt": "2026-10-20T15:00:22.080Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-vs-2026-10-20-1-claude-sonnet-5",
+      "queryId": "a2ed61cede2808ab414238af025d06c53bbf9b656e0499e08ec5c2b6f16fef94",
+      "bodySha256": "15d0608f930ae6b135fa2bc88ff62d85019121e1fd2f3b7375e540f19aa09ecf",
+      "bytes": 28372,
+      "fetchedAt": "2026-10-20T15:00:12.084Z",
+      "backend": "live",
+      "httpStatus": 200
+    },
+    {
+      "tag": "key-cr-vs-2026-10-20-1-claude-sonnet-5",
+      "queryId": "fd11a33030fa8da4ac62ffa4417e37945c3b13391eaef7ac06267d4b660c14c0",
+      "bodySha256": "9abb9cdfa9c3531dd127419047d131b87451fee11c44835553da50fb15751f03",
+      "bytes": 29585,
+      "fetchedAt": "2026-10-20T15:00:16.645Z",
+      "backend": "live",
+      "httpStatus": 200
     }
   ]
 }

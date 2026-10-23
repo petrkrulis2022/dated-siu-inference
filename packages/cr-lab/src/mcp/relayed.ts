@@ -70,10 +70,13 @@ export function referenceFor(instance: Instance, day: DayData): Instance["refere
     case "CR-VS":
       return solveVS(day, instance.params.endMonth, instance.params.months ?? 12);
     case "CR-PL":
-      return solvePL(day, instance.params.protocolId, {
-        start: instance.params.start,
-        end: instance.params.end,
-      });
+      return solvePL(
+        day,
+        instance.params.protocolId,
+        { start: instance.params.start, end: instance.params.end },
+        // a model that reads only fees, interest and net interest income has read all the question needs (revenue is fees minus payouts)
+        { deriveRevenue: true },
+      );
     case "CR-UO":
       return solveUO(day, instance.params.slug);
     case "CR-SM":

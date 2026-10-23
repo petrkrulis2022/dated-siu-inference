@@ -1,0 +1,32 @@
+{
+  "rule": "Each task's per-turn output allowance in MCP mode covers almost all observed turns: the most one model call (turn) needed over every recorded MCP-mode session (a turn cut off at the cap counts as at least its cap), times 6/5, rounded up to a multiple of 2,000, never below the print's own allowance. The same for every model. Thinking budgets and the $1 session cap are unchanged. Frozen for the counted windows; a session that never answers counts as zero. Changes only by a dated revision (D120).",
+  "frozenAt": "2026-10-23",
+  "observed": {
+    "CR-VS": {
+      "n": 73,
+      "maxNeed": 32000,
+      "censored": 3
+    },
+    "CR-PL": {
+      "n": 32,
+      "maxNeed": 12194,
+      "censored": 0
+    },
+    "CR-UO": {
+      "n": 0,
+      "maxNeed": 0,
+      "censored": 0
+    },
+    "CR-SM": {
+      "n": 60,
+      "maxNeed": 3928,
+      "censored": 0
+    }
+  },
+  "allowance": {
+    "CR-VS": 40000,
+    "CR-PL": 16000,
+    "CR-UO": 4000,
+    "CR-SM": 6000
+  }
+}

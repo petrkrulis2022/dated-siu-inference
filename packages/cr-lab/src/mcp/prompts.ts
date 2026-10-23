@@ -54,7 +54,7 @@ function taskText(instance: Instance, window: string): string {
       const { dimension } = instance.params;
       const start = addDays(window, -90);
       return [
-        `Task: stablecoin movers by ${dimension}, ${start} to the latest day the data provider has published (the snapshot day ${window} or the day before).`,
+        `Task: stablecoin movers by ${dimension}, ${start} to the latest day the data provider has published (${window} or, if it has not yet published that day, up to three days before it: the most recent day most ${dimension}s reach).`,
         `For each ${dimension}, the change is its circulating stablecoin supply in USD on the latest published day minus its supply on ${start}, signed (as valued by the data provider: a stablecoin that trades below one dollar is valued below its token count, so it can show as a fall).`,
         `Find the five ${dimension}s with the largest absolute change, in order from largest to smallest absolute change (break ties by id, ascending), and give each one's signed change in USD. Consider only ids that have a figure on both dates.`,
       ].join("\n");

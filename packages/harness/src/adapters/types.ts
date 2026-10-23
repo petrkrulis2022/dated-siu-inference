@@ -75,6 +75,27 @@ export type Adapter = (
  */
 export const REASONING_BUDGET_MULTIPLE = 3;
 
+/**
+ * An error from a retry that came AFTER a first call the provider had already billed (a completion cut off by its budget, then a retry the provider refused or lost). The first call's cost is real
+ * and would otherwise be lost, because the error carries no result. `withBilledUsage` marks the error with that call's usage and returns the SAME error: its class, its message and every
+ * existing `instanceof` check are unchanged, so callers that do not look for the mark behave as before. A caller that books spend (the trial's answer runner) reads it with `billedUsageOf`.
+ */
+export function withBilledUsage<E>(err: E, usage: AdapterUsage): E {
+  if (typeof err === "object" && err !== null)
+    Object.defineProperty(err, "billedUsage", { value: { ...usage }, enumerable: false, configurable: true });
+  return err;
+}
+
+export function billedUsageOf(err: unknown): AdapterUsage | undefined {
+  if (typeof err !== "object" || err === null) return undefined;
+  const u = (err as { billedUsage?: unknown }).billedUsage;
+  if (typeof u !== "object" || u === null) return undefined;
+  const { input, output, cached_input, reasoning } = u as Record<string, unknown>;
+  return [input, output, cached_input, reasoning].every((n) => typeof n === "number")
+    ? (u as AdapterUsage)
+    : undefined;
+}
+
 export class AdapterHttpError extends Error {
   constructor(
     message: string,

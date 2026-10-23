@@ -50,6 +50,10 @@ export class SpendIncurred extends Error {
   constructor(
     readonly usd: string,
     message: string,
+    /** the error the failed call actually raised, for whoever classifies the failure */
+    readonly cause?: unknown,
+    /** what the billed call used, for the record of the attempt */
+    readonly usage?: { input: number; output: number; cached_input: number; reasoning: number },
   ) {
     super(message);
     this.name = "SpendIncurred";

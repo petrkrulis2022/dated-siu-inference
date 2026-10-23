@@ -36,6 +36,9 @@ export class McpTransportFailure extends Error {
   }
 }
 
+/** The MCP's own wording of a rate limit in an error result. */
+export const RATE_LIMITED = /\bRATE_LIMITED\b/;
+
 const statusOf = (e: unknown): number | undefined => {
   const c = (e as { code?: unknown }).code;
   return typeof c === "number" && c >= 100 && c < 600 ? c : undefined;
@@ -110,7 +113,14 @@ export class LiveMcp implements McpBackend {
           text === "" && res.structuredContent !== undefined
             ? JSON.stringify(res.structuredContent)
             : text;
-        return { status: 200, value: { isError: res.isError === true, text: body } };
+        // The MCP answers a rate limit as an error RESULT with HTTP 200 ("Error: RATE_LIMITED: too many requests, wait before retrying", seen in 7 of 22 sessions, 20 to 23 October), so a client
+        // that reads only HTTP statuses never backs off and hands the refusal to the model, which retries at once and is refused again. It is a 429: the governor widens its pacing and retries after a
+        // back-off, and if the limit outlasts the retries the call throws `RateLimited` and the session is not recorded (D122).
+        const limited = res.isError === true && RATE_LIMITED.test(body);
+        return {
+          status: limited ? 429 : 200,
+          value: { isError: res.isError === true, text: body },
+        };
       } catch (e) {
         if (e instanceof UnauthorizedError) throw new McpLoginRequired();
         const status = statusOf(e);

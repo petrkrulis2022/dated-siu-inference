@@ -4,13 +4,14 @@ import { join } from "node:path";
 import { D } from "@touchstone/sdk";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Secret } from "../keys.js";
+import { MCP_ALLOWANCES_PATH, loadAllowances } from "../runner/allowance.js";
 import { standInSeat } from "../runner/stand-in-models.js";
 import { SpendLedger } from "../spend/ledger.js";
 import { MemoryLedgerStore } from "../spend/store.js";
 import type { SpendPolicy } from "../spend/types.js";
 import { fixtureDay, type FixtureDay } from "../tasks/fixture-day.js";
 import { drawInstances, type Instance } from "../tasks/instances.js";
-import { DEFAULT_LIMITS, anthropicChat } from "./anthropic-loop.js";
+import { anthropicChat } from "./anthropic-loop.js";
 import { FakeMcp } from "./fake-mcp.js";
 import { openAiChat, openAiChatApi, type ChatCompletionsApi } from "./openai-loop.js";
 import { runMcpAnswer } from "./session.js";
@@ -86,7 +87,7 @@ describe("the GPT tool loop on the fake server", () => {
       temperature?: unknown;
     };
     expect(first.model).toBe("gpt-5.1");
-    expect(first.max_completion_tokens).toBe(DEFAULT_LIMITS.maxTokensPerTurn);
+    expect(first.max_completion_tokens).toBe(loadAllowances(MCP_ALLOWANCES_PATH)["CR-PL"]); // the task's per-turn allowance (D120)
     expect(first.temperature).toBeUndefined();
     expect(
       first.tools.every((t) => t.type === "function" && typeof t.function.name === "string"),

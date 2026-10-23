@@ -10,8 +10,15 @@
  * Prints step names, pass or fail and dollars, never a Blockworks figure or a model's reply; the sessions and tables go under the private directory.
  * Exit status: 0 for complete, partial, already complete, waiting for the snapshot, or another run holding the lock; 1 for a failure, a stop or a watchdog alert.
  */
+import { DataDesk } from "../data-desk/desk.js";
+import { liveBackendFromEnv } from "../data-desk/live.js";
 import { SnapshotStore, defaultStoreOptions } from "../data-desk/snapshots.js";
-import { BLOCKWORKS_MCP_URL, LiveMcp, McpLoginRequired } from "../mcp/live-mcp.js";
+import {
+  BLOCKWORKS_MCP_URL,
+  LiveMcp,
+  MCP_GOVERNOR_GROUP,
+  McpLoginRequired,
+} from "../mcp/live-mcp.js";
 import { DEFAULT_LOGIN_PORT, TrialOAuthProvider } from "../mcp/oauth-store.js";
 import { chatForSeats } from "../mcp/seat-chat.js";
 import { privatePath } from "../paths.js";
@@ -76,28 +83,32 @@ log(
 );
 
 const records = new FileRecordStore();
+// one ledger store for the run, so a torn last line it repairs (a crash or a sleep mid-write) is alerted on, not only logged
+const ledgerStore = new FileLedgerStore();
 const provider = new TrialOAuthProvider({
   redirectUrl: `http://127.0.0.1:${DEFAULT_LOGIN_PORT}/callback`,
 });
+const alerts = new CompositeAlertSink(
+  [new FileAlertSink(), ...(email.sink !== undefined ? [email.sink] : []), new ToastAlertSink()],
+  (sink, reason) => log(`alert sink ${sink} failed: ${reason}`),
+);
 const { outcome, window } = await runDailyMcp({
   mode,
   status: new StatusStore(privatePath("cr", "mcp-status")),
   snapshotStatus: new StatusStore(),
-  alerts: new CompositeAlertSink(
-    [new FileAlertSink(), ...(email.sink !== undefined ? [email.sink] : []), new ToastAlertSink()],
-    (sink, reason) => log(`alert sink ${sink} failed: ${reason}`),
-  ),
+  alerts,
   lockPath: privatePath("cr", "locks", "blockworks-live.lock"),
   isLoginRequired: (e) => e instanceof McpLoginRequired,
   run: async (w, l, tally) => {
+    const store = new SnapshotStore(defaultStoreOptions("live"));
     const seats = buildSeats(models ?? MCP_MODELS);
     const summary = await runLiveMcpDay(
       w,
       {
-        store: new SnapshotStore(defaultStoreOptions("live")),
+        store,
         records,
         ledger: new SpendLedger({
-          store: new FileLedgerStore(),
+          store: ledgerStore,
           policy: policyFromBudgets(loadBudgets()),
         }),
         seeds: new SeedBook(),
@@ -105,7 +116,16 @@ const { outcome, window } = await runDailyMcp({
         chatFor: chatForSeats(seats),
         connect: async (governor) => {
           if (!provider.describe().signedIn) throw new McpLoginRequired();
-          return LiveMcp.connect({ url: BLOCKWORKS_MCP_URL, provider, governor });
+          const mcp = await LiveMcp.connect({ url: BLOCKWORKS_MCP_URL, provider, governor });
+          // each session's answer key is a REST pull of its own (D117), paced by the same governor
+          // ONE pacing group for the MCP's calls and the REST pulls: the provider's limit is on the account's requests, and with two groups the pulls and the session's first calls arrived together and were refused (D122)
+          const desk = new DataDesk({
+            backend: liveBackendFromEnv(),
+            store,
+            governor,
+            groupFor: () => MCP_GOVERNOR_GROUP,
+          });
+          return { mcp, desk };
         },
         ...(maxSessions !== undefined ? { maxSessions } : {}),
         ...(tasks !== undefined ? { tasks } : {}),
@@ -118,6 +138,15 @@ const { outcome, window } = await runDailyMcp({
   },
   log,
 });
+if (ledgerStore.repairs.length > 0) {
+  for (const note of ledgerStore.repairs) log(`LEDGER REPAIRED: ${note}`);
+  await alerts.send({
+    at: new Date().toISOString(),
+    kind: "ledger-repaired",
+    window,
+    message: `the spend ledger's last line was an interrupted write and was cut off (${ledgerStore.repairs.length} repair${ledgerStore.repairs.length === 1 ? "" : "s"}); at most one call's cost may be unrecorded. ${ledgerStore.repairs[0] ?? ""}`,
+  });
+}
 if (outcome === "complete" || outcome === "partial") {
   const files = writeTables(records, window, "mcp");
   log(`tables (private): ${files.join(", ")}`);

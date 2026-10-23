@@ -131,9 +131,10 @@ describe("an MCP-mode session", () => {
   });
 
   it("ends a session on its own spend cap before a call that could pass it, and on the conversation size", async () => {
-    const cap = await answer("chatty", "CR-VS", { limits: { maxSessionUsd: "0.40" } }).run();
+    // CR-VS's per-turn allowance is 40,000 tokens (D120), so one turn at this price is reserved at about $0.40: a cap of $0.60 allows a couple of turns and then stops
+    const cap = await answer("chatty", "CR-VS", { limits: { maxSessionUsd: "0.60" } }).run();
     expect(cap.record.mcp?.limit).toBe("session-cap");
-    expect(new D(cap.record.usd).lte("0.40")).toBe(true);
+    expect(new D(cap.record.usd).lte("0.60")).toBe(true);
     expect(cap.record.mcp?.turns.length ?? 0).toBeGreaterThan(0);
     const none = await answer("chatty", "CR-VS", { limits: { maxSessionUsd: "0.0001" } }).run();
     expect(none.record.mcp?.limit).toBe("session-cap");

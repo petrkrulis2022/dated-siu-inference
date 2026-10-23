@@ -1,5 +1,6 @@
 import {
   AdapterHttpError,
+  withBilledUsage,
   REASONING_BUDGET_MULTIPLE,
   type Adapter,
   type AdapterParams,
@@ -103,7 +104,18 @@ export function createGoogleAdapter(apiKey: string): Adapter {
           `${params.max_tokens}-token task budget) — retried with reasoning accommodated above ` +
           `the task budget, capped at ${REASONING_BUDGET_MULTIPLE}x (${accommodatedBudget} tokens total)`,
       );
-      result = await callGoogle(apiKey, modelString, prompt, params, includeTemperature, accommodatedBudget);
+      try {
+        result = await callGoogle(apiKey, modelString, prompt, params, includeTemperature, accommodatedBudget);
+      } catch (err) {
+        // the truncated first call was billed even though the retry failed: mark the error with its usage so the caller can still book it
+        const u = truncatedResult.response.usageMetadata;
+        throw withBilledUsage(err, {
+          input: u.promptTokenCount,
+          output: u.candidatesTokenCount,
+          cached_input: u.cachedContentTokenCount ?? 0,
+          reasoning: u.thoughtsTokenCount ?? 0,
+        });
+      }
     }
 
     const { response, latencyMs } = result;

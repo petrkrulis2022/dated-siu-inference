@@ -235,15 +235,22 @@ describe("the file ledger", () => {
   });
 
   it("refuses to run past a ledger it cannot read, instead of skipping the bad line and under-counting", () => {
+    // a bad line that is NOT the last is real corruption. (A bad LAST line is what a crash tears mid-write and is repaired, not refused: see store-torn.test.ts, D120.)
     const path = tmp();
-    writeFileSync(
-      path,
-      `${JSON.stringify({ at: "2026-10-20T12:00:00Z", provider: "anthropic", usd: "1", part: "snapshot", model: "m", key: "CR_ANTHROPIC_API_KEY", what: "x" })}\nnot json\n`,
-    );
+    const good = JSON.stringify({
+      at: "2026-10-20T12:00:00Z",
+      provider: "anthropic",
+      usd: "1",
+      part: "snapshot",
+      model: "m",
+      key: "CR_ANTHROPIC_API_KEY",
+      what: "x",
+    });
+    writeFileSync(path, `${good}\nnot json\n${good}\n`);
     expect(() => new FileLedgerStore(path).load()).toThrow(/line 2 is not a valid spend entry/);
     writeFileSync(
       path,
-      `${JSON.stringify({ at: "2026-10-20T12:00:00Z", provider: "anthropic", usd: 1, part: "snapshot", model: "m", key: "CR_ANTHROPIC_API_KEY", what: "x" })}\n`,
+      `${JSON.stringify({ at: "2026-10-20T12:00:00Z", provider: "anthropic", usd: 1, part: "snapshot", model: "m", key: "CR_ANTHROPIC_API_KEY", what: "x" })}\n${good}\n`,
     );
     expect(() => new FileLedgerStore(path).load()).toThrow(/line 1/);
   });

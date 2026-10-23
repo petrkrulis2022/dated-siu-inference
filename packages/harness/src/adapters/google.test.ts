@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createGoogleAdapter } from "./google.js";
+import { AdapterHttpError, billedUsageOf } from "./types.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -30,6 +31,25 @@ describe("createGoogleAdapter", () => {
 
     expect(result.text).toBe("gemini says hi");
     expect(result.usage).toEqual({ input: 300, output: 60, cached_input: 20, reasoning: 80 });
+  });
+
+  it("a retry that fails AFTER a billed truncated first call carries that call's usage on the error, and changes nothing else about it", async () => {
+    const fetchMock = vi.fn(async () => {
+      if (fetchMock.mock.calls.length === 1)
+        return {
+          ok: true,
+          json: async () => ({
+            candidates: [{ content: { parts: [{ text: "" }] }, finishReason: "MAX_TOKENS" }],
+            usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 2, thoughtsTokenCount: 95, cachedContentTokenCount: 9 },
+          }),
+        };
+      return { ok: false, status: 503, json: async () => ({ error: { message: "unavailable" } }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const err = await createGoogleAdapter("test-key")("gemini-3.1-pro-preview", "prompt", PARAMS).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AdapterHttpError);
+    expect((err as AdapterHttpError).status).toBe(503);
+    expect(billedUsageOf(err)).toEqual({ input: 50, output: 2, cached_input: 9, reasoning: 95 });
   });
 
   it("retries with reasoning accommodated above the task budget when mandatory reasoning truncates the completion", async () => {

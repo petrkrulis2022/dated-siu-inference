@@ -217,6 +217,45 @@ describe("grading an MCP answer from the data the model received", () => {
       relayed: dayFromRelayed(W(), await run(mcp(), read(i.params.protocolId))),
     });
     expect(ok.passed).toBe(true);
+    // a model that reads only the three fields it needs (revenue is fees minus payouts, by the question's own definition) has read everything the question needs (first live Sonnet session, 2026-10-20)
+    const threeFields = await run(mcp(), [
+      [
+        "timeseries_data",
+        {
+          model: "lending-protocols",
+          granularity: "1d",
+          series: [i.params.protocolId],
+          selections: ["fees-usd", "interest-usd", "net-interest-income-usd"],
+          start: i.params.start,
+          end: i.params.end,
+        },
+      ],
+    ]);
+    const lean = gradeMcpAnswer({
+      instance: i,
+      text: answerFor(i),
+      relayed: dayFromRelayed(W(), threeFields),
+    });
+    expect(lean.snapshotCheck).toBe("same");
+    expect(lean.passed).toBe(true);
+    // and with a figure it does need left out, the data still cannot answer the question
+    const noFees = await run(mcp(), [
+      [
+        "timeseries_data",
+        {
+          model: "lending-protocols",
+          granularity: "1d",
+          series: [i.params.protocolId],
+          selections: ["interest-usd", "net-interest-income-usd"],
+          start: i.params.start,
+          end: i.params.end,
+        },
+      ],
+    ]);
+    expect(
+      gradeMcpAnswer({ instance: i, text: answerFor(i), relayed: dayFromRelayed(W(), noFees) })
+        .snapshotCheck,
+    ).toBe("insufficient");
     const other = f.day.lendingProtocols.find((p) => p !== i.params.protocolId) as string;
     const wrong = gradeMcpAnswer({
       instance: i,

@@ -13,6 +13,7 @@
 import { D, type DecimalValue } from "@touchstone/sdk";
 import type { Provider } from "../keys.js";
 import { SpendStopped, type SpendLedger } from "../spend/ledger.js";
+import { LedgerUnreadable } from "../spend/store.js";
 import { projectedTurnCostUsd, usageCostUsd, type ModelPrice } from "../runner/prices.js";
 import type { McpBackend, McpToolDef } from "./types.js";
 import { MCP_DATA_TOOLS, MCP_WITHHELD_TOOLS } from "./types.js";
@@ -106,6 +107,14 @@ export interface TurnLog {
   reasoning_tokens?: number;
 }
 
+/** Error classes that mean no response reached us. */
+const TRANSPORT_ERRORS: ReadonlySet<string> = new Set([
+  "TypeError",
+  "AbortError",
+  "TimeoutError",
+  "FetchError",
+]);
+
 export type SessionLimit =
   "max-turns" | "max-tool-calls" | "context-limit" | "session-cap" | "spend-guard";
 
@@ -117,6 +126,12 @@ export interface SessionResult {
   limit?: SessionLimit;
   /** a sanitised reason when a model call failed: the error class and HTTP status, never a body */
   error?: string;
+  /**
+   * The model call failed for a reason that is the provider's or the network's and not the model's: no answer reached us (a `fetch failed`, a timeout), or the provider said it was
+   * overloaded or limited and kept saying so through the client's retries (429, 5xx, 529). Such a session is not a result about the model (D122); a refusal of the request itself (400, 401, 403)
+   * is deterministic and stays an ordinary failed call.
+   */
+  serviceFailure?: boolean;
   turns: TurnLog[];
   toolCalls: ToolCallLog[];
   /** exactly what the model was shown, in order: the grader reads this */
@@ -241,13 +256,18 @@ export async function runToolLoop(input: RunLoopInput): Promise<SessionResult> {
         result.limit = "spend-guard";
         return finish();
       }
+      // a ledger that cannot be read is not a model's failure and not a result: the run stops (D120)
+      if (err instanceof LedgerUnreadable) throw err;
       result.error = err instanceof Error ? err.name : "UnknownError";
+      // no response at all: the network or the provider, not the model
+      if (err instanceof Error && TRANSPORT_ERRORS.has(err.name)) result.serviceFailure = true;
       return finish();
     }
     spent = spent.plus(costUsd);
     const reply = sent.reply;
     if (sent.status !== 200 || reply === undefined) {
       result.error = `HTTP ${sent.status}`;
+      if (sent.status === 429 || sent.status >= 500) result.serviceFailure = true;
       return finish();
     }
     lastInput = reply.usage.input + reply.usage.cachedInput;

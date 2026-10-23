@@ -3,14 +3,17 @@
  * session goes through the same loop, grader and record as before (`mcp/session.ts`). What this adds is what a live, unattended run needs:
  *
  *  - every tool call is paced by the rate governor's `mcp` group, which waits out its hourly limit rather than stopping, so a day's sessions finish slowly instead of failing;
+ *  - each session is graded against its own answer key, a REST pull taken just before it (`mcp/key-snapshot.ts`, D117), through the same governor's `data-api` group;
  *  - a session that met a service failure is not recorded and stops the run (`mcp/incident-guard.ts`), so the provider's outage is not counted against a model;
  *  - the live tool calls are tallied for the day's request ceiling.
  *
  * The connection, the chat for each seat and the stores are given, so a test runs the whole path on the fake server and scripted agents; the entry point builds the real ones.
  */
+import type { DataDesk } from "../data-desk/desk.js";
 import { RateGovernor } from "../data-desk/governor.js";
 import type { SnapshotStore } from "../data-desk/snapshots.js";
 import { AbortOnIncidentStore, InfraWatchMcp } from "../mcp/incident-guard.js";
+import { keyTagFor, pullSessionKey } from "../mcp/key-snapshot.js";
 import { MCP_GOVERNOR_GROUP } from "../mcp/live-mcp.js";
 import type { LoopLimits, ToolChat } from "../mcp/anthropic-loop.js";
 import { runMcpDay, type RunMcpDaySummary } from "../mcp/session.js";
@@ -31,8 +34,13 @@ export interface LiveMcpRunDeps {
   seeds: SeedBook;
   seats: readonly Seat[];
   chatFor: (seat: Seat) => ToolChat;
-  /** opens the connection, given the governor that must pace it */
-  connect: (governor: RateGovernor) => Promise<McpBackend & { close(): Promise<void> }>;
+  /**
+   * Opens the connection to the MCP, and the data desk that pulls each session's answer key over REST (D117), both given the one governor that must pace them: the MCP's calls and the
+   * key pulls are separate request groups of it, and both count toward the day's ceiling.
+   */
+  connect: (
+    governor: RateGovernor,
+  ) => Promise<{ mcp: McpBackend & { close(): Promise<void> }; desk: DataDesk }>;
   governor?: RateGovernor;
   tasks?: readonly TaskId[];
   perTask?: number;
@@ -55,8 +63,11 @@ export async function runLiveMcpDay(
   // the hourly limit is waited out, not thrown: a day's sessions are slow by design (D101)
   const governor =
     deps.governor ??
-    new RateGovernor({ overrides: { [MCP_GOVERNOR_GROUP]: { waitOnHourlyLimit: true } } });
-  const live = await deps.connect(governor);
+    new RateGovernor({
+      // one group for the MCP's calls and the key pulls (D122): the hourly count is the 30 + 30 the two groups had, now counted together
+      overrides: { [MCP_GOVERNOR_GROUP]: { waitOnHourlyLimit: true, maxRequestsPerHour: 60 } },
+    });
+  const { mcp: live, desk } = await deps.connect(governor);
   const watch = new InfraWatchMcp(live);
   try {
     return await runMcpDay({
@@ -69,6 +80,14 @@ export async function runLiveMcpDay(
       records: new AbortOnIncidentStore(deps.records, watch),
       mcp: watch,
       chatFor: deps.chatFor,
+      keyFor: (instance, seat) =>
+        pullSessionKey({
+          desk,
+          store: deps.store,
+          instance,
+          window,
+          tag: keyTagFor(instance, seat.modelId, new Date()),
+        }),
       ...(deps.tasks !== undefined ? { tasks: deps.tasks } : {}),
       ...(deps.perTask !== undefined ? { perTask: deps.perTask } : {}),
       ...(deps.limits !== undefined ? { limits: deps.limits } : {}),
@@ -77,10 +96,8 @@ export async function runLiveMcpDay(
       log,
     });
   } finally {
-    tally.requests += governor
-      .report()
-      .filter((r) => r.group === MCP_GOVERNOR_GROUP)
-      .reduce((n, r) => n + r.requestsToday, 0);
+    // the MCP's calls and the key pulls (Data API), counted together
+    tally.requests += governor.report().reduce((n, r) => n + r.requestsToday, 0);
     await live.close().catch(() => undefined);
   }
 }

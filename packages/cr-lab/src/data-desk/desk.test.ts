@@ -100,6 +100,31 @@ describe("one pull per query per window", () => {
   });
 });
 
+describe("pacing groups (D122)", () => {
+  it("paces a pull under the query's own group by default, and under one chosen group when the caller says so, so two routes to the provider can share one pace", async () => {
+    const own = new RateGovernor({ overrides: { "data-api": { minIntervalMs: 0 } } });
+    await setup({ governor: own }).desk.pull(catalog.perpVenues(), W);
+    expect(own.report().map((r) => r.group)).toEqual(["data-api"]);
+
+    const shared = new RateGovernor({ overrides: { mcp: { minIntervalMs: 0 } } });
+    const root = mkdtempSync(join(tmpdir(), "cr-desk-"));
+    dirs.push(root);
+    const backend = new FixtureBackend();
+    const desk = new DataDesk({
+      backend,
+      store: new SnapshotStore({
+        privateRoot: join(root, "p"),
+        manifestDir: join(root, "m"),
+        backend: backend.name,
+      }),
+      governor: shared,
+      groupFor: () => "mcp",
+    });
+    await desk.pull(catalog.perpVenues(), W);
+    expect(shared.report().map((r) => r.group)).toEqual(["mcp"]);
+  });
+});
+
 describe("the snapshot is what Blockworks sent, exactly", () => {
   it("stores the response bytes and their sha256, and parses the numbers as text", async () => {
     const raw = '{"error":null,"data":[{"v":0.1000000000000000055511151231257827}]}';

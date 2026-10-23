@@ -3,10 +3,16 @@
  * against the daily cap and the provider's budget BEFORE it is made and a refused call never starts (`SpendStopped` is not caught here: it stops the whole run).
  * Whatever else happens (a provider error, an empty or truncated reply, a wrong answer) becomes a record with a class, and the run goes on.
  */
-import { REASONING_BUDGET_MULTIPLE, type Adapter, type AdapterParams } from "@touchstone/harness";
+import {
+  REASONING_BUDGET_MULTIPLE,
+  billedUsageOf,
+  type Adapter,
+  type AdapterParams,
+} from "@touchstone/harness";
 import type { ModelRegistryEntry } from "@touchstone/sdk";
 import type { Provider } from "../keys.js";
-import { SpendStopped, type SpendLedger } from "../spend/ledger.js";
+import { SpendIncurred, SpendStopped, type SpendLedger } from "../spend/ledger.js";
+import { LedgerUnreadable } from "../spend/store.js";
 import type { Part } from "../spend/types.js";
 import type { Instance } from "../tasks/instances.js";
 import { gradeAnswer } from "./grade.js";
@@ -92,21 +98,38 @@ export async function runAnswer(input: RunAnswerInput): Promise<AnswerRecord> {
   let outcome: Awaited<ReturnType<Adapter>> | undefined;
   let usd = "0";
   let callError: string | undefined;
+  let billedFirstCall: SpendIncurred | undefined;
   try {
     const out = await ledger.guard(
       seat.provider,
       projected,
       { part, model: seat.modelId, key: seat.keyName, what: instance.id },
       async () => {
-        const res = await seat.adapter(seat.modelString, bundle.text, params);
-        return { usd: usageCostUsd(res.usage, seat.price, seat.provider).toFixed(), res };
+        try {
+          const res = await seat.adapter(seat.modelString, bundle.text, params);
+          return { usd: usageCostUsd(res.usage, seat.price, seat.provider).toFixed(), res };
+        } catch (err) {
+          // a retry that failed AFTER a billed first call: that call's cost is real and is booked (D120); the error is classified from the original, below
+          const billed = billedUsageOf(err);
+          if (billed === undefined) throw err;
+          throw new SpendIncurred(
+            usageCostUsd(billed, seat.price, seat.provider).toFixed(),
+            "a retry failed after a billed first call",
+            err,
+            billed,
+          );
+        }
       },
     );
     outcome = out.res;
     usd = out.usd;
   } catch (err) {
-    if (err instanceof SpendStopped) throw err;
-    callError = sanitizeError(err);
+    if (err instanceof SpendStopped || err instanceof LedgerUnreadable) throw err;
+    if (err instanceof SpendIncurred) {
+      billedFirstCall = err;
+      usd = err.usd;
+      callError = sanitizeError(err.cause);
+    } else callError = sanitizeError(err);
   }
 
   const text = outcome?.text ?? "";
@@ -132,14 +155,21 @@ export async function runAnswer(input: RunAnswerInput): Promise<AnswerRecord> {
     failures: verdict?.failures ?? [],
     usd,
     tokens: {
-      input: outcome?.usage.input ?? 0,
-      output: outcome?.usage.output ?? 0,
-      reasoning: outcome?.usage.reasoning ?? 0,
-      cached_input: outcome?.usage.cached_input ?? 0,
+      input: outcome?.usage.input ?? billedFirstCall?.usage?.input ?? 0,
+      output: outcome?.usage.output ?? billedFirstCall?.usage?.output ?? 0,
+      reasoning: outcome?.usage.reasoning ?? billedFirstCall?.usage?.reasoning ?? 0,
+      cached_input: outcome?.usage.cached_input ?? billedFirstCall?.usage?.cached_input ?? 0,
     },
     latency_ms: outcome?.latency_ms ?? 0,
     ...(outcome?.stopReason !== undefined ? { stop_reason: outcome.stopReason } : {}),
-    deviations: outcome?.deviations ?? [],
+    deviations: [
+      ...(outcome?.deviations ?? []),
+      ...(billedFirstCall !== undefined
+        ? [
+            `the first call was billed (${billedFirstCall.usd} USD) and its retry failed: the cost is booked, and no answer was returned`,
+          ]
+        : []),
+    ],
     ...(callError !== undefined ? { error: callError } : {}),
     allowance_tokens: allowance,
     raw_output: text,

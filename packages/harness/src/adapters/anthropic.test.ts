@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAnthropicAdapter } from "./anthropic.js";
+import { AdapterHttpError, billedUsageOf } from "./types.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -142,6 +143,39 @@ describe("createAnthropicAdapter", () => {
     // The truncated first call is real, separately-billed usage — summed with the final call's,
     // not discarded: input 50+50=100, output 2+8=10, reasoning 95+90=185.
     expect(result.usage).toEqual({ input: 100, output: 10, cached_input: 0, reasoning: 185 });
+  });
+
+  it("a retry the provider refuses AFTER a billed truncated first call carries that call's usage on the error, and changes nothing else about it", async () => {
+    // seen live in the trial, 2026-10-20: the retry asks for four times the budget, which can exceed a model's output limit (HTTP 400); the first call was billed and its cost was lost
+    const fetchMock = vi.fn(async () => {
+      if (fetchMock.mock.calls.length === 1)
+        return {
+          ok: true,
+          json: async () => ({
+            content: [{ type: "text", text: "" }],
+            stop_reason: "max_tokens",
+            usage: {
+              input_tokens: 50,
+              output_tokens: 100,
+              cache_read_input_tokens: 7,
+              output_tokens_details: { thinking_tokens: 95 },
+            },
+          }),
+        };
+      return { ok: false, status: 400, json: async () => ({ error: { message: "max_tokens too large" } }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const err = await createAnthropicAdapter("test-key")("claude-haiku-4-5", "prompt", PARAMS).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AdapterHttpError);
+    expect((err as AdapterHttpError).status).toBe(400);
+    expect(billedUsageOf(err)).toEqual({ input: 50, output: 100, cached_input: 7, reasoning: 95 });
+    expect(Object.keys(err as object)).not.toContain("billedUsage"); // not enumerable: nothing that serialises an error changes
+  });
+
+  it("an error with no billed call before it carries no usage", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })));
+    const err = await createAnthropicAdapter("test-key")("claude-haiku-4-5", "prompt", PARAMS).catch((e: unknown) => e);
+    expect(billedUsageOf(err)).toBeUndefined();
   });
 
   it("does not resend temperature on the reasoning-truncation retry once the model has already rejected it", async () => {

@@ -79,10 +79,23 @@ export interface McpSessionSummary {
   variant?: string;
   /** DIAGNOSTIC, never counted: a failed answer that would pass if the last JSON object in the reply were read (a failure of format only) */
   lenient_passed?: boolean;
-  /** the key recomputed from the data the model received, against the day's snapshot key */
+  /** the key recomputed from the data the model received, against the answer key (the session's own snapshot from D117; before that, the day's snapshot) */
   snapshot_check: "same" | "differs" | "insufficient";
   /** why the session ended before an answer, if it did */
   limit?: string;
+  /**
+   * The answer key's own snapshot, taken at the session's time (D117): its tag in the day's manifest, its hash, when its last request answered, when the session started and ended, and the gap
+   * between the pull and the end of the session. Absent on sessions graded against the day's snapshot (before D117).
+   */
+  key?: {
+    tag: string;
+    sha256: string;
+    pulled_at: string;
+    requests: number;
+    session_started_at: string;
+    session_ended_at: string;
+    gap_ms: number;
+  };
   tools_offered: string[];
   tools_withheld: string[];
   turns: {

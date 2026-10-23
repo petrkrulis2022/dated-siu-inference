@@ -11,7 +11,7 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { RateGovernor } from "../data-desk/governor.js";
+import { RateGovernor, RateLimited } from "../data-desk/governor.js";
 import { LiveMcp, MCP_GOVERNOR_GROUP, McpTransportFailure } from "./live-mcp.js";
 import { LoginFailed, runLogin } from "./oauth-login.js";
 import { TrialOAuthProvider } from "./oauth-store.js";
@@ -242,6 +242,9 @@ describe("the one-time browser sign-in", () => {
   });
 });
 
+/** how many more calls to the tool "limited" the fake server refuses with its rate-limit error result */
+let limitedLeft = 0;
+
 describe("the live MCP client", () => {
   async function connected(governor?: RateGovernor) {
     const server = new Server(
@@ -276,6 +279,19 @@ describe("the live MCP client", () => {
         return { content: [{ type: "image", data: "AAAA", mimeType: "image/png" }] };
       if (req.params.name === "bad_args")
         throw new McpError(ErrorCode.InvalidParams, "no such model");
+      if (req.params.name === "limited") {
+        if (limitedLeft-- > 0)
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: "Error: RATE_LIMITED: too many requests, wait before retrying (request ID 1)\n\nIf this result looks wrong or incomplete, report it.",
+              },
+            ],
+          };
+        return { content: [{ type: "text", text: "served" }] };
+      }
       return {
         content: [
           { type: "text", text: '{"data":{"series":[]}}' },
@@ -342,6 +358,57 @@ describe("the live MCP client", () => {
     // only the class is kept, never the message
     expect((failed as Error).message).not.toContain("Not connected");
     expect((failed as McpTransportFailure).errorClass).toBe("Error");
+  });
+
+  it("treats the MCP's RATE_LIMITED error result as a 429: backs off and retries, so the model never sees it (7 of 22 sessions did, 20 to 23 October)", async () => {
+    const governor = new RateGovernor({
+      overrides: {
+        [MCP_GOVERNOR_GROUP]: {
+          minIntervalMs: 0,
+          baseBackoffMs: 1,
+          maxBackoffMs: 1,
+          maxRetries: 4,
+        },
+      },
+    });
+    const { live } = await connected(governor);
+    limitedLeft = 2;
+    expect(await live.call("limited", {})).toEqual({ isError: false, text: "served" });
+    const r = governor.report().find((x) => x.group === MCP_GOVERNOR_GROUP);
+    expect(r?.requestsToday).toBe(3); // two refused, one served
+    expect(r?.tooManyRequests).toBe(2);
+    await live.close();
+  });
+
+  it("and when the limit outlasts the retries it throws RateLimited, which is a service failure, not an error result for the model", async () => {
+    const governor = new RateGovernor({
+      overrides: {
+        [MCP_GOVERNOR_GROUP]: {
+          minIntervalMs: 0,
+          baseBackoffMs: 1,
+          maxBackoffMs: 1,
+          maxRetries: 2,
+        },
+      },
+    });
+    const { live } = await connected(governor);
+    limitedLeft = 100;
+    await expect(live.call("limited", {})).rejects.toBeInstanceOf(RateLimited);
+    limitedLeft = 0;
+    await live.close();
+  });
+
+  it("does not mistake a different error result for a rate limit", async () => {
+    const governor = new RateGovernor({
+      overrides: { [MCP_GOVERNOR_GROUP]: { minIntervalMs: 0 } },
+    });
+    const { live } = await connected(governor);
+    expect(await live.call("tabular_catalog", {})).toEqual({
+      isError: true,
+      text: "no such table",
+    });
+    expect(governor.report().find((x) => x.group === MCP_GOVERNOR_GROUP)?.tooManyRequests).toBe(0);
+    await live.close();
   });
 
   it("paces every call through the rate governor's mcp group, and counts them", async () => {

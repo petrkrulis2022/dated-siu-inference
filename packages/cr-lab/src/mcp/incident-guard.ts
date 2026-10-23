@@ -7,13 +7,22 @@
  *
  * A refusal about the call itself (an error result from the server: bad arguments, an unknown model) is the model's to handle and is not an incident.
  */
+import { DataDeskError } from "../data-desk/desk.js";
 import { DailyRequestLimit, HourlyRequestLimit, RateLimited } from "../data-desk/governor.js";
 import type { AnswerRecord, RecordStore } from "../runner/records.js";
+import { KeyPullFailed, KeyUnavailable } from "./key-snapshot.js";
 import { McpLoginRequired, McpTransportFailure } from "./live-mcp.js";
 import type { McpBackend, McpCallResult, McpToolDef } from "./types.js";
 
 export type IncidentKind =
-  "rate-limited" | "request-limit" | "login-required" | "transport-failure" | "other";
+  | "rate-limited"
+  | "request-limit"
+  | "login-required"
+  | "transport-failure"
+  | "key-pull-failed"
+  | "key-unavailable"
+  | "model-api-failure"
+  | "other";
 
 export interface Incident {
   kind: IncidentKind;
@@ -22,6 +31,15 @@ export interface Incident {
 }
 
 export function classifyIncident(e: unknown): Incident {
+  // the answer key's REST pull failed: say which kind of failure inside it, never its message
+  if (e instanceof KeyPullFailed)
+    return {
+      kind: "key-pull-failed",
+      detail: `key pull at "${e.step}": ${classifyIncident(e.cause).detail}`,
+    };
+  if (e instanceof KeyUnavailable) return { kind: "key-unavailable", detail: "KeyUnavailable" };
+  if (e instanceof DataDeskError)
+    return { kind: "other", detail: `DataDeskError (${e.status ?? "no status"})` };
   if (e instanceof McpLoginRequired) return { kind: "login-required", detail: "McpLoginRequired" };
   if (e instanceof RateLimited)
     return { kind: "rate-limited", detail: `RateLimited (${e.status})` };

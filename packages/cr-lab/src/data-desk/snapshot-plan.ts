@@ -57,8 +57,13 @@ const rowsOf = (j: Json): Obj[] =>
     .map((r) => obj(r))
     .filter((r): r is Obj => r !== undefined);
 const str = (v: Json | undefined): string | undefined => (typeof v === "string" ? v : undefined);
+/** The `id` (or another field) of every row of a tabular response, in order: the series keys the timeseries pulls name. */
+export const idsOfRows = (json: Json, field = "id"): string[] =>
+  rowsOf(json)
+    .map((r) => str(r[field]))
+    .filter((x): x is string => x !== undefined);
 
-const batches = <T>(xs: readonly T[], n: number): T[][] =>
+export const batches = <T>(xs: readonly T[], n: number): T[][] =>
   Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
 
 /** The first day of the quarter containing `date`. */
@@ -132,11 +137,7 @@ export async function runDailyPlan(
     }
   };
   const ids = (s: { json: Json } | undefined, field = "id"): string[] =>
-    s === undefined
-      ? []
-      : rowsOf(s.json)
-          .map((r) => str(r[field]))
-          .filter((x): x is string => x !== undefined);
+    s === undefined ? [] : idsOfRows(s.json, field);
 
   // CR-VS
   const months = { start: monthsBefore(firstOfMonth(window), 17), end: firstOfMonth(window) };

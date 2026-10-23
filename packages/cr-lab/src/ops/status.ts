@@ -24,7 +24,8 @@ export type AlertKind =
   | "mcp-login-failed"
   | "mcp-unreachable"
   | "mcp-run-failed"
-  | "mcp-not-complete";
+  | "mcp-not-complete"
+  | "ledger-repaired";
 
 export interface AttemptRecord {
   at: string;

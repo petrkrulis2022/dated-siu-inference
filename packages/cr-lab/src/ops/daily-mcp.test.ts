@@ -78,29 +78,15 @@ describe("the scheduled MCP day: when it runs", () => {
     expect(s.status.read(DAY)).toBeUndefined();
   });
 
-  it("does not play sessions on a snapshot pulled before the pull hour: the live data is a day ahead of it, so even a perfect session would fail the check against it (2026-10-20)", async () => {
+  it("plays sessions on any complete snapshot of the day, even one pulled in the early morning: each session is graded against its own answer key, taken at its own time (D117)", async () => {
     const s = setup(async () => summary());
     s.snapshotStatus.write({
       ...emptyStatus(DAY),
       state: "complete",
       completedAt: `${DAY}T06:19:44Z`,
     });
-    expect((await runDailyMcp(s.deps())).outcome).toBe("snapshot-before-pull-time");
-    expect(s.calls.n).toBe(0);
-    expect(s.alerts.alerts).toEqual([]);
-    // the evening check does not judge a day it could not have played
-    const evening = setup(async () => summary(), {
-      start: new Date(`${DAY}T22:00:00Z`),
-    });
-    evening.snapshotStatus.write({
-      ...emptyStatus(DAY),
-      state: "complete",
-      completedAt: `${DAY}T06:19:44Z`,
-    });
-    expect((await runDailyMcp(evening.deps("watchdog"))).outcome).toBe(
-      "watchdog-no-usable-snapshot",
-    );
-    expect(evening.alerts.alerts).toEqual([]);
+    expect((await runDailyMcp(s.deps())).outcome).toBe("complete");
+    expect(s.calls.n).toBe(1);
   });
 
   it("runs once the snapshot is in, records the day complete, and then does nothing on later hourly runs", async () => {
@@ -285,9 +271,9 @@ describe("the evening check", () => {
     expect(s.alerts.alerts).toEqual([]);
   });
 
-  it("says nothing when there is no usable snapshot, because then there is no MCP day: the snapshot's own check reports that", async () => {
+  it("says nothing when there is no snapshot, because then there is no MCP day: the snapshot's own check reports that", async () => {
     const s = setup(async () => summary(), { start: evening, snapshotComplete: false });
-    expect((await runDailyMcp(s.deps("watchdog"))).outcome).toBe("watchdog-no-usable-snapshot");
+    expect((await runDailyMcp(s.deps("watchdog"))).outcome).toBe("watchdog-snapshot-not-complete");
     expect(s.alerts.alerts).toEqual([]);
   });
 

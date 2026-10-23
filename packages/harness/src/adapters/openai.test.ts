@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createOpenAiAdapter } from "./openai.js";
+import { AdapterHttpError, billedUsageOf } from "./types.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -77,6 +78,30 @@ describe("createOpenAiAdapter", () => {
 
     expect(callCount).toBe(2);
     expect(result.deviations).toHaveLength(1);
+  });
+
+  it("a retry that fails AFTER a billed truncated first call carries that call's usage on the error, and changes nothing else about it", async () => {
+    const fetchMock = vi.fn(async () => {
+      if (fetchMock.mock.calls.length === 1)
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: "" }, finish_reason: "length" }],
+            usage: {
+              prompt_tokens: 50,
+              completion_tokens: 100,
+              prompt_tokens_details: { cached_tokens: 5 },
+              completion_tokens_details: { reasoning_tokens: 95 },
+            },
+          }),
+        };
+      return { ok: false, status: 400, json: async () => ({ error: { message: "max_tokens too large" } }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const err = await createOpenAiAdapter("test-key")("gpt-5.4-mini", "prompt", PARAMS).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AdapterHttpError);
+    expect((err as AdapterHttpError).status).toBe(400);
+    expect(billedUsageOf(err)).toEqual({ input: 50, output: 100, cached_input: 5, reasoning: 95 });
   });
 
   it("retries with reasoning accommodated above the task budget when mandatory reasoning truncates the completion", async () => {
