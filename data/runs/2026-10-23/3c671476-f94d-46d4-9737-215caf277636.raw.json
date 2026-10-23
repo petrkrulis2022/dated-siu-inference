@@ -1,0 +1,39 @@
+{
+  "id": "34030a15-5293-946c-b01f-efb85077ddb1",
+  "object": "chat.completion",
+  "created": 1792717262,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "C14F9B\n7D1A1B\nEB90B2\n6E17E7",
+        "reasoning_content": "I will scan the archive log for access codes and list them in order.\n\nI found four access codes so far: C14F9B for the coastal annex, 7D1A1B for the central annex, EB90B2 for the northern annex, and 6E17E7 for the western annex.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21731,
+    "completion_tokens": 23,
+    "total_tokens": 22257,
+    "prompt_tokens_details": {
+      "text_tokens": 21731,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 503,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 458500000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
