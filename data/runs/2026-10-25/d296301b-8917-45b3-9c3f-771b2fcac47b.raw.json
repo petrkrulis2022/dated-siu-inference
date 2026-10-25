@@ -1,0 +1,39 @@
+{
+  "id": "f2540820-a01f-9041-9ab4-5da44e66e044",
+  "object": "chat.completion",
+  "created": 1792890221,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "A968AC\n8AF149\nF65D4A\n3935ED",
+        "reasoning_content": "I am scanning the archive log for access codes. I will list each one in order.\n\nFour access codes were found: A968AC, 8AF149, F65D4A, and 3935ED.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21472,
+    "completion_tokens": 17,
+    "total_tokens": 21910,
+    "prompt_tokens_details": {
+      "text_tokens": 21472,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 421,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 448040000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
