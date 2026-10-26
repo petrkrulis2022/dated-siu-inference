@@ -1,0 +1,39 @@
+{
+  "id": "59ac35a1-4437-903a-b5dd-cae017905124",
+  "object": "chat.completion",
+  "created": 1792976547,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "362744\n246D77\nDFD8E0\n81A5D9",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes: 362744, 246D77, DFD8E0, and 81A5D9.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21489,
+    "completion_tokens": 18,
+    "total_tokens": 21876,
+    "prompt_tokens_details": {
+      "text_tokens": 21489,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 369,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 445320000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
