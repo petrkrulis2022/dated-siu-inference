@@ -1,0 +1,39 @@
+{
+  "id": "c3883636-5ad4-96dd-ac3f-0b119e405fe3",
+  "object": "chat.completion",
+  "created": 1793148426,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "69D960\n2C931B\n2136F8\n67AEF0",
+        "reasoning_content": "I am extracting the archival access codes from the document.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21743,
+    "completion_tokens": 18,
+    "total_tokens": 21983,
+    "prompt_tokens_details": {
+      "text_tokens": 21743,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 222,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 441580000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
