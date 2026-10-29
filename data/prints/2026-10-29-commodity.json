@@ -1,0 +1,127 @@
+{
+  "version": "SIU-2026a",
+  "print_id": "2026-10-29-commodity",
+  "date": "2026-10-29",
+  "status": "provisional",
+  "basket_costs": [
+    {
+      "model_id": "deepseek-v3.2",
+      "cost_usd": "0.001803"
+    },
+    {
+      "model_id": "llama-3.3-70b-deepinfra",
+      "cost_usd": "0.000705"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-instruct",
+      "cost_usd": "0.000656"
+    },
+    {
+      "model_id": "qwen-2.5-72b-instruct",
+      "cost_usd": "0.002496"
+    }
+  ],
+  "weights": {
+    "source": "equal",
+    "values": [
+      {
+        "model_id": "deepseek-v3.2",
+        "weight": "0.250000"
+      },
+      {
+        "model_id": "llama-3.3-70b-deepinfra",
+        "weight": "0.250000"
+      },
+      {
+        "model_id": "mistral-small-3.2-24b-instruct",
+        "weight": "0.250000"
+      },
+      {
+        "model_id": "qwen-2.5-72b-instruct",
+        "weight": "0.250000"
+      }
+    ]
+  },
+  "dated_siu": "0.001415",
+  "exchange_rate_table": [
+    {
+      "model_id": "deepseek-v3.2",
+      "usd_per_siu": "0.0018",
+      "spread_to_index": "0.2742",
+      "siu_per_usd": "554.6"
+    },
+    {
+      "model_id": "llama-3.3-70b-deepinfra",
+      "usd_per_siu": "0.0007",
+      "spread_to_index": "-0.5019",
+      "siu_per_usd": "1418.6"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-instruct",
+      "usd_per_siu": "0.0007",
+      "spread_to_index": "-0.5363",
+      "siu_per_usd": "1524.1"
+    },
+    {
+      "model_id": "qwen-2.5-72b-instruct",
+      "usd_per_siu": "0.0025",
+      "spread_to_index": "0.7640",
+      "siu_per_usd": "400.6"
+    }
+  ],
+  "sensitivity_block": [
+    {
+      "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
+      "dated_siu": "0.0009471",
+      "delta": "-0.3307",
+      "applies_to": [
+        "deepseek-v3.2",
+        "llama-3.3-70b-deepinfra",
+        "mistral-small-3.2-24b-instruct",
+        "qwen-2.5-72b-instruct"
+      ]
+    },
+    {
+      "policy_variant": "batch-discount: 50% off input and output",
+      "dated_siu": "0.0007085",
+      "delta": "-0.4993",
+      "applies_to": [
+        "deepseek-v3.2",
+        "llama-3.3-70b-deepinfra",
+        "mistral-small-3.2-24b-instruct",
+        "qwen-2.5-72b-instruct"
+      ]
+    }
+  ],
+  "rounding": {
+    "dated_siu_sig_figs": 4,
+    "basket_cost_dp": 6,
+    "usd_per_siu_dp": 4,
+    "spread_dp": 4,
+    "siu_per_usd_dp": 1,
+    "mode": "ROUND_HALF_UP",
+    "siu_per_usd_mode": "ROUND_DOWN",
+    "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. dated_siu rounds to significant figures, not a fixed decimal-place count, so its precision scales with the price rather than being lost as it falls (found live, 2026-09-25 — see docs/methodology.md's Rounding section). basket_cost carries more decimal places than dated_siu needs at any price level so the published print stays reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
+  },
+  "cost_of_production_usd": "0.0899",
+  "price_snapshot_ref": "price-snapshot-merged-2026-10-29T04-27-05.287Z.json",
+  "methodology_version": "v0-draft",
+  "methodology_revision": "rules-2026-09-26",
+  "series": "commodity",
+  "signature": "0x0562b5ab5854088648bf815509249448045d758d40517976e90f352b73af743a350ab9a5dbc4e1efb4b3b87c03f1e98f14f065f84676b464ba2698febbaac5a6",
+  "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
+  "anchor": {
+    "chain": "base-sepolia",
+    "status": "anchored",
+    "tx_hash": "0xf31b5e7c7dd23d39730d630f11d01ecb455fb714a6768323b71b6dca6d36690d",
+    "posted_at": "2026-10-29T04:28:57.000Z",
+    "additional_anchors": [
+      {
+        "chain": "arc-testnet",
+        "status": "anchored",
+        "tx_hash": "0xaedcc4f47671a3f0bf91a01a55119fcb8b31a6993aa9a05e74f687c2dae2b873",
+        "posted_at": "2026-10-29T04:28:58.000Z"
+      }
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "print_id": "2026-10-29",
+  "date": "2026-10-29",
+  "spend_usd_by_provider": {
+    "anthropic": "0.500566",
+    "openai": "0.231664",
+    "openrouter": "0.08990202",
+    "xai": "0.2756"
+  }
+}
