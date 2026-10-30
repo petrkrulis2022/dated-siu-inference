@@ -1,0 +1,39 @@
+{
+  "id": "678481f8-8fe6-93c3-a139-7fa26f5a7a5f",
+  "object": "chat.completion",
+  "created": 1793321241,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "2CB86D\n1A530A\n9D49E5\n534714",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nFour access codes were found for the upper, lower, central, and northern annexes. The document is being checked for additional codes.\n\nThe search is complete. No additional access codes were found.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21773,
+    "completion_tokens": 18,
+    "total_tokens": 22201,
+    "prompt_tokens_details": {
+      "text_tokens": 21773,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 410,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 453460000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
