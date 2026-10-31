@@ -1,0 +1,39 @@
+{
+  "id": "b9f33eba-02dc-974c-a173-1ec9b464054c",
+  "object": "chat.completion",
+  "created": 1793407164,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "C6A179\n326308\n3DBB02\n5306A8",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nFour access codes were found: C6A179, 326308, 3DBB02, and 5306A8. The document is being checked for additional codes.\n\nNo additional access codes were found.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21820,
+    "completion_tokens": 17,
+    "total_tokens": 22199,
+    "prompt_tokens_details": {
+      "text_tokens": 21820,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 362,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 451460000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
