@@ -1,0 +1,39 @@
+{
+  "id": "73b86762-2fba-9d1e-8726-79a92f45187a",
+  "object": "chat.completion",
+  "created": 1793580161,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"tracking_id\": \"SH-5CC4CD\",\n  \"origin_city\": \"Perth\",\n  \"destination_city\": \"Nairobi\",\n  \"weight_kg\": 302,\n  \"status\": \"in_transit\",\n  \"priority\": \"standard\"\n}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nI found the shipment details in the report. The record is SH-5CC4CD from Perth to Nairobi weighing 302 kg with standard priority and in_transit status.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1559,
+    "completion_tokens": 65,
+    "total_tokens": 1888,
+    "prompt_tokens_details": {
+      "text_tokens": 1559,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 264,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 43240000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
