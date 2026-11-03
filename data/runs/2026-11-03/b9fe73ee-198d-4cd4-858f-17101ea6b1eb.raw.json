@@ -1,0 +1,39 @@
+{
+  "id": "fcb6c4d4-a135-93aa-b856-1d4673b311f5",
+  "object": "chat.completion",
+  "created": 1793666859,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "B9B3ED\n945F4F\n981458\n818837",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes: B9B3ED for the coastal annex, 945F4F and 981458 for the western annex, and 818837 for the northern annex. I am doing a final check to ensure no codes were missed.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21498,
+    "completion_tokens": 16,
+    "total_tokens": 21930,
+    "prompt_tokens_details": {
+      "text_tokens": 21498,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 416,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 448200000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
