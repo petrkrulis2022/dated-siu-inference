@@ -1,5 +1,5 @@
 /**
- * `pnpm --filter @touchstone/cr-lab run cr-print [-- --days 2026-10-17,2026-10-18]`: WP0's figures from the stored snapshot-mode records (no model call, no Blockworks request).
+ * `pnpm --filter @touchstone/cr-lab run cr-print [-- --days 2026-10-17,2026-10-18] [--records <private records dir>]`: WP0's figures from the stored snapshot-mode records (no model call, no Blockworks request).
  *
  * The issuer models are the owner's choices: Frontier claude-sonnet-5 (D84), Commodity claude-haiku-5-5 (2026-11-04, qualifying per task type, D124). Writes the result, which holds
  * only costs, counts and pass rates (no Blockworks figure), to `data/lab/cr/economy/cr-print.json`.
@@ -23,7 +23,8 @@ const arg = (name: string): string | undefined => {
   return i >= 0 ? process.argv[i + 1] : undefined;
 };
 
-const store = new FileRecordStore();
+// `--records <dir>` reads another worktree's private records (the live trial's), never copying them
+const store = new FileRecordStore(arg("--records"));
 const records = store.windows().flatMap((w) => store.forWindow(w));
 const { snapshot } = loadRegistryAndPrices();
 const fix = (d: DecimalValue | undefined, dp = 9): string | null =>
