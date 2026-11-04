@@ -41,6 +41,31 @@ export function overview(
     lines.push(
       `- window ${s.window}: ${s.turns} turns, ${s.parseFailures} failed to parse, ${s.serviceFailures} lost to service failures, agents $${s.agentCostUsd.toFixed(6)}, task work $${s.workCostUsd.toFixed(6)}`,
     );
+  const mirrors = stats.flatMap((s) => s.mirrors);
+  lines.push(
+    "",
+    "## Mirrored sample (SIU first versus dollars first; the mirror is never executed)",
+    "",
+  );
+  if (mirrors.length === 0) lines.push("- no mirrored turns (scripted agents are never mirrored)");
+  else {
+    for (const siuFirst of [true, false]) {
+      const asked = [
+        ...mirrors
+          .filter((m) => m.original.siuFirst === siuFirst)
+          .map((m) => ({ parsed: true, flags: m.original.flags })),
+        ...mirrors
+          .filter((m) => m.mirror.siuFirst === siuFirst)
+          .map((m) => ({ parsed: m.mirror.parsed, flags: m.mirror.flags })),
+      ];
+      lines.push(
+        `- ${siuFirst ? "SIU first" : "dollars first"}: ${asked.length} answers, ${asked.filter((x) => !x.parsed).length} unreadable, ${asked.filter((x) => x.flags.length > 0).length} with a flagged amount`,
+      );
+    }
+    lines.push(
+      `- the mirror chose a different tool in ${mirrors.filter((m) => m.mirror.tool !== m.original.tool).length} of ${mirrors.length} pairs`,
+    );
+  }
   lines.push("", "## Payments, with each agent's own reason", "");
   const reasoningBefore = (t: LogEntry): string => {
     const r = [...log]

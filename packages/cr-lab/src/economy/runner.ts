@@ -125,6 +125,13 @@ export interface WindowStats {
   parseFailures: number;
   serviceFailures: number;
   flagged: { agent: string; round: number; flags: string[] }[];
+  /** the mirrored sample: the same board asked again with the other display, never executed */
+  mirrors: {
+    agent: string;
+    round: number;
+    original: { siuFirst: boolean; tool: string; flags: string[] };
+    mirror: { siuFirst: boolean; parsed: boolean; flags: string[]; tool: string | undefined };
+  }[];
   agentCostUsd: DecimalValue;
   workCostUsd: DecimalValue;
 }
@@ -153,6 +160,7 @@ export async function runWindows(opts: {
       parseFailures: 0,
       serviceFailures: 0,
       flagged: [],
+      mirrors: [],
       agentCostUsd: new D(0),
       workCostUsd: new D(0),
     };
@@ -197,6 +205,39 @@ export async function runWindows(opts: {
           w.log.write(board.day, r, a.id, "reasoning", { seat: a.seat, text: parsed.reasoning });
           if (parsed.flags.length > 0)
             s.flagged.push({ agent: a.id, round: r, flags: parsed.flags });
+          // the mirrored sample (D82): a seeded share of model turns is asked again with the other display (SIU first versus dollars first); the mirror is never executed
+          if (
+            a.seat !== "scripted" &&
+            mirrored(w.params.seed, k, r, a.id, w.params.mirroredShareBps)
+          ) {
+            const flipped = { ...board, siuFirst: !board.siuFirst, notices: [] };
+            const m = await a.reply(
+              flipped,
+              `${opts.instructions?.(a.role) ?? ""}\n\n${renderBoard(flipped)}`,
+            );
+            s.agentCostUsd = s.agentCostUsd.plus(m.costUsd);
+            const mp =
+              m.serviceFailure === undefined ? parseReply(m.text, a.role, flipped) : undefined;
+            const entry = {
+              siuFirst: flipped.siuFirst,
+              parsed: mp?.ok === true,
+              flags: mp?.ok === true ? mp.flags : [],
+              tool: mp?.ok === true ? mp.action.tool : undefined,
+            };
+            s.mirrors.push({
+              agent: a.id,
+              round: r,
+              original: { siuFirst: board.siuFirst, tool: parsed.action.tool, flags: parsed.flags },
+              mirror: entry,
+            });
+            w.log.write(board.day, r, a.id, "turn", {
+              seat: a.seat,
+              mirror: true,
+              executed: false,
+              ...entry,
+              ...(mp !== undefined && !mp.ok ? { error: mp.error } : {}),
+            });
+          }
           const out = await w.act(a.id, parsed.action, parsed.reasoning);
           w.log.write(board.day, r, a.id, "turn", {
             seat: a.seat,
@@ -219,6 +260,10 @@ export async function runWindows(opts: {
     s.workCostUsd = w.workSpendUsd;
   }
   return stats;
+}
+
+function mirrored(seed: string, k: number, r: number, agent: string, shareBps: bigint): boolean {
+  return new SeedStream(seed, `mirror:${k}:${r}:${agent}`).next(10_000) < Number(shareBps);
 }
 
 function seededOrder<T>(seed: string, k: number, r: number, xs: readonly T[]): T[] {
