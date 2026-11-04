@@ -123,6 +123,7 @@ export interface WindowStats {
   window: number;
   turns: number;
   parseFailures: number;
+  serviceFailures: number;
   flagged: { agent: string; round: number; flags: string[] }[];
   agentCostUsd: DecimalValue;
   workCostUsd: DecimalValue;
@@ -150,6 +151,7 @@ export async function runWindows(opts: {
       window: k,
       turns: 0,
       parseFailures: 0,
+      serviceFailures: 0,
       flagged: [],
       agentCostUsd: new D(0),
       workCostUsd: new D(0),
@@ -168,6 +170,16 @@ export async function runWindows(opts: {
         const rep = await a.reply(board, prompt);
         s.turns++;
         s.agentCostUsd = s.agentCostUsd.plus(rep.costUsd);
+        if (rep.serviceFailure !== undefined) {
+          s.serviceFailures++;
+          w.log.write(board.day, r, a.id, "turn", {
+            seat: a.seat,
+            parsed: false,
+            serviceFailure: rep.serviceFailure,
+          });
+          w.lastResult.set(a.id, "your last turn was lost to a service failure; nothing happened");
+          continue;
+        }
         const parsed = parseReply(rep.text, a.role, board);
         if (!parsed.ok) {
           s.parseFailures++;

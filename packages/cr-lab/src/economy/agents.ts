@@ -17,6 +17,8 @@ import type { Role, TaskWorker, WorkOutcome } from "./world.js";
 export interface AgentReply {
   text: string;
   costUsd: DecimalValue;
+  /** the provider failed (after its own retries): the turn is a service failure, not the agent's, and is not counted as a parse failure */
+  serviceFailure?: string;
 }
 export interface Agent {
   id: string;
