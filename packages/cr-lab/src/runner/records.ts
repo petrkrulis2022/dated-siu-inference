@@ -17,7 +17,8 @@ import type { FailureClass } from "./taxonomy.js";
 export interface AnswerRecord {
   schema: 1;
   window: string;
-  part: Extract<Part, "snapshot" | "dry-run" | "mcp">;
+  /** `economy`: an issuer's task work inside a Part 5 window (never counted in the CR lab print, which reads snapshot-mode parts only) */
+  part: Extract<Part, "snapshot" | "dry-run" | "mcp" | "economy">;
   task: TaskId;
   instance: string;
   model: string;

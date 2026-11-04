@@ -61,7 +61,7 @@ export interface RunAnswerInput {
   bundle: PromptBundle;
   window: string;
   daySha256: string;
-  part?: Extract<Part, "snapshot" | "dry-run">;
+  part?: Extract<Part, "snapshot" | "dry-run" | "economy">;
   /** the frozen output allowance per task (D113); defaults to `data/lab/cr/allowances.json` */
   allowances?: Readonly<Record<Instance["task"], number>>;
   now?: () => Date;
