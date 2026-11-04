@@ -1,6 +1,6 @@
 # Part 5 build plan: the CR economy
 
-**Status: PROPOSED 2026-10-19, REVISED 2026-10-20 after your answers to Q1 to Q11 and your note splitting the issuer from the participant, and APPROVED 2026-10-20 WITH THREE CHANGES (§0), which are in. Nothing in it is built.** Written for you to approve or amend before any code, as the working agreement requires. The design it follows is `docs/marketplace_plan.md` §16.9 and decisions D76, D77, D82, D84, D86, D87, D92 and D111. Numbers marked _illustrative_ are placeholders for tests and development windows, not proposals.
+**Status: PROPOSED 2026-10-19, REVISED 2026-10-20 after your answers to Q1 to Q11 and your note splitting the issuer from the participant, and APPROVED 2026-10-20 WITH THREE CHANGES (§0), which are in. BUILD STARTED 2026-11-04 on branch `part5` (your word: "build it"); the reserve's grade is settled (Commodity, claude-haiku-5-5), which lifts the blocker in §0 and risk 10. Progress and every choice made where this plan was loose: `docs/marketplace_plan.md` D125.** Written for you to approve or amend before any code, as the working agreement requires. The design it follows is `docs/marketplace_plan.md` §16.9 and decisions D76, D77, D82, D84, D86, D87, D92 and D111. Numbers marked _illustrative_ are placeholders for tests and development windows, not proposals.
 
 ## 0. Read this first
 
