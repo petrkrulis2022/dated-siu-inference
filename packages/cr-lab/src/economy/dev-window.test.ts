@@ -102,3 +102,64 @@ describe("development window DW0: scripted agents, memory ledger, stand-in data,
     }
   });
 });
+
+describe("R12 in the engine: every claim received in kind gets its warning before the window ends", () => {
+  it("warns a claim that arrives after the last round's warnings, at close, so none lapses unwarned", async () => {
+    const seed = "r12-late";
+    const params = { ...loadParams(), seed };
+    const wp0 = loadCrPrint();
+    const sha = standInSha(seed);
+    const world = buildWorld({
+      params,
+      wp0,
+      log: new EconomyLog("stand-in"),
+      worker: new StandInWorker(seed, passRates(wp0), sha),
+      t0: T0,
+      dataSha: sha,
+    });
+    world.genesis();
+    world.startWindow(1, needsSchedule(seed, TASKS));
+    // redeemed in window 1, the claims fall due in later windows (this window's lots were retired at the roll)
+    await world.act("DEMAND-1", { tool: "buy_agu", usdc: 100_000n }, "buying");
+    const r = await world.act(
+      "DEMAND-1",
+      { tool: "redeem_agu", agu: world.chain.balance("DEMAND-1", "AGU") },
+      "redeeming",
+    );
+    expect(r.ok).toBe(true);
+    world.closeWindow(1);
+    world.startWindow(2, needsSchedule(seed, TASKS));
+    // the round-by-round warning never ran in window 2: the close must still warn before the claims lapse
+    world.closeWindow(2);
+    const closes = world.log.of("claim-close").filter((e) => e.holder === "DEMAND-1");
+    expect(closes.length).toBeGreaterThan(0);
+    for (const c of closes) expect(c.lapsedAfterWarning).toBe(true);
+  });
+
+  it("stops the window with an invariant failure if a claim would lapse without its warning", async () => {
+    const seed = "r12-none";
+    const params = { ...loadParams(), seed };
+    const wp0 = loadCrPrint();
+    const sha = standInSha(seed);
+    const world = buildWorld({
+      params,
+      wp0,
+      log: new EconomyLog("stand-in"),
+      worker: new StandInWorker(seed, passRates(wp0), sha),
+      t0: T0,
+      dataSha: sha,
+    });
+    world.genesis();
+    world.startWindow(1, needsSchedule(seed, TASKS));
+    await world.act("DEMAND-1", { tool: "buy_agu", usdc: 100_000n }, "buying");
+    await world.act(
+      "DEMAND-1",
+      { tool: "redeem_agu", agu: world.chain.balance("DEMAND-1", "AGU") },
+      "redeeming",
+    );
+    world.closeWindow(1);
+    world.startWindow(2, needsSchedule(seed, TASKS));
+    world.lapseWarnings = () => undefined; // the warning removed from the path
+    expect(() => world.closeWindow(2)).toThrow(/R12/);
+  });
+});

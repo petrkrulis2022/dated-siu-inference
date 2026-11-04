@@ -54,6 +54,42 @@ describe("creation and redemption (R3, R4)", () => {
     expect(after.num * before.den).toBe(before.num * after.den);
   });
 
+  it("creates at NAV when NAV is below 1: a creator gets fewer units per mSIU than at face, and per-unit value is unchanged up to dust", () => {
+    const front = seedReserve(2_000n, 1); // 2 AGU-lab, NAV 1
+    c.seedBuffer("C2", usdcFor(500n, RATE)); // the buffer covers only a quarter of the face
+    now = w(1).from + 60;
+    c.roll("agu-issuer", {
+      rate: RATE,
+      frontLots: [front],
+      sales: [],
+      buys: [{ classId: "CR-PL", milli: 500n }],
+      buyFrom: w(2).from,
+      buyTo: w(2).to,
+    });
+    const before = c.nav(); // 500 mSIU behind 2 AGU-lab: NAV 0.25
+    expect(before.num * 4n).toBe(before.den);
+    const id = c.mint(PARTICIPANT, "CR-PL", "commodity", 1_000n, w(2).from, w(2).to, RATE);
+    const units = c.create(PARTICIPANT, id, 1_000n);
+    expect(units).toBe(4_000_000n); // 1 SIU of face at NAV 0.25 is 4 AGU-lab, not 1
+    const after = c.nav();
+    // per-unit value unchanged: after.num/after.den == before.num/before.den
+    expect(after.num * before.den).toBe(before.num * after.den);
+  });
+
+  it("creates at NAV when NAV is above 1, never diluting existing holders", () => {
+    const a = seedReserve(1_000n, 1); // 1 AGU-lab
+    c.transfer("AGU", PARTICIPANT, "agent-1", 500_000n);
+    c.redeem("agent-1", 1n); // a sliver of dust stays in the reserve: NAV a hair above 1
+    const before = c.nav();
+    expect(before.num * 1n > before.den * 1n).toBe(true);
+    const id = c.mint(PARTICIPANT, "CR-PL", "commodity", 1_000n, w(1).from, w(1).to, RATE);
+    c.create(PARTICIPANT, id, 1_000n);
+    const after = c.nav();
+    // non-dilution in holders' favour: per-unit value never falls
+    expect(after.num * before.den >= before.num * after.den).toBe(true);
+    expect(a).toBeDefined();
+  });
+
   it("refuses a Frontier lot, too little tenor, and anyone but the participant", () => {
     c.mintTestUsdc("F", 1n);
     c.createLot("F", "CR-VS", 100n, 1_000n, 1n);

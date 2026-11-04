@@ -721,7 +721,7 @@ export class World {
       task,
       series,
       milli,
-      window: k,
+      forWindow: k,
       usdc: usdcFor(milli, this.rates[series]),
     });
     this.notify(
@@ -819,7 +819,7 @@ export class World {
         tokenId: id,
         task: c,
         milli: each,
-        window: k,
+        forWindow: k,
         agu: units,
       });
     }
@@ -1024,7 +1024,7 @@ export class World {
         this.#log(GATE_RUNNER, "claim-close", {
           tokenId,
           holder,
-          kind: r.kind,
+          outcome: r.kind,
           milli: r.milli,
           usdc: r.usdc,
           lapsedAfterWarning,

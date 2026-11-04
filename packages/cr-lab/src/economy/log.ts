@@ -51,6 +51,8 @@ export interface LogEntry {
   [field: string]: unknown;
 }
 
+const RESERVED = ["seq", "window", "round", "actor", "backend", "kind"] as const;
+
 /** bigints are written as decimal strings of base units, so the log is plain JSON and nothing is rounded */
 const replacer = (_k: string, v: unknown): unknown => (typeof v === "bigint" ? v.toString() : v);
 
@@ -72,6 +74,8 @@ export class EconomyLog {
     kind: LogKind,
     fields: Record<string, unknown> = {},
   ): LogEntry {
+    for (const k of RESERVED)
+      if (k in fields) throw new Error(`log field "${k}" would overwrite the entry's own ${k}`);
     const entry: LogEntry = {
       seq: ++this.#seq,
       window,
