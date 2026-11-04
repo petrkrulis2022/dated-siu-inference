@@ -2,7 +2,7 @@
   "status": "ILLUSTRATIVE: development values, not a proposal. Committed and frozen before the first counted window (pre-registration, D87); never edited after.",
   "units": "USDC and AGU-lab in base units (6 decimals); face in mSIU; rates in nano-USD per SIU; basis points for shares",
   "secondsPerWindow": 86400,
-  "roundsPerWindow": 6,
+  "roundsPerWindow": 8,
   "ladderWindows": 3,
   "reserve": {
     "series": "commodity",
