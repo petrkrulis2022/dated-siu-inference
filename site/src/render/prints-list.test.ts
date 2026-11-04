@@ -131,6 +131,73 @@ describe("renderPrintsList", () => {
     expect(html).toContain('href="../prints/2026-08-27.html"');
   });
 
+  it("marks a print whose constituent produced no run records on every class with an incomplete badge naming it", () => {
+    const html = renderPrintsList({
+      allPrints: [
+        print({
+          print_id: "2026-10-29",
+          date: "2026-10-29",
+          basket_costs: [
+            { model_id: "deepseek-v3.2", cost_usd: "0.001820" },
+            {
+              model_id: "gemini-3.1-pro-preview",
+              excluded_reason:
+                "undefined class: T1 (no run records for this class); T2 (no run records for this class); T3 (no run records for this class)",
+            } as never,
+          ],
+        }),
+      ],
+      basePath: "../",
+      chain: CHAIN,
+    });
+    expect(html).toContain('class="badge status-incomplete"');
+    expect(html).toContain(">incomplete<");
+    expect(html).toContain("gemini-3.1-pro-preview produced no run records");
+    expect(html).toContain('href="../prints/2026-10-29.html"');
+  });
+
+  it("does not mark a print whose excluded constituent ran on some class (a quality-gate exclusion is not a missing model)", () => {
+    const html = renderPrintsList({
+      allPrints: [
+        print({
+          print_id: "2026-08-26",
+          date: "2026-08-26",
+          basket_costs: [
+            { model_id: "deepseek-v3.2", cost_usd: "0.001820" },
+            {
+              model_id: "llama-3.3-70b-novita",
+              excluded_reason:
+                "undefined class: T1 (all 5 instance(s) failed the quality gate); T2 (no run records for this class)",
+            } as never,
+          ],
+        }),
+      ],
+      basePath: "../",
+      chain: CHAIN,
+    });
+    expect(html).not.toContain("status-incomplete");
+  });
+
+  it("marks the day a missing model was dropped without a gap row from its correction note", () => {
+    const html = renderPrintsList({
+      allPrints: [
+        print({
+          print_id: "2026-09-08",
+          date: "2026-09-08",
+          correction_notes: [
+            {
+              published_at: "2026-09-08",
+              note: "claude-sonnet-5 and claude-haiku-4-5 (both frontier-tier) produced zero run records for this print",
+            },
+          ],
+        }),
+      ],
+      basePath: "../",
+      chain: CHAIN,
+    });
+    expect(html).toContain('class="badge status-incomplete"');
+  });
+
   it("shows final only for a print with a signed reconciliation record, never from print.status", () => {
     // print.status is "provisional" on both fixtures here (the field never changes on the
     // signed body, by design) — the badge must derive purely from reconciledPrintIds.

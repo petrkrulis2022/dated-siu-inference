@@ -178,6 +178,17 @@ nav.site-nav a:first-child {
   color: var(--ink);
 }
 
+.badge.status-incomplete {
+  background: transparent;
+  border-style: dashed;
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+
+.badge.status-incomplete:hover {
+  color: var(--ink);
+}
+
 tr.superseded td {
   color: var(--ink-muted);
 }

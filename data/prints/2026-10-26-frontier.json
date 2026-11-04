@@ -149,5 +149,11 @@
         "posted_at": "2026-10-26T01:03:03.000Z"
       }
     ]
-  }
+  },
+  "correction_notes": [
+    {
+      "published_at": "2026-11-04",
+      "note": "gemini-3.1-pro-preview produced no run records for this print: every attempt failed with Google's API error \"Your prepayment credits are depleted\", a billing failure on the publisher's own prepaid account, not a quality-gate failure. This frontier-tier print is therefore the equal-weighted average of 5 frontier constituents instead of 6. Gemini was the most expensive of them (basket cost $0.038953 on 2026-10-25, the last day it was measured), so the frontier prints of 2026-10-26 to 2026-11-04 read 26% to 27% below the last frontier print that measured it (2026-10-25, $0.01704). The other five averaged $0.012657 on 2026-10-25, and these prints range from $0.01249 to $0.01266, so the step comes from the missing constituent, not from a market move. Unlike the blended Dated SIU, which carried Gemini's last cost forward for 2026-10-26 to 2026-10-28, the frontier tier excluded it from the first missing day. The published figure is correctly computed from the constituents that ran, but it is not comparable with frontier prints that include Gemini."
+    }
+  ]
 }
