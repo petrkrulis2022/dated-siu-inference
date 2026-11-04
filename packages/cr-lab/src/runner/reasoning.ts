@@ -85,9 +85,10 @@ export type ReasoningRequest = "summary" | "default";
 
 /**
  * The Claude models whose thinking text is hidden unless a summary is asked for; for these, and only these, the tool loop and the snapshot runner send `display: "summarized"` (D107).
- * Haiku's only thinking is manual, off by default, and changes its behaviour, so it is left at its defaults.
+ * Haiku 4.5's only thinking is manual, off by default, and changes its behaviour, so it is left at its defaults; Haiku 5.5 thinks adaptively by default, like Sonnet, so it is asked for the
+ * summary too (D124).
  */
-const SUMMARY_REQUESTED_FOR: ReadonlySet<string> = new Set(["claude-sonnet-5"]);
+const SUMMARY_REQUESTED_FOR: ReadonlySet<string> = new Set(["claude-sonnet-5", "claude-haiku-5-5"]);
 
 export const requestsThinkingSummary = (modelString: string): boolean =>
   SUMMARY_REQUESTED_FOR.has(modelString);

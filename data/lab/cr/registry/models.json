@@ -1,0 +1,15 @@
+[
+  {
+    "id": "claude-haiku-5-5",
+    "provider": "anthropic",
+    "endpoint": "https://api.anthropic.com/v1/messages",
+    "model_string": "claude-haiku-5-5",
+    "tier": "mid",
+    "open_weights": false,
+    "host": "anthropic",
+    "sampling": {
+      "temperature": "provider-default"
+    },
+    "notes": "TRIAL-ONLY (D124): not in the print's registry and not admitted to it; the Blockworks trial (lab series CR) uses it to test whether a cheap Anthropic model can be the Commodity issuer. The model rejects any non-default sampling parameter, so none is sent. Adaptive thinking is on by default."
+  }
+]
