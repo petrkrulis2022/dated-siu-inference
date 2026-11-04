@@ -329,3 +329,67 @@ describe("window close, routing and escrow", () => {
     expect(c.balance("agent-1", "AGU")).toBe(300_000n);
   });
 });
+
+describe("every call is atomic, as a contract call is, and journalled", () => {
+  it("a mint the buyer cannot pay for leaves headroom, claims and balances exactly as they were", () => {
+    const head = c.headroom("C1", "CR-PL");
+    const before = JSON.stringify([...c.claims], (_k, v) =>
+      typeof v === "bigint" ? v.toString() : v instanceof Map ? [...v] : v,
+    );
+    const types = c.claimTypes.size;
+    expect(() => c.mint("pauper", "CR-PL", "commodity", 1_000n, w(1).from, w(1).to, RATE)).toThrow(
+      /needs/,
+    );
+    expect(c.headroom("C1", "CR-PL")).toBe(head);
+    expect(
+      JSON.stringify([...c.claims], (_k, v) =>
+        typeof v === "bigint" ? v.toString() : v instanceof Map ? [...v] : v,
+      ),
+    ).toBe(before);
+    expect(c.claimTypes.size).toBe(types);
+  });
+
+  it("a refused roll leaves the front lots unretired and every balance unchanged", () => {
+    const front = seedReserve(2_000n, 1);
+    now = w(1).from + 60;
+    const face = c.liveFace();
+    const usdc = c.balance("agent-1", "USDC");
+    expect(() =>
+      c.roll("agu-issuer", {
+        rate: RATE,
+        frontLots: [front],
+        sales: [{ buyer: "agent-1", tokenId: front, milli: 1_000n }],
+        buys: [{ classId: "CR-PL", milli: 2_000n }], // no buffer: unaffordable, refused after the sale moved money
+        buyFrom: w(2).from,
+        buyTo: w(2).to,
+      }),
+    ).toThrow(/R6/);
+    expect(c.retired.has(front)).toBe(false);
+    expect(c.liveFace()).toBe(face);
+    expect(c.balance("agent-1", "USDC")).toBe(usdc);
+    expect(c.claimBalance("agent-1", front)).toBe(0n);
+  });
+
+  it("journals only successful top-level calls, with the time they happened", () => {
+    const n = c.journal.length;
+    expect(() => c.mint("pauper", "CR-PL", "commodity", 1n, w(1).from, w(1).to, RATE)).toThrow();
+    expect(c.journal.length).toBe(n);
+    seedReserve(1_000n); // a mint and a create
+    const tail = c.journal.slice(n).map((j) => j.op);
+    expect(tail).toEqual(["mint", "create"]);
+    now = w(1).from + 60;
+    c.seedBuffer("C2", 1_000_000n);
+    const before = c.journal.length;
+    c.roll("agu-issuer", {
+      rate: RATE,
+      frontLots: [c.reserveLots[0] as string],
+      sales: [],
+      buys: [{ classId: "CR-PL", milli: 1_000n }],
+      buyFrom: w(2).from,
+      buyTo: w(2).to,
+    });
+    // the roll's own mint and transfers are part of it: one entry
+    expect(c.journal.slice(before).map((j) => j.op)).toEqual(["roll"]);
+    expect(c.journal.at(-1)?.now).toBe(now);
+  });
+});

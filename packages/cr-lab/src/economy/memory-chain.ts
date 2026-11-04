@@ -106,6 +106,51 @@ export interface Redemption {
   lots: { tokenId: string; milli: MilliSiu; windowTo: number }[];
 }
 
+/** one successful call that changed state, in order, as the chain would see it: the journal a window is replayed from onto the contracts */
+export interface JournalEntry {
+  op: Mutating;
+  args: unknown[];
+  now: number;
+}
+export const MUTATING = [
+  "mintTestUsdc",
+  "transfer",
+  "createLot",
+  "transferClaim",
+  "mint",
+  "present",
+  "serve",
+  "settleWindowClose",
+  "escrowOpen",
+  "escrowSettle",
+  "escrowExpire",
+  "create",
+  "redeem",
+  "seedBuffer",
+  "roll",
+  "setSkipped",
+  "setProbe",
+] as const;
+export type Mutating = (typeof MUTATING)[number];
+
+interface Saved {
+  usdc: Map<Account, UsdcUnits>;
+  agu: Map<Account, AguUnits>;
+  claims: Map<string, Map<Account, MilliSiu>>;
+  claimTypes: Map<string, ClaimType>;
+  everPresented: Set<string>;
+  settledPositions: Set<string>;
+  bondLots: Map<string, BondLot>;
+  issuersForClass: Map<string, Account[]>;
+  skipped: Set<Account>;
+  probeOpen: Set<Account>;
+  escrows: Map<string, Escrow>;
+  reserveLots: string[];
+  retired: Set<string>;
+  aguSupply: bigint;
+  inRoll: boolean;
+}
+
 export const RESERVE = "reserve";
 export const BUFFER = "buffer";
 export const INCOME = "income";
@@ -130,12 +175,97 @@ export class MemoryChain {
   readonly retired = new Set<string>();
   aguSupply = 0n;
   #inRoll = false;
+  readonly journal: JournalEntry[] = [];
+  #depth = 0;
 
+  /**
+   * Every state-changing call is ATOMIC, as a contract call is: on a refusal nothing it did stays (a contract reverts the whole call; found 2026-11-04: a mint the buyer could not
+   * pay for had already consumed headroom and delivered the claim). Only the outermost call snapshots and is journalled; calls it makes on itself are part of it.
+   */
   constructor(
     readonly agu_: AguParams,
     readonly issuerRole: Account,
     readonly now: () => number,
-  ) {}
+  ) {
+    const self = this as unknown as Record<Mutating, (...a: unknown[]) => unknown>;
+    for (const name of MUTATING) {
+      const orig = self[name].bind(this);
+      self[name] = (...args: unknown[]): unknown => this.#atomic(name, args, () => orig(...args));
+    }
+  }
+
+  #atomic<T>(op: Mutating, args: unknown[], fn: () => T): T {
+    if (this.#depth > 0) return fn();
+    const saved = this.#save();
+    this.#depth++;
+    try {
+      const out = fn();
+      this.journal.push({ op, args: structuredClone(args), now: this.now() });
+      return out;
+    } catch (e) {
+      this.#restore(saved);
+      throw e;
+    } finally {
+      this.#depth--;
+    }
+  }
+
+  #save(): Saved {
+    return structuredClone({
+      usdc: this.usdc,
+      agu: this.agu,
+      claims: this.claims,
+      claimTypes: this.claimTypes,
+      everPresented: this.everPresented,
+      settledPositions: this.settledPositions,
+      bondLots: this.bondLots,
+      issuersForClass: this.issuersForClass,
+      skipped: this.skipped,
+      probeOpen: this.probeOpen,
+      escrows: this.escrows,
+      reserveLots: this.reserveLots,
+      retired: this.retired,
+      aguSupply: this.aguSupply,
+      inRoll: this.#inRoll,
+    });
+  }
+
+  #restore(s: Saved): void {
+    const refill = <K, V>(target: Map<K, V>, from: Map<K, V>): void => {
+      target.clear();
+      for (const [k, v] of from) target.set(k, v);
+    };
+    const refillSet = <V>(target: Set<V>, from: Set<V>): void => {
+      target.clear();
+      for (const v of from) target.add(v);
+    };
+    refill(this.usdc, s.usdc);
+    refill(this.agu, s.agu);
+    refill(this.claims, s.claims);
+    refill(this.claimTypes, s.claimTypes);
+    refillSet(this.everPresented, s.everPresented);
+    refillSet(this.settledPositions, s.settledPositions);
+    refill(this.bondLots, s.bondLots);
+    refill(this.issuersForClass, s.issuersForClass);
+    refillSet(this.skipped, s.skipped);
+    refillSet(this.probeOpen, s.probeOpen);
+    refill(this.escrows, s.escrows);
+    this.reserveLots.splice(0, this.reserveLots.length, ...s.reserveLots);
+    refillSet(this.retired, s.retired);
+    this.aguSupply = s.aguSupply;
+    this.#inRoll = s.inRoll;
+  }
+
+  /** `EligibleClaimRouter.setSkipped` (the lab publisher only) */
+  setSkipped(issuer: Account, skipped: boolean): void {
+    if (skipped) this.skipped.add(issuer);
+    else this.skipped.delete(issuer);
+  }
+  /** `EligibleClaimRouter.setProbe` (the lab publisher only) */
+  setProbe(issuer: Account, open: boolean): void {
+    if (open) this.probeOpen.add(issuer);
+    else this.probeOpen.delete(issuer);
+  }
 
   // ---- balances ---------------------------------------------------------------------------------------------------------------------------------
   balance(account: Account, asset: Asset): bigint {

@@ -845,7 +845,7 @@ export class World {
       if (!this.chain.skipped.has(i.id) || i.grade !== this.params.reserve.series) continue;
       const c = i.classes[0];
       if (c === undefined || this.chain.headroom(i.id, c) < milli) continue;
-      this.chain.probeOpen.add(i.id);
+      this.chain.setProbe(i.id, true);
       try {
         const id = this.chain.mint(
           PARTICIPANT,
@@ -867,7 +867,7 @@ export class World {
           probeFor: i.id,
         });
       } finally {
-        this.chain.probeOpen.delete(i.id);
+        this.chain.setProbe(i.id, false);
       }
     }
   }
@@ -1154,10 +1154,10 @@ export class World {
       if (presented === 0) continue;
       const below = BigInt(served) * 10_000n < BigInt(presented) * this.params.deliveryFloorBps;
       const was = this.chain.skipped.has(i.id);
-      if (below && !was) this.chain.skipped.add(i.id);
+      if (below && !was) this.chain.setSkipped(i.id, true);
       // cleared by the published rule: the trailing ratio is back at the floor AND enough probes were served
       if (!below && was && (this.probesServed.get(i.id) ?? 0) >= this.params.probesToClear) {
-        this.chain.skipped.delete(i.id);
+        this.chain.setSkipped(i.id, false);
         this.probesServed.delete(i.id);
       }
       const now = this.chain.skipped.has(i.id);
