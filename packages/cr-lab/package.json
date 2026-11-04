@@ -27,7 +27,8 @@
     "mcp-login": "pnpm run build && node --env-file=../../.env dist/cli/mcp-login.js",
     "reasoning-overview": "pnpm run build && node --env-file=../../.env dist/cli/reasoning-overview.js",
     "reasoning-tagging": "pnpm run build && node --env-file=../../.env dist/cli/reasoning-tagging.js",
-    "derive-allowances": "pnpm run build && node --env-file=../../.env dist/cli/derive-allowances.js"
+    "derive-allowances": "pnpm run build && node --env-file=../../.env dist/cli/derive-allowances.js",
+    "cr-print": "pnpm run build && node dist/cli/cr-print.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.31.0",

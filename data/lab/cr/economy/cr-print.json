@@ -1,0 +1,142 @@
+{
+  "note": "WP0 (docs/part5-build-plan.md §4.1). Costs, counts and pass rates from the trial's stored snapshot-mode records only; no Blockworks figure. Headline cost basis (D113). Exact decimals as strings; the print is rounded once, half up, to nano-USD.",
+  "computedAt": "2026-11-04T18:00:47.187Z",
+  "issuers": [
+    {
+      "model": "claude-sonnet-5",
+      "grade": "frontier",
+      "days": [
+        "2026-10-17",
+        "2026-10-18",
+        "2026-10-19"
+      ],
+      "perType": {
+        "CR-VS": {
+          "answers": 10,
+          "passes": 9,
+          "notDerivable": 0,
+          "headlineCostUsd": "2.259988000",
+          "passRate": "0.900000",
+          "qualified": true
+        },
+        "CR-PL": {
+          "answers": 9,
+          "passes": 9,
+          "notDerivable": 1,
+          "headlineCostUsd": "0.782126000",
+          "passRate": "1.000000",
+          "qualified": true
+        },
+        "CR-UO": {
+          "answers": 10,
+          "passes": 10,
+          "notDerivable": 0,
+          "headlineCostUsd": "0.210640000",
+          "passRate": "1.000000",
+          "qualified": true
+        },
+        "CR-SM": {
+          "answers": 8,
+          "passes": 8,
+          "notDerivable": 0,
+          "headlineCostUsd": "0.170924000",
+          "passRate": "1.000000",
+          "qualified": true
+        }
+      },
+      "costPerSiuUsd": "0.380442167",
+      "measuredRateSiuPerUsd": "2.628520410",
+      "qualifiedTasks": [
+        "CR-VS",
+        "CR-PL",
+        "CR-UO",
+        "CR-SM"
+      ],
+      "haircut": {
+        "pairs": 2,
+        "p95Rise": "0.256529416",
+        "budgetMultiplier": "0.795842888"
+      }
+    },
+    {
+      "model": "claude-haiku-5-5",
+      "grade": "commodity",
+      "days": [
+        "2026-10-17",
+        "2026-10-18",
+        "2026-10-19",
+        "2026-10-20",
+        "2026-10-21",
+        "2026-10-22"
+      ],
+      "perType": {
+        "CR-VS": {
+          "answers": 18,
+          "passes": 11,
+          "notDerivable": 0,
+          "headlineCostUsd": "0.080459100",
+          "passRate": "0.611111",
+          "qualified": false
+        },
+        "CR-PL": {
+          "answers": 18,
+          "passes": 17,
+          "notDerivable": 0,
+          "headlineCostUsd": "0.067323300",
+          "passRate": "0.944444",
+          "qualified": true
+        },
+        "CR-UO": {
+          "answers": 18,
+          "passes": 17,
+          "notDerivable": 0,
+          "headlineCostUsd": "0.012925900",
+          "passRate": "0.944444",
+          "qualified": true
+        },
+        "CR-SM": {
+          "answers": 12,
+          "passes": 12,
+          "notDerivable": 0,
+          "headlineCostUsd": "0.013541700",
+          "passRate": "1.000000",
+          "qualified": true
+        }
+      },
+      "costPerSiuUsd": "0.013163480",
+      "measuredRateSiuPerUsd": "75.967754288",
+      "qualifiedTasks": [
+        "CR-PL",
+        "CR-UO",
+        "CR-SM"
+      ],
+      "haircut": {
+        "pairs": 3,
+        "p95Rise": "0.584259894",
+        "budgetMultiplier": "0.631209566"
+      }
+    }
+  ],
+  "prints": [
+    {
+      "grade": "frontier",
+      "basket": "SIU-CR-2026a",
+      "issuers": [
+        "claude-sonnet-5"
+      ],
+      "withoutCost": [],
+      "usdPerSiu": "0.380442167",
+      "nanoUsdPerSiu": "380442167"
+    },
+    {
+      "grade": "commodity",
+      "basket": "SIU-CR-2026a",
+      "issuers": [
+        "claude-haiku-5-5"
+      ],
+      "withoutCost": [],
+      "usdPerSiu": "0.013163480",
+      "nanoUsdPerSiu": "13163480"
+    }
+  ]
+}
