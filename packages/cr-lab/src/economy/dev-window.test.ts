@@ -185,3 +185,105 @@ describe("single grade in practice (R3): routing picks issuers by task type, not
     expect(() => world.checkInvariants()).toThrow(/R3: reserve lot/);
   });
 });
+
+describe("R11 in the engine: routing skips issuers below the delivery floor, with a way back", () => {
+  async function failingFirst(seed: string) {
+    const base = loadParams();
+    // ISSUER-X registered FIRST among the Commodity issuers (first-fit would send it everything) and failing every presentation
+    const x = base.issuers.find((i) => i.id === "ISSUER-X");
+    if (x === undefined) throw new Error("no ISSUER-X");
+    const others = base.issuers.filter((i) => i.id !== "ISSUER-X" && i.id !== "ISSUER-F");
+    const f = base.issuers.find((i) => i.id === "ISSUER-F");
+    const params = {
+      ...base,
+      seed,
+      issuers: [{ ...x, failShareBps: 10_000n }, ...others, ...(f ? [f] : [])],
+    };
+    const wp0 = loadCrPrint();
+    const sha = standInSha(seed);
+    const world = buildWorld({
+      params,
+      wp0,
+      log: new EconomyLog("stand-in"),
+      worker: new StandInWorker(seed, passRates(wp0), sha),
+      t0: T0,
+      dataSha: sha,
+    });
+    world.genesis();
+    const agents: Agent[] = [
+      new ScriptedAgent("RESEARCH-1", "research", "ISSUER-X"),
+      new ScriptedAgent("RESEARCH-2", "research", "ISSUER-X"),
+      new ScriptedAgent("DEMAND-1", "demand"),
+      new ScriptedAgent("DEMAND-2", "demand"),
+      new ScriptedAgent("DEMAND-3", "demand"),
+      new ScriptedAgent("HEDGER", "hedger", "ISSUER-C1"),
+    ];
+    await runWindows({
+      world,
+      agents,
+      windows: [1, 2, 3],
+      needsFor: needsSchedule(
+        seed,
+        TASKS.filter((t) => t !== "CR-VS"),
+      ),
+    });
+    return world;
+  }
+
+  it("skips a failing issuer from the window after it falls below 0.8, never rolls into it again, and offers it only probe lots", async () => {
+    const world = await failingFirst("r11-skip");
+    const skippedAt = world.log
+      .of("routing")
+      .find((e) => e.issuer === "ISSUER-X" && e.skipped === true);
+    expect(skippedAt).toBeDefined();
+    const after = world.log.entries.filter((e) => e.seq > (skippedAt?.seq ?? 0));
+    const rollBuysFromX = after.filter((e) => e.kind === "roll-buy" && e.issuer === "ISSUER-X");
+    expect(rollBuysFromX).toEqual([]);
+    const creates = after.filter((e) => e.kind === "create");
+    const nonProbeToX = creates.filter(
+      (e) =>
+        e.probeFor === undefined &&
+        world.chain.claimTypes.get(e.tokenId as string)?.issuer === "ISSUER-X",
+    );
+    expect(nonProbeToX).toEqual([]);
+    expect(creates.filter((e) => e.probeFor === "ISSUER-X").length).toBeGreaterThan(0);
+    expect(world.chain.skipped.has("ISSUER-X")).toBe(true); // it never served a probe, so it never cleared
+  });
+
+  it("clears a skipped issuer only once its trailing ratio is back at the floor AND three probes were served", async () => {
+    for (const [probes, cleared] of [
+      [2, false],
+      [3, true],
+    ] as const) {
+      const seed = `r11-clear-${probes}`;
+      const params = { ...loadParams(), seed };
+      const wp0 = loadCrPrint();
+      const sha = standInSha(seed);
+      const world = buildWorld({
+        params,
+        wp0,
+        log: new EconomyLog("stand-in"),
+        worker: new StandInWorker(seed, passRates(wp0), sha),
+        t0: T0,
+        dataSha: sha,
+      });
+      world.genesis();
+      world.startWindow(1, needsSchedule(seed, TASKS));
+      world.chain.skipped.add("ISSUER-X");
+      world.delivery.set("ISSUER-X", [
+        { presented: 0, served: 0 },
+        { presented: 5, served: 4 }, // exactly 0.8 is at the floor, so not below it
+      ]);
+      world.probesServed.set("ISSUER-X", probes);
+      world.closeWindow(1);
+      expect(world.chain.skipped.has("ISSUER-X")).toBe(!cleared);
+    }
+  });
+
+  it("must fail on first-fit: without the skip rule the same routing sends the work back to the failing issuer", async () => {
+    const world = await failingFirst("r11-firstfit");
+    expect(world.chain.route("CR-PL", 1n)).not.toBe("ISSUER-X");
+    world.chain.skipped.clear(); // the unchanged first-fit router
+    expect(world.chain.route("CR-PL", 1n)).toBe("ISSUER-X");
+  });
+});

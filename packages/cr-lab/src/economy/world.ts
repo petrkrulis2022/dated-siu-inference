@@ -157,6 +157,9 @@ export class World {
   readonly frontPurchases: { agent: string; window: number; milli: MilliSiu; usdc: UsdcUnits }[] =
     [];
   readonly warned = new Set<string>();
+  /** R11: the probe lots offered to skipped issuers, and how many of each issuer's probes were served */
+  readonly probeLots = new Set<string>();
+  readonly probesServed = new Map<string, number>();
   readonly roles = new Map<string, Role>();
   forwardDelivered = 0;
   workSpendUsd = new D(0);
@@ -423,7 +426,11 @@ export class World {
       costUsd: out.costUsd.toFixed(6),
     });
     this.chain.serve(ct.issuer, tokenId, agent, take, out.passed);
-    if (out.passed) this.#stat(ct.issuer).served++;
+    if (out.passed) {
+      this.#stat(ct.issuer).served++;
+      if (this.probeLots.has(tokenId))
+        this.probesServed.set(ct.issuer, (this.probesServed.get(ct.issuer) ?? 0) + 1);
+    }
     this.#log(ct.issuer, "claim-serve", {
       tokenId,
       holder: agent,
@@ -823,6 +830,46 @@ export class World {
         agu: units,
       });
     }
+    this.#probeLots(k);
+  }
+
+  /**
+   * R11's way back: each window, one small probe lot is offered to each skipped issuer of the reserve's grade (one task of its first class, at most `probeShareBps` of the window's
+   * face), routed to it by an open probe and bought and created by the participant outside the roll, so the roll itself never buys from a skipped issuer.
+   */
+  #probeLots(k: number): void {
+    const cap = (this.params.reserve.faceMilliPerWindow * this.params.probeShareBps) / 10_000n;
+    const milli = TASK_MILLI < cap ? TASK_MILLI : cap;
+    if (milli === 0n) return;
+    for (const i of this.params.issuers) {
+      if (!this.chain.skipped.has(i.id) || i.grade !== this.params.reserve.series) continue;
+      const c = i.classes[0];
+      if (c === undefined || this.chain.headroom(i.id, c) < milli) continue;
+      this.chain.probeOpen.add(i.id);
+      try {
+        const id = this.chain.mint(
+          PARTICIPANT,
+          c,
+          this.params.reserve.series,
+          milli,
+          this.windowFrom(k),
+          this.windowTo(k),
+          this.commodityRate,
+        );
+        this.probeLots.add(id);
+        const units = this.chain.create(PARTICIPANT, id, milli);
+        this.#log(PARTICIPANT, "create", {
+          tokenId: id,
+          task: c,
+          milli,
+          forWindow: k,
+          agu: units,
+          probeFor: i.id,
+        });
+      } finally {
+        this.chain.probeOpen.delete(i.id);
+      }
+    }
   }
 
   /** the start of window k: participant's cap, the roll, NAV published, needs drawn */
@@ -1108,9 +1155,20 @@ export class World {
       const below = BigInt(served) * 10_000n < BigInt(presented) * this.params.deliveryFloorBps;
       const was = this.chain.skipped.has(i.id);
       if (below && !was) this.chain.skipped.add(i.id);
-      if (!below && was && served >= this.params.probesToClear) this.chain.skipped.delete(i.id);
-      if (below !== was)
-        this.#log(GATE_RUNNER, "routing", { issuer: i.id, skipped: below, served, presented });
+      // cleared by the published rule: the trailing ratio is back at the floor AND enough probes were served
+      if (!below && was && (this.probesServed.get(i.id) ?? 0) >= this.params.probesToClear) {
+        this.chain.skipped.delete(i.id);
+        this.probesServed.delete(i.id);
+      }
+      const now = this.chain.skipped.has(i.id);
+      if (now !== was)
+        this.#log(GATE_RUNNER, "routing", {
+          issuer: i.id,
+          skipped: now,
+          served,
+          presented,
+          probesServed: this.probesServed.get(i.id) ?? 0,
+        });
     }
   }
 
