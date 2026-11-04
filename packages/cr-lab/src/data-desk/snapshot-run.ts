@@ -18,20 +18,37 @@ export interface SnapshotRunResult {
   requests: number;
 }
 
+/**
+ * Blockworks' trial key allows 25 requests per clock hour, shared by every route (Data API, Token Unlocks and the MCP), refused requests included; the window resets at
+ * the top of the hour (Blockworks, 2026-11-04). The snapshot therefore sends every request through ONE group, at most 24 per rolling hour (a rolling hour of 24 never puts
+ * more than 24 into any clock hour), and waits the limit out rather than stopping. Before this, the two routes had a group of 30 each: up to 60 an hour together.
+ */
+export const BLOCKWORKS_GROUP = "blockworks";
+export const BLOCKWORKS_PER_HOUR = 24;
+
+export function snapshotGovernor(
+  opts: Pick<ConstructorParameters<typeof RateGovernor>[0] & object, "now" | "sleep"> = {},
+): RateGovernor {
+  return new RateGovernor({
+    ...opts,
+    overrides: {
+      [BLOCKWORKS_GROUP]: { waitOnHourlyLimit: true, maxRequestsPerHour: BLOCKWORKS_PER_HOUR },
+    },
+  });
+}
+
+export const snapshotGroupFor = (): string => BLOCKWORKS_GROUP;
+
 export async function pullTodaysSnapshot(opts: {
   window: string;
   log: (line: string) => void;
 }): Promise<SnapshotRunResult> {
-  const governor = new RateGovernor({
-    overrides: {
-      "data-api": { waitOnHourlyLimit: true },
-      "token-unlocks": { waitOnHourlyLimit: true },
-    },
-  });
+  const governor = snapshotGovernor();
   const desk = new DataDesk({
     backend: liveBackendFromEnv(),
     store: new SnapshotStore(defaultStoreOptions("live")),
     governor,
+    groupFor: snapshotGroupFor,
   });
   await desk.recordSpecVersions(opts.window);
   const result = await runDailyPlan(desk, { window: opts.window, log: opts.log });
