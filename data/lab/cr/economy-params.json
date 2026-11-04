@@ -22,7 +22,7 @@
       "id": "ISSUER-F",
       "model": "claude-sonnet-5",
       "grade": "frontier",
-      "classes": ["CR-VS", "CR-PL", "CR-UO", "CR-SM"],
+      "classes": ["CR-VS"],
       "budgetUsdPerWindow": "1.00",
       "bondUsdc": "5000000",
       "failShareBps": "0"

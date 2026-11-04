@@ -1,8 +1,9 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { TASKS } from "../tasks/instances.js";
 import { ScriptedAgent, StandInWorker, type Agent } from "./agents.js";
 import { EconomyLog } from "./log.js";
-import { loadParams } from "./params.js";
+import { loadParams, PARAMS_PATH, parseParams } from "./params.js";
 import { judgeDevWindows, onwardSpends } from "./report.js";
 import {
   buildWorld,
@@ -161,5 +162,26 @@ describe("R12 in the engine: every claim received in kind gets its warning befor
     world.startWindow(2, needsSchedule(seed, TASKS));
     world.lapseWarnings = () => undefined; // the warning removed from the path
     expect(() => world.closeWindow(2)).toThrow(/R12/);
+  });
+});
+
+describe("single grade in practice (R3): routing picks issuers by task type, not by grade", () => {
+  it("refuses parameters in which an issuer of another grade holds a lot of a class the reserve's grade serves", () => {
+    const raw = JSON.parse(readFileSync(PARAMS_PATH, "utf-8")) as {
+      issuers: { id: string; classes: string[] }[];
+    };
+    const f = raw.issuers.find((i) => i.id === "ISSUER-F");
+    if (f === undefined) throw new Error("no ISSUER-F in the parameters");
+    f.classes = ["CR-VS", "CR-PL"];
+    expect(() => parseParams(raw as never)).toThrow(/ISSUER-F \(frontier\) has a CR-PL lot/);
+  });
+
+  it("stops the run if a reserve lot was issued by an issuer of another grade", async () => {
+    const { world } = await dw0("r3-grade");
+    const lot = world.chain.reserveLots[0] as string;
+    const ct = world.chain.claimTypes.get(lot);
+    if (ct === undefined) throw new Error("no lot");
+    ct.issuer = "ISSUER-F";
+    expect(() => world.checkInvariants()).toThrow(/R3: reserve lot/);
   });
 });

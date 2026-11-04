@@ -110,6 +110,15 @@ export function parseParams(raw: Raw): EconomyParams {
     if (mandates[d] === undefined) throw new Error(`economy params: no mandate for ${d}`);
   if (raw.reserve.series !== "commodity" && raw.reserve.series !== "frontier")
     throw new Error("economy params: reserve.series");
+  // routing picks an issuer by task type, not by grade: an issuer of another grade holding a lot of a class the reserve's grade serves
+  // would be routed reserve claims (found 2026-11-04, when ISSUER-F had a CR-PL lot)
+  for (const i of issuers)
+    if (i.grade !== raw.reserve.series)
+      for (const c of i.classes)
+        if (issuers.some((j) => j.grade === raw.reserve.series && j.classes.includes(c)))
+          throw new Error(
+            `economy params: ${i.id} (${i.grade}) has a ${c} lot, a class the ${raw.reserve.series} issuers serve, so reserve claims could be routed to it`,
+          );
   return {
     status: String(raw.status),
     secondsPerWindow: Number(raw.secondsPerWindow),

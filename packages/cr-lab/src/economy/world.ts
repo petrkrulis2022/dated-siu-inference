@@ -1129,6 +1129,16 @@ export class World {
       throw new InvariantFailure("the buffer moves only by seed, carry and roll cover");
     if (this.chain.balance(INCOME, "USDC") !== this.#incomeIn)
       throw new InvariantFailure("the income ledger only receives carry");
+    // single grade (R3): every lot the reserve holds was issued by an issuer of the reserve's grade, not merely labelled with it
+    for (const id of this.chain.reserveLots) {
+      const issuer = this.params.issuers.find(
+        (i) => i.id === this.chain.claimTypes.get(id)?.issuer,
+      );
+      if (issuer?.grade !== this.params.reserve.series)
+        throw new InvariantFailure(
+          `R3: reserve lot ${id} was issued by ${issuer?.id ?? "?"}, not a ${this.params.reserve.series} issuer`,
+        );
+    }
     for (const [, holders] of this.chain.claims)
       for (const [, v] of holders)
         if (v < 0n) throw new InvariantFailure("no negative claim balance");
