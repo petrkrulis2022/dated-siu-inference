@@ -29,12 +29,14 @@
     "reasoning-tagging": "pnpm run build && node --env-file=../../.env dist/cli/reasoning-tagging.js",
     "derive-allowances": "pnpm run build && node --env-file=../../.env dist/cli/derive-allowances.js",
     "cr-print": "pnpm run build && node dist/cli/cr-print.js",
-    "economy-window": "pnpm run build && node --env-file=../../.env dist/cli/economy-window.js"
+    "economy-window": "pnpm run build && node --env-file=../../.env dist/cli/economy-window.js",
+    "economy-replay": "pnpm run build && node dist/cli/economy-replay.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.31.0",
     "@touchstone/harness": "workspace:*",
-    "@touchstone/sdk": "workspace:*"
+    "@touchstone/sdk": "workspace:*",
+    "viem": "^2.55.16"
   },
   "devDependencies": {
     "@types/node": "^26.2.0"
