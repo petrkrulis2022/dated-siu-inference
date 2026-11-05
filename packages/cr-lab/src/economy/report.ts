@@ -14,7 +14,15 @@ export interface DevWindowVerdict {
   checks: { name: string; ok: boolean; detail: string }[];
 }
 
-export function judgeDevWindows(w: World, stats: readonly WindowStats[]): DevWindowVerdict {
+/**
+ * `redemptionIsFinding` (the owner, 2026-11-05): with model agents, redeeming AGU-lab in kind is the agents' choice, so in model and counted windows it is reported as a finding
+ * and not required; the mechanics are proven by DW0 and the DW1 replay.
+ */
+export function judgeDevWindows(
+  w: World,
+  stats: readonly WindowStats[],
+  opts: { redemptionIsFinding?: boolean } = {},
+): DevWindowVerdict {
   const log = w.log.entries;
   const turns = stats.reduce((n, s) => n + s.turns, 0);
   const failures = stats.reduce((n, s) => n + s.parseFailures, 0);
@@ -58,8 +66,11 @@ export function judgeDevWindows(w: World, stats: readonly WindowStats[]): DevWin
     },
     { name: "the reserve was rolled", ok: rolls >= 1, detail: `${rolls} rolls` },
     {
-      name: "AGU-lab was redeemed in kind",
-      ok: redemptions >= 1,
+      name:
+        opts.redemptionIsFinding === true
+          ? "AGU-lab redeemed in kind (a finding, not a criterion)"
+          : "AGU-lab was redeemed in kind",
+      ok: opts.redemptionIsFinding === true || redemptions >= 1,
       detail: `${redemptions} redemptions`,
     },
     {

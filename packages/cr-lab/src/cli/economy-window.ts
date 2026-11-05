@@ -5,6 +5,10 @@
  * With `--backend snapshot` the issuers do real task work (their own models, through the answer runner and the gates) on the STORED days named by `--days`, one economy window per day;
  * that spends money too, so it needs `--yes-spend` and `--ledger` like model agents do. Stored Blockworks data may be used only until the end of the trial's deletion window.
  *
+ * `--counted` runs the COUNTED windows pre-registered in the parameters file (`counted`: the stored days in order, the seats' models rotating by window, settlement): model agents, real issuer
+ * work on the stored days, the redemption criterion reported as a finding (the owner, 2026-11-05), and at the end the window journal replayed onto the real contracts on anvil with every
+ * balance compared (`--no-replay` skips it). `--agents scripted` with `--counted` is the free rehearsal of the same pipeline (issuer work still costs a little); `--days` narrows the days.
+ *
  * Runs development windows of the CR economy (`docs/part5-build-plan.md` §6) on the memory ledger and the stand-in backend (labelled on every line; no Blockworks data). Scripted agents
  * spend nothing. Model agents spend real money through the trial's spend ledger: the run refuses without `--yes-spend`, and `--ledger` must name the ledger the trial itself writes, so the
  * $9 daily cap covers both (never run it while another spending process is running: reservations are in-process). Writes the ordered log and the report privately.
@@ -12,6 +16,9 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { trialKey } from "../keys.js";
 import { anthropicChat, anthropicMessagesApi } from "../mcp/anthropic-loop.js";
+import { openAiChat, openAiChatApi } from "../mcp/openai-loop.js";
+import type { ToolChat } from "../mcp/tool-loop.js";
+import { replayOnAnvil } from "../economy/chain-replay.js";
 import { privatePath } from "../paths.js";
 import { loadRegistryAndPrices, priceFor } from "../runner/prices.js";
 import { loadBudgets, policyFromBudgets } from "../spend/budgets.js";
@@ -44,15 +51,23 @@ const arg = (name: string, dflt?: string): string | undefined => {
 };
 const flag = (name: string): boolean => process.argv.includes(name);
 
-const mode = arg("--agents", "scripted") as "scripted" | "model";
-const model = arg("--model", "claude-haiku-4-5") as string;
-const windows = Number(arg("--windows", "1"));
-const seed = arg("--seed", `dev-${new Date().toISOString().slice(0, 10)}`) as string;
+const counted = flag("--counted");
 const base = loadParams();
+if (counted && base.counted === undefined)
+  throw new Error("--counted needs the `counted` block in the parameters file");
+const mode = (arg("--agents") ?? (counted ? "model" : "scripted")) as "scripted" | "model";
+const models = (
+  arg("--model") ?? (counted ? (base.counted?.seats ?? []).join(",") : "claude-haiku-4-5")
+).split(",");
+const windows = Number(arg("--windows", "1"));
+const seed = arg(
+  "--seed",
+  `${counted ? "counted" : "dev"}-${new Date().toISOString().slice(0, 10)}`,
+) as string;
 const rounds = Number(arg("--rounds", String(base.roundsPerWindow)));
 const params = { ...base, seed, roundsPerWindow: rounds };
 
-const backend = arg("--backend", "stand-in") as "stand-in" | "snapshot";
+const backend = (counted ? "snapshot" : arg("--backend", "stand-in")) as "stand-in" | "snapshot";
 const spends = mode === "model" || backend === "snapshot";
 if (spends && !flag("--yes-spend")) {
   console.error(
@@ -68,7 +83,7 @@ if (spends && ledgerPath === undefined) {
   process.exit(2);
 }
 
-const runId = `economy-${mode}-${backend}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+const runId = `economy-${counted ? "counted-" : ""}${mode}-${backend}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
 const dir = privatePath("cr", "economy", runId);
 mkdirSync(dir, { recursive: true });
 const wp0 = loadCrPrint();
@@ -83,7 +98,9 @@ let worker: TaskWorker;
 let dataSha: (k: number) => string;
 let windowCount = windows;
 if (backend === "snapshot") {
-  const days = (arg("--days") ?? "").split(",").filter((d) => d !== "");
+  const days = (arg("--days") ?? (counted ? (params.counted?.days ?? []).join(",") : ""))
+    .split(",")
+    .filter((d) => d !== "");
   if (days.length === 0) throw new Error("--backend snapshot needs --days");
   const dir = arg("--snapshots");
   if (dir === undefined)
@@ -120,22 +137,37 @@ const ids: [string, Role][] = [
   ...params.agents.demand.map((a): [string, Role] => [a, "demand"]),
   [params.agents.hedger, "hedger"],
 ];
-let agents: Agent[];
+let agents: Agent[] | ((k: number) => Agent[]);
 if (mode === "scripted") {
   agents = ids.map(
     ([id, role]) => new ScriptedAgent(id, role, id === "RESEARCH-2" ? "ISSUER-X" : "ISSUER-C1"),
   );
 } else {
-  const { snapshot } = loadRegistryAndPrices();
-  const price = priceFor(model, snapshot);
-  const ledger = new SpendLedger({
-    store: new FileLedgerStore(ledgerPath as string),
-    policy: policyFromBudgets(loadBudgets()),
-  });
-  const chat = anthropicChat(anthropicMessagesApi(trialKey("anthropic")), model);
-  agents = ids.map(
-    ([id, role]) => new ModelAgent(id, role, model, chat, price, ledger, "CR_ANTHROPIC_API_KEY"),
-  );
+  // each seat model talks to its own provider with the trial's own key; with several models the seats rotate by window (D75: counted windows alternate claude-sonnet-5 and gpt-5.1)
+  const { registry, snapshot } = loadRegistryAndPrices();
+  const byModel = new Map<string, Agent[]>();
+  for (const m of models) {
+    const entry = registry.find((r) => r.id === m);
+    if (entry === undefined) throw new Error(`"${m}" is not in the model registry`);
+    const chat: ToolChat =
+      entry.provider === "anthropic"
+        ? anthropicChat(anthropicMessagesApi(trialKey("anthropic")), entry.model_string)
+        : entry.provider === "openai"
+          ? openAiChat(openAiChatApi(trialKey("openai")), entry.model_string)
+          : (() => {
+              throw new Error(`no agent chat for ${m} (${entry.provider}) yet`);
+            })();
+    const keyName = entry.provider === "anthropic" ? "CR_ANTHROPIC_API_KEY" : "CR_OPENAI_API_KEY";
+    byModel.set(
+      m,
+      ids.map(
+        ([id, role]) =>
+          new ModelAgent(id, role, m, chat, priceFor(m, snapshot), ledger as SpendLedger, keyName),
+      ),
+    );
+  }
+  agents = (k: number): Agent[] =>
+    byModel.get(models[(k - 1) % models.length] as string) as Agent[];
 }
 
 const ks = Array.from({ length: windowCount }, (_, i) => i + 1);
@@ -149,13 +181,29 @@ const stats = await runWindows({
   ),
   instructions: (role) => instructionsFor(role as Role),
 });
-const verdict = judgeDevWindows(world, stats);
-const report = overview(
+const verdict = judgeDevWindows(world, stats, { redemptionIsFinding: counted || mode === "model" });
+let report = overview(
   world,
   stats,
   verdict,
-  `CR economy development run ${runId} (${mode}${mode === "model" ? `, ${model}` : ""})`,
+  `CR economy ${counted ? "COUNTED" : "development"} run ${runId} (${mode}${mode === "model" ? `, seats ${models.join(" / ")} rotating by window` : ""})`,
 );
+if (counted || flag("--replay")) {
+  if (flag("--no-replay")) report += "\n## On-chain replay\n\n- skipped (--no-replay)\n";
+  else {
+    const r = await replayOnAnvil(world.chain);
+    writeFileSync(
+      `${dir}/replay.json`,
+      `${JSON.stringify(r, (_k, v: unknown) => (typeof v === "bigint" ? v.toString() : v), 1)}\n`,
+      { mode: 0o600 },
+    );
+    report += `\n## On-chain replay (the window journal onto the real contracts on anvil)\n\n- ${r.replayed} of ${r.entries} journal entries in ${r.transactions} transactions; findings ${r.findings.length}; balance differences ${r.diff.length}${r.findings.length === 0 && r.diff.length === 0 ? " — the chain agrees with the memory ledger to the base unit" : ""}\n`;
+    for (const f of r.findings)
+      report += `- FINDING: ${f.kind} at entry ${f.entry} (${f.op}): ${f.detail}\n`;
+    for (const d of r.diff.slice(0, 20))
+      report += `- DIFF ${d.what} ${d.key}: memory ${d.memory}, chain ${d.chain}\n`;
+  }
+}
 writeFileSync(`${dir}/report.md`, report, { mode: 0o600 });
 console.log(report);
 console.log(`log and report (private): ${dir}`);

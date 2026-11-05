@@ -121,7 +121,7 @@ describe("R12 in the engine: every claim received in kind gets its warning befor
     world.genesis();
     world.startWindow(1, needsSchedule(seed, TASKS));
     // redeemed in window 1, the claims fall due in later windows (this window's lots were retired at the roll)
-    await world.act("DEMAND-1", { tool: "buy_agu", usdc: 100_000n }, "buying");
+    await world.act("DEMAND-1", { tool: "buy_agu", agu: 1_000_000n }, "buying");
     const r = await world.act(
       "DEMAND-1",
       { tool: "redeem_agu", agu: world.chain.balance("DEMAND-1", "AGU") },
@@ -152,7 +152,7 @@ describe("R12 in the engine: every claim received in kind gets its warning befor
     });
     world.genesis();
     world.startWindow(1, needsSchedule(seed, TASKS));
-    await world.act("DEMAND-1", { tool: "buy_agu", usdc: 100_000n }, "buying");
+    await world.act("DEMAND-1", { tool: "buy_agu", agu: 1_000_000n }, "buying");
     await world.act(
       "DEMAND-1",
       { tool: "redeem_agu", agu: world.chain.balance("DEMAND-1", "AGU") },

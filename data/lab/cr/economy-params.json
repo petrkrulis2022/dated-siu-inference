@@ -9,11 +9,11 @@
     "faceMilliPerWindow": "3000",
     "minTenorSeconds": 43200,
     "discountBps": "1000",
-    "bufferSeedUsdc": "2000000",
-    "bufferTargetUsdc": "2000000"
+    "bufferSeedUsdc": "500000",
+    "bufferTargetUsdc": "500000"
   },
   "participant": {
-    "usdc": "20000000",
+    "usdc": "2000000",
     "spreadBps": "200",
     "buybackCapBps": "1000"
   },
@@ -68,31 +68,49 @@
   },
   "mandates": {
     "DEMAND-1": {
-      "usdc": "3000000",
+      "usdc": "100000",
       "spendLimitAguPerWindow": "2000000",
       "holdingCeilingDays": 3,
-      "minUsdcBuffer": "500000",
+      "minUsdcBuffer": "16666",
       "sweepDays": [7, 14]
     },
     "DEMAND-2": {
-      "usdc": "3000000",
+      "usdc": "100000",
       "spendLimitAguPerWindow": "2000000",
       "holdingCeilingDays": 3,
-      "minUsdcBuffer": "500000",
+      "minUsdcBuffer": "16666",
       "sweepDays": [7, 14]
     },
     "DEMAND-3": {
-      "usdc": "3000000",
+      "usdc": "100000",
       "spendLimitAguPerWindow": "2000000",
       "holdingCeilingDays": 3,
-      "minUsdcBuffer": "500000",
+      "minUsdcBuffer": "16666",
       "sweepDays": [7, 14]
     }
   },
-  "researchUsdc": "1000000",
-  "hedger": { "usdc": "3000000", "briefsSold": 10, "priceUsdcPerBrief": "50000" },
+  "researchUsdc": "50000",
+  "hedger": {
+    "usdc": "100000",
+    "briefsSold": 10,
+    "priceUsdcPerBrief": "50000"
+  },
   "needsPerDemandAgentPerWindow": 1,
   "mirroredShareBps": "1000",
   "spendCapUsdPerWindow": "1.50",
-  "seed": "dev-0"
+  "seed": "dev-0",
+  "counted": {
+    "days": [
+      "2026-10-29",
+      "2026-10-30",
+      "2026-11-01",
+      "2026-11-02",
+      "2026-11-04",
+      "2026-11-05",
+      "2026-11-06"
+    ],
+    "seats": ["claude-sonnet-5", "gpt-5.1"],
+    "settlement": "memory ledger; the run's journal replayed onto the real contracts on anvil, every balance compared",
+    "redemptionIsFinding": true
+  }
 }

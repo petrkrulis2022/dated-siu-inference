@@ -145,13 +145,14 @@ export class StopRule extends Error {
 
 export async function runWindows(opts: {
   world: World;
-  agents: Agent[];
+  /** the agents, or the agents of each window (counted windows rotate the seat's model by day, D75) */
+  agents: Agent[] | ((k: number) => Agent[]);
   windows: number[];
   needsFor: (agent: string, k: number) => TaskId[];
   /** the system prompt a model agent gets before its board; scripted agents ignore it */
   instructions?: (role: string) => string;
 }): Promise<WindowStats[]> {
-  const { world: w, agents } = opts;
+  const w = opts.world;
   const stats: WindowStats[] = [];
   for (const k of opts.windows) {
     const s: WindowStats = {
@@ -171,6 +172,7 @@ export async function runWindows(opts: {
     for (let r = 0; r < w.params.roundsPerWindow; r++) {
       w.setTime(k, r);
       if (r === w.params.roundsPerWindow - 1) w.lapseWarnings(k);
+      const agents = typeof opts.agents === "function" ? opts.agents(k) : opts.agents;
       const order = seededOrder(w.params.seed, k, r, agents);
       for (const a of order) {
         const board = boardFor(w, a.id);

@@ -60,6 +60,8 @@ export interface EconomyParams {
   mirroredShareBps: bigint;
   spendCapUsdPerWindow: DecimalValue;
   seed: string;
+  /** the counted windows, pre-registered with the rest of this file (D87): the stored days they run on, in order, the seats' models rotating by window, and how they settle */
+  counted?: { days: string[]; seats: string[]; settlement: string; redemptionIsFinding: boolean };
 }
 
 const big = (v: unknown, what: string): bigint => {
@@ -156,6 +158,27 @@ export function parseParams(raw: Raw): EconomyParams {
     mirroredShareBps: big(raw.mirroredShareBps, "mirroredShareBps"),
     spendCapUsdPerWindow: dec(raw.spendCapUsdPerWindow, "spendCapUsdPerWindow"),
     seed: String(raw.seed),
+    ...(raw.counted !== undefined ? { counted: parseCounted(raw.counted) } : {}),
+  };
+}
+
+function parseCounted(v: unknown): NonNullable<EconomyParams["counted"]> {
+  const c = v as Record<string, unknown>;
+  const days = c.days as unknown[];
+  const seats = c.seats as unknown[];
+  if (
+    !Array.isArray(days) ||
+    days.length === 0 ||
+    !days.every((d) => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d))
+  )
+    throw new Error("economy params: counted.days must be a list of dates");
+  if (!Array.isArray(seats) || seats.length === 0 || !seats.every((x) => typeof x === "string"))
+    throw new Error("economy params: counted.seats must be a list of model ids");
+  return {
+    days: days as string[],
+    seats: seats as string[],
+    settlement: String(c.settlement),
+    redemptionIsFinding: c.redemptionIsFinding === true,
   };
 }
 

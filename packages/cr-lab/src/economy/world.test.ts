@@ -44,6 +44,7 @@ describe("buying AGU-lab (found in DW2, 2026-11-05)", () => {
     const inventory = w.chain.balance(PARTICIPANT, "AGU");
     const buffer = w.chain.balance("buffer", "USDC");
     const want = inventory + 2_000_000n;
+    w.mint("RESEARCH-1", 10_000_000n); // the test funds its own buyer, independent of the parameters' wallets
     const usdcBefore = w.chain.balance(PARTICIPANT, "USDC");
     const r = await w.act("RESEARCH-1", { tool: "buy_agu", agu: want }, "a large working balance");
     expect(r.ok, r.note).toBe(true);
@@ -60,6 +61,7 @@ describe("buying AGU-lab (found in DW2, 2026-11-05)", () => {
       p.participant = { ...p.participant, usdc: 200_000n }; // enough for the starting ladder (15 lots of 13,163 base units), little more
     });
     const inventory = w.chain.balance(PARTICIPANT, "AGU");
+    w.mint("RESEARCH-1", 10_000_000n);
     const r = await w.act(
       "RESEARCH-1",
       { tool: "buy_agu", agu: 50_000_000n },
