@@ -1,5 +1,5 @@
 {
-  "status": "ILLUSTRATIVE: development values, not a proposal. Committed and frozen before the first counted window (pre-registration, D87); never edited after.",
+  "status": "FROZEN 2026-11-05 for the counted windows (pre-registration, D87; the owner's choices in D129). Never edited after the first counted window; a change needs a dated revision and the owner's word.",
   "units": "USDC and AGU-lab in base units (6 decimals); face in mSIU; rates in nano-USD per SIU; basis points for shares",
   "secondsPerWindow": 86400,
   "roundsPerWindow": 8,
