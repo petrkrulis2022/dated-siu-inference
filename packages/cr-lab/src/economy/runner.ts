@@ -246,6 +246,7 @@ export async function runWindows(opts: {
             ok: out.ok,
             note: out.note,
             flags: parsed.flags,
+            fenced: parsed.fenced,
           });
         }
         w.checkInvariants();

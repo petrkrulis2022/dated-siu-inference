@@ -77,16 +77,27 @@ export const TOOL_HELP: Readonly<Record<string, string>> = {
 };
 
 export type Parsed =
-  | { ok: true; reasoning: string; action: Action; flags: string[] }
+  | { ok: true; reasoning: string; action: Action; flags: string[]; fenced: boolean }
   | { ok: false; error: string; reasoning?: string };
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
 
+/**
+ * The same fence rule as the snapshot-mode gate (`tasks/gates.ts`, `parseAnswer`): a reply that is EXACTLY one fenced block (```json ... ```) is read from inside the fence and
+ * marked `fenced`, noted and never counted as a failure; anything else around or after the object is still a failed turn, never repaired (found in DW2, 2026-11-05: claude-haiku-4-5
+ * fenced all 18 of its replies, each a valid object inside).
+ */
+const FENCE = /^```[A-Za-z]*\s*\n([\s\S]*?)\n?```$/;
+
 export function parseReply(text: string, role: Role, board?: Board): Parsed {
   let v: unknown;
+  let body = text.trim();
+  const fence = FENCE.exec(body);
+  const fenced = fence !== null;
+  if (fence !== null) body = (fence[1] as string).trim();
   try {
-    v = JSON.parse(text.trim());
+    v = JSON.parse(body);
   } catch {
     return { ok: false, error: "the reply is not one JSON object" };
   }
@@ -111,6 +122,7 @@ export function parseReply(text: string, role: Role, board?: Board): Parsed {
       reasoning,
       action,
       flags: board === undefined ? [] : scaleFlags(action, board),
+      fenced,
     };
   } catch (e) {
     return { ok: false, error: (e as Error).message, reasoning };
