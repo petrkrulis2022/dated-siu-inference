@@ -197,6 +197,7 @@ export async function runWindows(opts: {
             seat: a.seat,
             parsed: false,
             error: parsed.error,
+            ...(rep.stopReason !== undefined ? { stopReason: rep.stopReason } : {}),
             raw: rep.text.slice(0, 2000),
           });
           w.lastResult.set(

@@ -23,7 +23,8 @@ export class ModelAgent implements Agent {
     readonly price: ModelPrice,
     readonly ledger: SpendLedger,
     readonly keyName: string,
-    readonly maxTokens = 2_000,
+    /** the output allowance of a turn, thinking included: 2,000 cut claude-sonnet-5 off before its answer in 2 of 18 turns (found 2026-11-05) */
+    readonly maxTokens = 8_000,
   ) {}
 
   async reply(board: Board, prompt: string): Promise<AgentReply> {
@@ -50,7 +51,12 @@ export class ModelAgent implements Agent {
       async () => {
         const turn = await this.chat.send(this.chat.init(prompt), undefined, this.maxTokens);
         if (turn.status !== 200 || turn.reply === undefined)
-          return { usd: "0", text: "", failure: `model call failed (status ${turn.status})` };
+          return {
+            usd: "0",
+            text: "",
+            failure: `model call failed (status ${turn.status})`,
+            stopReason: undefined,
+          };
         const u = turn.reply.usage;
         const usd = usageCostUsd(
           {
@@ -62,12 +68,18 @@ export class ModelAgent implements Agent {
           this.price,
           this.chat.provider,
         );
-        return { usd: usd.toFixed(6), text: turn.reply.text, failure: undefined };
+        return {
+          usd: usd.toFixed(6),
+          text: turn.reply.text,
+          failure: undefined,
+          stopReason: turn.reply.stopReason,
+        };
       },
     );
     return {
       text: r.text,
       costUsd: new D(r.usd),
+      ...(r.stopReason !== undefined ? { stopReason: r.stopReason } : {}),
       ...(r.failure !== undefined ? { serviceFailure: r.failure } : {}),
     };
   }

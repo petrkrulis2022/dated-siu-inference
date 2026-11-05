@@ -19,6 +19,8 @@ export interface AgentReply {
   costUsd: DecimalValue;
   /** the provider failed (after its own retries): the turn is a service failure, not the agent's, and is not counted as a parse failure */
   serviceFailure?: string;
+  /** the provider's stop reason, so a reply cut off at the output allowance reads as that and not as the agent's format */
+  stopReason?: string;
 }
 export interface Agent {
   id: string;
