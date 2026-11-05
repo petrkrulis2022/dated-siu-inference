@@ -50,7 +50,8 @@ export const TOOLS_BY_ROLE: Readonly<Record<Role, readonly string[]>> = {
 
 export const TOOL_HELP: Readonly<Record<string, string>> = {
   pass: "{} — do nothing this round",
-  message: '{"to": "<agent id>", "text": "..."} — send a message',
+  message:
+    '{"to": "<agent id or all>", "text": "..."} — send a message to one agent, or to every agent',
   buy_agu:
     '{"agu": "<AGU-lab to buy>"} (or {"usdc": "<USDC to spend>"}) — buy AGU-lab from the participant at its ask',
   sell_agu:

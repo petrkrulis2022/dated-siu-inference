@@ -282,11 +282,18 @@ export class World {
     switch (a.tool) {
       case "pass":
         return { ok: true, note: "you passed this round" };
-      case "message":
-        if (!this.roles.has(a.to)) return { ok: false, note: `no agent ${a.to}` };
+      case "message": {
+        if (a.to !== "all" && !this.roles.has(a.to))
+          return {
+            ok: false,
+            note: `no agent ${a.to}; the agents are listed on your board, or send to "all"`,
+          };
         this.#log(agent, "message", { to: a.to, text: a.text });
-        this.notify(a.to, `message from ${agent}: ${a.text}`);
+        const to = a.to === "all" ? [...this.roles.keys()].filter((x) => x !== agent) : [a.to];
+        for (const x of to)
+          this.notify(x, `message from ${agent}${a.to === "all" ? " to all" : ""}: ${a.text}`);
         return { ok: true, note: `message sent to ${a.to}` };
+      }
       case "buy_agu":
         return this.#buyAgu(agent, a);
       case "sell_agu":
@@ -352,9 +359,26 @@ export class World {
     }
     const short = units - this.chain.balance(PARTICIPANT, "AGU");
     if (short > 0n) this.#participantTopUp(short);
-    const r = this.participant.sell(agent, units, rate);
-    this.#log(PARTICIPANT, "participant-sell", { to: agent, agu: r.units, usdc: r.usdc });
-    return { ok: true, note: `bought ${show(r.units)} AGU-lab for ${show(r.usdc)} USDC` };
+    const have = this.chain.balance(PARTICIPANT, "AGU");
+    if (have === 0n)
+      return {
+        ok: false,
+        note: "the participant has no AGU-lab to sell and the issuers have no capacity left this window",
+      };
+    const fill = units < have ? units : have;
+    const r = this.participant.sell(agent, fill, rate);
+    this.#log(PARTICIPANT, "participant-sell", {
+      to: agent,
+      agu: r.units,
+      usdc: r.usdc,
+      asked: units,
+    });
+    return fill < units
+      ? {
+          ok: true,
+          note: `partly filled: bought ${show(r.units)} of the ${show(units)} AGU-lab asked, for ${show(r.usdc)} USDC; the issuers have no more capacity this window`,
+        }
+      : { ok: true, note: `bought ${show(r.units)} AGU-lab for ${show(r.usdc)} USDC` };
   }
 
   /**
@@ -364,13 +388,7 @@ export class World {
    */
   #participantTopUp(unitsShort: AguUnits): void {
     const k = this.window + this.params.ladderWindows;
-    const classes = [
-      ...new Set(
-        this.params.issuers
-          .filter((i) => i.grade === this.params.reserve.series)
-          .flatMap((i) => i.classes),
-      ),
-    ];
+    const classes = this.#reserveClasses();
     const supply = this.chain.aguSupply;
     const face = this.chain.liveFace();
     // face needed so that floor(face × supply ÷ liveFace) covers the shortfall, plus one mSIU per class for rounding
@@ -378,35 +396,79 @@ export class World {
       supply === 0n || face === 0n
         ? unitsShort / 1_000n + 1n
         : (unitsShort * face + supply - 1n) / supply + BigInt(classes.length);
+    // class by class, and within a class issuer by issuer: each mint takes at most what one eligible issuer has left (routing sends a mint to one issuer)
     for (let i = 0; i < classes.length && need > 0n; i++) {
       const c = classes[i] as string;
-      const left = BigInt(classes.length - i);
-      const milli = (need + left - 1n) / left;
-      try {
-        const id = this.chain.mint(
-          PARTICIPANT,
-          c,
-          this.params.reserve.series,
-          milli,
-          this.windowFrom(k),
-          this.windowTo(k),
-          this.commodityRate,
-        );
-        const units = this.chain.create(PARTICIPANT, id, milli);
-        this.#log(PARTICIPANT, "create", {
-          tokenId: id,
-          task: c,
-          milli,
-          forWindow: k,
-          agu: units,
-          onDemand: true,
-        });
-        need -= milli;
-      } catch (e) {
-        if (!(e instanceof ChainRule)) throw e;
-        this.#log(PARTICIPANT, "error", { topUp: c, refused: e.message });
+      let share = (need + BigInt(classes.length - i) - 1n) / BigInt(classes.length - i);
+      while (share > 0n) {
+        const room = this.#largestHeadroom(c);
+        if (room === 0n) break;
+        const milli = share < room ? share : room;
+        try {
+          const id = this.chain.mint(
+            PARTICIPANT,
+            c,
+            this.params.reserve.series,
+            milli,
+            this.windowFrom(k),
+            this.windowTo(k),
+            this.commodityRate,
+          );
+          const units = this.chain.create(PARTICIPANT, id, milli);
+          this.#log(PARTICIPANT, "create", {
+            tokenId: id,
+            task: c,
+            milli,
+            forWindow: k,
+            agu: units,
+            onDemand: true,
+          });
+          share -= milli;
+          need -= milli;
+        } catch (e) {
+          if (!(e instanceof ChainRule)) throw e;
+          this.#log(PARTICIPANT, "error", { topUp: c, refused: e.message });
+          break;
+        }
       }
     }
+  }
+
+  #reserveClasses(): string[] {
+    return [
+      ...new Set(
+        this.params.issuers
+          .filter((i) => i.grade === this.params.reserve.series)
+          .flatMap((i) => i.classes),
+      ),
+    ];
+  }
+
+  /** the most one eligible issuer of the reserve's grade can still issue in `classId` */
+  #largestHeadroom(classId: string): MilliSiu {
+    let best = 0n;
+    for (const i of this.chain.issuersForClass.get(classId) ?? []) {
+      if (this.chain.skipped.has(i)) continue;
+      const h = this.chain.headroom(i, classId);
+      if (h > best) best = h;
+    }
+    return best;
+  }
+
+  /** what the participant can sell right now: its inventory plus what it could still create from the issuers' remaining headroom, at reserve NAV */
+  participantCanSell(): AguUnits {
+    const inventory = this.chain.balance(PARTICIPANT, "AGU");
+    const supply = this.chain.aguSupply;
+    const face = this.chain.liveFace();
+    if (supply === 0n || face === 0n) return inventory;
+    let room = 0n;
+    for (const c of this.#reserveClasses())
+      for (const i of this.chain.issuersForClass.get(c) ?? [])
+        if (!this.chain.skipped.has(i)) room += this.chain.headroom(i, c);
+    const usdcRoom = this.chain.balance(PARTICIPANT, "USDC");
+    const affordable = (usdcRoom * 1_000_000n) / this.commodityRate;
+    const creatable = room < affordable ? room : affordable;
+    return inventory + (creatable * supply) / face;
   }
 
   /** a demand agent's holding ceiling: its days of upcoming work, valued at the reference brief price */

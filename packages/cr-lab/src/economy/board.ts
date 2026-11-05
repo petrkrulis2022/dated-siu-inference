@@ -31,6 +31,10 @@ export interface Board {
   agu: AguUnits;
   aguSiuValue: MicroSiu;
   askUsdcPerAgu: UsdcUnits;
+  /** what the participant can sell right now (its inventory plus what the issuers' remaining capacity lets it create) */
+  participantCanSell: AguUnits;
+  /** every agent in the market and its role */
+  agents: { id: string; role: Role }[];
   bidUsdcPerAgu: UsdcUnits;
   claims: ClaimHolding[];
   needs: Need[];
@@ -86,6 +90,8 @@ export function boardFor(w: World, agent: string): Board {
     agu: w.chain.balance(agent, "AGU"),
     aguSiuValue: w.siuOf(w.chain.balance(agent, "AGU")),
     askUsdcPerAgu: q.ask,
+    participantCanSell: w.participantCanSell(),
+    agents: [...w.roles].map(([id, role]) => ({ id, role })),
     bidUsdcPerAgu: q.bid,
     claims,
     needs:
@@ -146,6 +152,12 @@ export function renderBoard(b: Board): string {
   );
   lines.push(
     `Your wallet: ${show(b.usdc)} USDC; ${show(b.agu)} AGU-lab (worth ${price(b, b.aguSiuValue)}).`,
+  );
+  lines.push(
+    `The participant can sell up to ${show(b.participantCanSell)} AGU-lab right now (the issuers' capacity this window limits what it can create).`,
+  );
+  lines.push(
+    `Agents in this market: ${b.agents.map((x) => `${x.id} (${x.role})`).join(", ")}. A message goes to one of them, or to "all".`,
   );
   if (b.mandate !== undefined)
     lines.push(

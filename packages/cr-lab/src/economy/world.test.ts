@@ -55,18 +55,46 @@ describe("buying AGU-lab (found in DW2, 2026-11-05)", () => {
     w.checkInvariants();
   });
 
-  it("refuses the sale when the participant's own USDC cannot buy the claims to create with", async () => {
+  it("fills a purchase only partly when the participant cannot create the rest, and says so", async () => {
     const w = world("broke", (p) => {
       p.participant = { ...p.participant, usdc: 200_000n }; // enough for the starting ladder (15 lots of 13,163 base units), little more
     });
+    const inventory = w.chain.balance(PARTICIPANT, "AGU");
     const r = await w.act(
       "RESEARCH-1",
       { tool: "buy_agu", agu: 50_000_000n },
       "far beyond what it can create",
     );
-    expect(r.ok).toBe(false);
-    expect(r.note).toMatch(/inventory is short/);
+    expect(r.ok).toBe(true);
+    expect(r.note).toMatch(/partly filled/);
+    expect(w.chain.balance("RESEARCH-1", "AGU")).toBeGreaterThanOrEqual(inventory);
+    expect(w.chain.balance("RESEARCH-1", "AGU")).toBeLessThan(50_000_000n);
     w.checkInvariants();
+  });
+
+  it("refuses once the issuers' capacity for the window is used up and the participant has nothing left to sell", async () => {
+    const w = world("empty");
+    w.mint("RESEARCH-1", 1_000_000_000n); // a buyer far richer than the window's capacity
+    let last = { ok: true, note: "" };
+    for (let i = 0; i < 40 && last.ok; i++)
+      last = await w.act("RESEARCH-1", { tool: "buy_agu", agu: 50_000_000n }, "take everything");
+    expect(last.ok).toBe(false);
+    expect(last.note).toMatch(/no AGU-lab to sell/);
+    expect(w.chain.balance(PARTICIPANT, "AGU")).toBe(0n);
+    w.checkInvariants();
+  });
+
+  it("lists the agents on the board and delivers a message to all of them", async () => {
+    const w = world("msg");
+    const r = await w.act(
+      "DEMAND-3",
+      { tool: "message", to: "all", text: "who quotes CR-PL?" },
+      "asking",
+    );
+    expect(r.ok).toBe(true);
+    for (const a of ["RESEARCH-1", "RESEARCH-2", "DEMAND-1", "HEDGER"])
+      expect((w.notices.get(a) ?? []).some((n) => n.includes("who quotes CR-PL?"))).toBe(true);
+    expect((w.notices.get("DEMAND-3") ?? []).some((n) => n.includes("who quotes"))).toBe(false);
   });
 
   it("parses buy_agu with exactly one of agu or usdc", () => {
