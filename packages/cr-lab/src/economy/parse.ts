@@ -51,7 +51,8 @@ export const TOOLS_BY_ROLE: Readonly<Record<Role, readonly string[]>> = {
 export const TOOL_HELP: Readonly<Record<string, string>> = {
   pass: "{} — do nothing this round",
   message: '{"to": "<agent id>", "text": "..."} — send a message',
-  buy_agu: '{"usdc": "<USDC to spend>"} — buy AGU-lab from the participant at its ask',
+  buy_agu:
+    '{"agu": "<AGU-lab to buy>"} (or {"usdc": "<USDC to spend>"}) — buy AGU-lab from the participant at its ask',
   sell_agu:
     '{"agu": "<AGU-lab to sell>"} — sell AGU-lab back to the participant at its bid (an exit to USDC)',
   redeem_agu:
@@ -157,7 +158,11 @@ function toAction(tool: string, args: Obj): Action {
     case "message":
       return { tool: "message", to: str(args, "to"), text: str(args, "text").slice(0, 600) };
     case "buy_agu":
-      return { tool: "buy_agu", usdc: amount(args, "usdc") };
+      if ((args.agu === undefined) === (args.usdc === undefined))
+        throw new Error('args must name exactly one of "agu" or "usdc"');
+      return args.agu !== undefined
+        ? { tool: "buy_agu", agu: amount(args, "agu") }
+        : { tool: "buy_agu", usdc: amount(args, "usdc") };
     case "sell_agu":
       return { tool: "sell_agu", agu: amount(args, "agu") };
     case "redeem_agu":
@@ -219,7 +224,10 @@ export function scaleFlags(a: Action, b: Board): string[] {
   };
   if (a.tool === "sell_agu" || a.tool === "redeem_agu")
     check(`${a.tool} vs your AGU-lab balance`, a.agu, b.agu);
-  if (a.tool === "buy_agu") check("buy_agu vs the ask for one AGU-lab", a.usdc, b.askUsdcPerAgu);
+  if (a.tool === "buy_agu" && a.usdc !== undefined)
+    check("buy_agu vs the ask for one AGU-lab", a.usdc, b.askUsdcPerAgu);
+  if (a.tool === "buy_agu" && a.agu !== undefined && b.agu > 0n)
+    check("buy_agu vs your AGU-lab balance", a.agu, b.agu);
   if (a.tool === "post_quote") {
     const ref = b.issuerPrices.reduce((m, p) => (p.priceMicroSiu > m ? p.priceMicroSiu : m), 0n);
     check("price_siu vs the dearest task price", a.priceMicroSiu, ref);

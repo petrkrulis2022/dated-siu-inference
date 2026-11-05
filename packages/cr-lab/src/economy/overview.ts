@@ -82,7 +82,11 @@ export function overview(
       : "(no reasoning)";
   };
   for (const t of log.filter(
-    (e) => e.kind === "turn" && e.parsed === true && PAYMENT_TOOLS.has(String(e.tool)),
+    (e) =>
+      e.kind === "turn" &&
+      e.parsed === true &&
+      e.mirror !== true &&
+      PAYMENT_TOOLS.has(String(e.tool)),
   )) {
     lines.push(
       `- ${t.window} r${t.round} **${t.actor}** \`${String(t.tool)}\` → ${t.ok === true ? "done" : "not done"}: ${String(t.note)}`,

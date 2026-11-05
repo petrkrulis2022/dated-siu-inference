@@ -55,7 +55,7 @@ export type Role = "research" | "demand" | "hedger";
 export type Action =
   | { tool: "pass" }
   | { tool: "message"; to: string; text: string }
-  | { tool: "buy_agu"; usdc: UsdcUnits }
+  | { tool: "buy_agu"; usdc?: UsdcUnits; agu?: AguUnits }
   | { tool: "sell_agu"; agu: AguUnits }
   | { tool: "redeem_agu"; agu: AguUnits }
   | { tool: "present_claim"; claim: string }
@@ -288,7 +288,7 @@ export class World {
         this.notify(a.to, `message from ${agent}: ${a.text}`);
         return { ok: true, note: `message sent to ${a.to}` };
       case "buy_agu":
-        return this.#buyAgu(agent, a.usdc);
+        return this.#buyAgu(agent, a);
       case "sell_agu":
         return this.#sellAgu(agent, a.agu, reasoning);
       case "redeem_agu":
@@ -334,20 +334,79 @@ export class World {
     }
   }
 
-  #buyAgu(agent: string, usdc: UsdcUnits): Outcome {
+  /** buy an exact amount of AGU-lab (`agu`, the ask charged for exactly that) or as much as a USDC amount buys at the ask (`usdc`) */
+  #buyAgu(agent: string, a: { usdc?: UsdcUnits; agu?: AguUnits }): Outcome {
     const m = this.params.mandates[agent];
-    if (m !== undefined && this.chain.balance(agent, "USDC") - usdc < m.minUsdcBuffer)
-      return { ok: false, note: `mandate: keep at least ${show(m.minUsdcBuffer)} USDC` };
-    const units = this.participant.unitsFor(usdc, this.commodityRate);
+    const rate = this.commodityRate;
+    const units = a.agu ?? (a.usdc !== undefined ? this.participant.unitsFor(a.usdc, rate) : 0n);
     if (units === 0n) return { ok: false, note: "that buys no AGU-lab at the ask" };
     if (m !== undefined) {
       const ceiling = this.holdingCeilingMicroSiu(agent);
       if (this.siuOf(this.chain.balance(agent, "AGU") + units) > ceiling)
         return { ok: false, note: `mandate: holding ceiling of ${show(ceiling)} SIU in AGU-lab` };
+      if (
+        this.chain.balance(agent, "USDC") - this.participant.quote(units, rate).ask <
+        m.minUsdcBuffer
+      )
+        return { ok: false, note: `mandate: keep at least ${show(m.minUsdcBuffer)} USDC` };
     }
-    const r = this.participant.sell(agent, units, this.commodityRate);
+    const short = units - this.chain.balance(PARTICIPANT, "AGU");
+    if (short > 0n) this.#participantTopUp(short);
+    const r = this.participant.sell(agent, units, rate);
     this.#log(PARTICIPANT, "participant-sell", { to: agent, agu: r.units, usdc: r.usdc });
     return { ok: true, note: `bought ${show(r.units)} AGU-lab for ${show(r.usdc)} USDC` };
+  }
+
+  /**
+   * The authorised participant creates AGU-lab on demand (§4.2): when its inventory is short of a sale, it buys claims from the reserve's grade's issuers with its own USDC, for the
+   * far end of the ladder, and creates at NAV. If its USDC or the issuers' headroom runs out it creates what it can, and the sale then refuses as before; it never draws on the reserve
+   * or the buffer (found in DW2, 2026-11-05: its genesis inventory of 12 AGU-lab ran out in the first round).
+   */
+  #participantTopUp(unitsShort: AguUnits): void {
+    const k = this.window + this.params.ladderWindows;
+    const classes = [
+      ...new Set(
+        this.params.issuers
+          .filter((i) => i.grade === this.params.reserve.series)
+          .flatMap((i) => i.classes),
+      ),
+    ];
+    const supply = this.chain.aguSupply;
+    const face = this.chain.liveFace();
+    // face needed so that floor(face × supply ÷ liveFace) covers the shortfall, plus one mSIU per class for rounding
+    let need =
+      supply === 0n || face === 0n
+        ? unitsShort / 1_000n + 1n
+        : (unitsShort * face + supply - 1n) / supply + BigInt(classes.length);
+    for (let i = 0; i < classes.length && need > 0n; i++) {
+      const c = classes[i] as string;
+      const left = BigInt(classes.length - i);
+      const milli = (need + left - 1n) / left;
+      try {
+        const id = this.chain.mint(
+          PARTICIPANT,
+          c,
+          this.params.reserve.series,
+          milli,
+          this.windowFrom(k),
+          this.windowTo(k),
+          this.commodityRate,
+        );
+        const units = this.chain.create(PARTICIPANT, id, milli);
+        this.#log(PARTICIPANT, "create", {
+          tokenId: id,
+          task: c,
+          milli,
+          forWindow: k,
+          agu: units,
+          onDemand: true,
+        });
+        need -= milli;
+      } catch (e) {
+        if (!(e instanceof ChainRule)) throw e;
+        this.#log(PARTICIPANT, "error", { topUp: c, refused: e.message });
+      }
+    }
   }
 
   /** a demand agent's holding ceiling: its days of upcoming work, valued at the reference brief price */
