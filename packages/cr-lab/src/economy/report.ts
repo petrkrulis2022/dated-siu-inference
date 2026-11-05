@@ -29,7 +29,9 @@ export function judgeDevWindows(w: World, stats: readonly WindowStats[]): DevWin
       (e.refunded as bigint) > 0n,
   ).length;
   const creates = log.filter((e) => e.kind === "create").length;
-  const rolls = log.filter((e) => e.kind === "roll-buy" && e.summary === true).length;
+  const rolls = log.filter(
+    (e) => e.kind === "roll-buy" && e.summary === true && e.refused === undefined,
+  ).length;
   const redemptions = log.filter((e) => e.kind === "redeem").length;
   const navs = log.filter(
     (e) => e.kind === "nav" && e.reserveNav !== null && e.navWithBuffer !== null,

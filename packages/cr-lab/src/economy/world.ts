@@ -396,42 +396,59 @@ export class World {
       supply === 0n || face === 0n
         ? unitsShort / 1_000n + 1n
         : (unitsShort * face + supply - 1n) / supply + BigInt(classes.length);
-    // class by class, and within a class issuer by issuer: each mint takes at most what one eligible issuer has left (routing sends a mint to one issuer)
+    // on-demand creation leaves one window's ladder per class of capacity for the ladder and the roll
+    const keep = this.params.reserve.faceMilliPerWindow / BigInt(classes.length);
     for (let i = 0; i < classes.length && need > 0n; i++) {
-      const c = classes[i] as string;
-      let share = (need + BigInt(classes.length - i) - 1n) / BigInt(classes.length - i);
-      while (share > 0n) {
-        const room = this.#largestHeadroom(c);
-        if (room === 0n) break;
-        const milli = share < room ? share : room;
-        try {
-          const id = this.chain.mint(
-            PARTICIPANT,
-            c,
-            this.params.reserve.series,
-            milli,
-            this.windowFrom(k),
-            this.windowTo(k),
-            this.commodityRate,
-          );
-          const units = this.chain.create(PARTICIPANT, id, milli);
-          this.#log(PARTICIPANT, "create", {
-            tokenId: id,
-            task: c,
-            milli,
-            forWindow: k,
-            agu: units,
-            onDemand: true,
-          });
-          share -= milli;
-          need -= milli;
-        } catch (e) {
-          if (!(e instanceof ChainRule)) throw e;
-          this.#log(PARTICIPANT, "error", { topUp: c, refused: e.message });
-          break;
-        }
+      const share = (need + BigInt(classes.length - i) - 1n) / BigInt(classes.length - i);
+      need -= this.#createWithin(classes[i] as string, share, k, true, keep);
+    }
+  }
+
+  /**
+   * Has the participant buy up to `milli` of `classId` claims for window `k` and create AGU-lab with them, issuer by issuer within each eligible issuer's remaining capacity
+   * (a mint is routed to one issuer), never using the last `keep` mSIU of capacity in the class. Capacity is one pool per issuer and class across every window, restored only when
+   * claims are redeemed, default or expire. Returns the face created.
+   */
+  #createWithin(
+    classId: string,
+    milli: MilliSiu,
+    k: number,
+    onDemand: boolean,
+    keep: MilliSiu,
+  ): MilliSiu {
+    let made = 0n;
+    while (made < milli) {
+      const room = this.#largestHeadroom(classId) - keep;
+      if (room <= 0n) break;
+      const want = milli - made;
+      const m = want < room ? want : room;
+      try {
+        const id = this.chain.mint(
+          PARTICIPANT,
+          classId,
+          this.params.reserve.series,
+          m,
+          this.windowFrom(k),
+          this.windowTo(k),
+          this.commodityRate,
+        );
+        const units = this.chain.create(PARTICIPANT, id, m);
+        this.#log(PARTICIPANT, "create", {
+          tokenId: id,
+          task: classId,
+          milli: m,
+          forWindow: k,
+          agu: units,
+          ...(onDemand ? { onDemand: true } : {}),
+        });
+        made += m;
+      } catch (e) {
+        if (!(e instanceof ChainRule)) throw e;
+        this.#log(PARTICIPANT, "error", { create: classId, refused: e.message });
+        break;
       }
     }
+    return made;
   }
 
   #reserveClasses(): string[] {
@@ -924,32 +941,19 @@ export class World {
     return BigInt(i.budgetUsdPerWindow.div(usdPerMilli).floor().toFixed(0));
   }
   #participantCreates(k: number): void {
-    const classes = [
-      ...new Set(
-        this.params.issuers
-          .filter((i) => i.grade === this.params.reserve.series)
-          .flatMap((i) => i.classes),
-      ),
-    ];
+    const classes = this.#reserveClasses();
     const each = this.params.reserve.faceMilliPerWindow / BigInt(classes.length);
+    // within the issuers' remaining capacity, issuer by issuer; a shortfall is logged, never a crash (found in DW3: on-demand creation had used the capacity up)
     for (const c of classes) {
-      const id = this.chain.mint(
-        PARTICIPANT,
-        c,
-        this.params.reserve.series,
-        each,
-        this.windowFrom(k),
-        this.windowTo(k),
-        this.commodityRate,
-      );
-      const units = this.chain.create(PARTICIPANT, id, each);
-      this.#log(PARTICIPANT, "create", {
-        tokenId: id,
-        task: c,
-        milli: each,
-        forWindow: k,
-        agu: units,
-      });
+      const made = this.#createWithin(c, each, k, false, 0n);
+      if (made < each)
+        this.#log(PARTICIPANT, "error", {
+          ladderShort: c,
+          forWindow: k,
+          wanted: each,
+          created: made,
+          reason: "the issuers' capacity is used up",
+        });
     }
     this.#probeLots(k);
   }
@@ -1073,14 +1077,31 @@ export class World {
     }
     const bufferBefore = this.chain.balance(BUFFER, "USDC");
     const incomeBefore = this.chain.balance(INCOME, "USDC");
-    const r = this.chain.roll(AGU_ISSUER, {
-      rate,
-      frontLots: front,
-      sales,
-      buys,
-      buyFrom: this.windowFrom(k + this.params.ladderWindows),
-      buyTo: this.windowTo(k + this.params.ladderWindows),
-    });
+    let r: ReturnType<MemoryChain["roll"]>;
+    try {
+      r = this.chain.roll(AGU_ISSUER, {
+        rate,
+        frontLots: front,
+        sales,
+        buys,
+        buyFrom: this.windowFrom(k + this.params.ladderWindows),
+        buyTo: this.windowTo(k + this.params.ladderWindows),
+      });
+    } catch (e) {
+      if (!(e instanceof ChainRule)) throw e;
+      // as AguLab does: the whole step reverts, nothing moves, and the front lots stay in the reserve until they lapse at the window's end (NAV falls by their face)
+      for (const o of this.frontOrders.filter((x) => x.forWindow === k))
+        this.notify(
+          o.agent,
+          `your front-claim order for ${o.task} was not filled: the roll could not run (${e.message})`,
+        );
+      this.#log(AGU_ISSUER, "roll-buy", {
+        summary: true,
+        refused: e.message,
+        frontLots: front.length,
+      });
+      return;
+    }
     this.#bufferOut += r.cover;
     this.#bufferIn += r.carryToBuffer + r.dustToBuffer;
     this.#incomeIn += r.carryToIncome;
@@ -1196,7 +1217,8 @@ export class World {
           milli: r.milli,
           usdc: r.usdc,
           lapsedAfterWarning,
-          retiredReserveLot: holder === RESERVE,
+          reserveLot: holder === RESERVE,
+          retiredReserveLot: holder === RESERVE && this.chain.retired.has(tokenId),
         });
         if (r.kind === "expired" && holder !== RESERVE && !lapsedAfterWarning)
           throw new InvariantFailure(

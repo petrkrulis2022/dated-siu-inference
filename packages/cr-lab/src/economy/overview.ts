@@ -106,7 +106,9 @@ export function overview(
     );
   for (const r of log.filter((e) => e.kind === "roll-buy" && e.summary === true))
     lines.push(
-      `- roll ${r.window}: sold ${show(r.faceSold as bigint, 3)} SIU of front claims for ${show(r.proceeds as bigint)} USDC, ${show(r.faceUnsold as bigint, 3)} SIU unsold, bought ${show(r.faceBought as bigint, 3)} SIU for ${show(r.cost as bigint)} USDC, buffer cover ${show(r.cover as bigint)}, roll cost ${show(r.rollCostUsdc as bigint)} USDC`,
+      r.refused !== undefined
+        ? `- roll ${r.window}: REFUSED (${String(r.refused)}); its ${String(r.frontLots)} front lot(s) stay until they lapse at the window's end`
+        : `- roll ${r.window}: sold ${show(r.faceSold as bigint, 3)} SIU of front claims for ${show(r.proceeds as bigint)} USDC, ${show(r.faceUnsold as bigint, 3)} SIU unsold, bought ${show(r.faceBought as bigint, 3)} SIU for ${show(r.cost as bigint)} USDC, buffer cover ${show(r.cover as bigint)}, roll cost ${show(r.rollCostUsdc as bigint)} USDC`,
     );
   return `${lines.join("\n")}\n`;
 }

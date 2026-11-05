@@ -114,3 +114,44 @@ describe("buying AGU-lab (found in DW2, 2026-11-05)", () => {
     ).toBe(false);
   });
 });
+
+describe("when the issuers' capacity runs out (found in DW3, 2026-11-05)", () => {
+  it("never crashes: the ladder falls short and says so, the roll is refused whole and its front lots lapse, and every invariant holds", async () => {
+    const w = world("no-capacity");
+    w.mint("RESEARCH-1", 1_000_000_000n);
+    // window 1 closes first (its expiries hand capacity back), then the capacity is used up just before window 2 opens
+    w.closeWindow(1);
+    for (const c of ["CR-PL", "CR-UO", "CR-SM"])
+      for (const iss of w.chain.issuersForClass.get(c) ?? []) {
+        const h = w.chain.headroom(iss, c);
+        if (h > 0n) {
+          w.mint("HEDGER", 1_000_000_000n);
+          w.chain.mint(
+            "HEDGER",
+            c,
+            "commodity",
+            h,
+            w.windowFrom(3),
+            w.windowTo(3),
+            w.commodityRate,
+          );
+        }
+      }
+    expect(() => w.startWindow(2, needsSchedule("no-capacity", TASKS))).not.toThrow();
+    w.checkInvariants();
+    expect(w.log.of("error").some((e) => e.ladderShort !== undefined)).toBe(true);
+    const roll2 = w.log
+      .of("roll-buy")
+      .filter((e) => e.summary === true)
+      .at(-1);
+    expect(roll2?.refused).toMatch(/NoIssuerWithHeadroom/);
+    w.closeWindow(2);
+    w.checkInvariants();
+    // the refused roll's front lots were never retired: they lapsed in the reserve at window 2's end
+    const closes2 = w.log
+      .of("claim-close")
+      .filter((e) => e.window === w.dayLabel(2) && e.holder === "reserve");
+    expect(closes2.length).toBeGreaterThan(0);
+    expect(closes2.every((e) => e.retiredReserveLot === false)).toBe(true);
+  });
+});
