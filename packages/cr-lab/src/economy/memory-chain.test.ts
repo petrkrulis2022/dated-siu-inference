@@ -79,7 +79,7 @@ describe("creation and redemption (R3, R4)", () => {
   it("creates at NAV when NAV is above 1, never diluting existing holders", () => {
     const a = seedReserve(1_000n, 1); // 1 AGU-lab
     c.transfer("AGU", PARTICIPANT, "agent-1", 500_000n);
-    c.redeem("agent-1", 1n); // a sliver of dust stays in the reserve: NAV a hair above 1
+    c.redeem("agent-1", 1_500n); // floor(1,500 × 1,000 ÷ 1,000,000) = 1 mSIU for 1,500 units: dust stays in the reserve, NAV a hair above 1
     const before = c.nav();
     expect(before.num * 1n > before.den * 1n).toBe(true);
     const id = c.mint(PARTICIPANT, "CR-PL", "commodity", 1_000n, w(1).from, w(1).to, RATE);
@@ -121,11 +121,11 @@ describe("creation and redemption (R3, R4)", () => {
     expect(c.balance(RESERVE, "USDC")).toBe(0n);
   });
 
-  it("rounds a redemption down, leaving dust in the reserve, and refuses zero units", () => {
+  it("refuses a redemption too small to deliver any claim (AguLab: NothingToRedeem), and zero units", () => {
     seedReserve(1_000n);
     c.transfer("AGU", PARTICIPANT, "agent-1", 999n);
-    const r = c.redeem("agent-1", 999n); // 999 × 1000 / 1,000,000 = 0.999 → 0
-    expect(r.lots).toEqual([]);
+    expect(() => c.redeem("agent-1", 999n)).toThrow(/NothingToRedeem/); // 999 × 1000 / 1,000,000 = 0.999 → 0
+    expect(c.balance("agent-1", "AGU")).toBe(999n); // nothing burned
     expect(() => c.redeem("agent-1", 0n)).toThrow(/ZeroAmount/);
   });
 });
@@ -212,7 +212,7 @@ describe("the roll (R5 to R7)", () => {
         buyFrom: w(2).from,
         buyTo: w(2).to,
       }),
-    ).toThrow(/R6: these buys cost more/);
+    ).toThrow(/RollShortfallExceedsBuffer|R6/);
     // too little while more is affordable: refused
     expect(() =>
       c.roll("agu-issuer", {
@@ -391,5 +391,102 @@ describe("every call is atomic, as a contract call is, and journalled", () => {
     // the roll's own mint and transfers are part of it: one entry
     expect(c.journal.slice(before).map((j) => j.op)).toEqual(["roll"]);
     expect(c.journal.at(-1)?.now).toBe(now);
+  });
+});
+
+describe("the roll's rules match AguLab's (found by the DW1 replay on anvil, 2026-11-05)", () => {
+  it("refuses an ineligible sale buyer, a sale that rounds to zero, and creation into a retired lot", () => {
+    const front = seedReserve(1_000n, 1);
+    c.seedBuffer("C2", 1_000_000n);
+    now = w(1).from + 60;
+    expect(() =>
+      c.roll("agu-issuer", {
+        rate: RATE,
+        frontLots: [front],
+        sales: [{ buyer: PARTICIPANT, tokenId: front, milli: 250n }],
+        buys: [{ classId: "CR-PL", milli: 1_000n }],
+        buyFrom: w(2).from,
+        buyTo: w(2).to,
+      }),
+    ).toThrow(/IneligibleBuyer/);
+    expect(() =>
+      c.roll("agu-issuer", {
+        rate: 1_000_000n, // at a print below $0.001 per SIU, 1 mSIU at the discount rounds to zero USDC
+
+        frontLots: [front],
+        sales: [{ buyer: "agent-1", tokenId: front, milli: 1n }],
+        buys: [{ classId: "CR-PL", milli: 1_000n }],
+        buyFrom: w(2).from,
+        buyTo: w(2).to,
+      }),
+    ).toThrow(/SaleRoundsToZero/);
+    c.roll("agu-issuer", {
+      rate: RATE,
+      frontLots: [front],
+      sales: [],
+      buys: [{ classId: "CR-PL", milli: 1_000n }],
+      buyFrom: w(2).from,
+      buyTo: w(2).to,
+    });
+    const more = c.mint(PARTICIPANT, "CR-PL", "commodity", 10n, w(1).from, w(1).to, RATE); // the same lot id as the retired front lot
+    expect(more).toBe(front);
+    expect(() => c.create(PARTICIPANT, more, 10n)).toThrow(/LotRetired/);
+  });
+
+  it("accepts the most face affordable under WorkClaim's rounding and refuses one mSIU less (the replay's case: buffer 40, one 250 mSIU sale)", () => {
+    const front = seedReserve(1_000n, 1);
+    c.seedBuffer("C2", 40n);
+    now = w(1).from + 60;
+    const sale = [{ buyer: "agent-1", tokenId: front, milli: 250n }];
+    const proceeds = usdcFor(250n, (RATE * 9_000n) / 10_000n);
+    const money = proceeds + 40n;
+    const most = ((money + 1n) * 1_000_000n - 1n) / RATE; // the engine's formula
+    expect(usdcFor(most, RATE)).toBeLessThanOrEqual(money);
+    expect(usdcFor(most + 1n, RATE)).toBeGreaterThan(money);
+    expect(() =>
+      c.roll("agu-issuer", {
+        rate: RATE,
+        frontLots: [front],
+        sales: sale,
+        buys: [{ classId: "CR-PL", milli: most - 1n }],
+        buyFrom: w(2).from,
+        buyTo: w(2).to,
+      }),
+    ).toThrow(/RollUnderbuys/);
+    const r = c.roll("agu-issuer", {
+      rate: RATE,
+      frontLots: [front],
+      sales: sale,
+      buys: [{ classId: "CR-PL", milli: most }],
+      buyFrom: w(2).from,
+      buyTo: w(2).to,
+    });
+    expect(r.faceBought).toBe(most);
+    expect(c.balance("reserve", "USDC")).toBe(0n);
+  });
+
+  it("accepts a roll with no money at all (no sales, empty buffer): nothing is bought and NAV falls by the front face", () => {
+    const front = seedReserve(1_000n, 1);
+    seedReserve(1_000n, 2);
+    now = w(1).from + 60;
+    const before = c.liveFace();
+    const r = c.roll("agu-issuer", {
+      rate: RATE,
+      frontLots: [front],
+      sales: [],
+      buys: [],
+      buyFrom: w(2).from,
+      buyTo: w(2).to,
+    });
+    expect(r.faceBought).toBe(0n);
+    expect(c.liveFace()).toBe(before - 1_000n);
+  });
+
+  it("closes an open probe whenever the skip flag changes, and opens one only for a skipped issuer", () => {
+    expect(() => c.setProbe("C1", true)).toThrow(/NotSkipped/);
+    c.setSkipped("C1", true);
+    c.setProbe("C1", true);
+    c.setSkipped("C1", false);
+    expect(c.probeOpen.has("C1")).toBe(false);
   });
 });

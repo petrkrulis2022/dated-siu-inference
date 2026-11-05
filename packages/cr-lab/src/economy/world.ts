@@ -1066,10 +1066,11 @@ export class World {
     // the buffer cannot cover everything: buy the most face affordable, class by class (R6)
     if (buys.reduce((n, b) => n + usdcFor(b.milli, rate), 0n) > affordable) {
       let money = affordable;
+      // under WorkClaim's rounding (cost(m) = floor(m × rate ÷ 1e6)) the most a line can buy with `money` is floor(((money + 1) × 1e6 − 1) ÷ rate); taking exactly that leaves
+      // less than one more mSIU's cost on the last line, which is AguLab's test (RollUnderbuys); found by the DW1 replay, 2026-11-05
       buys = buys.map((b) => {
-        let m = (money * 1_000_000n) / rate;
+        let m = ((money + 1n) * 1_000_000n - 1n) / rate;
         if (m > b.milli) m = b.milli;
-        while (m > 0n && usdcFor(m, rate) > money) m--;
         money -= usdcFor(m, rate);
         return { classId: b.classId, milli: m };
       });

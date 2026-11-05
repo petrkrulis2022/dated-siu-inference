@@ -260,9 +260,11 @@ export class MemoryChain {
   setSkipped(issuer: Account, skipped: boolean): void {
     if (skipped) this.skipped.add(issuer);
     else this.skipped.delete(issuer);
+    this.probeOpen.delete(issuer); // any change to the flag closes an open probe, as the router does
   }
   /** `EligibleClaimRouter.setProbe` (the lab publisher only) */
   setProbe(issuer: Account, open: boolean): void {
+    if (open && !this.skipped.has(issuer)) refuse(`NotSkipped: ${issuer}`);
     if (open) this.probeOpen.add(issuer);
     else this.probeOpen.delete(issuer);
   }
@@ -471,6 +473,7 @@ export class MemoryChain {
   ): void {
     if (this.escrows.has(id)) refuse("EscrowExists");
     if (maxAmount === 0n) refuse("ZeroAmount");
+    if (expiry <= this.now()) refuse("ExpiryNotInFuture");
     this.#sub(asset, buyer, maxAmount);
     this.#add(asset, `escrow:${id}`, maxAmount);
     this.escrows.set(id, { asset, buyer, seller, settler, maxAmount, expiry, status: "open" });
@@ -520,6 +523,8 @@ export class MemoryChain {
     const ct = this.#type(tokenId);
     if (ct.series !== this.agu_.reserveSeries)
       refuse(`R3: the reserve holds ${this.agu_.reserveSeries} claims only, not ${ct.series}`);
+    if (this.retired.has(tokenId))
+      refuse(`LotRetired: ${tokenId} (creating into it would dilute holders)`);
     if (ct.windowTo - this.now() < this.agu_.minTenorSeconds)
       refuse("R3: too little tenor left on this lot");
     if (milli === 0n) refuse("ZeroAmount");
@@ -545,6 +550,8 @@ export class MemoryChain {
       id,
       milli: (units * this.claimBalance(RESERVE, id)) / supply,
     }));
+    if (lots.every((l) => l.milli === 0n))
+      refuse(`NothingToRedeem(${units}): too few units to deliver any claim`);
     this.#sub("AGU", holder, units);
     this.aguSupply -= units;
     const out: Redemption = { units, lots: [] };
@@ -579,55 +586,91 @@ export class MemoryChain {
       buyTo: number;
     },
   ): RollResult {
-    if (caller !== this.issuerRole) refuse("only the AGU-lab issuer role rolls");
-    if (args.buyTo - this.now() < this.agu_.minTenorSeconds)
-      refuse("R5: bought lots need the minimum tenor");
-    for (const id of args.frontLots) {
-      if (!this.reserveLots.includes(id)) refuse(`not a reserve lot: ${id}`);
-      if (args.buyFrom < (this.claimTypes.get(id) as ClaimType).windowTo)
-        refuse("R5: next-window lots start after the front lots end");
-    }
+    // AguLab.roll, step for step (checked against the contract on anvil by the DW1 replay, 2026-11-05)
+    if (caller !== this.issuerRole) refuse("NotAguIssuer: only the AGU-lab issuer role rolls");
     this.#inRoll = true;
     try {
-      const strayAtStart = this.balance(RESERVE, "USDC");
-      for (const id of args.frontLots) this.retired.add(id);
+      const t = this.now();
+      // _retireFront: each lot live and in its window now
+      let required = 0n;
+      let frontEnd = 0;
+      for (const id of args.frontLots) {
+        const ct = this.claimTypes.get(id);
+        if (!this.reserveLots.includes(id) || this.retired.has(id) || ct === undefined)
+          refuse(`NotLiveLot: ${id}`);
+        const c = ct as ClaimType;
+        if (t < c.windowFrom || t >= c.windowTo) refuse(`NotAFrontLot: ${id}`);
+        this.retired.add(id);
+        required += this.claimBalance(RESERVE, id);
+        if (c.windowTo > frontEnd) frontEnd = c.windowTo;
+      }
+      // _sellFront: eligible buyers, lots retired by this roll, never a sale that rounds to zero
       const price = discounted(args.rate, this.agu_.discountBps);
       let proceeds = 0n;
       let faceSold = 0n;
       for (const s of args.sales) {
-        if (!args.frontLots.includes(s.tokenId)) refuse("R5: the roll sells front lots only");
+        if ([PARTICIPANT, INCOME, BUFFER, this.issuerRole, RESERVE, ""].includes(s.buyer))
+          refuse(`IneligibleBuyer: ${s.buyer}`);
+        if (s.milli === 0n) refuse("ZeroAmount");
+        if (!args.frontLots.includes(s.tokenId))
+          refuse(`NotRetiredThisRoll: R5, the roll sells front lots only (${s.tokenId})`);
         const pay = usdcFor(s.milli, price);
+        if (pay === 0n) refuse(`SaleRoundsToZero(${s.milli})`);
         this.#sub("USDC", s.buyer, pay);
         this.#add("USDC", RESERVE, pay);
         this.#moveClaim(s.tokenId, RESERVE, s.buyer, s.milli);
         proceeds += pay;
         faceSold += s.milli;
       }
-      const faceUnsold = args.frontLots.reduce((n, id) => n + this.claimBalance(RESERVE, id), 0n);
-      const required = faceSold + faceUnsold;
-      const funds = proceeds + strayAtStart;
-      const cost = args.buys.reduce((n, b) => n + usdcFor(b.milli, args.rate), 0n);
-      const bought = args.buys.reduce((n, b) => n + b.milli, 0n);
-      let cover = 0n;
-      let carryToBuffer = 0n;
-      let carryToIncome = 0n;
-      let dustToBuffer = 0n;
-      if (funds >= cost) {
-        if (bought !== required)
-          refuse(`R5: the roll must restore the face (${required} mSIU), not ${bought}`);
-      } else {
-        const short = cost - funds;
-        cover = short < this.balance(BUFFER, "USDC") ? short : this.balance(BUFFER, "USDC");
-        if (funds + cover < cost)
-          refuse("R6: these buys cost more than the proceeds and the whole buffer");
-        if (bought > required) refuse("R5: the roll buys no more face than it restores");
-        // a shortfall the buffer could not fully meet must buy the most face affordable
-        const headroomLeft = funds + this.balance(BUFFER, "USDC") - cost;
-        const oneMoreMilli = (args.rate + 999_999n) / 1_000_000n;
-        if (bought < required && headroomLeft >= oneMoreMilli)
-          refuse("R6: with the buffer exhausted the roll buys the most face it can afford");
-        this.transfer("USDC", BUFFER, RESERVE, cover);
+      const faceUnsold = required - faceSold;
+      // _priceBuys
+      if (args.buys.length > 0) {
+        if (args.buyFrom < frontEnd)
+          refuse("BuyWindowOverlapsFront: R5, next-window lots start after the front lots end");
+        if (args.buyTo - t < this.agu_.minTenorSeconds)
+          refuse("R5: bought lots need the minimum tenor");
       }
+      let cost = 0n;
+      let bought = 0n;
+      for (const b of args.buys) {
+        if (b.milli === 0n) refuse("ZeroAmount");
+        cost += usdcFor(b.milli, args.rate);
+        bought += b.milli;
+      }
+      if (bought > required)
+        refuse(
+          `RollOverbuys(${bought}, ${required}): R5, the roll buys no more face than it restores`,
+        );
+      // _drawCover
+      const funds = this.balance(RESERVE, "USDC");
+      const bufferBal = this.balance(BUFFER, "USDC");
+      let cover = 0n;
+      if (bought === required) {
+        if (cost > funds) {
+          const shortfall = cost - funds;
+          if (shortfall > bufferBal)
+            refuse(`RollShortfallExceedsBuffer(${shortfall}, ${bufferBal}): R6`);
+          cover = shortfall;
+        }
+      } else {
+        const available = funds + bufferBal;
+        if (cost > available)
+          refuse(
+            `RollUnaffordable(${cost}, ${available}): R6, these buys cost more than the proceeds and the whole buffer`,
+          );
+        const last = args.buys.at(-1);
+        const oneMore =
+          last === undefined
+            ? usdcFor(1n, args.rate)
+            : usdcFor(last.milli + 1n, args.rate) - usdcFor(last.milli, args.rate);
+        if (available - cost >= oneMore)
+          refuse(
+            `RollUnderbuys(${bought}, ${required}, ${available - cost}, ${oneMore}): R6, with the buffer exhausted the roll buys the most face it can afford`,
+          );
+        if (cost > funds) cover = cost - funds;
+      }
+      if (cover > 0n) this.transfer("USDC", BUFFER, RESERVE, cover);
+      // _buyNext
       const minted: RollResult["minted"] = [];
       for (const b of args.buys) {
         const id = this.mint(
@@ -639,6 +682,7 @@ export class MemoryChain {
           args.buyTo,
           args.rate,
         );
+        if (this.retired.has(id)) refuse(`LotRetired: ${id}`);
         if (!this.reserveLots.includes(id)) this.reserveLots.push(id);
         minted.push({
           tokenId: id,
@@ -647,24 +691,26 @@ export class MemoryChain {
           milli: b.milli,
         });
       }
+      // _sendLeftover: carry (full face) tops the buffer up to its target and the rest goes to income; after an underbuy every remainder goes to the buffer
       const left = this.balance(RESERVE, "USDC");
+      let carryToBuffer = 0n;
+      let carryToIncome = 0n;
+      let dustToBuffer = 0n;
       if (left > 0n) {
-        if (cover > 0n) {
-          dustToBuffer = left;
-          this.transfer("USDC", RESERVE, BUFFER, left);
-        } else {
-          const room =
-            this.agu_.bufferTarget > this.balance(BUFFER, "USDC")
-              ? this.agu_.bufferTarget - this.balance(BUFFER, "USDC")
-              : 0n;
+        if (bought === required) {
+          const held = this.balance(BUFFER, "USDC");
+          const room = this.agu_.bufferTarget > held ? this.agu_.bufferTarget - held : 0n;
           carryToBuffer = left < room ? left : room;
           carryToIncome = left - carryToBuffer;
           this.transfer("USDC", RESERVE, BUFFER, carryToBuffer);
           this.transfer("USDC", RESERVE, INCOME, carryToIncome);
+        } else {
+          dustToBuffer = left;
+          this.transfer("USDC", RESERVE, BUFFER, left);
         }
       }
       if (this.balance(RESERVE, "USDC") !== 0n)
-        refuse("R5: the roll must end with zero reserve USDC");
+        refuse("ReserveUsdcNotZero: R5, the roll must end with zero reserve USDC");
       return {
         proceeds,
         cost,

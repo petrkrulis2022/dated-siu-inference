@@ -128,8 +128,7 @@ describe.skipIf(!foundry)(
       }
     }, 300_000);
 
-    it("stops at a call the chain refuses: memory lets the participant buy front claims in the roll, AguLab does not (R6)", async () => {
-      // FINDING, reported for the owner and not fixed here: MemoryChain.roll has no buyer check, AguLab refuses the participant, the income ledger, the buffer and the issuer role
+    it("agrees with AguLab that the participant may not buy front claims in the roll (R6; the replay's finding, fixed in the memory model 2026-11-05)", async () => {
       const T0 = 1_800_000_000 - (1_800_000_000 % 86_400);
       const D = 86_400;
       const rate = 13_163_480n;
@@ -152,26 +151,20 @@ describe.skipIf(!foundry)(
       const front = m.mint("participant", "CR-PL", "commodity", 1_000n, T0 + D, T0 + 2 * D, rate);
       m.create("participant", front, 1_000n);
       clock.now = T0 + D + 8_640;
-      m.roll("AGU-ISSUER", {
-        rate,
-        frontLots: [front],
-        sales: [{ buyer: "participant", tokenId: front, milli: 250n }],
-        buys: [{ classId: "CR-PL", milli: 1_000n }],
-        buyFrom: T0 + 4 * D,
-        buyTo: T0 + 5 * D,
-      });
+      expect(() =>
+        m.roll("AGU-ISSUER", {
+          rate,
+          frontLots: [front],
+          sales: [{ buyer: "participant", tokenId: front, milli: 250n }],
+          buys: [{ classId: "CR-PL", milli: 1_000n }],
+          buyFrom: T0 + 4 * D,
+          buyTo: T0 + 5 * D,
+        }),
+      ).toThrow(/IneligibleBuyer/);
+      // what memory did carry out replays onto the contracts with nothing different
       const r = await replayOnAnvil(m, { build: false });
-      const last = m.journal.length - 1;
-      expect(r.replayed).toBe(last);
-      expect(r.findings).toHaveLength(1);
-      const f = r.findings[0];
-      expect(f?.kind).toBe("chain refused");
-      expect(f?.op).toBe("roll");
-      expect(f?.entry).toBe(last);
-      expect(f?.detail).toMatch(/IneligibleBuyer/);
-      const p = f?.balances.find((x) => x.account === "participant" && x.asset === "USDC");
-      expect(p?.chain).toBe(p?.memoryBefore);
-      expect(p?.memoryAfter).not.toBe(p?.memoryBefore);
-    }, 300_000);
+      expect(r.findings).toEqual([]);
+      expect(r.diff).toEqual([]);
+    }, 120_000);
   },
 );

@@ -49,4 +49,26 @@ describe("the reply parser", () => {
       ).ok,
     ).toBe(false);
   });
+
+  it("flags a quote a thousand times off its own tasks' cheapest prices, not against tasks it does not include", () => {
+    const board = {
+      agu: 0n,
+      askUsdcPerAgu: 13_296n,
+      issuerPrices: [
+        { issuer: "ISSUER-C1", task: "CR-PL", priceMicroSiu: 300_848n, skipped: false },
+        { issuer: "ISSUER-C1", task: "CR-UO", priceMicroSiu: 57_762n, skipped: false },
+        { issuer: "ISSUER-F", task: "CR-VS", priceMicroSiu: 19_076_246n, skipped: false },
+      ],
+    } as never;
+    const quote = (siu: string) =>
+      parseReply(
+        `{"reasoning": "r", "action": {"tool": "post_quote", "args": {"need": "n", "tasks": ["CR-PL", "CR-UO"], "price_siu": "${siu}"}}}`,
+        "research",
+        board,
+      );
+    const ordinary = quote("0.005");
+    expect(ordinary.ok && ordinary.flags).toEqual([]); // 0.005 against 0.358610: underpriced, not a scale slip
+    const slip = quote("0.0003");
+    expect(slip.ok && slip.flags.length).toBe(1); // 0.0003 against 0.358610: over a thousandfold below
+  });
 });

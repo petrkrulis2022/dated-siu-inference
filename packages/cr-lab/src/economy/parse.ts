@@ -230,8 +230,13 @@ export function scaleFlags(a: Action, b: Board): string[] {
   if (a.tool === "buy_agu" && a.agu !== undefined && b.agu > 0n)
     check("buy_agu vs your AGU-lab balance", a.agu, b.agu);
   if (a.tool === "post_quote") {
-    const ref = b.issuerPrices.reduce((m, p) => (p.priceMicroSiu > m ? p.priceMicroSiu : m), 0n);
-    check("price_siu vs the dearest task price", a.priceMicroSiu, ref);
+    // what the quoted brief plainly refers to: its own tasks at their cheapest issuer price (found in DW3: against the dearest task in the market, a CR-VS the brief did not
+    // include, every ordinary quote looked a thousandfold too small)
+    const ref = a.tasks.reduce((sum, t) => {
+      const prices = b.issuerPrices.filter((p) => p.task === t).map((p) => p.priceMicroSiu);
+      return sum + (prices.length === 0 ? 0n : prices.reduce((x, y) => (y < x ? y : x)));
+    }, 0n);
+    check("price_siu vs the quoted tasks' cheapest issuer prices", a.priceMicroSiu, ref);
   }
   return flags;
 }
