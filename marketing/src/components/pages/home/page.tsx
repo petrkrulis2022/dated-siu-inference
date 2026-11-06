@@ -4,6 +4,7 @@ import { Footer } from "./sections/footer";
 import { Hero } from "./sections/hero";
 import { HowItWorks } from "./sections/how-it-works";
 import { Method } from "./sections/method";
+import { PriceToMoney } from "./sections/price-to-money";
 import { Problem } from "./sections/problem";
 import { Proof } from "./sections/proof";
 import { Roadmap } from "./sections/roadmap";
@@ -29,6 +30,7 @@ export function HomePage() {
       <Method />
       <Builders />
       <Roadmap />
+      <PriceToMoney />
       <Footer />
     </main>
   );
