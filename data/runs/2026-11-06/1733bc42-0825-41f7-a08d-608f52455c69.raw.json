@@ -1,0 +1,39 @@
+{
+  "id": "4e9924d2-5a5a-959e-882f-4cd8cc8182f0",
+  "object": "chat.completion",
+  "created": 1793925578,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "B1BFAD\n02E85B\n896B51\n2E3475",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nFour access codes have been found so far: B1BFAD, 02E85B, 896B51, and 2E3475. The search continues.\n\nThe search is complete. No additional access codes were found.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 22028,
+    "completion_tokens": 18,
+    "total_tokens": 22640,
+    "prompt_tokens_details": {
+      "text_tokens": 22028,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 594,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 469600000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

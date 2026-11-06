@@ -1,0 +1,39 @@
+{
+  "id": "12ddce7d-9dd0-9c79-88ea-c88b53f0447e",
+  "object": "chat.completion",
+  "created": 1793925581,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "8DF602\n2FA8E0\n9955BC\n671050",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nFour access codes were found for the coastal, southern, lower, and western annexes. A final scan is underway to confirm no additional codes exist.\n\nThe final scan confirms only four access codes exist.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 22066,
+    "completion_tokens": 16,
+    "total_tokens": 22634,
+    "prompt_tokens_details": {
+      "text_tokens": 22066,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 552,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 467720000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
