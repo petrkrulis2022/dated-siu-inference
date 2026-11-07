@@ -156,6 +156,22 @@ const ceilDiv = (a: bigint, b: bigint): bigint => (a + b - 1n) / b;
 /** one presentation is one task's work: a quarter of a CR-SIU */
 export const TASK_MILLI = 250n;
 
+/**
+ * v2 item 8: a running per-agent economic objective -- a SCORING layer, never a real currency: no field here ever moves chain.usdc/chain.agu, so it cannot interact with, or
+ * tilt, the real dual-currency mechanics items 1-5 added. `usdcNet`/`aguNet` are tracked NATIVELY per currency and never collapsed into one canonical unit internally (the
+ * currency-neutrality requirement, [[feedback_design_scoring_for_currency_neutrality]]); `unmetMicroSiu` is a SIU-denominated penalty that touches neither currency, so it
+ * cannot itself be a source of bias. `boardFor` converts all three to one combined figure ONLY for display, at the same live rate every other price on the board already uses.
+ */
+export interface ObjectiveLedger {
+  usdcNet: bigint;
+  aguNet: bigint;
+  /** demand agents only: the cumulative cost of every need that lapsed unmet */
+  unmetMicroSiu: bigint;
+  /** the hedger only: briefs delivered on time vs. late or never, by count */
+  onTime: number;
+  late: number;
+}
+
 export class World {
   readonly chain: MemoryChain;
   readonly participant: Participant;
@@ -176,6 +192,8 @@ export class World {
   readonly probeLots = new Set<string>();
   readonly probesServed = new Map<string, number>();
   readonly roles = new Map<string, Role>();
+  /** v2 item 8: see `ObjectiveLedger`'s own doc comment -- a scoring layer, never a real currency */
+  readonly objective = new Map<string, ObjectiveLedger>();
   forwardDelivered = 0;
   workSpendUsd = new D(0);
   window = 0;
@@ -185,6 +203,8 @@ export class World {
   #bufferIn = 0n;
   #bufferOut = 0n;
   #incomeIn = 0n;
+  /** v2 item 8: the hedger's own cumulative delivered count as of the last closeWindow, so each window's bonus/penalty counts only that window's NEW deliveries/shortfall */
+  #hedgerDeliveredAtLastClose = 0;
 
   constructor(
     readonly params: EconomyParams,
@@ -197,6 +217,8 @@ export class World {
     readonly dayLabel: (window: number) => string,
     readonly t0: number,
     readonly clock: { now: number },
+    /** v2 item 8: how many windows this run has, for the hedger's own due-by-window schedule; opt-in -- absent, the bonus/penalty mechanism is a no-op, every existing caller unaffected */
+    readonly totalWindows?: number,
   ) {
     this.chain = new MemoryChain(
       {
@@ -621,6 +643,15 @@ export class World {
     while (list.length <= this.window) list.push({ presented: 0, served: 0 });
     return list[this.window] as { presented: number; served: number };
   }
+  /** v2 item 8: this agent's objective ledger, created at zero on first touch */
+  #objectiveFor(agent: string): ObjectiveLedger {
+    let o = this.objective.get(agent);
+    if (o === undefined) {
+      o = { usdcNet: 0n, aguNet: 0n, unmetMicroSiu: 0n, onTime: 0, late: 0 };
+      this.objective.set(agent, o);
+    }
+    return o;
+  }
 
   #postQuote(agent: string, role: Role, a: Extract<Action, { tool: "post_quote" }>): Outcome {
     if (role !== "research") return { ok: false, note: "only research agents post brief quotes" };
@@ -741,6 +772,7 @@ export class World {
       const rate = this.commodityRate;
       const agu = this.aguFor(microSiuForUsdcCeil(usdcPrice, rate));
       this.chain.transfer("AGU", agent, DATA_AGENT, agu);
+      this.#objectiveFor(agent).aguNet -= agu; // v2 item 8: a research cost
       this.#log(agent, "data-purchase", {
         dataset,
         agu,
@@ -754,6 +786,7 @@ export class World {
       };
     }
     this.chain.transfer("USDC", agent, DATA_AGENT, usdcPrice);
+    this.#objectiveFor(agent).usdcNet -= usdcPrice; // v2 item 8: a research cost
     this.#log(agent, "data-purchase", {
       dataset,
       usdc: usdcPrice,
@@ -816,6 +849,13 @@ export class World {
     const paid = out.passed ? amount : 0n;
     this.chain.escrowSettle(escrow, GATE_RUNNER, paid);
     if (out.passed) this.#stat(issuerId).served++;
+    // v2 item 8: a research cost, only on an ACTUAL payment (a failed commission is refunded in full, so it never counts against profit); scoped to research -- the
+    // hedger can also commission work, but item 8 defines its objective as only the on-time bonus/late penalty (closeWindow), never a general profit/cost ledger
+    if (paid > 0n && role === "research") {
+      const o = this.#objectiveFor(agent);
+      if (pay === "usdc") o.usdcNet -= paid;
+      else o.aguNet -= paid;
+    }
     const field = pay === "usdc" ? "usdc" : "agu";
     this.#log(GATE_RUNNER, "escrow-settle", { escrow, paid, refunded: amount - paid });
     this.#log(GATE_RUNNER, "receipt", {
@@ -871,6 +911,12 @@ export class World {
     const paid = passed ? escrowed : 0n;
     this.chain.escrowSettle(q.escrow, GATE_RUNNER, paid);
     q.status = passed ? "delivered" : "failed";
+    // v2 item 8: research income, in whichever currency the brief was actually paid in
+    if (paid > 0n) {
+      const o = this.#objectiveFor(agent);
+      if (q.priceUnit === "usdc") o.usdcNet += paid;
+      else o.aguNet += paid;
+    }
     const need = this.needs.find((n) => n.id === q.need);
     if (passed && need !== undefined) need.status = "met";
     this.#log(GATE_RUNNER, "gate", {
@@ -1311,7 +1357,17 @@ export class World {
           );
       }
     }
-    for (const n of this.needs) if (n.window === k && n.status === "open") n.status = "lapsed";
+    for (const n of this.needs)
+      if (n.window === k && n.status === "open") {
+        n.status = "lapsed";
+        // v2 item 8: a demand agent's stated cost for a need that lapses unmet -- a pure scoring deduction, never a real currency debit (opt-in: a no-op when the
+        // params file carries no unmetNeedCostMicroSiu, exactly every v1 log/fixture). Also closes an independent gap the redesign's own research found: a lapsed
+        // need previously left NO trace in the log at all.
+        if (this.params.unmetNeedCostMicroSiu !== undefined) {
+          this.#objectiveFor(n.agent).unmetMicroSiu += this.params.unmetNeedCostMicroSiu;
+          this.#log(n.agent, "need-lapsed", { need: n.id, costMicroSiu: this.params.unmetNeedCostMicroSiu });
+        }
+      }
     for (const q of this.quotes) {
       if (q.status === "accepted" && q.escrow !== undefined) {
         this.chain.escrowExpire(q.escrow);
@@ -1373,6 +1429,33 @@ export class World {
         this.chain.transfer("USDC", a, `OWNER-${a}`, over);
         this.#log(a, "sweep", { usdc: over, to: `OWNER-${a}` });
       }
+    }
+    // v2 item 8: the hedger's on-time bonus / late penalty against its own due-by-window schedule. Opt-in: needs totalWindows (the caller's own choice to supply it)
+    // and a stated latePenaltyUsdcPerBrief; a no-op otherwise, so every existing caller/test is unaffected. priceUsdcPerBrief was parsed and never read anywhere
+    // before this (confirmed by the redesign's own research) -- this is its first real use.
+    if (this.totalWindows !== undefined && this.params.hedger.latePenaltyUsdcPerBrief !== undefined) {
+      const hedger = this.params.agents.hedger;
+      const owedByNow = Math.ceil((this.params.hedger.briefsSold * k) / this.totalWindows);
+      const owedBefore = k > 1 ? Math.ceil((this.params.hedger.briefsSold * (k - 1)) / this.totalWindows) : 0;
+      const dueThisWindow = owedByNow - owedBefore;
+      const deliveredThisWindow = this.forwardDelivered - this.#hedgerDeliveredAtLastClose;
+      const onTimeThisWindow = Math.min(deliveredThisWindow, dueThisWindow);
+      const lateThisWindow = Math.max(dueThisWindow - deliveredThisWindow, 0);
+      const o = this.#objectiveFor(hedger);
+      if (onTimeThisWindow > 0) {
+        o.usdcNet += this.params.hedger.priceUsdcPerBrief * BigInt(onTimeThisWindow);
+        o.onTime += onTimeThisWindow;
+      }
+      if (lateThisWindow > 0) {
+        o.usdcNet -= this.params.hedger.latePenaltyUsdcPerBrief * BigInt(lateThisWindow);
+        o.late += lateThisWindow;
+      }
+      if (onTimeThisWindow > 0 || lateThisWindow > 0)
+        this.#log(hedger, "objective", { onTimeThisWindow, lateThisWindow, owedByNow, deliveredByNow: this.forwardDelivered });
+      this.#hedgerDeliveredAtLastClose = this.forwardDelivered;
+      // no separate "final reconciliation" step: owedByNow(totalWindows) === briefsSold exactly (a ceiling-based proportional schedule), so the last window's own
+      // dueThisWindow/lateThisWindow above already accounts for every brief never delivered by the run's end -- a second pass here would double-count it (found
+      // writing this test: a 2-brief, 2-window fixture read `late: 2` instead of `1` before this comment existed).
     }
     this.#classifyExits(k);
     this.#updateDeliveryFlags();

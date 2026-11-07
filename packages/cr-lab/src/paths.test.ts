@@ -50,8 +50,10 @@ describe("the repository never tracks licensed Blockworks data (D71)", () => {
   });
 
   it("commits only the files the plan allows under data/lab/cr/: budgets, the frozen output allowances, snapshot mode and MCP mode (token counts per task), the trial-only model registry and its list prices, the economy's parameters and its CR lab print (costs and counts only), the spend ledger, hash manifests and seed commitments", () => {
+    // widened for marketplace-redesign-v2.md: economy-params.v2.json is a draft config for the redesign, same shape as economy-params.json, no Blockworks data or
+    // row-level derivative of any kind -- checked before widening, per this test's own instruction.
     const allowed =
-      /^data\/lab\/cr\/(README\.md|budgets\.json|economy-params\.json|economy\/cr-print\.json|allowances\.json|allowances-mcp\.json|registry\/(models|prices)\.json|spend-ledger\.jsonl|manifests\/[0-9]{4}-[0-9]{2}-[0-9]{2}\.json|seeds\/[0-9]{4}-[0-9]{2}-[0-9]{2}\.json)$/;
+      /^data\/lab\/cr\/(README\.md|budgets\.json|economy-params(\.v2)?\.json|economy\/cr-print\.json|allowances\.json|allowances-mcp\.json|registry\/(models|prices)\.json|spend-ledger\.jsonl|manifests\/[0-9]{4}-[0-9]{2}-[0-9]{2}\.json|seeds\/[0-9]{4}-[0-9]{2}-[0-9]{2}\.json)$/;
     const tracked = git("ls-files", CR_PUBLIC_DIR_REL)
       .split("\n")
       .filter((l) => l !== "");

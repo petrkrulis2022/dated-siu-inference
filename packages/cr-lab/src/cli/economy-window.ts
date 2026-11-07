@@ -133,7 +133,7 @@ if (backend === "snapshot") {
   dataSha = sha;
 }
 const log = new EconomyLog(backend, `${dir}/log.jsonl`);
-const world = buildWorld({ params, wp0, log, worker, t0: T0, dataSha });
+const world = buildWorld({ params, wp0, log, worker, t0: T0, dataSha, windowCount });
 world.genesis();
 world.checkInvariants();
 

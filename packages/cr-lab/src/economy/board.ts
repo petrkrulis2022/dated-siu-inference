@@ -10,11 +10,12 @@ import {
   microSiuForUsdcCeil,
   show,
   showMsiu,
+  usdcForMicroSiu,
   type AguUnits,
   type MilliSiu,
   type UsdcUnits,
 } from "./units.js";
-import type { MicroSiu, Need, Quote, Role, TaskOutput, World } from "./world.js";
+import type { MicroSiu, Need, ObjectiveLedger, Quote, Role, TaskOutput, World } from "./world.js";
 
 /**
  * The display order, as its own function of the window number (D75/§16.9), so every reader of a window's display order — the board itself and the pre-registered scoring
@@ -80,6 +81,15 @@ export interface Board {
   forward?: { sold: number; delivered: number };
   /** v2 item 9: this agent's own needs N windows ahead (demand and the hedger only) -- `needsSchedule` is pure, so this is never a new randomness source */
   needsAhead?: { window: number; tasks: TaskId[] }[];
+  /** v2 item 8: this agent's running economic objective, both currencies tracked natively and combined only here, for display, at the live rate -- see `ObjectiveLedger`'s own doc comment in world.ts */
+  objective?: {
+    usdcNet: string;
+    aguNet: string;
+    unmetSiu: string;
+    combinedUsd: string;
+    onTime?: number;
+    late?: number;
+  };
 }
 
 export function boardFor(w: World, agent: string): Board {
@@ -174,6 +184,22 @@ export function boardFor(w: World, agent: string): Board {
           }),
         }
       : {}),
+    // v2 item 8: shown once this agent's objective ledger has anything in it (lazily created on first touch, world.ts's own `#objectiveFor`)
+    ...(w.objective.has(agent) ? { objective: objectiveView(w.objective.get(agent) as ObjectiveLedger, rate, w) } : {}),
+  };
+}
+
+/** v2 item 8: combine usdcNet/aguNet/unmetMicroSiu into one USD-equivalent figure, ONLY for display -- the ledger itself never collapses them */
+function objectiveView(o: ObjectiveLedger, rate: bigint, w: World): NonNullable<Board["objective"]> {
+  const aguAsMicroSiu = w.siuOf(o.aguNet);
+  const combinedMicroSiu = aguAsMicroSiu - o.unmetMicroSiu;
+  const combinedUsd = o.usdcNet + usdcForMicroSiu(combinedMicroSiu, rate);
+  return {
+    usdcNet: show(o.usdcNet),
+    aguNet: show(o.aguNet),
+    unmetSiu: show(o.unmetMicroSiu),
+    combinedUsd: show(combinedUsd),
+    ...(o.onTime > 0 || o.late > 0 ? { onTime: o.onTime, late: o.late } : {}),
   };
 }
 
@@ -226,6 +252,13 @@ export function renderBoard(b: Board): string {
     lines.push(
       `Your own needs ahead: ${b.needsAhead.map((n) => `window ${n.window}: ${n.tasks.join(" + ")}`).join("; ")}.`,
     );
+  if (b.objective !== undefined) {
+    const onTimeLate =
+      b.objective.onTime !== undefined ? ` (${b.objective.onTime} on time, ${b.objective.late} late or missing)` : "";
+    lines.push(
+      `Your running result: ${b.objective.usdcNet} USDC net, ${b.objective.aguNet} AGU-lab net${b.objective.unmetSiu !== "0.000000" ? `, ${b.objective.unmetSiu} SIU charged for unmet needs` : ""} -- combined, about $${b.objective.combinedUsd}${onTimeLate}.`,
+    );
+  }
   if (b.claims.length > 0) {
     lines.push("Work claims you hold:");
     for (const c of b.claims)

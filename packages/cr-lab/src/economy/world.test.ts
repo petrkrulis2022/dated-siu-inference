@@ -9,7 +9,11 @@ import { buildWorld, loadCrPrint, needsSchedule, passRates, standInSha } from ".
 import { DATA_AGENT } from "./world.js";
 import type { Need } from "./world.js";
 
-function world(seed: string, patch: (p: ReturnType<typeof loadParams>) => void = () => undefined) {
+function world(
+  seed: string,
+  patch: (p: ReturnType<typeof loadParams>) => void = () => undefined,
+  windowCount?: number,
+) {
   const params = { ...loadParams(), seed };
   patch(params);
   const wp0 = loadCrPrint();
@@ -21,6 +25,7 @@ function world(seed: string, patch: (p: ReturnType<typeof loadParams>) => void =
     worker: new StandInWorker(seed, passRates(wp0), sha),
     t0: 1_799_971_200,
     dataSha: sha,
+    windowCount,
   });
   w.genesis();
   w.startWindow(
@@ -298,5 +303,117 @@ describe("v2 items 1-5: a real currency choice at every transaction type (docs/m
       "research",
     );
     expect(neither.ok).toBe(false);
+  });
+});
+
+describe("v2 item 8: a running economic objective (docs/marketplace-redesign-v2.md)", () => {
+  it("debits a research agent's objective for a data purchase, in whichever currency it actually paid", async () => {
+    const w = world("objective-data-usdc");
+    await w.act("RESEARCH-1", { tool: "buy_data", dataset: "perp", pay: "usdc" }, "buying data");
+    const o = w.objective.get("RESEARCH-1");
+    expect(o?.usdcNet).toBe(-w.params.dataShadowPriceUsdc);
+    expect(o?.aguNet).toBe(0n);
+  });
+
+  it("credits a research agent's objective on a passing, delivered brief, in whichever currency it was paid", async () => {
+    const w = world("objective-brief-usdc");
+    const need = w.needs.find((n) => n.agent === "DEMAND-1" && n.status === "open") as Need;
+    await w.act(
+      "RESEARCH-1",
+      { tool: "post_quote", need: need.id, tasks: need.tasks, priceUsdcMicro: 15_000n },
+      "dollar price",
+    );
+    const quote = w.quotes.find((q) => q.researcher === "RESEARCH-1") as { id: string };
+    w.mint("DEMAND-1", 10_000_000n);
+    await w.act("DEMAND-1", { tool: "accept_quote", quote: quote.id }, "fine");
+    for (const t of need.tasks)
+      w.outputs.push({
+        id: `out-${t}`,
+        owner: "RESEARCH-1",
+        task: t,
+        passed: true,
+        dataSha: w.dataSha(1),
+        issuer: "ISSUER-C1",
+        window: 1,
+        used: false,
+      });
+    await w.act("RESEARCH-1", { tool: "deliver_brief", quote: quote.id }, "delivering");
+    expect(w.objective.get("RESEARCH-1")?.usdcNet).toBe(15_000n);
+  });
+
+  it("charges a demand agent's objective for a need that lapses unmet, as a pure scoring deduction -- never a real balance debit", () => {
+    const w = world("objective-unmet", (p) => {
+      p.unmetNeedCostMicroSiu = 200_000n;
+    });
+    const usdcBefore = w.chain.balance("DEMAND-1", "USDC");
+    const aguBefore = w.chain.balance("DEMAND-1", "AGU");
+    w.closeWindow(1);
+    expect(w.objective.get("DEMAND-1")?.unmetMicroSiu).toBe(200_000n);
+    expect(w.chain.balance("DEMAND-1", "USDC")).toBe(usdcBefore);
+    expect(w.chain.balance("DEMAND-1", "AGU")).toBe(aguBefore);
+    expect(w.log.of("need-lapsed").some((e) => e.actor === "DEMAND-1")).toBe(true);
+  });
+
+  it("never charges anything when unmetNeedCostMicroSiu is absent (every v1 log/fixture, opt-in only)", () => {
+    const w = world("objective-unmet-off");
+    w.closeWindow(1);
+    expect(w.objective.has("DEMAND-1")).toBe(false);
+    expect(w.log.of("need-lapsed")).toHaveLength(0);
+  });
+
+  it("pays the hedger's on-time bonus and charges its late penalty against its own due-by-window schedule, plus a final reconciliation at the run's last window", async () => {
+    const w = world(
+      "objective-hedger",
+      (p) => {
+        p.hedger = { ...p.hedger, briefsSold: 2, priceUsdcPerBrief: 1_000n, latePenaltyUsdcPerBrief: 500n };
+      },
+      2, // totalWindows
+    );
+    // window 1: owed = ceil(2*1/2) = 1 -- deliver exactly one, on time, no penalty
+    for (const t of ["CR-PL", "CR-UO"] as const)
+      w.outputs.push({
+        id: `h1-${t}`,
+        owner: "HEDGER",
+        task: t,
+        passed: true,
+        dataSha: w.dataSha(1),
+        issuer: "ISSUER-C1",
+        window: 1,
+        used: false,
+      });
+    const delivered = await w.act("HEDGER", { tool: "deliver_forward" }, "on time");
+    expect(delivered.ok, delivered.note).toBe(true);
+    w.closeWindow(1);
+    let o = w.objective.get("HEDGER");
+    expect(o?.onTime).toBe(1);
+    expect(o?.late).toBe(0);
+    expect(o?.usdcNet).toBe(1_000n);
+    // window 2: owed by now = ceil(2*2/2) = 2, one more due this window; deliver NONE -- late, and this is also the run's last window, so the same shortfall
+    // is the final reconciliation too (never counted twice: dueThisWindow already is exactly the one brief still owed)
+    w.startWindow(
+      2,
+      needsSchedule(
+        "objective-hedger",
+        TASKS.filter((t) => t !== "CR-VS"),
+      ),
+    );
+    w.closeWindow(2);
+    o = w.objective.get("HEDGER");
+    expect(o?.late).toBe(1);
+    expect(o?.usdcNet).toBe(1_000n - 500n);
+  });
+
+  it("the owner's requirement: the objective's combined figure is currency-neutral -- the same real economic value via opposite currencies gives the identical combined result (within rounding)", async () => {
+    const w = world("objective-neutral");
+    const rate = w.commodityRate;
+    const valueUsdc = 15_000n;
+    const valueMicroSiu = (valueUsdc * 1_000_000_000n) / rate;
+    const valueAgu = w.aguFor(valueMicroSiu);
+    w.objective.set("RESEARCH-1", { usdcNet: valueUsdc, aguNet: 0n, unmetMicroSiu: 0n, onTime: 0, late: 0 });
+    w.objective.set("RESEARCH-2", { usdcNet: 0n, aguNet: valueAgu, unmetMicroSiu: 0n, onTime: 0, late: 0 });
+    const { boardFor } = await import("./board.js");
+    const combinedUsdc = Number(boardFor(w, "RESEARCH-1").objective?.combinedUsd ?? "0");
+    const combinedAgu = Number(boardFor(w, "RESEARCH-2").objective?.combinedUsd ?? "0");
+    expect(Math.abs(combinedUsdc - combinedAgu)).toBeLessThan(0.00005);
   });
 });
