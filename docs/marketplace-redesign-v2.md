@@ -77,12 +77,59 @@ A seller who takes the "wrong" currency and then converts what it received to co
 
 ---
 
+## 8. An economic objective for every agent, as a number on the board every round
+
+Items 1–7 fix *how* an agent can pay; they don't fix the gap underneath all of them: v1 gives every role a way to earn or spend a currency but never a reason to care about the result. A research agent is "paid only if every part passes," with no running total it's trying to grow. A demand agent "chooses whether and how to get your needs met," with no cost attached to leaving one unmet. The hedger owes ten briefs with no consequence for missing one. Without an objective, "which currency an agent prefers" has nothing to be instrumental *to* — there's nothing to optimise.
+
+- RESEARCH agents: a running **profit** — cumulative brief income minus cumulative issuer and data costs.
+- DEMAND agents: a running budget minus spend minus a **stated cost for every unmet need**, charged whether or not that need is later covered. "Needs met within budget" becomes literally scoreable instead of a backstory phrase.
+- HEDGER: a **stated bonus per brief delivered on time** (within the window it's owed) and a **stated penalty per brief delivered late or never delivered** by the run's end.
+- PARTICIPANT stays unscored — a market-maker, not an optimising party. It holds no position, same principle as this project's standing "never a Datum-operated derivatives venue" invariant, applied here to the demo roll.
+
+Mechanism: `World` keeps a running per-agent objective ledger — a score, never spendable, never the same map as `MemoryChain`'s real balances, so it can't be mistaken for money that actually moves — updated at the same points `#commission`/`#deliverBrief`/`#deliverForward`/need-closing already run. `boardFor` exposes it as a new `objective` field, shown in both currencies at the live participant rate (item 1's conversion path, reused, not a second one).
+
+**Answers:** "the agents had nothing to optimise" — the precondition every other item in this note assumes.
+
+## 9. Forward visibility
+
+Demand agents and the hedger see their own needs for the next **N windows** ahead (N = 2; stated here and frozen into the config, item 14), not only on the day a need opens. `needsSchedule(seed, ...)` already generates every window's needs deterministically; the board's new `needsAhead` field just queries it N windows further than today — no new randomness, no new generator.
+
+**Answers:** "with nothing to gain from planning, nobody had a reason to buy ahead" — visibility is the other precondition buying-ahead needs, alongside item 8's objective.
+
+## 10. Moving prices: replay real Dated SIU history
+
+Instead of one frozen print (`wp0`/`cr-print.json`) held constant for the whole run, the stand-in replays the REAL, already-published Dated SIU prints across the run's windows — one published day's print per simulated window, in calendar order from a fixed start date recorded in the frozen config. This is honest rather than a path the experimenter chose: real, already-printed history, not an authored scenario, and it gives timing decisions (buy now vs. wait, deliver now vs. later) real consequences instead of a constant backdrop.
+
+**Answers:** "the print never moved during the run" — the price-side half of why nobody bought ahead.
+
+## 11. A symmetric common introduction
+
+`model-agent.ts`'s shared `COMMON` instructions currently name "paid in AGU-lab" as the default and USDC as the exception. Rewritten so both units are introduced in the same sentence, with whichever one is named first alternating window to window the same way the board's own SIU-first/dollars-first display order already does (`siuFirstForWindow`) — so the instructions and the board agree, and neither currency reads as *the* currency.
+
+**Answers:** extends item 5's hedger-specific fix to the text every role reads.
+
+## 12. Seller-side forced conversion — the data seller, explicitly
+
+Already covered by item 6's addition above (2026-11-07): a seller converting received AGU-lab to cover its own dollar costs is classed as that seller's forced cost, never the buyer's choice. Restated here with the data seller named explicitly, since `buy_data` is the single most frequent source of exactly this conversion in every run so far (D132).
+
+## 13. Models: all Anthropic, Haiku 5.5 for development, Sonnet 5 for the counted run
+
+The counted run's seat rotation (`counted.seats`, currently alternating `claude-sonnet-5`/`gpt-5.1` by window, D75) becomes a single seat, `claude-sonnet-5`, for every window. This removes the Sonnet-vs-GPT confound entirely: any difference between agents in the counted run is now role, money, needs, and objective — never which model answered. Development windows run on `claude-haiku-5-5` (added to the model registry if not already present) to keep dev-testing cheap. The SIU-first/dollars-first display flip every two windows (unchanged, `board.ts`) stays, and so does keeping two demand agents' configurations byte-identical: identical agents behaving differently is the run's own built-in measure of how much of any result is chance rather than design.
+
+**Answers:** removes a confound the owner flagged directly; the identical-pair control is pre-existing practice, reconfirmed here rather than dropped when the roster changes.
+
+## 14. Freeze before any counted run
+
+As already stated below (Build and test plan): the full redesigned configuration — `economy-params.json`, the roster, every role's instruction text, and the model/seat assignment from item 13 — is frozen and its hash recorded in this plan before any counted run, the same pre-registration discipline D87 applied to v1's file.
+
+---
+
 ## What stays exactly as it is
 
-The four kill criteria's thresholds and questions (§16.9, D130); the thesis/circulation/comparability measures' definitions; the blind-tagging methodology (reasoning text only, before the threshold is scored); the escrow/gate/settlement mechanics for a passing or failing task; the print, the issuers, the reserve/buffer/roll's own accounting rules. v2 changes who can pay whom in which unit and what the board shows; it does not change what counts as success for a task, a brief, or the reserve.
+The four kill criteria's thresholds and questions (§16.9, D130); the thesis/circulation/comparability measures' definitions; the blind-tagging methodology (reasoning text only, before the threshold is scored); the escrow/gate/settlement mechanics for a passing or failing task; the print's own publication, the issuers, the reserve/buffer/roll's own accounting rules. v2 changes who can pay whom in which unit, what the board shows, what each agent is trying to achieve, and what it can see ahead of time; it does not change what counts as a pass on a task or a brief, or how the reserve/roll itself accounts for a claim. Item 8's running objective is a new measurement surface for reading intent, layered on top of these unchanged mechanics — it is not a gate, and nothing about whether a task or a brief passes depends on it.
 
 ## Build and test plan
 
-All code changes to `economy/world.ts`, `economy/parse.ts` (tool schemas), `economy/board.ts`, `economy/model-agent.ts` (role text), `economy/scoring.ts` (items 6–7). Every changed behaviour gets a test before it's considered done, same bar as the rest of `economy/`. Development and comprehension runs on the stand-in backend only (`StandInWorker`, calibrated to the print's own measured pass rates) — no Blockworks access needed or used, per your instruction. Cheap models for the dev-test (Haiku-class), same as DW1–DW3. Results shown before anything else happens — no counted run, no push, until you've seen the dev-test.
+All code changes to `economy/world.ts`, `economy/parse.ts` (tool schemas), `economy/board.ts`, `economy/model-agent.ts` (role text, items 11/13), `economy/scoring.ts` (items 6–7), `economy/runner.ts`/`cli/economy-window.ts` (item 13's seat rotation, item 10's print-history replay), plus a new objective-ledger module for item 8. Every changed behaviour gets a test before it's considered done, same bar as the rest of `economy/`. Development and comprehension runs on the stand-in backend only (`StandInWorker`, calibrated to the print's own measured pass rates) — no Blockworks access needed or used, per your instruction. `claude-haiku-5-5` for the dev-test (item 13); `claude-sonnet-5` only for the counted run. Results shown before anything else happens — no counted run, no push, until you've seen the dev-test, together with an example of one agent's full step-by-step reasoning from the run.
 
 Before any counted run under v2, the full redesigned configuration — `economy-params.json`, the roster, and every role's instruction text — is frozen and its hash recorded in this plan, the same pre-registration discipline D87 already applied to v1's file. Agent Studio's "freeze" (Part 2, item 5) is the mechanism that does this: no counted run starts from a configuration Studio hasn't frozen.
