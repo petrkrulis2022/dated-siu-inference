@@ -73,6 +73,8 @@ export class ModelAgent implements Agent {
           text: turn.reply.text,
           failure: undefined,
           stopReason: turn.reply.stopReason,
+          // the provider's OWN reasoning/thinking summary, if it returns one -- previously read and silently dropped
+          reasoningSummary: turn.reply.reasoning?.text,
         };
       },
     );
@@ -81,6 +83,9 @@ export class ModelAgent implements Agent {
       costUsd: new D(r.usd),
       ...(r.stopReason !== undefined ? { stopReason: r.stopReason } : {}),
       ...(r.failure !== undefined ? { serviceFailure: r.failure } : {}),
+      ...(r.reasoningSummary !== undefined && r.reasoningSummary !== ""
+        ? { reasoningSummary: r.reasoningSummary }
+        : {}),
     };
   }
 }

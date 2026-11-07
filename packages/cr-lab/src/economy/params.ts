@@ -55,13 +55,20 @@ export interface EconomyParams {
   agents: { research: string[]; demand: string[]; hedger: string };
   mandates: Record<string, Mandate>;
   researchUsdc: bigint;
-  hedger: { usdc: bigint; briefsSold: number; priceUsdcPerBrief: bigint };
+  /** v2 item 8: `priceUsdcPerBrief` is the on-time delivery bonus (previously parsed and never read anywhere); `latePenaltyUsdcPerBrief` is new -- a stated penalty for each brief behind its own due schedule, or never delivered by the run's end */
+  hedger: { usdc: bigint; briefsSold: number; priceUsdcPerBrief: bigint; latePenaltyUsdcPerBrief?: bigint };
   needsPerDemandAgentPerWindow: number;
   mirroredShareBps: bigint;
   spendCapUsdPerWindow: DecimalValue;
   seed: string;
   /** the counted windows, pre-registered with the rest of this file (D87): the stored days they run on, in order, the seats' models rotating by window, and how they settle */
   counted?: { days: string[]; seats: string[]; settlement: string; redemptionIsFinding: boolean };
+  /** v2 item 8: a demand agent's stated cost for each need that lapses unmet -- ONE shared value across every demand agent, never per-agent, so the identical-pair noise control stays intact */
+  unmetNeedCostMicroSiu?: bigint;
+  /** v2 item 9: how many windows ahead a demand agent's own needs are visible; `board.ts`'s own default (2) applies when this is absent, for every v1 log/fixture that predates the field */
+  forwardVisibilityWindows?: number;
+  /** v2 item 10: the first real, published Dated SIU print date the stand-in replays from, one window per calendar day that has a print, in order */
+  printHistoryStartDate?: string;
 }
 
 const big = (v: unknown, what: string): bigint => {
@@ -153,12 +160,24 @@ export function parseParams(raw: Raw): EconomyParams {
       usdc: big(raw.hedger.usdc, "hedger.usdc"),
       briefsSold: Number(raw.hedger.briefsSold),
       priceUsdcPerBrief: big(raw.hedger.priceUsdcPerBrief, "hedger.priceUsdcPerBrief"),
+      ...(raw.hedger.latePenaltyUsdcPerBrief !== undefined
+        ? { latePenaltyUsdcPerBrief: big(raw.hedger.latePenaltyUsdcPerBrief, "hedger.latePenaltyUsdcPerBrief") }
+        : {}),
     },
     needsPerDemandAgentPerWindow: Number(raw.needsPerDemandAgentPerWindow),
     mirroredShareBps: big(raw.mirroredShareBps, "mirroredShareBps"),
     spendCapUsdPerWindow: dec(raw.spendCapUsdPerWindow, "spendCapUsdPerWindow"),
     seed: String(raw.seed),
     ...(raw.counted !== undefined ? { counted: parseCounted(raw.counted) } : {}),
+    ...(raw.unmetNeedCostMicroSiu !== undefined
+      ? { unmetNeedCostMicroSiu: big(raw.unmetNeedCostMicroSiu, "unmetNeedCostMicroSiu") }
+      : {}),
+    ...(raw.forwardVisibilityWindows !== undefined
+      ? { forwardVisibilityWindows: Number(raw.forwardVisibilityWindows) }
+      : {}),
+    ...(raw.printHistoryStartDate !== undefined
+      ? { printHistoryStartDate: String(raw.printHistoryStartDate) }
+      : {}),
   };
 }
 

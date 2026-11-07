@@ -1,0 +1,120 @@
+{
+  "status": "DRAFT v2 (docs/marketplace-redesign-v2.md): NOT frozen, NOT pre-registered. Dev-testing only, stand-in backend. Every field matches the frozen v1 file (economy-params.json) unchanged except: counted.seats (item 13, all-Anthropic) and the new item 8/9/10 fields below, whose values are illustrative pending a dev-test and the owner's review -- never used for a counted run until frozen (item 14).",
+  "units": "USDC and AGU-lab in base units (6 decimals); face in mSIU; rates in nano-USD per SIU; basis points for shares",
+  "secondsPerWindow": 86400,
+  "roundsPerWindow": 8,
+  "ladderWindows": 3,
+  "reserve": {
+    "series": "commodity",
+    "faceMilliPerWindow": "3000",
+    "minTenorSeconds": 43200,
+    "discountBps": "1000",
+    "bufferSeedUsdc": "500000",
+    "bufferTargetUsdc": "500000"
+  },
+  "participant": {
+    "usdc": "2000000",
+    "spreadBps": "200",
+    "buybackCapBps": "1000"
+  },
+  "issuers": [
+    {
+      "id": "ISSUER-F",
+      "model": "claude-sonnet-5",
+      "grade": "frontier",
+      "classes": ["CR-VS"],
+      "budgetUsdPerWindow": "1.00",
+      "bondUsdc": "5000000",
+      "failShareBps": "0"
+    },
+    {
+      "id": "ISSUER-C1",
+      "model": "claude-haiku-5-5",
+      "grade": "commodity",
+      "classes": ["CR-PL", "CR-UO", "CR-SM"],
+      "budgetUsdPerWindow": "0.20",
+      "bondUsdc": "2000000",
+      "failShareBps": "0"
+    },
+    {
+      "id": "ISSUER-C2",
+      "model": "claude-haiku-5-5",
+      "grade": "commodity",
+      "classes": ["CR-PL", "CR-UO", "CR-SM"],
+      "budgetUsdPerWindow": "0.20",
+      "bondUsdc": "2000000",
+      "failShareBps": "0"
+    },
+    {
+      "id": "ISSUER-X",
+      "model": "claude-haiku-5-5",
+      "grade": "commodity",
+      "classes": ["CR-PL", "CR-UO", "CR-SM"],
+      "budgetUsdPerWindow": "0.10",
+      "bondUsdc": "1000000",
+      "failShareBps": "3000"
+    }
+  ],
+  "deliveryFloorBps": "8000",
+  "deliveryTrailingWindows": 5,
+  "probeShareBps": "500",
+  "probesToClear": 3,
+  "dataShadowPriceUsdc": "1000",
+  "briefMarkupBps": "12000",
+  "agents": {
+    "research": ["RESEARCH-1", "RESEARCH-2"],
+    "demand": ["DEMAND-1", "DEMAND-2", "DEMAND-3"],
+    "hedger": "HEDGER"
+  },
+  "mandates": {
+    "DEMAND-1": {
+      "usdc": "100000",
+      "spendLimitAguPerWindow": "2000000",
+      "holdingCeilingDays": 3,
+      "minUsdcBuffer": "16666",
+      "sweepDays": [7, 14]
+    },
+    "DEMAND-2": {
+      "usdc": "100000",
+      "spendLimitAguPerWindow": "2000000",
+      "holdingCeilingDays": 3,
+      "minUsdcBuffer": "16666",
+      "sweepDays": [7, 14]
+    },
+    "DEMAND-3": {
+      "usdc": "100000",
+      "spendLimitAguPerWindow": "2000000",
+      "holdingCeilingDays": 3,
+      "minUsdcBuffer": "16666",
+      "sweepDays": [7, 14]
+    }
+  },
+  "researchUsdc": "50000",
+  "hedger": {
+    "usdc": "100000",
+    "briefsSold": 10,
+    "priceUsdcPerBrief": "50000",
+    "latePenaltyUsdcPerBrief": "50000"
+  },
+  "needsPerDemandAgentPerWindow": 1,
+  "mirroredShareBps": "1000",
+  "spendCapUsdPerWindow": "1.50",
+  "seed": "dev-0",
+  "counted": {
+    "days": [
+      "2026-10-29",
+      "2026-10-30",
+      "2026-11-01",
+      "2026-11-02",
+      "2026-11-04",
+      "2026-11-05",
+      "2026-11-06"
+    ],
+    "seats": ["claude-sonnet-5"],
+    "settlement": "memory ledger; the run's journal replayed onto the real contracts on anvil, every balance compared",
+    "redemptionIsFinding": true
+  },
+  "unmetNeedCostMicroSiu": "200000",
+  "forwardVisibilityWindows": 2,
+  "printHistoryStartDate": "2026-09-02"
+}

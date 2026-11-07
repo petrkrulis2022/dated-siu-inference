@@ -35,7 +35,7 @@ import { buildSeats } from "../runner/seats.js";
 import { EconomyLog } from "../economy/log.js";
 import { instructionsFor, ModelAgent } from "../economy/model-agent.js";
 import { overview } from "../economy/overview.js";
-import { loadParams } from "../economy/params.js";
+import { loadParams, PARAMS_PATH } from "../economy/params.js";
 import { judgeDevWindows } from "../economy/report.js";
 import { exitsToTagBlind } from "../economy/scoring.js";
 import {
@@ -55,7 +55,9 @@ const arg = (name: string, dflt?: string): string | undefined => {
 const flag = (name: string): boolean => process.argv.includes(name);
 
 const counted = flag("--counted");
-const base = loadParams();
+// v2 (redesign items 8-14): --params points at a candidate v2 config for dev-testing, never the committed v1 file in place -- the default stays PARAMS_PATH exactly as
+// every pre-existing call site/test already expects, so this is purely additive.
+const base = loadParams(arg("--params", PARAMS_PATH));
 if (counted && base.counted === undefined)
   throw new Error("--counted needs the `counted` block in the parameters file");
 const mode = (arg("--agents") ?? (counted ? "model" : "scripted")) as "scripted" | "model";

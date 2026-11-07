@@ -21,6 +21,8 @@ export interface AgentReply {
   serviceFailure?: string;
   /** the provider's stop reason, so a reply cut off at the output allowance reads as that and not as the agent's format */
   stopReason?: string;
+  /** the provider's OWN reasoning/thinking summary for this turn, when it returns one (`ChatReply.reasoning`) -- distinct from `parsed.reasoning`, the model's stated reasoning inside its own JSON reply; absent where a model/provider does not return one */
+  reasoningSummary?: string;
 }
 export interface Agent {
   id: string;

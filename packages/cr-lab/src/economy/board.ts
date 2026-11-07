@@ -168,7 +168,7 @@ export function boardFor(w: World, agent: string): Board {
     // v2 item 9: forward visibility for demand agents, N windows ahead -- `needsForFn` is the SAME deterministic closure startWindow already used, queried further, no new randomness
     ...(role === "demand" && w.needsForFn !== undefined
       ? {
-          needsAhead: Array.from({ length: FORWARD_VISIBILITY_WINDOWS }, (_, i) => {
+          needsAhead: Array.from({ length: w.params.forwardVisibilityWindows ?? FORWARD_VISIBILITY_WINDOWS }, (_, i) => {
             const k = w.window + i + 1;
             return { window: k, tasks: [...new Set(w.needsForFn?.(agent, k) ?? [])] };
           }),

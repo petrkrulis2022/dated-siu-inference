@@ -205,7 +205,11 @@ export async function runWindows(opts: {
             `your reply could not be read (${parsed.error}); reply with exactly one JSON object`,
           );
         } else {
-          w.log.write(board.day, r, a.id, "reasoning", { seat: a.seat, text: parsed.reasoning });
+          w.log.write(board.day, r, a.id, "reasoning", {
+            seat: a.seat,
+            text: parsed.reasoning,
+            ...(rep.reasoningSummary !== undefined ? { providerSummary: rep.reasoningSummary } : {}),
+          });
           if (parsed.flags.length > 0)
             s.flagged.push({ agent: a.id, round: r, flags: parsed.flags });
           // the mirrored sample (D82): a seeded share of model turns is asked again with the other display (SIU first versus dollars first); the mirror is never executed

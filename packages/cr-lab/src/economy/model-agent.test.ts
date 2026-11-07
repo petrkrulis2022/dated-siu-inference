@@ -64,6 +64,60 @@ describe("a model agent", () => {
     expect(parseReply(r.text, "demand").ok).toBe(true);
   });
 
+  it("passes through the provider's own reasoning/thinking summary when it returns one, and omits the field when it doesn't", async () => {
+    const reply = '{"reasoning": "nothing to do", "action": {"tool": "pass", "args": {}}}';
+    const withSummary = fakeChat({
+      status: 200,
+      attempts: 1,
+      reply: {
+        text: reply,
+        toolUses: [],
+        wantsTools: false,
+        usage: { input: 1_000, output: 200, cachedInput: 0 },
+        assistant: {},
+        reasoning: {
+          text: "thinking: the data agent needs USDC, paying that way",
+          redactedBlocks: 0,
+          emptyBlocks: 0,
+        },
+      },
+    });
+    const a = new ModelAgent(
+      "DEMAND-1",
+      "demand",
+      "claude-sonnet-5",
+      withSummary,
+      PRICE,
+      ledger(),
+      "CR_ANTHROPIC_API_KEY",
+    );
+    const r = await a.reply(board, "the board");
+    expect(r.reasoningSummary).toBe("thinking: the data agent needs USDC, paying that way");
+
+    const withoutSummary = fakeChat({
+      status: 200,
+      attempts: 1,
+      reply: {
+        text: reply,
+        toolUses: [],
+        wantsTools: false,
+        usage: { input: 1_000, output: 200, cachedInput: 0 },
+        assistant: {},
+      },
+    });
+    const b = new ModelAgent(
+      "DEMAND-1",
+      "demand",
+      "claude-haiku-4-5",
+      withoutSummary,
+      PRICE,
+      ledger(),
+      "CR_ANTHROPIC_API_KEY",
+    );
+    const rb = await b.reply(board, "the board");
+    expect(rb.reasoningSummary).toBeUndefined();
+  });
+
   it("turns a provider failure into a service failure, billed at zero, not a parse failure", async () => {
     const chat = fakeChat({ status: 529, attempts: 3 });
     const a = new ModelAgent(
