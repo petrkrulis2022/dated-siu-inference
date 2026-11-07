@@ -27,6 +27,16 @@ export const usdcFor = (milli: MilliSiu, rate: NanoUsdPerSiu): UsdcUnits =>
 export const discounted = (rate: NanoUsdPerSiu, discountBps: bigint): NanoUsdPerSiu =>
   (rate * (BPS - discountBps)) / BPS;
 
+/**
+ * A micro-SIU price as a whole count of mSIU ("250 mSIU", never "0.25 SIU"), for a quote's own posted price (the owner, 2026-11-07). Throws on a micro-SIU amount that is not
+ * an exact multiple of 1,000: a quote's price is parsed as a whole mSIU count to begin with (`parse.ts`'s `post_quote`), so this never has to round.
+ */
+export function showMsiu(microSiu: bigint): string {
+  if (microSiu % 1_000n !== 0n)
+    throw new Error(`${microSiu} micro-SIU is not a whole number of mSIU`);
+  return `${(microSiu / 1_000n).toString()} mSIU`;
+}
+
 /** A decimal string of `units` with `decimals` places, for logs and boards (display only, never arithmetic). */
 export function show(units: bigint, decimals = 6): string {
   const neg = units < 0n;

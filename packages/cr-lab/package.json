@@ -30,7 +30,8 @@
     "derive-allowances": "pnpm run build && node --env-file=../../.env dist/cli/derive-allowances.js",
     "cr-print": "pnpm run build && node dist/cli/cr-print.js",
     "economy-window": "pnpm run build && node --env-file=../../.env dist/cli/economy-window.js",
-    "economy-replay": "pnpm run build && node dist/cli/economy-replay.js"
+    "economy-replay": "pnpm run build && node dist/cli/economy-replay.js",
+    "economy-score": "pnpm run build && node dist/cli/economy-score.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.31.0",

@@ -32,6 +32,7 @@ import type { EconomyParams, IssuerParams } from "./params.js";
 import { Participant, ParticipantRefused } from "./participant.js";
 import {
   show,
+  showMsiu,
   usdcFor,
   type AguUnits,
   type MilliSiu,
@@ -633,11 +634,11 @@ export class World {
       to: need.agent,
       need: need.id,
       tasks: a.tasks,
-      priceSiu: show(a.priceMicroSiu),
+      priceMicroSiu: a.priceMicroSiu,
     });
     this.notify(
       need.agent,
-      `quote ${q.id} from ${agent}: a brief on ${a.tasks.join(" + ")} for ${show(a.priceMicroSiu)} SIU, payable in AGU-lab on delivery of a passing brief`,
+      `quote ${q.id} from ${agent}: a brief on ${a.tasks.join(" + ")} for ${showMsiu(a.priceMicroSiu)}, payable in AGU-lab on delivery of a passing brief`,
     );
     return { ok: true, note: `quote ${q.id} posted to ${need.agent}` };
   }
@@ -676,7 +677,7 @@ export class World {
       quote: q.id,
       to: q.researcher,
       agu: units,
-      priceSiu: show(q.priceMicroSiu),
+      priceMicroSiu: q.priceMicroSiu,
     });
     this.notify(
       q.researcher,
@@ -1274,7 +1275,12 @@ export class World {
     this.publishNav();
   }
 
-  /** an exit followed in the same window by that agent's front-claim purchase, up to the amount exited, is a dollar cost with the sub-label (§4.2) */
+  /**
+   * An exit followed in the same window by that agent's front-claim purchase, up to the amount exited, is its own class, "structural dollar route": buying work ahead pays
+   * in USDC by design (R5/Q5a), so this is the dollar leg of a structural feature of the market, not necessarily a thesis violation — but it IS still an exit to USDC, so
+   * the owner's scoring (`scoring.ts`) scores it both ways: neutral in the primary share, counted against in the secondary (2026-11-07). Every other exit is left
+   * unclassified here and tagged blind from its reasoning text alone, after the run and before the thesis share is scored (`scoring.ts`'s `exitsToTagBlind`).
+   */
   #classifyExits(k: number): void {
     const price = (this.commodityRate * (10_000n - this.params.reserve.discountBps)) / 10_000n;
     for (const e of this.exits.filter((x) => x.window === k && x.label === undefined)) {
@@ -1282,10 +1288,7 @@ export class World {
       const ordered = this.frontOrders
         .filter((f) => f.agent === e.agent && f.forWindow === k + 1)
         .reduce((n, f) => n + usdcFor(f.milli, price), 0n);
-      e.label =
-        ordered > 0n
-          ? "dollar cost / dollar route to work"
-          : "unclassified (tagged from reasoning)";
+      e.label = ordered > 0n ? "structural dollar route" : "unclassified (tagged from reasoning)";
     }
   }
 

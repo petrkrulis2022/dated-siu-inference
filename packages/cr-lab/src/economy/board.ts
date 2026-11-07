@@ -1,12 +1,22 @@
 /**
  * What one agent sees on its turn: a structured board (scripted agents read it directly) and the same board as text (a model agent's prompt). Amounts are shown as plain decimals;
- * prices inside the market are in SIU, and the display order alternates by day between SIU first and dollars first (§16.9, the comparability measure).
+ * prices inside the market are in SIU, and the display order alternates between SIU first and dollars first (§16.9, the comparability measure).
  */
 import { D } from "@touchstone/sdk";
 import type { TaskId } from "../tasks/instances.js";
 import { PARTICIPANT, RESERVE } from "./memory-chain.js";
-import { show, type AguUnits, type MilliSiu, type UsdcUnits } from "./units.js";
+import { show, showMsiu, type AguUnits, type MilliSiu, type UsdcUnits } from "./units.js";
 import type { MicroSiu, Need, Quote, Role, TaskOutput, World } from "./world.js";
+
+/**
+ * The display order, as its own function of the window number (D75/§16.9), so every reader of a window's display order — the board itself and the pre-registered scoring
+ * (`scoring.ts`) — uses the same rule. Flips every TWO windows (SIU, SIU, $, $, SIU, SIU, $, ...), not every one: tying the flip to window parity alone made it move in lock
+ * step with the counted windows' own seat rotation (every window's seat also alternates by one), so every SIU-first window was Sonnet and every dollars-first window was
+ * GPT-5.1 and the comparability measure could not tell the display's effect from the model's (found 2026-11-06, fixed on the owner's word 2026-11-07).
+ */
+export function siuFirstForWindow(k: number): boolean {
+  return (k - 1) % 4 < 2;
+}
 
 export interface ClaimHolding {
   claim: string;
@@ -83,7 +93,7 @@ export function boardFor(w: World, agent: string): Board {
     day: w.dayLabel(w.window),
     round: w.round,
     rounds: w.params.roundsPerWindow,
-    siuFirst: w.window % 2 === 1,
+    siuFirst: siuFirstForWindow(w.window),
     printUsdPerSiu: new D(String(w.commodityRate)).div(1e9).toFixed(6),
     reserveNav: w.navText(),
     usdc: w.chain.balance(agent, "USDC"),
@@ -140,6 +150,15 @@ const price = (b: Board, microSiu: MicroSiu): string =>
   b.siuFirst
     ? `${show(microSiu)} SIU (≈ $${usdOf(b, microSiu)})`
     : `$${usdOf(b, microSiu)} (${show(microSiu)} SIU)`;
+/**
+ * A posted or accepted quote's own price, in whole mSIU rather than decimal SIU (the owner, 2026-11-07: "250 mSIU, not 0.25 SIU"). Scoped to quotes themselves — a research
+ * agent's own freely-chosen brief price — not to the AGU wallet value, the holding ceiling or an issuer's per-task price, which stay in decimal SIU: those reflect measured
+ * real costs, not a round number an agent picked. `post_quote`'s own price argument is parsed as a whole mSIU count (`parse.ts`), so this never has a remainder to drop.
+ */
+const quotePrice = (b: Board, microSiu: MicroSiu): string =>
+  b.siuFirst
+    ? `${showMsiu(microSiu)} (≈ $${usdOf(b, microSiu)})`
+    : `$${usdOf(b, microSiu)} (${showMsiu(microSiu)})`;
 
 /** the board as the text a model agent reads */
 export function renderBoard(b: Board): string {
@@ -189,7 +208,7 @@ export function renderBoard(b: Board): string {
     lines.push("Quotes:");
     for (const q of b.quotes)
       lines.push(
-        `  - ${q.id}: ${q.researcher} → ${q.demand}, brief on ${q.tasks.join(" + ")} for ${price(b, q.priceMicroSiu)}, ${q.status}${q.agu !== undefined ? `, ${show(q.agu)} AGU-lab in escrow` : ""}`,
+        `  - ${q.id}: ${q.researcher} → ${q.demand}, brief on ${q.tasks.join(" + ")} for ${quotePrice(b, q.priceMicroSiu)}, ${q.status}${q.agu !== undefined ? `, ${show(q.agu)} AGU-lab in escrow` : ""}`,
       );
   }
   if (b.outputs.length > 0) {

@@ -8,6 +8,16 @@ import type { WindowStats } from "./runner.js";
 import { show } from "./units.js";
 import type { World } from "./world.js";
 
+/** the agent's own reasoning entry that precedes its action at `t` (the same actor's nearest prior "reasoning" entry); shared with `scoring.ts`'s blind tagging */
+export function reasoningBeforeOf(log: readonly LogEntry[], t: LogEntry, maxLength = 400): string {
+  const r = [...log]
+    .reverse()
+    .find((e) => e.seq < t.seq && e.actor === t.actor && e.kind === "reasoning");
+  return typeof r?.text === "string"
+    ? r.text.replace(/\s+/g, " ").slice(0, maxLength)
+    : "(no reasoning)";
+}
+
 const PAYMENT_TOOLS = new Set([
   "buy_agu",
   "sell_agu",
@@ -73,14 +83,7 @@ export function overview(
     );
   }
   lines.push("", "## Payments, with each agent's own reason", "");
-  const reasoningBefore = (t: LogEntry): string => {
-    const r = [...log]
-      .reverse()
-      .find((e) => e.seq < t.seq && e.actor === t.actor && e.kind === "reasoning");
-    return typeof r?.text === "string"
-      ? r.text.replace(/\s+/g, " ").slice(0, 400)
-      : "(no reasoning)";
-  };
+  const reasoningBefore = (t: LogEntry): string => reasoningBeforeOf(log, t, 400);
   for (const t of log.filter(
     (e) =>
       e.kind === "turn" &&

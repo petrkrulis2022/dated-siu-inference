@@ -157,7 +157,8 @@ export class ScriptedAgent implements Agent {
         {
           need: unquoted.id,
           tasks: unquoted.tasks,
-          price_siu: show((price * 12n) / 10n),
+          // a quote is priced in whole mSIU (owner, 2026-11-07): round the marked-up micro-SIU cost up to the next whole mSIU, never down, so the quote never prices below cost
+          price_msiu: (((price * 12n) / 10n + 999n) / 1_000n).toString(),
         },
       );
     }

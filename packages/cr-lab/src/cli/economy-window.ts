@@ -8,6 +8,8 @@
  * `--counted` runs the COUNTED windows pre-registered in the parameters file (`counted`: the stored days in order, the seats' models rotating by window, settlement): model agents, real issuer
  * work on the stored days, the redemption criterion reported as a finding (the owner, 2026-11-05), and at the end the window journal replayed onto the real contracts on anvil with every
  * balance compared (`--no-replay` skips it). `--agents scripted` with `--counted` is the free rehearsal of the same pipeline (issuer work still costs a little); `--days` narrows the days.
+ * A `--counted` run also drops `blind-exits.json` in its own directory when an exit needs a blind tag, and the report points at `economy-score` (`cli/economy-score.ts`) for the
+ * pre-registered scoring itself (§16.9, `economy/scoring.ts`) — never run inline here, since the thesis's threshold waits on that blind tag (the owner, 2026-11-07).
  *
  * Runs development windows of the CR economy (`docs/part5-build-plan.md` §6) on the memory ledger and the stand-in backend (labelled on every line; no Blockworks data). Scripted agents
  * spend nothing. Model agents spend real money through the trial's spend ledger: the run refuses without `--yes-spend`, and `--ledger` must name the ledger the trial itself writes, so the
@@ -35,6 +37,7 @@ import { instructionsFor, ModelAgent } from "../economy/model-agent.js";
 import { overview } from "../economy/overview.js";
 import { loadParams } from "../economy/params.js";
 import { judgeDevWindows } from "../economy/report.js";
+import { exitsToTagBlind } from "../economy/scoring.js";
 import {
   buildWorld,
   loadCrPrint,
@@ -203,6 +206,16 @@ if (counted || flag("--replay")) {
     for (const d of r.diff.slice(0, 20))
       report += `- DIFF ${d.what} ${d.key}: memory ${d.memory}, chain ${d.chain}\n`;
   }
+}
+if (counted) {
+  // the pre-registered scoring (§16.9, `scoring.ts`) is never run inline: unclassified exits need a blind human tag before the thesis's 20% threshold can be scored
+  // (the owner, 2026-11-07), so this only drops the blind-exit list here (if any) and points at the standalone `economy-score` command for the rest.
+  const blind = exitsToTagBlind(world.log.entries);
+  if (blind.length > 0) {
+    writeFileSync(`${dir}/blind-exits.json`, `${JSON.stringify(blind, null, 1)}\n`, { mode: 0o600 });
+    report += `\n## Pre-registered scoring\n\n- ${blind.length} exit(s) need a blind tag before the thesis is scored: see \`${dir}/blind-exits.json\`, then run \`pnpm run economy-score -- --log ${dir}/log.jsonl --tags <tagged file> --out ${dir}/scoring.md\`.\n`;
+  } else
+    report += `\n## Pre-registered scoring\n\n- run \`pnpm run economy-score -- --log ${dir}/log.jsonl --out ${dir}/scoring.md\` (no exit needs a blind tag this run).\n`;
 }
 writeFileSync(`${dir}/report.md`, report, { mode: 0o600 });
 console.log(report);

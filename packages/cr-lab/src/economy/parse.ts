@@ -63,7 +63,7 @@ export const TOOL_HELP: Readonly<Record<string, string>> = {
   order_front_claim:
     '{"task": "CR-PL", "siu": "0.25"} — order work claims for the next window, paid in USDC at the roll at a discount to the print',
   post_quote:
-    '{"need": "<need id>", "tasks": ["CR-PL", "CR-UO"], "price_siu": "<SIU>"} — offer a brief to the demand agent with that need',
+    '{"need": "<need id>", "tasks": ["CR-PL", "CR-UO"], "price_msiu": "<whole mSIU, e.g. 250>"} — offer a brief to the demand agent with that need, priced in whole mSIU (a thousandth of a SIU), never a decimal',
   accept_quote:
     '{"quote": "<quote id>"} — accept a quote: its price goes into escrow in AGU-lab, released only if the brief passes',
   buy_data:
@@ -176,11 +176,12 @@ function toAction(tool: string, args: Obj): Action {
       const tasks = args.tasks;
       if (!Array.isArray(tasks) || !tasks.every((t) => TASKS.includes(t as TaskId)))
         throw new Error("args.tasks must be a list of task types");
+      // a quote's price is a whole number of mSIU, never a decimal SIU amount (the owner, 2026-11-07): `amount(…, 0)` refuses a fractional string outright
       return {
         tool: "post_quote",
         need: str(args, "need"),
         tasks: tasks as TaskId[],
-        priceMicroSiu: amount(args, "price_siu"),
+        priceMicroSiu: amount(args, "price_msiu", 0) * 1_000n,
       };
     }
     case "accept_quote":
