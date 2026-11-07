@@ -8,7 +8,13 @@
 import { TASKS, type TaskId } from "../tasks/instances.js";
 import type { Board } from "./board.js";
 import { parseUnits, type AguUnits } from "./units.js";
-import type { Action, Role } from "./world.js";
+import type { Action, PayUnit, Role } from "./world.js";
+
+const pay = (args: Obj): PayUnit | undefined => {
+  if (args.pay === undefined) return undefined;
+  if (args.pay !== "usdc" && args.pay !== "agu") throw new Error('args.pay must be "usdc" or "agu"');
+  return args.pay;
+};
 
 export const TOOLS_BY_ROLE: Readonly<Record<Role, readonly string[]>> = {
   research: [
@@ -63,13 +69,13 @@ export const TOOL_HELP: Readonly<Record<string, string>> = {
   order_front_claim:
     '{"task": "CR-PL", "siu": "0.25"} — order work claims for the next window, paid in USDC at the roll at a discount to the print',
   post_quote:
-    '{"need": "<need id>", "tasks": ["CR-PL", "CR-UO"], "price_msiu": "<whole mSIU, e.g. 250>"} — offer a brief to the demand agent with that need, priced in whole mSIU (a thousandth of a SIU), never a decimal',
+    '{"need": "<need id>", "tasks": ["CR-PL", "CR-UO"], "price_msiu": "<whole mSIU, e.g. 250>"} (or {"price_usdc": "<decimal USDC, e.g. 0.015>"} instead of price_msiu) — offer a brief to the demand agent with that need, priced in whole mSIU (a thousandth of a SIU, never a decimal) OR in USDC, your choice; whichever you name is what binds at acceptance',
   accept_quote:
-    '{"quote": "<quote id>"} — accept a quote: its price goes into escrow in AGU-lab, released only if the brief passes',
+    '{"quote": "<quote id>"} — accept a quote: its price goes into escrow in whichever unit the quote named (AGU-lab or USDC), released only if the brief passes',
   buy_data:
-    '{"dataset": "perp|lending|tokens|stablecoins"} — buy today\'s data for a task type (USDC)',
+    '{"dataset": "perp|lending|tokens|stablecoins"} (optionally {"pay": "usdc"} or {"pay": "agu"}, default usdc) — buy today\'s data for a task type, in USDC or its AGU-lab equivalent at the live rate',
   commission_task:
-    '{"tasks": ["CR-PL", "CR-UO"], "issuer": "<issuer id>"} — pay an issuer in AGU-lab (escrowed, paid per task only on a pass) to do these tasks now; a research agent\'s first task on a dataset each day also buys that data (USDC)',
+    '{"tasks": ["CR-PL", "CR-UO"], "issuer": "<issuer id>"} (optionally {"pay": "usdc"} or {"pay": "agu"}, default agu) — pay an issuer (escrowed, paid per task only on a pass) to do these tasks now, in AGU-lab or USDC, your choice; a research agent\'s first task on a dataset each day also buys that data (USDC, or AGU-lab with its own {"pay": "agu"})',
   deliver_brief:
     '{"quote": "<quote id>"} — deliver a brief from your passing outputs of today; you are paid only if every component passed',
   buy_claims:
@@ -176,18 +182,27 @@ function toAction(tool: string, args: Obj): Action {
       const tasks = args.tasks;
       if (!Array.isArray(tasks) || !tasks.every((t) => TASKS.includes(t as TaskId)))
         throw new Error("args.tasks must be a list of task types");
-      // a quote's price is a whole number of mSIU, never a decimal SIU amount (the owner, 2026-11-07): `amount(…, 0)` refuses a fractional string outright
-      return {
-        tool: "post_quote",
-        need: str(args, "need"),
-        tasks: tasks as TaskId[],
-        priceMicroSiu: amount(args, "price_msiu", 0) * 1_000n,
-      };
+      // v2 item 2: a quote binds in exactly one unit -- whole mSIU (never a decimal SIU amount, the owner, 2026-11-07) or whole-cent-precision USDC
+      if ((args.price_msiu === undefined) === (args.price_usdc === undefined))
+        throw new Error('args must name exactly one of "price_msiu" or "price_usdc"');
+      return args.price_usdc !== undefined
+        ? {
+            tool: "post_quote",
+            need: str(args, "need"),
+            tasks: tasks as TaskId[],
+            priceUsdcMicro: amount(args, "price_usdc"),
+          }
+        : {
+            tool: "post_quote",
+            need: str(args, "need"),
+            tasks: tasks as TaskId[],
+            priceMicroSiu: amount(args, "price_msiu", 0) * 1_000n,
+          };
     }
     case "accept_quote":
       return { tool: "accept_quote", quote: str(args, "quote") };
     case "buy_data":
-      return { tool: "buy_data", dataset: str(args, "dataset") };
+      return { tool: "buy_data", dataset: str(args, "dataset"), pay: pay(args) };
     case "commission_task": {
       const tasks = args.tasks;
       if (
@@ -196,7 +211,12 @@ function toAction(tool: string, args: Obj): Action {
         !tasks.every((t) => TASKS.includes(t as TaskId))
       )
         throw new Error("args.tasks must be a non-empty list of task types");
-      return { tool: "commission_task", tasks: tasks as TaskId[], issuer: str(args, "issuer") };
+      return {
+        tool: "commission_task",
+        tasks: tasks as TaskId[],
+        issuer: str(args, "issuer"),
+        pay: pay(args),
+      };
     }
     case "deliver_brief":
       return { tool: "deliver_brief", quote: str(args, "quote") };
@@ -237,7 +257,11 @@ export function scaleFlags(a: Action, b: Board): string[] {
       const prices = b.issuerPrices.filter((p) => p.task === t).map((p) => p.priceMicroSiu);
       return sum + (prices.length === 0 ? 0n : prices.reduce((x, y) => (y < x ? y : x)));
     }, 0n);
-    check("price_siu vs the quoted tasks' cheapest issuer prices", a.priceMicroSiu, ref);
+    // v2 item 2: a usdc-priced quote is checked against the same reference, converted at the board's own live rate -- still a soft heuristic, never a financial calculation
+    if (a.priceUsdcMicro !== undefined) {
+      const usdcPerSiu = parseUnits(b.printUsdPerSiu, 6);
+      check("price_usdc vs the quoted tasks' cheapest issuer prices", a.priceUsdcMicro, (ref * usdcPerSiu) / 1_000_000n);
+    } else check("price_siu vs the quoted tasks' cheapest issuer prices", a.priceMicroSiu as bigint, ref);
   }
   return flags;
 }

@@ -23,6 +23,19 @@ export const BPS = 10_000n;
 export const usdcFor = (milli: MilliSiu, rate: NanoUsdPerSiu): UsdcUnits =>
   (milli * rate) / 1_000_000n;
 
+/**
+ * v2 (marketplace-redesign-v2.md, items 1-5): a micro-SIU price's USDC value, and the reverse, for a transaction type whose native unit is the OTHER currency choosing to
+ * settle in this one. Every conversion rounds against whoever is initiating it (the "small, stated conversion spread" the design note describes) -- never a separate fee
+ * account, just never the rounding direction that favours the party asking for the non-native unit: `Ceil` variants are for a PAYER's own owed amount (never pay less than
+ * the item is worth), the plain (floor) variant is for a SELLER's later conversion of what it received (it never gets more than the item was actually worth).
+ */
+export const usdcForMicroSiu = (microSiu: bigint, rate: NanoUsdPerSiu): UsdcUnits =>
+  (microSiu * rate) / 1_000_000_000n;
+export const usdcForMicroSiuCeil = (microSiu: bigint, rate: NanoUsdPerSiu): UsdcUnits =>
+  (microSiu * rate + 999_999_999n) / 1_000_000_000n;
+export const microSiuForUsdcCeil = (usdc: UsdcUnits, rate: NanoUsdPerSiu): bigint =>
+  (usdc * 1_000_000_000n + rate - 1n) / rate;
+
 /** The posted price of a front claim: the print less the roll discount, in nano-USD per SIU (rounded down). */
 export const discounted = (rate: NanoUsdPerSiu, discountBps: bigint): NanoUsdPerSiu =>
   (rate * (BPS - discountBps)) / BPS;

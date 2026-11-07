@@ -5,7 +5,15 @@
 import { D } from "@touchstone/sdk";
 import type { TaskId } from "../tasks/instances.js";
 import { PARTICIPANT, RESERVE } from "./memory-chain.js";
-import { show, showMsiu, type AguUnits, type MilliSiu, type UsdcUnits } from "./units.js";
+import {
+  discounted,
+  microSiuForUsdcCeil,
+  show,
+  showMsiu,
+  type AguUnits,
+  type MilliSiu,
+  type UsdcUnits,
+} from "./units.js";
 import type { MicroSiu, Need, Quote, Role, TaskOutput, World } from "./world.js";
 
 /**
@@ -17,6 +25,9 @@ import type { MicroSiu, Need, Quote, Role, TaskOutput, World } from "./world.js"
 export function siuFirstForWindow(k: number): boolean {
   return (k - 1) % 4 < 2;
 }
+
+/** v2 item 9: how many windows ahead a demand agent's own needs are visible -- fixed and stated here, once, per the design note */
+export const FORWARD_VISIBILITY_WINDOWS = 2;
 
 export interface ClaimHolding {
   claim: string;
@@ -52,6 +63,11 @@ export interface Board {
   outputs: TaskOutput[];
   issuerPrices: { issuer: string; task: TaskId; priceMicroSiu: MicroSiu; skipped: boolean }[];
   dataBought: string[];
+  /** v2 item 3: today's data price, in SIU terms at the live rate -- shown every round, never buried in a one-time instruction */
+  dataPriceMicroSiu: MicroSiu;
+  /** v2 items 3/4: the front-claim roll's own discounted price this window (per SIU of face) and its discount -- nothing economic stays prose-only */
+  frontClaimPriceUsdPerSiu: string;
+  frontClaimDiscountBps: bigint;
   notices: string[];
   lastResult?: string;
   mandate?: {
@@ -62,6 +78,8 @@ export interface Board {
     sweepDays: number[];
   };
   forward?: { sold: number; delivered: number };
+  /** v2 item 9: this agent's own needs N windows ahead (demand and the hedger only) -- `needsSchedule` is pure, so this is never a new randomness source */
+  needsAhead?: { window: number; tasks: TaskId[] }[];
 }
 
 export function boardFor(w: World, agent: string): Board {
@@ -86,6 +104,7 @@ export function boardFor(w: World, agent: string): Board {
     });
   }
   const m = w.params.mandates[agent];
+  const rate = w.commodityRate;
   return {
     agent,
     role,
@@ -94,8 +113,13 @@ export function boardFor(w: World, agent: string): Board {
     round: w.round,
     rounds: w.params.roundsPerWindow,
     siuFirst: siuFirstForWindow(w.window),
-    printUsdPerSiu: new D(String(w.commodityRate)).div(1e9).toFixed(6),
+    printUsdPerSiu: new D(String(rate)).div(1e9).toFixed(6),
     reserveNav: w.navText(),
+    dataPriceMicroSiu: microSiuForUsdcCeil(w.params.dataShadowPriceUsdc, rate),
+    frontClaimPriceUsdPerSiu: new D(String(discounted(rate, w.params.reserve.discountBps)))
+      .div(1e9)
+      .toFixed(6),
+    frontClaimDiscountBps: w.params.reserve.discountBps,
     usdc: w.chain.balance(agent, "USDC"),
     agu: w.chain.balance(agent, "AGU"),
     aguSiuValue: w.siuOf(w.chain.balance(agent, "AGU")),
@@ -141,6 +165,15 @@ export function boardFor(w: World, agent: string): Board {
     ...(role === "hedger"
       ? { forward: { sold: w.params.hedger.briefsSold, delivered: w.forwardDelivered } }
       : {}),
+    // v2 item 9: forward visibility for demand agents, N windows ahead -- `needsForFn` is the SAME deterministic closure startWindow already used, queried further, no new randomness
+    ...(role === "demand" && w.needsForFn !== undefined
+      ? {
+          needsAhead: Array.from({ length: FORWARD_VISIBILITY_WINDOWS }, (_, i) => {
+            const k = w.window + i + 1;
+            return { window: k, tasks: [...new Set(w.needsForFn?.(agent, k) ?? [])] };
+          }),
+        }
+      : {}),
   };
 }
 
@@ -176,15 +209,22 @@ export function renderBoard(b: Board): string {
     `The participant can sell up to ${show(b.participantCanSell)} AGU-lab right now (the issuers' capacity this window limits what it can create).`,
   );
   lines.push(
+    `Front-claim roll: order work claims for the next window at ${b.frontClaimPriceUsdPerSiu} per SIU (${(Number(b.frontClaimDiscountBps) / 100).toFixed(2)}% below the print), or buy claims further ahead at the plain print rate.`,
+  );
+  lines.push(
     `Agents in this market: ${b.agents.map((x) => `${x.id} (${x.role})`).join(", ")}. A message goes to one of them, or to "all".`,
   );
   if (b.mandate !== undefined)
     lines.push(
-      `Your mandate: spend at most ${show(b.mandate.spendLimitAgu)} AGU-lab per window (spent ${show(b.mandate.spentAgu)}); keep at least ${show(b.mandate.minUsdcBuffer)} USDC; hold at most ${price(b, b.mandate.holdingCeilingSiu)} in AGU-lab; your owner sweeps your USDC on days ${b.mandate.sweepDays.join(" and ")} of the series.`,
+      `Your mandate: spend at most ${show(b.mandate.spendLimitAgu)} AGU-lab-equivalent value per window (spent ${show(b.mandate.spentAgu)}); keep at least ${show(b.mandate.minUsdcBuffer)} USDC; hold at most ${price(b, b.mandate.holdingCeilingSiu)} in AGU-lab; your owner sweeps your USDC on days ${b.mandate.sweepDays.join(" and ")} of the series.`,
     );
   if (b.forward !== undefined)
     lines.push(
-      `You sold ${b.forward.sold} briefs forward for USDC; ${b.forward.delivered} delivered so far. Each needs passing outputs of two task types from the same day.`,
+      `You hold a standing obligation: ${b.forward.sold} briefs owed over the run, ${b.forward.delivered} delivered so far. Each needs passing outputs of two task types from the same day.`,
+    );
+  if (b.needsAhead !== undefined && b.needsAhead.length > 0)
+    lines.push(
+      `Your own needs ahead: ${b.needsAhead.map((n) => `window ${n.window}: ${n.tasks.join(" + ")}`).join("; ")}.`,
     );
   if (b.claims.length > 0) {
     lines.push("Work claims you hold:");
@@ -206,10 +246,18 @@ export function renderBoard(b: Board): string {
   }
   if (b.quotes.length > 0) {
     lines.push("Quotes:");
-    for (const q of b.quotes)
+    for (const q of b.quotes) {
+      const escrowed =
+        q.agu !== undefined
+          ? `, ${show(q.agu)} AGU-lab in escrow`
+          : q.usdcEscrowed !== undefined
+            ? `, ${show(q.usdcEscrowed)} USDC in escrow`
+            : "";
+      const bound = q.priceUnit === "usdc" ? `${show(q.priceUsdcMicro ?? 0n)} USDC (binding)` : quotePrice(b, q.priceMicroSiu);
       lines.push(
-        `  - ${q.id}: ${q.researcher} → ${q.demand}, brief on ${q.tasks.join(" + ")} for ${quotePrice(b, q.priceMicroSiu)}, ${q.status}${q.agu !== undefined ? `, ${show(q.agu)} AGU-lab in escrow` : ""}`,
+        `  - ${q.id}: ${q.researcher} → ${q.demand}, brief on ${q.tasks.join(" + ")} for ${bound}, ${q.status}${escrowed}`,
       );
+    }
   }
   if (b.outputs.length > 0) {
     lines.push("Your task outputs from today (unused):");
@@ -217,7 +265,9 @@ export function renderBoard(b: Board): string {
       lines.push(`  - ${o.id}: ${o.task} by ${o.issuer}, ${o.passed ? "PASSED" : "FAILED"}`);
   }
   if (b.role !== "demand") {
-    lines.push("Issuers' prices per task (paid in AGU-lab through escrow, only on a pass):");
+    lines.push(
+      "Issuers' prices per task (escrowed, released only on a pass; commission_task pays in AGU-lab or USDC, your choice):",
+    );
     for (const p of b.issuerPrices)
       lines.push(
         `  - ${p.issuer} ${p.task}: ${price(b, p.priceMicroSiu)}${p.skipped ? " (skipped by routing: delivery below the floor)" : ""}`,
@@ -225,7 +275,7 @@ export function renderBoard(b: Board): string {
   }
   if (b.role === "research")
     lines.push(
-      `Data bought today: ${b.dataBought.length > 0 ? b.dataBought.join(", ") : "none"} (each dataset costs USDC once per day; buy it before commissioning a task on it).`,
+      `Data bought today: ${b.dataBought.length > 0 ? b.dataBought.join(", ") : "none"} (${price(b, b.dataPriceMicroSiu)} once per day, in USDC or AGU-lab, your choice; buy it before commissioning a task on it).`,
     );
   if (b.notices.length > 0) {
     lines.push("Since your last turn:");

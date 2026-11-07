@@ -31,14 +31,19 @@ import {
 import type { EconomyParams, IssuerParams } from "./params.js";
 import { Participant, ParticipantRefused } from "./participant.js";
 import {
+  microSiuForUsdcCeil,
   show,
   showMsiu,
   usdcFor,
+  usdcForMicroSiuCeil,
   type AguUnits,
   type MilliSiu,
   type NanoUsdPerSiu,
   type UsdcUnits,
 } from "./units.js";
+
+/** v2: which currency a transaction type's payment moves in, where the design note gives a real choice (items 1-5) */
+export type PayUnit = "usdc" | "agu";
 
 export type MicroSiu = bigint;
 export const DATASET_FOR: Readonly<Record<TaskId, string>> = {
@@ -61,10 +66,11 @@ export type Action =
   | { tool: "redeem_agu"; agu: AguUnits }
   | { tool: "present_claim"; claim: string }
   | { tool: "order_front_claim"; task: TaskId; milli: MilliSiu }
-  | { tool: "post_quote"; need: string; tasks: TaskId[]; priceMicroSiu: MicroSiu }
+  // v2 item 2: exactly one of priceMicroSiu/priceUsdcMicro is set, enforced by parse.ts -- the RAW unit the quoting researcher chose, converted and locked in `#postQuote`
+  | { tool: "post_quote"; need: string; tasks: TaskId[]; priceMicroSiu?: MicroSiu; priceUsdcMicro?: UsdcUnits }
   | { tool: "accept_quote"; quote: string }
-  | { tool: "buy_data"; dataset: string }
-  | { tool: "commission_task"; tasks: TaskId[]; issuer: string }
+  | { tool: "buy_data"; dataset: string; pay?: PayUnit }
+  | { tool: "commission_task"; tasks: TaskId[]; issuer: string; pay?: PayUnit }
   | { tool: "deliver_brief"; quote: string }
   | { tool: "buy_claims"; task: TaskId; milli: MilliSiu; windowsAhead: number }
   | { tool: "deliver_forward" };
@@ -93,10 +99,18 @@ export interface Quote {
   demand: string;
   need: string;
   tasks: TaskId[];
+  /** ALWAYS the SIU-equivalent, locked at post time -- unchanged meaning for every existing reader (comparability, display); for a usdc-unit quote this is the equivalent at post time, never re-derived */
   priceMicroSiu: MicroSiu;
+  /** v2 item 2: which unit actually binds at acceptance */
+  priceUnit: "siu" | "usdc";
+  /** v2: the real binding amount when priceUnit === "usdc" */
+  priceUsdcMicro?: UsdcUnits;
   status: "posted" | "accepted" | "delivered" | "failed" | "lapsed";
   escrow?: string;
+  /** the AGU-lab amount actually escrowed, when priceUnit === "siu" */
   agu?: AguUnits;
+  /** v2: the USDC amount actually escrowed, when priceUnit === "usdc" */
+  usdcEscrowed?: UsdcUnits;
 }
 export interface FrontOrder {
   agent: string;
@@ -320,14 +334,14 @@ export class World {
       case "accept_quote":
         return this.#acceptQuote(agent, role, a.quote);
       case "buy_data":
-        return this.#buyData(agent, a.dataset);
+        return this.#buyData(agent, a.dataset, a.pay);
       case "commission_task": {
         if (a.tasks.length < 1 || a.tasks.length > 4 || new Set(a.tasks).size !== a.tasks.length)
           return { ok: false, note: "commission 1 to 4 different task types at once" };
         const notes: string[] = [];
         let anyOk = false;
         for (const t of a.tasks) {
-          const r = await this.#commission(agent, t, a.issuer);
+          const r = await this.#commission(agent, t, a.issuer, a.pay);
           anyOk ||= r.ok;
           notes.push(`${t}: ${r.note}`);
         }
@@ -618,14 +632,22 @@ export class World {
       return { ok: false, note: "a brief bundles 2 to 4 different task types" };
     if (!need.tasks.every((t) => a.tasks.includes(t)))
       return { ok: false, note: `the quote must cover the need's tasks: ${need.tasks.join(", ")}` };
-    if (a.priceMicroSiu <= 0n) return { ok: false, note: "a price must be above zero" };
+    // v2 item 2: a quote binds in whichever unit the researcher named; the OTHER unit's figure is locked now, at post time, never re-derived at acceptance (the design note's rate-locking rule)
+    const rate = this.commodityRate;
+    const priceUnit: "siu" | "usdc" = a.priceUsdcMicro !== undefined ? "usdc" : "siu";
+    const priceUsdcMicro = priceUnit === "usdc" ? (a.priceUsdcMicro as UsdcUnits) : undefined;
+    const priceMicroSiu =
+      priceUnit === "usdc" ? microSiuForUsdcCeil(priceUsdcMicro as UsdcUnits, rate) : (a.priceMicroSiu as MicroSiu);
+    if (priceMicroSiu <= 0n) return { ok: false, note: "a price must be above zero" };
     const q: Quote = {
       id: this.#id("quote"),
       researcher: agent,
       demand: need.agent,
       need: need.id,
       tasks: a.tasks,
-      priceMicroSiu: a.priceMicroSiu,
+      priceMicroSiu,
+      priceUnit,
+      priceUsdcMicro,
       status: "posted",
     };
     this.quotes.push(q);
@@ -634,11 +656,15 @@ export class World {
       to: need.agent,
       need: need.id,
       tasks: a.tasks,
-      priceMicroSiu: a.priceMicroSiu,
+      priceMicroSiu,
+      priceUnit,
+      ...(priceUsdcMicro !== undefined ? { priceUsdcMicro } : {}),
     });
     this.notify(
       need.agent,
-      `quote ${q.id} from ${agent}: a brief on ${a.tasks.join(" + ")} for ${showMsiu(a.priceMicroSiu)}, payable in AGU-lab on delivery of a passing brief`,
+      priceUnit === "usdc"
+        ? `quote ${q.id} from ${agent}: a brief on ${a.tasks.join(" + ")} for ${show(priceUsdcMicro as UsdcUnits)} USDC, payable on delivery of a passing brief`
+        : `quote ${q.id} from ${agent}: a brief on ${a.tasks.join(" + ")} for ${showMsiu(priceMicroSiu)}, payable in AGU-lab on delivery of a passing brief`,
     );
     return { ok: true, note: `quote ${q.id} posted to ${need.agent}` };
   }
@@ -650,27 +676,38 @@ export class World {
       return { ok: false, note: `no posted quote ${id} for you` };
     if (this.quotes.some((x) => x.need === q.need && x.status === "accepted"))
       return { ok: false, note: "you already accepted a quote for that need" };
-    const units = this.aguFor(q.priceMicroSiu);
+    // the mandate's spend limit is stated in AGU-lab terms regardless of which rail actually pays -- a value cap, not a currency-specific one (item 3)
+    const aguEquivalent = this.aguFor(q.priceMicroSiu);
     const m = this.params.mandates[agent];
     const spent = this.spentAguThisWindow.get(agent) ?? 0n;
-    if (m !== undefined && spent + units > m.spendLimitAguPerWindow)
+    if (m !== undefined && spent + aguEquivalent > m.spendLimitAguPerWindow)
       return {
         ok: false,
         note: `mandate: spending limit of ${show(m.spendLimitAguPerWindow)} AGU-lab this window`,
       };
     const escrow = this.#id("escrow");
-    this.chain.escrowOpen(
-      escrow,
-      "AGU",
-      agent,
-      q.researcher,
-      GATE_RUNNER,
-      units,
-      this.windowTo(this.window),
-    );
-    this.spentAguThisWindow.set(agent, spent + units);
+    this.spentAguThisWindow.set(agent, spent + aguEquivalent);
     q.status = "accepted";
     q.escrow = escrow;
+    if (q.priceUnit === "usdc") {
+      const usdcOwed = q.priceUsdcMicro as UsdcUnits;
+      this.chain.escrowOpen(escrow, "USDC", agent, q.researcher, GATE_RUNNER, usdcOwed, this.windowTo(this.window));
+      q.usdcEscrowed = usdcOwed;
+      this.#log(agent, "escrow-open", {
+        escrow,
+        quote: q.id,
+        to: q.researcher,
+        usdc: usdcOwed,
+        priceMicroSiu: q.priceMicroSiu,
+      });
+      this.notify(
+        q.researcher,
+        `${agent} accepted quote ${q.id}: ${show(usdcOwed)} USDC is in escrow, released when you deliver a passing brief this window`,
+      );
+      return { ok: true, note: `accepted ${q.id}: ${show(usdcOwed)} USDC in escrow` };
+    }
+    const units = aguEquivalent;
+    this.chain.escrowOpen(escrow, "AGU", agent, q.researcher, GATE_RUNNER, units, this.windowTo(this.window));
     q.agu = units;
     this.#log(agent, "escrow-open", {
       escrow,
@@ -686,26 +723,53 @@ export class World {
     return { ok: true, note: `accepted ${q.id}: ${show(units)} AGU-lab in escrow` };
   }
 
-  #buyData(agent: string, dataset: string): Outcome {
+  /**
+   * v2 item 1: the data agent quotes its shadow price in USDC (native) or its AGU-lab equivalent, locked now at the live rate. Paying in AGU-lab does not cost the PAYER a
+   * spread -- the data agent still receives exactly the equivalent value. The spread this item's design note describes is the data agent's OWN, later, forced conversion of
+   * that AGU-lab back to the real USDC its costs need: see the DATA_AGENT branch in `closeWindow` (item 6/12 -- code, never folded into any model agent's own receipt, since
+   * DATA_AGENT is not in `modelAgentIds`).
+   */
+  #buyData(agent: string, dataset: string, pay: PayUnit = "usdc"): Outcome {
     if (!Object.values(DATASET_FOR).includes(dataset))
       return { ok: false, note: `no dataset ${dataset}` };
     const key = `${agent}|${this.window}|${dataset}`;
     if (this.dataBought.has(key))
       return { ok: false, note: `you already bought ${dataset} this window` };
-    this.chain.transfer("USDC", agent, DATA_AGENT, this.params.dataShadowPriceUsdc);
+    const usdcPrice = this.params.dataShadowPriceUsdc;
     this.dataBought.add(key);
+    if (pay === "agu") {
+      const rate = this.commodityRate;
+      const agu = this.aguFor(microSiuForUsdcCeil(usdcPrice, rate));
+      this.chain.transfer("AGU", agent, DATA_AGENT, agu);
+      this.#log(agent, "data-purchase", {
+        dataset,
+        agu,
+        usdcEquivalent: usdcPrice,
+        payUnit: "agu",
+        dataSha: this.dataSha(this.window),
+      });
+      return {
+        ok: true,
+        note: `bought today's ${dataset} data for ${show(agu)} AGU-lab (the equivalent of ${show(usdcPrice)} USDC)`,
+      };
+    }
+    this.chain.transfer("USDC", agent, DATA_AGENT, usdcPrice);
     this.#log(agent, "data-purchase", {
       dataset,
-      usdc: this.params.dataShadowPriceUsdc,
+      usdc: usdcPrice,
+      payUnit: "usdc",
       dataSha: this.dataSha(this.window),
     });
-    return {
-      ok: true,
-      note: `bought today's ${dataset} data for ${show(this.params.dataShadowPriceUsdc)} USDC`,
-    };
+    return { ok: true, note: `bought today's ${dataset} data for ${show(usdcPrice)} USDC` };
   }
 
-  async #commission(agent: string, task: TaskId, issuerId: string): Promise<Outcome> {
+  /** v2 item 1: the issuer quotes both units the same way; paying in USDC instead of the native AGU-lab costs the payer the participant's own ask-side rounding (never a separate fee account) */
+  async #commission(
+    agent: string,
+    task: TaskId,
+    issuerId: string,
+    pay: PayUnit = "agu",
+  ): Promise<Outcome> {
     const role = this.roles.get(agent);
     // a research agent works from today's data: the first commission on a dataset buys it (USDC, at the data agent's shadow price)
     if (
@@ -722,23 +786,17 @@ export class World {
     if (price === undefined) return { ok: false, note: `${issuerId} has no price for ${task}` };
     if (this.workSpendUsd.gte(this.params.spendCapUsdPerWindow))
       return { ok: false, note: "the window's work budget is spent" };
-    const units = this.aguFor(price);
+    const asset: "AGU" | "USDC" = pay === "usdc" ? "USDC" : "AGU";
+    const amount = pay === "usdc" ? usdcForMicroSiuCeil(price, this.commodityRate) : this.aguFor(price);
     const escrow = this.#id("escrow");
-    this.chain.escrowOpen(
-      escrow,
-      "AGU",
-      agent,
-      issuerId,
-      GATE_RUNNER,
-      units,
-      this.windowTo(this.window),
-    );
+    this.chain.escrowOpen(escrow, asset, agent, issuerId, GATE_RUNNER, amount, this.windowTo(this.window));
     this.#log(agent, "escrow-open", {
       escrow,
       to: issuerId,
       task,
-      agu: units,
+      [pay === "usdc" ? "usdc" : "agu"]: amount,
       priceSiu: show(price),
+      payUnit: pay,
     });
     this.#stat(issuerId).presented++;
     const out = await this.worker.work(issuer, task, {
@@ -755,26 +813,25 @@ export class World {
       dataSha: out.dataSha,
       costUsd: out.costUsd.toFixed(6),
     });
-    this.chain.escrowSettle(escrow, GATE_RUNNER, out.passed ? units : 0n);
+    const paid = out.passed ? amount : 0n;
+    this.chain.escrowSettle(escrow, GATE_RUNNER, paid);
     if (out.passed) this.#stat(issuerId).served++;
-    this.#log(GATE_RUNNER, "escrow-settle", {
-      escrow,
-      paid: out.passed ? units : 0n,
-      refunded: out.passed ? 0n : units,
-    });
+    const field = pay === "usdc" ? "usdc" : "agu";
+    this.#log(GATE_RUNNER, "escrow-settle", { escrow, paid, refunded: amount - paid });
     this.#log(GATE_RUNNER, "receipt", {
       escrow,
       snapshotSha: out.dataSha,
       task,
       verdict: out.passed ? "pass" : "fail",
-      agu: out.passed ? units : 0n,
+      [field]: paid,
     });
     this.#addOutput(agent, task, out, issuerId);
+    const unitLabel = pay === "usdc" ? "USDC" : "AGU-lab";
     return {
       ok: true,
       note: out.passed
-        ? `${issuerId} delivered ${task} and passed: paid ${show(units)} AGU-lab`
-        : `${issuerId}'s ${task} work failed the gate: your ${show(units)} AGU-lab came back in full`,
+        ? `${issuerId} delivered ${task} and passed: paid ${show(paid)} ${unitLabel}`
+        : `${issuerId}'s ${task} work failed the gate: your ${show(amount)} ${unitLabel} came back in full`,
     };
   }
 
@@ -810,7 +867,8 @@ export class World {
     }
     for (const p of parts) p.used = true;
     const passed = parts.every((p) => p.passed && p.dataSha === sha);
-    const paid = passed ? (q.agu as AguUnits) : 0n;
+    const escrowed = (q.priceUnit === "usdc" ? q.usdcEscrowed : q.agu) as bigint;
+    const paid = passed ? escrowed : 0n;
     this.chain.escrowSettle(q.escrow, GATE_RUNNER, paid);
     q.status = passed ? "delivered" : "failed";
     const need = this.needs.find((n) => n.id === q.need);
@@ -820,26 +878,24 @@ export class World {
       components: parts.map((p) => ({ task: p.task, passed: p.passed, dataSha: p.dataSha })),
       passed,
     });
-    this.#log(GATE_RUNNER, "escrow-settle", {
-      escrow: q.escrow,
-      paid,
-      refunded: (q.agu as AguUnits) - paid,
-    });
+    const field = q.priceUnit === "usdc" ? "usdc" : "agu";
+    this.#log(GATE_RUNNER, "escrow-settle", { escrow: q.escrow, paid, refunded: escrowed - paid });
     this.#log(GATE_RUNNER, "receipt", {
       escrow: q.escrow,
       brief: q.id,
       snapshotSha: sha,
       verdict: passed ? "pass" : "fail",
-      agu: paid,
+      [field]: paid,
     });
+    const unitLabel = q.priceUnit === "usdc" ? "USDC" : "AGU-lab";
     this.notify(
       q.demand,
-      `brief ${q.id} from ${agent}: ${passed ? `PASSED, ${show(paid)} AGU-lab paid` : "FAILED, your AGU-lab came back in full; you may commission it again"}`,
+      `brief ${q.id} from ${agent}: ${passed ? `PASSED, ${show(paid)} ${unitLabel} paid` : `FAILED, your ${unitLabel} came back in full; you may commission it again`}`,
     );
     return {
       ok: true,
       note: passed
-        ? `brief ${q.id} passed: you were paid ${show(paid)} AGU-lab`
+        ? `brief ${q.id} passed: you were paid ${show(paid)} ${unitLabel}`
         : `brief ${q.id} failed (a component failed): the buyer was refunded`,
     };
   }
@@ -927,6 +983,26 @@ export class World {
     for (const a of p.agents.research) this.mint(a, p.researchUsdc);
     for (const a of p.agents.demand) this.mint(a, (p.mandates[a] as { usdc: bigint }).usdc);
     this.mint(p.agents.hedger, p.hedger.usdc);
+    // v2 item 5: a split genesis wallet, not minted entirely in USDC -- matching how every other role starts (some capital, no stated currency preference). Half is converted
+    // to AGU-lab immediately, through the ordinary participant mechanism `buy_agu` always uses; if the participant's own inventory is short, the hedger simply keeps more
+    // USDC (never a crash at genesis, the same posture as every other on-demand shortfall in this file).
+    const half = p.hedger.usdc / 2n;
+    if (half > 0n) {
+      const rate = this.commodityRate;
+      const wanted = this.participant.unitsFor(half, rate);
+      const have = this.chain.balance(PARTICIPANT, "AGU");
+      const fill = wanted < have ? wanted : have;
+      if (fill > 0n) {
+        const r = this.participant.sell(p.agents.hedger, fill, rate);
+        this.#log(PARTICIPANT, "participant-sell", {
+          to: p.agents.hedger,
+          agu: r.units,
+          usdc: r.usdc,
+          asked: wanted,
+          genesis: true,
+        });
+      }
+    }
   }
   /**
    * An issuer's deliverable mSIU per window: its budget divided by the cost of one mSIU of its own work. One task is 250 mSIU (a quarter of a CR-SIU, one of the four types), and a
@@ -1001,8 +1077,12 @@ export class World {
     }
   }
 
+  /** v2 item 9: the same deterministic needs closure every window already uses, retained so `boardFor` can query it further ahead -- `needsSchedule` is pure, so this is safe to call for any future window at any time, never a new randomness source */
+  needsForFn?: (agent: string, k: number) => TaskId[];
+
   /** the start of window k: participant's cap, the roll, NAV published, needs drawn */
   startWindow(k: number, needsFor: (agent: string, k: number) => TaskId[]): void {
+    this.needsForFn = needsFor;
     this.setTime(k, 0);
     this.participant.startWindow();
     this.spentAguThisWindow.clear();
@@ -1261,6 +1341,27 @@ export class World {
       } catch (e) {
         if (!(e instanceof ParticipantRefused)) throw e;
         this.#log(i.id, "error", { refused: e.message });
+      }
+    }
+    // v2 items 6/12: the data agent's own forced conversion of any AGU-lab it was paid (item 1's buy_data) into the real USDC its costs need -- code, not a model agent's
+    // choice, so it is never folded into any model agent's own conversion/circulation statistics (DATA_AGENT is not in modelAgentIds, scoring.ts)
+    {
+      const units = this.chain.balance(DATA_AGENT, "AGU");
+      const room = this.participant.capThisWindow - this.participant.boughtBackThisWindow;
+      const sell = units < room ? units : room;
+      if (sell > 0n) {
+        try {
+          const r = this.participant.buyBack(DATA_AGENT, sell, this.commodityRate);
+          this.#log(PARTICIPANT, "participant-buyback", {
+            from: DATA_AGENT,
+            agu: r.units,
+            usdc: r.usdc,
+            dataAgentCode: true,
+          });
+        } catch (e) {
+          if (!(e instanceof ParticipantRefused)) throw e;
+          this.#log(DATA_AGENT, "error", { refused: e.message });
+        }
       }
     }
     const day = k; // window k is day k of the series

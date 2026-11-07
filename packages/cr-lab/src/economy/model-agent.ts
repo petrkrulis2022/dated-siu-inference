@@ -85,13 +85,24 @@ export class ModelAgent implements Agent {
   }
 }
 
-const COMMON = [
+/**
+ * v2 item 11: both units are introduced in the same sentence, and which one is named first alternates with the board's own SIU-first/dollars-first display order
+ * (`siuFirstForWindow`), so the instructions and the board always agree -- today's text named AGU-lab first, unconditionally, which is exactly the asymmetry the design
+ * note's item 11 fixes.
+ */
+const marketLine = (siuFirst: boolean): string =>
+  siuFirst
+    ? "Prices inside the market are quoted in SIU (one SIU is one correct answer to each of the four task types). Depending on the transaction type, you settle in SIU terms through AGU-lab -- a token whose value is its reserve of work claims (its NAV, in SIU per AGU-lab) -- or directly in USDC, at the live rate between them on your board; where a choice exists, it is yours. The authorised participant trades AGU-lab for USDC and back, at prices on your board."
+    : "Prices inside the market are quoted in SIU (one SIU is one correct answer to each of the four task types). Depending on the transaction type, you settle directly in USDC, or in SIU terms through AGU-lab -- a token whose value is its reserve of work claims (its NAV, in SIU per AGU-lab) -- at the live rate between them on your board; where a choice exists, it is yours. The authorised participant trades AGU-lab for USDC and back, at prices on your board.";
+
+const COMMON = (siuFirst: boolean): string[] => [
   "You are one agent in a small closed market for crypto-research work. Each day is one window of several rounds; on each round you take exactly one action.",
   "Work is done by issuers: AI models that answer research tasks of four types (CR-VS perp DEX volume share, CR-PL lending protocol P&L, CR-UO token unlock overhang, CR-SM stablecoin supply moves). An answer is checked by an objective gate; it PASSES or FAILS.",
-  "Prices inside the market are quoted in SIU (one SIU is one correct answer to each of the four task types) and paid in AGU-lab, a token whose value is its reserve of work claims (its NAV, in SIU per AGU-lab). The authorised participant sells AGU-lab for USDC and buys it back, at prices on your board.",
+  marketLine(siuFirst),
   "Payments for work and for briefs go into escrow and are released only if the work passes; a failed piece of work pays nothing and the buyer gets the full amount back.",
   "AGU-lab can also be redeemed in kind: you receive your share of the reserve's work claims. A work claim is presented to its issuer in its own window for one task; a claim never presented lapses worthless at the end of its window.",
-  "You may also order work claims for the next window, paid in USDC at a discount to the print, and you may sell AGU-lab back for USDC at any time. Use whichever routes suit your goals.",
+  "You may also order work claims for the next window at a discount to the print, and you may sell AGU-lab back for USDC at any time. Use whichever routes suit your goals.",
+  "Your board shows a running result for your role -- profit, budget headroom, or delivery bonus and penalty -- computed in both currencies and updated every round.",
 ];
 const ROLE: Record<Role, string> = {
   demand:
@@ -99,14 +110,14 @@ const ROLE: Record<Role, string> = {
   research:
     "You are a RESEARCH agent. Demand agents have needs for briefs. You can quote a brief, buy the day's data, commission task work from issuers, and deliver the brief from passing outputs of today. You are paid only if every part of the brief passes.",
   hedger:
-    "You are the HEDGER. You sold briefs forward for USDC and must deliver them over the coming windows, each from two passing outputs of different task types from the same day. You can buy work claims ahead, present claims, or commission work.",
+    "You are the HEDGER. You hold a standing obligation: deliver briefs over the coming windows, each from two passing outputs of different task types from the same day; your board shows how many are owed and delivered. You can buy work claims ahead, present claims, or commission work.",
 };
 
-/** a role's standing instructions, with its tools and the reply format */
-export function instructionsFor(role: Role): string {
+/** a role's standing instructions, with its tools and the reply format. `siuFirst` matches the board's own display order for this window (item 11). */
+export function instructionsFor(role: Role, siuFirst = true): string {
   const tools = TOOLS_BY_ROLE[role].map((t) => `  - ${t} ${TOOL_HELP[t] ?? ""}`).join("\n");
   return [
-    ...COMMON,
+    ...COMMON(siuFirst),
     ROLE[role],
     "Your tools (amounts are plain decimal strings):",
     tools,

@@ -106,4 +106,17 @@ describe("the instructions", () => {
     expect(instructionsFor("demand")).toMatch(/accept_quote/);
     expect(instructionsFor("demand")).not.toMatch(/commission_task/);
   });
+
+  it("v2 item 11: names both currencies in the same sentence, and swaps which one comes first with the board's own display order", () => {
+    const first = instructionsFor("research", true).match(/settle in SIU terms through AGU-lab|settle directly in USDC/);
+    const flipped = instructionsFor("research", false).match(/settle in SIU terms through AGU-lab|settle directly in USDC/);
+    expect(first?.[0]).toBe("settle in SIU terms through AGU-lab");
+    expect(flipped?.[0]).toBe("settle directly in USDC");
+  });
+
+  it("v2 item 5: the hedger's role text names no currency at all (D131/D133: it used to name USDC alone, the one role the firing messages traced to)", () => {
+    const text = instructionsFor("hedger");
+    const roleLine = text.split("\n").find((l) => l.startsWith("You are the HEDGER"));
+    expect(roleLine).not.toMatch(/AGU-lab|USDC/);
+  });
 });

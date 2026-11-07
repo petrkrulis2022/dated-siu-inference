@@ -6,6 +6,8 @@ import { PARTICIPANT } from "./memory-chain.js";
 import { loadParams } from "./params.js";
 import { parseReply } from "./parse.js";
 import { buildWorld, loadCrPrint, needsSchedule, passRates, standInSha } from "./runner.js";
+import { DATA_AGENT } from "./world.js";
+import type { Need } from "./world.js";
 
 function world(seed: string, patch: (p: ReturnType<typeof loadParams>) => void = () => undefined) {
   const params = { ...loadParams(), seed };
@@ -155,5 +157,146 @@ describe("when the issuers' capacity runs out (found in DW3, 2026-11-05)", () =>
       .filter((e) => e.window === w.dayLabel(2) && e.holder === "reserve");
     expect(closes2.length).toBeGreaterThan(0);
     expect(closes2.every((e) => e.retiredReserveLot === false)).toBe(true);
+  });
+});
+
+describe("v2 items 1-5: a real currency choice at every transaction type (docs/marketplace-redesign-v2.md)", () => {
+  it("buy_data(pay: 'agu') pays the data agent in AGU-lab instead of USDC, at the live rate", async () => {
+    const w = world("buy-data-agu");
+    const buy = await w.act(
+      "RESEARCH-1",
+      { tool: "buy_agu", agu: 1_000_000n },
+      "need a working balance",
+    );
+    expect(buy.ok, buy.note).toBe(true);
+    const aguBefore = w.chain.balance("RESEARCH-1", "AGU");
+    const usdcBefore = w.chain.balance("RESEARCH-1", "USDC");
+    const r = await w.act(
+      "RESEARCH-1",
+      { tool: "buy_data", dataset: "perp", pay: "agu" },
+      "keeping USDC, paying in AGU-lab",
+    );
+    expect(r.ok, r.note).toBe(true);
+    expect(w.chain.balance("RESEARCH-1", "AGU")).toBeLessThan(aguBefore);
+    expect(w.chain.balance("RESEARCH-1", "USDC")).toBe(usdcBefore); // no USDC moved for the payer
+    expect(w.chain.balance(DATA_AGENT, "AGU")).toBeGreaterThan(0n);
+    expect(w.chain.balance(DATA_AGENT, "USDC")).toBe(0n);
+    expect(w.log.of("data-purchase").at(-1)?.payUnit).toBe("agu");
+    w.checkInvariants();
+  });
+
+  it("the data agent's own AGU-lab income converts back to USDC at window close -- its own forced cost, never the payer's (items 6/12)", async () => {
+    const w = world("data-agent-exit");
+    await w.act("RESEARCH-1", { tool: "buy_agu", agu: 1_000_000n }, "working balance");
+    await w.act("RESEARCH-1", { tool: "buy_data", dataset: "perp", pay: "agu" }, "paying in AGU-lab");
+    expect(w.chain.balance(DATA_AGENT, "AGU")).toBeGreaterThan(0n);
+    w.closeWindow(1);
+    expect(w.chain.balance(DATA_AGENT, "AGU")).toBe(0n);
+    expect(w.chain.balance(DATA_AGENT, "USDC")).toBeGreaterThan(0n);
+    const sale = w.log.of("participant-buyback").find((e) => e.dataAgentCode === true);
+    expect(sale?.from).toBe(DATA_AGENT);
+    // DATA_AGENT is not a model agent: this conversion must never be attributed to RESEARCH-1's own receipt (items 6/12)
+    expect(w.log.of("exit").some((e) => e.actor === "RESEARCH-1")).toBe(false);
+    w.checkInvariants();
+  });
+
+  it("commission_task(pay: 'usdc') escrows and settles in USDC, never touching AGU-lab", async () => {
+    const w = world("commission-usdc");
+    w.mint("RESEARCH-1", 10_000_000n);
+    const r = await w.act(
+      "RESEARCH-1",
+      { tool: "commission_task", tasks: ["CR-PL"], issuer: "ISSUER-C1", pay: "usdc" },
+      "paying the issuer in USDC, keeping AGU-lab free for briefs",
+    );
+    expect(r.ok, r.note).toBe(true);
+    expect(w.chain.balance("RESEARCH-1", "AGU")).toBe(0n);
+    const open = w.log.of("escrow-open").find((e) => e.payUnit === "usdc" && e.task === "CR-PL");
+    expect(open).toBeDefined();
+    expect(typeof open?.usdc).toBe("bigint");
+    w.checkInvariants();
+  });
+
+  it("a quote priced in USDC (post_quote price_usdc) escrows, settles and pays in USDC end to end", async () => {
+    const w = world("quote-usdc");
+    const need = w.needs.find((n) => n.agent === "DEMAND-1" && n.status === "open") as Need;
+    expect(need).toBeDefined();
+    const quoted = await w.act(
+      "RESEARCH-1",
+      { tool: "post_quote", need: need.id, tasks: need.tasks, priceUsdcMicro: 15_000n },
+      "quoting in dollars for once",
+    );
+    expect(quoted.ok, quoted.note).toBe(true);
+    const quote = w.quotes.find((q) => q.researcher === "RESEARCH-1");
+    expect(quote?.priceUnit).toBe("usdc");
+    expect(quote?.priceUsdcMicro).toBe(15_000n);
+    w.mint("DEMAND-1", 10_000_000n);
+    const usdcBefore = w.chain.balance("DEMAND-1", "USDC");
+    const accepted = await w.act(
+      "DEMAND-1",
+      { tool: "accept_quote", quote: (quote as { id: string }).id },
+      "a dollar price is fine",
+    );
+    expect(accepted.ok, accepted.note).toBe(true);
+    expect(w.chain.balance("DEMAND-1", "USDC")).toBe(usdcBefore - 15_000n);
+    // simulate passing outputs for the brief's tasks, directly, to exercise deliver_brief's own USDC settlement path
+    for (const t of need.tasks)
+      w.outputs.push({
+        id: `out-${t}`,
+        owner: "RESEARCH-1",
+        task: t,
+        passed: true,
+        dataSha: w.dataSha(1),
+        issuer: "ISSUER-C1",
+        window: 1,
+        used: false,
+      });
+    const researcherUsdcBefore = w.chain.balance("RESEARCH-1", "USDC");
+    const delivered = await w.act(
+      "RESEARCH-1",
+      { tool: "deliver_brief", quote: (quote as { id: string }).id },
+      "delivering for a dollar price",
+    );
+    expect(delivered.ok, delivered.note).toBe(true);
+    expect(w.chain.balance("RESEARCH-1", "USDC")).toBe(researcherUsdcBefore + 15_000n);
+    expect(w.chain.balance("RESEARCH-1", "AGU")).toBe(0n); // never touched AGU-lab anywhere in this trade
+    w.checkInvariants();
+  });
+
+  it("the hedger's genesis wallet is split across both currencies, not minted entirely in USDC (item 5)", () => {
+    const w = world("hedger-split");
+    expect(w.chain.balance("HEDGER", "AGU")).toBeGreaterThan(0n);
+    expect(w.chain.balance("HEDGER", "USDC")).toBeGreaterThan(0n);
+    w.checkInvariants();
+  });
+
+  it("parses buy_data and commission_task's optional pay unit, and rejects an invalid one", () => {
+    const ok = parseReply(
+      '{"reasoning": "r", "action": {"tool": "buy_data", "args": {"dataset": "perp", "pay": "agu"}}}',
+      "research",
+    );
+    expect(ok.ok && ok.action.tool === "buy_data" && ok.action.pay).toBe("agu");
+    const bad = parseReply(
+      '{"reasoning": "r", "action": {"tool": "buy_data", "args": {"dataset": "perp", "pay": "eur"}}}',
+      "research",
+    );
+    expect(bad.ok).toBe(false);
+  });
+
+  it("parses post_quote with exactly one of price_msiu or price_usdc", () => {
+    const usd = parseReply(
+      '{"reasoning": "r", "action": {"tool": "post_quote", "args": {"need": "n1", "tasks": ["CR-PL", "CR-UO"], "price_usdc": "0.015"}}}',
+      "research",
+    );
+    expect(usd.ok && usd.action.tool === "post_quote" && usd.action.priceUsdcMicro).toBe(15_000n);
+    const both = parseReply(
+      '{"reasoning": "r", "action": {"tool": "post_quote", "args": {"need": "n1", "tasks": ["CR-PL", "CR-UO"], "price_msiu": "250", "price_usdc": "0.015"}}}',
+      "research",
+    );
+    expect(both.ok).toBe(false);
+    const neither = parseReply(
+      '{"reasoning": "r", "action": {"tool": "post_quote", "args": {"need": "n1", "tasks": ["CR-PL", "CR-UO"]}}}',
+      "research",
+    );
+    expect(neither.ok).toBe(false);
   });
 });

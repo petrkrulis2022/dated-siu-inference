@@ -150,7 +150,7 @@ export async function runWindows(opts: {
   windows: number[];
   needsFor: (agent: string, k: number) => TaskId[];
   /** the system prompt a model agent gets before its board; scripted agents ignore it */
-  instructions?: (role: string) => string;
+  instructions?: (role: string, siuFirst: boolean) => string;
 }): Promise<WindowStats[]> {
   const w = opts.world;
   const stats: WindowStats[] = [];
@@ -176,7 +176,7 @@ export async function runWindows(opts: {
       const order = seededOrder(w.params.seed, k, r, agents);
       for (const a of order) {
         const board = boardFor(w, a.id);
-        const prompt = `${opts.instructions?.(a.role) ?? ""}\n\n${renderBoard(board)}`;
+        const prompt = `${opts.instructions?.(a.role, board.siuFirst) ?? ""}\n\n${renderBoard(board)}`;
         const rep = await a.reply(board, prompt);
         s.turns++;
         s.agentCostUsd = s.agentCostUsd.plus(rep.costUsd);
@@ -216,7 +216,7 @@ export async function runWindows(opts: {
             const flipped = { ...board, siuFirst: !board.siuFirst, notices: [] };
             const m = await a.reply(
               flipped,
-              `${opts.instructions?.(a.role) ?? ""}\n\n${renderBoard(flipped)}`,
+              `${opts.instructions?.(a.role, flipped.siuFirst) ?? ""}\n\n${renderBoard(flipped)}`,
             );
             s.agentCostUsd = s.agentCostUsd.plus(m.costUsd);
             const mp =

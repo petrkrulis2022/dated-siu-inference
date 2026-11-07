@@ -182,7 +182,7 @@ const stats = await runWindows({
     seed,
     TASKS.filter((t) => t !== "CR-VS"),
   ),
-  instructions: (role) => instructionsFor(role as Role),
+  instructions: (role, siuFirst) => instructionsFor(role as Role, siuFirst),
 });
 const verdict = judgeDevWindows(world, stats, { redemptionIsFinding: counted || mode === "model" });
 let report = overview(
