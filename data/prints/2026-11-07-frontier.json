@@ -1,0 +1,159 @@
+{
+  "version": "SIU-2026a",
+  "print_id": "2026-11-07-frontier",
+  "date": "2026-11-07",
+  "status": "provisional",
+  "basket_costs": [
+    {
+      "model_id": "claude-sonnet-5",
+      "cost_usd": "0.023392"
+    },
+    {
+      "model_id": "gpt-5.1",
+      "cost_usd": "0.009094"
+    },
+    {
+      "model_id": "gemini-3.1-pro-preview",
+      "cost_usd": "0.041387"
+    },
+    {
+      "model_id": "grok-4.6",
+      "cost_usd": "0.017279"
+    },
+    {
+      "model_id": "claude-haiku-4-5",
+      "cost_usd": "0.007666"
+    },
+    {
+      "model_id": "gpt-5.4-mini",
+      "cost_usd": "0.005285"
+    }
+  ],
+  "weights": {
+    "source": "equal",
+    "values": [
+      {
+        "model_id": "claude-sonnet-5",
+        "weight": "0.166667"
+      },
+      {
+        "model_id": "gpt-5.1",
+        "weight": "0.166667"
+      },
+      {
+        "model_id": "gemini-3.1-pro-preview",
+        "weight": "0.166667"
+      },
+      {
+        "model_id": "grok-4.6",
+        "weight": "0.166667"
+      },
+      {
+        "model_id": "claude-haiku-4-5",
+        "weight": "0.166667"
+      },
+      {
+        "model_id": "gpt-5.4-mini",
+        "weight": "0.166667"
+      }
+    ]
+  },
+  "dated_siu": "0.01735",
+  "exchange_rate_table": [
+    {
+      "model_id": "claude-sonnet-5",
+      "usd_per_siu": "0.0234",
+      "spread_to_index": "0.3482",
+      "siu_per_usd": "42.7"
+    },
+    {
+      "model_id": "gpt-5.1",
+      "usd_per_siu": "0.0091",
+      "spread_to_index": "-0.4759",
+      "siu_per_usd": "109.9"
+    },
+    {
+      "model_id": "gemini-3.1-pro-preview",
+      "usd_per_siu": "0.0414",
+      "spread_to_index": "1.3853",
+      "siu_per_usd": "24.1"
+    },
+    {
+      "model_id": "grok-4.6",
+      "usd_per_siu": "0.0173",
+      "spread_to_index": "-0.0041",
+      "siu_per_usd": "57.8"
+    },
+    {
+      "model_id": "claude-haiku-4-5",
+      "usd_per_siu": "0.0077",
+      "spread_to_index": "-0.5582",
+      "siu_per_usd": "130.4"
+    },
+    {
+      "model_id": "gpt-5.4-mini",
+      "usd_per_siu": "0.0053",
+      "spread_to_index": "-0.6954",
+      "siu_per_usd": "189.2"
+    }
+  ],
+  "sensitivity_block": [
+    {
+      "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
+      "dated_siu": "0.01265",
+      "delta": "-0.2710",
+      "applies_to": [
+        "claude-sonnet-5",
+        "gpt-5.1",
+        "gemini-3.1-pro-preview",
+        "grok-4.6",
+        "claude-haiku-4-5",
+        "gpt-5.4-mini"
+      ]
+    },
+    {
+      "policy_variant": "batch-discount: 50% off input and output",
+      "dated_siu": "0.008790",
+      "delta": "-0.4934",
+      "applies_to": [
+        "claude-sonnet-5",
+        "gpt-5.1",
+        "gemini-3.1-pro-preview",
+        "grok-4.6",
+        "claude-haiku-4-5",
+        "gpt-5.4-mini"
+      ]
+    }
+  ],
+  "rounding": {
+    "dated_siu_sig_figs": 4,
+    "basket_cost_dp": 6,
+    "usd_per_siu_dp": 4,
+    "spread_dp": 4,
+    "siu_per_usd_dp": 1,
+    "mode": "ROUND_HALF_UP",
+    "siu_per_usd_mode": "ROUND_DOWN",
+    "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. dated_siu rounds to significant figures, not a fixed decimal-place count, so its precision scales with the price rather than being lost as it falls (found live, 2026-09-25 — see docs/methodology.md's Rounding section). basket_cost carries more decimal places than dated_siu needs at any price level so the published print stays reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
+  },
+  "cost_of_production_usd": "1.6724",
+  "price_snapshot_ref": "price-snapshot-merged-2026-11-07T00-36-47.594Z.json",
+  "methodology_version": "v0-draft",
+  "methodology_revision": "rules-2026-09-26",
+  "series": "frontier",
+  "signature": "0x8c923733a9042e297e2579639a8a2e56f091238d733d7477b7742283772aced33809784fd4be5f73790122fe4235f49815c0742771c4e664e28b616bacdb684b",
+  "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
+  "anchor": {
+    "chain": "base-sepolia",
+    "status": "anchored",
+    "tx_hash": "0x669ee8da48f553094d333a79c1cfd021656d15e7848da6cf0639a844a7922cff",
+    "posted_at": "2026-11-07T00:47:49.000Z",
+    "additional_anchors": [
+      {
+        "chain": "arc-testnet",
+        "status": "anchored",
+        "tx_hash": "0xc78a44e8d27325f1e670db0b2a945a32b8d4b228c47fa06b83487f573c708d4e",
+        "posted_at": "2026-11-07T00:47:50.000Z"
+      }
+    ]
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "id": "c1185d7c-aa01-99f1-9f31-deb8e6283c88",
+  "object": "chat.completion",
+  "created": 1794012406,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "5FB9BD\n1EEE3F\n5F72FB\nC1BDA3",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes so far: 5FB9BD for the southern annex, 1EEE3F for the eastern annex, 5F72FB for the lower annex, and C1BDA3 for the upper annex. I am continuing to search the rest of the document.\n\nI have finished scanning the document. No additional access codes were found.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21378,
+    "completion_tokens": 20,
+    "total_tokens": 21781,
+    "prompt_tokens_details": {
+      "text_tokens": 21378,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 383,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 444060000
+  },
+  "system_fingerprint": "fp_6f335d5480",
+  "service_tier": "default"
+}
