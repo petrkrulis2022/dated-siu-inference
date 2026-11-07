@@ -19,6 +19,8 @@ Every transaction *type* in v1 is hard-wired to one currency: data purchases USD
 
 Every conversion between units, wherever it happens, goes through the SAME participant rate and spread already in `participant.ts` — no new pricing mechanism, just more callers of the one that exists.
 
+The rate a price's second-currency figure is computed at is locked at the moment that price is posted — the live participant rate read once, at `post_quote`'s/`buy_data`'s/`order_front_claim`'s own call, never re-derived at acceptance or settlement. A quote that could redenominate itself between posting and acceptance would make item 2's binding-quote fix cosmetic: the agent accepting it would be accepting a formula, not a price. The number the board shows each round (item 3) is whatever rate a NEW price posted right now would lock at; an already-posted price never moves after it's posted, in either unit.
+
 **Answers:** D132 (data purchases forced to USDC), half of D133's criterion-2 finding (commissioning forced to AGU-lab — once it isn't, "paid onward in AGU-lab" means something again).
 
 ## 2. Binding quotes in either unit
@@ -63,6 +65,8 @@ Restated neutrally: *"You hold a standing obligation: deliver N briefs over the 
 
 This is the only code change needed to fix criterion 1's measurement; criterion 2's parallel problem (D133) is fixed structurally by item 1 instead, since once commissioning has a real currency choice, "paid onward in AGU-lab" stops being compelled and starts being informative again.
 
+A seller who takes the "wrong" currency and then converts what it received to cover its own dollar costs (item 1's stated spread) is a forced conversion on the SELLER's side, never a reading of the BUYER's preference, and it must not be folded into the buyer's own circulation/conversion statistics. Concretely: when the data agent, an issuer, or the hedger receives AGU-lab and converts it to meet a real USDC cost, that conversion is logged and classified under that seller's own identity, using the same `ExitClass` machinery this item already fixes for the buyer side — never attributed to the paying agent's receipt. This is the same conflation D132 found, applied pre-emptively to the other side of the trade, so the new bi-currency mechanics don't reintroduce it from the seller's end.
+
 ## 7. Bug fix: the scorer reads the real seed, not a default
 
 `scoreBuyingAhead` needs the run's seed to reconstruct each window's expected needs (`needsSchedule(params.seed, ...)`), but nothing in the log or the committed params records which seed a given run actually used — `economy-score`'s default `--params` carries the frozen file's `"dev-0"`, never a counted run's real seed (`counted-2026-11-06` here), a mismatch confirmed to diverge on 20 of 21 sampled (agent, window) pairs (D133). This also breaks the module's own claim of scoring "from the ordered log alone."
@@ -80,3 +84,5 @@ The four kill criteria's thresholds and questions (§16.9, D130); the thesis/cir
 ## Build and test plan
 
 All code changes to `economy/world.ts`, `economy/parse.ts` (tool schemas), `economy/board.ts`, `economy/model-agent.ts` (role text), `economy/scoring.ts` (items 6–7). Every changed behaviour gets a test before it's considered done, same bar as the rest of `economy/`. Development and comprehension runs on the stand-in backend only (`StandInWorker`, calibrated to the print's own measured pass rates) — no Blockworks access needed or used, per your instruction. Cheap models for the dev-test (Haiku-class), same as DW1–DW3. Results shown before anything else happens — no counted run, no push, until you've seen the dev-test.
+
+Before any counted run under v2, the full redesigned configuration — `economy-params.json`, the roster, and every role's instruction text — is frozen and its hash recorded in this plan, the same pre-registration discipline D87 already applied to v1's file. Agent Studio's "freeze" (Part 2, item 5) is the mechanism that does this: no counted run starts from a configuration Studio hasn't frozen.
