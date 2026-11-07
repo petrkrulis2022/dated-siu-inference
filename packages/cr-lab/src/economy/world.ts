@@ -210,7 +210,8 @@ export class World {
     readonly params: EconomyParams,
     readonly log: EconomyLog,
     readonly worker: TaskWorker,
-    readonly rates: Readonly<Record<Series, NanoUsdPerSiu>>,
+    /** v2 item 10: no longer `readonly` -- `startWindow` updates this per window from `priceSchedule` when one is supplied, so a moving-price replay propagates through every existing read site (board, participant quotes, the roll, window-close settlement) with no other change */
+    public rates: Readonly<Record<Series, NanoUsdPerSiu>>,
     /** each issuer's price per task, micro-SIU, from its measured cost per pass (WP0) */
     readonly taskPrice: Readonly<Record<string, Partial<Record<TaskId, MicroSiu>>>>,
     readonly dataSha: (window: number) => string,
@@ -219,6 +220,8 @@ export class World {
     readonly clock: { now: number },
     /** v2 item 8: how many windows this run has, for the hedger's own due-by-window schedule; opt-in -- absent, the bonus/penalty mechanism is a no-op, every existing caller unaffected */
     readonly totalWindows?: number,
+    /** v2 item 10: window -> that day's real print rates, replayed instead of holding `rates` fixed for the whole run; opt-in, absent for every existing caller/test */
+    readonly priceSchedule?: ReadonlyMap<number, Readonly<Record<Series, NanoUsdPerSiu>>>,
   ) {
     this.chain = new MemoryChain(
       {
@@ -1130,6 +1133,9 @@ export class World {
   startWindow(k: number, needsFor: (agent: string, k: number) => TaskId[]): void {
     this.needsForFn = needsFor;
     this.setTime(k, 0);
+    // v2 item 10: this window's real print rates, if a replay schedule was supplied -- before the roll, so it prices at today's real rate, not yesterday's
+    const scheduled = this.priceSchedule?.get(k);
+    if (scheduled !== undefined) this.rates = scheduled;
     this.participant.startWindow();
     this.spentAguThisWindow.clear();
     this.roll(k);

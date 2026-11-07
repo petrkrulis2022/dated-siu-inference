@@ -13,6 +13,7 @@ function world(
   seed: string,
   patch: (p: ReturnType<typeof loadParams>) => void = () => undefined,
   windowCount?: number,
+  priceSchedule?: Parameters<typeof buildWorld>[0]["priceSchedule"],
 ) {
   const params = { ...loadParams(), seed };
   patch(params);
@@ -26,6 +27,7 @@ function world(
     t0: 1_799_971_200,
     dataSha: sha,
     windowCount,
+    priceSchedule,
   });
   w.genesis();
   w.startWindow(
@@ -415,5 +417,37 @@ describe("v2 item 8: a running economic objective (docs/marketplace-redesign-v2.
     const combinedUsdc = Number(boardFor(w, "RESEARCH-1").objective?.combinedUsd ?? "0");
     const combinedAgu = Number(boardFor(w, "RESEARCH-2").objective?.combinedUsd ?? "0");
     expect(Math.abs(combinedUsdc - combinedAgu)).toBeLessThan(0.00005);
+  });
+});
+
+describe("v2 item 10: moving prices replay the real published Dated SIU history", () => {
+  it("applies the schedule's own rate for each window, propagating through commodityRate/the board with no other change -- absent, one fixed rate for the whole run as before", () => {
+    const schedule = new Map([
+      [1, { commodity: 1_000_000_000n, frontier: 9_000_000_000n }],
+      [2, { commodity: 2_000_000_000n, frontier: 9_000_000_000n }],
+    ]);
+    const w = world("print-history", undefined, undefined, schedule);
+    expect(w.commodityRate).toBe(1_000_000_000n);
+    w.startWindow(
+      2,
+      needsSchedule(
+        "print-history",
+        TASKS.filter((t) => t !== "CR-VS"),
+      ),
+    );
+    expect(w.commodityRate).toBe(2_000_000_000n);
+  });
+
+  it("keeps the original fixed-for-the-whole-run rate when no schedule is supplied (every existing caller/test)", () => {
+    const w = world("no-print-history");
+    const before = w.commodityRate;
+    w.startWindow(
+      2,
+      needsSchedule(
+        "no-print-history",
+        TASKS.filter((t) => t !== "CR-VS"),
+      ),
+    );
+    expect(w.commodityRate).toBe(before);
   });
 });

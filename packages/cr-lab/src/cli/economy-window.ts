@@ -36,6 +36,7 @@ import { EconomyLog } from "../economy/log.js";
 import { instructionsFor, ModelAgent } from "../economy/model-agent.js";
 import { overview } from "../economy/overview.js";
 import { loadParams, PARAMS_PATH } from "../economy/params.js";
+import { printHistorySchedule } from "../economy/print-history.js";
 import { judgeDevWindows } from "../economy/report.js";
 import { exitsToTagBlind } from "../economy/scoring.js";
 import {
@@ -132,8 +133,13 @@ if (backend === "snapshot") {
   worker = new StandInWorker(seed, passRates(wp0), sha);
   dataSha = sha;
 }
+// v2 item 10: replay the real published Dated SIU history across this run's windows, when the params file names a start date -- absent, one fixed print for the whole run, as before
+const priceSchedule =
+  params.printHistoryStartDate !== undefined
+    ? printHistorySchedule(params.printHistoryStartDate, windowCount)
+    : undefined;
 const log = new EconomyLog(backend, `${dir}/log.jsonl`);
-const world = buildWorld({ params, wp0, log, worker, t0: T0, dataSha, windowCount });
+const world = buildWorld({ params, wp0, log, worker, t0: T0, dataSha, windowCount, priceSchedule });
 world.genesis();
 world.checkInvariants();
 

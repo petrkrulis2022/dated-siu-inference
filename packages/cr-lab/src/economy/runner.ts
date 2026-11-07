@@ -16,8 +16,10 @@ import { SeedStream } from "../tasks/seeds.js";
 import type { Agent } from "./agents.js";
 import { boardFor, renderBoard } from "./board.js";
 import type { EconomyLog } from "./log.js";
+import type { Series } from "./memory-chain.js";
 import type { EconomyParams } from "./params.js";
 import { parseReply } from "./parse.js";
+import type { NanoUsdPerSiu } from "./units.js";
 import type { MicroSiu, TaskWorker } from "./world.js";
 import { World } from "./world.js";
 
@@ -84,6 +86,8 @@ export function buildWorld(opts: {
   dataSha: (k: number) => string;
   /** v2 item 8: how many windows this run has, for the hedger's own due-by-window schedule (World.totalWindows); omit for every caller that doesn't need it */
   windowCount?: number;
+  /** v2 item 10: window -> that day's real print rates (World.priceSchedule); omit to keep one fixed rate for the whole run, as before */
+  priceSchedule?: ReadonlyMap<number, Readonly<Record<Series, NanoUsdPerSiu>>>;
 }): World {
   const nano = (g: string): bigint => {
     const v = opts.wp0.prints.find((p) => p.grade === g)?.nanoUsdPerSiu;
@@ -102,6 +106,7 @@ export function buildWorld(opts: {
     opts.t0,
     clock,
     opts.windowCount,
+    opts.priceSchedule,
   );
   return w;
 }
