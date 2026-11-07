@@ -1,7 +1,8 @@
 /** New in v2 (marketplace-redesign-v2.md, items 8-10): three additive, optional fields. The rest of parseParams is already exercised indirectly by every other test's loadParams() call. */
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadParams, PARAMS_PATH } from "./params.js";
+import { loadParams, parseParams, PARAMS_PATH } from "./params.js";
 
 const V2_DRAFT_PATH = join(dirname(PARAMS_PATH), "economy-params.v2.json");
 
@@ -22,5 +23,18 @@ describe("parseParams: v2's new optional fields", () => {
     expect(p.printHistoryStartDate).toBe("2026-09-02");
     expect(p.hedger.latePenaltyUsdcPerBrief).toBe(50_000n);
     expect(p.counted?.seats).toEqual(["claude-sonnet-5"]);
+  });
+
+  it("counted.dataSource is recorded explicitly in the config, not just implied by a CLI flag (the owner's freeze requirement)", () => {
+    const p = loadParams(V2_DRAFT_PATH);
+    expect(p.counted?.dataSource).toBe("stand-in");
+    expect(loadParams(PARAMS_PATH).counted?.dataSource).toBeUndefined(); // v1 predates this field entirely
+  });
+
+  it("refuses a counted.dataSource that isn't 'stand-in' or 'snapshot'", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a deliberately malformed raw file, parseParams's own job is to reject it
+    const raw = JSON.parse(readFileSync(V2_DRAFT_PATH, "utf-8")) as any;
+    raw.counted.dataSource = "made-up";
+    expect(() => parseParams(raw)).toThrow(/counted\.dataSource/);
   });
 });

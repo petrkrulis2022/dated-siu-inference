@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { datedSiuToNanoUsdPerSiu, printHistorySchedule } from "./print-history.js";
+import { datedSiuToNanoUsdPerSiu, minCommodityRateInRange, printHistorySchedule } from "./print-history.js";
 
 describe("datedSiuToNanoUsdPerSiu", () => {
   it("converts a decimal USD-per-SIU string to nano-USD-per-SIU exactly, no floats", () => {
@@ -34,5 +34,16 @@ describe("printHistorySchedule", () => {
 
   it("throws on a start date with no prints at all, rather than return an empty schedule silently", () => {
     expect(() => printHistorySchedule("1999-01-01", 1)).toThrow(/only found 0 of 1/);
+  });
+});
+
+describe("minCommodityRateInRange (v2 fix 1: the real worst case across the full available history)", () => {
+  it("finds 1,400,000 nanoUSD/SIU as the lowest real commodity rate across the full available range (2026-09-02 through 2026-10-10, ~39 days, as of this build)", () => {
+    // surveyed directly against data/prints/ while building this fix: every commodity print from 2026-09-02 to 2026-10-10 is >= 0.0014 USD/SIU, and several early days hit it exactly
+    expect(minCommodityRateInRange("2026-09-02", "2026-10-10")).toBe(1_400_000n);
+  });
+
+  it("throws rather than return a bogus minimum when the range has no commodity print at all", () => {
+    expect(() => minCommodityRateInRange("1999-01-01", "1999-01-05")).toThrow(/no commodity print found/);
   });
 });

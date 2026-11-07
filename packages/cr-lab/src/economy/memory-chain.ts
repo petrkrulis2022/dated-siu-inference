@@ -24,14 +24,21 @@ export type Asset = "USDC" | "AGU";
 export type Series = "frontier" | "commodity";
 export type Account = string;
 
+/**
+ * v2 fix 1 (owner, 2026-11-07): `detail` carries the concrete numbers behind a refusal, where the caller has them, so `World.act`'s catch-all can put an actionable figure on
+ * the agent's next board instead of a bare rule name. Optional and additive: every existing `refuse(rule)` call (no detail) is unaffected.
+ */
 export class ChainRule extends Error {
-  constructor(rule: string) {
+  constructor(
+    rule: string,
+    readonly detail?: Readonly<Record<string, bigint | number | string>>,
+  ) {
     super(rule);
     this.name = "ChainRule";
   }
 }
-const refuse = (rule: string): never => {
-  throw new ChainRule(rule);
+const refuse = (rule: string, detail?: Readonly<Record<string, bigint | number | string>>): never => {
+  throw new ChainRule(rule, detail);
 };
 
 export interface ClaimType {
@@ -485,7 +492,7 @@ export class MemoryChain {
     if (caller !== e.settler) refuse("NotSettler");
     if (this.now() > e.expiry) refuse("PastExpiry");
     if (actual > e.maxAmount) refuse("OverMax");
-    if (actual !== 0n && actual < MIN_SETTLEMENT) refuse("BelowMinSettlement");
+    if (actual !== 0n && actual < MIN_SETTLEMENT) refuse("BelowMinSettlement", { actual, min: MIN_SETTLEMENT });
     e.status = "settled";
     this.#sub(e.asset, `escrow:${id}`, e.maxAmount);
     this.#add(e.asset, e.seller, actual);

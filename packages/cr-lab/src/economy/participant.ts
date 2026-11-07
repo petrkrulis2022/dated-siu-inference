@@ -25,6 +25,8 @@ const ceilDiv = (a: bigint, b: bigint): bigint => (a + b - 1n) / b;
 export class Participant {
   #capBase = 0n;
   #boughtBack = 0n;
+  /** v2 fix 2 (owner, 2026-11-07): tracks a scripted/code conversion's own volume for reporting only -- see `buyBackScripted`'s own doc comment for why it is never capped by `buybackCapBps`. */
+  #scriptedBoughtBack = 0n;
 
   constructor(
     readonly chain: MemoryChain,
@@ -36,6 +38,7 @@ export class Participant {
   startWindow(): void {
     this.#capBase = this.chain.aguSupply;
     this.#boughtBack = 0n;
+    this.#scriptedBoughtBack = 0n;
   }
 
   get boughtBackThisWindow(): AguUnits {
@@ -43,6 +46,9 @@ export class Participant {
   }
   get capThisWindow(): AguUnits {
     return (this.#capBase * this.buybackCapBps) / BPS;
+  }
+  get scriptedBoughtBackThisWindow(): AguUnits {
+    return this.#scriptedBoughtBack;
   }
 
   /** the USDC an agent pays for `units` (ask, rounded up) and receives for them (bid, rounded down), at reserve NAV × `rate` */
@@ -103,6 +109,35 @@ export class Participant {
     }
     this.chain.transfer("USDC", PARTICIPANT, agent, bid);
     this.#boughtBack += units;
+    return { units, usdc: bid };
+  }
+
+  /**
+   * v2 fix 2 (owner, 2026-11-07): the same trade as `buyBack`, for a SCRIPTED/code-driven conversion (an issuer's own real-inference-bill income sale, the data agent's own
+   * forced conversion of AGU-lab it was paid) -- deliberately carries NO `buybackCapBps` check at all, unlike `buyBack`. That cap's whole purpose is bounding the OPEN
+   * MARKET's price impact from agent speculation (`capThisWindow`'s own doc comment); a scripted conversion is not speculation, it is a structural cash-out the economy's
+   * own accounting already requires (an issuer's real inference bill, the data agent's real vendor cost), so capping it by a share of AGU-lab supply was never protecting
+   * against anything real for THIS kind of flow -- it was only ever an accident of sharing `buyBack`'s own allowance. That accident is exactly what D134's dev-test found:
+   * the issuers' own sales exhausted the shared cap before the data agent's own conversion got a turn, in 2 of 3 windows. Dropping the cap for scripted conversions removes
+   * the collision between scripted actors directly, not just between them and agents, without inventing a second cap to divide between them. The one real constraint that
+   * DOES still apply -- the participant's own USDC actually being there to pay with -- is unchanged below. `scriptedBoughtBackThisWindow` still tracks the volume, for
+   * reporting only.
+   */
+  buyBackScripted(agent: string, units: AguUnits, rate: NanoUsdPerSiu): { units: AguUnits; usdc: UsdcUnits } {
+    if (units <= 0n) throw new ParticipantRefused("nothing to buy back");
+    const { bid } = this.quote(units, rate);
+    if (this.chain.balance(PARTICIPANT, "USDC") < bid)
+      throw new ParticipantRefused(
+        "the participant's own USDC has run out: it refuses, and never draws on the reserve or the buffer",
+      );
+    try {
+      this.chain.transfer("AGU", agent, PARTICIPANT, units);
+    } catch (e) {
+      if (e instanceof ChainRule) throw new ParticipantRefused(e.message);
+      throw e;
+    }
+    this.chain.transfer("USDC", PARTICIPANT, agent, bid);
+    this.#scriptedBoughtBack += units;
     return { units, usdc: bid };
   }
 }

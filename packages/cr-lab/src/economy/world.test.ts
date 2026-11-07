@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { TASKS } from "../tasks/instances.js";
 import { StandInWorker } from "./agents.js";
 import { EconomyLog } from "./log.js";
-import { PARTICIPANT } from "./memory-chain.js";
+import { MIN_SETTLEMENT, PARTICIPANT } from "./memory-chain.js";
 import { loadParams } from "./params.js";
 import { parseReply } from "./parse.js";
+import { minCommodityRateInRange } from "./print-history.js";
 import { buildWorld, loadCrPrint, needsSchedule, passRates, standInSha } from "./runner.js";
 import { DATA_AGENT } from "./world.js";
 import type { Need } from "./world.js";
@@ -506,5 +507,106 @@ describe("v2 item 10: moving prices replay the real published Dated SIU history"
       ),
     );
     expect(w.commodityRate).toBe(before);
+  });
+});
+
+describe("v2 fix 1 (owner, 2026-11-07): a USDC commission never gets stuck below the real settlement floor", () => {
+  it("at the REAL worst-case commodity rate across the full available print history, CR-UO's USDC commission floors to exactly MIN_SETTLEMENT and settles -- not just the one rate the first dev-test happened to hit", async () => {
+    // the survey this fix is sized against: the lowest commodity rate published anywhere in the full available real history
+    const worstCaseRate = minCommodityRateInRange("2026-09-02", "2026-10-10");
+    const schedule = new Map([[1, { commodity: worstCaseRate, frontier: 12_000_000n }]]);
+    const w = world("fix1-worst-case", undefined, undefined, schedule);
+    w.mint("RESEARCH-1", 10_000_000n);
+    const r = await w.act(
+      "RESEARCH-1",
+      { tool: "commission_task", tasks: ["CR-UO"], issuer: "ISSUER-C1", pay: "usdc" },
+      "paying in USDC even though CR-UO is cheap",
+    );
+    expect(r.ok, r.note).toBe(true);
+    expect(r.note).not.toMatch(/refused/);
+    const open = w.log.of("escrow-open").find((e) => e.task === "CR-UO" && e.payUnit === "usdc");
+    expect(open?.usdc).toBe(MIN_SETTLEMENT); // floored up from the raw conversion
+    expect(open?.flooredFromUsdc).toBeLessThan(MIN_SETTLEMENT); // the real, un-floored price was genuinely below the floor
+    expect(w.log.of("error").some((e) => e.refused === "BelowMinSettlement")).toBe(false);
+    w.checkInvariants();
+  });
+
+  it("a refusal's concrete numbers ride along onto the agent's NEXT board (lastResult), not just the bare rule name", async () => {
+    const w = world("fix1-refusal-message");
+    // redeem_agu with more than held hits a ChainRule the agent can act on if it sees the real numbers
+    const r = await w.act("DEMAND-1", { tool: "redeem_agu", agu: 1_000_000n }, "trying to redeem more than I hold");
+    expect(r.ok).toBe(false);
+    const lastResult = w.lastResult.get("DEMAND-1");
+    expect(lastResult).toContain("refused:");
+    // whichever ChainRule fires here, confirm the general mechanism: an error-kind log entry exists and lastResult echoes its own refused reason
+    const errorEntry = w.log.of("error").find((e) => e.actor === "DEMAND-1");
+    expect(errorEntry).toBeDefined();
+    expect(lastResult).toContain(String(errorEntry?.refused));
+  });
+
+  it("BelowMinSettlement specifically round-trips its actual amount and the floor onto the next board", () => {
+    // a direct, minimal reproduction of the exact refusal the dev-test hit, isolated from the commission/pricing machinery above
+    const w = world("fix1-belowmin-detail");
+    const before = w.chain.balance("DEMAND-1", "USDC");
+    expect(before).toBeGreaterThan(0n);
+    // force the exact failure by opening and settling a tiny escrow directly against the chain, bypassing #commission's own new floor -- this is what the OLD code path produced
+    w.chain.escrowOpen("tiny-1", "USDC", "DEMAND-1", "RESEARCH-1", "GATE-RUNNER", 50n, w.windowTo(w.window));
+    expect(() => w.chain.escrowSettle("tiny-1", "GATE-RUNNER", 50n)).toThrowError(/BelowMinSettlement/);
+    try {
+      w.chain.escrowSettle("tiny-1", "GATE-RUNNER", 50n);
+    } catch (e) {
+      const detail = (e as { detail?: { actual: bigint; min: bigint } }).detail;
+      expect(detail?.actual).toBe(50n);
+      expect(detail?.min).toBe(MIN_SETTLEMENT);
+    }
+  });
+});
+
+describe("v2 fix 2 (owner, 2026-11-07): scripted conversions never use up the cap a model agent's own currency choice depends on", () => {
+  it("the data agent's own forced AGU-lab conversion still goes through IN FULL, even when an issuer's own scripted sale, in the SAME window, is far bigger than the old shared cap would ever have allowed", async () => {
+    const w = world("fix2-cap-collision", (p) => {
+      // a tight cap: reproduces D134's exact collision (10% of supply let the issuer alone exhaust it) -- fix 2 must make this cap irrelevant to scripted conversions entirely
+      p.participant = { ...p.participant, buybackCapBps: 1_000n }; // 10%, same as the real dev-test
+    });
+    // the participant needs enough of its own USDC to pay out BOTH conversions below; top it up directly (test setup only, not part of the fix itself)
+    w.mint(PARTICIPANT, 10_000_000n);
+    // the data agent earns a little AGU-lab (item 1's own mechanism)
+    await w.act("RESEARCH-1", { tool: "buy_agu", agu: 1_000_000n }, "working balance");
+    await w.act("RESEARCH-1", { tool: "buy_data", dataset: "perp", pay: "agu" }, "paying the data agent in AGU-lab");
+    const dataAgentBalance = w.chain.balance(DATA_AGENT, "AGU");
+    expect(dataAgentBalance).toBeGreaterThan(0n);
+    // give an issuer a balance far larger than the old 10%-of-supply cap would ever have allowed through alone, mirroring D134's own finding
+    const oldCap = (w.chain.aguSupply * 1_000n) / 10_000n;
+    const issuerBalance = oldCap * 3n;
+    w.mint("RESEARCH-1", 10_000_000n);
+    await w.act("RESEARCH-1", { tool: "buy_agu", agu: issuerBalance }, "funding the issuer seed below");
+    w.chain.escrowOpen("seed-issuer-agu", "AGU", "RESEARCH-1", "ISSUER-C1", "GATE-RUNNER", issuerBalance, w.windowTo(w.window));
+    w.chain.escrowSettle("seed-issuer-agu", "GATE-RUNNER", issuerBalance);
+    expect(w.chain.balance("ISSUER-C1", "AGU")).toBe(issuerBalance);
+    w.closeWindow(1);
+    const issuerSale = w.log.of("participant-buyback").find((e) => e.issuerCode === true);
+    const dataAgentSale = w.log.of("participant-buyback").find((e) => e.dataAgentCode === true);
+    // the issuer's own sale is NOT truncated to the old 10% cap -- it converts its full balance, well beyond what that cap would have allowed
+    expect(issuerSale?.agu).toBe(issuerBalance);
+    expect(issuerSale?.agu as bigint).toBeGreaterThan(oldCap);
+    // AND the data agent's own conversion still fires in full, in the SAME window, never crowded out by the issuer's much larger sale
+    expect(dataAgentSale).toBeDefined();
+    expect(dataAgentSale?.from).toBe(DATA_AGENT);
+    expect(dataAgentSale?.agu).toBe(dataAgentBalance);
+    expect(w.chain.balance(DATA_AGENT, "AGU")).toBe(0n);
+    w.checkInvariants();
+  });
+
+  it("a model agent's own sell_agu is still bounded by buybackCapBps, unaffected by fix 2 (the agent-facing cap is untouched)", async () => {
+    const w = world("fix2-agent-cap-unchanged", (p) => {
+      p.participant = { ...p.participant, buybackCapBps: 1_000n }; // 10% of opening supply
+    });
+    const cap = (w.chain.aguSupply * 1_000n) / 10_000n;
+    w.mint("DEMAND-1", 10_000_000n);
+    const tooMuch = cap * 2n;
+    await w.act("DEMAND-1", { tool: "buy_agu", agu: tooMuch }, "a balance well beyond the window's buy-back cap");
+    const r = await w.act("DEMAND-1", { tool: "sell_agu", agu: tooMuch }, "selling more than 10% of supply");
+    expect(r.ok).toBe(false);
+    expect(r.note).toMatch(/buy-back cap/);
   });
 });

@@ -74,3 +74,21 @@ export function printHistorySchedule(
     );
   return out;
 }
+
+/**
+ * v2 fix 1 (owner, 2026-11-07): the lowest real commodity rate published anywhere in `[startDate, endDate]` (inclusive, every real `{date}-commodity.json` found, regardless
+ * of whether that day's frontier print also exists -- the commission floor only ever depends on the commodity rate). Used to prove `#commission`'s own settlement-floor
+ * rounding is sized against the REAL worst case across the full available history, not just whatever one dev-test happened to land on.
+ */
+export function minCommodityRateInRange(startDate: string, endDate: string): NanoUsdPerSiu {
+  let min: NanoUsdPerSiu | undefined;
+  let date = startDate;
+  for (let steps = 0; date <= endDate && steps < 3650; steps++, date = nextCalendarDay(date)) {
+    const commodity = readGradePrint(date, "commodity");
+    if (commodity === undefined) continue;
+    const rate = datedSiuToNanoUsdPerSiu(commodity.dated_siu);
+    if (min === undefined || rate < min) min = rate;
+  }
+  if (min === undefined) throw new Error(`print-history: no commodity print found in [${startDate}, ${endDate}]`);
+  return min;
+}

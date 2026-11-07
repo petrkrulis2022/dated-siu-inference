@@ -112,7 +112,8 @@
     ],
     "seats": ["claude-sonnet-5"],
     "settlement": "memory ledger; the run's journal replayed onto the real contracts on anvil, every balance compared",
-    "redemptionIsFinding": true
+    "redemptionIsFinding": true,
+    "dataSource": "stand-in"
   },
   "unmetNeedCostMicroSiu": "200000",
   "forwardVisibilityWindows": 2,

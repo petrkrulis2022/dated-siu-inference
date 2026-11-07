@@ -62,7 +62,14 @@ export interface EconomyParams {
   spendCapUsdPerWindow: DecimalValue;
   seed: string;
   /** the counted windows, pre-registered with the rest of this file (D87): the stored days they run on, in order, the seats' models rotating by window, and how they settle */
-  counted?: { days: string[]; seats: string[]; settlement: string; redemptionIsFinding: boolean };
+  counted?: {
+    days: string[];
+    seats: string[];
+    settlement: string;
+    redemptionIsFinding: boolean;
+    /** v2 fix freeze (owner, 2026-11-07): which data backend the counted run uses, recorded as a fact in the config itself, not just implied by whichever CLI flag happens to be passed */
+    dataSource?: "stand-in" | "snapshot";
+  };
   /** v2 item 8: a demand agent's stated cost for each need that lapses unmet -- ONE shared value across every demand agent, never per-agent, so the identical-pair noise control stays intact */
   unmetNeedCostMicroSiu?: bigint;
   /** v2 item 9: how many windows ahead a demand agent's own needs are visible; `board.ts`'s own default (2) applies when this is absent, for every v1 log/fixture that predates the field */
@@ -193,11 +200,14 @@ function parseCounted(v: unknown): NonNullable<EconomyParams["counted"]> {
     throw new Error("economy params: counted.days must be a list of dates");
   if (!Array.isArray(seats) || seats.length === 0 || !seats.every((x) => typeof x === "string"))
     throw new Error("economy params: counted.seats must be a list of model ids");
+  if (c.dataSource !== undefined && c.dataSource !== "stand-in" && c.dataSource !== "snapshot")
+    throw new Error('economy params: counted.dataSource must be "stand-in" or "snapshot"');
   return {
     days: days as string[],
     seats: seats as string[],
     settlement: String(c.settlement),
     redemptionIsFinding: c.redemptionIsFinding === true,
+    ...(c.dataSource !== undefined ? { dataSource: c.dataSource } : {}),
   };
 }
 

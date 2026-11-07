@@ -24,6 +24,7 @@ import {
   ChainRule,
   INCOME,
   MemoryChain,
+  MIN_SETTLEMENT,
   PARTICIPANT,
   RESERVE,
   type Series,
@@ -309,8 +310,17 @@ export class World {
       return this.#result(agent, r);
     } catch (e) {
       if (e instanceof ChainRule || e instanceof ParticipantRefused) {
-        this.#log(agent, "error", { tool: action.tool, refused: e.message });
-        return this.#result(agent, { ok: false, note: `refused: ${e.message}` });
+        // v2 fix 1 (owner, 2026-11-07): a refusal's own concrete numbers, where the throw site had any, ride along onto the agent's NEXT board (`lastResult`/`renderBoard`'s
+        // "Your last action" line) -- not just the bare rule name, so a refused agent has something to react to instead of retrying the same action for rounds (found:
+        // RESEARCH-1's own BelowMinSettlement loop in the first dev-test).
+        const detail = e instanceof ChainRule && e.detail !== undefined ? e.detail : undefined;
+        const suffix = detail === undefined ? "" : ` (${Object.entries(detail).map(([k, v]) => `${k} ${v}`).join(", ")})`;
+        this.#log(agent, "error", {
+          tool: action.tool,
+          refused: e.message,
+          ...(detail !== undefined ? { detail } : {}),
+        });
+        return this.#result(agent, { ok: false, note: `refused: ${e.message}${suffix}` });
       }
       throw e;
     }
@@ -829,7 +839,13 @@ export class World {
     if (this.workSpendUsd.gte(this.params.spendCapUsdPerWindow))
       return { ok: false, note: "the window's work budget is spent" };
     const asset: "AGU" | "USDC" = pay === "usdc" ? "USDC" : "AGU";
-    const amount = pay === "usdc" ? usdcForMicroSiuCeil(price, this.commodityRate) : this.aguFor(price);
+    // v2 fix 1 (owner, 2026-11-07): the real print rate can be low enough that an ordinarily-priced task's USDC-converted price falls under the settlement contract's own
+    // real, immutable floor (TouchstoneEscrow.MIN_SETTLEMENT = 100, shared by other deployments with a real nonzero fee -- never lowered for this build, see the plan
+    // entry). Rounding the escrowed amount UP to that floor keeps the USDC choice genuinely always available, at the cost of a few base units on a very cheap task,
+    // instead of letting the agent open an escrow that can never settle.
+    const rawUsdc = pay === "usdc" ? usdcForMicroSiuCeil(price, this.commodityRate) : undefined;
+    const amount =
+      rawUsdc !== undefined ? (rawUsdc < MIN_SETTLEMENT ? MIN_SETTLEMENT : rawUsdc) : this.aguFor(price);
     const escrow = this.#id("escrow");
     this.chain.escrowOpen(escrow, asset, agent, issuerId, GATE_RUNNER, amount, this.windowTo(this.window));
     this.#log(agent, "escrow-open", {
@@ -839,6 +855,7 @@ export class World {
       [pay === "usdc" ? "usdc" : "agu"]: amount,
       priceSiu: show(price),
       payUnit: pay,
+      ...(rawUsdc !== undefined && rawUsdc < MIN_SETTLEMENT ? { flooredFromUsdc: rawUsdc } : {}),
     });
     this.#stat(issuerId).presented++;
     const out = await this.worker.work(issuer, task, {
@@ -1429,15 +1446,14 @@ export class World {
         });
       } else if (q.status === "posted") q.status = "lapsed";
     }
-    // issuers pay real inference bills: their AGU-lab income goes back to the participant, within its cap (an issuer exit, code not a model)
+    // v2 fix 2 (owner, 2026-11-07): issuers pay real inference bills, their AGU-lab income goes back to the participant -- a scripted/code conversion (an issuer exit, not
+    // a model's choice), so the FULL balance converts via `buyBackScripted`, never capped by `buybackCapBps` (the agent-facing cap `buyBack` enforces) and never competing
+    // with the data agent's own conversion below for a shared allowance -- see `buyBackScripted`'s own doc comment for why no cap applies here at all.
     for (const i of this.params.issuers) {
       const units = this.chain.balance(i.id, "AGU");
       if (units === 0n) continue;
-      const room = this.participant.capThisWindow - this.participant.boughtBackThisWindow;
-      const sell = units < room ? units : room;
-      if (sell <= 0n) continue;
       try {
-        const r = this.participant.buyBack(i.id, sell, this.commodityRate);
+        const r = this.participant.buyBackScripted(i.id, units, this.commodityRate);
         this.#log(PARTICIPANT, "participant-buyback", {
           from: i.id,
           agu: r.units,
@@ -1450,14 +1466,14 @@ export class World {
       }
     }
     // v2 items 6/12: the data agent's own forced conversion of any AGU-lab it was paid (item 1's buy_data) into the real USDC its costs need -- code, not a model agent's
-    // choice, so it is never folded into any model agent's own conversion/circulation statistics (DATA_AGENT is not in modelAgentIds, scoring.ts)
+    // choice, so it is never folded into any model agent's own conversion/circulation statistics (DATA_AGENT is not in modelAgentIds, scoring.ts). v2 fix 2: the issuers'
+    // own sales just above can no longer exhaust the room this needs -- there is no shared room left to exhaust (D134's dev-test: the issuers' sales alone exhausted the
+    // old shared cap in 2 of 3 windows).
     {
       const units = this.chain.balance(DATA_AGENT, "AGU");
-      const room = this.participant.capThisWindow - this.participant.boughtBackThisWindow;
-      const sell = units < room ? units : room;
-      if (sell > 0n) {
+      if (units > 0n) {
         try {
-          const r = this.participant.buyBack(DATA_AGENT, sell, this.commodityRate);
+          const r = this.participant.buyBackScripted(DATA_AGENT, units, this.commodityRate);
           this.#log(PARTICIPANT, "participant-buyback", {
             from: DATA_AGENT,
             agu: r.units,
