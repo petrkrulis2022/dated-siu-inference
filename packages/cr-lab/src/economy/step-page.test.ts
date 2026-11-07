@@ -50,4 +50,10 @@ describe("renderStepPage", () => {
     const page = renderStepPage(log, "HEDGER");
     expect(page).toContain("1 on time, 0 late");
   });
+
+  it("renders the real refusal reason for an 'error' entry, not just the bare word 'error' (found generating the dev-test's own example page)", () => {
+    const log: LogEntry[] = [e("RESEARCH-1", "error", { tool: "commission_task", refused: "BelowMinSettlement" })];
+    const page = renderStepPage(log, "RESEARCH-1");
+    expect(page).toContain("refused: commission_task -- BelowMinSettlement");
+  });
 });

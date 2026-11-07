@@ -63,6 +63,8 @@ function summarize(e: LogEntry, agent: string): string {
       return `exited to USDC: ${str(e, "agu") ?? "?"} AGU-lab -> ${str(e, "usdc") ?? "?"} USDC`;
     case "notice":
       return str(e, "text") ?? "(notice)";
+    case "error":
+      return `refused: ${str(e, "tool") ?? "?"} -- ${str(e, "refused") ?? "?"}`;
     default:
       return e.kind;
   }
