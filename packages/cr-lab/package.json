@@ -32,6 +32,7 @@
     "economy-window": "pnpm run build && node --env-file=../../.env dist/cli/economy-window.js",
     "economy-replay": "pnpm run build && node dist/cli/economy-replay.js",
     "economy-score": "pnpm run build && node dist/cli/economy-score.js",
+    "economy-steps": "pnpm run build && node dist/cli/economy-steps.js",
     "studio": "pnpm run build && node dist/cli/studio.js"
   },
   "dependencies": {
