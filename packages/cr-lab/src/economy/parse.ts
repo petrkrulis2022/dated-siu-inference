@@ -67,7 +67,7 @@ export const TOOL_HELP: Readonly<Record<string, string>> = {
   present_claim:
     '{"claim": "<claim id>"} — present a work claim in its window: the issuer does one task of its type for you',
   order_front_claim:
-    '{"task": "CR-PL", "siu": "0.25"} — order work claims for the next window, paid in USDC at the roll at a discount to the print',
+    '{"task": "CR-PL", "siu": "0.25"} (optionally {"pay": "usdc"} or {"pay": "agu"}, default usdc) — order work claims for the next window at the roll\'s discount to the print, in USDC or AGU-lab, your choice',
   post_quote:
     '{"need": "<need id>", "tasks": ["CR-PL", "CR-UO"], "price_msiu": "<whole mSIU, e.g. 250>"} (or {"price_usdc": "<decimal USDC, e.g. 0.015>"} instead of price_msiu) — offer a brief to the demand agent with that need, priced in whole mSIU (a thousandth of a SIU, never a decimal) OR in USDC, your choice; whichever you name is what binds at acceptance',
   accept_quote:
@@ -79,7 +79,7 @@ export const TOOL_HELP: Readonly<Record<string, string>> = {
   deliver_brief:
     '{"quote": "<quote id>"} — deliver a brief from your passing outputs of today; you are paid only if every component passed',
   buy_claims:
-    '{"task": "CR-PL", "siu": "0.25", "windows_ahead": 1} — buy work claims for a future window, in USDC at the print',
+    '{"task": "CR-PL", "siu": "0.25", "windows_ahead": 1} (optionally {"pay": "usdc"} or {"pay": "agu"}, default usdc) — buy work claims for a future window at the plain print, in USDC or AGU-lab, your choice',
   deliver_forward:
     "{} — deliver one of the briefs you sold forward, from two passing outputs of today",
 };
@@ -177,7 +177,7 @@ function toAction(tool: string, args: Obj): Action {
     case "present_claim":
       return { tool: "present_claim", claim: str(args, "claim") };
     case "order_front_claim":
-      return { tool: "order_front_claim", task: task(args), milli: amount(args, "siu", 3) };
+      return { tool: "order_front_claim", task: task(args), milli: amount(args, "siu", 3), pay: pay(args) };
     case "post_quote": {
       const tasks = args.tasks;
       if (!Array.isArray(tasks) || !tasks.every((t) => TASKS.includes(t as TaskId)))
@@ -229,6 +229,7 @@ function toAction(tool: string, args: Obj): Action {
         task: task(args),
         milli: amount(args, "siu", 3),
         windowsAhead: ahead,
+        pay: pay(args),
       };
     }
     default:

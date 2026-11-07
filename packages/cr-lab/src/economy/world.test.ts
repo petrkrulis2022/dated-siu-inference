@@ -276,6 +276,63 @@ describe("v2 items 1-5: a real currency choice at every transaction type (docs/m
     w.checkInvariants();
   });
 
+  it("buy_claims(pay: 'agu') pre-converts through the participant, so the mint's own USDC debit is unaffected and the buyer's AGU-lab falls instead (item 4)", async () => {
+    const w = world("buy-claims-agu");
+    const buy = await w.act("HEDGER", { tool: "buy_agu", agu: 2_000_000n }, "a working balance");
+    expect(buy.ok, buy.note).toBe(true);
+    const aguBefore = w.chain.balance("HEDGER", "AGU");
+    const usdcBefore = w.chain.balance("HEDGER", "USDC");
+    const r = await w.act(
+      "HEDGER",
+      { tool: "buy_claims", task: "CR-PL", milli: 250n, windowsAhead: 1, pay: "agu" },
+      "paying in AGU-lab, keeping USDC for forward-brief bonuses",
+    );
+    expect(r.ok, r.note).toBe(true);
+    expect(w.chain.balance("HEDGER", "AGU")).toBeLessThan(aguBefore);
+    expect(w.chain.balance("HEDGER", "USDC")).toBeGreaterThanOrEqual(usdcBefore); // unaffected, or a tiny surplus from the conversion's own rounding
+    expect(w.log.of("claim-mint").at(-1)?.payUnit).toBe("agu");
+    w.checkInvariants();
+  });
+
+  it("order_front_claim(pay: 'agu') is filled by the roll in AGU-lab, pre-converted through the participant before the roll's own USDC check runs (item 4)", async () => {
+    const w = world("front-claim-agu");
+    await w.act("DEMAND-1", { tool: "buy_agu", agu: 5_000_000n }, "a large AGU-lab balance");
+    const ordered = await w.act(
+      "DEMAND-1",
+      { tool: "order_front_claim", task: "CR-PL", milli: 250n, pay: "agu" },
+      "paying the roll in AGU-lab",
+    );
+    expect(ordered.ok, ordered.note).toBe(true);
+    expect(ordered.note).toMatch(/AGU-lab/);
+    const aguBefore = w.chain.balance("DEMAND-1", "AGU");
+    w.startWindow(
+      2,
+      needsSchedule(
+        "front-claim-agu",
+        TASKS.filter((t) => t !== "CR-VS"),
+      ),
+    );
+    expect(w.chain.balance("DEMAND-1", "AGU")).toBeLessThan(aguBefore);
+    expect(w.log.of("roll-sale").some((e) => e.to === "DEMAND-1")).toBe(true);
+    expect(w.log.of("participant-buyback").some((e) => e.from === "DEMAND-1" && e.forPurchase === "front-claim-order")).toBe(
+      true,
+    );
+    w.checkInvariants();
+  });
+
+  it("parses order_front_claim and buy_claims's optional pay unit", () => {
+    const front = parseReply(
+      '{"reasoning": "r", "action": {"tool": "order_front_claim", "args": {"task": "CR-PL", "siu": "0.25", "pay": "agu"}}}',
+      "demand",
+    );
+    expect(front.ok && front.action.tool === "order_front_claim" && front.action.pay).toBe("agu");
+    const claims = parseReply(
+      '{"reasoning": "r", "action": {"tool": "buy_claims", "args": {"task": "CR-PL", "siu": "0.25", "windows_ahead": 1, "pay": "agu"}}}',
+      "hedger",
+    );
+    expect(claims.ok && claims.action.tool === "buy_claims" && claims.action.pay).toBe("agu");
+  });
+
   it("parses buy_data and commission_task's optional pay unit, and rejects an invalid one", () => {
     const ok = parseReply(
       '{"reasoning": "r", "action": {"tool": "buy_data", "args": {"dataset": "perp", "pay": "agu"}}}',

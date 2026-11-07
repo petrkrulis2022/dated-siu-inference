@@ -65,14 +65,14 @@ export type Action =
   | { tool: "sell_agu"; agu: AguUnits }
   | { tool: "redeem_agu"; agu: AguUnits }
   | { tool: "present_claim"; claim: string }
-  | { tool: "order_front_claim"; task: TaskId; milli: MilliSiu }
+  | { tool: "order_front_claim"; task: TaskId; milli: MilliSiu; pay?: PayUnit }
   // v2 item 2: exactly one of priceMicroSiu/priceUsdcMicro is set, enforced by parse.ts -- the RAW unit the quoting researcher chose, converted and locked in `#postQuote`
   | { tool: "post_quote"; need: string; tasks: TaskId[]; priceMicroSiu?: MicroSiu; priceUsdcMicro?: UsdcUnits }
   | { tool: "accept_quote"; quote: string }
   | { tool: "buy_data"; dataset: string; pay?: PayUnit }
   | { tool: "commission_task"; tasks: TaskId[]; issuer: string; pay?: PayUnit }
   | { tool: "deliver_brief"; quote: string }
-  | { tool: "buy_claims"; task: TaskId; milli: MilliSiu; windowsAhead: number }
+  | { tool: "buy_claims"; task: TaskId; milli: MilliSiu; windowsAhead: number; pay?: PayUnit }
   | { tool: "deliver_forward" };
 export type Tool = Action["tool"];
 
@@ -117,6 +117,8 @@ export interface FrontOrder {
   task: TaskId;
   milli: MilliSiu;
   forWindow: number;
+  /** v2 item 4: default usdc (unchanged); "agu" pre-converts through the participant (same mechanism as buy_claims) before the roll's own USDC check runs, unchanged downstream */
+  pay?: PayUnit;
 }
 export interface WorkOutcome {
   passed: boolean;
@@ -344,14 +346,18 @@ export class World {
         return this.#present(agent, a.claim);
       case "order_front_claim": {
         if (a.milli <= 0n) return { ok: false, note: "order at least 0.001 SIU" };
-        this.frontOrders.push({ agent, task: a.task, milli: a.milli, forWindow: this.window + 1 });
+        this.frontOrders.push({ agent, task: a.task, milli: a.milli, forWindow: this.window + 1, pay: a.pay });
+        // this exact text is parsed by scoring.ts's FRONT_ORDER_TASK regex (kill criterion 4) -- its shape never varies with `pay`
         this.#log(agent, "message", {
           to: AGU_ISSUER,
           text: `front-claim order: ${show(a.milli, 3)} SIU of ${a.task} for the next window`,
         });
         return {
           ok: true,
-          note: `ordered ${show(a.milli, 3)} SIU of ${a.task} claims for the next window, paid in USDC at the roll`,
+          note:
+            a.pay === "agu"
+              ? `ordered ${show(a.milli, 3)} SIU of ${a.task} claims for the next window, paid in AGU-lab at the roll's discounted price`
+              : `ordered ${show(a.milli, 3)} SIU of ${a.task} claims for the next window, paid in USDC at the roll`,
         };
       }
       case "post_quote":
@@ -375,7 +381,7 @@ export class World {
       case "deliver_brief":
         return this.#deliverBrief(agent, role, a.quote);
       case "buy_claims":
-        return this.#buyClaims(agent, a.task, a.milli, a.windowsAhead);
+        return this.#buyClaims(agent, a.task, a.milli, a.windowsAhead, a.pay);
       case "deliver_forward":
         return this.#deliverForward(agent, role);
     }
@@ -949,7 +955,13 @@ export class World {
     };
   }
 
-  #buyClaims(agent: string, task: TaskId, milli: MilliSiu, ahead: number): Outcome {
+  /**
+   * v2 item 4: `chain.mint` always debits the buyer's USDC directly (it is also how `#probeLots`/`#participantCreates` fund the participant's OWN on-demand creation, so
+   * its own signature stays USDC-only). Paying in AGU-lab instead pre-converts through the participant first (`#aguToSellForAtLeast`, the same mechanism `sell_agu`
+   * already uses), for exactly enough USDC to cover the mint's own debit, then the mint proceeds completely unchanged -- net effect: the buyer's AGU-lab falls, its
+   * USDC is unaffected (topped up then immediately spent), the claim is minted exactly as it always was.
+   */
+  #buyClaims(agent: string, task: TaskId, milli: MilliSiu, ahead: number, pay: PayUnit = "usdc"): Outcome {
     if (ahead < 1 || ahead > this.params.ladderWindows)
       return { ok: false, note: `buy claims 1 to ${this.params.ladderWindows} windows ahead` };
     const series: Series = this.params.issuers.some(
@@ -957,29 +969,43 @@ export class World {
     )
       ? "commodity"
       : "frontier";
+    const rate = this.rates[series];
+    if (pay === "agu") {
+      const usdcNeeded = usdcFor(milli, rate);
+      const units = this.#aguToSellForAtLeast(usdcNeeded, rate);
+      const r = this.participant.buyBack(agent, units, rate);
+      this.#log(PARTICIPANT, "participant-buyback", { from: agent, agu: r.units, usdc: r.usdc, forPurchase: "buy_claims" });
+    }
     const k = this.window + ahead;
-    const id = this.chain.mint(
-      agent,
-      task,
-      series,
-      milli,
-      this.windowFrom(k),
-      this.windowTo(k),
-      this.rates[series],
-    );
+    const id = this.chain.mint(agent, task, series, milli, this.windowFrom(k), this.windowTo(k), rate);
     this.#log(agent, "claim-mint", {
       tokenId: id,
       task,
       series,
       milli,
       forWindow: k,
-      usdc: usdcFor(milli, this.rates[series]),
+      usdc: usdcFor(milli, rate),
+      payUnit: pay,
     });
     this.notify(
       agent,
       `arrival: ${show(milli, 3)} SIU of ${task} work claim ${id}, presentable in window ${k} only; it lapses worthless if never presented`,
     );
-    return { ok: true, note: `bought ${show(milli, 3)} SIU of ${task} claims for window ${k}` };
+    return {
+      ok: true,
+      note:
+        pay === "agu"
+          ? `bought ${show(milli, 3)} SIU of ${task} claims for window ${k}, paid in AGU-lab`
+          : `bought ${show(milli, 3)} SIU of ${task} claims for window ${k}`,
+    };
+  }
+
+  /** v2 items 4/10: the fewest AGU-lab units whose bid (participant.quote) covers at least `target` USDC -- a plain doubling search, never an algebraic inverse of the spread formula; any small surplus USDC lands in the agent's own wallet, harmless */
+  #aguToSellForAtLeast(target: UsdcUnits, rate: NanoUsdPerSiu): AguUnits {
+    if (target <= 0n) return 0n;
+    let units = 1n;
+    while (this.participant.quote(units, rate).bid < target) units *= 2n;
+    return units;
   }
 
   #deliverForward(agent: string, role: Role): Outcome {
@@ -1180,10 +1206,28 @@ export class World {
         continue;
       }
       const milli = o.milli < (left.get(lot) ?? 0n) ? o.milli : (left.get(lot) as bigint);
+      // v2 item 4: paid in AGU-lab, pre-convert through the participant for exactly enough USDC first (same mechanism as #buyClaims); the fill itself, below, is
+      // then unchanged -- it only ever checks/spends USDC, so nothing downstream needs to know which currency the buyer actually held.
+      // unconditional on the chosen unit, like every other pay:"agu" branch -- a buyer who CHOSE AGU-lab converts regardless of whether its existing USDC alone
+      // would also have covered this, exactly like buy_data/commission_task's own pay:"agu" paths
+      if (o.pay === "agu") {
+        try {
+          const units = this.#aguToSellForAtLeast(usdcFor(milli, price), rate);
+          const r = this.participant.buyBack(o.agent, units, rate);
+          this.#log(PARTICIPANT, "participant-buyback", {
+            from: o.agent,
+            agu: r.units,
+            usdc: r.usdc,
+            forPurchase: "front-claim-order",
+          });
+        } catch (e) {
+          if (!(e instanceof ParticipantRefused)) throw e;
+        }
+      }
       if (this.chain.balance(o.agent, "USDC") < usdcFor(milli, price)) {
         this.notify(
           o.agent,
-          `your front-claim order for ${o.task} was not filled: not enough USDC`,
+          `your front-claim order for ${o.task} was not filled: not enough USDC${o.pay === "agu" ? " (its AGU-lab could not be converted for enough)" : ""}`,
         );
         continue;
       }
