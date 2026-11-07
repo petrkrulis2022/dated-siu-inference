@@ -233,22 +233,52 @@ interface ReceiptFact {
   convertedToUsdc: boolean;
 }
 
-/** every AGU-lab receipt (an escrow paid to a model agent, never an issuer or the gate runner), and whether that agent is later seen paying onward or exiting to USDC */
-function modelAgentReceipts(log: readonly LogEntry[], params: EconomyParams): ReceiptFact[] {
+/**
+ * Every exit's class, keyed by its `seq` (D132): a structural exit is classed by code (`exitFacts`), every other exit only once `tags` supplies it. An exit missing from
+ * both is left out of the map -- callers must treat a missing key as "not classifiable yet", never as any particular class.
+ */
+function exitClassBySeqOf(log: readonly LogEntry[], tags: ReadonlyMap<string, ExitClass>): Map<number, ExitClass> {
+  const out = new Map<number, ExitClass>();
+  for (const f of exitFacts(log)) {
+    const cls = f.structural ? "structural dollar route" : tags.get(`exit-${f.seq}`);
+    if (cls !== undefined) out.set(f.seq, cls);
+  }
+  return out;
+}
+
+/**
+ * Every AGU-lab receipt (an escrow paid to a model agent, never an issuer or the gate runner), whether that agent is later seen paying onward, and whether it later
+ * converted to USDC. `exitClassBySeq`, when given, makes "converted" read the NEAREST subsequent exit's own classification (D132): a forced exit (a "structural dollar
+ * route" or a blind-tagged "dollar cost") does not count as conversion, since kill criterion 1 is about revealed preference, not plumbing. An unclassified or voluntary
+ * exit ("price move"/"fear"/"other") still counts, same as before. Omitting `exitClassBySeq` keeps the old "any later exit at all" reading, which `scoreCirculation` and
+ * `scoreHops` rely on only for `onward` -- they never read `convertedToUsdc`, so they are unaffected by this fix.
+ */
+function modelAgentReceipts(
+  log: readonly LogEntry[],
+  params: EconomyParams,
+  exitClassBySeq?: ReadonlyMap<number, ExitClass>,
+): ReceiptFact[] {
   const agents = modelAgentIds(params);
   const opens = log.filter((e) => e.kind === "escrow-open");
   const settles = log.filter((e) => e.kind === "escrow-settle" && (asBigInt(e.paid) ?? 0n) > 0n);
   const openByEscrow = new Map(opens.map((o) => [o.escrow as string, o]));
+  const exits = log.filter((e) => e.kind === "exit");
   const out: ReceiptFact[] = [];
   for (const s of settles) {
     const open = openByEscrow.get(s.escrow as string);
     if (open === undefined) continue;
     const seller = open.to as string;
     if (!agents.has(seller)) continue;
-    out.push({
-      onward: opens.some((o) => o.actor === seller && o.seq > s.seq),
-      convertedToUsdc: log.some((e) => e.kind === "exit" && e.actor === seller && e.seq > s.seq),
-    });
+    const nearestExit = exits
+      .filter((e) => e.actor === seller && e.seq > s.seq)
+      .sort((a, b) => a.seq - b.seq)[0];
+    const convertedToUsdc =
+      exitClassBySeq === undefined
+        ? nearestExit !== undefined
+        : nearestExit !== undefined &&
+          exitClassBySeq.get(nearestExit.seq) !== "structural dollar route" &&
+          exitClassBySeq.get(nearestExit.seq) !== "dollar cost";
+    out.push({ onward: opens.some((o) => o.actor === seller && o.seq > s.seq), convertedToUsdc });
   }
   return out;
 }
@@ -280,9 +310,16 @@ export interface ConversionScoring {
   fails: boolean;
 }
 
-/** kill criterion 1: "agents convert received currency to USDC almost every time"; the 90% threshold is pre-registered here, as the module's own doc comment explains */
-export function scoreConversionToUsdc(log: readonly LogEntry[], params: EconomyParams): ConversionScoring {
-  const receipts = modelAgentReceipts(log, params);
+/**
+ * Kill criterion 1: "agents convert received currency to USDC almost every time"; the 90% threshold is pre-registered here, as the module's own doc comment explains.
+ * `tags` is the SAME blind-tag map `scoreThesis` takes (D132): "converted" only counts a receipt whose nearest subsequent exit is not a forced one.
+ */
+export function scoreConversionToUsdc(
+  log: readonly LogEntry[],
+  params: EconomyParams,
+  tags: ReadonlyMap<string, ExitClass>,
+): ConversionScoring {
+  const receipts = modelAgentReceipts(log, params, exitClassBySeqOf(log, tags));
   const converted = receipts.filter((r) => r.convertedToUsdc).length;
   const share = receipts.length === 0 ? null : converted / receipts.length;
   return { converted, opportunities: receipts.length, share, fails: share !== null && share >= 0.9 };
@@ -324,11 +361,20 @@ export interface BuyingAheadScoring {
   neverCovered: boolean;
 }
 
+/** the run's REAL seed, from its own `"genesis"` log entry (D133) -- never guessed from `--params`, which may still carry the committed file's dev default */
+export function genesisSeedOf(log: readonly LogEntry[]): string | undefined {
+  const seed = log.find((e) => e.kind === "genesis")?.seed;
+  return typeof seed === "string" ? seed : undefined;
+}
+
 /** "the hedger and demand agents cover at least a quarter of the next window's known needs in most windows" (§16.9) */
 export function scoreBuyingAhead(log: readonly LogEntry[], params: EconomyParams): BuyingAheadScoring {
   const dayIndex = windowIndexOf(log);
   const windowCount = dayIndex.size;
-  const needsFor = needsSchedule(params.seed, TASKS.filter((t): t is TaskId => t !== "CR-VS"));
+  const needsFor = needsSchedule(
+    genesisSeedOf(log) ?? params.seed,
+    TASKS.filter((t): t is TaskId => t !== "CR-VS"),
+  );
   const ahead = buyingAheadActions(log);
   const coveredFor = new Set(ahead.filter((a) => a.task !== undefined).map((a) => `${a.agent}|${a.task}|${a.forWindow}`));
   const hedgerAheadWindows = new Set(ahead.filter((a) => a.agent === params.agents.hedger).map((a) => a.forWindow));
@@ -456,8 +502,9 @@ export function scoreKillCriteria(
   log: readonly LogEntry[],
   params: EconomyParams,
   buyingAhead: BuyingAheadScoring,
+  tags: ReadonlyMap<string, ExitClass>,
 ): KillCriteria {
-  const conversionOnReceipt = scoreConversionToUsdc(log, params);
+  const conversionOnReceipt = scoreConversionToUsdc(log, params, tags);
   const medianHops = scoreHops(log, params);
   const quotingInDollars = scoreQuotingInDollars(log, params);
   const noBuyingAheadForVisibleNeeds = buyingAhead.neverCovered;
@@ -498,7 +545,7 @@ export function scoreRun(
     circulation: scoreCirculation(log, params),
     buyingAhead,
     comparability: scoreComparability(log),
-    killCriteria: scoreKillCriteria(log, params, buyingAhead),
+    killCriteria: scoreKillCriteria(log, params, buyingAhead, tags),
   };
 }
 

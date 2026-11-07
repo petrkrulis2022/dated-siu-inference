@@ -38,6 +38,10 @@ export const LOG_KINDS = [
   "routing",
   "turn",
   "exit",
+  // v2 redesign additions (docs/marketplace-redesign-v2.md)
+  "genesis",
+  "need-lapsed",
+  "objective",
 ] as const;
 export type LogKind = (typeof LOG_KINDS)[number];
 

@@ -183,10 +183,40 @@ describe("circulation, conversion and hops (model agents only)", () => {
   });
 
   it("scores the conversion-to-USDC kill criterion against the same receipt population", () => {
-    const k = scoreConversionToUsdc(log, params);
+    const k = scoreConversionToUsdc(log, params, new Map());
     expect(k.opportunities).toBe(2);
     expect(k.converted).toBe(1);
     expect(k.fails).toBe(false); // 50% < the 90% pre-registered threshold
+  });
+
+  it("D132: a receipt whose nearest exit is forced (structural or blind-tagged 'dollar cost') does not count as converted; an unclassified or voluntary one still does", () => {
+    const forced: LogEntry[] = [
+      entry("2026-10-29", 0, "DEMAND-1", { kind: "escrow-open", escrow: "f1", to: "RESEARCH-1", agu: 1_000n }),
+      entry("2026-10-29", 1, "GATE-RUNNER", { kind: "escrow-settle", escrow: "f1", paid: 1_000n, refunded: 0n }),
+      entry("2026-10-29", 2, "RESEARCH-1", { kind: "reasoning", text: "need USDC for the dataset fee" }),
+      entry("2026-10-29", 2, "RESEARCH-1", { kind: "exit", agu: 1_000n, usdc: 10n }),
+    ];
+    const blindForced = exitsToTagBlind(forced);
+    const kForced = scoreConversionToUsdc(forced, params, new Map([[blindForced[0]?.key as string, "dollar cost"]]));
+    expect(kForced.converted).toBe(0); // the forced exit does not count as revealed preference
+
+    const voluntary: LogEntry[] = [
+      entry("2026-10-29", 0, "DEMAND-1", { kind: "escrow-open", escrow: "f2", to: "RESEARCH-2", agu: 1_000n }),
+      entry("2026-10-29", 1, "GATE-RUNNER", { kind: "escrow-settle", escrow: "f2", paid: 1_000n, refunded: 0n }),
+      entry("2026-10-29", 2, "RESEARCH-2", { kind: "reasoning", text: "the price is about to fall" }),
+      entry("2026-10-29", 2, "RESEARCH-2", { kind: "exit", agu: 1_000n, usdc: 10n }),
+    ];
+    const blindVoluntary = exitsToTagBlind(voluntary);
+    const kVoluntary = scoreConversionToUsdc(
+      voluntary,
+      params,
+      new Map([[blindVoluntary[0]?.key as string, "fear"]]),
+    );
+    expect(kVoluntary.converted).toBe(1);
+
+    // an exit with no tag at all yet still counts (unclassified, not proven forced) -- per the design note's own stated rule
+    const kUntagged = scoreConversionToUsdc(voluntary, params, new Map());
+    expect(kUntagged.converted).toBe(1);
   });
 
   it("reports hops 2 for a circulated receipt and 1 for one converted straight to USDC, median over both", () => {
@@ -205,7 +235,9 @@ describe("circulation, conversion and hops (model agents only)", () => {
   it("gives the identical result once the same log has been written to JSONL and read back, as every real run's log is", () => {
     const roundTripped = roundTrip(log);
     expect(scoreCirculation(roundTripped, params)).toEqual(scoreCirculation(log, params));
-    expect(scoreConversionToUsdc(roundTripped, params)).toEqual(scoreConversionToUsdc(log, params));
+    expect(scoreConversionToUsdc(roundTripped, params, new Map())).toEqual(
+      scoreConversionToUsdc(log, params, new Map()),
+    );
     expect(scoreHops(roundTripped, params)).toEqual(scoreHops(log, params));
   });
 });
@@ -278,6 +310,28 @@ describe("scoreBuyingAhead", () => {
     const r = scoreBuyingAhead(log, params);
     expect(r.neverCovered).toBe(true);
   });
+
+  it("D133: reads the run's REAL seed from its own genesis log entry, never the committed params file's seed", () => {
+    const realSeed = "counted-2026-11-06"; // deliberately different from params.seed ("dev-0")
+    expect(realSeed).not.toBe(params.seed);
+    const a = params.agents.demand[0] as string;
+    const needsFor = needsSchedule(
+      realSeed,
+      TASKS.filter((t) => t !== "CR-VS"),
+    );
+    const realNextTask = [...new Set(needsFor(a, 2))][0];
+    const log: LogEntry[] = [
+      entry("2026-10-29", 0, "AGU-ISSUER", { kind: "genesis", seed: realSeed, backend: "stand-in", t0: 0 }),
+      entry("2026-10-29", 1, a, {
+        kind: "message",
+        to: "AGU-ISSUER",
+        text: `front-claim order: 0.250 SIU of ${realNextTask} for the next window`,
+      }),
+      entry("2026-10-30", 0, "x", { kind: "notice" }),
+    ];
+    const r = scoreBuyingAhead(log, params);
+    expect(r.perWindow[0]?.covered).toBe(1); // only matches if the REAL seed's need was used, not params.seed's
+  });
 });
 
 describe("scoreKillCriteria and renderScoringReport", () => {
@@ -289,7 +343,7 @@ describe("scoreKillCriteria and renderScoringReport", () => {
       entry("2026-10-30", 0, "x", { kind: "notice" }),
     ];
     const ahead = scoreBuyingAhead(log, params);
-    const k = scoreKillCriteria(log, params, ahead);
+    const k = scoreKillCriteria(log, params, ahead, new Map());
     expect(k.conversionOnReceipt.fails).toBe(true); // 100% conversion ≥ 90%
     expect(k.medianHops.fails).toBe(true); // median hops 1
     expect(k.noBuyingAheadForVisibleNeeds).toBe(true);

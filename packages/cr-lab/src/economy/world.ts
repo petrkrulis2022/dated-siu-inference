@@ -907,6 +907,9 @@ export class World {
   /** genesis: issuers bond lots, the participant builds the reserve ladder, the buffer is seeded, agents are funded */
   genesis(): void {
     const p = this.params;
+    // D133: the scorer needs the run's REAL seed, never the committed params file's own default -- recorded once, here, so `economy-score` never has to guess it from `--params`
+    // (the entry's own top-level `backend` field, set by EconomyLog itself, already carries which data backend ran this -- no need to repeat it here)
+    this.#log(AGU_ISSUER, "genesis", { seed: p.seed, t0: this.t0 });
     for (const i of p.issuers) {
       this.mint(i.id, i.bondUsdc);
       // issuance = deliverability: one window's budget after haircut × measured rate × 0.5 is CapacityBond's own ratio; here one "hour" is one window
