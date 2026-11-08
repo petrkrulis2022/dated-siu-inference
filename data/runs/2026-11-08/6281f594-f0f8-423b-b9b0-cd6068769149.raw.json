@@ -1,0 +1,39 @@
+{
+  "id": "d9f658bc-f1d9-9cb1-8c26-6ec5ab38400a",
+  "object": "chat.completion",
+  "created": 1794098584,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"tracking_id\": \"SH-72ADA3\",\n  \"origin_city\": \"Marseille\",\n  \"destination_city\": \"Tallinn\",\n  \"weight_kg\": 453,\n  \"status\": \"delivered\",\n  \"priority\": \"express\"\n}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nThe report contains a shipment record for SH-72ADA3 from Marseille to Tallinn. It weighs 453 kilograms and has express priority. The current status is delivered.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1562,
+    "completion_tokens": 62,
+    "total_tokens": 1950,
+    "prompt_tokens_details": {
+      "text_tokens": 1562,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 326,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 46840000
+  },
+  "system_fingerprint": "fp_6f335d5480",
+  "service_tier": "default"
+}
