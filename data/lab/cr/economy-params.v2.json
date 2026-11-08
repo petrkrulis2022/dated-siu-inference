@@ -1,5 +1,5 @@
 {
-  "status": "FROZEN 2026-11-08 for the counted windows (item 14's own pre-registration; D137). Dev-tested on the stand-in backend throughout (counted.dataSource: \"stand-in\" below is explicit, not implied by a CLI flag). Never edited after the first counted window; a change needs a dated revision and the owner's word.",
+  "status": "RE-FROZEN 2026-11-08 for the counted windows (item 14's own pre-registration; D138, unfreezing D137's own hash -- this file's own bytes are unchanged, the fix was in world.ts's referenceBriefMicroSiu, not a parameter value here). Dev-tested on the stand-in backend throughout (counted.dataSource: \"stand-in\" below is explicit, not implied by a CLI flag). Never edited after the first counted window; a change needs a dated revision and the owner's word.",
   "units": "USDC and AGU-lab in base units (6 decimals); face in mSIU; rates in nano-USD per SIU; basis points for shares",
   "secondsPerWindow": 86400,
   "roundsPerWindow": 8,

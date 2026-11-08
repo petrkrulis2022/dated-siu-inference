@@ -553,8 +553,19 @@ export class World {
       this.referenceBriefMicroSiu()
     );
   }
+  /**
+   * Found 2026-11-08 checking a counted run's cap arithmetic: this used to scan every issuer's every task price, including frontier-grade CR-VS (ISSUER-F) -- a task no
+   * brief ever contains (every real needsSchedule call site -- scoring.ts, economy-window.ts, chain-replay.ts, studio/roster.ts -- draws needs from
+   * `TASKS.filter(t => t !== "CR-VS")`). CR-VS's price sits on a wholly different cost basis (~60x the commodity tasks), so including it inflated the reference brief
+   * price well past what a real two-task brief can ever actually cost, silently loosening `holdingCeilingMicroSiu`'s own check (more permissive than intended, so it
+   * never visibly refused anything) and distorting the board's own displayed figure, which agents read to decide how much AGU-lab to hold.
+   */
   referenceBriefMicroSiu(): MicroSiu {
-    const prices = Object.values(this.taskPrice).flatMap((p) => Object.values(p));
+    const prices = Object.values(this.taskPrice).flatMap((p) =>
+      Object.entries(p)
+        .filter(([task]) => task !== "CR-VS")
+        .map(([, price]) => price as MicroSiu),
+    );
     const max = prices.reduce((a, b) => (b > a ? b : a), 0n);
     return (2n * max * this.params.briefMarkupBps) / 10_000n;
   }

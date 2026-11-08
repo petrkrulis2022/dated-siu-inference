@@ -291,7 +291,11 @@ describe("v2 items 1-5: a real currency choice at every transaction type (docs/m
   });
 
   it("order_front_claim(pay: 'agu') is filled by the roll in AGU-lab, pre-converted through the participant before the roll's own USDC check runs (item 4)", async () => {
-    const w = world("front-claim-agu");
+    // the holding ceiling (2026-11-08's fix to referenceBriefMicroSiu, correctly excluding CR-VS) is now tight enough to matter here -- raised for this test alone,
+    // since its own subject is the AGU-lab payment path, not the ceiling
+    const w = world("front-claim-agu", (p) => {
+      p.mandates = { ...p.mandates, "DEMAND-1": { ...p.mandates["DEMAND-1"], holdingCeilingDays: 1_000 } };
+    });
     await w.act("DEMAND-1", { tool: "buy_agu", agu: 5_000_000n }, "a large AGU-lab balance");
     const ordered = await w.act(
       "DEMAND-1",
@@ -629,5 +633,29 @@ describe("v2 fix 3 (found live testing D137, native tool-calling): accept_quote 
     expect(w.quotes.find((x) => x.id === quote.id)?.status).toBe("accepted");
     w.checkInvariants();
     expect(() => w.closeWindow(1)).not.toThrow(); // the original crash site
+  });
+});
+
+describe("the reference brief price (found checking a counted run's cap arithmetic, 2026-11-08)", () => {
+  it("only ever takes its max over task types a brief can actually contain -- CR-VS is never one of them", () => {
+    const w = world("reference-brief");
+    const allPrices = Object.values(w.taskPrice).flatMap((p) => Object.entries(p));
+    const crVsPrice = allPrices.find(([task]) => task === "CR-VS")?.[1] as bigint;
+    const nonCrVsMax = allPrices
+      .filter(([task]) => task !== "CR-VS")
+      .map(([, price]) => price as bigint)
+      .reduce((a, b) => (b > a ? b : a), 0n);
+    // the fixture's own CR-VS price is genuinely far above every other task's, so this is a real exclusion, not a coincidence that happens not to matter
+    expect(crVsPrice).toBeGreaterThan(nonCrVsMax * 10n);
+    const expected = (2n * nonCrVsMax * w.params.briefMarkupBps) / 10_000n;
+    expect(w.referenceBriefMicroSiu()).toBe(expected);
+  });
+
+  it("the holding ceiling stays tied to that same corrected reference price", () => {
+    const w = world("holding-ceiling");
+    const m = w.params.mandates["DEMAND-1"] as { holdingCeilingDays: number };
+    const expected =
+      BigInt(m.holdingCeilingDays * w.params.needsPerDemandAgentPerWindow) * w.referenceBriefMicroSiu();
+    expect(w.holdingCeilingMicroSiu("DEMAND-1")).toBe(expected);
   });
 });
