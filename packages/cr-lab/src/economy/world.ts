@@ -736,12 +736,16 @@ export class World {
         note: `mandate: spending limit of ${show(m.spendLimitAguPerWindow)} AGU-lab this window`,
       };
     const escrow = this.#id("escrow");
-    this.spentAguThisWindow.set(agent, spent + aguEquivalent);
-    q.status = "accepted";
-    q.escrow = escrow;
+    // escrowOpen can refuse (the buyer's real balance is short): commit no state at all -- status, escrow id, the spend counter -- until it actually succeeds, the same
+    // order #commission already uses. Setting these first (as this branch once did) left a quote permanently "accepted" with no real escrow the one time a demand agent's
+    // own balance came up short, surviving to crash window-close's cleanup trying to expire an escrow that was never opened (found live testing D137, native tool-calling's
+    // own near-100% execution rate reaching this for the first time).
     if (q.priceUnit === "usdc") {
       const usdcOwed = q.priceUsdcMicro as UsdcUnits;
       this.chain.escrowOpen(escrow, "USDC", agent, q.researcher, GATE_RUNNER, usdcOwed, this.windowTo(this.window));
+      this.spentAguThisWindow.set(agent, spent + aguEquivalent);
+      q.status = "accepted";
+      q.escrow = escrow;
       q.usdcEscrowed = usdcOwed;
       this.#log(agent, "escrow-open", {
         escrow,
@@ -758,6 +762,9 @@ export class World {
     }
     const units = aguEquivalent;
     this.chain.escrowOpen(escrow, "AGU", agent, q.researcher, GATE_RUNNER, units, this.windowTo(this.window));
+    this.spentAguThisWindow.set(agent, spent + aguEquivalent);
+    q.status = "accepted";
+    q.escrow = escrow;
     q.agu = units;
     this.#log(agent, "escrow-open", {
       escrow,

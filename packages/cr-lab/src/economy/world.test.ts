@@ -4,7 +4,7 @@ import { StandInWorker } from "./agents.js";
 import { EconomyLog } from "./log.js";
 import { MIN_SETTLEMENT, PARTICIPANT } from "./memory-chain.js";
 import { loadParams } from "./params.js";
-import { parseReply } from "./parse.js";
+import { parseToolCall, type ToolCall } from "./parse.js";
 import { minCommodityRateInRange } from "./print-history.js";
 import { buildWorld, loadCrPrint, needsSchedule, passRates, standInSha } from "./runner.js";
 import { DATA_AGENT } from "./world.js";
@@ -40,6 +40,11 @@ function world(
   );
   return w;
 }
+
+const call = (tool: string, args: Record<string, unknown> = {}): ToolCall => ({
+  tool,
+  args: { reasoning: "r", ...args },
+});
 
 describe("buying AGU-lab (found in DW2, 2026-11-05)", () => {
   it("buys an exact amount of AGU-lab at the ask, so a quote can be met to the base unit", async () => {
@@ -110,20 +115,10 @@ describe("buying AGU-lab (found in DW2, 2026-11-05)", () => {
   });
 
   it("parses buy_agu with exactly one of agu or usdc", () => {
-    const ok = parseReply(
-      '{"reasoning": "r", "action": {"tool": "buy_agu", "args": {"agu": "0.2"}}}',
-      "demand",
-    );
+    const ok = parseToolCall(call("buy_agu", { agu: "0.2" }), "demand");
     expect(ok.ok && ok.action.tool === "buy_agu" && ok.action.agu).toBe(200_000n);
-    expect(
-      parseReply(
-        '{"reasoning": "r", "action": {"tool": "buy_agu", "args": {"agu": "0.2", "usdc": "1"}}}',
-        "demand",
-      ).ok,
-    ).toBe(false);
-    expect(
-      parseReply('{"reasoning": "r", "action": {"tool": "buy_agu", "args": {}}}', "demand").ok,
-    ).toBe(false);
+    expect(parseToolCall(call("buy_agu", { agu: "0.2", usdc: "1" }), "demand").ok).toBe(false);
+    expect(parseToolCall(call("buy_agu"), "demand").ok).toBe(false);
   });
 });
 
@@ -322,46 +317,34 @@ describe("v2 items 1-5: a real currency choice at every transaction type (docs/m
   });
 
   it("parses order_front_claim and buy_claims's optional pay unit", () => {
-    const front = parseReply(
-      '{"reasoning": "r", "action": {"tool": "order_front_claim", "args": {"task": "CR-PL", "siu": "0.25", "pay": "agu"}}}',
-      "demand",
-    );
+    const front = parseToolCall(call("order_front_claim", { task: "CR-PL", siu: "0.25", pay: "agu" }), "demand");
     expect(front.ok && front.action.tool === "order_front_claim" && front.action.pay).toBe("agu");
-    const claims = parseReply(
-      '{"reasoning": "r", "action": {"tool": "buy_claims", "args": {"task": "CR-PL", "siu": "0.25", "windows_ahead": 1, "pay": "agu"}}}',
+    const claims = parseToolCall(
+      call("buy_claims", { task: "CR-PL", siu: "0.25", windows_ahead: 1, pay: "agu" }),
       "hedger",
     );
     expect(claims.ok && claims.action.tool === "buy_claims" && claims.action.pay).toBe("agu");
   });
 
   it("parses buy_data and commission_task's optional pay unit, and rejects an invalid one", () => {
-    const ok = parseReply(
-      '{"reasoning": "r", "action": {"tool": "buy_data", "args": {"dataset": "perp", "pay": "agu"}}}',
-      "research",
-    );
+    const ok = parseToolCall(call("buy_data", { dataset: "perp", pay: "agu" }), "research");
     expect(ok.ok && ok.action.tool === "buy_data" && ok.action.pay).toBe("agu");
-    const bad = parseReply(
-      '{"reasoning": "r", "action": {"tool": "buy_data", "args": {"dataset": "perp", "pay": "eur"}}}',
-      "research",
-    );
+    const bad = parseToolCall(call("buy_data", { dataset: "perp", pay: "eur" }), "research");
     expect(bad.ok).toBe(false);
   });
 
   it("parses post_quote with exactly one of price_msiu or price_usdc", () => {
-    const usd = parseReply(
-      '{"reasoning": "r", "action": {"tool": "post_quote", "args": {"need": "n1", "tasks": ["CR-PL", "CR-UO"], "price_usdc": "0.015"}}}',
+    const usd = parseToolCall(
+      call("post_quote", { need: "n1", tasks: ["CR-PL", "CR-UO"], price_usdc: "0.015" }),
       "research",
     );
     expect(usd.ok && usd.action.tool === "post_quote" && usd.action.priceUsdcMicro).toBe(15_000n);
-    const both = parseReply(
-      '{"reasoning": "r", "action": {"tool": "post_quote", "args": {"need": "n1", "tasks": ["CR-PL", "CR-UO"], "price_msiu": "250", "price_usdc": "0.015"}}}',
+    const both = parseToolCall(
+      call("post_quote", { need: "n1", tasks: ["CR-PL", "CR-UO"], price_msiu: "250", price_usdc: "0.015" }),
       "research",
     );
     expect(both.ok).toBe(false);
-    const neither = parseReply(
-      '{"reasoning": "r", "action": {"tool": "post_quote", "args": {"need": "n1", "tasks": ["CR-PL", "CR-UO"]}}}',
-      "research",
-    );
+    const neither = parseToolCall(call("post_quote", { need: "n1", tasks: ["CR-PL", "CR-UO"] }), "research");
     expect(neither.ok).toBe(false);
   });
 });
@@ -608,5 +591,43 @@ describe("v2 fix 2 (owner, 2026-11-07): scripted conversions never use up the ca
     const r = await w.act("DEMAND-1", { tool: "sell_agu", agu: tooMuch }, "selling more than 10% of supply");
     expect(r.ok).toBe(false);
     expect(r.note).toMatch(/buy-back cap/);
+  });
+});
+
+describe("v2 fix 3 (found live testing D137, native tool-calling): accept_quote beyond the buyer's real balance", () => {
+  it("refuses cleanly, leaves the quote exactly as posted (no phantom escrow), and the quote is still genuinely acceptable once funded", async () => {
+    // the mandate's own spend-limit check runs first and is independent of this bug: raise it out of the way so the test isolates the real-balance failure specifically
+    const w = world("accept-insufficient", (p) => {
+      p.mandates = {
+        ...p.mandates,
+        "DEMAND-1": { ...p.mandates["DEMAND-1"], spendLimitAguPerWindow: 1_000_000_000_000n },
+      };
+    });
+    const need = w.needs.find((n) => n.agent === "DEMAND-1" && n.status === "open") as Need;
+    const usdcBefore = w.chain.balance("DEMAND-1", "USDC");
+    const tooMuch = usdcBefore + 1n; // just beyond what DEMAND-1 actually holds
+    const quoted = await w.act(
+      "RESEARCH-1",
+      { tool: "post_quote", need: need.id, tasks: need.tasks, priceUsdcMicro: tooMuch },
+      "pricing above what this buyer can afford",
+    );
+    expect(quoted.ok, quoted.note).toBe(true);
+    const quote = w.quotes.find((q) => q.researcher === "RESEARCH-1") as { id: string };
+    const r = await w.act("DEMAND-1", { tool: "accept_quote", quote: quote.id }, "trying to accept anyway");
+    expect(r.ok).toBe(false);
+    expect(r.note).toMatch(/refused:/);
+    // the one bug this exposed: before the fix, status/escrow were set BEFORE the failing transfer, leaving a quote stuck "accepted" with an escrow id
+    // that was never actually opened -- crashing window-close's own cleanup (`NoEscrow`) trying to expire it. Confirm it never happened here.
+    const stillPosted = w.quotes.find((x) => x.id === quote.id);
+    expect(stillPosted?.status).toBe("posted");
+    expect(stillPosted?.escrow).toBeUndefined();
+    w.checkInvariants();
+    // fund the buyer and accept again: the quote is genuinely unharmed, not merely "not crashing"
+    w.mint("DEMAND-1", tooMuch);
+    const accepted = await w.act("DEMAND-1", { tool: "accept_quote", quote: quote.id }, "funded now");
+    expect(accepted.ok, accepted.note).toBe(true);
+    expect(w.quotes.find((x) => x.id === quote.id)?.status).toBe("accepted");
+    w.checkInvariants();
+    expect(() => w.closeWindow(1)).not.toThrow(); // the original crash site
   });
 });

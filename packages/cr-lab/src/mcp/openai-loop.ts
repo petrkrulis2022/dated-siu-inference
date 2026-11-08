@@ -101,12 +101,13 @@ export function openAiChat(api: ChatCompletionsApi, modelString: string): ToolCh
         type: "function",
         function: { name: t.name, description: t.description, parameters: t.inputSchema },
       })),
-    async send(messages, tools, maxTokens): Promise<ChatTurn> {
+    async send(messages, tools, maxTokens, opts): Promise<ChatTurn> {
       const r = await api.send({
         model: modelString,
         max_completion_tokens: maxTokens,
         messages,
         tools,
+        ...(opts?.forceTool ? { tool_choice: "required", parallel_tool_calls: false } : {}),
       });
       if (r.status !== 200) return { status: r.status, attempts: r.attempts };
       const resp = (r.json ?? {}) as ChatResponse;

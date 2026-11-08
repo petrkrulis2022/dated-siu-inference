@@ -240,12 +240,15 @@ export function anthropicChat(
     init: (prompt) => [{ role: "user", content: prompt } satisfies Message],
     toolSpecs: (tools: McpToolDef[]) =>
       tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.inputSchema })),
-    async send(messages, tools, maxTokens): Promise<ChatTurn> {
+    async send(messages, tools, maxTokens, opts): Promise<ChatTurn> {
       const r = await api.send({
         model: modelString,
         max_tokens: maxTokens,
         messages,
         tools,
+        ...(opts?.forceTool
+          ? { tool_choice: { type: "any", disable_parallel_tool_use: true } }
+          : {}),
         ...(summary ? { thinking: { type: "adaptive", display: "summarized" } } : {}),
       });
       if (r.status !== 200) return { status: r.status, attempts: r.attempts };

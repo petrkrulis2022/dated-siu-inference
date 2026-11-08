@@ -1,5 +1,5 @@
 {
-  "status": "DRAFT v2 (docs/marketplace-redesign-v2.md): NOT frozen, NOT pre-registered. Dev-testing only, stand-in backend. Every field matches the frozen v1 file (economy-params.json) unchanged except: counted.seats (item 13, all-Anthropic) and the new item 8/9/10 fields below, whose values are illustrative pending a dev-test and the owner's review -- never used for a counted run until frozen (item 14).",
+  "status": "FROZEN 2026-11-08 for the counted windows (item 14's own pre-registration; D137). Dev-tested on the stand-in backend throughout (counted.dataSource: \"stand-in\" below is explicit, not implied by a CLI flag). Never edited after the first counted window; a change needs a dated revision and the owner's word.",
   "units": "USDC and AGU-lab in base units (6 decimals); face in mSIU; rates in nano-USD per SIU; basis points for shares",
   "secondsPerWindow": 86400,
   "roundsPerWindow": 8,

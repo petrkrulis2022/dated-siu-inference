@@ -18,7 +18,7 @@ import { boardFor, renderBoard } from "./board.js";
 import type { EconomyLog } from "./log.js";
 import type { Series } from "./memory-chain.js";
 import type { EconomyParams } from "./params.js";
-import { parseReply } from "./parse.js";
+import { parseToolCall } from "./parse.js";
 import type { NanoUsdPerSiu } from "./units.js";
 import type { MicroSiu, TaskWorker } from "./world.js";
 import { World } from "./world.js";
@@ -198,7 +198,7 @@ export async function runWindows(opts: {
           w.lastResult.set(a.id, "your last turn was lost to a service failure; nothing happened");
           continue;
         }
-        const parsed = parseReply(rep.text, a.role, board);
+        const parsed = parseToolCall(rep.toolCall, a.role, board);
         if (!parsed.ok) {
           s.parseFailures++;
           w.log.write(board.day, r, a.id, "turn", {
@@ -206,12 +206,11 @@ export async function runWindows(opts: {
             parsed: false,
             error: parsed.error,
             ...(rep.stopReason !== undefined ? { stopReason: rep.stopReason } : {}),
-            raw: rep.text.slice(0, 2000),
+            ...(rep.toolCall !== undefined
+              ? { raw: JSON.stringify(rep.toolCall).slice(0, 2000) }
+              : {}),
           });
-          w.lastResult.set(
-            a.id,
-            `your reply could not be read (${parsed.error}); reply with exactly one JSON object`,
-          );
+          w.lastResult.set(a.id, `your last turn could not be used (${parsed.error})`);
         } else {
           w.log.write(board.day, r, a.id, "reasoning", {
             seat: a.seat,
@@ -232,7 +231,7 @@ export async function runWindows(opts: {
             );
             s.agentCostUsd = s.agentCostUsd.plus(m.costUsd);
             const mp =
-              m.serviceFailure === undefined ? parseReply(m.text, a.role, flipped) : undefined;
+              m.serviceFailure === undefined ? parseToolCall(m.toolCall, a.role, flipped) : undefined;
             const entry = {
               siuFirst: flipped.siuFirst,
               parsed: mp?.ok === true,
@@ -261,7 +260,6 @@ export async function runWindows(opts: {
             ok: out.ok,
             note: out.note,
             flags: parsed.flags,
-            fenced: parsed.fenced,
           });
         }
         w.checkInvariants();

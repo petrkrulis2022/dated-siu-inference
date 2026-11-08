@@ -1,8 +1,9 @@
 /**
  * The agents an economy window runs, and the task worker behind the issuers.
  *
- *  - An `Agent` replies to its board with one JSON object (§3.3). Scripted agents (development windows DW0 and DW1, free) build that object from the structured board and go through
- *    the same parser as a model, so the parser, the log and every rule are exercised exactly as a model's turn would exercise them.
+ *  - An `Agent` replies to its board with exactly one tool call (§3.3, native tool-calling since D137): `reasoning` is the first-declared argument of every tool. Scripted agents
+ *    (development windows DW0 and DW1, free) build that call directly from the structured board and go through the same validation as a model's turn (`parse.ts`), so the
+ *    parser, the log and every rule are exercised exactly as a model's turn would exercise them.
  *  - The `StandInWorker` does an issuer's task work without a model and without data, labelled `stand-in`: a pass is drawn from the seed at that issuer model's measured pass rate on
  *    that task type (WP0), and ISSUER-X additionally fails its published share. It spends nothing.
  */
@@ -15,7 +16,8 @@ import { show } from "./units.js";
 import type { Role, TaskWorker, WorkOutcome } from "./world.js";
 
 export interface AgentReply {
-  text: string;
+  /** the tool call this turn names: absent exactly on a service failure, or (should not otherwise happen with tool use forced) a turn that named none at all */
+  toolCall?: { tool: string; args: Record<string, unknown> };
   costUsd: DecimalValue;
   /** the provider failed (after its own retries): the turn is a service failure, not the agent's, and is not counted as a parse failure */
   serviceFailure?: string;
@@ -59,7 +61,7 @@ const reply = (
   tool: string,
   args: Record<string, unknown> = {},
 ): AgentReply => ({
-  text: JSON.stringify({ reasoning, action: { tool, args } }),
+  toolCall: { tool, args: { reasoning, ...args } },
   costUsd: new D(0),
 });
 

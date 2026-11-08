@@ -51,12 +51,6 @@ export function overview(
     lines.push(
       `- window ${s.window}: ${s.turns} turns, ${s.parseFailures} failed to parse, ${s.serviceFailures} lost to service failures, agents $${s.agentCostUsd.toFixed(6)}, task work $${s.workCostUsd.toFixed(6)}`,
     );
-  const parsedTurns = log.filter(
-    (e) => e.kind === "turn" && e.parsed === true && e.mirror !== true,
-  );
-  lines.push(
-    `- ${parsedTurns.filter((t) => t.fenced === true).length} of ${parsedTurns.length} readable turns came inside a code fence (read from inside it, as the snapshot gate does; noted, not a failure)`,
-  );
   const mirrors = stats.flatMap((s) => s.mirrors);
   lines.push(
     "",

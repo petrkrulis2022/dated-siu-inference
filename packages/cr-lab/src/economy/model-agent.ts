@@ -1,9 +1,10 @@
 /**
- * A model in an agent seat (WP7): it reads its role's instructions and its board, and replies with one JSON object, reasoning first (§3.3). Every call goes through the trial's spend
- * ledger guard (part `economy`), so its projected cost is reserved against the daily cap and the provider's budget before it is made, and a refused call stops the run.
+ * A model in an agent seat (WP7): it reads its role's instructions and its board, and replies by calling exactly one of its role's tools, reasoning first (§3.3, native
+ * tool-calling since D137 -- `tool_choice: {type: "any"}`, no free-text reply is possible any more). Every call goes through the trial's spend ledger guard (part `economy`),
+ * so its projected cost is reserved against the daily cap and the provider's budget before it is made, and a refused call stops the run.
  *
- * The instructions describe the market and the tools and say nothing about which way to pay: whether agents use AGU-lab when they are not forced to is what the economy measures
- * (§16.9, the thesis), so no instruction may lean on it.
+ * The instructions describe the market and say nothing about which way to pay: whether agents use AGU-lab when they are not forced to is what the economy measures (§16.9, the
+ * thesis), so no instruction may lean on it.
  */
 import { D } from "@touchstone/sdk";
 import type { ToolChat } from "../mcp/tool-loop.js";
@@ -11,7 +12,7 @@ import { usageCostUsd, type ModelPrice } from "../runner/prices.js";
 import type { SpendLedger } from "../spend/ledger.js";
 import type { Agent, AgentReply } from "./agents.js";
 import type { Board } from "./board.js";
-import { TOOL_HELP, TOOLS_BY_ROLE } from "./parse.js";
+import { toolDefsForRole } from "./parse.js";
 import type { Role } from "./world.js";
 
 export class ModelAgent implements Agent {
@@ -49,11 +50,14 @@ export class ModelAgent implements Agent {
         what: `${this.id} w${board.window} r${board.round}`,
       },
       async () => {
-        const turn = await this.chat.send(this.chat.init(prompt), undefined, this.maxTokens);
+        const specs = this.chat.toolSpecs(toolDefsForRole(this.role));
+        const turn = await this.chat.send(this.chat.init(prompt), specs, this.maxTokens, {
+          forceTool: true,
+        });
         if (turn.status !== 200 || turn.reply === undefined)
           return {
             usd: "0",
-            text: "",
+            toolCall: undefined,
             failure: `model call failed (status ${turn.status})`,
             stopReason: undefined,
           };
@@ -68,9 +72,10 @@ export class ModelAgent implements Agent {
           this.price,
           this.chat.provider,
         );
+        const use = turn.reply.toolUses[0];
         return {
           usd: usd.toFixed(6),
-          text: turn.reply.text,
+          toolCall: use === undefined ? undefined : { tool: use.name, args: use.args },
           failure: undefined,
           stopReason: turn.reply.stopReason,
           // the provider's OWN reasoning/thinking summary, if it returns one -- previously read and silently dropped
@@ -79,7 +84,7 @@ export class ModelAgent implements Agent {
       },
     );
     return {
-      text: r.text,
+      toolCall: r.toolCall,
       costUsd: new D(r.usd),
       ...(r.stopReason !== undefined ? { stopReason: r.stopReason } : {}),
       ...(r.failure !== undefined ? { serviceFailure: r.failure } : {}),
@@ -118,14 +123,15 @@ const ROLE: Record<Role, string> = {
     "You are the HEDGER. You hold a standing obligation: deliver briefs over the coming windows, each from two passing outputs of different task types from the same day; your board shows how many are owed and delivered. You can buy work claims ahead, present claims, or commission work.",
 };
 
-/** a role's standing instructions, with its tools and the reply format. `siuFirst` matches the board's own display order for this window (item 11). */
+/**
+ * a role's standing instructions. `siuFirst` matches the board's own display order for this window (item 11). The tools themselves, their own descriptions and argument
+ * schemas, are given to the model natively (D137, `parse.ts`'s `toolDefsForRole`) rather than restated here -- there is nothing left to say about the reply format, since a
+ * free-text reply is no longer a shape the API allows.
+ */
 export function instructionsFor(role: Role, siuFirst = true): string {
-  const tools = TOOLS_BY_ROLE[role].map((t) => `  - ${t} ${TOOL_HELP[t] ?? ""}`).join("\n");
   return [
     ...COMMON(siuFirst),
     ROLE[role],
-    "Your tools (amounts are plain decimal strings):",
-    tools,
-    'Reply with exactly one JSON object and nothing else, reasoning first: {"reasoning": "why, in a few sentences", "action": {"tool": "<tool>", "args": {...}}}',
+    "Amounts in a tool's arguments are plain decimal strings. Call exactly one tool this round, reasoning first.",
   ].join("\n");
 }

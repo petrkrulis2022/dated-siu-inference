@@ -72,7 +72,16 @@ export interface ToolChat {
   init(prompt: string): unknown[];
   /** the provider's own description of the tools */
   toolSpecs(tools: McpToolDef[]): unknown;
-  send(messages: unknown[], tools: unknown, maxTokens: number): Promise<ChatTurn>;
+  /**
+   * `opts.forceTool`, where a provider supports it, forces the model to call one of `tools` and rules out a plain-text reply at the source (D137): Anthropic's
+   * `tool_choice: {type: "any"}` with parallel calls disabled, so the turn is always exactly one call. Absent or false, behaviour is exactly as before this option existed.
+   */
+  send(
+    messages: unknown[],
+    tools: unknown,
+    maxTokens: number,
+    opts?: { forceTool?: boolean },
+  ): Promise<ChatTurn>;
   appendAssistant(messages: unknown[], assistant: unknown): void;
   appendToolResults(
     messages: unknown[],

@@ -1,10 +1,15 @@
 /**
- * The strict parser for an agent's reply (`docs/part5-build-plan.md` §3.3): exactly one JSON object, reasoning first, `{"reasoning": "...", "action": {"tool": "...", "args": {...}}}`.
- * A reply that is not that object is a failed turn: logged, counted, never repaired. Amounts are plain decimal strings, read exactly into base units.
+ * Every economy tool as a native tool call (D136/D137): the provider is given each role's tools as real JSON Schema, forced to call exactly one with `tool_choice: {type:
+ * "any"}` (`mcp/anthropic-loop.ts`), so a free-text reply is no longer a possible shape at all -- there is nothing left for a model to write prose before. `reasoning` is a
+ * required string, listed first in every tool's schema, so it stays the first property a model fills in practice (verified empirically, the same standard as D136's own
+ * finding, not assumed from the schema alone). `parseToolCall` validates the call the provider actually returned exactly as the old free-text parser validated the object it
+ * read, reusing the same per-tool argument rules unchanged: a scripted agent's own structured reply goes through it too, so the parser and every rule are still exercised
+ * exactly as a model's turn exercises them.
  *
  * The scale-slip check (D82) runs on every amount an agent states: an amount a thousand times above or below what it plainly refers to (the agent's own balance for a sale or a
  * redemption, the participant's ask for a purchase) is flagged. A flagged decision still executes and stays in every count; the report lists it for examination.
  */
+import type { McpToolDef } from "../mcp/types.js";
 import { TASKS, type TaskId } from "../tasks/instances.js";
 import type { Board } from "./board.js";
 import { parseUnits, type AguUnits } from "./units.js";
@@ -55,74 +60,140 @@ export const TOOLS_BY_ROLE: Readonly<Record<Role, readonly string[]>> = {
 };
 
 export const TOOL_HELP: Readonly<Record<string, string>> = {
-  pass: "{} — do nothing this round",
-  message:
-    '{"to": "<agent id or all>", "text": "..."} — send a message to one agent, or to every agent',
-  buy_agu:
-    '{"agu": "<AGU-lab to buy>"} (or {"usdc": "<USDC to spend>"}) — buy AGU-lab from the participant at its ask',
-  sell_agu:
-    '{"agu": "<AGU-lab to sell>"} — sell AGU-lab back to the participant at its bid (an exit to USDC)',
-  redeem_agu:
-    '{"agu": "<AGU-lab>"} — redeem AGU-lab in kind: you receive your share of the reserve\'s work claims',
-  present_claim:
-    '{"claim": "<claim id>"} — present a work claim in its window: the issuer does one task of its type for you',
+  pass: "do nothing this round",
+  message: "send a message to one agent, or to every agent",
+  buy_agu: "buy AGU-lab from the participant at its ask -- name exactly one of agu or usdc",
+  sell_agu: "sell AGU-lab back to the participant at its bid (an exit to USDC)",
+  redeem_agu: "redeem AGU-lab in kind: you receive your share of the reserve's work claims",
+  present_claim: "present a work claim in its window: the issuer does one task of its type for you",
   order_front_claim:
-    '{"task": "CR-PL", "siu": "0.25"} (optionally {"pay": "usdc"} or {"pay": "agu"}, default usdc) — order work claims for the next window at the roll\'s discount to the print, in USDC or AGU-lab, your choice',
+    "order work claims for the next window at the roll's discount to the print, in USDC or AGU-lab, your choice (default usdc)",
   post_quote:
-    '{"need": "<need id>", "tasks": ["CR-PL", "CR-UO"], "price_msiu": "<whole mSIU, e.g. 250>"} (or {"price_usdc": "<decimal USDC, e.g. 0.015>"} instead of price_msiu) — offer a brief to the demand agent with that need, priced in whole mSIU (a thousandth of a SIU, never a decimal) OR in USDC, your choice; whichever you name is what binds at acceptance',
+    "offer a brief to the demand agent with that need, priced in whole mSIU (a thousandth of a SIU, never a decimal) OR in USDC -- name exactly one of price_msiu or price_usdc, whichever you name is what binds at acceptance",
   accept_quote:
-    '{"quote": "<quote id>"} — accept a quote: its price goes into escrow in whichever unit the quote named (AGU-lab or USDC), released only if the brief passes',
+    "accept a quote: its price goes into escrow in whichever unit the quote named (AGU-lab or USDC), released only if the brief passes",
   buy_data:
-    '{"dataset": "perp|lending|tokens|stablecoins"} (optionally {"pay": "usdc"} or {"pay": "agu"}, default usdc) — buy today\'s data for a task type, in USDC or its AGU-lab equivalent at the live rate',
+    "buy today's data for a task type, in USDC or its AGU-lab equivalent at the live rate (default usdc); a research agent's first task on a dataset each day also buys that data",
   commission_task:
-    '{"tasks": ["CR-PL", "CR-UO"], "issuer": "<issuer id>"} (optionally {"pay": "usdc"} or {"pay": "agu"}, default agu) — pay an issuer (escrowed, paid per task only on a pass) to do these tasks now, in AGU-lab or USDC, your choice; a research agent\'s first task on a dataset each day also buys that data (USDC, or AGU-lab with its own {"pay": "agu"})',
+    "pay an issuer (escrowed, paid per task only on a pass) to do these tasks now, in AGU-lab or USDC, your choice (default agu)",
   deliver_brief:
-    '{"quote": "<quote id>"} — deliver a brief from your passing outputs of today; you are paid only if every component passed',
+    "deliver a brief from your passing outputs of today; you are paid only if every component passed",
   buy_claims:
-    '{"task": "CR-PL", "siu": "0.25", "windows_ahead": 1} (optionally {"pay": "usdc"} or {"pay": "agu"}, default usdc) — buy work claims for a future window at the plain print, in USDC or AGU-lab, your choice',
-  deliver_forward:
-    "{} — deliver one of the briefs you sold forward, from two passing outputs of today",
+    "buy work claims for a future window at the plain print, in USDC or AGU-lab, your choice (default usdc)",
+  deliver_forward: "deliver one of the briefs you sold forward, from two passing outputs of today",
 };
 
+const PAY_ENUM = {
+  type: "string",
+  enum: ["usdc", "agu"],
+  description: "default usdc unless this tool's own description says otherwise",
+};
+const TASK_ENUM = { type: "string", enum: [...TASKS] };
+const REASONING = { type: "string", description: "why, in a few sentences" } as const;
+
+/** every tool's own argument schema; `reasoning` is prepended first by `toolDefsForRole`, never listed here. */
+const ARG_SCHEMAS: Readonly<
+  Record<string, { properties: Record<string, unknown>; required: string[] }>
+> = {
+  pass: { properties: {}, required: [] },
+  message: {
+    properties: {
+      to: { type: "string", description: 'an agent id, or "all"' },
+      text: { type: "string" },
+    },
+    required: ["to", "text"],
+  },
+  buy_agu: {
+    properties: {
+      agu: { type: "string", description: "AGU-lab to buy, a decimal string" },
+      usdc: { type: "string", description: "USDC to spend, a decimal string" },
+    },
+    required: [],
+  },
+  sell_agu: { properties: { agu: { type: "string" } }, required: ["agu"] },
+  redeem_agu: { properties: { agu: { type: "string" } }, required: ["agu"] },
+  present_claim: { properties: { claim: { type: "string" } }, required: ["claim"] },
+  order_front_claim: {
+    properties: { task: TASK_ENUM, siu: { type: "string" }, pay: PAY_ENUM },
+    required: ["task", "siu"],
+  },
+  post_quote: {
+    properties: {
+      need: { type: "string" },
+      tasks: { type: "array", items: TASK_ENUM, minItems: 1 },
+      price_msiu: { type: "string", description: "whole mSIU, e.g. 250" },
+      price_usdc: { type: "string", description: "decimal USDC, e.g. 0.015" },
+    },
+    required: ["need", "tasks"],
+  },
+  accept_quote: { properties: { quote: { type: "string" } }, required: ["quote"] },
+  buy_data: {
+    properties: {
+      dataset: { type: "string", enum: ["perp", "lending", "tokens", "stablecoins"] },
+      pay: PAY_ENUM,
+    },
+    required: ["dataset"],
+  },
+  commission_task: {
+    properties: {
+      tasks: { type: "array", items: TASK_ENUM, minItems: 1 },
+      issuer: { type: "string" },
+      pay: PAY_ENUM,
+    },
+    required: ["tasks", "issuer"],
+  },
+  deliver_brief: { properties: { quote: { type: "string" } }, required: ["quote"] },
+  buy_claims: {
+    properties: {
+      task: TASK_ENUM,
+      siu: { type: "string" },
+      windows_ahead: { type: "integer", minimum: 1 },
+      pay: PAY_ENUM,
+    },
+    required: ["task", "siu", "windows_ahead"],
+  },
+  deliver_forward: { properties: {}, required: [] },
+};
+
+/** the tool defs a role's model is given, native Anthropic/OpenAI tool-call shape: reasoning first, then that tool's own args. */
+export function toolDefsForRole(role: Role): McpToolDef[] {
+  return TOOLS_BY_ROLE[role].map((name) => {
+    const s = ARG_SCHEMAS[name];
+    if (s === undefined) throw new Error(`no argument schema for tool ${name}`);
+    return {
+      name,
+      description: TOOL_HELP[name] ?? name,
+      inputSchema: {
+        type: "object",
+        properties: { reasoning: REASONING, ...s.properties },
+        required: ["reasoning", ...s.required],
+      },
+    };
+  });
+}
+
 export type Parsed =
-  | { ok: true; reasoning: string; action: Action; flags: string[]; fenced: boolean }
+  | { ok: true; reasoning: string; action: Action; flags: string[] }
   | { ok: false; error: string; reasoning?: string };
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
 
-/**
- * The same fence rule as the snapshot-mode gate (`tasks/gates.ts`, `parseAnswer`): a reply that is EXACTLY one fenced block (```json ... ```) is read from inside the fence and
- * marked `fenced`, noted and never counted as a failure; anything else around or after the object is still a failed turn, never repaired (found in DW2, 2026-11-05: claude-haiku-4-5
- * fenced all 18 of its replies, each a valid object inside).
- */
-const FENCE = /^```[A-Za-z]*\s*\n([\s\S]*?)\n?```$/;
+/** a single native tool call, as the provider actually returned it: `args` is the tool's input, `reasoning` included alongside its own fields. */
+export interface ToolCall {
+  tool: string;
+  args: Record<string, unknown>;
+}
 
-export function parseReply(text: string, role: Role, board?: Board): Parsed {
-  let v: unknown;
-  let body = text.trim();
-  const fence = FENCE.exec(body);
-  const fenced = fence !== null;
-  if (fence !== null) body = (fence[1] as string).trim();
-  try {
-    v = JSON.parse(body);
-  } catch {
-    return { ok: false, error: "the reply is not one JSON object" };
-  }
-  if (!isObj(v)) return { ok: false, error: "the reply is not one JSON object" };
-  const keys = Object.keys(v);
-  if (keys.length !== 2 || keys[0] !== "reasoning" || keys[1] !== "action")
-    return { ok: false, error: 'the object must have exactly "reasoning" then "action"' };
-  const reasoning = v.reasoning;
+export function parseToolCall(call: ToolCall | undefined, role: Role, board?: Board): Parsed {
+  if (call === undefined) return { ok: false, error: "no tool call in the reply" };
+  const { tool, args } = call;
+  if (!isObj(args)) return { ok: false, error: "the tool call's arguments are not an object" };
+  if (!TOOLS_BY_ROLE[role].includes(tool))
+    return { ok: false, error: `tool ${tool} is not available to a ${role} agent` };
+  const reasoning = args.reasoning;
   if (typeof reasoning !== "string" || reasoning.trim() === "")
     return { ok: false, error: "reasoning must be a non-empty string" };
-  const a = v.action;
-  if (!isObj(a) || typeof a.tool !== "string" || !isObj(a.args ?? {}))
-    return { ok: false, error: 'action must be {"tool": "...", "args": {...}}', reasoning };
-  const tool = a.tool;
-  if (!TOOLS_BY_ROLE[role].includes(tool))
-    return { ok: false, error: `tool ${tool} is not available to a ${role} agent`, reasoning };
-  const args = (a.args ?? {}) as Obj;
   try {
     const action = toAction(tool, args);
     return {
@@ -130,7 +201,6 @@ export function parseReply(text: string, role: Role, board?: Board): Parsed {
       reasoning,
       action,
       flags: board === undefined ? [] : scaleFlags(action, board),
-      fenced,
     };
   } catch (e) {
     return { ok: false, error: (e as Error).message, reasoning };
