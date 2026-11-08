@@ -1,6 +1,6 @@
 /**
  * `pnpm --filter @touchstone/cr-lab run economy-window -- [--agents scripted|model] [--model claude-haiku-4-5] [--windows 1] [--rounds 8] [--seed dev-0] [--ledger <path>] [--yes-spend]
- *    [--backend stand-in|snapshot --days 2026-10-17,2026-10-18 --snapshots <private snapshots dir>]`
+ *    [--budgets <path, default data/lab/cr/budgets.json>] [--backend stand-in|snapshot --days 2026-10-17,2026-10-18 --snapshots <private snapshots dir>]`
  *
  * With `--backend snapshot` the issuers do real task work (their own models, through the answer runner and the gates) on the STORED days named by `--days`, one economy window per day;
  * that spends money too, so it needs `--yes-spend` and `--ledger` like model agents do. Stored Blockworks data may be used only until the end of the trial's deletion window.
@@ -73,7 +73,9 @@ const seed = arg(
 const rounds = Number(arg("--rounds", String(base.roundsPerWindow)));
 const params = { ...base, seed, roundsPerWindow: rounds };
 
-const backend = (counted ? "snapshot" : arg("--backend", "stand-in")) as "stand-in" | "snapshot";
+// an explicit --backend always wins; --counted only changes the DEFAULT (snapshot), so a counted run can still ask for stand-in explicitly (counted.dataSource in the
+// params file is exactly this: a counted run pre-registered as stand-in before any counted data exists to run it on for real)
+const backend = arg("--backend", counted ? "snapshot" : "stand-in") as "stand-in" | "snapshot";
 const spends = mode === "model" || backend === "snapshot";
 if (spends && !flag("--yes-spend")) {
   console.error(
@@ -94,10 +96,12 @@ const dir = privatePath("cr", "economy", runId);
 mkdirSync(dir, { recursive: true });
 const wp0 = loadCrPrint();
 const T0 = Math.floor(Date.UTC(2026, 10, 2) / 1000); // the economy's own calendar starts on a fixed midnight, so a seed replays exactly
+// --budgets overrides the trial's own data/lab/cr/budgets.json (optional, default unchanged): a scoped budgets file, same shape, for a run that needs its own
+// tighter cumulative cap (e.g. a counted run approved up to a specific dollar figure) without touching the real account-balance record every other run reads.
 const ledger = spends
   ? new SpendLedger({
       store: new FileLedgerStore(ledgerPath as string),
-      policy: policyFromBudgets(loadBudgets()),
+      policy: policyFromBudgets(loadBudgets(arg("--budgets"))),
     })
   : undefined;
 let worker: TaskWorker;
