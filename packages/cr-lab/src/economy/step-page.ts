@@ -70,8 +70,20 @@ function summarize(e: LogEntry, agent: string): string {
   }
 }
 
+/** every model agent that ever reasoned in this log, in first-appearance order -- the log's own ordered record, nothing from params */
+export function modelAgentsIn(log: readonly LogEntry[]): string[] {
+  const seen = new Set<string>();
+  const order: string[] = [];
+  for (const e of log)
+    if (e.kind === "reasoning" && !seen.has(e.actor)) {
+      seen.add(e.actor);
+      order.push(e.actor);
+    }
+  return order;
+}
+
 /** this agent's own entries, plus any settlement/gate/receipt entry for an escrow it opened or was the named counterparty ("to") of */
-function stepsFor(log: readonly LogEntry[], agent: string): Step[] {
+export function stepsFor(log: readonly LogEntry[], agent: string): Step[] {
   const escrowTo = new Map<string, string>();
   for (const e of log) if (e.kind === "escrow-open" && typeof e.escrow === "string") escrowTo.set(e.escrow, str(e, "to") ?? "");
   const relevant = log.filter((e) => {
@@ -100,9 +112,8 @@ function stepsFor(log: readonly LogEntry[], agent: string): Step[] {
   return steps;
 }
 
-export function renderStepPage(log: readonly LogEntry[], agent: string): string {
-  const steps = stepsFor(log, agent);
-  const rows = steps
+function rowsFor(steps: readonly Step[]): string {
+  return steps
     .map((s) => {
       const reasoningBlock =
         s.reasoning !== undefined
@@ -115,11 +126,9 @@ export function renderStepPage(log: readonly LogEntry[], agent: string): string 
       return `<tr><td>${s.seq}</td><td>${escapeHtml(s.window)} r${s.round}</td><td><code>${escapeHtml(s.kind)}</code></td><td>${escapeHtml(s.summary)}</td><td>${reasoningBlock}${summaryBlock}</td></tr>`;
     })
     .join("\n");
-  return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(agent)} — step by step</title>
-<style>
+}
+
+const PAGE_STYLE = `
   :root { color-scheme: light dark; }
   body { font: 14px/1.5 system-ui, sans-serif; margin: 0; padding: 24px; max-width: 1200px; margin-inline: auto; }
   table { border-collapse: collapse; width: 100%; }
@@ -129,13 +138,75 @@ export function renderStepPage(log: readonly LogEntry[], agent: string): string 
   details { margin-bottom: 4px; }
   details summary { cursor: pointer; opacity: .8; }
   .note { opacity: .8; max-width: 80ch; }
-</style></head>
+`;
+
+export function renderStepPage(log: readonly LogEntry[], agent: string): string {
+  const steps = stepsFor(log, agent);
+  const rows = rowsFor(steps);
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(agent)} — step by step</title>
+<style>${PAGE_STYLE}</style></head>
 <body>
 <h1>${escapeHtml(agent)} — every step, in order</h1>
 <p class="note">Read-only, from this run's own ordered log alone (never a live run): ${escapeHtml(agent)}'s own actions, plus any settlement/gate/receipt for an escrow headed to it. "reasoning" is the model's own stated reasoning before that turn's action; "provider reasoning summary" is the model's separate thinking summary (<code>ChatReply.reasoning</code>), shown only on the turns a provider actually returned one. This is a presentation join, not a scoring reconstruction -- nothing here is a pre-registered number.</p>
 <table><thead><tr><th>seq</th><th>when</th><th>kind</th><th>what happened</th><th>reasoning</th></tr></thead><tbody>
 ${rows}
 </tbody></table>
+</body></html>
+`;
+}
+
+/**
+ * One combined, self-contained page for a whole run: every model agent's full step-by-step turns, one section each, with a sidebar nav and (when supplied) the
+ * run's own pre-registered scoring text verbatim at the top. Same convention as `renderStepPage` -- no server, no new dependency, read from a stored log alone.
+ */
+export function renderCombinedRunPage(
+  log: readonly LogEntry[],
+  agents: readonly string[],
+  opts: { title?: string; scoringText?: string; runId?: string } = {},
+): string {
+  const title = opts.title ?? "CR economy run — every agent, step by step";
+  const nav = agents.map((a) => `<li><a href="#${escapeHtml(a)}">${escapeHtml(a)}</a></li>`).join("\n");
+  const sections = agents
+    .map((a) => {
+      const rows = rowsFor(stepsFor(log, a));
+      return `<section id="${escapeHtml(a)}">
+  <h2>${escapeHtml(a)}</h2>
+  <table><thead><tr><th>seq</th><th>when</th><th>kind</th><th>what happened</th><th>reasoning</th></tr></thead><tbody>
+${rows}
+  </tbody></table>
+</section>`;
+    })
+    .join("\n");
+  const scoringBlock =
+    opts.scoringText === undefined
+      ? ""
+      : `<section id="scoring"><h2>Pre-registered scoring</h2><pre>${escapeHtml(opts.scoringText)}</pre></section>`;
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(title)}</title>
+<style>${PAGE_STYLE}
+  body { display: flex; gap: 24px; align-items: flex-start; max-width: none; }
+  nav { position: sticky; top: 24px; flex: 0 0 160px; }
+  nav ul { list-style: none; padding: 0; margin: 0; }
+  nav li { margin-bottom: 4px; }
+  main { flex: 1 1 auto; min-width: 0; max-width: 1200px; }
+  section { margin-bottom: 40px; }
+  section pre { max-width: none; }
+</style></head>
+<body>
+<nav><h3>${opts.runId !== undefined ? escapeHtml(opts.runId) : "Agents"}</h3><ul>
+${opts.scoringText !== undefined ? '<li><a href="#scoring">Scoring</a></li>' : ""}
+${nav}
+</ul></nav>
+<main>
+<p class="note">Read-only, from this run's own ordered log alone (never a live run). Each section is one agent's full step-by-step record: reasoning, actions, payments. This is a presentation join, not a scoring reconstruction -- the Scoring section above is the pre-registered numbers verbatim, unrelated to this page's own rendering.</p>
+${scoringBlock}
+${sections}
+</main>
 </body></html>
 `;
 }
