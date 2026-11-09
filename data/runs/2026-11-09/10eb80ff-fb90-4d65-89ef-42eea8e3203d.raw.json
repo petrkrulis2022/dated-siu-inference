@@ -1,0 +1,39 @@
+{
+  "id": "fd899efe-b3d3-90ed-bbf4-009de77ec81a",
+  "object": "chat.completion",
+  "created": 1794184983,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"tracking_id\":\"SH-64D16B\",\"origin_city\":\"Denver\",\"destination_city\":\"Nairobi\",\"weight_kg\":238,\"status\":\"delivered\",\"priority\":\"standard\"}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nThe report contains shipment SH-64D16B from Denver to Nairobi. It weighs 238 kilograms with standard priority and is marked delivered. The JSON schema requires weight_kg as a number and status as a specific enum value.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1620,
+    "completion_tokens": 45,
+    "total_tokens": 1976,
+    "prompt_tokens_details": {
+      "text_tokens": 1620,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 311,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 46080000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
