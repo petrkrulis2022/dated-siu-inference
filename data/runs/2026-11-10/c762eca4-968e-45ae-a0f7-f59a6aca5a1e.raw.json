@@ -1,0 +1,39 @@
+{
+  "id": "a52e015b-6f7f-9720-8d96-f4a8b852ccd2",
+  "object": "chat.completion",
+  "created": 1794271159,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "D77AAE\n8EDBD6\n88F66E\n804936",
+        "reasoning_content": "I am scanning the archive log for internal notes containing archival access codes for named annexes.\n\nI found four access codes. I am checking for any additional ones.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 22597,
+    "completion_tokens": 17,
+    "total_tokens": 22960,
+    "prompt_tokens_details": {
+      "text_tokens": 22597,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 346,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 466040000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
