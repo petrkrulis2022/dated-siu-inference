@@ -152,6 +152,6 @@ Each of these is ruled out by the same fact: identical requests from the same si
   organisation's credit, which other keys also draw down.
 - As of the 11 Nov 00:37 UTC print run, the organisation's Anthropic credit was still refused. Any Anthropic call, including the phase 4 rehearsal, needs a
   top-up first.
-- Outside this note's scope, recorded so it is not lost: the print's basket shows claude-sonnet-5 at `0.023623` and claude-haiku-4-5 at `0.007739` on 8, 9, 10
-  and 11 November, the same figures every day, while every Claude call on 9 to 11 November was refused. The print appears to be carrying 8 November's Claude
-  figures forward. Not looked into here.
+- Outside this note's scope, recorded so it is not lost: the 9, 10 and 11 November prints mark both Claude models `carried_forward_from: "2026-11-08"`
+  (`basket_costs`, claude-sonnet-5 `0.023623`, claude-haiku-4-5 `0.007739`). This is the print's documented carry-forward, capped at three days, and the
+  11 November print used the third. Without a top-up before the next print, it drops both Claude models.
