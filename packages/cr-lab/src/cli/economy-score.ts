@@ -10,8 +10,11 @@
  * and reasoning text alone, nothing that identifies the agent, the window or the amount), read and classify each one by hand into "dollar cost", "price move", "fear" or
  * "other" (never "structural dollar route": the scoring itself decides that), write `{"<key>": "<class>", ...}` to a file, then run again with `--tags <that file>`. If
  * every exit is already classified "structural dollar route" (or there are no exits), scoring runs straight away with no tag file needed.
+ *
+ * v3a Phase 2 item 8: `--out` never overwrites an existing file, so a run's recorded scoring.md can never be replaced. `--diagnostic` heads the output as a diagnostic
+ * re-score with corrected code, never the pre-registered verdict -- the way to re-score a past run after the scorer is fixed, into a new file beside its scoring.md.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { loadParams, PARAMS_PATH } from "../economy/params.js";
 import { exitsToTagBlind, renderScoringReport, scoreRun, type ExitClass } from "../economy/scoring.js";
 import type { LogEntry } from "../economy/log.js";
@@ -26,7 +29,14 @@ if (logPath === undefined) {
   console.error("--log <path to a run's log.jsonl> is required");
   process.exit(2);
 }
-const params = loadParams(arg("--params", PARAMS_PATH));
+const out = arg("--out");
+if (out !== undefined && existsSync(out)) {
+  console.error(`${out} already exists; scoring never overwrites a file (a run's recorded scoring stands). Write to a new path.`);
+  process.exit(2);
+}
+const diagnostic = process.argv.includes("--diagnostic");
+const paramsPath = arg("--params", PARAMS_PATH) as string;
+const params = loadParams(paramsPath);
 const log: LogEntry[] = readFileSync(logPath, "utf-8")
   .split("\n")
   .filter((l) => l.trim() !== "")
@@ -63,8 +73,15 @@ if (tagsPath !== undefined) {
 }
 
 const result = scoreRun(log, params, tags);
-const report = renderScoringReport(result);
+const report = diagnostic
+  ? [
+      "# Diagnostic re-score with corrected code. Not the pre-registered verdict.",
+      "",
+      `Scored ${new Date().toISOString().slice(0, 10)} from \`${logPath}\` with params \`${paramsPath}\`. This run's pre-registered verdict is the scoring.md recorded beside its log, and it stands as recorded.`,
+      "",
+      renderScoringReport(result),
+    ].join("\n")
+  : renderScoringReport(result);
 console.log(report);
-const out = arg("--out");
-if (out !== undefined) writeFileSync(out, report, { mode: 0o600 });
+if (out !== undefined) writeFileSync(out, report, { mode: 0o600, flag: "wx" });
 process.exitCode = result.thesis.untagged.length === 0 ? 0 : 1;

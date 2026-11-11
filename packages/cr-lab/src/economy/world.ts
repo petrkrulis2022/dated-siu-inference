@@ -69,7 +69,8 @@ export type Action =
   | { tool: "order_front_claim"; task: TaskId; milli: MilliSiu; pay?: PayUnit }
   // v2 item 2: exactly one of priceMicroSiu/priceUsdcMicro is set, enforced by parse.ts -- the RAW unit the quoting researcher chose, converted and locked in `#postQuote`
   | { tool: "post_quote"; need: string; tasks: TaskId[]; priceMicroSiu?: MicroSiu; priceUsdcMicro?: UsdcUnits }
-  | { tool: "accept_quote"; quote: string }
+  // v3a Phase 2 item 7: `claims` names work claims the demand agent holds for this window, paid instead of the quote's own unit (the fSIU lifecycle's "Transfer")
+  | { tool: "accept_quote"; quote: string; claims?: string[] }
   | { tool: "buy_data"; dataset: string; pay?: PayUnit }
   | { tool: "commission_task"; tasks: TaskId[]; issuer: string; pay?: PayUnit }
   | { tool: "deliver_brief"; quote: string }
@@ -86,6 +87,8 @@ export interface TaskOutput {
   issuer: string;
   window: number;
   used: boolean;
+  /** v3a Phase 2 item 7: the claim whose presentation produced this output, when one did -- so a brief paid in claims is built from the work those claims bought */
+  fromClaim?: string;
 }
 export interface Need {
   id: string;
@@ -112,6 +115,13 @@ export interface Quote {
   agu?: AguUnits;
   /** v2: the USDC amount actually escrowed, when priceUnit === "usdc" */
   usdcEscrowed?: UsdcUnits;
+  /** v3a Phase 2 item 7: the work claims the demand agent paid with at acceptance, instead of an escrow -- they moved to the researcher then, so nothing is ever refunded */
+  paidInClaims?: { tokenId: string; milli: MilliSiu }[];
+  /**
+   * v3a Phase 2 item 1: when and how the quote stopped being live. Set once, at settlement or lapse, when the escrow fields above are cleared: the board then drops the
+   * quote, and any later action on it is refused with this as the reason.
+   */
+  closed?: { window: number; how: "paid" | "refunded" | "lapsed" | "lapsed-refunded" | "lapsed-paid-in-claims" };
 }
 export interface FrontOrder {
   agent: string;
@@ -206,8 +216,6 @@ export class World {
   #bufferIn = 0n;
   #bufferOut = 0n;
   #incomeIn = 0n;
-  /** v2 item 8: the hedger's own cumulative delivered count as of the last closeWindow, so each window's bonus/penalty counts only that window's NEW deliveries/shortfall */
-  #hedgerDeliveredAtLastClose = 0;
 
   constructor(
     readonly params: EconomyParams,
@@ -320,7 +328,14 @@ export class World {
           refused: e.message,
           ...(detail !== undefined ? { detail } : {}),
         });
-        return this.#result(agent, { ok: false, note: `refused: ${e.message}${suffix}` });
+        // v3a Phase 2 item 1: a refusal on a quote or a need names it, so an agent holding several can tell which one the chain refused
+        const subject =
+          action.tool === "accept_quote" || action.tool === "deliver_brief"
+            ? `${action.quote}: `
+            : action.tool === "post_quote"
+              ? `${action.need}: `
+              : "";
+        return this.#result(agent, { ok: false, note: `${subject}refused: ${e.message}${suffix}` });
       }
       throw e;
     }
@@ -357,10 +372,12 @@ export class World {
       case "order_front_claim": {
         if (a.milli <= 0n) return { ok: false, note: "order at least 0.001 SIU" };
         this.frontOrders.push({ agent, task: a.task, milli: a.milli, forWindow: this.window + 1, pay: a.pay });
-        // this exact text is parsed by scoring.ts's FRONT_ORDER_TASK regex (kill criterion 4) -- its shape never varies with `pay`
+        // this exact text is parsed by scoring.ts's FRONT_ORDER_TASK regex (kill criterion 4) -- its shape never varies with `pay`; the unit rides in its own field
+        // (v3a Phase 2 item 3: buying ahead is reported per currency)
         this.#log(agent, "message", {
           to: AGU_ISSUER,
           text: `front-claim order: ${show(a.milli, 3)} SIU of ${a.task} for the next window`,
+          pay: a.pay ?? "usdc",
         });
         return {
           ok: true,
@@ -373,7 +390,7 @@ export class World {
       case "post_quote":
         return this.#postQuote(agent, role, a);
       case "accept_quote":
-        return this.#acceptQuote(agent, role, a.quote);
+        return this.#acceptQuote(agent, role, a.quote, a.claims);
       case "buy_data":
         return this.#buyData(agent, a.dataset, a.pay);
       case "commission_task": {
@@ -642,13 +659,13 @@ export class World {
       milli: take,
       passed: out.passed,
     });
-    this.#addOutput(agent, ct.classId as TaskId, out, ct.issuer);
+    this.#addOutput(agent, ct.classId as TaskId, out, ct.issuer, tokenId);
     return {
       ok: true,
       note: `${ct.issuer} did ${ct.classId} work on your claim: ${out.passed ? "PASSED" : "FAILED (the claim stays with you; you may present it again this window)"}`,
     };
   }
-  #addOutput(owner: string, task: TaskId, out: WorkOutcome, issuer: string): TaskOutput {
+  #addOutput(owner: string, task: TaskId, out: WorkOutcome, issuer: string, fromClaim?: string): TaskOutput {
     const o: TaskOutput = {
       id: this.#id("out"),
       owner,
@@ -658,6 +675,7 @@ export class World {
       issuer,
       window: this.window,
       used: false,
+      ...(fromClaim !== undefined ? { fromClaim } : {}),
     };
     this.outputs.push(o);
     return o;
@@ -684,22 +702,28 @@ export class World {
   }
 
   #postQuote(agent: string, role: Role, a: Extract<Action, { tool: "post_quote" }>): Outcome {
-    if (role !== "research") return { ok: false, note: "only research agents post brief quotes" };
-    const need = this.needs.find(
-      (n) => n.id === a.need && n.status === "open" && n.window === this.window,
-    );
-    if (need === undefined) return { ok: false, note: `no open need ${a.need} this window` };
+    // v3a Phase 2 item 1: no quote exists yet, so every refusal here names the need it was for, and why
+    if (role !== "research") return { ok: false, note: `${a.need}: only research agents post brief quotes` };
+    const need = this.needs.find((n) => n.id === a.need);
+    if (need === undefined) return { ok: false, note: `${a.need}: no such need` };
+    if (need.status !== "open")
+      return {
+        ok: false,
+        note: `${a.need}: ${need.status === "met" ? "already met" : `lapsed at the end of window ${need.window}`}`,
+      };
+    if (need.window !== this.window)
+      return { ok: false, note: `${a.need}: due in window ${need.window}, and quotes are for this window's needs (window ${this.window})` };
     if (a.tasks.length < 2 || a.tasks.length > 4 || new Set(a.tasks).size !== a.tasks.length)
-      return { ok: false, note: "a brief bundles 2 to 4 different task types" };
+      return { ok: false, note: `${a.need}: a brief bundles 2 to 4 different task types` };
     if (!need.tasks.every((t) => a.tasks.includes(t)))
-      return { ok: false, note: `the quote must cover the need's tasks: ${need.tasks.join(", ")}` };
+      return { ok: false, note: `${a.need}: the quote must cover the need's tasks: ${need.tasks.join(", ")}` };
     // v2 item 2: a quote binds in whichever unit the researcher named; the OTHER unit's figure is locked now, at post time, never re-derived at acceptance (the design note's rate-locking rule)
     const rate = this.commodityRate;
     const priceUnit: "siu" | "usdc" = a.priceUsdcMicro !== undefined ? "usdc" : "siu";
     const priceUsdcMicro = priceUnit === "usdc" ? (a.priceUsdcMicro as UsdcUnits) : undefined;
     const priceMicroSiu =
       priceUnit === "usdc" ? microSiuForUsdcCeil(priceUsdcMicro as UsdcUnits, rate) : (a.priceMicroSiu as MicroSiu);
-    if (priceMicroSiu <= 0n) return { ok: false, note: "a price must be above zero" };
+    if (priceMicroSiu <= 0n) return { ok: false, note: `${a.need}: a price must be above zero` };
     const q: Quote = {
       id: this.#id("quote"),
       researcher: agent,
@@ -730,13 +754,42 @@ export class World {
     return { ok: true, note: `quote ${q.id} posted to ${need.agent}` };
   }
 
-  #acceptQuote(agent: string, role: Role, id: string): Outcome {
-    if (role !== "demand") return { ok: false, note: "only demand agents accept brief quotes" };
+  /**
+   * v3a Phase 2 item 1: why a quote is no longer open to accept or to deliver, in words its holder can act on -- `side` is who is asking: the demand agent who would pay
+   * ("buyer") or the research agent who would deliver ("seller").
+   */
+  #whyNotOpen(q: Quote, side: "buyer" | "seller"): string {
+    const w = q.closed?.window ?? this.window;
+    switch (q.status) {
+      case "accepted":
+        return q.paidInClaims !== undefined
+          ? "already accepted, paid in work claims"
+          : `already accepted, ${show((q.priceUnit === "usdc" ? q.usdcEscrowed : q.agu) ?? 0n)} ${q.priceUnit === "usdc" ? "USDC" : "AGU-lab"} in escrow`;
+      case "delivered":
+        return `already paid in window ${w}`;
+      case "failed":
+        return `its brief failed in window ${w} and ${side === "buyer" ? "your payment was" : "the buyer was"} refunded`;
+      case "lapsed":
+        if (q.closed?.how === "lapsed-refunded")
+          return `lapsed at the end of window ${w}; its escrow was refunded to ${side === "buyer" ? "you" : "the buyer"}`;
+        if (q.closed?.how === "lapsed-paid-in-claims")
+          return side === "buyer"
+            ? `lapsed undelivered at the end of window ${w}; the work claims you paid with stayed with ${q.researcher}`
+            : `lapsed undelivered at the end of window ${w}; the work claims paid for it stayed with you`;
+        return `lapsed at the end of window ${w}`;
+      case "posted":
+        return side === "buyer" ? "still posted" : `not accepted yet by ${q.demand}`;
+    }
+  }
+
+  #acceptQuote(agent: string, role: Role, id: string, claims?: readonly string[]): Outcome {
+    if (role !== "demand") return { ok: false, note: `${id}: only demand agents accept brief quotes` };
     const q = this.quotes.find((x) => x.id === id);
-    if (q === undefined || q.demand !== agent || q.status !== "posted")
-      return { ok: false, note: `no posted quote ${id} for you` };
-    if (this.quotes.some((x) => x.need === q.need && x.status === "accepted"))
-      return { ok: false, note: "you already accepted a quote for that need" };
+    if (q === undefined) return { ok: false, note: `${id}: no such quote` };
+    if (q.demand !== agent) return { ok: false, note: `${id}: offered to ${q.demand}, not to you` };
+    if (q.status !== "posted") return { ok: false, note: `${id}: ${this.#whyNotOpen(q, "buyer")}` };
+    const other = this.quotes.find((x) => x.need === q.need && x.status === "accepted");
+    if (other !== undefined) return { ok: false, note: `${id}: you already accepted ${other.id} for ${q.need}` };
     // the mandate's spend limit is stated in AGU-lab terms regardless of which rail actually pays -- a value cap, not a currency-specific one (item 3)
     const aguEquivalent = this.aguFor(q.priceMicroSiu);
     const m = this.params.mandates[agent];
@@ -744,8 +797,9 @@ export class World {
     if (m !== undefined && spent + aguEquivalent > m.spendLimitAguPerWindow)
       return {
         ok: false,
-        note: `mandate: spending limit of ${show(m.spendLimitAguPerWindow)} AGU-lab this window`,
+        note: `${id}: over spend cap: ${show(spent + aguEquivalent)} of ${show(m.spendLimitAguPerWindow)} AGU-lab-equivalent this window (${show(spent)} already spent, this quote ${show(aguEquivalent)})`,
       };
+    if (claims !== undefined && claims.length > 0) return this.#acceptWithClaims(agent, q, claims, spent + aguEquivalent);
     const escrow = this.#id("escrow");
     // escrowOpen can refuse (the buyer's real balance is short): commit no state at all -- status, escrow id, the spend counter -- until it actually succeeds, the same
     // order #commission already uses. Setting these first (as this branch once did) left a quote permanently "accepted" with no real escrow the one time a demand agent's
@@ -789,6 +843,66 @@ export class World {
       `${agent} accepted quote ${q.id}: ${show(units)} AGU-lab is in escrow, released when you deliver a passing brief this window`,
     );
     return { ok: true, note: `accepted ${q.id}: ${show(units)} AGU-lab in escrow` };
+  }
+
+  /** Commodity-grade micro-SIU in one mSIU of a claim of `series`: 1,000 for a Commodity claim; a Frontier claim converts through the two prints, rounded down */
+  #microSiuPerMilli(series: Series): bigint {
+    return series === "commodity" ? 1_000n : (1_000n * this.rates[series]) / this.rates.commodity;
+  }
+
+  /**
+   * v3a Phase 2 item 7 (docs/experiment-3a-design.md, the fSIU lifecycle's "Transfer: free. Paying in fSIU means transferring the claim: a demand agent can pay a research
+   * agent with claims for the window the brief is due"). The named claims are valued at face, in SIU, against the quote's own SIU price (locked at post time, so a
+   * USDC-priced quote is covered by the same rule), taking only as much of each as the price still needs, in the order given. Every claim must be held and presentable in
+   * this window, the window the brief is due; if the claims cannot cover the price, nothing moves.
+   *
+   * The claims move to the research agent at once: it must hold a claim to present it, so a claim payment cannot sit in an escrow the way a currency payment does. The
+   * research agent presents them for the brief's work (`#present`, each output remembering its claim) and `#deliverBrief` builds the brief from that work first, which is
+   * what meets this demand agent's need. Since a failed presentation leaves a claim alive (lifecycle step 3), a brief paid in claims is never settled as failed: delivery is
+   * refused until every component passes, and an undelivered one lapses at the window's end with the claims staying where they were paid.
+   */
+  #acceptWithClaims(agent: string, q: Quote, claimIds: readonly string[], spentAfter: AguUnits): Outcome {
+    const due = this.window;
+    const plan: { tokenId: string; milli: MilliSiu; task: string }[] = [];
+    let covered = 0n;
+    for (const id of new Set(claimIds)) {
+      if (covered >= q.priceMicroSiu) break;
+      const ct = this.chain.claimTypes.get(id);
+      const held = ct === undefined ? 0n : this.chain.claimBalance(agent, id);
+      if (ct === undefined || held === 0n) return { ok: false, note: `${q.id}: you hold no claim ${id}` };
+      const k = this.#windowOf(ct.windowFrom);
+      if (k !== due)
+        return { ok: false, note: `${q.id}: claim ${id} is presentable in window ${k}, not window ${due}, when this brief is due` };
+      const per = this.#microSiuPerMilli(ct.series);
+      const want = ceilDiv(q.priceMicroSiu - covered, per);
+      const take = want < held ? want : held;
+      plan.push({ tokenId: id, milli: take, task: ct.classId });
+      covered += take * per;
+    }
+    if (covered < q.priceMicroSiu)
+      return { ok: false, note: `${q.id}: your claims cover ${covered / 1_000n} of ${ceilDiv(q.priceMicroSiu, 1_000n)} mSIU` };
+    for (const p of plan) {
+      this.chain.transferClaim(p.tokenId, agent, q.researcher, p.milli);
+      this.#log(agent, "claim-transfer", {
+        tokenId: p.tokenId,
+        from: agent,
+        to: q.researcher,
+        milli: p.milli,
+        task: p.task,
+        quote: q.id,
+        need: q.need,
+        forWindow: due,
+      });
+    }
+    this.spentAguThisWindow.set(agent, spentAfter);
+    q.status = "accepted";
+    q.paidInClaims = plan.map((p) => ({ tokenId: p.tokenId, milli: p.milli }));
+    const face = plan.reduce((n, p) => n + p.milli, 0n);
+    this.notify(
+      q.researcher,
+      `${agent} accepted quote ${q.id} and paid in work claims, now yours: ${plan.map((p) => `${show(p.milli, 3)} SIU of ${p.task} claim ${p.tokenId}`).join("; ")}. They are presentable in this window (${due}) only and lapse worthless if never presented; present them for the brief's work, then deliver the brief.`,
+    );
+    return { ok: true, note: `accepted ${q.id}: paid in work claims (${show(face, 3)} SIU), now held by ${q.researcher}` };
   }
 
   /**
@@ -920,58 +1034,80 @@ export class World {
   }
 
   #deliverBrief(agent: string, role: Role, id: string): Outcome {
-    if (role !== "research") return { ok: false, note: "only research agents deliver briefs" };
+    if (role !== "research") return { ok: false, note: `${id}: only research agents deliver briefs` };
     const q = this.quotes.find((x) => x.id === id);
-    if (
-      q === undefined ||
-      q.researcher !== agent ||
-      q.status !== "accepted" ||
-      q.escrow === undefined
-    )
-      return { ok: false, note: `no accepted quote ${id} of yours` };
+    if (q === undefined) return { ok: false, note: `${id}: no such quote` };
+    if (q.researcher !== agent) return { ok: false, note: `${id}: it is ${q.researcher}'s quote, not yours` };
+    if (q.status !== "accepted") return { ok: false, note: `${id}: ${this.#whyNotOpen(q, "seller")}` };
     const sha = this.dataSha(this.window);
+    // v3a Phase 2 item 7: a brief paid in claims is built first from the work those very claims bought
+    const paidClaims = new Set((q.paidInClaims ?? []).map((c) => c.tokenId));
+    const usable = (x: TaskOutput, t: TaskId): boolean =>
+      x.owner === agent && x.task === t && !x.used && x.window === this.window;
     const parts: TaskOutput[] = [];
     for (const t of q.tasks) {
       const o =
         this.outputs.find(
-          (x) =>
-            x.owner === agent &&
-            x.task === t &&
-            !x.used &&
-            x.window === this.window &&
-            x.passed &&
-            x.dataSha === sha,
+          (x) => usable(x, t) && x.passed && x.dataSha === sha && x.fromClaim !== undefined && paidClaims.has(x.fromClaim),
         ) ??
-        this.outputs.find(
-          (x) => x.owner === agent && x.task === t && !x.used && x.window === this.window,
-        );
+        this.outputs.find((x) => usable(x, t) && x.passed && x.dataSha === sha) ??
+        this.outputs.find((x) => usable(x, t));
       if (o === undefined)
-        return { ok: false, note: `you have no ${t} output from today to put in the brief` };
+        return { ok: false, note: `${id}: you have no ${t} output from today to put in the brief` };
       parts.push(o);
     }
-    for (const p of parts) p.used = true;
     const passed = parts.every((p) => p.passed && p.dataSha === sha);
+    if (q.paidInClaims !== undefined && !passed) {
+      const bad = parts.find((p) => !(p.passed && p.dataSha === sha)) as TaskOutput;
+      return {
+        ok: false,
+        note: `${id}: your ${bad.task} output failed the gate, and this brief was paid in work claims, so nothing is refunded; a failed presentation leaves its claim alive, so present it again (or get passing work another way), then deliver`,
+      };
+    }
+    for (const p of parts) p.used = true;
+    q.status = passed ? "delivered" : "failed";
+    q.closed = { window: this.window, how: passed ? "paid" : "refunded" };
+    const need = this.needs.find((n) => n.id === q.need);
+    if (passed && need !== undefined) need.status = "met";
+    this.#log(GATE_RUNNER, "gate", {
+      brief: q.id,
+      components: parts.map((p) => ({
+        task: p.task,
+        passed: p.passed,
+        dataSha: p.dataSha,
+        ...(p.fromClaim !== undefined ? { fromClaim: p.fromClaim } : {}),
+      })),
+      passed,
+    });
+    if (q.paidInClaims !== undefined) {
+      // paid at acceptance, in claims: no escrow to settle and nothing to refund; the receipt records what paid for it
+      this.#log(GATE_RUNNER, "receipt", {
+        brief: q.id,
+        snapshotSha: sha,
+        verdict: "pass",
+        paidInClaims: q.paidInClaims,
+      });
+      this.notify(q.demand, `brief ${q.id} from ${agent}: PASSED; it was paid in work claims when you accepted it`);
+      return { ok: true, note: `brief ${q.id} passed: it was paid in work claims at acceptance` };
+    }
+    const escrow = q.escrow as string;
     const escrowed = (q.priceUnit === "usdc" ? q.usdcEscrowed : q.agu) as bigint;
     const paid = passed ? escrowed : 0n;
-    this.chain.escrowSettle(q.escrow, GATE_RUNNER, paid);
-    q.status = passed ? "delivered" : "failed";
+    this.chain.escrowSettle(escrow, GATE_RUNNER, paid);
+    // v3a Phase 2 item 1: settled -- the escrow fields no longer describe anything held, so they are cleared (the board read them as "in escrow" for the rest of the run)
+    q.escrow = undefined;
+    q.agu = undefined;
+    q.usdcEscrowed = undefined;
     // v2 item 8: research income, in whichever currency the brief was actually paid in
     if (paid > 0n) {
       const o = this.#objectiveFor(agent);
       if (q.priceUnit === "usdc") o.usdcNet += paid;
       else o.aguNet += paid;
     }
-    const need = this.needs.find((n) => n.id === q.need);
-    if (passed && need !== undefined) need.status = "met";
-    this.#log(GATE_RUNNER, "gate", {
-      brief: q.id,
-      components: parts.map((p) => ({ task: p.task, passed: p.passed, dataSha: p.dataSha })),
-      passed,
-    });
     const field = q.priceUnit === "usdc" ? "usdc" : "agu";
-    this.#log(GATE_RUNNER, "escrow-settle", { escrow: q.escrow, paid, refunded: escrowed - paid });
+    this.#log(GATE_RUNNER, "escrow-settle", { escrow, paid, refunded: escrowed - paid });
     this.#log(GATE_RUNNER, "receipt", {
-      escrow: q.escrow,
+      escrow,
       brief: q.id,
       snapshotSha: sha,
       verdict: passed ? "pass" : "fail",
@@ -1455,14 +1591,33 @@ export class World {
       }
     for (const q of this.quotes) {
       if (q.status === "accepted" && q.escrow !== undefined) {
+        // v3a Phase 2 item 4: the refund is whatever was escrowed, in either currency (this read `q.agu` alone, so a lapsed USDC escrow logged no amount at all), and
+        // `paid` is written beside it like every other escrow-settle entry
+        const refunded = (q.priceUnit === "usdc" ? q.usdcEscrowed : q.agu) ?? 0n;
         this.chain.escrowExpire(q.escrow);
-        q.status = "lapsed";
         this.#log(GATE_RUNNER, "escrow-settle", {
           escrow: q.escrow,
+          quote: q.id,
           expired: true,
-          refunded: q.agu,
+          paid: 0n,
+          refunded,
         });
-      } else if (q.status === "posted") q.status = "lapsed";
+        q.status = "lapsed";
+        q.closed = { window: k, how: "lapsed-refunded" };
+        q.escrow = undefined;
+        q.agu = undefined;
+        q.usdcEscrowed = undefined;
+      } else if (q.status === "accepted" && q.paidInClaims !== undefined) {
+        // v3a Phase 2 item 7: paid in claims at acceptance and never delivered -- the claims were the payment and stay with the research agent (they settle as its own claims
+        // just above: default if it presented them, expiry if not); the need lapses unmet like any other
+        q.status = "lapsed";
+        q.closed = { window: k, how: "lapsed-paid-in-claims" };
+        this.notify(q.demand, `quote ${q.id} lapsed undelivered at the end of window ${k}; the work claims you paid with stayed with ${q.researcher}`);
+        this.notify(q.researcher, `quote ${q.id} lapsed undelivered at the end of window ${k}; you kept the work claims ${q.demand} paid with`);
+      } else if (q.status === "posted") {
+        q.status = "lapsed";
+        q.closed = { window: k, how: "lapsed" };
+      }
     }
     // v2 fix 2 (owner, 2026-11-07): issuers pay real inference bills, their AGU-lab income goes back to the participant -- a scripted/code conversion (an issuer exit, not
     // a model's choice), so the FULL balance converts via `buyBackScripted`, never capped by `buybackCapBps` (the agent-facing cap `buyBack` enforces) and never competing
@@ -1522,9 +1677,12 @@ export class World {
       const owedByNow = Math.ceil((this.params.hedger.briefsSold * k) / this.totalWindows);
       const owedBefore = k > 1 ? Math.ceil((this.params.hedger.briefsSold * (k - 1)) / this.totalWindows) : 0;
       const dueThisWindow = owedByNow - owedBefore;
-      const deliveredThisWindow = this.forwardDelivered - this.#hedgerDeliveredAtLastClose;
-      const onTimeThisWindow = Math.min(deliveredThisWindow, dueThisWindow);
-      const lateThisWindow = Math.max(dueThisWindow - deliveredThisWindow, 0);
+      // v3a Phase 2 item 2: cumulative, as the build plan specified ("compare cumulative delivered vs. owed"). The briefs falling due this window are numbers
+      // owedBefore+1 .. owedByNow of the schedule; brief i is on time if at least i are delivered by this close. So a surplus delivered early banks against every later
+      // window, and a brief missed when due stays late even once caught up (it is never paid the bonus afterwards). This compared this window's own deliveries with this
+      // window's own dues, which threw an early surplus away and then scored later windows late (v2: "0 on time, 1 late (owed by now: 6, delivered: 10)").
+      const onTimeThisWindow = Math.max(0, Math.min(this.forwardDelivered - owedBefore, dueThisWindow));
+      const lateThisWindow = dueThisWindow - onTimeThisWindow;
       const o = this.#objectiveFor(hedger);
       if (onTimeThisWindow > 0) {
         o.usdcNet += this.params.hedger.priceUsdcPerBrief * BigInt(onTimeThisWindow);
@@ -1536,7 +1694,6 @@ export class World {
       }
       if (onTimeThisWindow > 0 || lateThisWindow > 0)
         this.#log(hedger, "objective", { onTimeThisWindow, lateThisWindow, owedByNow, deliveredByNow: this.forwardDelivered });
-      this.#hedgerDeliveredAtLastClose = this.forwardDelivered;
       // no separate "final reconciliation" step: owedByNow(totalWindows) === briefsSold exactly (a ceiling-based proportional schedule), so the last window's own
       // dueThisWindow/lateThisWindow above already accounts for every brief never delivered by the run's end -- a second pass here would double-count it (found
       // writing this test: a 2-brief, 2-window fixture read `late: 2` instead of `1` before this comment existed).

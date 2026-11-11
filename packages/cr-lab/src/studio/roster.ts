@@ -7,7 +7,8 @@
 import type { EconomyParams } from "../economy/params.js";
 import { instructionsFor } from "../economy/model-agent.js";
 import { TOOLS_BY_ROLE } from "../economy/parse.js";
-import { needsSchedule } from "../economy/runner.js";
+import { PARTICIPANT } from "../economy/memory-chain.js";
+import { genesisBalances, needsSchedule, type CrPrintFile } from "../economy/runner.js";
 import { show } from "../economy/units.js";
 import { TASKS, type TaskId } from "../tasks/instances.js";
 import type { Role } from "../economy/world.js";
@@ -74,9 +75,16 @@ function seatScheduleFor(params: EconomyParams, days: readonly string[]): SeatWi
   });
 }
 
-export function buildRoster(params: EconomyParams, seed: string): StudioRoster {
+/**
+ * `wp0` is the issuers' measured figures a run is built from (`cr-print.json`): v3a Phase 2 item 6 derives every starting wallet by running genesis itself
+ * (`genesisBalances`), since genesis is what decides them -- the hedger's half-to-AGU-lab split and the participant's created inventory exist nowhere in the params file.
+ */
+export function buildRoster(params: EconomyParams, seed: string, wp0: CrPrintFile): StudioRoster {
   const days = params.counted?.days ?? [];
   const needsFor = needsSchedule(seed, TASKS.filter((t): t is TaskId => t !== "CR-VS"));
+  const start = genesisBalances(params, wp0);
+  const usdcOf = (id: string): string => show(start.get(id)?.usdc ?? 0n);
+  const aguOf = (id: string): string => show(start.get(id)?.agu ?? 0n);
 
   const agents: AgentConfig[] = [];
 
@@ -84,8 +92,8 @@ export function buildRoster(params: EconomyParams, seed: string): StudioRoster {
     agents.push({
       id,
       role: "research",
-      startingUsdc: show(params.researchUsdc),
-      startingAgu: show(0n),
+      startingUsdc: usdcOf(id),
+      startingAgu: aguOf(id),
       tools: TOOLS_BY_ROLE.research,
       instructions: instructionsFor("research"),
     });
@@ -95,8 +103,8 @@ export function buildRoster(params: EconomyParams, seed: string): StudioRoster {
     agents.push({
       id,
       role: "demand",
-      startingUsdc: show(m?.usdc ?? 0n),
-      startingAgu: show(0n),
+      startingUsdc: usdcOf(id),
+      startingAgu: aguOf(id),
       tools: TOOLS_BY_ROLE.demand,
       instructions: instructionsFor("demand"),
       mandate:
@@ -119,8 +127,8 @@ export function buildRoster(params: EconomyParams, seed: string): StudioRoster {
   agents.push({
     id: params.agents.hedger,
     role: "hedger",
-    startingUsdc: show(params.hedger.usdc),
-    startingAgu: show(0n),
+    startingUsdc: usdcOf(params.agents.hedger),
+    startingAgu: aguOf(params.agents.hedger),
     tools: TOOLS_BY_ROLE.hedger,
     instructions: instructionsFor("hedger"),
     hedger: {
@@ -132,8 +140,9 @@ export function buildRoster(params: EconomyParams, seed: string): StudioRoster {
   agents.push({
     id: "PARTICIPANT",
     role: "participant",
-    startingUsdc: show(params.participant.usdc),
-    startingAgu: show(0n),
+    // the chain's own account name for the participant (the roster's displayed id is "PARTICIPANT")
+    startingUsdc: usdcOf(PARTICIPANT),
+    startingAgu: aguOf(PARTICIPANT),
     participant: {
       spreadBps: Number(params.participant.spreadBps),
       buybackCapBps: Number(params.participant.buybackCapBps),

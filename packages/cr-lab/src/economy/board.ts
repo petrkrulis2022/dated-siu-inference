@@ -144,8 +144,10 @@ export function boardFor(w: World, agent: string): Board {
         : role === "research"
           ? w.needs.filter((n) => n.window === w.window && n.status === "open")
           : [],
+    // v3a Phase 2 item 1: only a live quote (posted, or accepted and not yet settled) is on the board; paid, refunded and lapsed ones leave it -- a paid quote used to
+    // stay for the rest of the run as "delivered, ... in escrow" (docs/v2-code-check.md item 1)
     quotes: w.quotes.filter(
-      (x) => (x.demand === agent || x.researcher === agent) && x.status !== "lapsed",
+      (x) => (x.demand === agent || x.researcher === agent) && (x.status === "posted" || x.status === "accepted"),
     ),
     outputs: w.outputs.filter((o) => o.owner === agent && !o.used && o.window === w.window),
     issuerPrices: w.params.issuers.flatMap((i) =>
@@ -281,11 +283,16 @@ export function renderBoard(b: Board): string {
     lines.push("Quotes:");
     for (const q of b.quotes) {
       const escrowed =
-        q.agu !== undefined
-          ? `, ${show(q.agu)} AGU-lab in escrow`
-          : q.usdcEscrowed !== undefined
-            ? `, ${show(q.usdcEscrowed)} USDC in escrow`
-            : "";
+        q.paidInClaims !== undefined
+          ? `, paid in work claims (${show(
+              q.paidInClaims.reduce((n, c) => n + c.milli, 0n),
+              3,
+            )} SIU, now held by ${q.researcher})`
+          : q.agu !== undefined
+            ? `, ${show(q.agu)} AGU-lab in escrow`
+            : q.usdcEscrowed !== undefined
+              ? `, ${show(q.usdcEscrowed)} USDC in escrow`
+              : "";
       const bound = q.priceUnit === "usdc" ? `${show(q.priceUsdcMicro ?? 0n)} USDC (binding)` : quotePrice(b, q.priceMicroSiu);
       lines.push(
         `  - ${q.id}: ${q.researcher} → ${q.demand}, brief on ${q.tasks.join(" + ")} for ${bound}, ${q.status}${escrowed}`,

@@ -15,7 +15,7 @@ import { TASKS, type TaskId } from "../tasks/instances.js";
 import { SeedStream } from "../tasks/seeds.js";
 import type { Agent } from "./agents.js";
 import { boardFor, renderBoard } from "./board.js";
-import type { EconomyLog } from "./log.js";
+import { EconomyLog } from "./log.js";
 import type { Series } from "./memory-chain.js";
 import type { EconomyParams } from "./params.js";
 import { parseToolCall } from "./parse.js";
@@ -111,6 +111,32 @@ export function buildWorld(opts: {
   return w;
 }
 
+/**
+ * Every account's USDC and AGU-lab right after `genesis()`, found by running genesis itself on a scratch world (in-memory log, no task work) -- so anything that shows
+ * starting balances (the studio's roster) derives them exactly as a run does, never by echoing the params file (v3a Phase 2 item 6: the studio showed v2's hedger with
+ * 0.10 USDC and no AGU-lab, when genesis gives it 0.05 USDC and half its money's worth in AGU-lab).
+ */
+export function genesisBalances(
+  params: EconomyParams,
+  wp0: CrPrintFile,
+): Map<string, { usdc: bigint; agu: bigint }> {
+  const w = buildWorld({
+    params,
+    wp0,
+    log: new EconomyLog("stand-in"),
+    worker: {
+      work: () => Promise.reject(new Error("genesis does no task work")),
+    },
+    t0: 0,
+    dataSha: standInSha(params.seed),
+  });
+  w.genesis();
+  const out = new Map<string, { usdc: bigint; agu: bigint }>();
+  for (const a of new Set([...w.chain.usdc.keys(), ...w.chain.agu.keys()]))
+    out.set(a, { usdc: w.chain.balance(a, "USDC"), agu: w.chain.balance(a, "AGU") });
+  return out;
+}
+
 /** a stand-in day's hash: the label says what it is, so it can never be mistaken for a snapshot's */
 export const standInSha =
   (seed: string) =>
@@ -188,7 +214,10 @@ export async function runWindows(opts: {
         const rep = await a.reply(board, prompt);
         s.turns++;
         s.agentCostUsd = s.agentCostUsd.plus(rep.costUsd);
-        if (rep.serviceFailure !== undefined) {
+        // v3a Phase 2 item 5: a service failure no longer `continue`s past the checks at the bottom of this loop -- it skipped the stop rule, so a window could lose every
+        // turn to failed calls and run on (v2's window 7)
+        const parsed = rep.serviceFailure === undefined ? parseToolCall(rep.toolCall, a.role, board) : undefined;
+        if (parsed === undefined) {
           s.serviceFailures++;
           w.log.write(board.day, r, a.id, "turn", {
             seat: a.seat,
@@ -196,10 +225,7 @@ export async function runWindows(opts: {
             serviceFailure: rep.serviceFailure,
           });
           w.lastResult.set(a.id, "your last turn was lost to a service failure; nothing happened");
-          continue;
-        }
-        const parsed = parseToolCall(rep.toolCall, a.role, board);
-        if (!parsed.ok) {
+        } else if (!parsed.ok) {
           s.parseFailures++;
           w.log.write(board.day, r, a.id, "turn", {
             seat: a.seat,
@@ -263,8 +289,11 @@ export async function runWindows(opts: {
           });
         }
         w.checkInvariants();
-        if (s.turns >= 20 && s.parseFailures * 5 > s.turns)
-          throw new StopRule(`more than a fifth of ${s.turns} turns failed to parse`);
+        // v3a Phase 2 item 5: a turn lost to a service failure counts as lost, exactly like one that could not be parsed
+        if (s.turns >= 20 && (s.parseFailures + s.serviceFailures) * 5 > s.turns)
+          throw new StopRule(
+            `more than a fifth of ${s.turns} turns were lost (${s.parseFailures} parse failures, ${s.serviceFailures} service failures)`,
+          );
         if (s.agentCostUsd.plus(w.workSpendUsd).gt(w.params.spendCapUsdPerWindow))
           throw new StopRule("the window's spend cap is reached");
       }

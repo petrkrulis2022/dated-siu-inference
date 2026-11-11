@@ -53,6 +53,8 @@ function summarize(e: LogEntry, agent: string): string {
       return `receipt: ${str(e, "verdict") ?? ""}, ${str(e, "agu") ?? str(e, "usdc") ?? "0"}`;
     case "gate":
       return `gate: ${e.passed === true ? "PASSED" : "FAILED"}`;
+    case "claim-transfer":
+      return `${e.actor === agent ? "paid in work claims" : "received work claims"}: ${str(e, "milli") ?? "?"} mSIU of ${str(e, "task") ?? ""} claim ${str(e, "tokenId") ?? ""}${str(e, "quote") !== undefined ? ` for ${str(e, "quote")}` : ""}`;
     case "claim-mint":
       return `bought a work claim: ${str(e, "milli") ?? ""} mSIU of ${str(e, "task") ?? ""} for window ${str(e, "forWindow") ?? ""} (${e.payUnit === "agu" ? "AGU-lab" : "USDC"})`;
     case "need-lapsed":

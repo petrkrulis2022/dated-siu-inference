@@ -5,7 +5,7 @@
  *
  * "Two hops": AGU-lab paid to an agent through an escrow and later paid onward by that agent through another escrow (buyer → it → the next seller).
  */
-import type { LogEntry } from "./log.js";
+import { asBigInt, currencyOfEscrow, type Currency, type LogEntry } from "./log.js";
 import type { WindowStats } from "./runner.js";
 import type { World } from "./world.js";
 
@@ -25,16 +25,16 @@ export function judgeDevWindows(
 ): DevWindowVerdict {
   const log = w.log.entries;
   const turns = stats.reduce((n, s) => n + s.turns, 0);
-  const failures = stats.reduce((n, s) => n + s.parseFailures, 0);
+  // v3a Phase 2 item 5: a turn lost to a service failure is as lost as one that could not be parsed (v2's window 7 lost 14 of 48 turns to HTTP 400s and still read "336 of 336 parsed")
+  const parseFailures = stats.reduce((n, s) => n + s.parseFailures, 0);
+  const serviceFailures = stats.reduce((n, s) => n + s.serviceFailures, 0);
+  const lost = parseFailures + serviceFailures;
   const briefs = log.filter((e) => e.kind === "gate" && e.brief !== undefined);
   const passedBriefs = briefs.filter((e) => e.passed === true).length;
   const failedBriefs = briefs.filter((e) => e.passed === false).length;
+  // v3a Phase 2 item 4: a lapsed escrow's refund counts (it now logs its amount in either currency), and a stored log's decimal-string amounts read the same as live bigints
   const refunds = log.filter(
-    (e) =>
-      e.kind === "escrow-settle" &&
-      e.brief === undefined &&
-      typeof e.refunded === "bigint" &&
-      (e.refunded as bigint) > 0n,
+    (e) => e.kind === "escrow-settle" && e.brief === undefined && (asBigInt(e.refunded) ?? 0n) > 0n,
   ).length;
   const creates = log.filter((e) => e.kind === "create").length;
   const rolls = log.filter(
@@ -45,12 +45,12 @@ export function judgeDevWindows(
     (e) => e.kind === "nav" && e.reserveNav !== null && e.navWithBuffer !== null,
   ).length;
   const flagged = stats.flatMap((s) => s.flagged);
-  const hops = onwardSpends(log);
+  const hops = onwardSpends(log, "agu");
   const checks = [
     {
-      name: "turns parsed ≥ 90%",
-      ok: turns > 0 && (turns - failures) * 10 >= turns * 9,
-      detail: `${turns - failures} of ${turns}`,
+      name: "turns used ≥ 90% (parse and service failures both count as lost)",
+      ok: turns > 0 && (turns - lost) * 10 >= turns * 9,
+      detail: `${turns - lost} of ${turns} (${parseFailures} parse failures, ${serviceFailures} service failures)`,
     },
     { name: "a brief passed end to end", ok: passedBriefs >= 1, detail: `${passedBriefs} passed` },
     {
@@ -90,16 +90,18 @@ export function judgeDevWindows(
   return { passed: checks.every((c) => c.ok), checks };
 }
 
-/** escrow payments received by an agent and followed, later in the log, by that agent opening an AGU-lab escrow */
-export function onwardSpends(log: readonly LogEntry[]): number {
-  const opens = log.filter((e) => e.kind === "escrow-open");
+/**
+ * escrow payments received in `currency` and followed, later in the log, by the receiver opening an escrow in that SAME currency. v3a Phase 2 item 3: this counted every
+ * receipt and every later payment whatever their currency (v2's "6 onward spends of AGU-lab" were six USDC receipts), and read a stored log's decimal-string amounts as
+ * no payment at all.
+ */
+export function onwardSpends(log: readonly LogEntry[], currency: Currency): number {
+  const opens = log.filter((e) => e.kind === "escrow-open" && currencyOfEscrow(e) === currency);
   const sellerOf = new Map<string, string>();
   for (const o of opens)
     if (typeof o.escrow === "string" && typeof o.to === "string") sellerOf.set(o.escrow, o.to);
   let n = 0;
-  for (const s of log.filter(
-    (e) => e.kind === "escrow-settle" && typeof e.paid === "bigint" && (e.paid as bigint) > 0n,
-  )) {
+  for (const s of log.filter((e) => e.kind === "escrow-settle" && (asBigInt(e.paid) ?? 0n) > 0n)) {
     const seller = sellerOf.get(s.escrow as string);
     if (seller === undefined) continue;
     if (opens.some((o) => o.actor === seller && o.seq > s.seq)) n++;

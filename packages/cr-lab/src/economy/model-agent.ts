@@ -109,7 +109,7 @@ const COMMON = (siuFirst: boolean): string[] => [
   "You are one agent in a small closed market for crypto-research work. Each day is one window of several rounds; on each round you take exactly one action.",
   "Work is done by issuers: AI models that answer research tasks of four types (CR-VS perp DEX volume share, CR-PL lending protocol P&L, CR-UO token unlock overhang, CR-SM stablecoin supply moves). An answer is checked by an objective gate; it PASSES or FAILS.",
   marketLine(siuFirst),
-  "Payments for work and for briefs go into escrow and are released only if the work passes; a failed piece of work pays nothing and the buyer gets the full amount back.",
+  "Payments for work and for briefs go into escrow and are released only if the work passes; a failed piece of work pays nothing and the buyer gets the full amount back. A brief can also be paid with work claims for its window: they move to the research agent at once and are not refunded.",
   "AGU-lab can also be redeemed in kind: you receive your share of the reserve's work claims. A work claim is presented to its issuer in its own window for one task; a claim never presented lapses worthless at the end of its window.",
   "You may also order work claims for the next window at a discount to the print, and you may sell AGU-lab back for USDC at any time. Use whichever routes suit your goals.",
   "Your board shows a running result for your role -- profit, budget headroom, or delivery bonus and penalty -- computed in both currencies and updated every round.",

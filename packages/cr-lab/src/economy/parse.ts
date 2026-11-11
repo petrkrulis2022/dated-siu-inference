@@ -71,7 +71,7 @@ export const TOOL_HELP: Readonly<Record<string, string>> = {
   post_quote:
     "offer a brief to the demand agent with that need, priced in whole mSIU (a thousandth of a SIU, never a decimal) OR in USDC -- name exactly one of price_msiu or price_usdc, whichever you name is what binds at acceptance",
   accept_quote:
-    "accept a quote: its price goes into escrow in whichever unit the quote named (AGU-lab or USDC), released only if the brief passes",
+    "accept a quote: its price goes into escrow in whichever unit the quote named (AGU-lab or USDC), released only if the brief passes. Or name work claims you hold for this window in claims: they pay the price at face in SIU and move to the research agent at once, who presents them for the brief's work; a claim payment is not escrowed and is not refunded",
   buy_data:
     "buy today's data for a task type, in USDC or its AGU-lab equivalent at the live rate (default usdc); a research agent's first task on a dataset each day also buys that data",
   commission_task:
@@ -126,7 +126,17 @@ const ARG_SCHEMAS: Readonly<
     },
     required: ["need", "tasks"],
   },
-  accept_quote: { properties: { quote: { type: "string" } }, required: ["quote"] },
+  accept_quote: {
+    properties: {
+      quote: { type: "string" },
+      claims: {
+        type: "array",
+        items: { type: "string" },
+        description: "optional: ids of work claims you hold for this window, to pay with instead of the quote's own unit",
+      },
+    },
+    required: ["quote"],
+  },
   buy_data: {
     properties: {
       dataset: { type: "string", enum: ["perp", "lending", "tokens", "stablecoins"] },
@@ -269,8 +279,14 @@ function toAction(tool: string, args: Obj): Action {
             priceMicroSiu: amount(args, "price_msiu", 0) * 1_000n,
           };
     }
-    case "accept_quote":
-      return { tool: "accept_quote", quote: str(args, "quote") };
+    case "accept_quote": {
+      // v3a Phase 2 item 7: an optional list of claim ids to pay with
+      const claims = args.claims;
+      if (claims === undefined) return { tool: "accept_quote", quote: str(args, "quote") };
+      if (!Array.isArray(claims) || !claims.every((c) => typeof c === "string" && c.trim() !== ""))
+        throw new Error("args.claims must be a list of claim ids");
+      return { tool: "accept_quote", quote: str(args, "quote"), claims: (claims as string[]).slice(0, 8) };
+    }
     case "buy_data":
       return { tool: "buy_data", dataset: str(args, "dataset"), pay: pay(args) };
     case "commission_task": {

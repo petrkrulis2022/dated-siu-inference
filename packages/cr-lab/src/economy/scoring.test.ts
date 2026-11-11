@@ -175,7 +175,7 @@ describe("circulation, conversion and hops (model agents only)", () => {
   ];
 
   it("counts circulation only over receipts to a model agent (research/demand/hedger), not an issuer", () => {
-    const c = scoreCirculation(log, params);
+    const c = scoreCirculation(log, params, "agu");
     expect(c.opportunities).toBe(2);
     expect(c.onwardSpends).toBe(1);
     expect(c.share).toBe(0.5);
@@ -183,7 +183,7 @@ describe("circulation, conversion and hops (model agents only)", () => {
   });
 
   it("scores the conversion-to-USDC kill criterion against the same receipt population", () => {
-    const k = scoreConversionToUsdc(log, params, new Map());
+    const k = scoreConversionToUsdc(log, params, new Map(), "agu");
     expect(k.opportunities).toBe(2);
     expect(k.converted).toBe(1);
     expect(k.fails).toBe(false); // 50% < the 90% pre-registered threshold
@@ -197,7 +197,7 @@ describe("circulation, conversion and hops (model agents only)", () => {
       entry("2026-10-29", 2, "RESEARCH-1", { kind: "exit", agu: 1_000n, usdc: 10n }),
     ];
     const blindForced = exitsToTagBlind(forced);
-    const kForced = scoreConversionToUsdc(forced, params, new Map([[blindForced[0]?.key as string, "dollar cost"]]));
+    const kForced = scoreConversionToUsdc(forced, params, new Map([[blindForced[0]?.key as string, "dollar cost"]]), "agu");
     expect(kForced.converted).toBe(0); // the forced exit does not count as revealed preference
 
     const voluntary: LogEntry[] = [
@@ -211,16 +211,17 @@ describe("circulation, conversion and hops (model agents only)", () => {
       voluntary,
       params,
       new Map([[blindVoluntary[0]?.key as string, "fear"]]),
+      "agu",
     );
     expect(kVoluntary.converted).toBe(1);
 
     // an exit with no tag at all yet still counts (unclassified, not proven forced) -- per the design note's own stated rule
-    const kUntagged = scoreConversionToUsdc(voluntary, params, new Map());
+    const kUntagged = scoreConversionToUsdc(voluntary, params, new Map(), "agu");
     expect(kUntagged.converted).toBe(1);
   });
 
   it("reports hops 2 for a circulated receipt and 1 for one converted straight to USDC, median over both", () => {
-    const h = scoreHops(log, params);
+    const h = scoreHops(log, params, "agu");
     expect(h.values.sort()).toEqual([1, 2]);
     expect(h.median).toBe(1.5);
     expect(h.fails).toBe(false); // median > 1
@@ -234,11 +235,11 @@ describe("circulation, conversion and hops (model agents only)", () => {
    */
   it("gives the identical result once the same log has been written to JSONL and read back, as every real run's log is", () => {
     const roundTripped = roundTrip(log);
-    expect(scoreCirculation(roundTripped, params)).toEqual(scoreCirculation(log, params));
-    expect(scoreConversionToUsdc(roundTripped, params, new Map())).toEqual(
-      scoreConversionToUsdc(log, params, new Map()),
+    expect(scoreCirculation(roundTripped, params, "agu")).toEqual(scoreCirculation(log, params, "agu"));
+    expect(scoreConversionToUsdc(roundTripped, params, new Map(), "agu")).toEqual(
+      scoreConversionToUsdc(log, params, new Map(), "agu"),
     );
-    expect(scoreHops(roundTripped, params)).toEqual(scoreHops(log, params));
+    expect(scoreHops(roundTripped, params, "agu")).toEqual(scoreHops(log, params, "agu"));
   });
 });
 
@@ -344,8 +345,8 @@ describe("scoreKillCriteria and renderScoringReport", () => {
     ];
     const ahead = scoreBuyingAhead(log, params);
     const k = scoreKillCriteria(log, params, ahead, new Map());
-    expect(k.conversionOnReceipt.fails).toBe(true); // 100% conversion ≥ 90%
-    expect(k.medianHops.fails).toBe(true); // median hops 1
+    expect(k.conversionOnReceipt.agu.fails).toBe(true); // 100% conversion ≥ 90%
+    expect(k.medianHops.agu.fails).toBe(true); // median hops 1
     expect(k.noBuyingAheadForVisibleNeeds).toBe(true);
     expect(k.failCount).toBeGreaterThanOrEqual(2);
     expect(k.fails).toBe(true);

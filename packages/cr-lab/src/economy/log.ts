@@ -42,8 +42,31 @@ export const LOG_KINDS = [
   "genesis",
   "need-lapsed",
   "objective",
+  // v3a Phase 2 item 7: a work claim moved from one holder to another as payment (docs/experiment-3a-design.md, the fSIU lifecycle's "Transfer")
+  "claim-transfer",
 ] as const;
 export type LogKind = (typeof LOG_KINDS)[number];
+
+/** the two currencies a payment through an escrow can move in */
+export type Currency = "agu" | "usdc";
+export const CURRENCIES: readonly Currency[] = ["agu", "usdc"];
+
+/**
+ * A log field holding an amount is a live `bigint` only inside the SAME process that ran the window; once the log is written to disk and read back, the replacer below has
+ * turned it into a plain decimal string. This reads either back as the same `bigint`, so every reader of the log works identically on a live log and a stored one.
+ */
+export function asBigInt(v: unknown): bigint | undefined {
+  if (typeof v === "bigint") return v;
+  if (typeof v === "string" && /^-?\d+$/.test(v)) return BigInt(v);
+  return undefined;
+}
+
+/** which currency an `escrow-open` entry moved: every escrow-open the engine writes carries exactly one of an `agu` or a `usdc` amount */
+export function currencyOfEscrow(open: LogEntry): Currency | undefined {
+  if (open.agu !== undefined) return "agu";
+  if (open.usdc !== undefined) return "usdc";
+  return undefined;
+}
 
 export interface LogEntry {
   seq: number;

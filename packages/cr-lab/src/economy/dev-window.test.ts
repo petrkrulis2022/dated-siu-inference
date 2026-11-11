@@ -89,7 +89,7 @@ describe("development window DW0: scripted agents, memory ledger, stand-in data,
       );
       expect(before.length).toBeGreaterThan(0);
     }
-    expect(onwardSpends(log.entries)).toBeGreaterThanOrEqual(1);
+    expect(onwardSpends(log.entries, "agu")).toBeGreaterThanOrEqual(1);
   });
 
   it("ends every roll with zero reserve USDC and publishes NAV with and without the buffer", async () => {

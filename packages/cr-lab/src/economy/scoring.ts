@@ -31,7 +31,7 @@
  */
 import { TASKS, type TaskId } from "../tasks/instances.js";
 import { siuFirstForWindow } from "./board.js";
-import type { LogEntry } from "./log.js";
+import { asBigInt, currencyOfEscrow, type Currency, type LogEntry } from "./log.js";
 import type { EconomyParams } from "./params.js";
 import { reasoningBeforeOf } from "./overview.js";
 import { needsSchedule } from "./runner.js";
@@ -40,16 +40,8 @@ import { AGU_ISSUER } from "./world.js";
 export type ExitClass = "structural dollar route" | "dollar cost" | "price move" | "fear" | "other";
 const BLIND_TAGGED: readonly ExitClass[] = ["dollar cost", "price move", "fear", "other"];
 
-/**
- * A log field holding an amount is a live `bigint` only inside the SAME process that ran the window; once the log is written to disk and read back (every stored run this
- * module is meant to score, `economy-score.ts`'s whole reason to exist), `log.ts`'s own replacer has turned every bigint into a plain decimal string. This reads either
- * back as the same `bigint`, so every function below works identically on a live log and a stored one.
- */
-function asBigInt(v: unknown): bigint | undefined {
-  if (typeof v === "bigint") return v;
-  if (typeof v === "string" && /^-?\d+$/.test(v)) return BigInt(v);
-  return undefined;
-}
+/** v3a Phase 2 item 3: a receipt-based measure, scored separately for each currency a payment can move in */
+export type PerCurrency<T> = Record<Currency, T>;
 
 /** the log's own window (a day label) in run order, mapped back to the numeric window index 1..N every other part of the engine uses */
 export function windowIndexOf(log: readonly LogEntry[]): Map<string, number> {
@@ -65,10 +57,19 @@ const modelAgentIds = (params: EconomyParams): ReadonlySet<string> =>
 const FRONT_ORDER_PREFIX = "front-claim order: ";
 const FRONT_ORDER_TASK = /^front-claim order: [\d.]+ SIU of (\S+) for the next window$/;
 
+/** how a buying-ahead action was paid: v3a logs it on both kinds of action; a front-claim order logged before that is "unrecorded", and a claim mint before v2 was USDC-only */
+type AheadUnit = Currency | "unrecorded";
+interface AheadAction {
+  agent: string;
+  task: string | undefined;
+  forWindow: number;
+  unit: AheadUnit;
+}
+
 /** every `(agent, forWindow)` pair with a buying-ahead action: an `order_front_claim` (the synthetic message) or a `buy_claims` (the `claim-mint` entry) */
-function buyingAheadActions(log: readonly LogEntry[]): { agent: string; task: string | undefined; forWindow: number }[] {
+function buyingAheadActions(log: readonly LogEntry[]): AheadAction[] {
   const dayIndex = windowIndexOf(log);
-  const out: { agent: string; task: string | undefined; forWindow: number }[] = [];
+  const out: AheadAction[] = [];
   for (const e of log) {
     if (
       e.kind === "message" &&
@@ -78,10 +79,16 @@ function buyingAheadActions(log: readonly LogEntry[]): { agent: string; task: st
     ) {
       const k = dayIndex.get(e.window);
       const m = FRONT_ORDER_TASK.exec(e.text);
-      if (k !== undefined) out.push({ agent: e.actor, task: m?.[1], forWindow: k + 1 });
+      const unit: AheadUnit = e.pay === "agu" || e.pay === "usdc" ? e.pay : "unrecorded";
+      if (k !== undefined) out.push({ agent: e.actor, task: m?.[1], forWindow: k + 1, unit });
     }
     if (e.kind === "claim-mint")
-      out.push({ agent: e.actor, task: e.task as string, forWindow: e.forWindow as number });
+      out.push({
+        agent: e.actor,
+        task: e.task as string,
+        forWindow: e.forWindow as number,
+        unit: e.payUnit === "agu" ? "agu" : "usdc",
+      });
   }
   return out;
 }
@@ -196,7 +203,9 @@ export interface IssuerExitReport {
 /** the scripted issuers' own AGU-lab income sales (code, not an agent's choice — `world.ts`'s `closeWindow`), reported as dollar-cost exits separately from model agents' */
 export function scoreIssuerExits(log: readonly LogEntry[]): IssuerExitReport[] {
   const dayIndex = windowIndexOf(log);
-  const opens = log.filter((e) => e.kind === "escrow-open");
+  // v3a Phase 2 item 3: the issuer sells AGU-lab, so only AGU-lab payments into it (and, for the hop, AGU-lab receipts by its payer) are traced; a USDC commission was
+  // counted as one of the sale's AGU-lab payments
+  const opens = log.filter((e) => e.kind === "escrow-open" && currencyOfEscrow(e) === "agu");
   const openByEscrow = new Map(opens.map((o) => [o.escrow as string, o]));
   const paidOf = (e: LogEntry): bigint | undefined => (e.kind === "escrow-settle" ? asBigInt(e.paid) : undefined);
   const isReceipt = (e: LogEntry): boolean => (paidOf(e) ?? 0n) > 0n;
@@ -247,19 +256,23 @@ function exitClassBySeqOf(log: readonly LogEntry[], tags: ReadonlyMap<string, Ex
 }
 
 /**
- * Every AGU-lab receipt (an escrow paid to a model agent, never an issuer or the gate runner), whether that agent is later seen paying onward, and whether it later
- * converted to USDC. `exitClassBySeq`, when given, makes "converted" read the NEAREST subsequent exit's own classification (D132): a forced exit (a "structural dollar
- * route" or a blind-tagged "dollar cost") does not count as conversion, since kill criterion 1 is about revealed preference, not plumbing. An unclassified or voluntary
- * exit ("price move"/"fear"/"other") still counts, same as before. Omitting `exitClassBySeq` keeps the old "any later exit at all" reading, which `scoreCirculation` and
- * `scoreHops` rely on only for `onward` -- they never read `convertedToUsdc`, so they are unaffected by this fix.
+ * Every receipt IN `currency` (an escrow paid to a model agent, never an issuer or the gate runner), whether that agent is later seen paying onward IN THE SAME currency,
+ * and whether it later converted to USDC. `exitClassBySeq`, when given, makes "converted" read the NEAREST subsequent exit's own classification (D132): a forced exit (a
+ * "structural dollar route" or a blind-tagged "dollar cost") does not count as conversion, since kill criterion 1 is about revealed preference, not plumbing. An
+ * unclassified or voluntary exit ("price move"/"fear"/"other") still counts, same as before. Omitting `exitClassBySeq` keeps the old "any later exit at all" reading,
+ * which `scoreCirculation` and `scoreHops` rely on only for `onward` -- they never read `convertedToUsdc`, so they are unaffected by this fix.
+ *
+ * v3a Phase 2 item 3 (docs/v2-code-check.md 6b): this said "every AGU-lab receipt" and never filtered by currency, so v2's six USDC brief payments were scored as
+ * AGU-lab receipts by kill criteria 1 and 2 and by circulation alike.
  */
 function modelAgentReceipts(
   log: readonly LogEntry[],
   params: EconomyParams,
+  currency: Currency,
   exitClassBySeq?: ReadonlyMap<number, ExitClass>,
 ): ReceiptFact[] {
   const agents = modelAgentIds(params);
-  const opens = log.filter((e) => e.kind === "escrow-open");
+  const opens = log.filter((e) => e.kind === "escrow-open" && currencyOfEscrow(e) === currency);
   const settles = log.filter((e) => e.kind === "escrow-settle" && (asBigInt(e.paid) ?? 0n) > 0n);
   const openByEscrow = new Map(opens.map((o) => [o.escrow as string, o]));
   const exits = log.filter((e) => e.kind === "exit");
@@ -290,9 +303,9 @@ export interface CirculationScoring {
   holds: boolean | null;
 }
 
-/** "received currency is spent onward in at least half of opportunities" (§16.9); model agents only — an issuer's income sale is never a "receipt of currency" by an agent */
-export function scoreCirculation(log: readonly LogEntry[], params: EconomyParams): CirculationScoring {
-  const receipts = modelAgentReceipts(log, params);
+/** "received currency is spent onward in at least half of opportunities" (§16.9), for receipts in `currency`; model agents only — an issuer's income sale is never a "receipt of currency" by an agent */
+export function scoreCirculation(log: readonly LogEntry[], params: EconomyParams, currency: Currency): CirculationScoring {
+  const receipts = modelAgentReceipts(log, params, currency);
   const onwardSpends = receipts.filter((r) => r.onward).length;
   const share = receipts.length === 0 ? null : onwardSpends / receipts.length;
   return {
@@ -308,6 +321,8 @@ export interface ConversionScoring {
   opportunities: number;
   share: number | null;
   fails: boolean;
+  /** false for USDC receipts: a USDC receipt has nothing to convert to USDC, so its share is n/a by definition, never 0% */
+  applicable: boolean;
 }
 
 /**
@@ -318,11 +333,14 @@ export function scoreConversionToUsdc(
   log: readonly LogEntry[],
   params: EconomyParams,
   tags: ReadonlyMap<string, ExitClass>,
+  currency: Currency,
 ): ConversionScoring {
-  const receipts = modelAgentReceipts(log, params, exitClassBySeqOf(log, tags));
+  const receipts = modelAgentReceipts(log, params, currency, exitClassBySeqOf(log, tags));
+  if (currency === "usdc")
+    return { converted: 0, opportunities: receipts.length, share: null, fails: false, applicable: false };
   const converted = receipts.filter((r) => r.convertedToUsdc).length;
   const share = receipts.length === 0 ? null : converted / receipts.length;
-  return { converted, opportunities: receipts.length, share, fails: share !== null && share >= 0.9 };
+  return { converted, opportunities: receipts.length, share, fails: share !== null && share >= 0.9, applicable: true };
 }
 
 export interface HopsScoring {
@@ -331,9 +349,9 @@ export interface HopsScoring {
   fails: boolean;
 }
 
-/** kill criterion 2: "median hops stays at one" (the per-receipt floor this module's doc comment explains; 1 = money stopped with this agent, 2 = it was seen paid onward) */
-export function scoreHops(log: readonly LogEntry[], params: EconomyParams): HopsScoring {
-  const values = modelAgentReceipts(log, params).map((r) => (r.onward ? 2 : 1));
+/** kill criterion 2: "median hops stays at one" (the per-receipt floor this module's doc comment explains; 1 = money stopped with this agent, 2 = it was seen paid onward), for receipts in `currency` */
+export function scoreHops(log: readonly LogEntry[], params: EconomyParams, currency: Currency): HopsScoring {
+  const values = modelAgentReceipts(log, params, currency).map((r) => (r.onward ? 2 : 1));
   const median = medianOf(values);
   return { values, median, fails: median !== null && median <= 1 };
 }
@@ -359,6 +377,8 @@ export interface BuyingAheadScoring {
   holds: boolean | null;
   /** kill criterion 4: no demand agent ever bought ahead for a need it could see coming, in any window of the run */
   neverCovered: boolean;
+  /** v3a Phase 2 item 3: every buying-ahead action in the run, by the currency it was paid in */
+  actionsByUnit: Record<AheadUnit, number>;
 }
 
 /** the run's REAL seed, from its own `"genesis"` log entry (D133) -- never guessed from `--params`, which may still carry the committed file's dev default */
@@ -395,12 +415,15 @@ export function scoreBuyingAhead(log: readonly LogEntry[], params: EconomyParams
   }
   const windowsConsidered = perWindow.length;
   const windowsAtLeastQuarter = perWindow.filter((w) => w.atLeastQuarter === true).length;
+  const actionsByUnit: Record<AheadUnit, number> = { agu: 0, usdc: 0, unrecorded: 0 };
+  for (const a of ahead) actionsByUnit[a.unit]++;
   return {
     perWindow,
     windowsConsidered,
     windowsAtLeastQuarter,
     holds: windowsConsidered === 0 ? null : windowsAtLeastQuarter * 2 > windowsConsidered,
     neverCovered: perWindow.every((w) => w.covered === 0),
+    actionsByUnit,
   };
 }
 
@@ -410,6 +433,27 @@ export interface ComparabilityScoring {
   siuFirstSample: number;
   dollarsFirstSample: number;
   holds: boolean | null;
+  /** v3a Phase 2 item 3: the accepted offers in the sample (both display orders), by what paid for them */
+  acceptedPaidIn: Record<Currency | "claims", number>;
+}
+
+/**
+ * Every acceptance of a quote, once each, in log order: an escrow opened for it (paid in its own unit), or (v3a Phase 2 item 7) the first claim transferred for it (paid
+ * in work claims, no escrow)
+ */
+function quoteAcceptances(
+  log: readonly LogEntry[],
+): { entry: LogEntry; quote: string; paidIn: Currency | "claims" | undefined }[] {
+  const seen = new Set<string>();
+  const out: { entry: LogEntry; quote: string; paidIn: Currency | "claims" | undefined }[] = [];
+  for (const e of log) {
+    if (typeof e.quote !== "string" || seen.has(e.quote)) continue;
+    if (e.kind !== "escrow-open" && e.kind !== "claim-transfer") continue;
+    seen.add(e.quote);
+    // an escrow opened for a quote is its acceptance whatever it carries; its currency is read where the entry states one
+    out.push({ entry: e, quote: e.quote, paidIn: e.kind === "claim-transfer" ? "claims" : currencyOfEscrow(e) });
+  }
+  return out;
 }
 
 /**
@@ -427,7 +471,6 @@ export function scoreComparability(log: readonly LogEntry[]): ComparabilityScori
         { seq: e.seq, need: e.need as string, priceMicroSiu: asBigInt(e.priceMicroSiu) ?? 0n },
       ]),
   );
-  const accepts = log.filter((e) => e.kind === "escrow-open" && typeof e.quote === "string");
   const passed = new Set(
     log.filter((e) => e.kind === "gate" && e.brief !== undefined && e.passed === true).map((e) => e.brief as string),
   );
@@ -435,15 +478,17 @@ export function scoreComparability(log: readonly LogEntry[]): ComparabilityScori
   let siuCheapest = 0;
   let dollarsN = 0;
   let dollarsCheapest = 0;
-  for (const acc of accepts) {
-    const q = quotes.get(acc.quote as string);
-    if (q === undefined || !passed.has(acc.quote as string)) continue;
+  const acceptedPaidIn: Record<Currency | "claims", number> = { agu: 0, usdc: 0, claims: 0 };
+  for (const { entry: acc, quote, paidIn } of quoteAcceptances(log)) {
+    const q = quotes.get(quote);
+    if (q === undefined || !passed.has(quote)) continue;
     const alternatives = [...quotes.values()].filter((x) => x.need === q.need && x.seq < acc.seq);
     if (alternatives.length < 2) continue;
     const cheapest = alternatives.reduce((m, x) => (x.priceMicroSiu < m ? x.priceMicroSiu : m), alternatives[0]?.priceMicroSiu ?? 0n);
     const pickedCheapest = q.priceMicroSiu <= cheapest;
     const k = dayIndex.get(acc.window);
     if (k === undefined) continue;
+    if (paidIn !== undefined) acceptedPaidIn[paidIn]++;
     if (siuFirstForWindow(k)) {
       siuN++;
       if (pickedCheapest) siuCheapest++;
@@ -460,6 +505,7 @@ export function scoreComparability(log: readonly LogEntry[]): ComparabilityScori
     siuFirstSample: siuN,
     dollarsFirstSample: dollarsN,
     holds: siuShare === null || dollarsShare === null ? null : siuShare > dollarsShare,
+    acceptedPaidIn,
   };
 }
 
@@ -471,6 +517,8 @@ export interface QuotingInDollars {
   messages: number;
   share: number | null;
   fails: boolean;
+  /** v3a Phase 2 item 3: every posted quote by the unit that binds at acceptance -- reported beside the pre-registered message proxy, never scored into it */
+  bindingQuotesByUnit: { siu: number; usdc: number };
 }
 
 /** kill criterion 3: "agents quote in dollars when free to choose" — the proxy is a dollar amount in a `message` tool call's own text (see the module's doc comment) */
@@ -485,12 +533,24 @@ export function scoreQuotingInDollars(log: readonly LogEntry[], params: EconomyP
   );
   const count = messages.filter((e) => DOLLAR_IN_TEXT.test(e.text as string)).length;
   const share = messages.length === 0 ? null : count / messages.length;
-  return { count, messages: messages.length, share, fails: share !== null && share > 0 };
+  const quotes = log.filter((e) => e.kind === "quote");
+  const usdc = quotes.filter((e) => e.priceUnit === "usdc").length;
+  return {
+    count,
+    messages: messages.length,
+    share,
+    fails: share !== null && share > 0,
+    bindingQuotesByUnit: { siu: quotes.length - usdc, usdc },
+  };
 }
 
+/**
+ * Kill criteria 1 and 2 are reported for both currencies and FIRE on the AGU-lab sample alone: they close the question of whether AGU-lab circulates, and a USDC receipt
+ * says nothing about that (v3a Phase 2 item 3). An empty AGU-lab sample is n/a and never fires.
+ */
 export interface KillCriteria {
-  conversionOnReceipt: ConversionScoring;
-  medianHops: HopsScoring;
+  conversionOnReceipt: PerCurrency<ConversionScoring>;
+  medianHops: PerCurrency<HopsScoring>;
   quotingInDollars: QuotingInDollars;
   noBuyingAheadForVisibleNeeds: boolean;
   failCount: number;
@@ -504,13 +564,16 @@ export function scoreKillCriteria(
   buyingAhead: BuyingAheadScoring,
   tags: ReadonlyMap<string, ExitClass>,
 ): KillCriteria {
-  const conversionOnReceipt = scoreConversionToUsdc(log, params, tags);
-  const medianHops = scoreHops(log, params);
+  const conversionOnReceipt: PerCurrency<ConversionScoring> = {
+    agu: scoreConversionToUsdc(log, params, tags, "agu"),
+    usdc: scoreConversionToUsdc(log, params, tags, "usdc"),
+  };
+  const medianHops: PerCurrency<HopsScoring> = { agu: scoreHops(log, params, "agu"), usdc: scoreHops(log, params, "usdc") };
   const quotingInDollars = scoreQuotingInDollars(log, params);
   const noBuyingAheadForVisibleNeeds = buyingAhead.neverCovered;
   const failCount = [
-    conversionOnReceipt.fails,
-    medianHops.fails,
+    conversionOnReceipt.agu.fails,
+    medianHops.agu.fails,
     quotingInDollars.fails,
     noBuyingAheadForVisibleNeeds,
   ].filter(Boolean).length;
@@ -527,7 +590,7 @@ export function scoreKillCriteria(
 export interface ScoringReport {
   thesis: ExitScoring;
   issuerExits: IssuerExitReport[];
-  circulation: CirculationScoring;
+  circulation: PerCurrency<CirculationScoring>;
   buyingAhead: BuyingAheadScoring;
   comparability: ComparabilityScoring;
   killCriteria: KillCriteria;
@@ -542,7 +605,7 @@ export function scoreRun(
   return {
     thesis: scoreThesis(log, tags),
     issuerExits: scoreIssuerExits(log),
-    circulation: scoreCirculation(log, params),
+    circulation: { agu: scoreCirculation(log, params, "agu"), usdc: scoreCirculation(log, params, "usdc") },
     buyingAhead,
     comparability: scoreComparability(log),
     killCriteria: scoreKillCriteria(log, params, buyingAhead, tags),
@@ -551,10 +614,27 @@ export function scoreRun(
 
 const pct = (x: number | null): string => (x === null ? "n/a" : `${(x * 100).toFixed(1)}%`);
 const verdict = (ok: boolean | null): string => (ok === null ? "n/a (no sample)" : ok ? "HOLDS" : "DOES NOT HOLD");
+const CURRENCY_NAME: Record<Currency, string> = { agu: "AGU-lab", usdc: "USDC" };
+
+/** v3a Phase 2 item 3: one receipt-based figure per currency, an empty sample always "n/a (0 receipts)" with its count, never a percentage of nothing */
+function circulationLine(c: CirculationScoring, cur: Currency): string {
+  if (c.opportunities === 0) return `- ${CURRENCY_NAME[cur]}: n/a (0 receipts)`;
+  return `- ${CURRENCY_NAME[cur]}: ${c.onwardSpends} of ${c.opportunities} receipts spent onward in ${CURRENCY_NAME[cur]} (${pct(c.share)}) — ${verdict(c.holds)}`;
+}
+function conversionText(c: ConversionScoring, cur: Currency): string {
+  if (!c.applicable) return `${CURRENCY_NAME[cur]}: n/a (a USDC receipt is already USDC)`;
+  if (c.opportunities === 0) return `${CURRENCY_NAME[cur]}: n/a (0 receipts)`;
+  return `${CURRENCY_NAME[cur]}: ${c.converted} of ${c.opportunities} receipts converted (${pct(c.share)})`;
+}
+function hopsText(h: HopsScoring, cur: Currency): string {
+  if (h.median === null) return `${CURRENCY_NAME[cur]}: n/a (0 receipts)`;
+  return `${CURRENCY_NAME[cur]}: ${h.median} (${h.values.length} receipts)`;
+}
 
 export function renderScoringReport(r: ScoringReport): string {
   const lines: string[] = ["## Pre-registered scoring (§16.9)", ""];
   lines.push("### Thesis: agents exit only for sweeps and dollar costs", "");
+  lines.push("- (an exit is a sale of AGU-lab for USDC, so this measure is AGU-lab's by definition)");
   lines.push(
     `- exits: ${r.thesis.total} total (${r.thesis.untagged.length} untagged); by class: ${Object.entries(
       r.thesis.byClass,
@@ -584,29 +664,39 @@ export function renderScoringReport(r: ScoringReport): string {
     lines.push(
       `- window ${e.window} ${e.issuer}: ${e.agu} AGU-lab base units → ${e.usdc} USDC base units; ${e.payers.length} payment(s) in, hops ${e.payers.map((p) => p.hops).join(",") || "none"}`,
     );
-  lines.push("", "### Circulation: received currency spent onward in at least half of opportunities", "");
   lines.push(
-    `- ${r.circulation.onwardSpends} of ${r.circulation.opportunities} receipts spent onward (${pct(r.circulation.share)}) — ${verdict(r.circulation.holds)}`,
+    "",
+    "### Circulation: received currency spent onward in at least half of opportunities (per currency: a receipt counts as spent onward only by a later payment in the same currency)",
+    "",
   );
+  lines.push(circulationLine(r.circulation.agu, "agu"), circulationLine(r.circulation.usdc, "usdc"));
   lines.push("", "### Buying ahead: the hedger and demand agents cover ≥ a quarter of the next window's known needs in most windows", "");
   for (const w of r.buyingAhead.perWindow)
     lines.push(`- window ${w.window} → ${w.window + 1}: ${w.covered} of ${w.total} covered (${pct(w.share)})`);
   lines.push(
     `- ${r.buyingAhead.windowsAtLeastQuarter} of ${r.buyingAhead.windowsConsidered} windows at or above a quarter — ${verdict(r.buyingAhead.holds)}`,
   );
+  const u = r.buyingAhead.actionsByUnit;
+  lines.push(
+    `- buying-ahead actions by payment currency: AGU-lab ${u.agu}, USDC ${u.usdc}${u.unrecorded > 0 ? `, not recorded ${u.unrecorded}` : ""}`,
+  );
   lines.push("", "### Comparability: with SIU shown first, the cheapest passing offer is picked more often than with dollars first", "");
   lines.push(
     `- SIU first: ${pct(r.comparability.siuFirstCheapestShare)} of ${r.comparability.siuFirstSample} real choices; dollars first: ${pct(r.comparability.dollarsFirstCheapestShare)} of ${r.comparability.dollarsFirstSample} — ${verdict(r.comparability.holds)}`,
   );
+  const p = r.comparability.acceptedPaidIn;
+  lines.push(`- accepted offers in the sample, by what paid for them: AGU-lab ${p.agu}, USDC ${p.usdc}, work claims ${p.claims}`);
   lines.push("", "### Kill criteria: any two close the currency question for this design", "");
+  const k = r.killCriteria;
   lines.push(
-    `- 1. near-universal conversion to USDC on receipt (≥ 90%, a pre-registered proxy threshold): ${pct(r.killCriteria.conversionOnReceipt.share)} — ${r.killCriteria.conversionOnReceipt.fails ? "FIRES" : "does not fire"}`,
+    `- 1. near-universal conversion to USDC on receipt (≥ 90%, a pre-registered proxy threshold): ${conversionText(k.conversionOnReceipt.agu, "agu")}; ${conversionText(k.conversionOnReceipt.usdc, "usdc")} — ${k.conversionOnReceipt.agu.fails ? "FIRES" : "does not fire"} (scored on AGU-lab)`,
   );
   lines.push(
-    `- 2. median hops stays at one: ${r.killCriteria.medianHops.median ?? "n/a"} (${r.killCriteria.medianHops.values.length} receipts) — ${r.killCriteria.medianHops.fails ? "FIRES" : "does not fire"}`,
+    `- 2. median hops stays at one: ${hopsText(k.medianHops.agu, "agu")}; ${hopsText(k.medianHops.usdc, "usdc")} — ${k.medianHops.agu.fails ? "FIRES" : "does not fire"} (scored on AGU-lab)`,
   );
+  const qd = k.quotingInDollars;
   lines.push(
-    `- 3. quoting in dollars when free to choose (a dollar amount in an agent's own message): ${r.killCriteria.quotingInDollars.count} of ${r.killCriteria.quotingInDollars.messages} messages — ${r.killCriteria.quotingInDollars.fails ? "FIRES" : "does not fire"}`,
+    `- 3. quoting in dollars when free to choose (a dollar amount in an agent's own message): ${qd.messages === 0 ? "n/a (no messages)" : `${qd.count} of ${qd.messages} messages`}; binding quotes posted: ${qd.bindingQuotesByUnit.siu} in mSIU, ${qd.bindingQuotesByUnit.usdc} in USDC — ${qd.fails ? "FIRES" : "does not fire"}`,
   );
   lines.push(
     `- 4. no demand agent ever bought ahead for a visible need: ${r.killCriteria.noBuyingAheadForVisibleNeeds ? "FIRES" : "does not fire"}`,
