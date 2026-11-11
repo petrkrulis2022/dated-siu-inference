@@ -1,0 +1,39 @@
+{
+  "id": "8d589fc4-bfdd-9eb5-990d-18851cdc6faf",
+  "object": "chat.completion",
+  "created": 1794357641,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "AAAC77\nD9CBA5\n18D765\nDC4233",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nFour access codes were found in the document. They are AAAC77, D9CBA5, 18D765, and DC4233.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21276,
+    "completion_tokens": 17,
+    "total_tokens": 21731,
+    "prompt_tokens_details": {
+      "text_tokens": 21276,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 438,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 445140000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

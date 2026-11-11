@@ -1,0 +1,39 @@
+{
+  "id": "1d014551-e957-9a21-a57b-2e55bb8a52bb",
+  "object": "chat.completion",
+  "created": 1794357635,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "392C17\n6363C6\n78CAC6\nFC5331",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes so far: 392C17, 6363C6, 78CAC6, and FC5331. I am checking the rest of the document for more.\n\nI found no additional access codes. The four codes are 392C17, 6363C6, 78CAC6, and FC5331.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21669,
+    "completion_tokens": 16,
+    "total_tokens": 22052,
+    "prompt_tokens_details": {
+      "text_tokens": 21669,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 367,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 448680000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
