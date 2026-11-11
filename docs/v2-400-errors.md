@@ -154,4 +154,4 @@ Each of these is ruled out by the same fact: identical requests from the same si
   top-up first.
 - Outside this note's scope, recorded so it is not lost: the print's basket shows claude-sonnet-5 at `0.023623` and claude-haiku-4-5 at `0.007739` on 8, 9, 10
   and 11 November, the same figures every day, while every Claude call on 9 to 11 November was refused. The print appears to be carrying 8 November's Claude
-  figures forward. Not investigated here.
+  figures forward. Not looked into here.
