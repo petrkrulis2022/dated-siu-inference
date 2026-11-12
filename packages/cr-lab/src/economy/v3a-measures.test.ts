@@ -333,5 +333,8 @@ describe("D146 (owner, 2026-11-12): the scorer reports the lab subsidy each run 
       { label: "b", paidUsdc: 0n },
     ]);
     expect(renderArmScore(s)).toMatch(/Lab subsidy for unsold front work, per run: a 350,000 µ\$, b 0 µ\$/);
+    // the shadow NAV is what the reserve would support with no subsidy; the report never speaks of a buffer
+    expect(renderArmScore(s)).toMatch(/Against the shadow NAV \(no subsidy\)/);
+    expect(renderArmScore(s)).not.toMatch(/buffer/i);
   });
 });

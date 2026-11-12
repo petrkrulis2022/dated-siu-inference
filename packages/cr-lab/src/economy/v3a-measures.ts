@@ -498,7 +498,7 @@ export function renderArmScore(s: ArmScore): string {
   );
   const sv = s.storeOfValue;
   L.push(
-    `- **Store of value** — ${sv.verdict}: median work share at window 8 ${pct(sv.finalMedian)} (${sv.finalN} agents); in the low-volatility runs ${pct(sv.lowVolFinalMedian)} (${sv.lowVolFinalN}); by close: ${sv.medianByClose.map((c) => `w${c.close} ${pct(c.median)}`).join(", ")}. Against the shadow NAV (no buffer support): ${pct(sv.shadow.finalMedian)} at window 8 (low volatility ${pct(sv.shadow.lowVolFinalMedian)}); by close: ${sv.shadow.medianByClose.map((c) => `w${c.close} ${pct(c.median)}`).join(", ")}.`,
+    `- **Store of value** — ${sv.verdict}: median work share at window 8 ${pct(sv.finalMedian)} (${sv.finalN} agents); in the low-volatility runs ${pct(sv.lowVolFinalMedian)} (${sv.lowVolFinalN}); by close: ${sv.medianByClose.map((c) => `w${c.close} ${pct(c.median)}`).join(", ")}. Against the shadow NAV (no subsidy): ${pct(sv.shadow.finalMedian)} at window 8 (low volatility ${pct(sv.shadow.lowVolFinalMedian)}); by close: ${sv.shadow.medianByClose.map((c) => `w${c.close} ${pct(c.median)}`).join(", ")}.`,
   );
   const d = s.deferredPayment;
   L.push(
