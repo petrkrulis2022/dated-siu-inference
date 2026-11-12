@@ -283,6 +283,21 @@ export class World {
   #mintedUsdc = 0n;
   #bufferIn = 0n;
   #bufferOut = 0n;
+  /**
+   * D144 (owner, 2026-11-12): the shadow NAV is what the reserve alone would support with no buffer support, as a share of NAV, in ppm. Each roll the buffer covers would,
+   * without the buffer, have bought `cover` USDC less face at the print, so that roll's face is scaled by (face after the roll − that face) ÷ face after the roll; the share
+   * compounds roll by roll. Carry into the buffer never raises it (without a buffer, the surplus would not stay in the reserve). Creation, redemption and defaults move NAV and
+   * the shadow in proportion. Agents see this and NAV; never a NAV that includes the buffer.
+   */
+  #shadowPpm = 1_000_000n;
+  /** D144: the buffer's draw at this window's roll, USDC base units (0 when no roll ran or the buffer paid nothing) */
+  #bufferDraw = 0n;
+  get shadowNavPpm(): bigint {
+    return this.#shadowPpm;
+  }
+  get bufferDrawThisWindow(): UsdcUnits {
+    return this.#bufferDraw;
+  }
   #incomeIn = 0n;
 
   constructor(
@@ -1983,11 +1998,9 @@ export class World {
       const aguMicroSiu = this.siuOf(agu);
       const claimsMicroSiu = this.claimsValueMicroSiu(agent);
       const total = usdcMicroSiu + aguMicroSiu + claimsMicroSiu;
-      // D144: AGU-lab also valued at NAV WITH the buffer (the reserve's face plus the buffer's value, per unit), so the buffer's draw is visible in store of value
-      const { num, den } = this.chain.nav();
-      const bufferMicroSiu = (this.chain.balance(BUFFER, "USDC") * 1_000_000_000n) / rate;
-      const aguWithBuffer = den === 0n ? 0n : (agu * (num + bufferMicroSiu)) / den;
-      const totalWithBuffer = usdcMicroSiu + aguWithBuffer + claimsMicroSiu;
+      // D144 (owner, 2026-11-12): AGU-lab also valued at the shadow NAV, what the reserve alone would support with no buffer support, reported beside the verdict's NAV
+      const aguShadow = (aguMicroSiu * this.#shadowPpm) / 1_000_000n;
+      const totalShadow = usdcMicroSiu + aguShadow + claimsMicroSiu;
       this.#log(agent, "holdings", {
         atClose: k,
         role,
@@ -1999,8 +2012,8 @@ export class World {
         totalMicroSiu: total,
         aguValueMicroUsd: usdcForMicroSiu(aguMicroSiu, rate),
         workShareBps: total === 0n ? null : ((aguMicroSiu + claimsMicroSiu) * 10_000n) / total,
-        aguMicroSiuWithBuffer: aguWithBuffer,
-        workShareBpsWithBuffer: totalWithBuffer === 0n ? null : ((aguWithBuffer + claimsMicroSiu) * 10_000n) / totalWithBuffer,
+        aguMicroSiuShadow: aguShadow,
+        workShareBpsShadow: totalShadow === 0n ? null : ((aguShadow + claimsMicroSiu) * 10_000n) / totalShadow,
       });
     }
   }
@@ -2126,6 +2139,7 @@ export class World {
 
   /** R5 to R7 for the front window k */
   roll(k: number): void {
+    this.#bufferDraw = 0n;
     const front = this.chain.reserveLots.filter(
       (id) =>
         !this.chain.retired.has(id) &&
@@ -2260,6 +2274,12 @@ export class World {
     this.#bufferOut += r.cover;
     this.#bufferIn += r.carryToBuffer + r.dustToBuffer;
     this.#incomeIn += r.carryToIncome;
+    this.#bufferDraw = r.cover;
+    const faceAfter = this.chain.liveFace();
+    if (r.cover > 0n && faceAfter > 0n) {
+      const coverMilli = (r.cover * 1_000_000n) / rate;
+      this.#shadowPpm = (this.#shadowPpm * (faceAfter > coverMilli ? faceAfter - coverMilli : 0n)) / faceAfter;
+    }
     for (const [i, s] of sales.entries()) {
       const sp = salePay[i];
       // v3a: the roll accepts either currency, so every fill counts in the exchange measure as freely chosen; the AGU-lab issuer is the payee
@@ -2318,6 +2338,8 @@ export class World {
       faceUnsold: r.faceUnsold,
       faceBought: r.faceBought,
       rollCostUsdc: r.cost - r.proceeds > 0n ? r.cost - r.proceeds : 0n,
+      faceAfterMilli: faceAfter,
+      shadowRatioPpm: this.#shadowPpm,
     });
   }
 
@@ -2334,7 +2356,13 @@ export class World {
       den === 0n ? null : new D(String(num)).div(1000).plus(bufferSiu.times(1000)).times(1000).div(String(den));
     this.#log(AGU_ISSUER, "nav", {
       reserveNav: reserveNav?.toFixed(9) ?? null,
-      navWithBuffer: withBuffer?.toFixed(9) ?? null,
+      // D144 (owner, 2026-11-12): a v3a run never logs or shows a NAV that includes the buffer; it logs the shadow NAV (no buffer support) and the buffer's draw instead
+      ...(this.v3a === undefined
+        ? { navWithBuffer: withBuffer?.toFixed(9) ?? null }
+        : {
+            shadowNav: reserveNav === null ? null : reserveNav.times(String(this.#shadowPpm)).div(1_000_000).toFixed(9),
+            bufferDrawUsdc: this.#bufferDraw,
+          }),
       supply: this.chain.aguSupply,
       liveFaceMilli: this.chain.liveFace(),
       bufferUsdc: this.chain.balance(BUFFER, "USDC"),
@@ -2570,8 +2598,10 @@ export class World {
 
   /**
    * v3a (D143): each demand agent's owner takes a fixed dollar amount. The agent's USDC pays first; if it is short, enough of its AGU-lab is sold to the participant at the
-   * bid to cover the rest -- forced, so outside the buy-back cap and logged as forced (kept out of the exchange measure, which counts freely chosen payments only). Claims
-   * are never sold for it; anything still short is logged as the shortfall.
+   * bid to cover the rest -- forced, so outside the buy-back cap and logged as forced (kept out of the exchange measure, which counts freely chosen payments only). The
+   * design as updated with D144 ("AGU-lab or claims convert through the participant to cover it"): if AGU-lab still leaves it short, the agent's live claims are sold to the
+   * participant the same way, soonest-expiring first, at the same bid (face at the grade print, less half the spread), so holding claims neither dodges nor worsens a sweep.
+   * Claims in escrow are not the agent's and are never sold. Anything still short is logged as the shortfall.
    */
   #v3aSweep(): void {
     const rate = this.commodityRate;
@@ -2596,15 +2626,51 @@ export class World {
           }
         }
       }
+      const forcedClaimsMilli = this.chain.balance(a, "USDC") < demand ? this.#sweepClaims(a, demand - this.chain.balance(a, "USDC")) : 0n;
       const pay = this.chain.balance(a, "USDC") < demand ? this.chain.balance(a, "USDC") : demand;
       if (pay > 0n) {
         this.#payment(a, `OWNER-${a}`, "sweep", "usdc", (pay * 1_000_000_000n) / rate, { payeeAcceptsBoth: false, forced: true });
         this.chain.transfer("USDC", a, `OWNER-${a}`, pay);
       }
-      this.#log(a, "sweep", { usdc: pay, demanded: demand, forcedAgu, shortfall: demand - pay, to: `OWNER-${a}` });
-      if (forcedAgu > 0n || pay < demand)
-        this.notify(a, `your owner's sweep took ${pay} µ$${forcedAgu > 0n ? ", selling some of your AGU-lab at the bid to cover it" : ""}${pay < demand ? `; ${demand - pay} µ$ of it went unpaid` : ""}`);
+      this.#log(a, "sweep", { usdc: pay, demanded: demand, forcedAgu, forcedClaimsMilli, shortfall: demand - pay, to: `OWNER-${a}` });
+      if (forcedAgu > 0n || forcedClaimsMilli > 0n || pay < demand)
+        this.notify(
+          a,
+          `your owner's sweep took ${pay} µ$${forcedAgu > 0n ? ", selling some of your AGU-lab at the bid to cover it" : ""}${forcedClaimsMilli > 0n ? `${forcedAgu > 0n ? " and" : ","} selling ${forcedClaimsMilli} mSIU of your work claims at the bid` : ""}${pay < demand ? `; ${demand - pay} µ$ of it went unpaid` : ""}`,
+        );
     }
+  }
+
+  /** v3a sweep: sell `agent`'s live claims to the participant, soonest-expiring first, at the bid, until `need` USDC is raised or they run out; returns the mSIU sold */
+  #sweepClaims(agent: string, need: UsdcUnits): MilliSiu {
+    const twoBps = 20_000n;
+    const keep = twoBps - this.participant.spreadBps;
+    const held = [...this.chain.claims]
+      .map(([tokenId, holders]) => ({ tokenId, milli: holders.get(agent) ?? 0n, ct: this.chain.claimTypes.get(tokenId) }))
+      .filter((c) => c.milli > 0n && c.ct !== undefined && c.ct.windowTo > this.clock.now)
+      .sort((x, y) => (x.ct?.windowTo ?? 0) - (y.ct?.windowTo ?? 0) || (x.tokenId < y.tokenId ? -1 : 1));
+    let sold = 0n;
+    for (const c of held) {
+      if (need <= 0n) break;
+      const ct = c.ct as NonNullable<typeof c.ct>;
+      const rate = this.rates[ct.series];
+      // the bid on m mSIU is floor(m × rate × keep ÷ (1e6 × 20,000)); the fewest mSIU whose bid covers `need`, or all of the claim
+      let m = ceilDiv(need * 1_000_000n * twoBps, rate * keep);
+      if (m > c.milli) m = c.milli;
+      const bid = (m * rate * keep) / (1_000_000n * twoBps);
+      if (bid === 0n || this.chain.balance(PARTICIPANT, "USDC") < bid) continue;
+      this.chain.transferClaim(c.tokenId, agent, PARTICIPANT, m);
+      this.chain.transfer("USDC", PARTICIPANT, agent, bid);
+      this.#payment(agent, PARTICIPANT, "sweep conversion", "claims", this.#toCommodity(m * 1_000n, ct.series), {
+        payeeAcceptsBoth: true,
+        forced: true,
+        ref: c.tokenId,
+      });
+      this.#log(PARTICIPANT, "claim-transfer", { tokenId: c.tokenId, from: agent, to: PARTICIPANT, milli: m, usdc: bid, forced: "sweep" });
+      need -= bid;
+      sold += m;
+    }
+    return sold;
   }
 
   /** v3a: the work in a set of tasks, Commodity micro-SIU (each task at its class's fixed face) */

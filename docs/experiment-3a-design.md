@@ -42,7 +42,7 @@ Nine model agents and seven scripted actors; the gate runner is infrastructure, 
 | DEMAND-3 | Model, cautious mandate | Same | Same |
 | DEMAND-4 | Model, permissive mandate | Same | Same |
 | HEDGER | Model | Commissions, claims, forward deliveries | 0.05 USDC + the same value in AGU-lab |
-| AGU issuer | Code | Reserve, NAV, roll, creation and redemption at NAV (v6 AGU-lab mechanics) | Seeded reserve and buffer |
+| AGU issuer | Code | Reserve, NAV, roll, creation and redemption at NAV (v6 AGU-lab mechanics) | Seeded reserve; buffer 1.5 USDC, sized to hold NAV through window 8 |
 | PARTICIPANT | Code | Buys and sells AGU-lab at NAV × print ± 1%, buybacks capped at 10% of supply per window | 2 USDC |
 | ISSUER-C1, -C2, -X, -F | Code | Serve tasks; pass or fail by seeded draw | Headroom; bonds |
 
@@ -63,10 +63,10 @@ The print moves once per window, along a seeded path agents cannot see ahead of 
 - **What moves:** the fixed-basket CR print that AGU-lab's NAV and the participant reference. The four class prints move with it plus small independent noise, so relative prices between task types drift a little.
 - **Next print:** published at each window open. Agents learn it only then.
 - **Two volatility settings, both pre-registered:**
-  - **Low:** daily volatility set to the measured volatility of the real Dated SIU history at freeze (its largest real one-day move is 1.38%).
+  - **Low:** daily volatility set to the measured volatility of the real Dated SIU history at freeze (0.6549% a day; its largest real one-day move is 1.93%, on 26 Sep).
   - **High:** 5% daily volatility.
 - **Drift is zero in both settings.** This matters: if work keeps getting cheaper in dollars, as the decline thesis expects, holding USDC buys more future work and AGU-lab loses in dollar terms. Zero drift favours neither currency. Whether agents read the direction of prices is a separate test with its own drift settings, after v3a.
-- **Sweeps** fall at the end of windows 4 and 8 of 8, so owners' dollar demands land while agents are still deciding.
+- **Sweeps** fall at the end of windows 4 and 8 of 8, so owners' dollar demands land while agents are still deciding. Each sweep is a fixed USDC amount, a set share of starting value, shown on the board from window 1 round 1. If an agent's USDC is short, AGU-lab or claims convert through the participant to cover it; those conversions are logged as forced and kept out of the exchange measure, so holding either currency neither dodges nor worsens a sweep.
 
 ## How value is established
 
@@ -74,8 +74,8 @@ Agents learn what fSIU and AGU-lab are worth by watching claims get minted, pres
 
 **fSIU, following the v6 lifecycle:**
 
-1. **Mint.** A buyer asks for class, quantity and window. PROVIDER decides whether to sell, at what discount to the grade print and in which currency it accepts payment (USDC, AGU-lab or both), within the issuers' headroom.
-2. **Transfer.** Free. Paying in fSIU means transferring the claim: a demand agent can pay a research agent with claims for the window the brief is due.
+1. **Mint.** PROVIDER posts standing offers within the issuers' headroom: class, window, maximum quantity, discount to the grade print, accepted currency (USDC, AGU-lab or both) and optionally named buyers. It may revise or withdraw an offer each round. Buyers buy against an offer in any round, or post a request that stays on the board until PROVIDER answers or the window closes. PROVIDER is paid at sale, issuers are paid their measured cost when they serve, and defaults come from the bond and count against PROVIDER's profit.
+2. **Transfer.** Free. Paying in fSIU means transferring the claim: a demand agent can pay a research agent with claims for the window the brief is due. Claims paid for a brief sit in escrow like any other payment and return to the payer if the brief fails or the need lapses.
 3. **Present.** The holder presents with a task inside the window. A pass retires the claim. A fail leaves it alive to present again.
 4. **Close.** Presented but never served: the issuer's bond pays the holder at the grade print (default). Never presented: nothing (expired). Agents get a deadline warning for held, unpresented claims.
 
@@ -83,12 +83,12 @@ Agents learn what fSIU and AGU-lab are worth by watching claims get minted, pres
 
 - **Creation and redemption at NAV,** in kind and pro rata, open to any agent above a minimum size.
 - **The roll sells front claims in either currency.** v2 forced USDC here, which made every forward purchase a "structural dollar route".
-- **Paying for work now with AGU-lab:** directly to a seller who accepts it, or by swapping for current-window claims through the participant.
+- **Paying for work now with AGU-lab:** directly to a seller who accepts it, by redeeming in kind, or by buying current-window claims from PROVIDER.
 
 **What every agent can see on the board:**
 
-- **NAV derivation each window:** reserve claims in SIU, expected default losses, supply, buffer, and NAV with and without the buffer, in SIU and in dollars.
-- **The claims record:** for each issuer and window, claims minted, presented, redeemed, defaulted and expired, plus PROVIDER's posted discounts.
+- **NAV derivation each window:** reserve claims in SIU, expected default losses, supply, NAV in SIU and in dollars, the buffer remaining and its draw this window, and the shadow NAV the reserve alone would support without the buffer.
+- **The claims record:** for each issuer and window, claims minted, presented, redeemed, defaulted and expired, plus PROVIDER's current and past discounts.
 - **Its own position:** every claim held, its window, its deadline and its value at today's print.
 
 ## Issuers and tasks
@@ -98,7 +98,7 @@ Issuers are code: each commissioned task passes or fails by a seeded draw from t
 | Issuer | Stands for | Task types offered | Pass rate source |
 | --- | --- | --- | --- |
 | ISSUER-C1, -C2 | claude-haiku-5-5 | CR-PL, CR-UO, CR-SM (it fails CR-VS) | Trial, per task type |
-| ISSUER-X | A cheaper, less reliable configuration | Same three | Trial's weakest qualifying rate, pre-registered |
+| ISSUER-X | A cheaper, less reliable configuration | Same three | D119's 80% qualifying floor, a pre-registered rule; list price 15% below C1/C2. Failed work is refunded (v6), so X's cost is timing risk: a failed task burns rounds and can make a need lapse |
 | ISSUER-F | claude-sonnet-5 | All four, including CR-VS | Trial, per task type |
 
 - **Pass-rate table:** exported from the trial ledger in `dsi-cr-trial` at freeze, with counts per model and task type, and hashed with the config.
@@ -113,7 +113,7 @@ Eight counted runs: two arms, two volatility settings, two seeds each, at about 
 | Arm | Who decides holdings | What it tests |
 | --- | --- | --- |
 | A: free choice | Agents, within mandates | Whether agents choose AGU-lab for each function unprompted |
-| B: owner reserve | Owners set a rule: at each window close, hold at least 50% of the next three windows' known needs in AGU-lab or fSIU; agents choose instrument and timing | Whether AGU-lab reaches balance sheets through owners' treasury rules, the board's route |
+| B: owner reserve | Owners set a rule: at each window close, hold at least 50% of the next three windows' known needs in AGU-lab or fSIU; agents choose instrument and timing. The rule and current shortfall are on the board and compliance is checked at every close, never forced. Applies to the four demand agents and the hedger, whose owed briefs count as known needs | Whether AGU-lab reaches balance sheets through owners' treasury rules, the board's route |
 
 - **Arm B measures more than obedience:** whether agents spend the reserve on work, unwind it right after each check, or work around the rule. Those are scored, not just compliance.
 - **Size:** 8 windows × 8 rounds × 9 model agents = 576 turns per run. v2 cost $0.0115 a turn, so about $6.60; the richer board pushes it towards $7–8.
@@ -126,9 +126,9 @@ Each function of money gets its own share-based measure, scored per currency and
 
 | Function | Measure | Counts only | Signal for AGU-lab | Kill signal |
 | --- | --- | --- | --- | --- |
-| Exchange | AGU-lab share of payments, by value | Payments where the payer held enough of both and the payee accepted both | ≥ 30% | < 10% |
+| Exchange | AGU-lab share of payments, by value | Payments where the payer held enough of both and the payee accepted both; claim transfers are excluded (buying the claim was the payment) and reported under deferred payment | ≥ 30% | < 10% |
 | Account | Unit used in reasoning, coded blind: SIU, dollars, both, none | Every priced decision (quote, counter, accept, mint, buy ahead) | SIU in ≥ 40% of decisions | SIU in < 20% and binding quotes in mSIU < 10% |
-| Store of value | Share of each agent's wealth in AGU-lab and fSIU at each window close, valued at the print | Every agent, every close | Median ≥ 40% at window 8 (start is 50%) | Median < 15% at window 8 in the low-volatility setting |
+| Store of value | Share of each agent's wealth in AGU-lab and fSIU at each window close, valued at the print, verdict on the NAV prices use, with the shadow NAV (no buffer support) reported beside it | Every agent, every close | Median ≥ 40% at window 8 (start is 50%) | Median < 15% at window 8 in the low-volatility setting |
 | Deferred payment | Share of forward commitments in each currency; missed worthwhile purchases | Opportunities computed as worthwhile in advance | Missed ≤ 50% of worthwhile purchases | Missed ≥ 80%, with at least 20 worthwhile opportunities |
 | Comparability | Share of choices that take the cheapest offer per accepted mSIU, SIU-first display vs dollars-first | Decisions with two or more offers that could all pass | SIU-first beats dollars-first by ≥ 10 points | No difference, with at least 40 decisions per display |
 
@@ -145,7 +145,7 @@ Each function of money gets its own share-based measure, scored per currency and
 A counted run is scored only if it passes every gate below; a failed run is reported as invalid with its reason, never rerun quietly.
 
 - **Lost turns (parse or service failures):** 1% or fewer.
-- **Starting balances:** every role holds both currencies at equal value, checked from the genesis log entry.
+- **Starting balances:** every role holds both currencies at equal value, checked from the genesis log entry. AGU-lab's buffer must also last to the end of window 8.
 - **Board integrity:** no paid or refunded quote appears as open; every refusal carries its reason.
 - **Scorer reads the seed from the log,** never from the config default (the D133 lesson).
 - **Enough data:** each measure states its own minimum count; below it, that measure reports n/a.
@@ -175,7 +175,7 @@ If you do want STU itself to become a token, that is a board decision that chang
 
 | # | Decision | Approved |
 | --- | --- | --- |
-| 1 | Thresholds in the measures table | Approve as proposed, or change them now; never after counted data exists |
+| 1 | Thresholds in the measures table | As proposed; never changed after counted data exists |
 | 2 | Arm B's owner rule | Hold at least 50% of the next three windows' known needs in AGU-lab or fSIU |
 | 3 | Seeds per cell | Two, with a third only where the two disagree |
 | 4 | High-volatility setting | 5% daily |
@@ -183,3 +183,5 @@ If you do want STU itself to become a token, that is a board decision that chang
 | 6 | PROVIDER's objective | Profit in SIU over the run, with a penalty for defaults it causes |
 | 7 | v3b's third currency | CAP-lab, measured in STU; STU itself stays a unit |
 | 8 | Cause of the 400 errors in window 7 | Claude Code finds it before any fix is built |
+
+Phase 3 decisions, also approved 11 Nov 2026: PROVIDER sells through standing offers; sweeps are a fixed dollar demand; arm B's rule is stated, checked and scored, never enforced; ISSUER-X uses D119's 80% floor and lists 15% below C1/C2; the DATA seller is the seventh scripted actor. Phase 3 report decisions (D144): the buffer is 1.5 USDC with its own validity gate; failed work stays refunded; claims paid for briefs go into escrow; claim transfers are excluded from the exchange denominator; the participant swap is dropped; PROVIDER's discount history is shown; low volatility is 0.6549% a day; the spend cap of $2 a window is an API-cost safety stop, not an agent limit; the board shows the buffer's draw and a shadow NAV, never a NAV that includes the buffer.

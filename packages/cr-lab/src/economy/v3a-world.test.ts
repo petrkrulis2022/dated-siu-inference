@@ -522,21 +522,19 @@ describe("v3a tools and instructions", () => {
   });
 });
 
-describe("publishNav (found building v3a): NAV with the buffer adds the buffer's value in the same unit as the reserve's face", () => {
-  it("logs (live face + buffer value) per AGU-lab, not the buffer understated a thousandfold", () => {
-    const { w } = v3aWorld("v3a-nav-buffer");
-    w.publishNav();
+describe("publishNav, v3a (D144, owner 2026-11-12): the NAV log carries the shadow NAV and the buffer's draw, never a NAV that includes the buffer", () => {
+  it("logs the shadow NAV as the reserve NAV times the shadow ratio, and this window's draw", () => {
+    const { w } = v3aWorld("v3a-nav-shadow");
     const e = w.log.entries.filter((x) => x.kind === "nav").at(-1) as LogEntry;
-    const face = e.liveFaceMilli as bigint; // mSIU
-    const supply = e.supply as bigint; // base units, 1e6 per AGU-lab
-    const bufferSiu = Number(e.bufferUsdc as bigint) / 1e6 / (Number(e.printNanoUsdPerSiu as bigint) / 1e9);
-    const expected = (Number(face) / 1000 + bufferSiu) / (Number(supply) / 1e6);
-    expect(Number(e.navWithBuffer)).toBeCloseTo(expected, 6);
-    expect(Number(e.navWithBuffer)).toBeGreaterThan(Number(e.reserveNav) + 0.01); // a 0.5 USDC buffer is visible, not 0.001 of it
+    const roll = w.log.entries.find((x) => x.kind === "roll-buy" && x.summary === true && x.refused === undefined) as LogEntry;
+    expect(e.navWithBuffer).toBeUndefined();
+    expect(e.bufferDrawUsdc).toBe(roll.cover);
+    expect(Number(e.shadowNav)).toBeCloseTo((Number(e.reserveNav) * Number(roll.shadowRatioPpm as bigint)) / 1e6, 6);
+    expect(Number(e.shadowNav)).toBeLessThan(Number(e.reserveNav));
   });
 });
 
-describe("D144: PROVIDER's discount history in the claims record; holdings valued against both NAVs", () => {
+describe("D144: PROVIDER's discount history in the claims record; holdings valued at NAV and at the shadow NAV", () => {
   it("shows every discount PROVIDER posted for an issuer and window, revised and withdrawn ones included", async () => {
     const { w } = v3aWorld("v3a-discounts");
     const post = (discountBps: bigint, replaces?: string) =>
@@ -552,10 +550,63 @@ describe("D144: PROVIDER's discount history in the claims record; holdings value
     expect(renderBoard(boardFor(w, "DEMAND-1"))).toMatch(/ISSUER-X window 2: .*PROVIDER posted CR-UO 15% off \(replaced\), CR-UO 12% off \(withdrawn\)/);
   });
 
-  it("logs each agent's AGU-lab at NAV and at NAV with the buffer, and both work shares", () => {
-    const { w } = v3aWorld("v3a-hold-buffer", { start: false });
-    const h = w.log.entries.find((e) => e.kind === "holdings" && e.actor === "DEMAND-1") as LogEntry;
-    expect((h.aguMicroSiuWithBuffer as bigint) > (h.aguMicroSiu as bigint)).toBe(true);
-    expect((h.workShareBpsWithBuffer as bigint) > (h.workShareBps as bigint)).toBe(true);
+  it("logs each agent's AGU-lab at NAV and at the shadow NAV (no buffer support), and both work shares -- never a NAV that includes the buffer", () => {
+    const { w } = v3aWorld("v3a-hold-shadow");
+    w.closeWindow(1);
+    const h = w.log.entries.find((e) => e.kind === "holdings" && e.atClose === 1 && e.actor === "DEMAND-1") as LogEntry;
+    expect((h.aguMicroSiuShadow as bigint) <= (h.aguMicroSiu as bigint)).toBe(true);
+    expect(h.workShareBpsShadow).toBeDefined();
+    expect(h.aguMicroSiuWithBuffer).toBeUndefined();
+    expect(h.workShareBpsWithBuffer).toBeUndefined();
+  });
+});
+
+describe("D144 (owner, 2026-11-12): the board shows the buffer's draw and a shadow NAV, never a NAV that includes the buffer", () => {
+  it("a roll the buffer covers lowers the shadow NAV by the share of the reserve the buffer bought back; the board shows it, the buffer left and this window's draw", () => {
+    const { w } = v3aWorld("v3a-shadow");
+    const roll = w.log.entries.find((e) => e.kind === "roll-buy" && e.summary === true && e.refused === undefined) as LogEntry;
+    const cover = roll.cover as bigint;
+    expect(cover > 0n).toBe(true); // window 1's front lots go unsold: the buffer pays
+    const coverMilli = (cover * 1_000_000n) / w.commodityRate;
+    // without the buffer the roll would have bought coverMilli less face: the shadow face is the face after the roll less that, as a share of it
+    const after = roll.faceAfterMilli as bigint;
+    expect(roll.shadowRatioPpm).toBe((1_000_000n * (after - coverMilli)) / after);
+    const b = boardFor(w, "DEMAND-1").v3a?.nav;
+    expect(b?.bufferDrawThisWindowUsdc).toBe(cover);
+    expect((b?.shadowNavMicroSiuPerAgu as bigint) < (b?.navMicroSiuPerAgu as bigint)).toBe(true);
+    expect(b).not.toHaveProperty("navWithBufferMicroSiuPerAgu");
+    const text = renderBoard(boardFor(w, "DEMAND-1"));
+    expect(text).toMatch(/shadow NAV/);
+    expect(text).toMatch(/paid [\d,]+ µ\$ this window/);
+    expect(text).not.toMatch(/with the buffer/i);
+  });
+});
+
+describe("v3a sweeps convert claims too when USDC and AGU-lab fall short (the design, as updated with D144)", () => {
+  it("sells the agent's soonest-expiring claims to the participant at its bid on the grade print, logged as forced", async () => {
+    const { w, needsFor } = v3aWorld("v3a-sweep-claims");
+    w.closeWindow(1);
+    w.startWindow(2, needsFor);
+    // a window-5 claim (three windows ahead, PROVIDER's limit): still live at window 4's close, when the sweep runs; window-4 claims have settled or lapsed by then
+    const posted = await w.act("PROVIDER", { tool: "post_offer", issuer: "ISSUER-C1", task: "CR-PL", window: 5, milli: 800n, discountBps: 0n, accept: "both", to: "all" }, "r");
+    expect(posted.ok).toBe(true);
+    const bought = await w.act("DEMAND-2", { tool: "buy_offer", offer: w.v3a?.offers.at(-1)?.id as string, milli: 600n, pay: "usdc" }, "r");
+    expect(bought.ok).toBe(true);
+    const claim = w.log.entries.find((e) => e.kind === "claim-mint" && e.actor === "DEMAND-2")?.tokenId as string;
+    w.closeWindow(2);
+    w.startWindow(3, needsFor);
+    w.closeWindow(3);
+    w.startWindow(4, needsFor);
+    // leave DEMAND-2 nothing but that claim and a little USDC
+    w.chain.transfer("USDC", "DEMAND-2", "OWNER-X", w.chain.balance("DEMAND-2", "USDC") - 1_000n);
+    w.chain.transfer("AGU", "DEMAND-2", "OWNER-X", w.chain.balance("DEMAND-2", "AGU"));
+    w.closeWindow(4);
+    const s = w.log.entries.find((e) => e.kind === "sweep" && e.actor === "DEMAND-2");
+    expect((s?.forcedClaimsMilli as bigint) > 0n).toBe(true);
+    expect(w.chain.claimBalance(PARTICIPANT, claim) > 0n).toBe(true);
+    expect(w.log.entries.some((e) => e.kind === "payment" && e.actor === "DEMAND-2" && e.what === "sweep conversion" && e.currency === "claims" && e.forced === true)).toBe(true);
+    // the rule is on the agent's board
+    expect(renderBoard(boardFor(w, "DEMAND-2"))).toMatch(/your work claims too, soonest-expiring first, at the same bid/);
+    w.checkInvariants();
   });
 });

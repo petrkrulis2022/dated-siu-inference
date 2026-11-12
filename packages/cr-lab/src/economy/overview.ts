@@ -99,7 +99,7 @@ export function overview(
   lines.push("", "## Reserve, buffer and NAV", "");
   for (const n of log.filter((e) => e.kind === "nav"))
     lines.push(
-      `- ${n.window} r${n.round}: reserve NAV ${String(n.reserveNav)} SIU per AGU-lab, with the buffer ${String(n.navWithBuffer)}; supply ${show(n.supply as bigint)}, live face ${show(n.liveFaceMilli as bigint, 3)} SIU, buffer ${show(n.bufferUsdc as bigint)} USDC`,
+      `- ${n.window} r${n.round}: reserve NAV ${String(n.reserveNav)} SIU per AGU-lab, ${n.shadowNav !== undefined ? `shadow NAV (no buffer support) ${String(n.shadowNav)}, buffer draw this window ${show(n.bufferDrawUsdc as bigint)} USDC` : `with the buffer ${String(n.navWithBuffer)}`}; supply ${show(n.supply as bigint)}, live face ${show(n.liveFaceMilli as bigint, 3)} SIU, buffer ${show(n.bufferUsdc as bigint)} USDC`,
     );
   for (const r of log.filter((e) => e.kind === "roll-buy" && e.summary === true))
     lines.push(

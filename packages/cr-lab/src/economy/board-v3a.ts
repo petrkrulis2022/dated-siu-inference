@@ -4,8 +4,8 @@
  *  - Every amount in both units: work and AGU-lab in whole mSIU, dollars in whole µ$ (micro-dollars), each with its value in the other beside it; which comes first
  *    alternates with the window's display order (`siuFirst`), as v2's comparability sample requires.
  *  - The prints: the last 15, the burn-in labelled simulated; the next print is published only at each window's open.
- *  - The NAV derivation: reserve claims, expected default losses (the claims record's loss rate per issuer, applied to its live reserve face), supply, buffer, and NAV
- *    with and without the buffer, in SIU and in dollars.
+ *  - The NAV derivation: reserve claims, expected default losses (the claims record's loss rate per issuer, applied to its live reserve face), supply, NAV in SIU and in
+ *    dollars, the buffer remaining and its draw this window, and the shadow NAV the reserve alone would support without the buffer (D144: never a NAV that includes it).
  *  - The claims record per issuer and window, PROVIDER's posted offers, the agent's own requests, and every claim it holds with its window, deadline and value.
  *  - A demand agent's mandate: its cap per window of delivery and what it has committed against each, its minimum value, its owner's sweeps (amount and windows, from
  *    window 1 round 1); under arm B, the owner's holding rule and where it stands.
@@ -39,8 +39,11 @@ export interface V3aBoard {
     liveFaceMilli: bigint;
     supply: bigint;
     navMicroSiuPerAgu: bigint;
-    navWithBufferMicroSiuPerAgu: bigint;
+    /** D144 (owner, 2026-11-12): what the reserve alone would support with no buffer support; never a NAV that includes the buffer */
+    shadowNavMicroSiuPerAgu: bigint;
     bufferUsdc: bigint;
+    /** the buffer's draw at this window's roll, USDC base units */
+    bufferDrawThisWindowUsdc: bigint;
     expectedDefaultMicroSiu: bigint;
   };
   wallet: { usdc: bigint; aguMicroSiu: bigint; claimsMicroSiu: bigint; valueMicroUsd: bigint };
@@ -80,9 +83,6 @@ export function v3aBoardFor(w: World, agent: string, role: Role): V3aBoard {
   const supply = w.chain.aguSupply;
   const navMicro = den === 0n ? 0n : (num * 1_000_000n) / den; // micro-SIU per whole AGU-lab
   const bufferUsdc = w.chain.balance("buffer", "USDC");
-  const bufferMicroSiu = (bufferUsdc * 1_000_000_000n) / rate;
-  // nav() is face × 1,000 over supply, both in base units, which is SIU per AGU-lab; adding the buffer's value in micro-SIU to that numerator gives NAV with the buffer
-  const navWithBuffer = supply === 0n ? 0n : ((num + bufferMicroSiu) * 1_000_000n) / supply;
   // expected default losses: each live reserve lot's face, times its issuer's DEFAULT rate so far (presented and never served, over all it served or defaulted) -- a
   // claim its holder let lapse is the holder's loss, not the issuer's default
   let expectedDefault = 0n;
@@ -184,8 +184,9 @@ export function v3aBoardFor(w: World, agent: string, role: Role): V3aBoard {
       liveFaceMilli: w.chain.liveFace(),
       supply,
       navMicroSiuPerAgu: navMicro,
-      navWithBufferMicroSiuPerAgu: navWithBuffer,
+      shadowNavMicroSiuPerAgu: (navMicro * w.shadowNavPpm) / 1_000_000n,
       bufferUsdc,
+      bufferDrawThisWindowUsdc: w.bufferDrawThisWindow,
       expectedDefaultMicroSiu: expectedDefault,
     },
     wallet: {
@@ -316,7 +317,7 @@ export function renderV3aBoard(c: RenderCtx, b: V3aBoard): string {
   );
   const n = b.nav;
   L.push(
-    `AGU-lab NAV: the reserve holds ${msiu(n.liveFaceMilli * 1_000n)} of live work claims against ${group(n.supply / 1_000_000n)} AGU-lab issued; expected default losses on them ${both(n.expectedDefaultMicroSiu)}; NAV ${msiu(n.navMicroSiuPerAgu)} per AGU-lab (≈ ${musd(usdcForMicroSiu(n.navMicroSiuPerAgu, rate))}); with the buffer of ${musd(n.bufferUsdc)}, ${msiu(n.navWithBufferMicroSiuPerAgu)} per AGU-lab. AGU-lab amounts below are shown by their value at NAV.`,
+    `AGU-lab NAV: the reserve holds ${msiu(n.liveFaceMilli * 1_000n)} of live work claims against ${group(n.supply / 1_000_000n)} AGU-lab issued; expected default losses on them ${both(n.expectedDefaultMicroSiu)}; NAV ${msiu(n.navMicroSiuPerAgu)} per AGU-lab (≈ ${musd(usdcForMicroSiu(n.navMicroSiuPerAgu, rate))}); this is the NAV every AGU-lab price and value here uses. The buffer, a USDC fund that pays for front work the roll could not sell, has ${musd(n.bufferUsdc)} left and paid ${musd(n.bufferDrawThisWindowUsdc)} this window; shadow NAV (what the reserve alone would support with no buffer support): ${msiu(n.shadowNavMicroSiuPerAgu)} per AGU-lab. AGU-lab amounts below are shown by their value at NAV.`,
   );
   L.push(
     `The participant sells AGU-lab at ${musd(b.participant.askMicroUsdPerSiu)} and buys it back at ${musd(b.participant.bidMicroUsdPerSiu)} per SIU of value (NAV × print ± 1%); it can sell up to ${msiu(b.participant.canSellMicroSiu)} right now.`,
@@ -352,7 +353,7 @@ export function renderV3aBoard(c: RenderCtx, b: V3aBoard): string {
     L.push(
       `Your mandate (${m.profile}): spend at most ${both(m.capMicroSiu)} for the work of any one window, counted against the window the work is for (committed so far: ${m.committed
         .map((x) => `w${x.window} ${group(x.microSiu / 1_000n)}`)
-        .join(", ")} mSIU); keep at least ${musd(m.bufferMicroUsd)} of total value. Your owner takes ${musd(m.sweepMicroUsd)} in USDC at the end of windows ${m.sweepWindows.join(" and ")}; if your USDC is short then, AGU-lab is sold at the bid to cover it.`,
+        .join(", ")} mSIU); keep at least ${musd(m.bufferMicroUsd)} of total value. Your owner takes ${musd(m.sweepMicroUsd)} in USDC at the end of windows ${m.sweepWindows.join(" and ")}; if your USDC is short then, your AGU-lab is sold at the bid to cover it, and if that is not enough, your work claims too, soonest-expiring first, at the same bid.`,
     );
   }
   if (b.armB !== undefined)

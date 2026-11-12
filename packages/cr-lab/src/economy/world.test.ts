@@ -659,3 +659,17 @@ describe("the reference brief price (found checking a counted run's cap arithmet
     expect(w.holdingCeilingMicroSiu("DEMAND-1")).toBe(expected);
   });
 });
+
+describe("publishNav, v2 (found building v3a): NAV with the buffer adds the buffer's value in the same unit as the reserve's face", () => {
+  it("logs (live face + buffer value) per AGU-lab, not the buffer understated a thousandfold", () => {
+    const w = world("v2-nav-buffer");
+    w.publishNav();
+    const e = w.log.entries.filter((x) => x.kind === "nav").at(-1) as (typeof w.log.entries)[number];
+    const face = e.liveFaceMilli as bigint; // mSIU
+    const supply = e.supply as bigint; // base units, 1e6 per AGU-lab
+    const bufferSiu = Number(e.bufferUsdc as bigint) / 1e6 / (Number(e.printNanoUsdPerSiu as bigint) / 1e9);
+    const expected = (Number(face) / 1000 + bufferSiu) / (Number(supply) / 1e6);
+    expect(Number(e.navWithBuffer)).toBeCloseTo(expected, 6);
+    expect(e.shadowNav).toBeUndefined();
+  });
+});

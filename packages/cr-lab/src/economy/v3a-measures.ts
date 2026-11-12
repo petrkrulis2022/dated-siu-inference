@@ -167,10 +167,11 @@ export interface StoreOfValue {
   lowVolFinalMedian: number | null;
   lowVolFinalN: number;
   /**
-   * D144: the same shares with AGU-lab valued at NAV WITH the buffer, reported beside the verdict. The verdict uses the reserve NAV every price, creation and redemption
-   * uses; the buffer pays the roll's cost of unsold front work, so NAV with the buffer is where that carrying cost shows as it drains.
+   * D144 (owner, 2026-11-12): the same shares with AGU-lab valued at the shadow NAV, what the reserve alone would support with no buffer support, reported beside the
+   * verdict. The verdict uses the NAV every price, creation and redemption uses; the buffer pays the roll's cost of unsold front work, and the shadow NAV shows what AGU-lab
+   * would be worth had it not. No NAV that includes the buffer is ever scored or shown.
    */
-  withBuffer: { medianByClose: { close: number; median: number | null; n: number }[]; finalMedian: number | null; lowVolFinalMedian: number | null };
+  shadow: { medianByClose: { close: number; median: number | null; n: number }[]; finalMedian: number | null; lowVolFinalMedian: number | null };
   verdict: Verdict;
 }
 export function scoreStoreOfValue(runs: readonly V3aRunLog[], finalClose: number, min: number): StoreOfValue {
@@ -193,16 +194,16 @@ export function scoreStoreOfValue(runs: readonly V3aRunLog[], finalClose: number
   const lowMedian = median(low);
   const kill = low.length >= min && lowMedian !== null && lowMedian < 0.15;
   const lowRuns = runs.filter((r) => runMeta(r.log)?.volatility === "low");
-  const withBuffer = {
+  const shadow = {
     medianByClose: Array.from({ length: finalClose + 1 }, (_, close) => {
-      const xs = at(close, runs, "workShareBpsWithBuffer");
+      const xs = at(close, runs, "workShareBpsShadow");
       return { close, median: median(xs), n: xs.length };
     }),
-    finalMedian: median(at(finalClose, runs, "workShareBpsWithBuffer")),
-    lowVolFinalMedian: median(at(finalClose, lowRuns, "workShareBpsWithBuffer")),
+    finalMedian: median(at(finalClose, runs, "workShareBpsShadow")),
+    lowVolFinalMedian: median(at(finalClose, lowRuns, "workShareBpsShadow")),
   };
   return {
-    withBuffer,
+    shadow,
     medianByClose,
     finalMedian,
     finalN: final.length,
@@ -474,7 +475,7 @@ export function renderArmScore(s: ArmScore): string {
   );
   const sv = s.storeOfValue;
   L.push(
-    `- **Store of value** — ${sv.verdict}: median work share at window 8 ${pct(sv.finalMedian)} (${sv.finalN} agents); in the low-volatility runs ${pct(sv.lowVolFinalMedian)} (${sv.lowVolFinalN}); by close: ${sv.medianByClose.map((c) => `w${c.close} ${pct(c.median)}`).join(", ")}. Against NAV with the buffer: ${pct(sv.withBuffer.finalMedian)} at window 8 (low volatility ${pct(sv.withBuffer.lowVolFinalMedian)}); by close: ${sv.withBuffer.medianByClose.map((c) => `w${c.close} ${pct(c.median)}`).join(", ")}.`,
+    `- **Store of value** — ${sv.verdict}: median work share at window 8 ${pct(sv.finalMedian)} (${sv.finalN} agents); in the low-volatility runs ${pct(sv.lowVolFinalMedian)} (${sv.lowVolFinalN}); by close: ${sv.medianByClose.map((c) => `w${c.close} ${pct(c.median)}`).join(", ")}. Against the shadow NAV (no buffer support): ${pct(sv.shadow.finalMedian)} at window 8 (low volatility ${pct(sv.shadow.lowVolFinalMedian)}); by close: ${sv.shadow.medianByClose.map((c) => `w${c.close} ${pct(c.median)}`).join(", ")}.`,
   );
   const d = s.deferredPayment;
   L.push(

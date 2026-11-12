@@ -128,12 +128,13 @@ describe("v3a account: blind coding, kappa, binding quotes", () => {
 
 describe("v3a store of value: the median work share at window 8; the kill only in low volatility", () => {
   const h = (actor: string, close: number, bps: bigint): LogEntry => e(`d${close}`, actor, { kind: "holdings", atClose: close, workShareBps: bps });
-  it("D144: reports the median against NAV with the buffer beside the reserve NAV", () => {
-    const hb = (actor: string, bps: bigint, withBuffer: bigint): LogEntry =>
-      e("d8", actor, { kind: "holdings", atClose: 8, workShareBps: bps, workShareBpsWithBuffer: withBuffer });
-    const s = scoreStoreOfValue([run("a", [genesis("low"), hb("A", 4_000n, 5_000n), hb("B", 4_400n, 5_200n), hb("C", 5_000n, 6_000n)])], 8, 3);
+  it("D144: reports the median against the shadow NAV (no buffer support) beside the verdict's NAV", () => {
+    const hs = (actor: string, bps: bigint, shadow: bigint): LogEntry =>
+      e("d8", actor, { kind: "holdings", atClose: 8, workShareBps: bps, workShareBpsShadow: shadow });
+    const s = scoreStoreOfValue([run("a", [genesis("low"), hs("A", 4_000n, 3_000n), hs("B", 4_400n, 3_400n), hs("C", 5_000n, 4_000n)])], 8, 3);
     expect(s.finalMedian).toBe(0.44);
-    expect(s.withBuffer.finalMedian).toBe(0.52);
+    expect(s.shadow.finalMedian).toBe(0.34);
+    expect(s).not.toHaveProperty("withBuffer");
   });
 
   it("takes the median across every agent of every run at the last close", () => {
