@@ -88,6 +88,8 @@ export interface Board {
     aguNet: string;
     unmetSiu: string;
     combinedUsd: string;
+    /** D146: the same figures in base units (USDC, Commodity micro-SIU), for the v3a board */
+    raw?: { usdcNet: bigint; aguNetMicroSiu: bigint; unmetMicroSiu: bigint; combinedUsdc: bigint };
     onTime?: number;
     late?: number;
   };
@@ -205,6 +207,8 @@ function objectiveView(o: ObjectiveLedger, rate: bigint, w: World): NonNullable<
     aguNet: show(o.aguNet),
     unmetSiu: show(o.unmetMicroSiu),
     combinedUsd: show(combinedUsd),
+    // D146: the same ledger in base units, for the v3a board's own units (mSIU and µ$, never decimals)
+    raw: { usdcNet: o.usdcNet, aguNetMicroSiu: aguAsMicroSiu, unmetMicroSiu: o.unmetMicroSiu, combinedUsdc: combinedUsd },
     ...(o.onTime > 0 || o.late > 0 ? { onTime: o.onTime, late: o.late } : {}),
   };
 }

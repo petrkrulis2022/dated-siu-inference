@@ -6,7 +6,7 @@
  *  - Starting balances: every role holds both currencies at equal value, checked from the genesis holdings.
  *  - Board integrity: no paid or refunded quote appears as open on any board (checked against the log's own settlements, not the board's filter), and every refusal
  *    carries its reason (a refusal on a quote, need, offer or request names it first).
- *  - The buffer lasts the run (D144): every roll restores the face it retires, and the buffer never reaches zero before the end of window 8.
+ *  - (D144's buffer gate is gone: D146 replaced the finite buffer with an open-ended lab subsidy, whose total the scorer reports per run.)
  *  - v6's issuance limit never binds (D145): no roll or creation is refused for lack of the issuers' total headroom; binding would mean capacity was sized wrong.
  *  - The scorer reads the seed from the log, never from the config default (D133); for a counted cell, the log's price-path seed hash must be the one frozen in the config.
  *  - Enough data is each measure's own rule (`v3a-measures.ts`): below its minimum count a measure reports n/a; that is not a gate on the run.
@@ -85,23 +85,6 @@ export function checkGates(log: readonly LogEntry[], params: EconomyParams, opts
     name: "board integrity: no settled quote shown as open; every refusal carries its reason",
     ok: stale.length === 0 && unnamed.length === 0 && turns.some((t) => t.boardQuotes !== undefined),
     detail: `${stale.length} stale quote(s)${stale.length > 0 ? ` (${stale.slice(0, 3).join("; ")})` : ""}; ${unnamed.length} refusal(s) without a named subject or reason${unnamed.length > 0 ? ` (${unnamed.slice(0, 3).map((e) => `seq ${e.seq} ${String(e.tool)}`).join("; ")})` : ""}`,
-  });
-
-  // D144: the buffer must not run dry before the end of window 8 -- every roll restores the face it retires, and no NAV is published with the buffer at zero
-  const rolls = log.filter((e) => e.kind === "roll-buy" && e.summary === true);
-  const shortRolls = rolls.filter(
-    (e) => e.refused !== undefined || (asBigInt(e.faceBought) ?? 0n) < (asBigInt(e.faceSold) ?? 0n) + (asBigInt(e.faceUnsold) ?? 0n),
-  );
-  const navs = log.filter((e) => e.kind === "nav");
-  const empty = navs.filter((e) => (asBigInt(e.bufferUsdc) ?? 0n) === 0n);
-  const lowest = navs.reduce<bigint | undefined>((m, e) => {
-    const b = asBigInt(e.bufferUsdc) ?? 0n;
-    return m === undefined || b < m ? b : m;
-  }, undefined);
-  gates.push({
-    name: "the buffer lasts the run: every roll restores the face it retires, and the buffer never reaches zero before the end of window 8",
-    ok: rolls.length > 0 && shortRolls.length === 0 && empty.length === 0,
-    detail: `${rolls.length} rolls, ${shortRolls.length} short of the face${shortRolls.length > 0 ? ` (first on ${shortRolls[0]?.window})` : ""}; buffer at its lowest ${lowest ?? "?"} µ$${empty.length > 0 ? `, empty from ${empty[0]?.window}` : ""}`,
   });
 
   // D145: v6's issuance limit stays in code and must never bind -- a roll or a creation refused for lack of the issuers' total headroom makes the run invalid

@@ -41,9 +41,9 @@ export interface V3aBoard {
     navMicroSiuPerAgu: bigint;
     /** D144 (owner, 2026-11-12): what the reserve alone would support with no buffer support; never a NAV that includes the buffer */
     shadowNavMicroSiuPerAgu: bigint;
-    bufferUsdc: bigint;
-    /** the buffer's draw at this window's roll, USDC base units */
-    bufferDrawThisWindowUsdc: bigint;
+    /** D146: what the lab subsidy has paid for unsold front work so far, and at this window's roll, USDC base units */
+    subsidyPaidUsdc: bigint;
+    subsidyThisWindowUsdc: bigint;
     expectedDefaultMicroSiu: bigint;
   };
   wallet: { usdc: bigint; aguMicroSiu: bigint; claimsMicroSiu: bigint; valueMicroUsd: bigint };
@@ -56,7 +56,7 @@ export interface V3aBoard {
   frontierFaces: Partial<Record<TaskId, bigint>>;
   dataPriceMicroSiu: MicroSiu;
   issuerList: { issuer: string; task: TaskId; priceMicroSiu: MicroSiu; served: number; presented: number }[];
-  needsAhead: { window: number; tasks: TaskId[]; workMicroSiu: MicroSiu; valueMicroUsd: bigint }[];
+  needsAhead: { window: number; tasks: TaskId[]; workMicroSiu: MicroSiu; valueMicroUsd: bigint; unmetMicroSiu: MicroSiu }[];
   mandate?: {
     profile: string;
     capMicroSiu: MicroSiu;
@@ -82,7 +82,6 @@ export function v3aBoardFor(w: World, agent: string, role: Role): V3aBoard {
   const { num, den } = w.chain.nav();
   const supply = w.chain.aguSupply;
   const navMicro = den === 0n ? 0n : (num * 1_000_000n) / den; // micro-SIU per whole AGU-lab
-  const bufferUsdc = w.chain.balance("buffer", "USDC");
   // expected default losses: each live reserve lot's face, times its issuer's DEFAULT rate so far (presented and never served, over all it served or defaulted) -- a
   // claim its holder let lapse is the holder's loss, not the issuer's default
   let expectedDefault = 0n;
@@ -142,7 +141,7 @@ export function v3aBoardFor(w: World, agent: string, role: Role): V3aBoard {
           .map((x) => {
             const tasks = [...new Set(w.needsForFn?.(agent, x) ?? [])];
             const work = w.workMicroSiu(tasks);
-            return { window: x, tasks, workMicroSiu: work, valueMicroUsd: usdcForMicroSiu(work, rate) };
+            return { window: x, tasks, workMicroSiu: work, valueMicroUsd: usdcForMicroSiu(work, rate), unmetMicroSiu: w.unmetNeedCostMicroSiu(tasks) ?? 0n };
           })
       : [];
   const cap = w.v3aCapMicroSiu(agent);
@@ -185,8 +184,8 @@ export function v3aBoardFor(w: World, agent: string, role: Role): V3aBoard {
       supply,
       navMicroSiuPerAgu: navMicro,
       shadowNavMicroSiuPerAgu: (navMicro * w.shadowNavPpm) / 1_000_000n,
-      bufferUsdc,
-      bufferDrawThisWindowUsdc: w.bufferDrawThisWindow,
+      subsidyPaidUsdc: w.subsidyPaid,
+      subsidyThisWindowUsdc: w.subsidyThisWindow,
       expectedDefaultMicroSiu: expectedDefault,
     },
     wallet: {
@@ -289,7 +288,7 @@ export interface RenderCtx {
   outputs: { id: string; task: string; issuer: string; passed: boolean }[];
   notices: string[];
   lastResult?: string;
-  objective?: { usdcNet: string; aguNet: string; unmetSiu: string; combinedUsd: string; onTime?: number; late?: number };
+  objective?: { usdcNet: string; aguNet: string; unmetSiu: string; combinedUsd: string; raw?: { usdcNet: bigint; aguNetMicroSiu: bigint; unmetMicroSiu: bigint; combinedUsdc: bigint }; onTime?: number; late?: number };
   forward?: { sold: number; delivered: number };
 }
 
@@ -305,6 +304,9 @@ export function renderV3aBoard(c: RenderCtx, b: V3aBoard): string {
     return c.siuFirst ? `${msiu(micro)} (≈ ${musd(usdc)})` : `${musd(usdc)} (≈ ${msiu(micro)})`;
   };
   const perSiu = (nano: bigint): string => musd(nano / 1_000n);
+  // D146: an amount of work with its dollar value beside it, in the window's display order (the value is already at the claim's own grade print)
+  const workPair = (milli: bigint, usd: bigint): string => (c.siuFirst ? `${group(milli)} mSIU (≈ ${musd(usd)})` : `${musd(usd)} (≈ ${group(milli)} mSIU)`);
+  const workAt = (milli: bigint, nano: bigint): string => workPair(milli, usdcForMicroSiu(milli * 1_000n, nano));
   const L: string[] = [];
   L.push(`You are ${c.agent}, a ${c.role} agent. Day ${c.day} (window ${c.window} of 8), round ${c.round} of ${c.rounds}.`);
   L.push(
@@ -317,7 +319,7 @@ export function renderV3aBoard(c: RenderCtx, b: V3aBoard): string {
   );
   const n = b.nav;
   L.push(
-    `AGU-lab NAV: the reserve holds ${msiu(n.liveFaceMilli * 1_000n)} of live work claims against ${group(n.supply / 1_000_000n)} AGU-lab issued; expected default losses on them ${both(n.expectedDefaultMicroSiu)}; NAV ${msiu(n.navMicroSiuPerAgu)} per AGU-lab (≈ ${musd(usdcForMicroSiu(n.navMicroSiuPerAgu, rate))}); this is the NAV every AGU-lab price and value here uses. The buffer, a USDC fund that pays for front work the roll could not sell, has ${musd(n.bufferUsdc)} left and paid ${musd(n.bufferDrawThisWindowUsdc)} this window; shadow NAV (what the reserve alone would support with no buffer support): ${msiu(n.shadowNavMicroSiuPerAgu)} per AGU-lab. AGU-lab amounts below are shown by their value at NAV.`,
+    `AGU-lab NAV: the reserve holds ${msiu(n.liveFaceMilli * 1_000n)} of live work claims against ${group(n.supply / 1_000_000n)} AGU-lab issued; expected default losses on them ${both(n.expectedDefaultMicroSiu)}; NAV ${msiu(n.navMicroSiuPerAgu)} per AGU-lab (≈ ${musd(usdcForMicroSiu(n.navMicroSiuPerAgu, rate))}); this is the NAV every AGU-lab price and value here uses. The lab subsidy, which pays for front work the roll could not sell, has paid ${bothUsd(n.subsidyPaidUsdc)} so far (${bothUsd(n.subsidyThisWindowUsdc)} at this window's roll); shadow NAV (what the reserve alone would support with no subsidy): ${msiu(n.shadowNavMicroSiuPerAgu)} per AGU-lab. AGU-lab amounts below are shown by their value at NAV.`,
   );
   L.push(
     `The participant sells AGU-lab at ${musd(b.participant.askMicroUsdPerSiu)} and buys it back at ${musd(b.participant.bidMicroUsdPerSiu)} per SIU of value (NAV × print ± 1%); it can sell up to ${msiu(b.participant.canSellMicroSiu)} right now.`,
@@ -329,14 +331,14 @@ export function renderV3aBoard(c: RenderCtx, b: V3aBoard): string {
     L.push("Work claims you hold (one task of a class uses that class's work, below; holdings of the same claim add up):");
     for (const x of b.claims)
       L.push(
-        `  - ${x.claim}: ${group(x.milli)} mSIU of ${x.task} from ${x.issuer}${x.provider ? " (sold by PROVIDER)" : ""}, window ${x.window}${x.presentableNow ? `, presentable NOW, ${x.roundsLeft} round(s) left before it lapses worthless` : `, deadline: the end of window ${x.window}`}; value ${musd(x.valueMicroUsd)}`,
+        `  - ${x.claim}: ${workPair(x.milli, x.valueMicroUsd)} of ${x.task} from ${x.issuer}${x.provider ? " (sold by PROVIDER)" : ""}, window ${x.window}${x.presentableNow ? `, presentable NOW, ${x.roundsLeft} round(s) left before it lapses worthless` : `, deadline: the end of window ${x.window}`}`,
       );
   }
   if (b.escrowedClaims.length > 0) {
     L.push("Work claims held in escrow for your accepted briefs (present them for the brief's own tasks; what is left is yours when the brief passes):");
     for (const x of b.escrowedClaims)
       L.push(
-        `  - ${x.claim}: ${group(x.milli)} mSIU of ${x.task} from ${x.issuer}, for ${x.quote}, window ${x.window}${x.presentableNow ? `, presentable NOW, ${x.roundsLeft} round(s) left` : ""}; value ${musd(x.valueMicroUsd)}`,
+        `  - ${x.claim}: ${workPair(x.milli, x.valueMicroUsd)} of ${x.task} from ${x.issuer}, for ${x.quote}, window ${x.window}${x.presentableNow ? `, presentable NOW, ${x.roundsLeft} round(s) left` : ""}`,
       );
   }
   L.push(
@@ -365,9 +367,11 @@ export function renderV3aBoard(c: RenderCtx, b: V3aBoard): string {
       `You hold a standing obligation: ${c.forward.sold} briefs owed over the run, ${c.forward.delivered} delivered so far. Each needs passing outputs of two task types from the same day.`,
     );
   if (b.needsAhead.length > 0) {
-    L.push("Your needs (each a brief covering two task types; its work, and its value at today's print):");
+    L.push("Your needs (each a brief covering two task types), with each one's work content and what it costs your result if it is still unmet when its window ends:");
     for (const x of b.needsAhead)
-      L.push(`  - window ${x.window}${x.window === c.window ? " (now)" : ""}: ${x.tasks.join(" + ")}, ${both(x.workMicroSiu)}`);
+      L.push(
+        `  - window ${x.window}${x.window === c.window ? " (now)" : ""}: ${x.tasks.join(" + ")}, work content ${both(x.workMicroSiu)}, before research costs such as data; if unmet at the window's end, ${both(x.unmetMicroSiu)} is charged to your result`,
+      );
   }
   if (c.needs.length > 0) {
     L.push(c.role === "demand" ? "Your needs this window:" : "Open needs this window (demand agents want briefs):");
@@ -395,13 +399,13 @@ export function renderV3aBoard(c: RenderCtx, b: V3aBoard): string {
     for (const o of b.offers) {
       const nano = (b.printNano * (10_000n - o.discountBps)) / 10_000n;
       L.push(
-        `  - ${o.id}: up to ${group(o.milliLeft)} mSIU of ${o.task} from ${o.issuer} for window ${o.window}, ${o.discountBps >= 0n ? `${Number(o.discountBps) / 100}% below` : `${-Number(o.discountBps) / 100}% above`} the ${o.series} print (${o.series === "commodity" ? perSiu(nano) : "Frontier"} per SIU), accepts ${o.accept === "both" ? "USDC or AGU-lab" : o.accept === "usdc" ? "USDC" : "AGU-lab"}${o.to !== "all" ? `, to ${o.to} only` : ""}${o.request !== undefined ? `, answering ${o.request}` : ""}`,
+        `  - ${o.id}: up to ${workAt(o.milliLeft, o.series === "commodity" ? rate : b.frontierNano)} of ${o.task} from ${o.issuer} for window ${o.window}, ${o.discountBps >= 0n ? `${Number(o.discountBps) / 100}% below` : `${-Number(o.discountBps) / 100}% above`} the ${o.series} print (${o.series === "commodity" ? perSiu(nano) : "Frontier"} per SIU), accepts ${o.accept === "both" ? "USDC or AGU-lab" : o.accept === "usdc" ? "USDC" : "AGU-lab"}${o.to !== "all" ? `, to ${o.to} only` : ""}${o.request !== undefined ? `, answering ${o.request}` : ""}`,
       );
     }
   }
   if (b.requests.length > 0) {
     L.push(c.role === "provider" ? "Open requests from buyers:" : "Your open requests to PROVIDER:");
-    for (const r of b.requests) L.push(`  - ${r.id}: ${r.buyer} asks for ${group(r.milli)} mSIU of ${r.task} for window ${r.window}`);
+    for (const r of b.requests) L.push(`  - ${r.id}: ${r.buyer} asks for ${workAt(r.milli, r.task === "CR-VS" ? b.frontierNano : rate)} of ${r.task} for window ${r.window}`);
   }
   if (b.provider !== undefined) {
     L.push(`Your running result: ${both(b.provider.profitMicroSiu)} of profit in SIU so far (sales, less issuers' costs when they serve, less defaults on claims you sold).`);
@@ -425,10 +429,14 @@ export function renderV3aBoard(c: RenderCtx, b: V3aBoard): string {
       L.push(`  - ${i.issuer} ${i.task}: ${both(i.priceMicroSiu)}; ${i.served} of ${i.presented} tasks passed`);
   }
   if (c.role === "research") L.push(`A dataset costs ${both(b.dataPriceMicroSiu)} a day, in USDC or AGU-lab; buy it before a task on it.`);
-  if (c.objective !== undefined && c.role !== "provider")
+  // D146: the running result in board units, the other unit beside each amount
+  if (c.objective?.raw !== undefined && c.role !== "provider") {
+    const o = c.objective;
+    const r = o.raw as NonNullable<typeof o.raw>;
     L.push(
-      `Your running result: ${c.objective.usdcNet} USDC net, ${c.objective.aguNet} AGU-lab net${c.objective.unmetSiu !== "0.000000" ? `, ${c.objective.unmetSiu} SIU charged for unmet needs` : ""} -- combined, about $${c.objective.combinedUsd}${c.objective.onTime !== undefined ? ` (${c.objective.onTime} on time, ${c.objective.late} late or missing)` : ""}.`,
+      `Your running result: ${bothUsd(r.usdcNet)} net in USDC, ${both(r.aguNetMicroSiu)} net in AGU-lab${r.unmetMicroSiu !== 0n ? `, ${both(r.unmetMicroSiu)} charged for unmet needs` : ""} -- combined, ${bothUsd(r.combinedUsdc)}${o.onTime !== undefined ? ` (${o.onTime} on time, ${o.late} late or missing)` : ""}.`,
     );
+  }
   if (c.notices.length > 0) {
     L.push("Since your last turn:");
     for (const x of c.notices) L.push(`  - ${x}`);

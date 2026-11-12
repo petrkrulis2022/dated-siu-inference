@@ -9,8 +9,9 @@
     "faceMilliPerWindow": "3000",
     "minTenorSeconds": 43200,
     "discountBps": "1000",
-    "bufferSeedUsdc": "1500000",
-    "bufferTargetUsdc": "1500000"
+    "bufferSeedUsdc": "0",
+    "bufferTargetUsdc": "0",
+    "bufferNote": "D146 (owner, 2026-11-12, amends D144): v3a has no finite buffer. An open-ended lab subsidy pays each roll's cover for unsold front work when it falls due; the board shows what it has paid so far beside the shadow NAV, the scorer reports the total per run, and D144's buffer gate is gone. Seed and target are zero so no buffer is ever seeded or refilled (carry goes to income)."
   },
   "participant": {
     "usdc": "2000000",
@@ -83,7 +84,6 @@
   "mirroredShareBps": "1000",
   "spendCapUsdPerWindow": "2.00",
   "seed": "dev-0",
-  "unmetNeedCostMicroSiu": "200000",
   "forwardVisibilityWindows": 3,
   "v3a": {
     "note": "APPROVED by the owner (D144): mandates' minValueBufferBps (cautious 4000, standard 2500, permissive 1000); sweep shareOfStartingValueBps 1500 (15% of starting value per sweep, demand agents only); printPath.classNoisePpm 2000 (0.2% a day); dataPriceMilli 148 (the mean of the three Commodity class prices, 301, 58 and 86 mSIU); providerRules (discount from -20% to +50%, offers up to 3 windows ahead, a default costs PROVIDER the bond's payout once); minRedeemMilli and minCreateMilli 250; hedger.briefsSold 8 (one a window); minCounts; reserve buffer 1.5 USDC (seed and target; a validity gate fails the run if it runs dry before the end of window 8); coder models gpt-5.1 and claude-haiku-5-5; spendCapUsdPerWindow 2.00 (D144 follow-up, 2026-11-12: an API-cost safety stop on the model agents' spend in each window, not a limit on any agent). Fixed by the design or the owner: everything else.",
@@ -126,6 +126,7 @@
     "minRedeemMilli": "250",
     "minCreateMilli": "250",
     "capacityHours": "2",
+    "unmetNeedMultiple": "3",
     "capacityNote": "D145 (owner, 2026-11-12): each reserve-grade issuer (C1, C2, X) commits 2 windows of its measured rate (v6: capacity = committed hours x measured rate; a bigger bond never raises issuance, C6). Sized from the four scripted cells (arms A and B, low and high volatility; price seeds shadow-check-<arm>-<vol>, run seeds shadow-<arm>-<vol>), run 2026-11-12 with 1000 hours so the limit could not bind: the largest live issuance relative to capacity was CR-PL in arm B high (run v3a-scripted-armB-high-2026-11-12T13-01-28-706Z), 20,516 mSIU against the issuers' 29,018 mSIU per hour, so twice that peak needs 1.41 hours; 2 is the smallest whole number covering it (2.83x in that run, more in the others). The largest live issuance in absolute terms was 28,176 mSIU of CR-PL in arm A high, against 50,372 mSIU per hour there. Live issuance counts the reserve and every other live claim on the same capacity (PROVIDER's sales), so it is at least the reserve. The issuers' measured rate varies with the print at genesis; v6's issuance limit stays in code and a validity gate fails any run in which it binds.",
     "seats": { "counted": "claude-sonnet-5", "dev": "claude-haiku-5-5" },
     "minCounts": {

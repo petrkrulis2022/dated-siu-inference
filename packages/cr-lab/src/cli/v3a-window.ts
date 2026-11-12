@@ -147,7 +147,7 @@ for (const t of of("turn"))
   }
 const nav = of("nav")
   .filter((_, i, all) => i === all.length - 1 || all[i + 1]?.window !== all[i]?.window)
-  .map((e) => `${e.window} ${e.reserveNav} (shadow NAV ${e.shadowNav}, buffer ${e.bufferUsdc} µ$, draw ${e.bufferDrawUsdc} µ$)`);
+  .map((e) => `${e.window} ${e.reserveNav} (shadow NAV ${e.shadowNav}; lab subsidy ${e.subsidyThisWindowUsdc} µ$ at this roll, ${e.subsidyPaidUsdc} µ$ so far)`);
 const closes = of("claim-close").filter((e) => e.reserveLot !== true);
 let report = `# v3a ${stopped !== undefined ? "STOPPED" : "run"} ${runId}\n\n`;
 report += `- ${mode} agents${mode === "model" ? ` (${model})` : ""}; arm ${arm}; ${vol} volatility; run seed ${seed}; ${windowCount} windows${cell !== undefined ? `; counted cell ${cell}` : " (not a counted cell)"}\n`;

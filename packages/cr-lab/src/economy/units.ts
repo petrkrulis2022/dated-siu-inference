@@ -50,6 +50,23 @@ export function showMsiu(microSiu: bigint): string {
   return `${(microSiu / 1_000n).toString()} mSIU`;
 }
 
+/** D146: a whole number with its digits grouped in thousands, as the v3a boards show amounts */
+export function group(n: bigint): string {
+  const neg = n < 0n;
+  const s = (neg ? -n : n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return neg ? `-${s}` : s;
+}
+/** D146 (v3a): a micro-SIU amount as the board shows it -- whole mSIU with its value in µ$ at `rate` beside it, in the window's display order */
+export function pairMicroSiu(microSiu: bigint, rate: NanoUsdPerSiu, siuFirst: boolean): string {
+  const usd = usdcForMicroSiu(microSiu, rate);
+  return siuFirst ? `${group(microSiu / 1_000n)} mSIU (≈ ${group(usd)} µ$)` : `${group(usd)} µ$ (≈ ${group(microSiu / 1_000n)} mSIU)`;
+}
+/** D146 (v3a): a USDC amount (base units, µ$) as the board shows it -- with its value in mSIU at `rate` beside it, in the window's display order */
+export function pairUsdc(usdc: bigint, rate: NanoUsdPerSiu, siuFirst: boolean): string {
+  const micro = rate === 0n ? 0n : (usdc * 1_000_000_000n) / rate;
+  return siuFirst ? `${group(micro / 1_000n)} mSIU (≈ ${group(usdc)} µ$)` : `${group(usdc)} µ$ (≈ ${group(micro / 1_000n)} mSIU)`;
+}
+
 /** A decimal string of `units` with `decimals` places, for logs and boards (display only, never arithmetic). */
 export function show(units: bigint, decimals = 6): string {
   const neg = units < 0n;

@@ -56,6 +56,8 @@ export const LOG_KINDS = [
   "provider-profit",
   // D145: v6's issuance limit bound -- a roll or a creation could not place what it wanted for lack of the issuers' total headroom (a validity gate)
   "issuance-limit",
+  // D146: the lab subsidy funded a roll's cover (it replaces v3a's finite buffer)
+  "lab-subsidy",
 ] as const;
 export type LogKind = (typeof LOG_KINDS)[number];
 

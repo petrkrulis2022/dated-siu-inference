@@ -353,11 +353,14 @@ export class MemoryChain {
     return (this.issuersForClass.get(classId) ?? []).reduce((n, i) => n + this.headroom(i, classId) + (this.bondLots.get(`${i}|${classId}`)?.outstanding ?? 0n), 0n);
   }
   /**
-   * v3a (D145): where a roll's lot goes under pooled direct mint -- whole to the issuer `route` would pick when one can take it, else split across the issuers not
-   * skipped, in registration order, each taking what its headroom allows. Refuses when even their total is short: v6's issuance limit binds.
+   * v3a (D145, amended): where a roll's lot goes under pooled direct mint (v6: direct mint is "routed to members with headroom by delivery ratio") -- whole to the
+   * first issuer in `rank` that can take it, else split across the issuers not skipped, in `rank` order, each taking what its headroom allows. `rank` is the world's
+   * delivery-ratio order; without it, registration order. Refuses when even their total is short: v6's issuance limit binds.
    */
-  #placePooled(classId: string, milli: MilliSiu): { issuer: Account; milli: MilliSiu }[] {
-    const candidates = this.issuersForClass.get(classId) ?? [];
+  #placePooled(classId: string, milli: MilliSiu, rank?: readonly Account[]): { issuer: Account; milli: MilliSiu }[] {
+    const registered = this.issuersForClass.get(classId) ?? [];
+    const candidates =
+      rank === undefined ? registered : [...rank.filter((i) => registered.includes(i)), ...registered.filter((i) => !rank.includes(i))];
     const whole =
       candidates.find((i) => this.probeOpen.has(i) && this.headroom(i, classId) >= milli) ??
       candidates.find((i) => !this.skipped.has(i) && this.headroom(i, classId) >= milli);
@@ -653,6 +656,8 @@ export class MemoryChain {
       buys: Buy[];
       buyFrom: number;
       buyTo: number;
+      /** v3a (D145): the issuer order pooled direct mint places lots in (delivery ratio, highest first) */
+      rank?: readonly Account[];
     },
   ): RollResult {
     // AguLab.roll, step for step (checked against the contract on anvil by the DW1 replay, 2026-11-05)
@@ -743,7 +748,7 @@ export class MemoryChain {
       const minted: RollResult["minted"] = [];
       for (const b of args.buys) {
         // v3a (D145): pooled direct mint places the lot across issuers when none can take it whole; otherwise one routed mint, as AguLab does
-        const parts = this.agu_.pooledMint === true ? this.#placePooled(b.classId, b.milli) : [{ issuer: undefined, milli: b.milli }];
+        const parts = this.agu_.pooledMint === true ? this.#placePooled(b.classId, b.milli, args.rank) : [{ issuer: undefined, milli: b.milli }];
         for (const part of parts) {
           const id = this.mint(
             RESERVE,

@@ -42,7 +42,7 @@ export function judgeDevWindows(
   ).length;
   const redemptions = log.filter((e) => e.kind === "redeem").length;
   const navs = log.filter(
-    (e) => e.kind === "nav" && e.reserveNav !== null && e.navWithBuffer !== null,
+    (e) => e.kind === "nav" && e.reserveNav !== null && (e.shadowNav !== undefined ? e.shadowNav !== null : e.navWithBuffer !== null),
   ).length;
   const flagged = stats.flatMap((s) => s.flagged);
   const hops = onwardSpends(log, "agu");
@@ -74,7 +74,7 @@ export function judgeDevWindows(
       detail: `${redemptions} redemptions`,
     },
     {
-      name: "NAV published with and without the buffer",
+      name: "NAV published every window (v3a: with the shadow NAV; v2: with and without the buffer)",
       ok: navs >= 1,
       detail: `${navs} publications`,
     },

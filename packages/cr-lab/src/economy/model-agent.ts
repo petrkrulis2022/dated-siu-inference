@@ -132,8 +132,8 @@ const ROLE: Record<Role, string> = {
  */
 const marketLineV3a = (siuFirst: boolean): string =>
   siuFirst
-    ? "Prices are stated in SIU (one SIU is one correct answer to each of the four task types) and in dollars. You hold two currencies, AGU-lab -- a token whose value is its reserve of work claims, its NAV -- and USDC, and you may pay in either wherever the payee accepts it; your board shows every amount in both units, at today's print."
-    : "Prices are stated in dollars and in SIU (one SIU is one correct answer to each of the four task types). You hold two currencies, USDC and AGU-lab -- a token whose value is its reserve of work claims, its NAV -- and you may pay in either wherever the payee accepts it; your board shows every amount in both units, at today's print.";
+    ? "Prices are stated in SIU and in dollars. An SIU is a fixed unit of AI work; each task type's work in mSIU is shown on your board. You hold two currencies, AGU-lab -- a token whose value is its reserve of work claims, its NAV -- and USDC, and you may pay in either wherever the payee accepts it; your board shows every amount in both units, at today's print."
+    : "Prices are stated in dollars and in SIU. An SIU is a fixed unit of AI work; each task type's work in mSIU is shown on your board. You hold two currencies, USDC and AGU-lab -- a token whose value is its reserve of work claims, its NAV -- and you may pay in either wherever the payee accepts it; your board shows every amount in both units, at today's print.";
 
 const COMMON_V3A = (siuFirst: boolean, failedWorkPays: boolean): string[] => [
   "You are one agent in a small closed market for crypto-research work. The run is 8 windows; each window is one day of 8 rounds, and on each round you take exactly one action.",

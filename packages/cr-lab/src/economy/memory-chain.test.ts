@@ -543,6 +543,22 @@ describe("v3a: pooled direct mint (D145, v6) -- the roll places a lot across iss
     expect(p.retired.has(lot)).toBe(false);
   });
 
+  it("follows the delivery-ratio rank it is given (v6: direct mint is \"routed to members with headroom by delivery ratio\"), for a whole lot and for a split", () => {
+    const ranked = (p: MemoryChain, lot: string, milli: bigint, rank: string[]) => {
+      now = w(1).from + 60;
+      return p.roll("agu-issuer", { rate: RATE, frontLots: [lot], sales: [], buys: [{ classId: "CR-PL", milli }], buyFrom: w(2).from, buyTo: w(2).to, rank });
+    };
+    // whole: both could take it (C1 2,500 left, C2 2,000); registration order would pick C1, the rank picks C2
+    const a = chainWith(4_000n, 2_000n, true);
+    expect(ranked(a, front(a, 1_500n), 1_500n, ["C2", "C1"]).minted.map((m) => [m.issuer, m.milli])).toEqual([["C2", 1_500n]]);
+    // split: C1 has 1,000 left, C2 1,200; ranked C2 first, C2 fills before C1
+    const b = chainWith(2_500n, 1_200n, true);
+    expect(ranked(b, front(b, 1_500n), 1_500n, ["C2", "C1"]).minted.map((m) => [m.issuer, m.milli])).toEqual([
+      ["C2", 1_200n],
+      ["C1", 300n],
+    ]);
+  });
+
   it("is off unless asked for: without it the roll still needs one issuer with room for the whole lot, as the deployed router does", () => {
     const p = chainWith(2_000n, 1_000n, false);
     const lot = front(p, 1_500n);

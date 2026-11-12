@@ -86,6 +86,8 @@ export interface V3aParams {
    * here), sized so the issuers' total covers the largest live issuance any v3a run reaches with a 2× margin. A bigger bond never raises issuance (v6 C6); only this does.
    */
   capacityHours: bigint;
+  /** D146: a need that lapses unmet charges its demand agent this many times the need's work (its value at the print), so skipping a need is never the cheap choice */
+  unmetNeedMultiple: bigint;
   seats: { counted: string; dev: string };
   /** each measure's own minimum count below which it reports n/a */
   minCounts: Record<string, number>;
@@ -346,6 +348,7 @@ function parseV3a(r: Record<string, unknown>): V3aParams {
     minRedeemMilli: big(r.minRedeemMilli, "v3a.minRedeemMilli"),
     minCreateMilli: big(r.minCreateMilli, "v3a.minCreateMilli"),
     capacityHours: positive(r.capacityHours, "v3a.capacityHours"),
+    unmetNeedMultiple: positive(r.unmetNeedMultiple, "v3a.unmetNeedMultiple"),
     seats: { counted: String(seats.counted), dev: String(seats.dev) },
     minCounts: Object.fromEntries(Object.entries(o(r.minCounts, "minCounts")).map(([k, v]) => [k, num(v, `minCounts.${k}`)])),
   };

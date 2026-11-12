@@ -171,21 +171,29 @@ describe("v3a deferred payment: missed worthwhile purchases", () => {
 });
 
 describe("v3a comparability: the cheapest offer per accepted mSIU, by display order", () => {
-  it("with failed work refunded, X at 15% below list is the cheapest per accepted task; with it paid for, C1 is (the owner's trade-off)", () => {
+  // D146 (owner, 2026-11-12) replaces D143's scoring of a C1-versus-X choice: issuers with different pass rates are not comparable offers, so such a choice is left out,
+  // whether failed work is refunded or paid for
+  it("leaves out a choice between C1 and ISSUER-X (different pass rates), whether failed work is refunded or paid for", () => {
     const pass = loadV3aPassRates(params);
-    // window 1 shows SIU first, window 3 dollars first (`siuFirstForWindow`)
     const commission = (day: string, to: string): LogEntry =>
       e(day, "RESEARCH-1", { kind: "escrow-open", to, task: "CR-PL", alternatives: { "ISSUER-C1": 300_848n, "ISSUER-X": 255_721n } });
     const log = [genesis(), price("d1", 1), price("d3", 3), commission("d1", "ISSUER-X"), commission("d3", "ISSUER-C1")];
-    const refunded = scoreComparability([run("r", log)], pass, false, 1, 1);
-    expect(refunded.siuFirst).toEqual({ decisions: 1, cheapest: 1, share: 1 });
-    expect(refunded.dollarsFirst).toEqual({ decisions: 1, cheapest: 0, share: 0 });
-    expect(refunded.differencePoints).toBe(100);
-    expect(refunded.verdict).toBe("signal");
-    // paid for on a fail: X costs 255,721 / 0.80 = 319,651 per accepted task, C1 300,848 / 0.9444 = 318,560 -- C1 is cheaper
-    const paid = scoreComparability([run("r", log)], pass, true, 1, 1);
-    expect(paid.siuFirst.cheapest).toBe(0);
-    expect(paid.dollarsFirst.cheapest).toBe(1);
+    for (const failedWorkPays of [false, true]) {
+      const c = scoreComparability([run("r", log)], pass, failedWorkPays, 1, 1);
+      expect(c.siuFirst.decisions + c.dollarsFirst.decisions).toBe(0);
+      expect(c.excluded.commission).toBe(2);
+      expect(c.verdict).toBe("n/a");
+    }
+  });
+
+  it("with failed work paid for, the cost per accepted task still decides among issuers of the same pass rate", () => {
+    const pass = { "ISSUER-C1": { "CR-PL": 9_444 }, "ISSUER-C2": { "CR-PL": 9_444 } };
+    const log = [
+      genesis(),
+      price("d1", 1),
+      e("d1", "RESEARCH-1", { kind: "escrow-open", to: "ISSUER-C2", task: "CR-PL", alternatives: { "ISSUER-C1": 300_848n, "ISSUER-C2": 290_000n } }),
+    ];
+    for (const failedWorkPays of [false, true]) expect(scoreComparability([run("r", log)], pass, failedWorkPays, 1, 1).siuFirst).toEqual({ decisions: 1, cheapest: 1, share: 1 });
   });
 });
 
@@ -229,13 +237,8 @@ describe("v3a validity gates and a full scripted run, scored end to end", () => 
     expect(checkGates(stale, params)[2]?.ok).toBe(false);
     // the seed: a counted cell whose hash is not the frozen one
     expect(checkGates(log, params, { cell: "A-low-1" }).find((g) => g.name.startsWith("the run's seed"))?.ok).toBe(false);
-    // D144: the buffer must not run dry before the end of window 8 -- a roll that could not restore the face, or a NAV published with the buffer at zero
-    const buffer = (g: ReturnType<typeof checkGates>) => g.find((x) => x.name.startsWith("the buffer"));
-    expect(buffer(gates)?.ok).toBe(true);
-    const dry = log.map((x) => (x.kind === "nav" && x.window === log.find((y) => y.kind === "price" && y.atWindow === 6)?.window ? { ...x, bufferUsdc: 0n } : x));
-    expect(buffer(checkGates(dry, params))?.ok).toBe(false);
-    const short = log.map((x) => (x.kind === "roll-buy" && x.summary === true && x.refused === undefined ? { ...x, faceBought: 0n } : x));
-    expect(buffer(checkGates(short, params))?.ok).toBe(false);
+    // D146 (amends D144): the buffer is replaced by an open-ended lab subsidy, so there is no buffer gate; what the subsidy paid is reported instead
+    expect(gates.some((x) => x.name.startsWith("the buffer"))).toBe(false);
     // D145: v6's issuance limit must never bind -- a creation or a roll refused for lack of total headroom makes the run invalid
     const issuance = (g: ReturnType<typeof checkGates>) => g.find((x) => x.name.startsWith("v6's issuance limit"));
     expect(issuance(gates)?.ok).toBe(true);
@@ -274,3 +277,61 @@ describe("v3a validity gates and a full scripted run, scored end to end", () => 
 
 // keep D and the fixture helpers referenced for the type checker
 void D;
+
+describe("D146 (owner, 2026-11-12): comparability counts only decisions among offers with the same pass rate", () => {
+  const pass = { "ISSUER-C1": { "CR-PL": 10_000 }, "ISSUER-C2": { "CR-PL": 10_000 }, "ISSUER-X": { "CR-PL": 8_000 } };
+  const commission = (seq: number, to: string, alternatives: Record<string, bigint>): LogEntry =>
+    ({ ...e("d1", "RESEARCH-1", { kind: "escrow-open", task: "CR-PL", to, alternatives }), seq }) as LogEntry;
+  const claims = (seq: number, offer: string, alternatives: { offer: string; issuer: string; discountBps: bigint }[]): LogEntry =>
+    ({ ...e("d1", "DEMAND-1", { kind: "claim-mint", task: "CR-PL", offer, alternatives }), seq }) as LogEntry;
+
+  it("commissions: ISSUER-X leaves the alternatives, a commission given to X is not counted, and a choice left with one alternative is not a decision", () => {
+    const log = [
+      genesis(),
+      price("d1", 1),
+      commission(10, "ISSUER-C1", { "ISSUER-C1": 100n, "ISSUER-C2": 90n, "ISSUER-X": 80n }), // C1 vs C2: counted, not the cheapest
+      commission(11, "ISSUER-X", { "ISSUER-C1": 100n, "ISSUER-C2": 90n, "ISSUER-X": 80n }), // a choice involving X: excluded
+      commission(12, "ISSUER-C2", { "ISSUER-C2": 90n, "ISSUER-X": 80n }), // only C2 left at its pass rate: no decision
+    ];
+    const c = scoreComparability([run("a", log)], pass, false, 1, 1);
+    expect(c.byKind.commission).toBe(1);
+    expect(c.siuFirst.decisions + c.dollarsFirst.decisions).toBe(1);
+    expect(c.siuFirst.cheapest + c.dollarsFirst.cheapest).toBe(0);
+    expect(c.excluded.commission).toBe(2);
+  });
+
+  it("claim purchases: offers from an issuer with another pass rate leave the alternatives; buying X's offer is not counted", () => {
+    const alts = [
+      { offer: "offer-1", issuer: "ISSUER-C1", discountBps: 200n },
+      { offer: "offer-2", issuer: "ISSUER-C2", discountBps: 100n },
+      { offer: "offer-3", issuer: "ISSUER-X", discountBps: 1_500n },
+    ];
+    const log = [genesis(), price("d1", 1), claims(10, "offer-1", alts), claims(11, "offer-3", alts)];
+    const c = scoreComparability([run("a", log)], pass, false, 1, 1);
+    // offer-1 is the deepest discount among C1 and C2 (X's deeper one is not comparable): counted, cheapest
+    expect(c.byKind.claims).toBe(1);
+    expect(c.siuFirst.cheapest + c.dollarsFirst.cheapest).toBe(1);
+    expect(c.excluded.claims).toBe(1);
+  });
+
+  it("reports how many decisions each source contributes, and how many were left out for a different pass rate", () => {
+    const log = [genesis(), price("d1", 1), commission(10, "ISSUER-X", { "ISSUER-C1": 100n, "ISSUER-C2": 90n, "ISSUER-X": 80n })];
+    const text = renderArmScore(scoreArm("A", [run("a", log)], params, pass));
+    expect(text).toMatch(/decisions: 0 briefs \(research quotes\), 0 commissions \(C1 vs C2\), 0 claim purchases \(PROVIDER's offers\); left out for a different pass rate: 1 commission, 0 claim purchases/);
+  });
+});
+
+describe("D146 (owner, 2026-11-12): the scorer reports the lab subsidy each run drew", () => {
+  it("totals what each run's rolls drew from the lab subsidy for unsold front work", () => {
+    const pass = loadV3aPassRates(params);
+    const roll = (day: string, cover: bigint): LogEntry => e(day, "AGU-ISSUER", { kind: "roll-buy", summary: true, cover });
+    const a = run("a", [genesis(), price("d1", 1), roll("d1", 100_000n), price("d2", 2), roll("d2", 250_000n)]);
+    const b = run("b", [genesis(), price("d1", 1), roll("d1", 0n)]);
+    const s = scoreArm("A", [a, b], params, pass);
+    expect(s.subsidy).toEqual([
+      { label: "a", paidUsdc: 350_000n },
+      { label: "b", paidUsdc: 0n },
+    ]);
+    expect(renderArmScore(s)).toMatch(/Lab subsidy for unsold front work, per run: a 350,000 µ\$, b 0 µ\$/);
+  });
+});

@@ -18,6 +18,7 @@
  */
 import { D, type DecimalValue } from "@touchstone/sdk";
 import { TASKS, type TaskId } from "../tasks/instances.js";
+import { siuFirstForWindow } from "./board.js";
 import type { EconomyLog } from "./log.js";
 import {
   BUFFER,
@@ -42,6 +43,8 @@ import {
 } from "./v3a-market.js";
 import {
   microSiuForUsdcCeil,
+  pairMicroSiu,
+  pairUsdc,
   show,
   showMsiu,
   usdcFor,
@@ -63,6 +66,8 @@ export const DATASET_FOR: Readonly<Record<TaskId, string>> = {
   "CR-UO": "tokens",
   "CR-SM": "stablecoins",
 };
+/** D146: the lab, paying for unsold front work in v3a (it replaces the finite buffer) */
+export const LAB_SUBSIDY = "LAB-SUBSIDY";
 export const DATA_AGENT = "DATA-AGENT";
 export const GATE_RUNNER = "GATE-RUNNER";
 export const AGU_ISSUER = "AGU-ISSUER";
@@ -290,8 +295,16 @@ export class World {
    * the shadow in proportion. Agents see this and NAV; never a NAV that includes the buffer.
    */
   #shadowPpm = 1_000_000n;
-  /** D144: the buffer's draw at this window's roll, USDC base units (0 when no roll ran or the buffer paid nothing) */
+  /** D144: the buffer's draw at this window's roll, USDC base units (0 when no roll ran or the buffer paid nothing); D146: in v3a, the lab subsidy's */
   #bufferDraw = 0n;
+  /** D146 (v3a): everything the lab subsidy has paid for unsold front work so far (the sum of every roll's cover) */
+  #subsidyPaid = 0n;
+  get subsidyPaid(): UsdcUnits {
+    return this.#subsidyPaid;
+  }
+  get subsidyThisWindow(): UsdcUnits {
+    return this.#bufferDraw;
+  }
   get shadowNavPpm(): bigint {
     return this.#shadowPpm;
   }
@@ -340,7 +353,8 @@ export class World {
         reserveSeries: params.reserve.series,
         minTenorSeconds: params.reserve.minTenorSeconds,
         discountBps: params.reserve.discountBps,
-        bufferTarget: params.reserve.bufferTargetUsdc,
+        // D146: v3a has no buffer to refill -- the lab subsidy funds each roll's cover exactly -- so carry goes to income
+        bufferTarget: params.v3a !== undefined ? 0n : params.reserve.bufferTargetUsdc,
         // D145: v3a's roll uses v6's pooled direct mint; v1/v2 keep the deployed router's single-issuer placement
         ...(params.v3a !== undefined ? { pooledMint: true } : {}),
       },
@@ -478,7 +492,7 @@ export class World {
         const units = this.#unitsOf(agent, a);
         const min = this.params.v3a?.minRedeemMilli;
         if (min !== undefined && this.siuOf(units) < min * 1_000n)
-          return { ok: false, note: `redeem at least ${min} mSIU of AGU-lab (that is ${this.siuOf(units) / 1_000n} mSIU)` };
+          return { ok: false, note: `redeem at least ${this.#val(min * 1_000n)} of AGU-lab value (that is ${this.#val(this.siuOf(units))})` };
         return this.#redeem(agent, units);
       }
       case "present_claim":
@@ -518,8 +532,8 @@ export class World {
           ok: true,
           note:
             a.pay === "agu"
-              ? `ordered ${show(a.milli, 3)} SIU of ${a.task} claims for the next window, paid in AGU-lab at the roll's discounted price`
-              : `ordered ${show(a.milli, 3)} SIU of ${a.task} claims for the next window, paid in USDC at the roll`,
+              ? `ordered ${this.#work(a.milli, this.#seriesOfTask(a.task))} of ${a.task} claims for the next window, paid in AGU-lab at the roll's discounted price`
+              : `ordered ${this.#work(a.milli, this.#seriesOfTask(a.task))} of ${a.task} claims for the next window, paid in USDC at the roll`,
         };
       }
       case "post_quote":
@@ -573,12 +587,12 @@ export class World {
     if (m !== undefined) {
       const ceiling = this.holdingCeilingMicroSiu(agent);
       if (this.siuOf(this.chain.balance(agent, "AGU") + units) > ceiling)
-        return { ok: false, note: `mandate: holding ceiling of ${show(ceiling)} SIU in AGU-lab` };
+        return { ok: false, note: this.v3a === undefined ? `mandate: holding ceiling of ${show(ceiling)} SIU in AGU-lab` : `mandate: holding ceiling of ${this.#val(ceiling)} in AGU-lab` };
       if (
         this.chain.balance(agent, "USDC") - this.participant.quote(units, rate).ask <
         m.minUsdcBuffer
       )
-        return { ok: false, note: `mandate: keep at least ${show(m.minUsdcBuffer)} USDC` };
+        return { ok: false, note: `mandate: keep at least ${this.#usd(m.minUsdcBuffer)}` };
     }
     const short = units - this.chain.balance(PARTICIPANT, "AGU");
     if (short > 0n) this.#participantTopUp(short);
@@ -599,9 +613,12 @@ export class World {
     return fill < units
       ? {
           ok: true,
-          note: `partly filled: bought ${show(r.units)} of the ${show(units)} AGU-lab asked, for ${show(r.usdc)} USDC; the issuers have no more capacity this window`,
+          note:
+            this.v3a === undefined
+              ? `partly filled: bought ${show(r.units)} of the ${show(units)} AGU-lab asked, for ${show(r.usdc)} USDC; the issuers have no more capacity this window`
+              : `partly filled: bought ${this.#agu(r.units)} of the ${this.#agu(units)} asked, for ${this.#usd(r.usdc)}; the issuers have no more capacity this window`,
         }
-      : { ok: true, note: `bought ${show(r.units)} AGU-lab for ${show(r.usdc)} USDC` };
+      : { ok: true, note: `bought ${this.#agu(r.units)} for ${this.#usd(r.usdc)}` };
   }
 
   /**
@@ -762,7 +779,7 @@ export class World {
       usdc: r.usdc,
       reasoning,
     });
-    return { ok: true, note: `sold ${show(r.units)} AGU-lab for ${show(r.usdc)} USDC` };
+    return { ok: true, note: `sold ${this.#agu(r.units)} for ${this.#usd(r.usdc)}` };
   }
 
   #redeem(agent: string, units: AguUnits): Outcome {
@@ -773,12 +790,12 @@ export class World {
       // R12: every claim received in kind gets the same arrival notice with its deadline as a bought claim
       this.notify(
         agent,
-        `arrival: ${show(l.milli, 3)} SIU of ${ct?.classId} work claim ${l.tokenId}, presentable from window ${this.#windowOf(ct?.windowFrom ?? 0)} until its end; it lapses worthless if never presented`,
+        `arrival: ${this.#work(l.milli, ct?.series)} of ${ct?.classId} work claim ${l.tokenId}, presentable from window ${this.#windowOf(ct?.windowFrom ?? 0)} until its end; it lapses worthless if never presented`,
       );
     }
     return {
       ok: true,
-      note: `redeemed ${show(units)} AGU-lab for ${r.lots.length} claim lot(s) in kind`,
+      note: `redeemed ${this.#agu(units)} for ${r.lots.length} claim lot(s) in kind`,
     };
   }
   #windowOf(t: number): number {
@@ -806,7 +823,7 @@ export class World {
     const face = this.v3a?.faces[ct.series][ct.classId as TaskId];
     if (this.v3a !== undefined && face === undefined) return { ok: false, note: `no task face for ${ct.classId} claims` };
     if (face !== undefined && milli < face)
-      return { ok: false, note: `one ${ct.classId} task takes ${face} mSIU of claim; you hold ${milli} mSIU of ${tokenId} (holdings of the same claim add up)` };
+      return { ok: false, note: `one ${ct.classId} task takes ${this.#work(face, ct.series)} of claim; you hold ${this.#work(milli, ct.series)} of ${tokenId} (holdings of the same claim add up)` };
     const take = face ?? (milli < TASK_MILLI ? milli : TASK_MILLI);
     if (take === 0n) return { ok: false, note: `you hold none of ${tokenId}` };
     this.chain.present(holder, tokenId);
@@ -989,10 +1006,10 @@ export class World {
     if (cap === undefined) return undefined;
     const after = this.spentFor(agent, forWindow) + value;
     if (after > cap)
-      return `over spend cap for window ${forWindow}: ${after / 1_000n} of ${cap / 1_000n} mSIU (already committed ${this.spentFor(agent, forWindow) / 1_000n}, this ${value / 1_000n})`;
+      return `over spend cap for window ${forWindow}: ${this.#val(after)} of ${this.#val(cap)} (already committed ${this.#val(this.spentFor(agent, forWindow))}, this ${this.#val(value)})`;
     const buffer = this.v3aBufferMicroUsd(agent) ?? 0n;
     const left = this.valueMicroUsd(agent) - usdcForMicroSiuCeil(value, this.commodityRate);
-    if (left < buffer) return `would leave ${left} µ$ of value, below your minimum of ${buffer} µ$`;
+    if (left < buffer) return `would leave ${this.#usd(left)} of value, below your minimum of ${this.#usd(buffer)}`;
     return undefined;
   }
 
@@ -1058,7 +1075,7 @@ export class World {
     this.notify(
       need.agent,
       this.v3a !== undefined
-        ? `quote ${q.id} from ${agent}: a brief on ${a.tasks.join(" + ")} for ${priceUnit === "usdc" ? `${priceUsdcMicro} µ$` : `${priceMicroSiu / 1_000n} mSIU`}, accepting ${q.accepts === "both" ? "USDC or AGU-lab" : q.accepts === "usdc" ? "USDC" : "AGU-lab"} (or work claims for this window), escrowed until a passing brief`
+        ? `quote ${q.id} from ${agent}: a brief on ${a.tasks.join(" + ")} for ${priceUnit === "usdc" ? this.#usd(priceUsdcMicro ?? 0n) : this.#val(priceMicroSiu)}, accepting ${q.accepts === "both" ? "USDC or AGU-lab" : q.accepts === "usdc" ? "USDC" : "AGU-lab"} (or work claims for this window), escrowed until a passing brief`
         : priceUnit === "usdc"
           ? `quote ${q.id} from ${agent}: a brief on ${a.tasks.join(" + ")} for ${show(priceUsdcMicro as UsdcUnits)} USDC, payable on delivery of a passing brief`
           : `quote ${q.id} from ${agent}: a brief on ${a.tasks.join(" + ")} for ${showMsiu(priceMicroSiu)}, payable in AGU-lab on delivery of a passing brief`,
@@ -1076,7 +1093,7 @@ export class World {
       case "accepted":
         return q.paidInClaims !== undefined
           ? "already accepted, paid in work claims held in escrow"
-          : `already accepted, ${show(q.usdcEscrowed ?? q.agu ?? 0n)} ${q.usdcEscrowed !== undefined ? "USDC" : "AGU-lab"} in escrow`;
+          : `already accepted, ${q.usdcEscrowed !== undefined ? this.#usd(q.usdcEscrowed) : this.#agu(q.agu ?? 0n)} in escrow`;
       case "delivered":
         return `already paid in window ${w}`;
       case "failed":
@@ -1172,9 +1189,9 @@ export class World {
       });
       this.notify(
         q.researcher,
-        `${agent} accepted quote ${q.id}: ${show(usdcOwed)} USDC is in escrow, released when you deliver a passing brief this window`,
+        `${agent} accepted quote ${q.id}: ${this.#usd(usdcOwed)} is in escrow, released when you deliver a passing brief this window`,
       );
-      return { ok: true, note: `accepted ${q.id}: ${show(usdcOwed)} USDC in escrow` };
+      return { ok: true, note: `accepted ${q.id}: ${this.#usd(usdcOwed)} in escrow` };
     }
     const units = this.v3a !== undefined ? this.aguFor(q.priceMicroSiu) : aguEquivalent;
     this.chain.escrowOpen(escrow, "AGU", agent, q.researcher, GATE_RUNNER, units, this.windowTo(this.window));
@@ -1193,9 +1210,9 @@ export class World {
     });
     this.notify(
       q.researcher,
-      `${agent} accepted quote ${q.id}: ${show(units)} AGU-lab is in escrow, released when you deliver a passing brief this window`,
+      `${agent} accepted quote ${q.id}: ${this.#agu(units)} is in escrow, released when you deliver a passing brief this window`,
     );
-    return { ok: true, note: `accepted ${q.id}: ${show(units)} AGU-lab in escrow` };
+    return { ok: true, note: `accepted ${q.id}: ${this.#agu(units)} in escrow` };
   }
 
   // ---- v3a: PROVIDER's offers, buyers' requests, creation in kind ---------------------------------------------------------------------------------
@@ -1214,9 +1231,10 @@ export class World {
       return { ok: false, note: `${a.issuer} bonds no ${a.task} claims (it may still take commissions for it)` };
     if (a.window < this.window || a.window > this.window + rules.maxWindowsAhead)
       return { ok: false, note: `offer claims for windows ${this.window} to ${this.window + rules.maxWindowsAhead}` };
-    if (a.milli <= 0n) return { ok: false, note: "offer at least 1 mSIU" };
+    if (a.milli <= 0n) return { ok: false, note: `offer at least ${this.#work(1n, this.#seriesOfTask(a.task))}` };
     const room = this.chain.headroom(a.issuer, a.task);
-    if (a.milli > room) return { ok: false, note: `${a.issuer} has headroom for ${room} mSIU of ${a.task}, not ${a.milli}` };
+    if (a.milli > room)
+      return { ok: false, note: `${a.issuer} has headroom for ${this.#work(room, this.#seriesOfTask(a.task))} of ${a.task}, not ${this.#work(a.milli, this.#seriesOfTask(a.task))}` };
     if (a.discountBps < rules.discountMinBps || a.discountBps > rules.discountMaxBps)
       return { ok: false, note: `the discount must be from ${rules.discountMinBps} to ${rules.discountMaxBps} bps (negative is a premium)` };
     if (a.to !== "all" && (this.roles.get(a.to) === undefined || this.roles.get(a.to) === "provider"))
@@ -1262,7 +1280,7 @@ export class World {
       ...(request !== undefined ? { request: request.id } : {}),
       ...(replaced !== undefined ? { replaces: replaced.id } : {}),
     });
-    if (a.to !== "all") this.notify(a.to, `PROVIDER offers you ${a.milli} mSIU of ${a.task} claims for window ${a.window} (${offer.id})`);
+    if (a.to !== "all") this.notify(a.to, `PROVIDER offers you ${this.#work(a.milli, offer.series)} of ${a.task} claims for window ${a.window} (${offer.id})`);
     return { ok: true, note: `offer ${offer.id} posted${replaced !== undefined ? `, replacing ${replaced.id}` : ""}` };
   }
 
@@ -1295,7 +1313,7 @@ export class World {
     const ahead = this.params.v3a.providerRules.maxWindowsAhead;
     if (a.window < this.window || a.window > this.window + ahead)
       return { ok: false, note: `ask for claims for windows ${this.window} to ${this.window + ahead}` };
-    if (a.milli <= 0n) return { ok: false, note: "ask for at least 1 mSIU" };
+    if (a.milli <= 0n) return { ok: false, note: `ask for at least ${this.#work(1n, this.#seriesOfTask(a.task))}` };
     if (![...this.chain.bondLots.keys()].some((k) => k.endsWith(`|${a.task}`)))
       return { ok: false, note: `no issuer bonds ${a.task} claims` };
     const r: ClaimRequest = {
@@ -1310,7 +1328,7 @@ export class World {
     };
     this.v3a.requests.push(r);
     this.#log(agent, "claim-request", { request: r.id, task: a.task, forWindow: a.window, milli: a.milli });
-    this.notify(this.params.v3a.provider, `${agent} asks for ${a.milli} mSIU of ${a.task} claims for window ${a.window} (${r.id})`);
+    this.notify(this.params.v3a.provider, `${agent} asks for ${this.#work(a.milli, this.#seriesOfTask(a.task))} of ${a.task} claims for window ${a.window} (${r.id})`);
     return { ok: true, note: `request ${r.id} posted to PROVIDER` };
   }
 
@@ -1322,14 +1340,14 @@ export class World {
     if (o === undefined) return { ok: false, note: `${a.offer}: no such offer` };
     if (o.status !== "live") return { ok: false, note: `${a.offer}: ${o.status}` };
     if (o.to !== "all" && o.to !== agent) return { ok: false, note: `${a.offer}: offered to ${o.to}, not to you` };
-    if (a.milli <= 0n || a.milli > o.milliLeft) return { ok: false, note: `${a.offer}: buy from 1 to ${o.milliLeft} mSIU` };
+    if (a.milli <= 0n || a.milli > o.milliLeft) return { ok: false, note: `${a.offer}: buy from ${this.#work(1n, o.series)} to ${this.#work(o.milliLeft, o.series)}` };
     if (!acceptsPay(o.accept, a.pay)) return { ok: false, note: `${a.offer}: PROVIDER accepts ${o.accept} on this offer` };
     const price = (this.rates[o.series] * (10_000n - o.discountBps)) / 10_000n;
     const usdc = (a.milli * price + 999_999n) / 1_000_000n;
     const value = microSiuForUsdcCeil(usdc, this.commodityRate);
     const agu = this.aguFor(value);
     if (this.chain.balance(agent, a.pay === "usdc" ? "USDC" : "AGU") < (a.pay === "usdc" ? usdc : agu))
-      return { ok: false, note: `${a.offer}: you hold too little ${a.pay === "usdc" ? "USDC" : "AGU-lab"} for that (${a.pay === "usdc" ? `${usdc} µ$` : `${this.siuOf(agu) / 1_000n} mSIU of AGU-lab`})` };
+      return { ok: false, note: `${a.offer}: you hold too little ${a.pay === "usdc" ? "USDC" : "AGU-lab"} for that (${a.pay === "usdc" ? this.#usd(usdc) : this.#agu(agu)})` };
     const refused = this.#mandateRefusal(agent, o.window, value);
     if (refused !== undefined) return { ok: false, note: `${a.offer}: ${refused}` };
     // for the comparability measure: every live offer this buyer could see for the same class and window when it chose, with its discount
@@ -1370,17 +1388,17 @@ export class World {
     });
     this.notify(
       agent,
-      `arrival: ${a.milli} mSIU of ${o.task} work claim ${tokenId} from ${o.issuer}, presentable in window ${o.window} only; it lapses worthless if never presented`,
+      `arrival: ${this.#work(a.milli, o.series)} of ${o.task} work claim ${tokenId} from ${o.issuer}, presentable in window ${o.window} only; it lapses worthless if never presented`,
     );
-    this.notify(this.params.v3a.provider, `${agent} bought ${a.milli} mSIU from ${o.id}, paid in ${a.pay === "usdc" ? `USDC (${usdc} µ$)` : "AGU-lab"}`);
-    return { ok: true, note: `bought ${a.milli} mSIU of ${o.task} claims for window ${o.window} from ${o.id}` };
+    this.notify(this.params.v3a.provider, `${agent} bought ${this.#work(a.milli, o.series)} from ${o.id}, paid in ${a.pay === "usdc" ? `USDC (${this.#usd(usdc)})` : "AGU-lab"}`);
+    return { ok: true, note: `bought ${this.#work(a.milli, o.series)} of ${o.task} claims for window ${o.window} from ${o.id}` };
   }
 
   /** v3a (design: creation and redemption at NAV, in kind, open to any agent above a minimum size): an agent delivers a reserve-grade claim and receives AGU-lab at NAV */
   #createAgu(agent: string, tokenId: string, milli: MilliSiu): Outcome {
     if (this.params.v3a === undefined) return { ok: false, note: "only the authorised participant creates AGU-lab in this market" };
-    if (milli < this.params.v3a.minCreateMilli) return { ok: false, note: `create with at least ${this.params.v3a.minCreateMilli} mSIU of claims` };
-    if (this.chain.claimBalance(agent, tokenId) < milli) return { ok: false, note: `you hold less than ${milli} mSIU of ${tokenId}` };
+    if (milli < this.params.v3a.minCreateMilli) return { ok: false, note: `create with at least ${this.#work(this.params.v3a.minCreateMilli)} of claims` };
+    if (this.chain.claimBalance(agent, tokenId) < milli) return { ok: false, note: `you hold less than ${this.#work(milli, this.#seriesOfClaim(tokenId))} of ${tokenId}` };
     // the reserve takes claims only through the authorised participant: the agent's claim passes through it and the AGU-lab comes back, all-or-nothing
     this.chain.transferClaim(tokenId, agent, PARTICIPANT, milli);
     let units: AguUnits;
@@ -1392,7 +1410,7 @@ export class World {
     }
     this.chain.transfer("AGU", PARTICIPANT, agent, units);
     this.#log(agent, "create", { tokenId, milli, agu: units, inKindBy: agent });
-    return { ok: true, note: `created ${this.siuOf(units) / 1_000n} mSIU of AGU-lab with ${milli} mSIU of ${tokenId}` };
+    return { ok: true, note: `created ${this.#agu(units)} with ${this.#work(milli, this.#seriesOfClaim(tokenId))} of ${tokenId}` };
   }
 
   /**
@@ -1507,7 +1525,13 @@ export class World {
       covered += take * per;
     }
     if (covered < q.priceMicroSiu)
-      return { ok: false, note: `${q.id}: your claims cover ${covered / 1_000n} of ${ceilDiv(q.priceMicroSiu, 1_000n)} mSIU` };
+      return {
+        ok: false,
+        note:
+          this.v3a === undefined
+            ? `${q.id}: your claims cover ${covered / 1_000n} of ${ceilDiv(q.priceMicroSiu, 1_000n)} mSIU`
+            : `${q.id}: your claims cover ${this.#val(covered)} of ${this.#val(q.priceMicroSiu)}`,
+      };
     const both = this.v3a !== undefined && this.#canPayBoth(agent, q.priceMicroSiu);
     // D144: into escrow, like a currency payment -- released to the research agent on a passing brief, returned to the payer if it fails or lapses
     const escrowAccount = `claims-escrow:${q.id}`;
@@ -1538,9 +1562,12 @@ export class World {
     const face = plan.reduce((n, p) => n + p.milli, 0n);
     this.notify(
       q.researcher,
-      `${agent} accepted quote ${q.id} and paid in work claims, held in escrow for the brief: ${plan.map((p) => `${show(p.milli, 3)} SIU of ${p.task} claim ${p.tokenId}`).join("; ")}. You may present them for the brief's own tasks in this window (${due}); what is left is yours when the brief passes, and returns to ${agent} if it fails or lapses -- and any of their work you used then, you pay back at the print.`,
+      `${agent} accepted quote ${q.id} and paid in work claims, held in escrow for the brief: ${plan.map((p) => `${this.#work(p.milli, this.#seriesOfClaim(p.tokenId))} of ${p.task} claim ${p.tokenId}`).join("; ")}. You may present them for the brief's own tasks in this window (${due}); what is left is yours when the brief passes, and returns to ${agent} if it fails or lapses -- and any of their work you used then, you pay back at the print.`,
     );
-    return { ok: true, note: `accepted ${q.id}: paid in work claims (${show(face, 3)} SIU), held in escrow until the brief passes` };
+    return {
+      ok: true,
+      note: `accepted ${q.id}: paid in work claims (${this.v3a === undefined ? `${show(face, 3)} SIU` : this.#val(plan.reduce((n, p) => n + this.#toCommodity(p.milli * 1_000n, this.#seriesOfClaim(p.tokenId)), 0n))}), held in escrow until the brief passes`,
+    };
   }
 
   /**
@@ -1580,7 +1607,7 @@ export class World {
       });
       return {
         ok: true,
-        note: `bought today's ${dataset} data for ${show(agu)} AGU-lab (the equivalent of ${show(usdcPrice)} USDC)`,
+        note: `bought today's ${dataset} data for ${this.#agu(agu)} (the equivalent of ${this.#usd(usdcPrice)})`,
       };
     }
     this.chain.transfer("USDC", agent, DATA_AGENT, usdcPrice);
@@ -1593,7 +1620,7 @@ export class World {
       payUnit: "usdc",
       dataSha: this.dataSha(this.window),
     });
-    return { ok: true, note: `bought today's ${dataset} data for ${show(usdcPrice)} USDC` };
+    return { ok: true, note: `bought today's ${dataset} data for ${this.#usd(usdcPrice)}` };
   }
 
   /** v2 item 1: the issuer quotes both units the same way; paying in USDC instead of the native AGU-lab costs the payer the participant's own ask-side rounding (never a separate fee account) */
@@ -1685,12 +1712,12 @@ export class World {
       [field]: paid,
     });
     this.#addOutput(agent, task, out, issuerId);
-    const unitLabel = pay === "usdc" ? "USDC" : "AGU-lab";
+    const amt = (n: bigint): string => (pay === "usdc" ? this.#usd(n) : this.#agu(n));
     return {
       ok: true,
       note: out.passed
-        ? `${issuerId} delivered ${task} and passed: paid ${show(paid)} ${unitLabel}`
-        : `${issuerId}'s ${task} work failed the gate: your ${show(amount)} ${unitLabel} came back in full`,
+        ? `${issuerId} delivered ${task} and passed: paid ${amt(paid)}`
+        : `${issuerId}'s ${task} work failed the gate: your ${amt(amount)} came back in full`,
     };
   }
 
@@ -1750,13 +1777,13 @@ export class World {
         q.demand,
         passed
           ? `brief ${q.id} from ${agent}: PASSED; it was paid in the work claims you put in escrow`
-          : `brief ${q.id} from ${agent}: FAILED; your unused claims came back${repaid > 0n ? `, and ${agent} paid back ${repaid} µ$ for the claim work it used` : ""}; you may get the need met another way`,
+          : `brief ${q.id} from ${agent}: FAILED; your unused claims came back${repaid > 0n ? `, and ${agent} paid back ${this.#usd(repaid)} for the claim work it used` : ""}; you may get the need met another way`,
       );
       return {
         ok: true,
         note: passed
           ? `brief ${q.id} passed: the claims left in escrow are yours`
-          : `brief ${q.id} failed (a component failed): the unused claims went back to ${q.demand}${repaid > 0n ? `, and you paid back ${repaid} µ$ for the claim work you used` : ""}`,
+          : `brief ${q.id} failed (a component failed): the unused claims went back to ${q.demand}${repaid > 0n ? `, and you paid back ${this.#usd(repaid)} for the claim work you used` : ""}`,
       };
     }
     const escrow = q.escrow as string;
@@ -1785,14 +1812,15 @@ export class World {
       [field]: paid,
     });
     const unitLabel = inUsdc ? "USDC" : "AGU-lab";
+    const amt = (n: bigint): string => (inUsdc ? this.#usd(n) : this.#agu(n));
     this.notify(
       q.demand,
-      `brief ${q.id} from ${agent}: ${passed ? `PASSED, ${show(paid)} ${unitLabel} paid` : `FAILED, your ${unitLabel} came back in full; you may commission it again`}`,
+      `brief ${q.id} from ${agent}: ${passed ? `PASSED, ${amt(paid)} paid` : `FAILED, your ${unitLabel} came back in full; you may commission it again`}`,
     );
     return {
       ok: true,
       note: passed
-        ? `brief ${q.id} passed: you were paid ${show(paid)} ${unitLabel}`
+        ? `brief ${q.id} passed: you were paid ${amt(paid)}`
         : `brief ${q.id} failed (a component failed): the buyer was refunded`,
     };
   }
@@ -1831,14 +1859,14 @@ export class World {
     });
     this.notify(
       agent,
-      `arrival: ${show(milli, 3)} SIU of ${task} work claim ${id}, presentable in window ${k} only; it lapses worthless if never presented`,
+      `arrival: ${this.#work(milli, series)} of ${task} work claim ${id}, presentable in window ${k} only; it lapses worthless if never presented`,
     );
     return {
       ok: true,
       note:
         pay === "agu"
-          ? `bought ${show(milli, 3)} SIU of ${task} claims for window ${k}, paid in AGU-lab`
-          : `bought ${show(milli, 3)} SIU of ${task} claims for window ${k}`,
+          ? `bought ${this.#work(milli, series)} of ${task} claims for window ${k}, paid in AGU-lab`
+          : `bought ${this.#work(milli, series)} of ${task} claims for window ${k}`,
     };
   }
 
@@ -1921,10 +1949,13 @@ export class World {
       this.#log(i.id, "setup", { lots, rateMilliPerWindow: rate, bondUsdc: i.bondUsdc, ...(p.v3a !== undefined ? { capacityHours: hours } : {}) });
     }
     this.mint(PARTICIPANT, p.participant.usdc);
-    this.mint("OWNER", p.reserve.bufferSeedUsdc);
-    this.chain.seedBuffer("OWNER", p.reserve.bufferSeedUsdc);
-    this.#bufferIn += p.reserve.bufferSeedUsdc;
-    this.#log(BUFFER, "buffer", { seed: p.reserve.bufferSeedUsdc });
+    // D146 (owner, 2026-11-12, amends D144): v3a has no finite buffer; an open-ended lab subsidy pays each roll's cover when it falls due
+    if (p.v3a === undefined) {
+      this.mint("OWNER", p.reserve.bufferSeedUsdc);
+      this.chain.seedBuffer("OWNER", p.reserve.bufferSeedUsdc);
+      this.#bufferIn += p.reserve.bufferSeedUsdc;
+      this.#log(BUFFER, "buffer", { seed: p.reserve.bufferSeedUsdc });
+    } else this.#log(BUFFER, "buffer", { seed: 0n, labSubsidy: true });
     for (let k = 1; k <= p.ladderWindows; k++) this.#participantCreates(k);
     if (this.v3a !== undefined) {
       this.#v3aGenesisWallets();
@@ -2244,6 +2275,16 @@ export class World {
     let buys = [...faceByClass].map(([classId, milli]) => ({ classId, milli }));
     const proceeds =
       sales.reduce((n, s) => n + usdcFor(s.milli, price), 0n) + this.chain.balance(RESERVE, "USDC");
+    // D146 (v3a): the lab subsidy pays what the sales do not, so the roll always restores the face it retires; it passes through the buffer account, which the roll draws
+    if (this.v3a !== undefined) {
+      const need = buys.reduce((n, b) => n + usdcFor(b.milli, rate), 0n) - proceeds - this.chain.balance(BUFFER, "USDC");
+      if (need > 0n) {
+        this.mint(LAB_SUBSIDY, need);
+        this.chain.seedBuffer(LAB_SUBSIDY, need);
+        this.#bufferIn += need;
+        this.#log(LAB_SUBSIDY, "lab-subsidy", { usdc: need, forWindow: k });
+      }
+    }
     const affordable = proceeds + this.chain.balance(BUFFER, "USDC");
     // the buffer cannot cover everything: buy the most face affordable, class by class (R6)
     if (buys.reduce((n, b) => n + usdcFor(b.milli, rate), 0n) > affordable) {
@@ -2260,6 +2301,7 @@ export class World {
     }
     const bufferBefore = this.chain.balance(BUFFER, "USDC");
     const incomeBefore = this.chain.balance(INCOME, "USDC");
+    const rank = this.deliveryRank();
     let r: ReturnType<MemoryChain["roll"]>;
     try {
       r = this.chain.roll(AGU_ISSUER, {
@@ -2269,6 +2311,7 @@ export class World {
         buys,
         buyFrom: this.windowFrom(k + this.params.ladderWindows),
         buyTo: this.windowTo(k + this.params.ladderWindows),
+        ...(this.v3a !== undefined ? { rank } : {}),
       });
     } catch (e) {
       if (!(e instanceof ChainRule)) throw e;
@@ -2294,6 +2337,7 @@ export class World {
     this.#bufferIn += r.carryToBuffer + r.dustToBuffer;
     this.#incomeIn += r.carryToIncome;
     this.#bufferDraw = r.cover;
+    if (this.v3a !== undefined) this.#subsidyPaid += r.cover;
     const faceAfter = this.chain.liveFace();
     if (r.cover > 0n && faceAfter > 0n) {
       const coverMilli = (r.cover * 1_000_000n) / rate;
@@ -2324,7 +2368,7 @@ export class World {
       const ct = this.chain.claimTypes.get(s.tokenId);
       this.notify(
         s.buyer,
-        `arrival: ${show(s.milli, 3)} SIU of ${ct?.classId} work claim ${s.tokenId}, presentable in this window only; it lapses worthless if never presented`,
+        `arrival: ${this.#work(s.milli, ct?.series)} of ${ct?.classId} work claim ${s.tokenId}, presentable in this window only; it lapses worthless if never presented`,
       );
     }
     for (const m of r.minted) {
@@ -2359,6 +2403,7 @@ export class World {
       rollCostUsdc: r.cost - r.proceeds > 0n ? r.cost - r.proceeds : 0n,
       faceAfterMilli: faceAfter,
       shadowRatioPpm: this.#shadowPpm,
+      ...(this.v3a !== undefined ? { rank } : {}),
     });
   }
 
@@ -2380,7 +2425,9 @@ export class World {
         ? { navWithBuffer: withBuffer?.toFixed(9) ?? null }
         : {
             shadowNav: reserveNav === null ? null : reserveNav.times(String(this.#shadowPpm)).div(1_000_000).toFixed(9),
-            bufferDrawUsdc: this.#bufferDraw,
+            // D146: what the lab subsidy paid at this window's roll, and in all so far
+            subsidyThisWindowUsdc: this.#bufferDraw,
+            subsidyPaidUsdc: this.#subsidyPaid,
             // D145: each reserve class's live issuance, its peak so far and v6's issuance limit (all issuers' capacity), mSIU
             issuance: Object.fromEntries(
               this.#reserveClasses().map((c) => [
@@ -2415,7 +2462,7 @@ export class World {
         const brief = holder.startsWith("claims-escrow:") ? this.quotes.find((q) => q.claimEscrow === holder) : undefined;
         this.notify(
           brief?.researcher ?? holder,
-          `LAPSE WARNING: ${show(milli, 3)} SIU of ${ct.classId} claim ${tokenId}${brief !== undefined ? `, held in escrow for ${brief.id},` : ""} lapses worthless at the end of this window unless you present it now`,
+          `LAPSE WARNING: ${this.#work(milli, ct.series)} of ${ct.classId} claim ${tokenId}${brief !== undefined ? `, held in escrow for ${brief.id},` : ""} lapses worthless at the end of this window unless you present it now`,
         );
       }
     }
@@ -2480,7 +2527,17 @@ export class World {
         // v2 item 8: a demand agent's stated cost for a need that lapses unmet -- a pure scoring deduction, never a real currency debit (opt-in: a no-op when the
         // params file carries no unmetNeedCostMicroSiu, exactly every v1 log/fixture). Also closes an independent gap the redesign's own research found: a lapsed
         // need previously left NO trace in the log at all.
-        if (this.params.unmetNeedCostMicroSiu !== undefined) {
+        // D146 (v3a): the charge is a multiple of the need's own work, valued at the print, so skipping a need is never cheaper than meeting it
+        const v3aCost = this.unmetNeedCostMicroSiu(n.tasks);
+        if (v3aCost !== undefined) {
+          this.#objectiveFor(n.agent).unmetMicroSiu += v3aCost;
+          this.#log(n.agent, "need-lapsed", {
+            need: n.id,
+            costMicroSiu: v3aCost,
+            costValueMicroUsd: usdcForMicroSiu(v3aCost, this.commodityRate),
+            multiple: this.params.v3a?.unmetNeedMultiple,
+          });
+        } else if (this.params.unmetNeedCostMicroSiu !== undefined) {
           this.#objectiveFor(n.agent).unmetMicroSiu += this.params.unmetNeedCostMicroSiu;
           this.#log(n.agent, "need-lapsed", { need: n.id, costMicroSiu: this.params.unmetNeedCostMicroSiu });
         }
@@ -2512,8 +2569,8 @@ export class World {
         q.status = "lapsed";
         q.closed = { window: k, how: "lapsed-paid-in-claims" };
         this.#log(GATE_RUNNER, "receipt", { brief: q.id, verdict: "lapsed", paidInClaims: q.paidInClaims, defaultPayoutToPayer: payout, repaidMicroUsd: repaid });
-        this.notify(q.demand, `quote ${q.id} lapsed undelivered at the end of window ${k}; your escrowed claims came back${payout > 0n ? `, with ${payout} µ$ of default payouts` : ""}${repaid > 0n ? `, and ${q.researcher} paid back ${repaid} µ$ for claim work it used` : ""}`);
-        this.notify(q.researcher, `quote ${q.id} lapsed undelivered at the end of window ${k}; the escrowed claims went back to ${q.demand}${repaid > 0n ? ` and you paid back ${repaid} µ$ for the claim work you used` : ""}`);
+        this.notify(q.demand, `quote ${q.id} lapsed undelivered at the end of window ${k}; your escrowed claims came back${payout > 0n ? `, with ${this.#usd(payout)} of default payouts` : ""}${repaid > 0n ? `, and ${q.researcher} paid back ${this.#usd(repaid)} for claim work it used` : ""}`);
+        this.notify(q.researcher, `quote ${q.id} lapsed undelivered at the end of window ${k}; the escrowed claims went back to ${q.demand}${repaid > 0n ? ` and you paid back ${this.#usd(repaid)} for the claim work you used` : ""}`);
       } else if (q.status === "posted") {
         q.status = "lapsed";
         q.closed = { window: k, how: "lapsed" };
@@ -2662,7 +2719,7 @@ export class World {
       if (forcedAgu > 0n || forcedClaimsMilli > 0n || pay < demand)
         this.notify(
           a,
-          `your owner's sweep took ${pay} µ$${forcedAgu > 0n ? ", selling some of your AGU-lab at the bid to cover it" : ""}${forcedClaimsMilli > 0n ? `${forcedAgu > 0n ? " and" : ","} selling ${forcedClaimsMilli} mSIU of your work claims at the bid` : ""}${pay < demand ? `; ${demand - pay} µ$ of it went unpaid` : ""}`,
+          `your owner's sweep took ${this.#usd(pay)}${forcedAgu > 0n ? `, selling ${this.#agu(forcedAgu)} at the bid to cover it` : ""}${forcedClaimsMilli > 0n ? `${forcedAgu > 0n ? " and" : ","} selling ${this.#work(forcedClaimsMilli)} of your work claims at the bid` : ""}${pay < demand ? `; ${this.#usd(demand - pay)} of it went unpaid` : ""}`,
         );
     }
   }
@@ -2699,6 +2756,11 @@ export class World {
     return sold;
   }
 
+  /** D146 (v3a): what a need that lapses unmet charges its demand agent's result -- `unmetNeedMultiple` times the need's work, Commodity micro-SIU; undefined outside v3a */
+  unmetNeedCostMicroSiu(tasks: readonly TaskId[]): MicroSiu | undefined {
+    const v = this.params.v3a;
+    return v === undefined ? undefined : this.workMicroSiu([...new Set(tasks)]) * v.unmetNeedMultiple;
+  }
   /** v3a: the work in a set of tasks, Commodity micro-SIU (each task at its class's fixed face) */
   workMicroSiu(tasks: readonly TaskId[]): MicroSiu {
     return tasks.reduce((n, t) => n + (this.v3a?.faces.commodity[t] ?? 0n) * 1_000n, 0n);
@@ -2831,6 +2893,58 @@ export class World {
         .reduce((n, f) => n + usdcFor(f.milli, price), 0n);
       e.label = ordered > 0n ? "structural dollar route" : "unclassified (tagged from reasoning)";
     }
+  }
+
+  /**
+   * D145 (amended, owner 2026-11-12; v6: direct mint is "routed to members with headroom by delivery ratio"): every issuer, ranked by its delivery ratio over the same
+   * trailing windows the delivery floor uses (served ÷ presented), highest first. Issuers with nothing presented yet have no ratio and come after those that do; ties
+   * keep registration order. The roll's pooled placement follows this order, so a less reliable issuer takes part of a lot only when the others cannot carry it.
+   */
+  deliveryRank(): string[] {
+    const ratio = (id: string): { presented: number; served: number } | undefined => {
+      const list = (this.delivery.get(id) ?? []).slice(-this.params.deliveryTrailingWindows);
+      const presented = list.reduce((n, x) => n + x.presented, 0);
+      return presented === 0 ? undefined : { presented, served: list.reduce((n, x) => n + x.served, 0) };
+    };
+    const ids = this.params.issuers.map((i) => i.id);
+    return ids
+      .map((id, order) => ({ id, order, r: ratio(id) }))
+      .sort((a, b) => {
+        if (a.r === undefined || b.r === undefined) return a.r === b.r ? a.order - b.order : a.r === undefined ? 1 : -1;
+        const x = a.r.served * b.r.presented;
+        const y = b.r.served * a.r.presented;
+        return x === y ? a.order - b.order : y - x;
+      })
+      .map((x) => x.id);
+  }
+
+  // ---- D146 (owner, 2026-11-12): amounts in text an agent reads ----------------------------------------------------------------------------------------
+  // v3a: board units (mSIU, µ$) with the other unit's value beside it, at today's print, in the window's display order -- never a decimal USDC, AGU-lab or SIU amount.
+  // v1/v2: exactly their own text, unchanged.
+  #siuFirst(): boolean {
+    return siuFirstForWindow(this.window);
+  }
+  /** a USDC amount (base units) */
+  #usd(usdc: UsdcUnits): string {
+    return this.v3a === undefined ? `${show(usdc)} USDC` : pairUsdc(usdc, this.commodityRate, this.#siuFirst());
+  }
+  /** an AGU-lab amount (base units), shown by its value at NAV */
+  #agu(units: AguUnits): string {
+    return this.v3a === undefined ? `${show(units)} AGU-lab` : `${pairMicroSiu(this.siuOf(units), this.commodityRate, this.#siuFirst())} of AGU-lab`;
+  }
+  /** an amount of work (mSIU of a claim of `series`), its dollar value at that grade's print */
+  #work(milli: MilliSiu, series: Series = "commodity"): string {
+    return this.v3a === undefined ? `${show(milli, 3)} SIU` : pairMicroSiu(milli * 1_000n, this.rates[series], this.#siuFirst());
+  }
+  /** a Commodity micro-SIU value */
+  #val(microSiu: MicroSiu): string {
+    return this.v3a === undefined ? `${microSiu / 1_000n} mSIU` : pairMicroSiu(microSiu, this.commodityRate, this.#siuFirst());
+  }
+  #seriesOfTask(task: string): Series {
+    return this.params.issuers.some((i) => i.grade === "commodity" && (i.classes as readonly string[]).includes(task)) ? "commodity" : "frontier";
+  }
+  #seriesOfClaim(tokenId: string): Series {
+    return this.chain.claimTypes.get(tokenId)?.series ?? "commodity";
   }
 
   /** R11: issuers below the delivery floor over the trailing windows are skipped from the next window; a skipped issuer clears after enough served probes */

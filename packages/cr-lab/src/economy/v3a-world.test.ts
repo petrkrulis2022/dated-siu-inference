@@ -13,6 +13,7 @@ import { boardFor, renderBoard } from "./board.js";
 import { EconomyLog, type LogEntry } from "./log.js";
 import { PARTICIPANT } from "./memory-chain.js";
 import { checkGates } from "./v3a-gates.js";
+import { judgeDevWindows } from "./report.js";
 import { instructionsForV3a } from "./model-agent.js";
 import { loadParams, type EconomyParams, type IssuerParams } from "./params.js";
 import { parseToolCall, toolDefsForRole } from "./parse.js";
@@ -280,13 +281,13 @@ describe("v3a buying claims: paid to PROVIDER in the accepted currency, minted f
       "r",
     );
     const t = await tight.w.act("DEMAND-3", { tool: "buy_offer", offer: tight.w.v3a?.offers[0]?.id as string, milli: 58n, pay: "usdc" }, "r");
-    expect(t.note).toMatch(/over spend cap for window 2: \d+ of 0 mSIU/);
+    expect(t.note).toMatch(/over spend cap for window 2: [\d,]+ (mSIU|µ\$) \(≈ [\d,]+ (mSIU|µ\$)\) of 0 (mSIU|µ\$) \(≈ 0 (mSIU|µ\$)\)/); // D146: board units, paired
     // the buffer: a permissive agent cannot spend below 10% of its starting value
     w2.chain.transfer("USDC", "DEMAND-4", "OWNER-X", w2.chain.balance("DEMAND-4", "USDC") - 1_000n);
     w2.chain.transfer("AGU", "DEMAND-4", "OWNER-X", w2.chain.balance("DEMAND-4", "AGU"));
     w2.mint("OWNER-X", 0n);
     const b = await w2.act("DEMAND-4", { tool: "buy_offer", offer: o2, milli: 58n, pay: "usdc" }, "r");
-    expect(b.note).toMatch(/would leave -?\d+ µ\$ of value, below your minimum of \d+ µ\$/);
+    expect(b.note).toMatch(/would leave -?[\d,]+ (mSIU|µ\$) \(≈ -?[\d,]+ (mSIU|µ\$)\) of value, below your minimum of [\d,]+ (mSIU|µ\$) \(≈ [\d,]+ (mSIU|µ\$)\)/); // D146: board units, paired
   });
 });
 
@@ -306,7 +307,7 @@ describe("v3a presenting: one task uses its class's fixed work; PROVIDER pays th
     expect(p.ok, p.note).toBe(true);
     expect(w.chain.claimBalance("HEDGER", claim)).toBe(50n); // 86 mSIU used
     const small = await w.act("HEDGER", { tool: "present_claim", claim }, "r");
-    expect(small.note).toMatch(/one CR-SM task takes 86 mSIU of claim; you hold 50 mSIU/);
+    expect(small.note).toMatch(/one CR-SM task takes (86 mSIU \(≈ [\d,]+ µ\$\)|[\d,]+ µ\$ \(≈ 86 mSIU\)) of claim; you hold (50 mSIU \(≈ [\d,]+ µ\$\)|[\d,]+ µ\$ \(≈ 50 mSIU\))/); // D146: board units, paired
     // PROVIDER paid ISSUER-C1 its list price for the task: in USDC if it held enough, otherwise in AGU-lab (here its USDC was short of one CR-SM task)
     const paid = w.log.entries.find((e) => e.kind === "provider-profit" && e.issuer === "ISSUER-C1");
     expect(paid?.cost).toBe(w.taskPrice["ISSUER-C1"]?.["CR-SM"]);
@@ -530,7 +531,7 @@ describe("publishNav, v3a (D144, owner 2026-11-12): the NAV log carries the shad
     const e = w.log.entries.filter((x) => x.kind === "nav").at(-1) as LogEntry;
     const roll = w.log.entries.find((x) => x.kind === "roll-buy" && x.summary === true && x.refused === undefined) as LogEntry;
     expect(e.navWithBuffer).toBeUndefined();
-    expect(e.bufferDrawUsdc).toBe(roll.cover);
+    expect(e.subsidyThisWindowUsdc).toBe(roll.cover);
     expect(Number(e.shadowNav)).toBeCloseTo((Number(e.reserveNav) * Number(roll.shadowRatioPpm as bigint)) / 1e6, 6);
     expect(Number(e.shadowNav)).toBeLessThan(Number(e.reserveNav));
   });
@@ -574,12 +575,12 @@ describe("D144 (owner, 2026-11-12): the board shows the buffer's draw and a shad
     const after = roll.faceAfterMilli as bigint;
     expect(roll.shadowRatioPpm).toBe((1_000_000n * (after - coverMilli)) / after);
     const b = boardFor(w, "DEMAND-1").v3a?.nav;
-    expect(b?.bufferDrawThisWindowUsdc).toBe(cover);
+    expect(b?.subsidyThisWindowUsdc).toBe(cover); // D146: the lab subsidy pays what the buffer did
     expect((b?.shadowNavMicroSiuPerAgu as bigint) < (b?.navMicroSiuPerAgu as bigint)).toBe(true);
     expect(b).not.toHaveProperty("navWithBufferMicroSiuPerAgu");
     const text = renderBoard(boardFor(w, "DEMAND-1"));
     expect(text).toMatch(/shadow NAV/);
-    expect(text).toMatch(/paid [\d,]+ µ\$ this window/);
+    expect(text).toMatch(/\(-?[\d,]+ (µ\$|mSIU) \(≈ [\d,]+ (µ\$|mSIU)\) at this window's roll\)/);
     expect(text).not.toMatch(/with the buffer/i);
   });
 });
@@ -673,5 +674,126 @@ describe("D145 (owner, 2026-11-12): pooled direct mint, capacity sized for the l
     expect(String(roll.refused)).toBe(`NoTotalHeadroom(CR-PL, ${lot}, ${3n * left})`);
     expect(checkGates(w.log.entries, w.params).find((g) => g.name.startsWith("v6's issuance limit"))?.ok).toBe(false);
     w.checkInvariants();
+  });
+});
+
+describe("D145 amended (owner, 2026-11-12): pooled direct mint ranks issuers by delivery ratio", () => {
+  it("ranks issuers by trailing delivery ratio, highest first; issuers with no deliveries yet come after, in registration order", () => {
+    const { w } = v3aWorld("v3a-rank");
+    expect(w.deliveryRank()).toEqual(["ISSUER-C1", "ISSUER-C2", "ISSUER-X", "ISSUER-F"]); // nothing delivered yet: registration order
+    w.delivery.set("ISSUER-C1", [{ presented: 10, served: 9 }]);
+    w.delivery.set("ISSUER-C2", [{ presented: 10, served: 10 }]);
+    w.delivery.set("ISSUER-X", [{ presented: 10, served: 8 }]);
+    expect(w.deliveryRank()).toEqual(["ISSUER-C2", "ISSUER-C1", "ISSUER-X", "ISSUER-F"]);
+  });
+
+  it("the roll splits a lot in rank order, so X takes part of a lot only when the others cannot carry it", () => {
+    const { w, needsFor } = v3aWorld("v3a-rank-split");
+    w.closeWindow(1);
+    w.delivery.set("ISSUER-C1", [{ presented: 10, served: 9 }]);
+    w.delivery.set("ISSUER-C2", [{ presented: 10, served: 10 }]);
+    w.delivery.set("ISSUER-X", [{ presented: 10, served: 8 }]);
+    const lot = w.chain.reserveLots
+      .filter((id) => w.chain.claimTypes.get(id)?.classId === "CR-PL" && w.chain.claimTypes.get(id)?.windowFrom === w.windowFrom(2))
+      .reduce((n, id) => n + w.chain.claimBalance("reserve", id), 0n);
+    const left = (lot * 2n) / 5n + 1n;
+    for (const id of ["ISSUER-C1", "ISSUER-C2", "ISSUER-X"]) {
+      const h = w.chain.headroom(id, "CR-PL");
+      if (h > left) w.chain.mint("OWNER-X", "CR-PL", "commodity", h - left, w.windowFrom(6), w.windowTo(6), w.commodityRate, { issuer: id, prepaid: true, tag: "fill" });
+    }
+    w.startWindow(2, needsFor);
+    const lots = w.log.entries.filter((e) => e.kind === "roll-buy" && e.summary !== true && e.task === "CR-PL" && e.window === w.log.entries.at(-1)?.window);
+    expect(lots.map((e) => [e.issuer, e.milli])).toEqual([
+      ["ISSUER-C2", left],
+      ["ISSUER-C1", left],
+      ["ISSUER-X", lot - 2n * left],
+    ]);
+  });
+});
+
+describe("D146 (owner, 2026-11-12): the SIU's definition, the unmet-need penalty, units everywhere, and the lab subsidy", () => {
+  it("defines the SIU as a fixed unit of AI work in every role's instructions, never as one correct answer per task type", () => {
+    for (const siuFirst of [true, false])
+      for (const role of ["demand", "research", "hedger", "provider"] as Role[]) {
+        const t = instructionsForV3a(role, siuFirst);
+        expect(t).not.toMatch(/correct answer/);
+        expect(t).toContain("An SIU is a fixed unit of AI work; each task type's work in mSIU is shown on your board.");
+      }
+  });
+
+  it("charges a need that lapses unmet three times its work, and shows that beside each need with its work content", () => {
+    const { w } = v3aWorld("v3a-unmet");
+    const need = w.needs.find((n) => n.agent === "DEMAND-1" && n.window === 1) as (typeof w.needs)[number];
+    const work = w.workMicroSiu([...new Set(need.tasks)]);
+    const text = renderBoard(boardFor(w, "DEMAND-1"));
+    const line = text.split("\n").find((l) => l.includes("window 1 (now)")) as string;
+    // the window decides which unit comes first; both are there either way
+    expect(line).toMatch(new RegExp(`work content [^;]*\\b${(work / 1_000n).toLocaleString("en-US")} mSIU[^;]*, before research costs such as data`));
+    expect(line).toMatch(new RegExp(`if unmet at the window's end, [^;]*\\b${((3n * work) / 1_000n).toLocaleString("en-US")} mSIU`));
+    w.closeWindow(1);
+    const lapsed = w.log.entries.find((e) => e.kind === "need-lapsed" && e.need === need.id) as LogEntry;
+    expect(lapsed.costMicroSiu).toBe(3n * work);
+    expect(w.objective.get("DEMAND-1")?.unmetMicroSiu).toBe(3n * work);
+  });
+
+  it("no board, tool result, notice or running result of a full scripted run shows a decimal or USDC-denominated amount; every amount in a result or notice has the other unit beside it", async () => {
+    const { w, needsFor, params } = v3aWorld("v3a-units", { arm: "B", worker: "stand-in", start: false });
+    const boards: string[] = [];
+    const agents: Agent[] = ids(params).map(([id, role]) => {
+      const inner = new ScriptedV3aAgent(id, role);
+      return { id, role, seat: "scripted", reply: (b: Parameters<Agent["reply"]>[0]) => (boards.push(renderBoard(b)), inner.reply(b)) } as unknown as Agent;
+    });
+    await runWindows({ world: w, agents, windows: [1, 2, 3, 4, 5, 6, 7, 8], needsFor, instructions: (role, siuFirst) => instructionsForV3a(role as Role, siuFirst) });
+    const notes = w.log.entries.filter((e) => e.kind === "turn" && typeof e.note === "string").map((e) => String(e.note));
+    // the messages the engine writes ("Since your last turn"), the last tool result, the running result, and the board's lists of offers, requests and claims
+    const notices = boards.flatMap((b) => {
+      const lines = b.split("\n");
+      const since = lines.indexOf("Since your last turn:");
+      const msgs = since < 0 ? [] : lines.slice(since + 1).filter((l, i, all) => l.startsWith("  - ") && all.slice(0, i).every((x) => x.startsWith("  - ")));
+      return [...msgs, ...lines.filter((l) => /^(Your last action:|Your running result:| {2}- (offer-|request-|[0-9a-f]{16}: ))/.test(l))];
+    });
+    const decimal = /\d+\.\d+\s*(USDC|AGU-lab|SIU)\b|\d\s*USDC\b|\$\s?\d/;
+    const badBoards = boards.flatMap((b) => b.split("\n")).filter((l) => decimal.test(l));
+    expect([...new Set(badBoards)].slice(0, 5)).toEqual([]);
+    expect([...new Set(notes.filter((n) => decimal.test(n)))].slice(0, 5)).toEqual([]);
+    // every amount in a tool result, notice or running result is a pair: one board unit, then the other unit's value beside it
+    const pair = /-?[\d,]+ (mSIU|µ\$)[^(]{0,40}\(≈ -?[\d,]+ (mSIU|µ\$)\)/g;
+    // a price rate ("N µ$ per SIU") is not an amount
+    const unpaired = [...notes, ...notices].map((t) => t.replace(pair, "")).filter((t) => /\d[\d,]* (mSIU|µ\$)(?! per SIU)/.test(t));
+    expect([...new Set(unpaired)].slice(0, 8)).toEqual([]);
+  }, 60_000);
+
+  it("replaces the buffer with an open-ended lab subsidy: every roll restores its face, the board shows what the lab has paid, and NAV never shows the buffer", () => {
+    const { w, needsFor } = v3aWorld("v3a-subsidy");
+    for (let k = 2; k <= 8; k++) {
+      w.closeWindow(k - 1);
+      w.startWindow(k, needsFor);
+    }
+    const rolls = w.log.entries.filter((e) => e.kind === "roll-buy" && e.summary === true);
+    expect(rolls.length).toBe(8);
+    expect(rolls.every((e) => e.refused === undefined && e.faceBought === (e.faceSold as bigint) + (e.faceUnsold as bigint))).toBe(true);
+    const paid = rolls.reduce((n, e) => n + (e.cover as bigint), 0n);
+    expect(paid > 0n).toBe(true);
+    // the lab funds exactly what the rolls draw, and no buffer is ever held between rolls
+    expect(w.log.entries.filter((e) => e.kind === "lab-subsidy").reduce((n, e) => n + (e.usdc as bigint), 0n)).toBe(paid);
+    expect(w.chain.balance("buffer", "USDC")).toBe(0n);
+    expect(w.subsidyPaid).toBe(paid);
+    const nav = w.log.entries.filter((e) => e.kind === "nav").at(-1) as LogEntry;
+    expect(nav.subsidyPaidUsdc).toBe(paid);
+    const text = renderBoard(boardFor(w, "DEMAND-1"));
+    expect(text).toMatch(/lab subsidy[^.]*has paid ([\d,]+ µ\$ \(≈ [\d,]+ mSIU\)|[\d,]+ mSIU \(≈ [\d,]+ µ\$\)) so far/);
+    expect(text).toMatch(/shadow NAV/);
+    expect(text).not.toMatch(/buffer/i);
+    expect(checkGates(w.log.entries, w.params).some((g) => g.name.startsWith("the buffer"))).toBe(false);
+    w.checkInvariants();
+  });
+});
+
+describe("D146 minor: the dev verdict's NAV check names what a v3a run publishes", () => {
+  it("passes a v3a run on NAV published with the shadow NAV, under a label that no longer speaks of the buffer", () => {
+    const { w } = v3aWorld("v3a-dev-label");
+    const check = judgeDevWindows(w, []).checks.find((c) => c.name.startsWith("NAV published"));
+    expect(check?.name).toBe("NAV published every window (v3a: with the shadow NAV; v2: with and without the buffer)");
+    expect(check?.ok).toBe(true);
   });
 });

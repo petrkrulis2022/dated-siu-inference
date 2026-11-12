@@ -11,6 +11,8 @@
  *  - Deferred payment: forward commitments' share in each currency, and missed worthwhile purchases (`World.logOpportunities` computes "worthwhile" in advance from what
  *    the agent could see). Signal: missed <= 50%; kill: missed >= 80% with at least 20 worthwhile opportunities; under 20, n/a.
  *  - Comparability: the share of choices that take the cheapest offer per accepted mSIU, SIU-first display versus dollars-first, over decisions with two or more offers.
+ *    D146: only offers with the same pass rate as the one chosen count as alternatives (research quotes; C1 vs C2 commissions; PROVIDER's offers), so a choice involving
+ *    ISSUER-X (80%) is never scored; each source's count, and how many decisions were left out for a different pass rate, are reported.
  *    Signal: SIU-first beats dollars-first by >= 10 points; kill: no difference with at least 40 decisions per display.
  *  - Arm B adds: the share of the reserve spent on work, the share unwound within one round of a close, and attempts to meet the rule with claims that hold no work value
  *    for its horizon.
@@ -21,6 +23,7 @@
  */
 import { siuFirstForWindow } from "./board.js";
 import { asBigInt, type LogEntry } from "./log.js";
+import { group } from "./units.js";
 import type { EconomyParams } from "./params.js";
 import { extractPricedDecisions, kappa, KAPPA_FLOOR, type UnitLabel } from "./v3a-coding.js";
 import type { Arm } from "./v3a-market.js";
@@ -282,6 +285,8 @@ export interface Comparability {
   siuFirst: { decisions: number; cheapest: number; share: number | null };
   dollarsFirst: { decisions: number; cheapest: number; share: number | null };
   byKind: Record<"brief" | "commission" | "claims", number>;
+  /** D146: decisions with two or more offers that were left out because fewer than two shared the chosen offer's pass rate */
+  excluded: Record<"commission" | "claims", number>;
   /** SIU-first share minus dollars-first share, in points */
   differencePoints: number | null;
   verdict: Verdict;
@@ -299,6 +304,8 @@ export function scoreComparability(
 ): Comparability {
   const sides = { siu: { decisions: 0, cheapest: 0 }, usd: { decisions: 0, cheapest: 0 } };
   const byKind = { brief: 0, commission: 0, claims: 0 };
+  const excluded = { commission: 0, claims: 0 };
+  const passOf = (issuer: string, task: unknown): number => passBps[issuer]?.[String(task)] ?? 10_000;
   const count = (window: number, tookCheapest: boolean, kind: keyof typeof byKind): void => {
     const s = siuFirstForWindow(window) ? sides.siu : sides.usd;
     s.decisions++;
@@ -319,9 +326,11 @@ export function scoreComparability(
         if (q !== undefined && alts.length >= 2)
           count(k, big(q.priceMicroSiu) <= alts.reduce((m, x) => (big(x.priceMicroSiu) < m ? big(x.priceMicroSiu) : m), big(alts[0]?.priceMicroSiu)), "brief");
       }
-      // a commission: every issuer of the task was on offer; cheapest per accepted task
+      // a commission: every issuer of the task was on offer; cheapest per accepted task. D146: only issuers with the chosen one's pass rate are alternatives
       if (e.kind === "escrow-open" && typeof e.alternatives === "object" && e.alternatives !== null && typeof e.task === "string") {
-        const alts = Object.entries(e.alternatives as Record<string, unknown>);
+        const offered = Object.entries(e.alternatives as Record<string, unknown>);
+        const alts = offered.filter(([i]) => passOf(i, e.task) === passOf(String(e.to), e.task));
+        if (offered.length >= 2 && alts.length < 2) excluded.commission++;
         if (alts.length >= 2) {
           const cost = (issuer: string, price: bigint): number =>
             failedWorkPays ? Number(price) / ((passBps[issuer]?.[e.task as string] ?? 10_000) / 10_000) : Number(price);
@@ -332,7 +341,14 @@ export function scoreComparability(
       }
       // claims from PROVIDER: the offers the buyer could see for that class and window; for one grade, the deepest discount is the cheapest per mSIU
       if (e.kind === "claim-mint" && Array.isArray(e.alternatives) && e.alternatives.length >= 2) {
-        const alts = e.alternatives as { offer: string; discountBps: unknown }[];
+        // D146: only offers from issuers with the chosen offer's pass rate are alternatives
+        const offered = e.alternatives as { offer: string; issuer?: string; discountBps: unknown }[];
+        const chosenIssuer = offered.find((x) => x.offer === e.offer)?.issuer ?? "";
+        const alts = offered.filter((x) => passOf(x.issuer ?? "", e.task) === passOf(chosenIssuer, e.task));
+        if (alts.length < 2) {
+          excluded.claims++;
+          continue;
+        }
         const deepest = alts.reduce((m, x) => (big(x.discountBps) > m ? big(x.discountBps) : m), big(alts[0]?.discountBps));
         const mine = alts.find((x) => x.offer === e.offer);
         if (mine !== undefined) count(k, big(mine.discountBps) >= deepest, "claims");
@@ -348,6 +364,7 @@ export function scoreComparability(
     siuFirst: { ...sides.siu, share: siuShare },
     dollarsFirst: { ...sides.usd, share: usdShare },
     byKind,
+    excluded,
     differencePoints: diff,
     verdict:
       diff === null || !enough(minSignal) ? "n/a" : diff >= 10 ? "signal" : enough(minKill) && diff <= 0 ? "kill" : "neither",
@@ -417,6 +434,8 @@ export interface ArmScore {
   storeOfValue: StoreOfValue;
   deferredPayment: DeferredPayment;
   comparability: Comparability;
+  /** D146: what each run's rolls drew from the lab subsidy for unsold front work (the sum of their cover), USDC base units */
+  subsidy: { label: string; paidUsdc: bigint }[];
   armB?: ArmBExtras;
   killSignals: string[];
   /** arm A only: any two kill signals close the AGU-lab question for this design */
@@ -454,6 +473,10 @@ export function scoreArm(
     storeOfValue,
     deferredPayment,
     comparability,
+    subsidy: runs.map((r) => ({
+      label: r.label,
+      paidUsdc: r.log.filter((e) => e.kind === "roll-buy" && e.summary === true).reduce((n, e) => n + (asBigInt(e.cover) ?? 0n), 0n),
+    })),
     ...(arm === "B" ? { armB: scoreArmB(runs) } : {}),
     killSignals,
     ...(arm === "A" ? { closed: killSignals.length >= 2 } : {}),
@@ -483,8 +506,10 @@ export function renderArmScore(s: ArmScore): string {
   );
   const c = s.comparability;
   L.push(
-    `- **Comparability** — ${c.verdict}: cheapest per accepted mSIU taken in ${pct(c.siuFirst.share)} of ${c.siuFirst.decisions} SIU-first decisions and ${pct(c.dollarsFirst.share)} of ${c.dollarsFirst.decisions} dollars-first (difference ${c.differencePoints === null ? "n/a" : `${c.differencePoints.toFixed(1)} points`}); decisions: ${c.byKind.brief} briefs, ${c.byKind.commission} commissions, ${c.byKind.claims} claim purchases.`,
+    `- **Comparability** — ${c.verdict}: cheapest per accepted mSIU taken in ${pct(c.siuFirst.share)} of ${c.siuFirst.decisions} SIU-first decisions and ${pct(c.dollarsFirst.share)} of ${c.dollarsFirst.decisions} dollars-first (difference ${c.differencePoints === null ? "n/a" : `${c.differencePoints.toFixed(1)} points`}); decisions: ${c.byKind.brief} briefs (research quotes), ${c.byKind.commission} commissions (C1 vs C2), ${c.byKind.claims} claim purchases (PROVIDER's offers); left out for a different pass rate: ${c.excluded.commission} commission${c.excluded.commission === 1 ? "" : "s"}, ${c.excluded.claims} claim purchase${c.excluded.claims === 1 ? "" : "s"}.`,
   );
+  // D146: the lab subsidy replaces the buffer; what it paid is reported per run, never a gate
+  L.push(`- Lab subsidy for unsold front work, per run: ${s.subsidy.map((x) => `${x.label} ${group(x.paidUsdc)} µ$`).join(", ")}.`);
   if (s.armB !== undefined)
     L.push(
       `- **Arm B rule** — ${s.armB.compliant} of ${s.armB.checks} checks compliant; reserve spent on work ${pct(s.armB.spentOnWorkShare)}; unwound within one round of a close ${pct(s.armB.unwoundShare)}; checks with claims outside the horizon ${s.armB.attemptsOutsideHorizon}.`,
