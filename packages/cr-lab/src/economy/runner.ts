@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { D, type DecimalValue } from "@touchstone/sdk";
-import { CR_PUBLIC_DIR } from "../paths.js";
+import { CR_PUBLIC_DIR, REPO_ROOT } from "../paths.js";
 import { TASKS, type TaskId } from "../tasks/instances.js";
 import { SeedStream } from "../tasks/seeds.js";
 import type { Agent } from "./agents.js";
@@ -20,6 +20,7 @@ import type { Series } from "./memory-chain.js";
 import type { EconomyParams } from "./params.js";
 import { parseToolCall } from "./parse.js";
 import type { NanoUsdPerSiu } from "./units.js";
+import { taskFaces, type V3aRun } from "./v3a-market.js";
 import type { MicroSiu, TaskWorker } from "./world.js";
 import { World } from "./world.js";
 
@@ -52,7 +53,8 @@ export function taskPrices(
     for (const t of i.classes) {
       const r = m.perType[t];
       if (r.passes === 0) continue;
-      const perPass = new D(r.headlineCostUsd).div(r.passes);
+      // v3a: an issuer may list below (or above) its model's measured cost (ISSUER-X lists 15% below C1/C2, D143); absent, it lists at cost, as in v1 and v2
+      const perPass = new D(r.headlineCostUsd).div(r.passes).times(String(i.listPriceBps ?? 10_000n)).div(10_000);
       (out[i.id] as Partial<Record<TaskId, MicroSiu>>)[t] = BigInt(
         perPass.div(usdPerSiu).times(1e6).ceil().toFixed(0),
       );
@@ -88,6 +90,8 @@ export function buildWorld(opts: {
   windowCount?: number;
   /** v2 item 10: window -> that day's real print rates (World.priceSchedule); omit to keep one fixed rate for the whole run, as before */
   priceSchedule?: ReadonlyMap<number, Readonly<Record<Series, NanoUsdPerSiu>>>;
+  /** v3a: the run (arm, volatility, seeded price path); the world opens at the path's opening print and each window's print comes from the path */
+  v3a?: V3aRun;
 }): World {
   const nano = (g: string): bigint => {
     const v = opts.wp0.prints.find((p) => p.grade === g)?.nanoUsdPerSiu;
@@ -95,20 +99,47 @@ export function buildWorld(opts: {
     return BigInt(v);
   };
   const clock = { now: opts.t0 };
+  const opening = opts.v3a?.path.find((p) => p.window === 0)?.rates;
+  const schedule =
+    opts.v3a !== undefined
+      ? new Map(opts.v3a.path.filter((p) => p.window >= 1).map((p) => [p.window, p.rates] as const))
+      : opts.priceSchedule;
   const w = new World(
     opts.params,
     opts.log,
     opts.worker,
-    { commodity: nano("commodity"), frontier: nano("frontier") },
+    opening ?? { commodity: nano("commodity"), frontier: nano("frontier") },
     taskPrices(opts.params, opts.wp0),
     opts.dataSha,
     (k) => new Date((opts.t0 + k * opts.params.secondsPerWindow) * 1000).toISOString().slice(0, 10),
     opts.t0,
     clock,
-    opts.windowCount,
-    opts.priceSchedule,
+    opts.windowCount ?? opts.params.v3a?.windows,
+    schedule,
+    opts.v3a !== undefined ? { run: opts.v3a, faces: taskFaces(opts.params, opts.wp0) } : undefined,
   );
   return w;
+}
+
+/**
+ * v3a: the committed issuer pass-rate table (`v3a-pass-rates.ts`), checked against the sha256 the parameters file pins before it is used, as each issuer's pass rate per
+ * task type in basis points for the stand-in worker (`StandInWorker`'s `byIssuer`).
+ */
+export function loadV3aPassRates(params: EconomyParams): Record<string, Partial<Record<TaskId, number>>> {
+  const v = params.v3a;
+  if (v === undefined) throw new Error("not a v3a parameters file");
+  const raw = readFileSync(join(REPO_ROOT, v.passRates.path));
+  const sha = createHash("sha256").update(raw).digest("hex");
+  if (sha !== v.passRates.sha256)
+    throw new Error(`${v.passRates.path} has sha256 ${sha}, but the parameters file pins ${v.passRates.sha256}`);
+  const table = (JSON.parse(raw.toString("utf-8")) as { issuers: Record<string, Partial<Record<TaskId, { bps: number }>>> }).issuers;
+  const out: Record<string, Partial<Record<TaskId, number>>> = {};
+  for (const [issuer, byTask] of Object.entries(table))
+    out[issuer] = Object.fromEntries(Object.entries(byTask).map(([t, r]) => [t, r?.bps ?? 0])) as Partial<Record<TaskId, number>>;
+  for (const i of params.issuers)
+    for (const c of i.classes)
+      if (out[i.id]?.[c] === undefined) throw new Error(`the pass-rate table has no rate for ${i.id} on ${c}`);
+  return out;
 }
 
 /**
@@ -206,23 +237,31 @@ export async function runWindows(opts: {
     for (let r = 0; r < w.params.roundsPerWindow; r++) {
       w.setTime(k, r);
       if (r === w.params.roundsPerWindow - 1) w.lapseWarnings(k);
+      // v3a: the deferred-payment measure's opportunities, as each round opens (a no-op outside v3a)
+      w.logOpportunities();
       const agents = typeof opts.agents === "function" ? opts.agents(k) : opts.agents;
       const order = seededOrder(w.params.seed, k, r, agents);
       for (const a of order) {
         const board = boardFor(w, a.id);
+        // the last log entry before this agent's board was drawn: anything settled after it cannot have been on the board (the board-integrity gate)
+        const boardSeq = w.log.entries.at(-1)?.seq ?? 0;
         const prompt = `${opts.instructions?.(a.role, board.siuFirst) ?? ""}\n\n${renderBoard(board)}`;
+        // v3a: every agent's full prompt at window 3, round 0 -- the sample boards a rehearsal report shows, one per role (Phase 4)
+        if (w.v3a !== undefined && k === 3 && r === 0) w.log.write(board.day, r, a.id, "board", { role: a.role, text: prompt });
         const rep = await a.reply(board, prompt);
         s.turns++;
         s.agentCostUsd = s.agentCostUsd.plus(rep.costUsd);
         // v3a Phase 2 item 5: a service failure no longer `continue`s past the checks at the bottom of this loop -- it skipped the stop rule, so a window could lose every
         // turn to failed calls and run on (v2's window 7)
         const parsed = rep.serviceFailure === undefined ? parseToolCall(rep.toolCall, a.role, board) : undefined;
+        const shown = w.v3a !== undefined ? { boardQuotes: board.quotes.map((q) => q.id), boardSeq } : {};
         if (parsed === undefined) {
           s.serviceFailures++;
           w.log.write(board.day, r, a.id, "turn", {
             seat: a.seat,
             parsed: false,
             serviceFailure: rep.serviceFailure,
+            ...shown,
           });
           w.lastResult.set(a.id, "your last turn was lost to a service failure; nothing happened");
         } else if (!parsed.ok) {
@@ -235,6 +274,7 @@ export async function runWindows(opts: {
             ...(rep.toolCall !== undefined
               ? { raw: JSON.stringify(rep.toolCall).slice(0, 2000) }
               : {}),
+            ...shown,
           });
           w.lastResult.set(a.id, `your last turn could not be used (${parsed.error})`);
         } else {
@@ -286,6 +326,8 @@ export async function runWindows(opts: {
             ok: out.ok,
             note: out.note,
             flags: parsed.flags,
+            // v3a: the quotes this agent's board showed, for the board-integrity gate (no paid or refunded quote may appear as open)
+            ...shown,
           });
         }
         w.checkInvariants();

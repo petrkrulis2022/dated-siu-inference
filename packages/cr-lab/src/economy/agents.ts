@@ -40,6 +40,8 @@ export class StandInWorker implements TaskWorker {
     /** pass rate per model per task type, basis points (from WP0's measured rates) */
     readonly passBps: Readonly<Record<string, Partial<Record<TaskId, number>>>>,
     readonly dataSha: (window: number) => string,
+    /** v3a: each ISSUER's own pass rate per task type (the committed pass-rate table), which wins over its model's -- ISSUER-X shares C1/C2's model but not their rate */
+    readonly byIssuer?: Readonly<Record<string, Partial<Record<TaskId, number>>>>,
   ) {}
 
   work(
@@ -48,7 +50,7 @@ export class StandInWorker implements TaskWorker {
     ctx: { window: number; round: number; key: string },
   ): Promise<WorkOutcome> {
     const s = new SeedStream(this.seed, `work:${issuer.id}:${task}:${ctx.window}:${ctx.key}`);
-    const bps = this.passBps[issuer.model]?.[task] ?? 0;
+    const bps = this.byIssuer?.[issuer.id]?.[task] ?? this.passBps[issuer.model]?.[task] ?? 0;
     let passed = s.next(10_000) < bps;
     if (passed && issuer.failShareBps > 0n && s.next(10_000) < Number(issuer.failShareBps))
       passed = false;

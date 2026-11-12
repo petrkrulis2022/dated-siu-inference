@@ -351,9 +351,11 @@ export class MemoryChain {
     series: Series,
     from: number,
     to: number,
+    tag?: string,
   ): string {
+    // v3a: a tagged mint (PROVIDER's sales) is its own token type, so every serve, default and expiry of a claim PROVIDER sold is attributable to it exactly
     return createHash("sha256")
-      .update(JSON.stringify([issuer, classId, series, from, to]))
+      .update(JSON.stringify(tag === undefined ? [issuer, classId, series, from, to] : [issuer, classId, series, from, to, tag]))
       .digest("hex")
       .slice(0, 16);
   }
@@ -380,7 +382,13 @@ export class MemoryChain {
       refuse("the reserve's claims move only through create, redeem and the roll");
     this.#moveClaim(tokenId, from, to, milli);
   }
-  /** `WorkClaim.mint`: routed, consumes headroom, the buyer pays the issuer at the attested rate */
+  /**
+   * `WorkClaim.mint`: routed, consumes headroom, the buyer pays the issuer at the attested rate.
+   *
+   * v3a (`opts`): PROVIDER's sales mint from the issuer its offer names (`issuer`, which must hold a lot of the class with the headroom), are already paid to PROVIDER
+   * (`prepaid`: no USDC moves here) and carry a `tag` (their own token type). Such a mint has no counterpart on the deployed WorkClaim, which always charges the buyer, so
+   * a v3a journal is not replayed onto those contracts.
+   */
   mint(
     buyer: Account,
     classId: string,
@@ -389,12 +397,20 @@ export class MemoryChain {
     from: number,
     to: number,
     rate: NanoUsdPerSiu,
+    opts: { issuer?: Account; prepaid?: boolean; tag?: string } = {},
   ): string {
     if (milli === 0n) refuse("ZeroAmount");
     if (to <= from) refuse("BadWindow");
     if (rate === 0n) refuse("ZeroAmount");
-    const issuer = this.route(classId, milli);
-    const tokenId = MemoryChain.tokenIdFor(issuer, classId, series, from, to);
+    const issuer =
+      opts.issuer === undefined
+        ? this.route(classId, milli)
+        : (this.issuersForClass.get(classId) ?? []).includes(opts.issuer)
+          ? this.headroom(opts.issuer, classId) >= milli
+            ? opts.issuer
+            : refuse(`NoHeadroom(${opts.issuer}, ${classId}, ${milli})`)
+          : refuse(`NoLot(${opts.issuer}, ${classId})`);
+    const tokenId = MemoryChain.tokenIdFor(issuer, classId, series, from, to, opts.tag);
     if (!this.claimTypes.has(tokenId))
       this.claimTypes.set(tokenId, {
         tokenId,
@@ -408,9 +424,11 @@ export class MemoryChain {
     const lot = this.bondLots.get(`${issuer}|${classId}`) as BondLot;
     lot.outstanding += milli;
     this.#moveClaim(tokenId, undefined, buyer, milli);
-    const pay = usdcFor(milli, rate);
-    this.#sub("USDC", buyer, pay);
-    this.#add("USDC", issuer, pay);
+    if (opts.prepaid !== true) {
+      const pay = usdcFor(milli, rate);
+      this.#sub("USDC", buyer, pay);
+      this.#add("USDC", issuer, pay);
+    }
     return tokenId;
   }
   present(holder: Account, tokenId: string): void {

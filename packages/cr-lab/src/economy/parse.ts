@@ -57,6 +57,8 @@ export const TOOLS_BY_ROLE: Readonly<Record<Role, readonly string[]>> = {
     "buy_claims",
     "deliver_forward",
   ],
+  // v1/v2 have no PROVIDER; v3a's tools are in TOOLS_V3A_BY_ROLE
+  provider: ["pass", "message"],
 };
 
 export const TOOL_HELP: Readonly<Record<string, string>> = {
@@ -165,14 +167,21 @@ const ARG_SCHEMAS: Readonly<
   deliver_forward: { properties: {}, required: [] },
 };
 
+/** which generation of tools an agent is given: v1/v2's, or v3a's (amounts in whole mSIU and µ$, every payment naming its currency, PROVIDER's offers) */
+export type Toolset = "v2" | "v3a";
+const toolsetOf = (board: Board | undefined): Toolset => (board?.v3a !== undefined ? "v3a" : "v2");
+
 /** the tool defs a role's model is given, native Anthropic/OpenAI tool-call shape: reasoning first, then that tool's own args. */
-export function toolDefsForRole(role: Role): McpToolDef[] {
-  return TOOLS_BY_ROLE[role].map((name) => {
-    const s = ARG_SCHEMAS[name];
+export function toolDefsForRole(role: Role, toolset: Toolset = "v2"): McpToolDef[] {
+  const tools = toolset === "v3a" ? TOOLS_V3A_BY_ROLE : TOOLS_BY_ROLE;
+  const schemas = toolset === "v3a" ? ARG_SCHEMAS_V3A : ARG_SCHEMAS;
+  const help = toolset === "v3a" ? TOOL_HELP_V3A : TOOL_HELP;
+  return tools[role].map((name) => {
+    const s = schemas[name];
     if (s === undefined) throw new Error(`no argument schema for tool ${name}`);
     return {
       name,
-      description: TOOL_HELP[name] ?? name,
+      description: help[name] ?? name,
       inputSchema: {
         type: "object",
         properties: { reasoning: REASONING, ...s.properties },
@@ -195,17 +204,18 @@ export interface ToolCall {
   args: Record<string, unknown>;
 }
 
-export function parseToolCall(call: ToolCall | undefined, role: Role, board?: Board): Parsed {
+/** `toolset` defaults to the board's own (a v3a board carries its v3a section), so a scripted agent's call is parsed exactly as a model's would be */
+export function parseToolCall(call: ToolCall | undefined, role: Role, board?: Board, toolset: Toolset = toolsetOf(board)): Parsed {
   if (call === undefined) return { ok: false, error: "no tool call in the reply" };
   const { tool, args } = call;
   if (!isObj(args)) return { ok: false, error: "the tool call's arguments are not an object" };
-  if (!TOOLS_BY_ROLE[role].includes(tool))
+  if (!(toolset === "v3a" ? TOOLS_V3A_BY_ROLE : TOOLS_BY_ROLE)[role].includes(tool))
     return { ok: false, error: `tool ${tool} is not available to a ${role} agent` };
   const reasoning = args.reasoning;
   if (typeof reasoning !== "string" || reasoning.trim() === "")
     return { ok: false, error: "reasoning must be a non-empty string" };
   try {
-    const action = toAction(tool, args);
+    const action = toolset === "v3a" ? toActionV3a(tool, args) : toAction(tool, args);
     return {
       ok: true,
       reasoning,
@@ -331,8 +341,11 @@ export function scaleFlags(a: Action, b: Board): string[] {
   const check = (what: string, x: AguUnits, ref: bigint): void => {
     if (off(x, ref)) flags.push(`${what}: ${x} base units against ${ref}`);
   };
-  if (a.tool === "sell_agu" || a.tool === "redeem_agu")
+  if ((a.tool === "sell_agu" || a.tool === "redeem_agu") && a.agu !== undefined)
     check(`${a.tool} vs your AGU-lab balance`, a.agu, b.agu);
+  // v3a: an AGU-lab amount stated as its value, against the value of the agent's own AGU-lab
+  if ((a.tool === "sell_agu" || a.tool === "redeem_agu") && a.valueMilli !== undefined)
+    check(`${a.tool} vs the value of your AGU-lab`, a.valueMilli * 1_000n, b.aguSiuValue);
   if (a.tool === "buy_agu" && a.usdc !== undefined)
     check("buy_agu vs the ask for one AGU-lab", a.usdc, b.askUsdcPerAgu);
   if (a.tool === "buy_agu" && a.agu !== undefined && b.agu > 0n)
@@ -348,7 +361,246 @@ export function scaleFlags(a: Action, b: Board): string[] {
     if (a.priceUsdcMicro !== undefined) {
       const usdcPerSiu = parseUnits(b.printUsdPerSiu, 6);
       check("price_usdc vs the quoted tasks' cheapest issuer prices", a.priceUsdcMicro, (ref * usdcPerSiu) / 1_000_000n);
-    } else check("price_siu vs the quoted tasks' cheapest issuer prices", a.priceMicroSiu as bigint, ref);
+    } else check("price_siu vs the quoted tasks' cheapest issuer prices", a.priceMicroSiu ?? 0n, ref);
   }
   return flags;
+}
+
+// ---- v3a ---------------------------------------------------------------------------------------------------------------------------------------------
+/**
+ * v3a's tools (docs/experiment-3a-design.md; D143). Amounts are in the units the board shows: work and AGU-lab in whole mSIU, dollars in whole µ$ (micro-dollars, one USDC
+ * base unit). Every payment names its currency (`pay`, `accept`): no tool ever chooses a currency for an agent by default, since that choice is what the experiment measures.
+ * Claims are bought from PROVIDER's offers (or asked for); `buy_claims` at the plain print is not a v3a tool.
+ */
+export const TOOLS_V3A_BY_ROLE: Readonly<Record<Role, readonly string[]>> = {
+  provider: ["pass", "message", "post_offer", "withdraw_offer", "decline_request", "buy_agu", "sell_agu", "redeem_agu"],
+  research: [
+    "pass",
+    "message",
+    "buy_agu",
+    "sell_agu",
+    "redeem_agu",
+    "create_agu",
+    "present_claim",
+    "order_front_claim",
+    "request_claims",
+    "buy_offer",
+    "post_quote",
+    "buy_data",
+    "commission_task",
+    "deliver_brief",
+  ],
+  demand: [
+    "pass",
+    "message",
+    "buy_agu",
+    "sell_agu",
+    "redeem_agu",
+    "create_agu",
+    "present_claim",
+    "order_front_claim",
+    "request_claims",
+    "buy_offer",
+    "accept_quote",
+  ],
+  hedger: [
+    "pass",
+    "message",
+    "buy_agu",
+    "sell_agu",
+    "redeem_agu",
+    "create_agu",
+    "present_claim",
+    "order_front_claim",
+    "request_claims",
+    "buy_offer",
+    "commission_task",
+    "deliver_forward",
+  ],
+};
+
+export const TOOL_HELP_V3A: Readonly<Record<string, string>> = {
+  pass: "do nothing this round",
+  message: "send a message to one agent, or to every agent",
+  buy_agu: "buy AGU-lab from the participant at its ask: name exactly one of msiu (the AGU-lab value to buy) or musd (the dollars to spend)",
+  sell_agu: "sell AGU-lab back to the participant at its bid, for USDC",
+  redeem_agu: "redeem AGU-lab in kind at NAV: you receive your pro-rata share of the reserve's work claims (there is a minimum size)",
+  create_agu: "deliver a Commodity work claim to the reserve and receive AGU-lab at NAV for it (there is a minimum size)",
+  present_claim: "present a work claim in its window: its issuer does one task of its class for you, which uses that class's work from the claim",
+  order_front_claim: "order work claims for the next window from the roll, at its discount to the print, paid in usdc or agu",
+  request_claims: "ask PROVIDER for work claims of a class, for a window, of a size; it stays on PROVIDER's board until answered or the window closes",
+  buy_offer: "buy work claims from one of PROVIDER's offers, paid now in a currency the offer accepts",
+  post_offer:
+    "offer work claims from one issuer for one window, up to a size, at a discount to the issuer's grade print (negative is a premium), accepting usdc, agu or both, to all or one buyer; may answer a request or replace one of your live offers",
+  withdraw_offer: "withdraw one of your live offers",
+  decline_request: "decline a buyer's request, with your reason",
+  post_quote:
+    "offer a brief to the demand agent with that need, priced in whole mSIU or in whole µ$ (name exactly one), and say which currencies you accept (usdc, agu or both); work claims for the brief's window are always accepted",
+  accept_quote:
+    "accept a quote, paying in usdc or agu (a currency the quote accepts; escrowed, released only if the brief passes), or in claims: work claims you hold for this window, which move to the research agent at once at face and are not refunded",
+  buy_data: "buy today's dataset for a task type (about one task's value), paid in usdc or agu; a research agent's first task on a dataset each day also buys it, in the commission's currency",
+  commission_task: "pay an issuer to do these tasks now, in usdc or agu, escrowed and paid per task only on a pass",
+  deliver_brief: "deliver a brief from your passing outputs of today; a currency payment is released only if every component passed",
+  deliver_forward: "deliver one of the briefs you sold forward, from two passing outputs of different task types from today",
+};
+
+const WHOLE = (what: string) => ({ type: "string", description: `${what}, a whole number` });
+const PAY_V3A = { type: "string", enum: ["usdc", "agu"] };
+const ACCEPT = { type: "string", enum: ["usdc", "agu", "both"] };
+
+const ARG_SCHEMAS_V3A: Readonly<Record<string, { properties: Record<string, unknown>; required: string[] }>> = {
+  pass: ARG_SCHEMAS.pass as { properties: Record<string, unknown>; required: string[] },
+  message: ARG_SCHEMAS.message as { properties: Record<string, unknown>; required: string[] },
+  buy_agu: { properties: { msiu: WHOLE("mSIU of AGU-lab value"), musd: WHOLE("µ$ to spend") }, required: [] },
+  sell_agu: { properties: { msiu: WHOLE("mSIU of AGU-lab value") }, required: ["msiu"] },
+  redeem_agu: { properties: { msiu: WHOLE("mSIU of AGU-lab value") }, required: ["msiu"] },
+  create_agu: { properties: { claim: { type: "string" }, msiu: WHOLE("mSIU of the claim") }, required: ["claim", "msiu"] },
+  present_claim: { properties: { claim: { type: "string" } }, required: ["claim"] },
+  order_front_claim: { properties: { task: TASK_ENUM, msiu: WHOLE("mSIU of claims"), pay: PAY_V3A }, required: ["task", "msiu", "pay"] },
+  request_claims: {
+    properties: { task: TASK_ENUM, window: { type: "integer" }, msiu: WHOLE("mSIU of claims") },
+    required: ["task", "window", "msiu"],
+  },
+  buy_offer: { properties: { offer: { type: "string" }, msiu: WHOLE("mSIU of claims"), pay: PAY_V3A }, required: ["offer", "msiu", "pay"] },
+  post_offer: {
+    properties: {
+      issuer: { type: "string" },
+      task: TASK_ENUM,
+      window: { type: "integer" },
+      msiu: WHOLE("mSIU of claims at most"),
+      discount_bps: { type: "integer", description: "basis points below the grade print; negative is a premium" },
+      accept: ACCEPT,
+      to: { type: "string", description: 'a buyer\'s id, or "all"' },
+      request: { type: "string", description: "optional: the request this answers" },
+      replaces: { type: "string", description: "optional: your live offer this replaces" },
+    },
+    required: ["issuer", "task", "window", "msiu", "discount_bps", "accept", "to"],
+  },
+  withdraw_offer: { properties: { offer: { type: "string" } }, required: ["offer"] },
+  decline_request: { properties: { request: { type: "string" }, reason: { type: "string" } }, required: ["request", "reason"] },
+  post_quote: {
+    properties: {
+      need: { type: "string" },
+      tasks: { type: "array", items: TASK_ENUM, minItems: 1 },
+      price_msiu: WHOLE("mSIU"),
+      price_musd: WHOLE("µ$"),
+      accept: ACCEPT,
+    },
+    required: ["need", "tasks", "accept"],
+  },
+  accept_quote: {
+    properties: {
+      quote: { type: "string" },
+      pay: { type: "string", enum: ["usdc", "agu", "claims"] },
+      claims: { type: "array", items: { type: "string" }, description: "with pay claims: the ids of work claims you hold for this window" },
+    },
+    required: ["quote", "pay"],
+  },
+  buy_data: {
+    properties: { dataset: { type: "string", enum: ["perp", "lending", "tokens", "stablecoins"] }, pay: PAY_V3A },
+    required: ["dataset", "pay"],
+  },
+  commission_task: {
+    properties: { tasks: { type: "array", items: TASK_ENUM, minItems: 1 }, issuer: { type: "string" }, pay: PAY_V3A },
+    required: ["tasks", "issuer", "pay"],
+  },
+  deliver_brief: ARG_SCHEMAS.deliver_brief as { properties: Record<string, unknown>; required: string[] },
+  deliver_forward: ARG_SCHEMAS.deliver_forward as { properties: Record<string, unknown>; required: string[] },
+};
+
+/** a whole number given as a digit string or an integer (models send either), as a bigint; `signed` admits a leading minus */
+const whole = (args: Obj, k: string, opts: { signed?: boolean; positive?: boolean } = {}): bigint => {
+  const v = args[k];
+  const s = typeof v === "number" && Number.isInteger(v) ? String(v) : typeof v === "string" ? v.trim().replace(/_/g, "") : undefined;
+  if (s === undefined || !(opts.signed === true ? /^-?\d+$/ : /^\d+$/).test(s))
+    throw new Error(`args.${k} must be a whole number${opts.signed === true ? "" : " (no decimals, no sign)"}`);
+  const n = BigInt(s);
+  if (opts.positive !== false && opts.signed !== true && n <= 0n) throw new Error(`args.${k} must be above zero`);
+  return n;
+};
+const windowArg = (args: Obj): number => {
+  const v = args.window;
+  const n = typeof v === "number" ? v : typeof v === "string" && /^\d+$/.test(v) ? Number(v) : NaN;
+  if (!Number.isInteger(n)) throw new Error("args.window must be a whole window number");
+  return n;
+};
+const payV3a = (args: Obj): PayUnit => {
+  if (args.pay !== "usdc" && args.pay !== "agu") throw new Error('args.pay must be "usdc" or "agu"');
+  return args.pay;
+};
+const acceptArg = (args: Obj): "usdc" | "agu" | "both" => {
+  if (args.accept !== "usdc" && args.accept !== "agu" && args.accept !== "both") throw new Error('args.accept must be "usdc", "agu" or "both"');
+  return args.accept;
+};
+const tasksArg = (args: Obj): TaskId[] => {
+  const tasks = args.tasks;
+  if (!Array.isArray(tasks) || tasks.length === 0 || !tasks.every((t) => TASKS.includes(t as TaskId)))
+    throw new Error("args.tasks must be a non-empty list of task types");
+  return tasks as TaskId[];
+};
+
+function toActionV3a(tool: string, args: Obj): Action {
+  switch (tool) {
+    case "pass":
+    case "message":
+    case "present_claim":
+    case "deliver_brief":
+    case "deliver_forward":
+      return toAction(tool, args);
+    case "buy_agu":
+      if ((args.msiu === undefined) === (args.musd === undefined)) throw new Error('args must name exactly one of "msiu" or "musd"');
+      return args.msiu !== undefined ? { tool: "buy_agu", valueMilli: whole(args, "msiu") } : { tool: "buy_agu", usdc: whole(args, "musd") };
+    case "sell_agu":
+      return { tool: "sell_agu", valueMilli: whole(args, "msiu") };
+    case "redeem_agu":
+      return { tool: "redeem_agu", valueMilli: whole(args, "msiu") };
+    case "create_agu":
+      return { tool: "create_agu", claim: str(args, "claim"), milli: whole(args, "msiu") };
+    case "order_front_claim":
+      return { tool: "order_front_claim", task: task(args), milli: whole(args, "msiu"), pay: payV3a(args) };
+    case "request_claims":
+      return { tool: "request_claims", task: task(args), window: windowArg(args), milli: whole(args, "msiu") };
+    case "buy_offer":
+      return { tool: "buy_offer", offer: str(args, "offer"), milli: whole(args, "msiu"), pay: payV3a(args) };
+    case "post_offer":
+      return {
+        tool: "post_offer",
+        issuer: str(args, "issuer"),
+        task: task(args),
+        window: windowArg(args),
+        milli: whole(args, "msiu"),
+        discountBps: whole(args, "discount_bps", { signed: true }),
+        accept: acceptArg(args),
+        to: str(args, "to"),
+        ...(args.request !== undefined ? { request: str(args, "request") } : {}),
+        ...(args.replaces !== undefined ? { replaces: str(args, "replaces") } : {}),
+      };
+    case "withdraw_offer":
+      return { tool: "withdraw_offer", offer: str(args, "offer") };
+    case "decline_request":
+      return { tool: "decline_request", request: str(args, "request"), reason: str(args, "reason").slice(0, 300) };
+    case "post_quote": {
+      if ((args.price_msiu === undefined) === (args.price_musd === undefined))
+        throw new Error('args must name exactly one of "price_msiu" or "price_musd"');
+      const base = { tool: "post_quote" as const, need: str(args, "need"), tasks: tasksArg(args), accepts: acceptArg(args) };
+      return args.price_msiu !== undefined
+        ? { ...base, priceMicroSiu: whole(args, "price_msiu") * 1_000n }
+        : { ...base, priceUsdcMicro: whole(args, "price_musd") };
+    }
+    case "accept_quote": {
+      const how = args.pay;
+      if (how !== "usdc" && how !== "agu" && how !== "claims") throw new Error('args.pay must be "usdc", "agu" or "claims"');
+      if (how !== "claims") return { tool: "accept_quote", quote: str(args, "quote"), pay: how };
+      const claims = args.claims;
+      if (!Array.isArray(claims) || claims.length === 0 || !claims.every((c) => typeof c === "string" && c.trim() !== ""))
+        throw new Error("with pay claims, args.claims must list the claim ids you pay with");
+      return { tool: "accept_quote", quote: str(args, "quote"), pay: "claims", claims: (claims as string[]).slice(0, 8) };
+    }
+    case "buy_data":
+      return { tool: "buy_data", dataset: str(args, "dataset"), pay: payV3a(args) };
+    case "commission_task":
+      return { tool: "commission_task", tasks: tasksArg(args), issuer: str(args, "issuer"), pay: payV3a(args) };
+    default:
+      throw new Error(`unknown tool ${tool}`);
+  }
 }

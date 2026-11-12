@@ -1,0 +1,138 @@
+{
+  "status": "v3a CANDIDATE, NOT FROZEN (Phase 3 build, 2026-11-11). Design: docs/experiment-3a-design.md; owner decisions D142, D143. Values marked PROPOSAL in v3a.note need the owner's approval before freeze; the price-path seeds are drawn at freeze and only their hashes go here.",
+  "units": "USDC and AGU-lab in base units (6 decimals); face in mSIU; rates in nano-USD per SIU; basis points for shares; ppm for price-path volatility",
+  "secondsPerWindow": 86400,
+  "roundsPerWindow": 8,
+  "ladderWindows": 3,
+  "reserve": {
+    "series": "commodity",
+    "faceMilliPerWindow": "3000",
+    "minTenorSeconds": 43200,
+    "discountBps": "1000",
+    "bufferSeedUsdc": "500000",
+    "bufferTargetUsdc": "500000"
+  },
+  "participant": {
+    "usdc": "2000000",
+    "spreadBps": "200",
+    "buybackCapBps": "1000"
+  },
+  "issuers": [
+    {
+      "id": "ISSUER-C1",
+      "model": "claude-haiku-5-5",
+      "grade": "commodity",
+      "classes": ["CR-PL", "CR-UO", "CR-SM"],
+      "budgetUsdPerWindow": "0.20",
+      "bondUsdc": "2000000",
+      "failShareBps": "0"
+    },
+    {
+      "id": "ISSUER-C2",
+      "model": "claude-haiku-5-5",
+      "grade": "commodity",
+      "classes": ["CR-PL", "CR-UO", "CR-SM"],
+      "budgetUsdPerWindow": "0.20",
+      "bondUsdc": "2000000",
+      "failShareBps": "0"
+    },
+    {
+      "id": "ISSUER-X",
+      "model": "claude-haiku-5-5",
+      "grade": "commodity",
+      "classes": ["CR-PL", "CR-UO", "CR-SM"],
+      "budgetUsdPerWindow": "0.10",
+      "bondUsdc": "1000000",
+      "failShareBps": "0",
+      "listPriceBps": "8500",
+      "reason": "Owner, D143: X passes at D119's 80% qualifying floor on CR-PL, CR-UO and CR-SM (a pre-registered rule, not a measured cell: the trial's weakest qualifying cell, sonnet-5 on CR-PL at 9 of 10, is statistically indistinguishable from C1/C2 and would leave the claims record with no defaults to show), and lists 15% below C1/C2, so X is cheaper per task but dearer per accepted unit and the comparability measure has a real trade-off. Its pass rate is in the pass-rate table; failShareBps stays 0 because the table already carries the rate."
+    },
+    {
+      "id": "ISSUER-F",
+      "model": "claude-sonnet-5",
+      "grade": "frontier",
+      "classes": ["CR-VS", "CR-PL", "CR-UO", "CR-SM"],
+      "lotClasses": ["CR-VS"],
+      "budgetUsdPerWindow": "1.00",
+      "bondUsdc": "5000000",
+      "failShareBps": "0",
+      "reason": "claude-sonnet-5 serves all four task types by commission (design, Issuers table); it bonds claim lots for CR-VS only, so no Commodity reserve claim can be routed to a Frontier issuer (the routing rule params.ts checks)."
+    }
+  ],
+  "deliveryFloorBps": "8000",
+  "deliveryTrailingWindows": 5,
+  "probeShareBps": "500",
+  "probesToClear": 3,
+  "dataShadowPriceUsdc": "1000",
+  "briefMarkupBps": "12000",
+  "agents": {
+    "research": ["RESEARCH-1", "RESEARCH-2", "RESEARCH-3"],
+    "demand": ["DEMAND-1", "DEMAND-2", "DEMAND-3", "DEMAND-4"],
+    "hedger": "HEDGER",
+    "provider": "PROVIDER"
+  },
+  "mandates": {},
+  "researchUsdc": "25000",
+  "hedger": {
+    "usdc": "50000",
+    "briefsSold": 8,
+    "priceUsdcPerBrief": "50000",
+    "latePenaltyUsdcPerBrief": "50000"
+  },
+  "needsPerDemandAgentPerWindow": 1,
+  "mirroredShareBps": "1000",
+  "spendCapUsdPerWindow": "2.00",
+  "seed": "dev-0",
+  "unmetNeedCostMicroSiu": "200000",
+  "forwardVisibilityWindows": 3,
+  "v3a": {
+    "note": "PROPOSALS awaiting the owner (Phase 3 report): mandates' minValueBufferBps (cautious 4000, standard 2500, permissive 1000); sweep shareOfStartingValueBps 1500 (15% of starting value per sweep, demand agents only); printPath.classNoisePpm 2000 (0.2% a day, about a third of the low setting); dataPriceMilli 148 (the mean of the three Commodity class prices, 301, 58 and 86 mSIU); providerRules (discount from -20% to +50%, offers up to 3 windows ahead, a default costs PROVIDER the bond's payout once); minRedeemMilli and minCreateMilli 250; hedger.briefsSold 8 (one a window); spendCapUsdPerWindow 2.00; minCounts. Fixed by the design or the owner: everything else.",
+    "windows": 8,
+    "provider": "PROVIDER",
+    "startingUsdc": { "research": "25000", "demand": "50000", "hedger": "50000" },
+    "mandates": {
+      "DEMAND-1": { "profile": "standard", "capBriefsPerWindow": 5, "minValueBufferBps": "2500" },
+      "DEMAND-2": { "profile": "standard", "capBriefsPerWindow": 5, "minValueBufferBps": "2500" },
+      "DEMAND-3": { "profile": "cautious", "capBriefsPerWindow": 3, "minValueBufferBps": "4000" },
+      "DEMAND-4": { "profile": "permissive", "capBriefsPerWindow": 8, "minValueBufferBps": "1000" }
+    },
+    "sweep": { "windows": [4, 8], "shareOfStartingValueBps": "1500" },
+    "needsVisibleWindows": 3,
+    "printPath": {
+      "burnIn": 15,
+      "lowVolPpm": "6549",
+      "highVolPpm": "50000",
+      "classNoisePpm": "2000",
+      "lowVolMeasured": "Commodity grade Dated SIU (data/prints/<date>-commodity.json), origin/main @ e4727014, 2026-09-01..2026-11-11: 66 one-day moves, sample sd 0.6549% (cli/v3a-volatility.ts). Re-measure at freeze.",
+      "seedHashes": {}
+    },
+    "passRates": {
+      "path": "data/lab/cr/v3a/pass-rates.json",
+      "sha256": "c0d32d2d13df87f94792c9d407ee6a810689d7969d4e57bd53d7364a805ac590"
+    },
+    "failedWorkPays": false,
+    "dataPriceMilli": "148",
+    "armB": {
+      "holdShareBps": "5000",
+      "windowsAhead": 3,
+      "agents": ["DEMAND-1", "DEMAND-2", "DEMAND-3", "DEMAND-4", "HEDGER"]
+    },
+    "providerRules": {
+      "defaultPenaltyBps": "10000",
+      "discountMinBps": "-2000",
+      "discountMaxBps": "5000",
+      "maxWindowsAhead": 3
+    },
+    "minRedeemMilli": "250",
+    "minCreateMilli": "250",
+    "seats": { "counted": "claude-sonnet-5", "dev": "claude-haiku-5-5" },
+    "minCounts": {
+      "exchange": 20,
+      "account": 40,
+      "storeOfValue": 9,
+      "deferredPayment": 20,
+      "comparabilityPerDisplay": 20,
+      "comparabilityKillPerDisplay": 40
+    }
+  }
+}

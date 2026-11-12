@@ -44,6 +44,16 @@ export const LOG_KINDS = [
   "objective",
   // v3a Phase 2 item 7: a work claim moved from one holder to another as payment (docs/experiment-3a-design.md, the fSIU lifecycle's "Transfer")
   "claim-transfer",
+  // v3a Phase 3 (docs/experiment-3a-design.md)
+  "payment",
+  "offer",
+  "claim-request",
+  "holdings",
+  "rule-check",
+  "opportunity",
+  "board",
+  "price",
+  "provider-profit",
 ] as const;
 export type LogKind = (typeof LOG_KINDS)[number];
 

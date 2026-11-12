@@ -16,6 +16,7 @@ import {
   type UsdcUnits,
 } from "./units.js";
 import type { MicroSiu, Need, ObjectiveLedger, Quote, Role, TaskOutput, World } from "./world.js";
+import { renderV3aBoard, v3aBoardFor, type V3aBoard } from "./board-v3a.js";
 
 /**
  * The display order, as its own function of the window number (D75/§16.9), so every reader of a window's display order — the board itself and the pre-registered scoring
@@ -90,6 +91,8 @@ export interface Board {
     onTime?: number;
     late?: number;
   };
+  /** v3a: the v3a board's own section (`board-v3a.ts`); present exactly when the world is a v3a world */
+  v3a?: V3aBoard;
 }
 
 export function boardFor(w: World, agent: string): Board {
@@ -188,6 +191,7 @@ export function boardFor(w: World, agent: string): Board {
       : {}),
     // v2 item 8: shown once this agent's objective ledger has anything in it (lazily created on first touch, world.ts's own `#objectiveFor`)
     ...(w.objective.has(agent) ? { objective: objectiveView(w.objective.get(agent) as ObjectiveLedger, rate, w) } : {}),
+    ...(w.v3a !== undefined ? { v3a: v3aBoardFor(w, agent, role) } : {}),
   };
 }
 
@@ -223,6 +227,27 @@ const quotePrice = (b: Board, microSiu: MicroSiu): string =>
 
 /** the board as the text a model agent reads */
 export function renderBoard(b: Board): string {
+  if (b.v3a !== undefined)
+    return renderV3aBoard(
+      {
+        agent: b.agent,
+        role: b.role,
+        window: b.window,
+        day: b.day,
+        round: b.round,
+        rounds: b.rounds,
+        siuFirst: b.siuFirst,
+        agents: b.agents,
+        needs: b.needs,
+        quotes: b.quotes,
+        outputs: b.outputs,
+        notices: b.notices,
+        ...(b.lastResult !== undefined ? { lastResult: b.lastResult } : {}),
+        ...(b.objective !== undefined ? { objective: b.objective } : {}),
+        ...(b.forward !== undefined ? { forward: b.forward } : {}),
+      },
+      b.v3a,
+    );
   const lines: string[] = [];
   lines.push(
     `You are ${b.agent}, a ${b.role} agent. Day ${b.day} (window ${b.window}), round ${b.round} of ${b.rounds}.`,

@@ -32,10 +32,20 @@ import {
 import type { EconomyParams, IssuerParams } from "./params.js";
 import { Participant, ParticipantRefused } from "./participant.js";
 import {
+  acceptsPay,
+  emptyRow,
+  type Accept,
+  type ClaimRequest,
+  type Offer,
+  type RecordRow,
+  type V3aRun,
+} from "./v3a-market.js";
+import {
   microSiuForUsdcCeil,
   show,
   showMsiu,
   usdcFor,
+  usdcForMicroSiu,
   usdcForMicroSiuCeil,
   type AguUnits,
   type MilliSiu,
@@ -57,20 +67,42 @@ export const DATA_AGENT = "DATA-AGENT";
 export const GATE_RUNNER = "GATE-RUNNER";
 export const AGU_ISSUER = "AGU-ISSUER";
 
-export type Role = "research" | "demand" | "hedger";
+/** v3a adds PROVIDER, the model agent that sells fSIU claims on the issuers' capacity */
+export type Role = "research" | "demand" | "hedger" | "provider";
 
 export type Action =
   | { tool: "pass" }
   | { tool: "message"; to: string; text: string }
-  | { tool: "buy_agu"; usdc?: UsdcUnits; agu?: AguUnits }
-  | { tool: "sell_agu"; agu: AguUnits }
-  | { tool: "redeem_agu"; agu: AguUnits }
+  // v3a: `valueMilli` states an AGU-lab amount by its value in mSIU at today's NAV, the unit the board shows it in; the world converts it to units when it acts
+  | { tool: "buy_agu"; usdc?: UsdcUnits; agu?: AguUnits; valueMilli?: MilliSiu }
+  | { tool: "sell_agu"; agu?: AguUnits; valueMilli?: MilliSiu }
+  | { tool: "redeem_agu"; agu?: AguUnits; valueMilli?: MilliSiu }
   | { tool: "present_claim"; claim: string }
   | { tool: "order_front_claim"; task: TaskId; milli: MilliSiu; pay?: PayUnit }
-  // v2 item 2: exactly one of priceMicroSiu/priceUsdcMicro is set, enforced by parse.ts -- the RAW unit the quoting researcher chose, converted and locked in `#postQuote`
-  | { tool: "post_quote"; need: string; tasks: TaskId[]; priceMicroSiu?: MicroSiu; priceUsdcMicro?: UsdcUnits }
-  // v3a Phase 2 item 7: `claims` names work claims the demand agent holds for this window, paid instead of the quote's own unit (the fSIU lifecycle's "Transfer")
-  | { tool: "accept_quote"; quote: string; claims?: string[] }
+  // v2 item 2: exactly one of priceMicroSiu/priceUsdcMicro is set, enforced by parse.ts -- the RAW unit the quoting researcher chose, converted and locked in `#postQuote`.
+  // v3a: `accepts` is which currencies the research agent will be paid in
+  | { tool: "post_quote"; need: string; tasks: TaskId[]; priceMicroSiu?: MicroSiu; priceUsdcMicro?: UsdcUnits; accepts?: Accept }
+  // v3a Phase 2 item 7: `claims` names work claims the demand agent holds for this window, paid instead of the quote's own unit (the fSIU lifecycle's "Transfer").
+  // v3a: `pay` is the payer's choice among what the quote accepts
+  | { tool: "accept_quote"; quote: string; claims?: string[]; pay?: "usdc" | "agu" | "claims" }
+  // v3a: PROVIDER's standing offers and buyers' requests (D143), and creating AGU-lab in kind
+  | {
+      tool: "post_offer";
+      issuer: string;
+      task: TaskId;
+      window: number;
+      milli: MilliSiu;
+      discountBps: bigint;
+      accept: Accept;
+      to: string;
+      request?: string;
+      replaces?: string;
+    }
+  | { tool: "withdraw_offer"; offer: string }
+  | { tool: "decline_request"; request: string; reason: string }
+  | { tool: "request_claims"; task: TaskId; window: number; milli: MilliSiu }
+  | { tool: "buy_offer"; offer: string; milli: MilliSiu; pay: PayUnit }
+  | { tool: "create_agu"; claim: string; milli: MilliSiu }
   | { tool: "buy_data"; dataset: string; pay?: PayUnit }
   | { tool: "commission_task"; tasks: TaskId[]; issuer: string; pay?: PayUnit }
   | { tool: "deliver_brief"; quote: string }
@@ -117,6 +149,10 @@ export interface Quote {
   usdcEscrowed?: UsdcUnits;
   /** v3a Phase 2 item 7: the work claims the demand agent paid with at acceptance, instead of an escrow -- they moved to the researcher then, so nothing is ever refunded */
   paidInClaims?: { tokenId: string; milli: MilliSiu }[];
+  /** v3a: which currencies the research agent accepts payment in (work claims are always accepted, per the fSIU lifecycle) */
+  accepts?: Accept;
+  /** v3a: the Commodity print when the quote was posted -- the rate a payment in the other currency converts at */
+  rateAtPost?: NanoUsdPerSiu;
   /**
    * v3a Phase 2 item 1: when and how the quote stopped being live. Set once, at settlement or lapse, when the escrow fields above are cleared: the board then drops the
    * quote, and any later action on it is refused with this as the reason.
@@ -185,6 +221,29 @@ export interface ObjectiveLedger {
   late: number;
 }
 
+/** v3a: what a v3a world keeps beyond v2's state (docs/experiment-3a-design.md; D143); absent in a v1 or v2 world */
+export interface V3aState {
+  run: V3aRun;
+  offers: Offer[];
+  requests: ClaimRequest[];
+  /** the public claims record, keyed `${issuer}|${window}` */
+  record: Map<string, RecordRow>;
+  /** the token types PROVIDER sold (tagged mints): every serve, default and expiry of these is PROVIDER's */
+  providerTokens: Set<string>;
+  /** spend per agent per window OF DELIVERY, micro-SIU (the mandate's cap counts the window the work is for) */
+  spent: Map<string, Map<number, MicroSiu>>;
+  /** each model agent's total starting value, micro-USD (USDC plus AGU-lab at the opening print), for buffers and sweeps */
+  startValueMicroUsd: Map<string, UsdcUnits>;
+  /** each issuer's list price per task before its class print's drift */
+  baseTaskPrice: Record<string, Partial<Record<TaskId, MicroSiu>>>;
+  /** this window's class-print factors, parts per million */
+  classPpm: Partial<Record<TaskId, bigint>>;
+  /** one task's work in mSIU of its grade, per class (fixed for the run: what a claim buys) */
+  faces: Record<Series, Partial<Record<TaskId, MilliSiu>>>;
+  /** PROVIDER's objective (decision 6): profit in SIU over the run, penalised for the defaults it causes */
+  providerProfitMicroSiu: MicroSiu;
+}
+
 export class World {
   readonly chain: MemoryChain;
   readonly participant: Participant;
@@ -207,6 +266,8 @@ export class World {
   readonly roles = new Map<string, Role>();
   /** v2 item 8: see `ObjectiveLedger`'s own doc comment -- a scoring layer, never a real currency */
   readonly objective = new Map<string, ObjectiveLedger>();
+  /** v3a: see `V3aState`; undefined in a v1/v2 world */
+  readonly v3a?: V3aState;
   forwardDelivered = 0;
   workSpendUsd = new D(0);
   window = 0;
@@ -223,8 +284,8 @@ export class World {
     readonly worker: TaskWorker,
     /** v2 item 10: no longer `readonly` -- `startWindow` updates this per window from `priceSchedule` when one is supplied, so a moving-price replay propagates through every existing read site (board, participant quotes, the roll, window-close settlement) with no other change */
     public rates: Readonly<Record<Series, NanoUsdPerSiu>>,
-    /** each issuer's price per task, micro-SIU, from its measured cost per pass (WP0) */
-    readonly taskPrice: Readonly<Record<string, Partial<Record<TaskId, MicroSiu>>>>,
+    /** each issuer's price per task, micro-SIU, from its measured cost per pass (WP0); v3a moves it each window with its class print */
+    public taskPrice: Readonly<Record<string, Partial<Record<TaskId, MicroSiu>>>>,
     readonly dataSha: (window: number) => string,
     readonly dayLabel: (window: number) => string,
     readonly t0: number,
@@ -233,7 +294,25 @@ export class World {
     readonly totalWindows?: number,
     /** v2 item 10: window -> that day's real print rates, replayed instead of holding `rates` fixed for the whole run; opt-in, absent for every existing caller/test */
     readonly priceSchedule?: ReadonlyMap<number, Readonly<Record<Series, NanoUsdPerSiu>>>,
+    /** v3a: the run (arm, volatility, price path) and each class's task face; absent, the world is v1/v2 exactly as before */
+    v3aSetup?: { run: V3aRun; faces: V3aState["faces"] },
   ) {
+    if (v3aSetup !== undefined) {
+      if (params.v3a === undefined) throw new Error("a v3a run needs a v3a parameters file");
+      this.v3a = {
+        run: v3aSetup.run,
+        offers: [],
+        requests: [],
+        record: new Map(),
+        providerTokens: new Set(),
+        spent: new Map(),
+        startValueMicroUsd: new Map(),
+        baseTaskPrice: taskPrice as Record<string, Partial<Record<TaskId, MicroSiu>>>,
+        classPpm: {},
+        faces: v3aSetup.faces,
+        providerProfitMicroSiu: 0n,
+      };
+    }
     this.chain = new MemoryChain(
       {
         reserveSeries: params.reserve.series,
@@ -252,6 +331,7 @@ export class World {
     for (const a of params.agents.research) this.roles.set(a, "research");
     for (const a of params.agents.demand) this.roles.set(a, "demand");
     this.roles.set(params.agents.hedger, "hedger");
+    if (this.v3a !== undefined && params.v3a !== undefined) this.roles.set(params.v3a.provider, "provider");
   }
 
   // ---- time --------------------------------------------------------------------------------------------------------------------------------------
@@ -334,7 +414,11 @@ export class World {
             ? `${action.quote}: `
             : action.tool === "post_quote"
               ? `${action.need}: `
-              : "";
+              : action.tool === "buy_offer" || action.tool === "withdraw_offer"
+                ? `${action.offer}: `
+                : action.tool === "decline_request"
+                  ? `${action.request}: `
+                  : "";
         return this.#result(agent, { ok: false, note: `${subject}refused: ${e.message}${suffix}` });
       }
       throw e;
@@ -362,15 +446,42 @@ export class World {
         return { ok: true, note: `message sent to ${a.to}` };
       }
       case "buy_agu":
-        return this.#buyAgu(agent, a);
+        // v3a: an amount stated as AGU-lab value in mSIU buys the units that value is at today's NAV (rounded up, so the agent gets at least the value it asked for)
+        return this.#buyAgu(agent, a.valueMilli !== undefined ? { agu: this.aguFor(a.valueMilli * 1_000n) } : a);
       case "sell_agu":
-        return this.#sellAgu(agent, a.agu, reasoning);
-      case "redeem_agu":
-        return this.#redeem(agent, a.agu);
+        return this.#sellAgu(agent, this.#unitsOf(agent, a), reasoning);
+      case "redeem_agu": {
+        const units = this.#unitsOf(agent, a);
+        const min = this.params.v3a?.minRedeemMilli;
+        if (min !== undefined && this.siuOf(units) < min * 1_000n)
+          return { ok: false, note: `redeem at least ${min} mSIU of AGU-lab (that is ${this.siuOf(units) / 1_000n} mSIU)` };
+        return this.#redeem(agent, units);
+      }
       case "present_claim":
         return this.#present(agent, a.claim);
+      case "post_offer":
+        return this.#postOffer(agent, role, a);
+      case "withdraw_offer":
+        return this.#withdrawOffer(agent, role, a.offer);
+      case "decline_request":
+        return this.#declineRequest(agent, role, a.request, a.reason);
+      case "request_claims":
+        return this.#requestClaims(agent, role, a);
+      case "buy_offer":
+        return this.#buyOffer(agent, role, a);
+      case "create_agu":
+        return this.#createAgu(agent, a.claim, a.milli);
       case "order_front_claim": {
         if (a.milli <= 0n) return { ok: false, note: "order at least 0.001 SIU" };
+        if (this.v3a !== undefined) {
+          if (a.pay === undefined) return { ok: false, note: "say which currency pays: usdc or agu" };
+          // the roll sells at the discounted print; a demand agent's order counts against its cap for the window the work is for (the next one)
+          const price = (this.commodityRate * (10_000n - this.params.reserve.discountBps)) / 10_000n;
+          const value = (a.milli * 1_000n * price) / this.commodityRate;
+          const refused = this.#mandateRefusal(agent, this.window + 1, value);
+          if (refused !== undefined) return { ok: false, note: refused };
+          this.#addSpend(agent, this.window + 1, value);
+        }
         this.frontOrders.push({ agent, task: a.task, milli: a.milli, forWindow: this.window + 1, pay: a.pay });
         // this exact text is parsed by scoring.ts's FRONT_ORDER_TASK regex (kill criterion 4) -- its shape never varies with `pay`; the unit rides in its own field
         // (v3a Phase 2 item 3: buying ahead is reported per currency)
@@ -390,12 +501,15 @@ export class World {
       case "post_quote":
         return this.#postQuote(agent, role, a);
       case "accept_quote":
-        return this.#acceptQuote(agent, role, a.quote, a.claims);
+        return this.#acceptQuote(agent, role, a.quote, a.claims, a.pay);
       case "buy_data":
+        if (this.v3a !== undefined && a.pay === undefined) return { ok: false, note: "say which currency pays: usdc or agu" };
         return this.#buyData(agent, a.dataset, a.pay);
       case "commission_task": {
         if (a.tasks.length < 1 || a.tasks.length > 4 || new Set(a.tasks).size !== a.tasks.length)
           return { ok: false, note: "commission 1 to 4 different task types at once" };
+        // v3a: no currency is ever chosen for an agent by default (a default would lean on the very choice the experiment measures)
+        if (this.v3a !== undefined && a.pay === undefined) return { ok: false, note: "say which currency pays: usdc or agu" };
         const notes: string[] = [];
         let anyOk = false;
         for (const t of a.tasks) {
@@ -408,10 +522,22 @@ export class World {
       case "deliver_brief":
         return this.#deliverBrief(agent, role, a.quote);
       case "buy_claims":
+        // v3a: claims are minted by PROVIDER's offers, never bought straight from an issuer at the plain print
+        if (this.v3a !== undefined) return { ok: false, note: "buy claims from PROVIDER's offers (buy_offer), or ask for them (request_claims)" };
         return this.#buyClaims(agent, a.task, a.milli, a.windowsAhead, a.pay);
       case "deliver_forward":
         return this.#deliverForward(agent, role);
     }
+  }
+
+  /** v3a: an AGU-lab amount given in units, or as value in mSIU at today's NAV (rounded down: never more than the agent asked to part with) */
+  #unitsOf(agent: string, a: { agu?: AguUnits; valueMilli?: MilliSiu }): AguUnits {
+    if (a.valueMilli === undefined) return a.agu ?? 0n;
+    const { num, den } = this.chain.nav();
+    const units = num === 0n ? 0n : (a.valueMilli * 1_000n * den) / num;
+    const held = this.chain.balance(agent, "AGU");
+    // "all of it" stated as its value can round one unit past the balance: cap it there
+    return units > held && units - held <= 1n ? held : units;
   }
 
   /** buy an exact amount of AGU-lab (`agu`, the ask charged for exactly that) or as much as a USDC amount buys at the ask (`usdc`) */
@@ -506,6 +632,7 @@ export class World {
           this.commodityRate,
         );
         const units = this.chain.create(PARTICIPANT, id, m);
+        if (this.v3a !== undefined) this.#row(this.chain.claimTypes.get(id)?.issuer as string, k).mintedMilli += m;
         this.#log(PARTICIPANT, "create", {
           tokenId: id,
           task: classId,
@@ -626,8 +753,13 @@ export class World {
     const ct = this.chain.claimTypes.get(tokenId);
     if (ct === undefined) return { ok: false, note: `no claim ${tokenId}` };
     const milli = this.chain.claimBalance(agent, tokenId);
-    // one presentation is one task's work (TASK_MILLI), or what is left of the claim
-    const take = milli < TASK_MILLI ? milli : TASK_MILLI;
+    // one presentation is one task's work (TASK_MILLI), or what is left of the claim. v3a: one task of a class is that class's fixed face (the work a claim buys,
+    // `taskFaces`), and a holding smaller than one task cannot be presented -- a remnant would otherwise buy a whole task
+    const face = this.v3a?.faces[ct.series][ct.classId as TaskId];
+    if (this.v3a !== undefined && face === undefined) return { ok: false, note: `no task face for ${ct.classId} claims` };
+    if (face !== undefined && milli < face)
+      return { ok: false, note: `one ${ct.classId} task takes ${face} mSIU of claim; you hold ${milli} mSIU of ${tokenId} (holdings of the same claim add up)` };
+    const take = face ?? (milli < TASK_MILLI ? milli : TASK_MILLI);
     if (take === 0n) return { ok: false, note: `you hold none of ${tokenId}` };
     this.chain.present(agent, tokenId);
     this.#log(agent, "claim-present", { tokenId, issuer: ct.issuer, task: ct.classId });
@@ -648,6 +780,15 @@ export class World {
       costUsd: out.costUsd.toFixed(6),
     });
     this.chain.serve(ct.issuer, tokenId, agent, take, out.passed);
+    if (this.v3a !== undefined) {
+      const row = this.#row(ct.issuer, this.window);
+      row.presented++;
+      if (out.passed) {
+        row.served++;
+        row.servedMilli += take;
+        if (this.v3a.providerTokens.has(tokenId)) this.#providerPaysIssuer(ct.issuer, ct.classId as TaskId);
+      }
+    }
     if (out.passed) {
       this.#stat(ct.issuer).served++;
       if (this.probeLots.has(tokenId))
@@ -691,6 +832,120 @@ export class World {
     while (list.length <= this.window) list.push({ presented: 0, served: 0 });
     return list[this.window] as { presented: number; served: number };
   }
+  // ---- v3a: payments, mandates and value ------------------------------------------------------------------------------------------------------------
+  /** v3a: whether `payer` holds enough of EACH currency to pay `value` micro-SIU in it (the exchange measure counts only payments where it did) */
+  #canPayBoth(payer: string, value: MicroSiu): boolean {
+    return (
+      this.chain.balance(payer, "USDC") >= usdcForMicroSiuCeil(value, this.commodityRate) &&
+      this.chain.balance(payer, "AGU") >= this.aguFor(value)
+    );
+  }
+
+  /**
+   * v3a: one payment, recorded when the payer commits it (an escrow opened counts, whether or not it later settles), before any money moves, for the exchange measure:
+   * AGU-lab's share of payments by value, counting only payments where the payer could pay in both and the payee accepted both. `forced` (a sweep's conversion) and
+   * `scripted` (code paying on an agent's behalf) are kept out of that measure, which counts freely chosen payments only (the owner, D143).
+   */
+  #payment(
+    payer: string,
+    payee: string,
+    what: string,
+    currency: PayUnit | "claims",
+    value: MicroSiu,
+    opts: {
+      payeeAcceptsBoth: boolean;
+      forced?: boolean;
+      scripted?: boolean;
+      forWindow?: number;
+      ref?: string;
+      /** read before the money moved, when the record is written after (so a refused transfer leaves no payment behind) */
+      couldPayBoth?: boolean;
+    },
+  ): void {
+    if (this.v3a === undefined) return;
+    this.#log(payer, "payment", {
+      payee,
+      what,
+      currency,
+      valueMicroSiu: value,
+      valueMicroUsd: usdcForMicroSiuCeil(value, this.commodityRate),
+      couldPayBoth: opts.couldPayBoth ?? this.#canPayBoth(payer, value),
+      payeeAcceptsBoth: opts.payeeAcceptsBoth,
+      forced: opts.forced === true,
+      scripted: opts.scripted === true,
+      forWindow: opts.forWindow ?? this.window,
+      ...(opts.ref !== undefined ? { ref: opts.ref } : {}),
+    });
+  }
+
+  /** v3a: the reference brief a mandate's cap counts in: two tasks of the dearest Commodity class, at the brief markup, micro-SIU */
+  v3aReferenceBriefMicroSiu(): MicroSiu {
+    const faces = Object.values(this.v3a?.faces.commodity ?? {}) as MilliSiu[];
+    const max = faces.reduce((a, b) => (b > a ? b : a), 0n);
+    return (2n * max * 1_000n * this.params.briefMarkupBps) / 10_000n;
+  }
+  /** v3a: a demand agent's spend cap for one window of delivery, micro-SIU; undefined for an agent without a v3a mandate */
+  v3aCapMicroSiu(agent: string): MicroSiu | undefined {
+    const m = this.params.v3a?.mandates[agent];
+    return m === undefined ? undefined : BigInt(m.capBriefsPerWindow) * this.v3aReferenceBriefMicroSiu();
+  }
+  spentFor(agent: string, window: number): MicroSiu {
+    return this.v3a?.spent.get(agent)?.get(window) ?? 0n;
+  }
+  #addSpend(agent: string, window: number, value: MicroSiu): void {
+    if (this.v3a === undefined) return;
+    const m = this.v3a.spent.get(agent) ?? new Map<number, MicroSiu>();
+    m.set(window, (m.get(window) ?? 0n) + value);
+    this.v3a.spent.set(agent, m);
+  }
+  /** v3a: a demand agent's buffer, micro-USD (its mandate's share of its starting value) */
+  v3aBufferMicroUsd(agent: string): UsdcUnits | undefined {
+    const m = this.params.v3a?.mandates[agent];
+    const start = this.v3a?.startValueMicroUsd.get(agent);
+    return m === undefined || start === undefined ? undefined : (start * m.minValueBufferBps) / 10_000n;
+  }
+
+  /** micro-SIU of the Commodity grade in one micro-SIU of `series` (Frontier converts through the two prints) */
+  #toCommodity(microSiu: bigint, series: Series): MicroSiu {
+    return series === "commodity" ? microSiu : (microSiu * this.rates[series]) / this.rates.commodity;
+  }
+  /** v3a: the live claims `agent` holds, valued at face in Commodity micro-SIU; `windows` narrows them to claims presentable in those windows */
+  claimsValueMicroSiu(agent: string, windows?: (k: number) => boolean): MicroSiu {
+    let v = 0n;
+    for (const [tokenId, holders] of this.chain.claims) {
+      const milli = holders.get(agent) ?? 0n;
+      const ct = this.chain.claimTypes.get(tokenId);
+      if (milli === 0n || ct === undefined || ct.windowTo <= this.clock.now) continue;
+      if (windows !== undefined && !windows(this.#windowOf(ct.windowFrom))) continue;
+      v += this.#toCommodity(milli * 1_000n, ct.series);
+    }
+    return v;
+  }
+  /** v3a: everything `agent` holds, valued at today's print, micro-USD: USDC, AGU-lab at mid (NAV × print) and live claims at face */
+  valueMicroUsd(agent: string): UsdcUnits {
+    const rate = this.commodityRate;
+    return (
+      this.chain.balance(agent, "USDC") +
+      usdcForMicroSiu(this.siuOf(this.chain.balance(agent, "AGU")) + this.claimsValueMicroSiu(agent), rate)
+    );
+  }
+
+  /**
+   * v3a: a demand agent's mandate (docs/experiment-3a-design.md, Cast): spend counts against the window the work is for, up to its cap in reference briefs, and it keeps a
+   * minimum total value in either currency. Returns the refusal, or undefined when the spend is within both.
+   */
+  #mandateRefusal(agent: string, forWindow: number, value: MicroSiu): string | undefined {
+    const cap = this.v3aCapMicroSiu(agent);
+    if (cap === undefined) return undefined;
+    const after = this.spentFor(agent, forWindow) + value;
+    if (after > cap)
+      return `over spend cap for window ${forWindow}: ${after / 1_000n} of ${cap / 1_000n} mSIU (already committed ${this.spentFor(agent, forWindow) / 1_000n}, this ${value / 1_000n})`;
+    const buffer = this.v3aBufferMicroUsd(agent) ?? 0n;
+    const left = this.valueMicroUsd(agent) - usdcForMicroSiuCeil(value, this.commodityRate);
+    if (left < buffer) return `would leave ${left} µ$ of value, below your minimum of ${buffer} µ$`;
+    return undefined;
+  }
+
   /** v2 item 8: this agent's objective ledger, created at zero on first touch */
   #objectiveFor(agent: string): ObjectiveLedger {
     let o = this.objective.get(agent);
@@ -724,6 +979,9 @@ export class World {
     const priceMicroSiu =
       priceUnit === "usdc" ? microSiuForUsdcCeil(priceUsdcMicro as UsdcUnits, rate) : (a.priceMicroSiu as MicroSiu);
     if (priceMicroSiu <= 0n) return { ok: false, note: `${a.need}: a price must be above zero` };
+    // v3a: the research agent states which currencies it will be paid in (none is assumed for it); work claims are always accepted (the fSIU lifecycle's "Transfer")
+    if (this.v3a !== undefined && a.accepts === undefined)
+      return { ok: false, note: `${a.need}: say which currencies you accept: usdc, agu or both` };
     const q: Quote = {
       id: this.#id("quote"),
       researcher: agent,
@@ -734,6 +992,7 @@ export class World {
       priceUnit,
       priceUsdcMicro,
       status: "posted",
+      ...(this.v3a !== undefined ? { accepts: a.accepts, rateAtPost: rate } : {}),
     };
     this.quotes.push(q);
     this.#log(agent, "quote", {
@@ -744,12 +1003,15 @@ export class World {
       priceMicroSiu,
       priceUnit,
       ...(priceUsdcMicro !== undefined ? { priceUsdcMicro } : {}),
+      ...(q.accepts !== undefined ? { accepts: q.accepts } : {}),
     });
     this.notify(
       need.agent,
-      priceUnit === "usdc"
-        ? `quote ${q.id} from ${agent}: a brief on ${a.tasks.join(" + ")} for ${show(priceUsdcMicro as UsdcUnits)} USDC, payable on delivery of a passing brief`
-        : `quote ${q.id} from ${agent}: a brief on ${a.tasks.join(" + ")} for ${showMsiu(priceMicroSiu)}, payable in AGU-lab on delivery of a passing brief`,
+      this.v3a !== undefined
+        ? `quote ${q.id} from ${agent}: a brief on ${a.tasks.join(" + ")} for ${priceUnit === "usdc" ? `${priceUsdcMicro} µ$` : `${priceMicroSiu / 1_000n} mSIU`}, accepting ${q.accepts === "both" ? "USDC or AGU-lab" : q.accepts === "usdc" ? "USDC" : "AGU-lab"} (or work claims for this window), escrowed until a passing brief`
+        : priceUnit === "usdc"
+          ? `quote ${q.id} from ${agent}: a brief on ${a.tasks.join(" + ")} for ${show(priceUsdcMicro as UsdcUnits)} USDC, payable on delivery of a passing brief`
+          : `quote ${q.id} from ${agent}: a brief on ${a.tasks.join(" + ")} for ${showMsiu(priceMicroSiu)}, payable in AGU-lab on delivery of a passing brief`,
     );
     return { ok: true, note: `quote ${q.id} posted to ${need.agent}` };
   }
@@ -764,7 +1026,7 @@ export class World {
       case "accepted":
         return q.paidInClaims !== undefined
           ? "already accepted, paid in work claims"
-          : `already accepted, ${show((q.priceUnit === "usdc" ? q.usdcEscrowed : q.agu) ?? 0n)} ${q.priceUnit === "usdc" ? "USDC" : "AGU-lab"} in escrow`;
+          : `already accepted, ${show(q.usdcEscrowed ?? q.agu ?? 0n)} ${q.usdcEscrowed !== undefined ? "USDC" : "AGU-lab"} in escrow`;
       case "delivered":
         return `already paid in window ${w}`;
       case "failed":
@@ -782,7 +1044,13 @@ export class World {
     }
   }
 
-  #acceptQuote(agent: string, role: Role, id: string, claims?: readonly string[]): Outcome {
+  #acceptQuote(
+    agent: string,
+    role: Role,
+    id: string,
+    claims?: readonly string[],
+    pay?: "usdc" | "agu" | "claims",
+  ): Outcome {
     if (role !== "demand") return { ok: false, note: `${id}: only demand agents accept brief quotes` };
     const q = this.quotes.find((x) => x.id === id);
     if (q === undefined) return { ok: false, note: `${id}: no such quote` };
@@ -790,6 +1058,19 @@ export class World {
     if (q.status !== "posted") return { ok: false, note: `${id}: ${this.#whyNotOpen(q, "buyer")}` };
     const other = this.quotes.find((x) => x.need === q.need && x.status === "accepted");
     if (other !== undefined) return { ok: false, note: `${id}: you already accepted ${other.id} for ${q.need}` };
+    if (this.v3a !== undefined) {
+      // v3a: the payer chooses the currency among what the quote accepts; no currency is chosen for it
+      const how = claims !== undefined && claims.length > 0 ? "claims" : pay;
+      if (how === undefined) return { ok: false, note: `${id}: say how you pay: usdc, agu or claims` };
+      if (how !== "claims" && !acceptsPay(q.accepts ?? "both", how))
+        return { ok: false, note: `${id}: ${q.researcher} accepts ${q.accepts} on this quote (or work claims)` };
+      if (how === "claims" && (claims === undefined || claims.length === 0))
+        return { ok: false, note: `${id}: name the claims you pay with` };
+      const refused = this.#mandateRefusal(agent, this.window, q.priceMicroSiu);
+      if (refused !== undefined) return { ok: false, note: `${id}: ${refused}` };
+      if (how === "claims") return this.#acceptWithClaims(agent, q, claims as string[], 0n);
+      return this.#openQuoteEscrow(agent, q, how, 0n, 0n);
+    }
     // the mandate's spend limit is stated in AGU-lab terms regardless of which rail actually pays -- a value cap, not a currency-specific one (item 3)
     const aguEquivalent = this.aguFor(q.priceMicroSiu);
     const m = this.params.mandates[agent];
@@ -800,15 +1081,35 @@ export class World {
         note: `${id}: over spend cap: ${show(spent + aguEquivalent)} of ${show(m.spendLimitAguPerWindow)} AGU-lab-equivalent this window (${show(spent)} already spent, this quote ${show(aguEquivalent)})`,
       };
     if (claims !== undefined && claims.length > 0) return this.#acceptWithClaims(agent, q, claims, spent + aguEquivalent);
+    return this.#openQuoteEscrow(agent, q, q.priceUnit === "usdc" ? "usdc" : "agu", spent, aguEquivalent);
+  }
+
+  /**
+   * Escrows a quote's price in `payIn` (v1/v2: always the quote's own unit; v3a: the payer's choice). The other currency's amount comes from the price locked at post time:
+   * USDC at the print then (`rateAtPost`), AGU-lab at today's NAV, as v2 already priced an SIU quote. `spent`/`aguEquivalent` feed v2's per-window AGU-lab counter only.
+   */
+  #openQuoteEscrow(agent: string, q: Quote, payIn: PayUnit, spent: AguUnits, aguEquivalent: AguUnits): Outcome {
     const escrow = this.#id("escrow");
+    const both = this.v3a !== undefined && this.#canPayBoth(agent, q.priceMicroSiu);
+    const recordPayment = (): void =>
+      this.#payment(agent, q.researcher, "brief", payIn, q.priceMicroSiu, {
+        payeeAcceptsBoth: q.accepts === "both",
+        ref: q.id,
+        couldPayBoth: both,
+      });
     // escrowOpen can refuse (the buyer's real balance is short): commit no state at all -- status, escrow id, the spend counter -- until it actually succeeds, the same
     // order #commission already uses. Setting these first (as this branch once did) left a quote permanently "accepted" with no real escrow the one time a demand agent's
     // own balance came up short, surviving to crash window-close's cleanup trying to expire an escrow that was never opened (found live testing D137, native tool-calling's
     // own near-100% execution rate reaching this for the first time).
-    if (q.priceUnit === "usdc") {
-      const usdcOwed = q.priceUsdcMicro as UsdcUnits;
+    if (payIn === "usdc") {
+      const usdcOwed =
+        q.priceUnit === "usdc"
+          ? (q.priceUsdcMicro as UsdcUnits)
+          : usdcForMicroSiuCeil(q.priceMicroSiu, q.rateAtPost ?? this.commodityRate);
       this.chain.escrowOpen(escrow, "USDC", agent, q.researcher, GATE_RUNNER, usdcOwed, this.windowTo(this.window));
+      recordPayment();
       this.spentAguThisWindow.set(agent, spent + aguEquivalent);
+      this.#addSpend(agent, this.window, q.priceMicroSiu);
       q.status = "accepted";
       q.escrow = escrow;
       q.usdcEscrowed = usdcOwed;
@@ -825,9 +1126,11 @@ export class World {
       );
       return { ok: true, note: `accepted ${q.id}: ${show(usdcOwed)} USDC in escrow` };
     }
-    const units = aguEquivalent;
+    const units = this.v3a !== undefined ? this.aguFor(q.priceMicroSiu) : aguEquivalent;
     this.chain.escrowOpen(escrow, "AGU", agent, q.researcher, GATE_RUNNER, units, this.windowTo(this.window));
+    recordPayment();
     this.spentAguThisWindow.set(agent, spent + aguEquivalent);
+    this.#addSpend(agent, this.window, q.priceMicroSiu);
     q.status = "accepted";
     q.escrow = escrow;
     q.agu = units;
@@ -843,6 +1146,240 @@ export class World {
       `${agent} accepted quote ${q.id}: ${show(units)} AGU-lab is in escrow, released when you deliver a passing brief this window`,
     );
     return { ok: true, note: `accepted ${q.id}: ${show(units)} AGU-lab in escrow` };
+  }
+
+  // ---- v3a: PROVIDER's offers, buyers' requests, creation in kind ---------------------------------------------------------------------------------
+  #issuerSeries(issuerId: string): Series | undefined {
+    return this.params.issuers.find((i) => i.id === issuerId)?.grade;
+  }
+
+  /** v3a (D143): PROVIDER posts a standing offer, or revises one (`replaces`), or answers a buyer's request with one (`request`) */
+  #postOffer(agent: string, role: Role, a: Extract<Action, { tool: "post_offer" }>): Outcome {
+    if (role !== "provider" || this.v3a === undefined || this.params.v3a === undefined)
+      return { ok: false, note: "only PROVIDER posts claim offers" };
+    const rules = this.params.v3a.providerRules;
+    const series = this.#issuerSeries(a.issuer);
+    if (series === undefined) return { ok: false, note: `no issuer ${a.issuer}` };
+    if (!this.chain.bondLots.has(`${a.issuer}|${a.task}`))
+      return { ok: false, note: `${a.issuer} bonds no ${a.task} claims (it may still take commissions for it)` };
+    if (a.window < this.window || a.window > this.window + rules.maxWindowsAhead)
+      return { ok: false, note: `offer claims for windows ${this.window} to ${this.window + rules.maxWindowsAhead}` };
+    if (a.milli <= 0n) return { ok: false, note: "offer at least 1 mSIU" };
+    const room = this.chain.headroom(a.issuer, a.task);
+    if (a.milli > room) return { ok: false, note: `${a.issuer} has headroom for ${room} mSIU of ${a.task}, not ${a.milli}` };
+    if (a.discountBps < rules.discountMinBps || a.discountBps > rules.discountMaxBps)
+      return { ok: false, note: `the discount must be from ${rules.discountMinBps} to ${rules.discountMaxBps} bps (negative is a premium)` };
+    if (a.to !== "all" && (this.roles.get(a.to) === undefined || this.roles.get(a.to) === "provider"))
+      return { ok: false, note: `offer to "all" or to one buyer by id, not ${a.to}` };
+    const replaced = a.replaces === undefined ? undefined : this.v3a.offers.find((o) => o.id === a.replaces);
+    if (a.replaces !== undefined && replaced?.status !== "live")
+      return { ok: false, note: `${a.replaces}: no live offer of yours to revise` };
+    const request = a.request === undefined ? undefined : this.v3a.requests.find((r) => r.id === a.request);
+    if (a.request !== undefined && request?.status !== "open")
+      return { ok: false, note: `${a.request}: no open request to answer` };
+    const offer: Offer = {
+      id: this.#id("offer"),
+      issuer: a.issuer,
+      task: a.task,
+      series,
+      window: a.window,
+      milliLeft: a.milli,
+      discountBps: a.discountBps,
+      accept: a.accept,
+      to: a.to,
+      ...(request !== undefined ? { request: request.id } : {}),
+      postedWindow: this.window,
+      postedRound: this.round,
+      status: "live",
+    };
+    if (replaced !== undefined) replaced.status = "replaced";
+    if (request !== undefined) {
+      request.status = "answered";
+      request.answer = offer.id;
+      this.notify(request.buyer, `PROVIDER answered your request ${request.id} with offer ${offer.id}`);
+    }
+    this.v3a.offers.push(offer);
+    this.#log(agent, "offer", {
+      offer: offer.id,
+      issuer: a.issuer,
+      task: a.task,
+      series,
+      forWindow: a.window,
+      milli: a.milli,
+      discountBps: a.discountBps,
+      accept: a.accept,
+      to: a.to,
+      ...(request !== undefined ? { request: request.id } : {}),
+      ...(replaced !== undefined ? { replaces: replaced.id } : {}),
+    });
+    if (a.to !== "all") this.notify(a.to, `PROVIDER offers you ${a.milli} mSIU of ${a.task} claims for window ${a.window} (${offer.id})`);
+    return { ok: true, note: `offer ${offer.id} posted${replaced !== undefined ? `, replacing ${replaced.id}` : ""}` };
+  }
+
+  #withdrawOffer(agent: string, role: Role, id: string): Outcome {
+    if (role !== "provider" || this.v3a === undefined) return { ok: false, note: `${id}: only PROVIDER withdraws offers` };
+    const o = this.v3a.offers.find((x) => x.id === id);
+    if (o === undefined) return { ok: false, note: `${id}: no such offer` };
+    if (o.status !== "live") return { ok: false, note: `${id}: already ${o.status}` };
+    o.status = "withdrawn";
+    this.#log(agent, "offer", { offer: id, withdrawn: true });
+    return { ok: true, note: `offer ${id} withdrawn` };
+  }
+
+  #declineRequest(agent: string, role: Role, id: string, reason: string): Outcome {
+    if (role !== "provider" || this.v3a === undefined) return { ok: false, note: `${id}: only PROVIDER answers requests` };
+    const r = this.v3a.requests.find((x) => x.id === id);
+    if (r === undefined) return { ok: false, note: `${id}: no such request` };
+    if (r.status !== "open") return { ok: false, note: `${id}: already ${r.status}` };
+    r.status = "declined";
+    r.answer = reason;
+    this.#log(agent, "claim-request", { request: id, declined: true, reason });
+    this.notify(r.buyer, `PROVIDER declined your request ${id}: ${reason}`);
+    return { ok: true, note: `request ${id} declined` };
+  }
+
+  /** v3a (D143): a buyer asks PROVIDER for claims; the request stays on the board until PROVIDER answers it or the window it was posted in closes */
+  #requestClaims(agent: string, role: Role, a: Extract<Action, { tool: "request_claims" }>): Outcome {
+    if (this.v3a === undefined || this.params.v3a === undefined) return { ok: false, note: "there is no claims provider in this market" };
+    if (role === "provider") return { ok: false, note: "PROVIDER answers requests; it does not post them" };
+    const ahead = this.params.v3a.providerRules.maxWindowsAhead;
+    if (a.window < this.window || a.window > this.window + ahead)
+      return { ok: false, note: `ask for claims for windows ${this.window} to ${this.window + ahead}` };
+    if (a.milli <= 0n) return { ok: false, note: "ask for at least 1 mSIU" };
+    if (![...this.chain.bondLots.keys()].some((k) => k.endsWith(`|${a.task}`)))
+      return { ok: false, note: `no issuer bonds ${a.task} claims` };
+    const r: ClaimRequest = {
+      id: this.#id("request"),
+      buyer: agent,
+      task: a.task,
+      window: a.window,
+      milli: a.milli,
+      postedWindow: this.window,
+      postedRound: this.round,
+      status: "open",
+    };
+    this.v3a.requests.push(r);
+    this.#log(agent, "claim-request", { request: r.id, task: a.task, forWindow: a.window, milli: a.milli });
+    this.notify(this.params.v3a.provider, `${agent} asks for ${a.milli} mSIU of ${a.task} claims for window ${a.window} (${r.id})`);
+    return { ok: true, note: `request ${r.id} posted to PROVIDER` };
+  }
+
+  /** v3a: a buyer buys claims from a live offer: paid to PROVIDER at once in a currency the offer accepts, minted from the offer's issuer, PROVIDER's own token type */
+  #buyOffer(agent: string, role: Role, a: Extract<Action, { tool: "buy_offer" }>): Outcome {
+    if (this.v3a === undefined || this.params.v3a === undefined) return { ok: false, note: `${a.offer}: there is no claims provider in this market` };
+    if (role === "provider") return { ok: false, note: `${a.offer}: PROVIDER does not buy its own offers` };
+    const o = this.v3a.offers.find((x) => x.id === a.offer);
+    if (o === undefined) return { ok: false, note: `${a.offer}: no such offer` };
+    if (o.status !== "live") return { ok: false, note: `${a.offer}: ${o.status}` };
+    if (o.to !== "all" && o.to !== agent) return { ok: false, note: `${a.offer}: offered to ${o.to}, not to you` };
+    if (a.milli <= 0n || a.milli > o.milliLeft) return { ok: false, note: `${a.offer}: buy from 1 to ${o.milliLeft} mSIU` };
+    if (!acceptsPay(o.accept, a.pay)) return { ok: false, note: `${a.offer}: PROVIDER accepts ${o.accept} on this offer` };
+    const price = (this.rates[o.series] * (10_000n - o.discountBps)) / 10_000n;
+    const usdc = (a.milli * price + 999_999n) / 1_000_000n;
+    const value = microSiuForUsdcCeil(usdc, this.commodityRate);
+    const agu = this.aguFor(value);
+    if (this.chain.balance(agent, a.pay === "usdc" ? "USDC" : "AGU") < (a.pay === "usdc" ? usdc : agu))
+      return { ok: false, note: `${a.offer}: you hold too little ${a.pay === "usdc" ? "USDC" : "AGU-lab"} for that (${a.pay === "usdc" ? `${usdc} µ$` : `${this.siuOf(agu) / 1_000n} mSIU of AGU-lab`})` };
+    const refused = this.#mandateRefusal(agent, o.window, value);
+    if (refused !== undefined) return { ok: false, note: `${a.offer}: ${refused}` };
+    // for the comparability measure: every live offer this buyer could see for the same class and window when it chose, with its discount
+    const alternatives = this.v3a.offers
+      .filter((x) => x.status === "live" && x.task === o.task && x.window === o.window && (x.to === "all" || x.to === agent))
+      .map((x) => ({ offer: x.id, issuer: x.issuer, discountBps: x.discountBps }));
+    // mint first (it can refuse for headroom, moving nothing); the payment, checked above, then cannot fail
+    const tokenId = this.chain.mint(agent, o.task, o.series, a.milli, this.windowFrom(o.window), this.windowTo(o.window), this.rates[o.series], {
+      issuer: o.issuer,
+      prepaid: true,
+      tag: "provider",
+    });
+    this.#payment(agent, this.params.v3a.provider, "claims", a.pay, value, {
+      payeeAcceptsBoth: o.accept === "both",
+      forWindow: o.window,
+      ref: o.id,
+    });
+    if (a.pay === "usdc") this.chain.transfer("USDC", agent, this.params.v3a.provider, usdc);
+    else this.chain.transfer("AGU", agent, this.params.v3a.provider, agu);
+    this.v3a.providerTokens.add(tokenId);
+    this.#row(o.issuer, o.window).mintedMilli += a.milli;
+    o.milliLeft -= a.milli;
+    if (o.milliLeft === 0n) o.status = "sold out";
+    this.#addSpend(agent, o.window, value);
+    this.v3a.providerProfitMicroSiu += value;
+    this.#log(agent, "claim-mint", {
+      tokenId,
+      task: o.task,
+      series: o.series,
+      milli: a.milli,
+      forWindow: o.window,
+      issuer: o.issuer,
+      offer: o.id,
+      payUnit: a.pay,
+      ...(a.pay === "usdc" ? { usdc } : { agu }),
+      valueMicroSiu: value,
+      alternatives,
+    });
+    this.notify(
+      agent,
+      `arrival: ${a.milli} mSIU of ${o.task} work claim ${tokenId} from ${o.issuer}, presentable in window ${o.window} only; it lapses worthless if never presented`,
+    );
+    this.notify(this.params.v3a.provider, `${agent} bought ${a.milli} mSIU from ${o.id}, paid in ${a.pay === "usdc" ? `USDC (${usdc} µ$)` : "AGU-lab"}`);
+    return { ok: true, note: `bought ${a.milli} mSIU of ${o.task} claims for window ${o.window} from ${o.id}` };
+  }
+
+  /** v3a (design: creation and redemption at NAV, in kind, open to any agent above a minimum size): an agent delivers a reserve-grade claim and receives AGU-lab at NAV */
+  #createAgu(agent: string, tokenId: string, milli: MilliSiu): Outcome {
+    if (this.params.v3a === undefined) return { ok: false, note: "only the authorised participant creates AGU-lab in this market" };
+    if (milli < this.params.v3a.minCreateMilli) return { ok: false, note: `create with at least ${this.params.v3a.minCreateMilli} mSIU of claims` };
+    if (this.chain.claimBalance(agent, tokenId) < milli) return { ok: false, note: `you hold less than ${milli} mSIU of ${tokenId}` };
+    // the reserve takes claims only through the authorised participant: the agent's claim passes through it and the AGU-lab comes back, all-or-nothing
+    this.chain.transferClaim(tokenId, agent, PARTICIPANT, milli);
+    let units: AguUnits;
+    try {
+      units = this.chain.create(PARTICIPANT, tokenId, milli);
+    } catch (e) {
+      this.chain.transferClaim(tokenId, PARTICIPANT, agent, milli);
+      throw e;
+    }
+    this.chain.transfer("AGU", PARTICIPANT, agent, units);
+    this.#log(agent, "create", { tokenId, milli, agu: units, inKindBy: agent });
+    return { ok: true, note: `created ${this.siuOf(units) / 1_000n} mSIU of AGU-lab with ${milli} mSIU of ${tokenId}` };
+  }
+
+  /**
+   * v3a (D143: "issuers are paid their measured cost when they serve"): when a claim PROVIDER sold is served, PROVIDER pays the issuer its list price for the task, in
+   * USDC if it holds enough and otherwise in AGU-lab at mid; it is code paying on PROVIDER's behalf, so it is recorded as scripted and never enters the exchange measure.
+   * The cost comes off PROVIDER's SIU profit either way; if PROVIDER holds too little of both, the issuer goes unpaid and that is logged.
+   */
+  #providerPaysIssuer(issuer: string, task: TaskId): void {
+    if (this.v3a === undefined || this.params.v3a === undefined) return;
+    const provider = this.params.v3a.provider;
+    const cost = this.taskPrice[issuer]?.[task] ?? 0n;
+    this.v3a.providerProfitMicroSiu -= cost;
+    const usdc = usdcForMicroSiuCeil(cost, this.commodityRate);
+    const agu = this.aguFor(cost);
+    const pay: PayUnit | undefined =
+      this.chain.balance(provider, "USDC") >= usdc ? "usdc" : this.chain.balance(provider, "AGU") >= agu ? "agu" : undefined;
+    if (pay !== undefined) this.#payment(provider, issuer, "issuer cost", pay, cost, { payeeAcceptsBoth: true, scripted: true, ref: task });
+    if (pay === "usdc") this.chain.transfer("USDC", provider, issuer, usdc);
+    else if (pay === "agu") this.chain.transfer("AGU", provider, issuer, agu);
+    this.#log(provider, "provider-profit", {
+      cost,
+      issuer,
+      task,
+      ...(pay === undefined ? { unpaid: true } : { paidIn: pay }),
+      profitMicroSiu: this.v3a.providerProfitMicroSiu,
+    });
+  }
+
+  /** v3a: the claims record's row for one issuer and window */
+  #row(issuer: string, window: number): RecordRow {
+    const key = `${issuer}|${window}`;
+    let r = this.v3a?.record.get(key);
+    if (r === undefined) {
+      r = emptyRow();
+      this.v3a?.record.set(key, r);
+    }
+    return r;
   }
 
   /** Commodity-grade micro-SIU in one mSIU of a claim of `series`: 1,000 for a Commodity claim; a Frontier claim converts through the two prints, rounded down */
@@ -881,6 +1418,7 @@ export class World {
     }
     if (covered < q.priceMicroSiu)
       return { ok: false, note: `${q.id}: your claims cover ${covered / 1_000n} of ${ceilDiv(q.priceMicroSiu, 1_000n)} mSIU` };
+    const both = this.v3a !== undefined && this.#canPayBoth(agent, q.priceMicroSiu);
     for (const p of plan) {
       this.chain.transferClaim(p.tokenId, agent, q.researcher, p.milli);
       this.#log(agent, "claim-transfer", {
@@ -894,7 +1432,13 @@ export class World {
         forWindow: due,
       });
     }
-    this.spentAguThisWindow.set(agent, spentAfter);
+    if (this.v3a === undefined) this.spentAguThisWindow.set(agent, spentAfter);
+    this.#payment(agent, q.researcher, "brief", "claims", q.priceMicroSiu, {
+      payeeAcceptsBoth: q.accepts === "both",
+      ref: q.id,
+      couldPayBoth: both,
+    });
+    this.#addSpend(agent, this.window, q.priceMicroSiu);
     q.status = "accepted";
     q.paidInClaims = plan.map((p) => ({ tokenId: p.tokenId, milli: p.milli }));
     const face = plan.reduce((n, p) => n + p.milli, 0n);
@@ -917,12 +1461,21 @@ export class World {
     const key = `${agent}|${this.window}|${dataset}`;
     if (this.dataBought.has(key))
       return { ok: false, note: `you already bought ${dataset} this window` };
-    const usdcPrice = this.params.dataShadowPriceUsdc;
-    this.dataBought.add(key);
+    // v3a: a dataset costs about one task's value, priced in mSIU and payable in either currency at today's print (design, "Data price is proportionate")
+    const v3aValue = this.params.v3a === undefined ? undefined : this.params.v3a.dataPriceMilli * 1_000n;
+    const usdcPrice =
+      v3aValue === undefined ? this.params.dataShadowPriceUsdc : usdcForMicroSiuCeil(v3aValue, this.commodityRate);
+    const both = v3aValue === undefined ? false : this.#canPayBoth(agent, v3aValue);
+    const recordPayment = (): void => {
+      if (v3aValue !== undefined)
+        this.#payment(agent, DATA_AGENT, "data", pay, v3aValue, { payeeAcceptsBoth: true, ref: dataset, couldPayBoth: both });
+    };
     if (pay === "agu") {
       const rate = this.commodityRate;
-      const agu = this.aguFor(microSiuForUsdcCeil(usdcPrice, rate));
+      const agu = this.aguFor(v3aValue ?? microSiuForUsdcCeil(usdcPrice, rate));
       this.chain.transfer("AGU", agent, DATA_AGENT, agu);
+      this.dataBought.add(key);
+      recordPayment();
       this.#objectiveFor(agent).aguNet -= agu; // v2 item 8: a research cost
       this.#log(agent, "data-purchase", {
         dataset,
@@ -937,6 +1490,8 @@ export class World {
       };
     }
     this.chain.transfer("USDC", agent, DATA_AGENT, usdcPrice);
+    this.dataBought.add(key);
+    recordPayment();
     this.#objectiveFor(agent).usdcNet -= usdcPrice; // v2 item 8: a research cost
     this.#log(agent, "data-purchase", {
       dataset,
@@ -955,14 +1510,6 @@ export class World {
     pay: PayUnit = "agu",
   ): Promise<Outcome> {
     const role = this.roles.get(agent);
-    // a research agent works from today's data: the first commission on a dataset buys it (USDC, at the data agent's shadow price)
-    if (
-      role === "research" &&
-      !this.dataBought.has(`${agent}|${this.window}|${DATASET_FOR[task]}`)
-    ) {
-      const bought = this.#buyData(agent, DATASET_FOR[task]);
-      if (!bought.ok) return bought;
-    }
     const issuer = this.#issuer(issuerId);
     if (!issuer.classes.includes(task))
       return { ok: false, note: `${issuerId} does not issue ${task}` };
@@ -970,6 +1517,16 @@ export class World {
     if (price === undefined) return { ok: false, note: `${issuerId} has no price for ${task}` };
     if (this.workSpendUsd.gte(this.params.spendCapUsdPerWindow))
       return { ok: false, note: "the window's work budget is spent" };
+    // a research agent works from today's data: the first commission on a dataset buys it (v1/v2: in USDC; v3a: in the currency the commission is paid in, never a
+    // currency chosen for it)
+    if (
+      role === "research" &&
+      !this.dataBought.has(`${agent}|${this.window}|${DATASET_FOR[task]}`)
+    ) {
+      const bought = this.#buyData(agent, DATASET_FOR[task], this.v3a !== undefined ? pay : "usdc");
+      if (!bought.ok) return bought;
+    }
+    const both = this.v3a !== undefined && this.#canPayBoth(agent, price);
     const asset: "AGU" | "USDC" = pay === "usdc" ? "USDC" : "AGU";
     // v2 fix 1 (owner, 2026-11-07): the real print rate can be low enough that an ordinarily-priced task's USDC-converted price falls under the settlement contract's own
     // real, immutable floor (TouchstoneEscrow.MIN_SETTLEMENT = 100, shared by other deployments with a real nonzero fee -- never lowered for this build, see the plan
@@ -980,6 +1537,7 @@ export class World {
       rawUsdc !== undefined ? (rawUsdc < MIN_SETTLEMENT ? MIN_SETTLEMENT : rawUsdc) : this.aguFor(price);
     const escrow = this.#id("escrow");
     this.chain.escrowOpen(escrow, asset, agent, issuerId, GATE_RUNNER, amount, this.windowTo(this.window));
+    this.#payment(agent, issuerId, "commission", pay, price, { payeeAcceptsBoth: true, ref: task, couldPayBoth: both });
     this.#log(agent, "escrow-open", {
       escrow,
       to: issuerId,
@@ -988,6 +1546,14 @@ export class World {
       priceSiu: show(price),
       payUnit: pay,
       ...(rawUsdc !== undefined && rawUsdc < MIN_SETTLEMENT ? { flooredFromUsdc: rawUsdc } : {}),
+      // v3a: every issuer's list price for this task when it was chosen, for the comparability measure
+      ...(this.v3a !== undefined
+        ? {
+            alternatives: Object.fromEntries(
+              this.params.issuers.filter((i) => i.classes.includes(task)).map((i) => [i.id, this.taskPrice[i.id]?.[task] ?? 0n]),
+            ),
+          }
+        : {}),
     });
     this.#stat(issuerId).presented++;
     const out = await this.worker.work(issuer, task, {
@@ -1004,7 +1570,8 @@ export class World {
       dataSha: out.dataSha,
       costUsd: out.costUsd.toFixed(6),
     });
-    const paid = out.passed ? amount : 0n;
+    // v3a: `failedWorkPays` is the owner's switch for whether a failed task is paid for (true) or refunded in full (false, the design's rule and v1/v2's)
+    const paid = out.passed || this.params.v3a?.failedWorkPays === true ? amount : 0n;
     this.chain.escrowSettle(escrow, GATE_RUNNER, paid);
     if (out.passed) this.#stat(issuerId).served++;
     // v2 item 8: a research cost, only on an ACTUAL payment (a failed commission is refunded in full, so it never counts against profit); scoped to research -- the
@@ -1091,7 +1658,9 @@ export class World {
       return { ok: true, note: `brief ${q.id} passed: it was paid in work claims at acceptance` };
     }
     const escrow = q.escrow as string;
-    const escrowed = (q.priceUnit === "usdc" ? q.usdcEscrowed : q.agu) as bigint;
+    // the escrow holds whichever currency paid (v1/v2: always the quote's own unit; v3a: the payer's choice)
+    const inUsdc = q.usdcEscrowed !== undefined;
+    const escrowed = (q.usdcEscrowed ?? q.agu) as bigint;
     const paid = passed ? escrowed : 0n;
     this.chain.escrowSettle(escrow, GATE_RUNNER, paid);
     // v3a Phase 2 item 1: settled -- the escrow fields no longer describe anything held, so they are cleared (the board read them as "in escrow" for the rest of the run)
@@ -1101,10 +1670,10 @@ export class World {
     // v2 item 8: research income, in whichever currency the brief was actually paid in
     if (paid > 0n) {
       const o = this.#objectiveFor(agent);
-      if (q.priceUnit === "usdc") o.usdcNet += paid;
+      if (inUsdc) o.usdcNet += paid;
       else o.aguNet += paid;
     }
-    const field = q.priceUnit === "usdc" ? "usdc" : "agu";
+    const field = inUsdc ? "usdc" : "agu";
     this.#log(GATE_RUNNER, "escrow-settle", { escrow, paid, refunded: escrowed - paid });
     this.#log(GATE_RUNNER, "receipt", {
       escrow,
@@ -1113,7 +1682,7 @@ export class World {
       verdict: passed ? "pass" : "fail",
       [field]: paid,
     });
-    const unitLabel = q.priceUnit === "usdc" ? "USDC" : "AGU-lab";
+    const unitLabel = inUsdc ? "USDC" : "AGU-lab";
     this.notify(
       q.demand,
       `brief ${q.id} from ${agent}: ${passed ? `PASSED, ${show(paid)} ${unitLabel} paid` : `FAILED, your ${unitLabel} came back in full; you may commission it again`}`,
@@ -1178,6 +1747,18 @@ export class World {
     while (this.participant.quote(units, rate).bid < target) units *= 2n;
     return units;
   }
+  /** v3a: the FEWEST AGU-lab units whose bid covers `target` (the doubling search above can sell up to twice what a forced conversion needs) */
+  #aguToSellAtLeastExactly(target: UsdcUnits, rate: NanoUsdPerSiu): AguUnits {
+    if (target <= 0n) return 0n;
+    let hi = this.#aguToSellForAtLeast(target, rate);
+    let lo = hi / 2n;
+    while (lo + 1n < hi) {
+      const mid = (lo + hi) / 2n;
+      if (this.participant.quote(mid, rate).bid >= target) hi = mid;
+      else lo = mid;
+    }
+    return hi;
+  }
 
   #deliverForward(agent: string, role: Role): Outcome {
     if (role !== "hedger") return { ok: false, note: "only the hedger owes forward briefs" };
@@ -1211,14 +1792,29 @@ export class World {
     const p = this.params;
     // D133: the scorer needs the run's REAL seed, never the committed params file's own default -- recorded once, here, so `economy-score` never has to guess it from `--params`
     // (the entry's own top-level `backend` field, set by EconomyLog itself, already carries which data backend ran this -- no need to repeat it here)
-    this.#log(AGU_ISSUER, "genesis", { seed: p.seed, t0: this.t0 });
+    this.#log(AGU_ISSUER, "genesis", {
+      seed: p.seed,
+      t0: this.t0,
+      // v3a: which run this is -- arm, volatility setting and the price-path seed's hash (the seed itself is revealed only when the run ends)
+      ...(this.v3a !== undefined
+        ? {
+            v3a: {
+              arm: this.v3a.run.arm,
+              volatility: this.v3a.run.volatility,
+              priceSeedHash: this.v3a.run.priceSeedHash,
+              ...(this.v3a.run.cell !== undefined ? { cell: this.v3a.run.cell } : {}),
+            },
+          }
+        : {}),
+    });
     for (const i of p.issuers) {
       this.mint(i.id, i.bondUsdc);
-      // issuance = deliverability: one window's budget after haircut × measured rate × 0.5 is CapacityBond's own ratio; here one "hour" is one window
+      // issuance = deliverability: one window's budget after haircut × measured rate × 0.5 is CapacityBond's own ratio; here one "hour" is one window. v3a: lots only for
+      // the classes the issuer bonds (`lotClasses`), the bond split across those
       const rate = this.#issuerRateMilliPerWindow(i);
-      for (const c of i.classes)
-        this.chain.createLot(i.id, c, 1n, rate, i.bondUsdc / BigInt(i.classes.length));
-      this.#log(i.id, "setup", { lots: i.classes, rateMilliPerWindow: rate, bondUsdc: i.bondUsdc });
+      const lots = i.lotClasses ?? i.classes;
+      for (const c of lots) this.chain.createLot(i.id, c, 1n, rate, i.bondUsdc / BigInt(lots.length));
+      this.#log(i.id, "setup", { lots, rateMilliPerWindow: rate, bondUsdc: i.bondUsdc });
     }
     this.mint(PARTICIPANT, p.participant.usdc);
     this.mint("OWNER", p.reserve.bufferSeedUsdc);
@@ -1226,6 +1822,10 @@ export class World {
     this.#bufferIn += p.reserve.bufferSeedUsdc;
     this.#log(BUFFER, "buffer", { seed: p.reserve.bufferSeedUsdc });
     for (let k = 1; k <= p.ladderWindows; k++) this.#participantCreates(k);
+    if (this.v3a !== undefined) {
+      this.#v3aGenesisWallets();
+      return;
+    }
     for (const a of p.agents.research) this.mint(a, p.researchUsdc);
     for (const a of p.agents.demand) this.mint(a, (p.mandates[a] as { usdc: bigint }).usdc);
     this.mint(p.agents.hedger, p.hedger.usdc);
@@ -1250,6 +1850,81 @@ export class World {
       }
     }
   }
+  /**
+   * v3a (docs/experiment-3a-design.md, Cast: "every role starts with both currencies at equal value"): each research, demand and hedger agent gets its role's USDC and the
+   * same value again in AGU-lab, sold by the participant at mid (NAV × the opening print, no spread), so the two halves are equal to under one micro-dollar. The participant
+   * creates what its inventory lacks from the issuers' capacity, as on any other day. PROVIDER starts with nothing: it holds only what its sales bring in. Each wallet is
+   * logged (`holdings`, window 0) for the starting-balance validity gate.
+   */
+  #v3aGenesisWallets(): void {
+    const p = this.params;
+    const v = p.v3a as NonNullable<EconomyParams["v3a"]>;
+    const rate = this.commodityRate;
+    const roles: [string, bigint][] = [
+      ...p.agents.research.map((a): [string, bigint] => [a, v.startingUsdc.research]),
+      ...p.agents.demand.map((a): [string, bigint] => [a, v.startingUsdc.demand]),
+      [p.agents.hedger, v.startingUsdc.hedger],
+    ];
+    // the participant creates the AGU-lab the wallets need evenly across the ladder's windows, one share per window and class, so the reserve's face rolls a third at a
+    // time (found building v3a: topping up on demand put it all on window 3's lots, and that one roll then cost half the buffer at once)
+    {
+      const { num, den } = this.chain.nav();
+      const needed = roles.reduce((s, [, usdc]) => s + (usdc * den * 1_000_000_000n) / (num * rate), 0n);
+      const short = needed - this.chain.balance(PARTICIPANT, "AGU");
+      if (short > 0n) {
+        const classes = this.#reserveClasses();
+        const supply = this.chain.aguSupply;
+        const face = this.chain.liveFace();
+        const faceNeeded = (short * face + supply - 1n) / supply;
+        const slices = BigInt(p.ladderWindows * classes.length);
+        const each = (faceNeeded + slices - 1n) / slices + 1n;
+        for (let k = 1; k <= p.ladderWindows; k++) for (const c of classes) this.#createWithin(c, each, k, true, 0n);
+      }
+    }
+    for (const [agent, usdc] of roles) {
+      const { num, den } = this.chain.nav();
+      const units = (usdc * den * 1_000_000_000n) / (num * rate);
+      const short = units - this.chain.balance(PARTICIPANT, "AGU");
+      if (short > 0n) this.#participantTopUp(short);
+      const paid = ceilDiv(units * num * rate, den * 1_000_000_000n);
+      this.mint(agent, usdc + paid);
+      const r = this.participant.sellAtMid(agent, units, rate);
+      this.v3a?.startValueMicroUsd.set(agent, usdc + r.usdc);
+      this.#log(PARTICIPANT, "participant-sell", { to: agent, agu: r.units, usdc: r.usdc, genesis: true, atMid: true });
+    }
+    this.v3a?.startValueMicroUsd.set(v.provider, 0n);
+    this.logHoldings(0);
+  }
+
+  /**
+   * v3a: every model agent's holdings at a window close (window 0: genesis), valued in Commodity micro-SIU at today's print -- USDC, AGU-lab at NAV, live claims at face --
+   * for the store-of-value measure (each agent's share of wealth in AGU-lab and fSIU at each close).
+   */
+  logHoldings(k: number): void {
+    if (this.v3a === undefined || this.params.v3a === undefined) return;
+    const rate = this.commodityRate;
+    for (const [agent, role] of this.roles) {
+      const usdc = this.chain.balance(agent, "USDC");
+      const agu = this.chain.balance(agent, "AGU");
+      const usdcMicroSiu = (usdc * 1_000_000_000n) / rate;
+      const aguMicroSiu = this.siuOf(agu);
+      const claimsMicroSiu = this.claimsValueMicroSiu(agent);
+      const total = usdcMicroSiu + aguMicroSiu + claimsMicroSiu;
+      this.#log(agent, "holdings", {
+        atClose: k,
+        role,
+        usdc,
+        agu,
+        usdcMicroSiu,
+        aguMicroSiu,
+        claimsMicroSiu,
+        totalMicroSiu: total,
+        aguValueMicroUsd: usdcForMicroSiu(aguMicroSiu, rate),
+        workShareBps: total === 0n ? null : ((aguMicroSiu + claimsMicroSiu) * 10_000n) / total,
+      });
+    }
+  }
+
   /**
    * An issuer's deliverable mSIU per window: its budget divided by the cost of one mSIU of its own work. One task is 250 mSIU (a quarter of a CR-SIU, one of the four types), and a
    * task's cost is its micro-SIU price at the Commodity print. CapacityBond then issues half of it (ISSUANCE_RATIO_BPS); one "hour" of the bond's lot is one window here.
@@ -1308,6 +1983,7 @@ export class World {
           this.commodityRate,
         );
         this.probeLots.add(id);
+        if (this.v3a !== undefined) this.#row(i.id, k).mintedMilli += milli;
         const units = this.chain.create(PARTICIPANT, id, milli);
         this.#log(PARTICIPANT, "create", {
           tokenId: id,
@@ -1333,6 +2009,21 @@ export class World {
     // v2 item 10: this window's real print rates, if a replay schedule was supplied -- before the roll, so it prices at today's real rate, not yesterday's
     const scheduled = this.priceSchedule?.get(k);
     if (scheduled !== undefined) this.rates = scheduled;
+    // v3a: this window's point on the seeded path -- each class's list prices move with its class print's small drift; published now, at the window's open
+    if (this.v3a !== undefined) {
+      const point = this.v3a.run.path.find((x) => x.window === k);
+      if (point !== undefined) {
+        this.v3a.classPpm = point.classPpm;
+        const moved: Record<string, Partial<Record<TaskId, MicroSiu>>> = {};
+        for (const [issuer, byTask] of Object.entries(this.v3a.baseTaskPrice)) {
+          moved[issuer] = {};
+          for (const [t, base] of Object.entries(byTask) as [TaskId, MicroSiu][])
+            (moved[issuer] as Partial<Record<TaskId, MicroSiu>>)[t] = (base * (point.classPpm[t] ?? 1_000_000n)) / 1_000_000n;
+        }
+        this.taskPrice = moved;
+        this.#log(AGU_ISSUER, "price", { atWindow: k, commodity: point.rates.commodity, frontier: point.rates.frontier, classPpm: point.classPpm });
+      }
+    }
     this.participant.startWindow();
     this.spentAguThisWindow.clear();
     this.roll(k);
@@ -1364,7 +2055,16 @@ export class World {
     const rate = this.commodityRate;
     const price = (rate * (10_000n - this.params.reserve.discountBps)) / 10_000n;
     const sales: { buyer: string; tokenId: string; milli: MilliSiu }[] = [];
+    // v3a: how each sale was paid and whether its buyer could have paid in both, read before any money moved, for its payment record once the roll succeeds
+    const salePay: { pay: PayUnit; both: boolean; value: MicroSiu }[] = [];
     const left = new Map(front.map((id) => [id, this.chain.claimBalance(RESERVE, id)]));
+    // v3a: an order that is not filled gives back the cap it held for window k
+    const unspend = (o: FrontOrder): void => {
+      if (this.v3a === undefined) return;
+      const m = this.v3a.spent.get(o.agent);
+      const v = (o.milli * 1_000n * price) / rate;
+      if (m !== undefined) m.set(k, (m.get(k) ?? 0n) > v ? (m.get(k) as bigint) - v : 0n);
+    };
     for (const o of this.frontOrders.filter((x) => x.forWindow === k)) {
       const lot = front.find(
         (id) => this.chain.claimTypes.get(id)?.classId === o.task && (left.get(id) ?? 0n) > 0n,
@@ -1374,14 +2074,33 @@ export class World {
           o.agent,
           `your front-claim order for ${o.task} was not filled: no ${o.task} front lot left`,
         );
+        unspend(o);
         continue;
       }
       const milli = o.milli < (left.get(lot) ?? 0n) ? o.milli : (left.get(lot) as bigint);
+      const value = (milli * 1_000n * price) / rate;
+      const both = this.v3a !== undefined && this.#canPayBoth(o.agent, value);
+      // v3a (design: "the roll sells front claims in either currency"): AGU-lab paid to the roll converts at mid, with no spread and no buy-back cap -- a payment, never an
+      // exit; v2 converted it at the participant's bid as a capped buy-back, which made every forward purchase in AGU-lab a dollar route
+      if (this.v3a !== undefined && o.pay === "agu") {
+        try {
+          const r = this.participant.takeAtMid(o.agent, usdcFor(milli, price), rate);
+          this.#log(PARTICIPANT, "participant-buyback", {
+            from: o.agent,
+            agu: r.units,
+            usdc: r.usdc,
+            forPurchase: "front-claim-order",
+            atMid: true,
+          });
+        } catch (e) {
+          if (!(e instanceof ParticipantRefused)) throw e;
+        }
+      }
       // v2 item 4: paid in AGU-lab, pre-convert through the participant for exactly enough USDC first (same mechanism as #buyClaims); the fill itself, below, is
       // then unchanged -- it only ever checks/spends USDC, so nothing downstream needs to know which currency the buyer actually held.
       // unconditional on the chosen unit, like every other pay:"agu" branch -- a buyer who CHOSE AGU-lab converts regardless of whether its existing USDC alone
       // would also have covered this, exactly like buy_data/commission_task's own pay:"agu" paths
-      if (o.pay === "agu") {
+      if (this.v3a === undefined && o.pay === "agu") {
         try {
           const units = this.#aguToSellForAtLeast(usdcFor(milli, price), rate);
           const r = this.participant.buyBack(o.agent, units, rate);
@@ -1400,9 +2119,11 @@ export class World {
           o.agent,
           `your front-claim order for ${o.task} was not filled: not enough USDC${o.pay === "agu" ? " (its AGU-lab could not be converted for enough)" : ""}`,
         );
+        unspend(o);
         continue;
       }
       sales.push({ buyer: o.agent, tokenId: lot, milli });
+      salePay.push({ pay: o.pay ?? "usdc", both, value });
       left.set(lot, (left.get(lot) as bigint) - milli);
     }
     const faceByClass = new Map<string, MilliSiu>();
@@ -1442,11 +2163,13 @@ export class World {
     } catch (e) {
       if (!(e instanceof ChainRule)) throw e;
       // as AguLab does: the whole step reverts, nothing moves, and the front lots stay in the reserve until they lapse at the window's end (NAV falls by their face)
-      for (const o of this.frontOrders.filter((x) => x.forWindow === k))
+      for (const o of this.frontOrders.filter((x) => x.forWindow === k)) {
         this.notify(
           o.agent,
           `your front-claim order for ${o.task} was not filled: the roll could not run (${e.message})`,
         );
+        unspend(o);
+      }
       this.#log(AGU_ISSUER, "roll-buy", {
         summary: true,
         refused: e.message,
@@ -1457,7 +2180,16 @@ export class World {
     this.#bufferOut += r.cover;
     this.#bufferIn += r.carryToBuffer + r.dustToBuffer;
     this.#incomeIn += r.carryToIncome;
-    for (const s of sales) {
+    for (const [i, s] of sales.entries()) {
+      const sp = salePay[i];
+      // v3a: the roll accepts either currency, so every fill counts in the exchange measure as freely chosen; the AGU-lab issuer is the payee
+      if (sp !== undefined)
+        this.#payment(s.buyer, AGU_ISSUER, "front claims", sp.pay, sp.value, {
+          payeeAcceptsBoth: true,
+          couldPayBoth: sp.both,
+          forWindow: k,
+          ref: s.tokenId,
+        });
       this.#log(AGU_ISSUER, "roll-sale", {
         to: s.buyer,
         tokenId: s.tokenId,
@@ -1476,13 +2208,15 @@ export class World {
         `arrival: ${show(s.milli, 3)} SIU of ${ct?.classId} work claim ${s.tokenId}, presentable in this window only; it lapses worthless if never presented`,
       );
     }
-    for (const m of r.minted)
+    for (const m of r.minted) {
+      if (this.v3a !== undefined) this.#row(m.issuer, k + this.params.ladderWindows).mintedMilli += m.milli;
       this.#log(AGU_ISSUER, "roll-buy", {
         tokenId: m.tokenId,
         issuer: m.issuer,
         task: m.classId,
         milli: m.milli,
       });
+    }
     if (r.cover > 0n)
       this.#log(BUFFER, "roll-cover", {
         usdc: r.cover,
@@ -1514,8 +2248,10 @@ export class World {
     const bufferSiu = new D(String(this.chain.balance(BUFFER, "USDC")))
       .div(1e6)
       .div(new D(String(this.commodityRate)).div(1e9));
+    // face (mSIU) plus the buffer's value in mSIU too, per AGU-lab (found building v3a: the buffer was added in SIU to a face in mSIU, a thousandfold too small; this only
+    // ever reached the logged figure, never a price)
     const withBuffer =
-      den === 0n ? null : new D(String(num)).div(1000).plus(bufferSiu).times(1000).div(String(den));
+      den === 0n ? null : new D(String(num)).div(1000).plus(bufferSiu.times(1000)).times(1000).div(String(den));
     this.#log(AGU_ISSUER, "nav", {
       reserveNav: reserveNav?.toFixed(9) ?? null,
       navWithBuffer: withBuffer?.toFixed(9) ?? null,
@@ -1572,6 +2308,25 @@ export class World {
           reserveLot: holder === RESERVE,
           retiredReserveLot: holder === RESERVE && this.chain.retired.has(tokenId),
         });
+        // v3a: the claims record counts claims in agents' hands (the reserve's own lots roll or lapse inside the AGU-lab mechanics); a default on a claim PROVIDER sold
+        // costs PROVIDER's SIU profit the bond's payout, times its penalty (decision 6)
+        if (this.v3a !== undefined && holder !== RESERVE) {
+          const row = this.#row(ct.issuer, k);
+          if (r.kind === "defaulted") row.defaultedMilli += r.milli;
+          else row.expiredMilli += r.milli;
+          if (r.kind === "defaulted" && this.v3a.providerTokens.has(tokenId) && this.params.v3a !== undefined) {
+            const penalty =
+              (((r.usdc * 1_000_000_000n) / this.commodityRate) * this.params.v3a.providerRules.defaultPenaltyBps) / 10_000n;
+            this.v3a.providerProfitMicroSiu -= penalty;
+            this.#log(this.params.v3a.provider, "provider-profit", {
+              defaultPenalty: penalty,
+              tokenId,
+              holder,
+              issuer: ct.issuer,
+              profitMicroSiu: this.v3a.providerProfitMicroSiu,
+            });
+          }
+        }
         if (r.kind === "expired" && holder !== RESERVE && !lapsedAfterWarning)
           throw new InvariantFailure(
             `R12: ${holder}'s claim ${tokenId} lapsed without its warning`,
@@ -1593,7 +2348,7 @@ export class World {
       if (q.status === "accepted" && q.escrow !== undefined) {
         // v3a Phase 2 item 4: the refund is whatever was escrowed, in either currency (this read `q.agu` alone, so a lapsed USDC escrow logged no amount at all), and
         // `paid` is written beside it like every other escrow-settle entry
-        const refunded = (q.priceUnit === "usdc" ? q.usdcEscrowed : q.agu) ?? 0n;
+        const refunded = q.usdcEscrowed ?? q.agu ?? 0n;
         this.chain.escrowExpire(q.escrow);
         this.#log(GATE_RUNNER, "escrow-settle", {
           escrow: q.escrow,
@@ -1618,6 +2373,15 @@ export class World {
         q.status = "lapsed";
         q.closed = { window: k, how: "lapsed" };
       }
+    }
+    // v3a (D143): an offer lapses when the window it is for closes; a request lapses when the window it was posted in closes without PROVIDER answering it
+    if (this.v3a !== undefined) {
+      for (const o of this.v3a.offers) if (o.status === "live" && o.window <= k) o.status = "lapsed";
+      for (const r of this.v3a.requests)
+        if (r.status === "open" && r.postedWindow <= k) {
+          r.status = "lapsed";
+          this.notify(r.buyer, `your request ${r.id} lapsed unanswered at the end of window ${k}`);
+        }
     }
     // v2 fix 2 (owner, 2026-11-07): issuers pay real inference bills, their AGU-lab income goes back to the participant -- a scripted/code conversion (an issuer exit, not
     // a model's choice), so the FULL balance converts via `buyBackScripted`, never capped by `buybackCapBps` (the agent-facing cap `buyBack` enforces) and never competing
@@ -1669,6 +2433,7 @@ export class World {
         this.#log(a, "sweep", { usdc: over, to: `OWNER-${a}` });
       }
     }
+    if (this.params.v3a?.sweep.windows.includes(k) === true) this.#v3aSweep();
     // v2 item 8: the hedger's on-time bonus / late penalty against its own due-by-window schedule. Opt-in: needs totalWindows (the caller's own choice to supply it)
     // and a stated latePenaltyUsdcPerBrief; a no-op otherwise, so every existing caller/test is unaffected. priceUsdcPerBrief was parsed and never read anywhere
     // before this (confirmed by the redesign's own research) -- this is its first real use.
@@ -1701,6 +2466,171 @@ export class World {
     this.#classifyExits(k);
     this.#updateDeliveryFlags();
     this.publishNav();
+    if (this.v3a?.run.arm === "B") this.#armBCheck(k);
+    this.logHoldings(k);
+  }
+
+  /** v3a: a demand agent's owner's fixed dollar demand at each sweep, micro-USD (shown on its board from window 1, round 1) */
+  v3aSweepMicroUsd(agent: string): UsdcUnits | undefined {
+    const v = this.params.v3a;
+    if (v === undefined || !this.params.agents.demand.includes(agent)) return undefined;
+    return ((this.v3a?.startValueMicroUsd.get(agent) ?? 0n) * v.sweep.shareOfStartingValueBps) / 10_000n;
+  }
+
+  /**
+   * v3a (D143): each demand agent's owner takes a fixed dollar amount. The agent's USDC pays first; if it is short, enough of its AGU-lab is sold to the participant at the
+   * bid to cover the rest -- forced, so outside the buy-back cap and logged as forced (kept out of the exchange measure, which counts freely chosen payments only). Claims
+   * are never sold for it; anything still short is logged as the shortfall.
+   */
+  #v3aSweep(): void {
+    const rate = this.commodityRate;
+    for (const a of this.params.agents.demand) {
+      const demand = this.v3aSweepMicroUsd(a) ?? 0n;
+      if (demand === 0n) continue;
+      let forcedAgu = 0n;
+      const usdcHeld = this.chain.balance(a, "USDC");
+      if (usdcHeld < demand) {
+        const held = this.chain.balance(a, "AGU");
+        let units = held === 0n ? 0n : this.#aguToSellAtLeastExactly(demand - usdcHeld, rate);
+        if (units > held) units = held;
+        if (units > 0n) {
+          try {
+            const value = this.siuOf(units);
+            const r = this.participant.buyBackScripted(a, units, rate);
+            forcedAgu = r.units;
+            this.#payment(a, PARTICIPANT, "sweep conversion", "agu", value, { payeeAcceptsBoth: true, forced: true });
+            this.#log(PARTICIPANT, "participant-buyback", { from: a, agu: r.units, usdc: r.usdc, forced: "sweep" });
+          } catch (e) {
+            if (!(e instanceof ParticipantRefused)) throw e;
+          }
+        }
+      }
+      const pay = this.chain.balance(a, "USDC") < demand ? this.chain.balance(a, "USDC") : demand;
+      if (pay > 0n) {
+        this.#payment(a, `OWNER-${a}`, "sweep", "usdc", (pay * 1_000_000_000n) / rate, { payeeAcceptsBoth: false, forced: true });
+        this.chain.transfer("USDC", a, `OWNER-${a}`, pay);
+      }
+      this.#log(a, "sweep", { usdc: pay, demanded: demand, forcedAgu, shortfall: demand - pay, to: `OWNER-${a}` });
+      if (forcedAgu > 0n || pay < demand)
+        this.notify(a, `your owner's sweep took ${pay} µ$${forcedAgu > 0n ? ", selling some of your AGU-lab at the bid to cover it" : ""}${pay < demand ? `; ${demand - pay} µ$ of it went unpaid` : ""}`);
+    }
+  }
+
+  /** v3a: the work in a set of tasks, Commodity micro-SIU (each task at its class's fixed face) */
+  workMicroSiu(tasks: readonly TaskId[]): MicroSiu {
+    return tasks.reduce((n, t) => n + (this.v3a?.faces.commodity[t] ?? 0n) * 1_000n, 0n);
+  }
+  /** v3a: the least work a forward brief needs -- two passing tasks of different types, the two cheapest Commodity classes */
+  forwardBriefMicroSiu(): MicroSiu {
+    const faces = (Object.values(this.v3a?.faces.commodity ?? {}) as MilliSiu[]).sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
+    return ((faces[0] ?? 0n) + (faces[1] ?? 0n)) * 1_000n;
+  }
+  /** v3a, arm B: the work an agent's known needs in windows k+1..k+n add up to, Commodity micro-SIU (the hedger's are the briefs it still owes that fall due by then) */
+  knownNeedsMicroSiu(agent: string, k: number, n: number): MicroSiu {
+    const role = this.roles.get(agent);
+    if (role === "demand") {
+      let v = 0n;
+      for (let w = k + 1; w <= k + n; w++)
+        for (let i = 0; i < this.params.needsPerDemandAgentPerWindow; i++) v += this.workMicroSiu([...new Set(this.needsForFn?.(agent, w) ?? [])]);
+      return v;
+    }
+    if (role === "hedger" && this.totalWindows !== undefined) {
+      const owed = Math.ceil((this.params.hedger.briefsSold * Math.min(k + n, this.totalWindows)) / this.totalWindows);
+      return BigInt(Math.max(0, owed - this.forwardDelivered)) * this.forwardBriefMicroSiu();
+    }
+    return 0n;
+  }
+
+  /**
+   * v3a, arm B (D143: stated, checked, scored -- never enforced): at each close the owner's rule asks each listed agent to hold at least `holdShareBps` of its next
+   * `windowsAhead` windows' known needs in AGU-lab or claims for those windows. Logged for scoring, with the claims held outside those windows (instruments that hold no work
+   * value for the horizon) beside it.
+   */
+  #armBCheck(k: number): void {
+    const b = this.params.v3a?.armB;
+    if (b === undefined) return;
+    for (const agent of b.agents) {
+      const required = (this.knownNeedsMicroSiu(agent, k, b.windowsAhead) * b.holdShareBps) / 10_000n;
+      const aguMicroSiu = this.siuOf(this.chain.balance(agent, "AGU"));
+      const claimsMicroSiu = this.claimsValueMicroSiu(agent, (w) => w > k && w <= k + b.windowsAhead);
+      const outsideMicroSiu = this.claimsValueMicroSiu(agent, (w) => w > k + b.windowsAhead);
+      const held = aguMicroSiu + claimsMicroSiu;
+      this.#log(agent, "rule-check", {
+        atClose: k,
+        requiredMicroSiu: required,
+        heldMicroSiu: held,
+        aguMicroSiu,
+        claimsMicroSiu,
+        outsideMicroSiu,
+        compliant: held >= required,
+      });
+    }
+  }
+
+  /**
+   * v3a's deferred-payment measure (design: "for each round where an agent can see a need in a later window, code compares the best posted forward price with the
+   * expected spot price (today's print, since drift is zero), less the expected loss from default and expiry taken from the claims record at that moment. Only
+   * information the agent could see at that moment counts"). Called at the start of every round; logs one entry per demand agent, visible future need and task not yet
+   * covered by claims it holds for that window.
+   */
+  logOpportunities(): void {
+    if (this.v3a === undefined || this.params.v3a === undefined) return;
+    const k = this.window;
+    const spot = this.rates.commodity;
+    for (const agent of this.params.agents.demand) {
+      for (let w = k + 1; w <= k + this.params.v3a.needsVisibleWindows; w++) {
+        const tasks = [...new Set(this.needsForFn?.(agent, w) ?? [])];
+        for (const task of tasks) {
+          const face = this.v3a.faces.commodity[task] ?? 0n;
+          if (this.#heldFor(agent, task, w) >= face) continue;
+          // the best forward source the agent could see: a live offer open to it, or (for the next window) the roll's front claims
+          let best: { nano: bigint; source: string; pLossBps: bigint } | undefined;
+          for (const o of this.v3a.offers) {
+            if (o.status !== "live" || o.window !== w || o.task !== task || (o.to !== "all" && o.to !== agent)) continue;
+            const nano = this.#toCommodity((this.rates[o.series] * (10_000n - o.discountBps)) / 10_000n, o.series);
+            const pLossBps = this.#lossBps([o.issuer]);
+            if (best === undefined || nano < best.nano) best = { nano, source: o.id, pLossBps };
+          }
+          if (w === k + 1) {
+            const nano = (spot * (10_000n - this.params.reserve.discountBps)) / 10_000n;
+            const reserveIssuers = this.params.issuers.filter((i) => i.grade === this.params.reserve.series).map((i) => i.id);
+            if (best === undefined || nano < best.nano) best = { nano, source: "roll", pLossBps: this.#lossBps(reserveIssuers) };
+          }
+          if (best === undefined) continue;
+          const worthwhile = best.nano <= (spot * (10_000n - best.pLossBps)) / 10_000n;
+          this.#log(agent, "opportunity", {
+            forWindow: w,
+            task,
+            forwardNanoPerSiu: best.nano,
+            spotNanoPerSiu: spot,
+            pLossBps: best.pLossBps,
+            source: best.source,
+            worthwhile,
+          });
+        }
+      }
+    }
+  }
+  /** mSIU of `task` claims presentable in window `w` that `agent` holds */
+  #heldFor(agent: string, task: TaskId, w: number): MilliSiu {
+    let held = 0n;
+    for (const [tokenId, holders] of this.chain.claims) {
+      const ct = this.chain.claimTypes.get(tokenId);
+      if (ct === undefined || ct.classId !== task || this.#windowOf(ct.windowFrom) !== w) continue;
+      held += holders.get(agent) ?? 0n;
+    }
+    return held;
+  }
+  /** the claims record's loss rate for these issuers so far: face defaulted or expired over all face settled in agents' hands, basis points (0 with no history) */
+  #lossBps(issuers: readonly string[]): bigint {
+    let lost = 0n;
+    let settled = 0n;
+    for (const [key, r] of this.v3a?.record ?? new Map<string, RecordRow>()) {
+      if (!issuers.includes(key.split("|")[0] as string)) continue;
+      lost += r.defaultedMilli + r.expiredMilli;
+      settled += r.defaultedMilli + r.expiredMilli + r.servedMilli;
+    }
+    return settled === 0n ? 0n : (lost * 10_000n) / settled;
   }
 
   /**

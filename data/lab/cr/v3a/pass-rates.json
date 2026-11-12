@@ -1,0 +1,329 @@
+{
+ "note": "v3a issuer pass rates (docs/experiment-3a-design.md; decision D143). Counts are snapshot-mode answers only (parts snapshot and dry-run, D70), every answer counted; superseded *.pre-*.jsonl files are not read. Only part, model, task and passed were read from the ledger. One difference from cr-print.json: claude-sonnet-5 on CR-PL is 9 of 10 here and 9 of 9 there, because WP0's cost leaves out the one answer whose headline cost could not be derived (it failed).",
+ "sourceDir": "dsi-cr-trial (branch cr-trial @ 3eb34bbf): data/private/blockworks/cr/records",
+ "files": [
+  {
+   "file": "2026-10-17.jsonl",
+   "sha256": "b402a63e49b3de4c450996f3d1fdba90f3dd66783f0ed1378fa72a2f6a11c303"
+  },
+  {
+   "file": "2026-10-18.jsonl",
+   "sha256": "6b689269f4e0458a17d2a4d833383dedbf4a0c4c096c0ec82fd8d0926102abd4"
+  },
+  {
+   "file": "2026-10-19.jsonl",
+   "sha256": "1de67bba562948719059b92209ac000500977052c07276e8e0af7ffc9b428ce1"
+  },
+  {
+   "file": "2026-10-20.jsonl",
+   "sha256": "e737bd1a1e4e381112af45959b3566354ba58a77db2890f90f1e5b200ec382a3"
+  },
+  {
+   "file": "2026-10-21.jsonl",
+   "sha256": "996298f2cb7ec0299548ac95b378f024988d091d6b5d970daaef4a5b72fe406e"
+  },
+  {
+   "file": "2026-10-22.jsonl",
+   "sha256": "23662605f0f3f6f06c51b9fb2e66b10e5ae76de93d61e24c671acae456b9f61d"
+  },
+  {
+   "file": "2026-10-23.jsonl",
+   "sha256": "ddb3d199bee266a15fc55d4976816e38984ac8aaa3cc4ed61b8af2e92e2d0e73"
+  },
+  {
+   "file": "2026-10-24.jsonl",
+   "sha256": "1628c34a7102103fde443ae47e7d7082e6f7db8ef32f9504f893b0ef8f2bea1c"
+  },
+  {
+   "file": "2026-10-25.jsonl",
+   "sha256": "459081e6005b0d77b75eca142c8f747c3e2bed21be0716a8d7e1bec71b8fc9c5"
+  },
+  {
+   "file": "2026-10-26.jsonl",
+   "sha256": "7f9d732b6f5aa31d8d5ddd0a8ed1b5b5ed7bb6c610e7529795cd9ff5e238f29e"
+  },
+  {
+   "file": "2026-10-27.jsonl",
+   "sha256": "0a5e60dc3ebec694cdf328ae867c7d85f14cf8cf7c7a1d4435f3d6633ec00a92"
+  },
+  {
+   "file": "2026-10-28.jsonl",
+   "sha256": "b8f60f3f78f1b7f4b2a93e5a016956e4c7bd5924d4fbd4be439ce1c30485fc27"
+  },
+  {
+   "file": "2026-10-29.jsonl",
+   "sha256": "59b762b01a24a7e8c390237efdcf434a9bb68b69511f2307b227d39a03303a59"
+  },
+  {
+   "file": "2026-10-30.jsonl",
+   "sha256": "0fcba7b624f746d9ad4cd586df5db26a9ed597241f0609fe53671721fd8c05aa"
+  },
+  {
+   "file": "2026-11-01.jsonl",
+   "sha256": "68d47e57cb60512947b5041ec51596007240009cc67dc2d63a93972d53ff3798"
+  },
+  {
+   "file": "2026-11-02.jsonl",
+   "sha256": "eb9edeac648817b62e28122379f17dce38719dc7e826d0b991a8e36aca86f395"
+  },
+  {
+   "file": "2026-11-04.jsonl",
+   "sha256": "37bed1a65e068dd607827f33e1ce5363ef6eea1916c893a07fa54037e57c6ff4"
+  }
+ ],
+ "sourceSha256": "f6250d261070d30951b00502d2ea7e893f02479e370d286fc1a2b12715b26b0a",
+ "counts": {
+  "claude-haiku-4-5": {
+   "CR-VS": {
+    "answers": 10,
+    "passes": 0
+   },
+   "CR-PL": {
+    "answers": 10,
+    "passes": 0
+   },
+   "CR-UO": {
+    "answers": 10,
+    "passes": 5
+   },
+   "CR-SM": {
+    "answers": 8,
+    "passes": 0
+   }
+  },
+  "claude-sonnet-5": {
+   "CR-VS": {
+    "answers": 10,
+    "passes": 9
+   },
+   "CR-PL": {
+    "answers": 10,
+    "passes": 9
+   },
+   "CR-UO": {
+    "answers": 10,
+    "passes": 10
+   },
+   "CR-SM": {
+    "answers": 8,
+    "passes": 8
+   }
+  },
+  "mistral-small-3.2-24b-instruct": {
+   "CR-VS": {
+    "answers": 18,
+    "passes": 0
+   },
+   "CR-PL": {
+    "answers": 18,
+    "passes": 0
+   },
+   "CR-UO": {
+    "answers": 18,
+    "passes": 2
+   },
+   "CR-SM": {
+    "answers": 12,
+    "passes": 0
+   }
+  },
+  "gpt-5.4-mini": {
+   "CR-VS": {
+    "answers": 18,
+    "passes": 0
+   },
+   "CR-PL": {
+    "answers": 18,
+    "passes": 0
+   },
+   "CR-UO": {
+    "answers": 18,
+    "passes": 8
+   },
+   "CR-SM": {
+    "answers": 12,
+    "passes": 0
+   }
+  },
+  "deepseek-v3.2": {
+   "CR-VS": {
+    "answers": 18,
+    "passes": 0
+   },
+   "CR-PL": {
+    "answers": 18,
+    "passes": 0
+   },
+   "CR-UO": {
+    "answers": 18,
+    "passes": 5
+   },
+   "CR-SM": {
+    "answers": 12,
+    "passes": 0
+   }
+  },
+  "llama-3.3-70b-deepinfra": {
+   "CR-VS": {
+    "answers": 18,
+    "passes": 0
+   },
+   "CR-PL": {
+    "answers": 18,
+    "passes": 0
+   },
+   "CR-UO": {
+    "answers": 18,
+    "passes": 3
+   },
+   "CR-SM": {
+    "answers": 12,
+    "passes": 0
+   }
+  },
+  "qwen-2.5-72b-instruct": {
+   "CR-VS": {
+    "answers": 18,
+    "passes": 0
+   },
+   "CR-PL": {
+    "answers": 18,
+    "passes": 0
+   },
+   "CR-UO": {
+    "answers": 18,
+    "passes": 8
+   },
+   "CR-SM": {
+    "answers": 12,
+    "passes": 0
+   }
+  },
+  "claude-haiku-5-5": {
+   "CR-VS": {
+    "answers": 18,
+    "passes": 11
+   },
+   "CR-PL": {
+    "answers": 18,
+    "passes": 17
+   },
+   "CR-UO": {
+    "answers": 18,
+    "passes": 17
+   },
+   "CR-SM": {
+    "answers": 12,
+    "passes": 12
+   }
+  }
+ },
+ "issuers": {
+  "ISSUER-C1": {
+   "CR-PL": {
+    "bps": 9444,
+    "source": {
+     "model": "claude-haiku-5-5",
+     "answers": 18,
+     "passes": 17
+    }
+   },
+   "CR-UO": {
+    "bps": 9444,
+    "source": {
+     "model": "claude-haiku-5-5",
+     "answers": 18,
+     "passes": 17
+    }
+   },
+   "CR-SM": {
+    "bps": 10000,
+    "source": {
+     "model": "claude-haiku-5-5",
+     "answers": 12,
+     "passes": 12
+    }
+   }
+  },
+  "ISSUER-C2": {
+   "CR-PL": {
+    "bps": 9444,
+    "source": {
+     "model": "claude-haiku-5-5",
+     "answers": 18,
+     "passes": 17
+    }
+   },
+   "CR-UO": {
+    "bps": 9444,
+    "source": {
+     "model": "claude-haiku-5-5",
+     "answers": 18,
+     "passes": 17
+    }
+   },
+   "CR-SM": {
+    "bps": 10000,
+    "source": {
+     "model": "claude-haiku-5-5",
+     "answers": 12,
+     "passes": 12
+    }
+   }
+  },
+  "ISSUER-X": {
+   "CR-PL": {
+    "bps": 8000,
+    "source": {
+     "rule": "D119's qualifying floor (80%), pre-registered for ISSUER-X (owner, D143)"
+    }
+   },
+   "CR-UO": {
+    "bps": 8000,
+    "source": {
+     "rule": "D119's qualifying floor (80%), pre-registered for ISSUER-X (owner, D143)"
+    }
+   },
+   "CR-SM": {
+    "bps": 8000,
+    "source": {
+     "rule": "D119's qualifying floor (80%), pre-registered for ISSUER-X (owner, D143)"
+    }
+   }
+  },
+  "ISSUER-F": {
+   "CR-VS": {
+    "bps": 9000,
+    "source": {
+     "model": "claude-sonnet-5",
+     "answers": 10,
+     "passes": 9
+    }
+   },
+   "CR-PL": {
+    "bps": 9000,
+    "source": {
+     "model": "claude-sonnet-5",
+     "answers": 10,
+     "passes": 9
+    }
+   },
+   "CR-UO": {
+    "bps": 10000,
+    "source": {
+     "model": "claude-sonnet-5",
+     "answers": 10,
+     "passes": 10
+    }
+   },
+   "CR-SM": {
+    "bps": 10000,
+    "source": {
+     "model": "claude-sonnet-5",
+     "answers": 8,
+     "passes": 8
+    }
+   }
+  }
+ }
+}

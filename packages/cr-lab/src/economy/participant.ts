@@ -72,6 +72,49 @@ export class Participant {
     return units;
   }
 
+  /** v3a: the USDC value of `units` at mid (NAV × `rate`, no spread), rounded down */
+  midValue(units: AguUnits, rate: NanoUsdPerSiu): UsdcUnits {
+    const { num, den } = this.chain.nav();
+    if (den === 0n || num === 0n) throw new ParticipantRefused("no NAV to price against: the reserve is empty");
+    return (units * num * rate) / (den * NANO);
+  }
+
+  /**
+   * v3a, code only (never an agent's own trade): the participant hands `units` from its inventory to `agent` for their mid value in USDC (rounded up, so the participant
+   * is never paid less than mid). Genesis uses it so every role starts with equal value in both currencies (docs/experiment-3a-design.md, Cast).
+   */
+  sellAtMid(agent: string, units: AguUnits, rate: NanoUsdPerSiu): { units: AguUnits; usdc: UsdcUnits } {
+    if (units <= 0n) throw new ParticipantRefused("nothing to sell");
+    if (this.chain.balance(PARTICIPANT, "AGU") < units)
+      throw new ParticipantRefused("the participant's AGU-lab inventory is short");
+    const { num, den } = this.chain.nav();
+    const usdc = ceilDiv(units * num * rate, den * NANO);
+    this.chain.transfer("USDC", agent, PARTICIPANT, usdc);
+    this.chain.transfer("AGU", PARTICIPANT, agent, units);
+    return { units, usdc };
+  }
+
+  /**
+   * v3a, code only: AGU-lab an agent chose to PAY with, where the payee settles in USDC (the roll), converted at mid -- no spread and no buy-back cap, because it is a
+   * payment in AGU-lab, not an exit (docs/experiment-3a-design.md: "the roll sells front claims in either currency"). Takes the fewest units whose mid value covers `usdc`.
+   */
+  takeAtMid(agent: string, usdc: UsdcUnits, rate: NanoUsdPerSiu): { units: AguUnits; usdc: UsdcUnits } {
+    if (usdc <= 0n) throw new ParticipantRefused("nothing to pay");
+    const { num, den } = this.chain.nav();
+    if (den === 0n || num === 0n) throw new ParticipantRefused("no NAV to price against: the reserve is empty");
+    const units = ceilDiv(usdc * den * NANO, num * rate);
+    if (this.chain.balance(PARTICIPANT, "USDC") < usdc)
+      throw new ParticipantRefused("the participant's own USDC has run out");
+    try {
+      this.chain.transfer("AGU", agent, PARTICIPANT, units);
+    } catch (e) {
+      if (e instanceof ChainRule) throw new ParticipantRefused(e.message);
+      throw e;
+    }
+    this.chain.transfer("USDC", PARTICIPANT, agent, usdc);
+    return { units, usdc };
+  }
+
   /** an agent buys `units` from the participant's inventory at the ask */
   sell(agent: string, units: AguUnits, rate: NanoUsdPerSiu): { units: AguUnits; usdc: UsdcUnits } {
     if (units <= 0n) throw new ParticipantRefused("nothing to sell");
