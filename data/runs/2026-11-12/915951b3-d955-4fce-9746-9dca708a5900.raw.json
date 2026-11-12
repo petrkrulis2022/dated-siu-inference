@@ -1,0 +1,39 @@
+{
+  "id": "2b483680-7743-96e3-a8ee-0159fb2a672b",
+  "object": "chat.completion",
+  "created": 1794457547,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "0271C7\n8974B4\n9870C8\n83FD33",
+        "reasoning_content": "I am scanning the archive log for access codes.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21691,
+    "completion_tokens": 18,
+    "total_tokens": 21895,
+    "prompt_tokens_details": {
+      "text_tokens": 21691,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 186,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 438380000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

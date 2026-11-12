@@ -1,0 +1,39 @@
+{
+  "id": "cde925c9-a1b6-970e-a05f-a4c9d0b628c7",
+  "object": "chat.completion",
+  "created": 1794457539,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"tracking_id\": \"SH-9C9009\",\n  \"origin_city\": \"Denver\",\n  \"destination_city\": \"Perth\",\n  \"weight_kg\": 223,\n  \"status\": \"delayed\",\n  \"priority\": \"standard\"\n}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nThe shipment record is SH-9C9009 from Denver to Perth. It weighs 223 kilograms. The status is delayed. The priority is standard.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1571,
+    "completion_tokens": 63,
+    "total_tokens": 1910,
+    "prompt_tokens_details": {
+      "text_tokens": 1571,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 276,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 44080000
+  },
+  "system_fingerprint": "fp_bd136647c5",
+  "service_tier": "default"
+}
