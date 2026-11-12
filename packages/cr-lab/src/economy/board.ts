@@ -312,7 +312,7 @@ export function renderBoard(b: Board): string {
           ? `, paid in work claims (${show(
               q.paidInClaims.reduce((n, c) => n + c.milli, 0n),
               3,
-            )} SIU, now held by ${q.researcher})`
+            )} SIU, held in escrow until the brief passes)`
           : q.agu !== undefined
             ? `, ${show(q.agu)} AGU-lab in escrow`
             : q.usdcEscrowed !== undefined

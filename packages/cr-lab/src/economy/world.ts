@@ -147,8 +147,15 @@ export interface Quote {
   agu?: AguUnits;
   /** v2: the USDC amount actually escrowed, when priceUnit === "usdc" */
   usdcEscrowed?: UsdcUnits;
-  /** v3a Phase 2 item 7: the work claims the demand agent paid with at acceptance, instead of an escrow -- they moved to the researcher then, so nothing is ever refunded */
+  /** v3a Phase 2 item 7: the work claims the demand agent paid with at acceptance */
   paidInClaims?: { tokenId: string; milli: MilliSiu }[];
+  /**
+   * D144: the account those claims are held in until the brief settles, as a currency payment is held in escrow -- released to the research agent on a passing brief,
+   * returned to the payer if it fails or lapses
+   */
+  claimEscrow?: string;
+  /** D144: escrowed claim face the research agent used for the brief's work (presentations that passed), which it pays back if the brief fails or lapses */
+  claimsUsed?: { tokenId: string; milli: MilliSiu; series: Series }[];
   /** v3a: which currencies the research agent accepts payment in (work claims are always accepted, per the fSIU lifecycle) */
   accepts?: Accept;
   /** v3a: the Commodity print when the quote was posted -- the rate a payment in the other currency converts at */
@@ -752,7 +759,19 @@ export class World {
   async #present(agent: string, tokenId: string): Promise<Outcome> {
     const ct = this.chain.claimTypes.get(tokenId);
     if (ct === undefined) return { ok: false, note: `no claim ${tokenId}` };
-    const milli = this.chain.claimBalance(agent, tokenId);
+    // D144: a research agent may present claims held in escrow for one of its accepted briefs, on the escrow's behalf, for that brief's work; the output is its own
+    const escrowed =
+      this.chain.claimBalance(agent, tokenId) > 0n
+        ? undefined
+        : this.quotes.find(
+            (q) =>
+              q.researcher === agent &&
+              q.status === "accepted" &&
+              q.claimEscrow !== undefined &&
+              this.chain.claimBalance(q.claimEscrow, tokenId) > 0n,
+          );
+    const holder = escrowed?.claimEscrow ?? agent;
+    const milli = this.chain.claimBalance(holder, tokenId);
     // one presentation is one task's work (TASK_MILLI), or what is left of the claim. v3a: one task of a class is that class's fixed face (the work a claim buys,
     // `taskFaces`), and a holding smaller than one task cannot be presented -- a remnant would otherwise buy a whole task
     const face = this.v3a?.faces[ct.series][ct.classId as TaskId];
@@ -761,8 +780,8 @@ export class World {
       return { ok: false, note: `one ${ct.classId} task takes ${face} mSIU of claim; you hold ${milli} mSIU of ${tokenId} (holdings of the same claim add up)` };
     const take = face ?? (milli < TASK_MILLI ? milli : TASK_MILLI);
     if (take === 0n) return { ok: false, note: `you hold none of ${tokenId}` };
-    this.chain.present(agent, tokenId);
-    this.#log(agent, "claim-present", { tokenId, issuer: ct.issuer, task: ct.classId });
+    this.chain.present(holder, tokenId);
+    this.#log(agent, "claim-present", { tokenId, issuer: ct.issuer, task: ct.classId, ...(escrowed !== undefined ? { fromEscrow: holder, quote: escrowed.id } : {}) });
     const issuer = this.#issuer(ct.issuer);
     this.#stat(ct.issuer).presented++;
     const out = await this.worker.work(issuer, ct.classId as TaskId, {
@@ -779,7 +798,9 @@ export class World {
       dataSha: out.dataSha,
       costUsd: out.costUsd.toFixed(6),
     });
-    this.chain.serve(ct.issuer, tokenId, agent, take, out.passed);
+    this.chain.serve(ct.issuer, tokenId, holder, take, out.passed);
+    if (escrowed !== undefined && out.passed)
+      escrowed.claimsUsed = [...(escrowed.claimsUsed ?? []), { tokenId, milli: take, series: ct.series }];
     if (this.v3a !== undefined) {
       const row = this.#row(ct.issuer, this.window);
       row.presented++;
@@ -1025,7 +1046,7 @@ export class World {
     switch (q.status) {
       case "accepted":
         return q.paidInClaims !== undefined
-          ? "already accepted, paid in work claims"
+          ? "already accepted, paid in work claims held in escrow"
           : `already accepted, ${show(q.usdcEscrowed ?? q.agu ?? 0n)} ${q.usdcEscrowed !== undefined ? "USDC" : "AGU-lab"} in escrow`;
       case "delivered":
         return `already paid in window ${w}`;
@@ -1036,8 +1057,8 @@ export class World {
           return `lapsed at the end of window ${w}; its escrow was refunded to ${side === "buyer" ? "you" : "the buyer"}`;
         if (q.closed?.how === "lapsed-paid-in-claims")
           return side === "buyer"
-            ? `lapsed undelivered at the end of window ${w}; the work claims you paid with stayed with ${q.researcher}`
-            : `lapsed undelivered at the end of window ${w}; the work claims paid for it stayed with you`;
+            ? `lapsed undelivered at the end of window ${w}; the claims you paid with were returned to you`
+            : `lapsed undelivered at the end of window ${w}; the escrowed claims were returned to the buyer`;
         return `lapsed at the end of window ${w}`;
       case "posted":
         return side === "buyer" ? "still posted" : `not accepted yet by ${q.demand}`;
@@ -1382,6 +1403,46 @@ export class World {
     return r;
   }
 
+  /** D144: every claim left in a quote's claim escrow moves to `to`; returns the mSIU moved */
+  #releaseClaimEscrow(q: Quote, to: string, only?: (tokenId: string) => boolean): MilliSiu {
+    if (q.claimEscrow === undefined) return 0n;
+    let moved = 0n;
+    for (const [tokenId, holders] of this.chain.claims) {
+      const milli = holders.get(q.claimEscrow) ?? 0n;
+      if (milli === 0n || (only !== undefined && !only(tokenId))) continue;
+      this.chain.transferClaim(tokenId, q.claimEscrow, to, milli);
+      this.#log(GATE_RUNNER, "claim-transfer", { tokenId, from: q.claimEscrow, to, milli, quote: q.id, settlement: to === q.researcher ? "released" : "returned" });
+      moved += milli;
+    }
+    return moved;
+  }
+
+  /**
+   * D144: when a brief paid in claims fails or lapses, the research agent pays the payer back for the escrowed claim work it used (its passing presentations), at the
+   * grade print -- in USDC, as the bond pays a default, or in AGU-lab at mid when its USDC is short; anything it cannot cover is logged. Code paying on the agent's
+   * behalf, so it is recorded as scripted and never enters the exchange measure. Returns the micro-USD repaid.
+   */
+  #repayUsedClaims(q: Quote): UsdcUnits {
+    const owed = (q.claimsUsed ?? []).reduce((n, u) => n + (u.milli * this.rates[u.series] + 999_999n) / 1_000_000n, 0n);
+    q.claimsUsed = [];
+    if (owed === 0n) return 0n;
+    const value = microSiuForUsdcCeil(owed, this.commodityRate);
+    const usdc = this.chain.balance(q.researcher, "USDC");
+    if (usdc >= owed) {
+      this.#payment(q.researcher, q.demand, "claim work repaid", "usdc", value, { payeeAcceptsBoth: true, scripted: true, ref: q.id });
+      this.chain.transfer("USDC", q.researcher, q.demand, owed);
+      return owed;
+    }
+    const agu = this.aguFor(value);
+    if (this.chain.balance(q.researcher, "AGU") >= agu) {
+      this.#payment(q.researcher, q.demand, "claim work repaid", "agu", value, { payeeAcceptsBoth: true, scripted: true, ref: q.id });
+      this.chain.transfer("AGU", q.researcher, q.demand, agu);
+      return owed;
+    }
+    this.#log(q.researcher, "error", { quote: q.id, claimWorkUnrepaid: owed, reason: "holds too little USDC or AGU-lab to pay back the claim work it used" });
+    return 0n;
+  }
+
   /** Commodity-grade micro-SIU in one mSIU of a claim of `series`: 1,000 for a Commodity claim; a Frontier claim converts through the two prints, rounded down */
   #microSiuPerMilli(series: Series): bigint {
     return series === "commodity" ? 1_000n : (1_000n * this.rates[series]) / this.rates.commodity;
@@ -1419,12 +1480,15 @@ export class World {
     if (covered < q.priceMicroSiu)
       return { ok: false, note: `${q.id}: your claims cover ${covered / 1_000n} of ${ceilDiv(q.priceMicroSiu, 1_000n)} mSIU` };
     const both = this.v3a !== undefined && this.#canPayBoth(agent, q.priceMicroSiu);
+    // D144: into escrow, like a currency payment -- released to the research agent on a passing brief, returned to the payer if it fails or lapses
+    const escrowAccount = `claims-escrow:${q.id}`;
     for (const p of plan) {
-      this.chain.transferClaim(p.tokenId, agent, q.researcher, p.milli);
+      this.chain.transferClaim(p.tokenId, agent, escrowAccount, p.milli);
       this.#log(agent, "claim-transfer", {
         tokenId: p.tokenId,
         from: agent,
-        to: q.researcher,
+        to: escrowAccount,
+        researcher: q.researcher,
         milli: p.milli,
         task: p.task,
         quote: q.id,
@@ -1441,12 +1505,13 @@ export class World {
     this.#addSpend(agent, this.window, q.priceMicroSiu);
     q.status = "accepted";
     q.paidInClaims = plan.map((p) => ({ tokenId: p.tokenId, milli: p.milli }));
+    q.claimEscrow = escrowAccount;
     const face = plan.reduce((n, p) => n + p.milli, 0n);
     this.notify(
       q.researcher,
-      `${agent} accepted quote ${q.id} and paid in work claims, now yours: ${plan.map((p) => `${show(p.milli, 3)} SIU of ${p.task} claim ${p.tokenId}`).join("; ")}. They are presentable in this window (${due}) only and lapse worthless if never presented; present them for the brief's work, then deliver the brief.`,
+      `${agent} accepted quote ${q.id} and paid in work claims, held in escrow for the brief: ${plan.map((p) => `${show(p.milli, 3)} SIU of ${p.task} claim ${p.tokenId}`).join("; ")}. You may present them for the brief's own tasks in this window (${due}); what is left is yours when the brief passes, and returns to ${agent} if it fails or lapses -- and any of their work you used then, you pay back at the print.`,
     );
-    return { ok: true, note: `accepted ${q.id}: paid in work claims (${show(face, 3)} SIU), now held by ${q.researcher}` };
+    return { ok: true, note: `accepted ${q.id}: paid in work claims (${show(face, 3)} SIU), held in escrow until the brief passes` };
   }
 
   /**
@@ -1624,13 +1689,6 @@ export class World {
       parts.push(o);
     }
     const passed = parts.every((p) => p.passed && p.dataSha === sha);
-    if (q.paidInClaims !== undefined && !passed) {
-      const bad = parts.find((p) => !(p.passed && p.dataSha === sha)) as TaskOutput;
-      return {
-        ok: false,
-        note: `${id}: your ${bad.task} output failed the gate, and this brief was paid in work claims, so nothing is refunded; a failed presentation leaves its claim alive, so present it again (or get passing work another way), then deliver`,
-      };
-    }
     for (const p of parts) p.used = true;
     q.status = passed ? "delivered" : "failed";
     q.closed = { window: this.window, how: passed ? "paid" : "refunded" };
@@ -1647,15 +1705,30 @@ export class World {
       passed,
     });
     if (q.paidInClaims !== undefined) {
-      // paid at acceptance, in claims: no escrow to settle and nothing to refund; the receipt records what paid for it
+      // D144: settled like a currency escrow -- on a pass the claims left in escrow are the research agent's; on a fail they go back to the payer, and the work the
+      // research agent used from them it pays back at the print
+      const moved = passed ? this.#releaseClaimEscrow(q, q.researcher) : this.#releaseClaimEscrow(q, q.demand);
+      const repaid = passed ? 0n : this.#repayUsedClaims(q);
       this.#log(GATE_RUNNER, "receipt", {
         brief: q.id,
         snapshotSha: sha,
-        verdict: "pass",
+        verdict: passed ? "pass" : "fail",
         paidInClaims: q.paidInClaims,
+        [passed ? "releasedToResearcher" : "returnedToPayer"]: moved,
+        ...(passed ? {} : { repaidMicroUsd: repaid }),
       });
-      this.notify(q.demand, `brief ${q.id} from ${agent}: PASSED; it was paid in work claims when you accepted it`);
-      return { ok: true, note: `brief ${q.id} passed: it was paid in work claims at acceptance` };
+      this.notify(
+        q.demand,
+        passed
+          ? `brief ${q.id} from ${agent}: PASSED; it was paid in the work claims you put in escrow`
+          : `brief ${q.id} from ${agent}: FAILED; your unused claims came back${repaid > 0n ? `, and ${agent} paid back ${repaid} µ$ for the claim work it used` : ""}; you may get the need met another way`,
+      );
+      return {
+        ok: true,
+        note: passed
+          ? `brief ${q.id} passed: the claims left in escrow are yours`
+          : `brief ${q.id} failed (a component failed): the unused claims went back to ${q.demand}${repaid > 0n ? `, and you paid back ${repaid} µ$ for the claim work you used` : ""}`,
+      };
     }
     const escrow = q.escrow as string;
     // the escrow holds whichever currency paid (v1/v2: always the quote's own unit; v3a: the payer's choice)
@@ -1910,6 +1983,11 @@ export class World {
       const aguMicroSiu = this.siuOf(agu);
       const claimsMicroSiu = this.claimsValueMicroSiu(agent);
       const total = usdcMicroSiu + aguMicroSiu + claimsMicroSiu;
+      // D144: AGU-lab also valued at NAV WITH the buffer (the reserve's face plus the buffer's value, per unit), so the buffer's draw is visible in store of value
+      const { num, den } = this.chain.nav();
+      const bufferMicroSiu = (this.chain.balance(BUFFER, "USDC") * 1_000_000_000n) / rate;
+      const aguWithBuffer = den === 0n ? 0n : (agu * (num + bufferMicroSiu)) / den;
+      const totalWithBuffer = usdcMicroSiu + aguWithBuffer + claimsMicroSiu;
       this.#log(agent, "holdings", {
         atClose: k,
         role,
@@ -1921,6 +1999,8 @@ export class World {
         totalMicroSiu: total,
         aguValueMicroUsd: usdcForMicroSiu(aguMicroSiu, rate),
         workShareBps: total === 0n ? null : ((aguMicroSiu + claimsMicroSiu) * 10_000n) / total,
+        aguMicroSiuWithBuffer: aguWithBuffer,
+        workShareBpsWithBuffer: totalWithBuffer === 0n ? null : ((aguWithBuffer + claimsMicroSiu) * 10_000n) / totalWithBuffer,
       });
     }
   }
@@ -2277,9 +2357,11 @@ export class World {
         const key = `${tokenId}|${holder}`;
         if (this.warned.has(key)) continue;
         this.warned.add(key);
+        // D144: claims held in escrow for a brief are the research agent's to present: it gets the warning
+        const brief = holder.startsWith("claims-escrow:") ? this.quotes.find((q) => q.claimEscrow === holder) : undefined;
         this.notify(
-          holder,
-          `LAPSE WARNING: ${show(milli, 3)} SIU of ${ct.classId} claim ${tokenId} lapses worthless at the end of this window unless you present it now`,
+          brief?.researcher ?? holder,
+          `LAPSE WARNING: ${show(milli, 3)} SIU of ${ct.classId} claim ${tokenId}${brief !== undefined ? `, held in escrow for ${brief.id},` : ""} lapses worthless at the end of this window unless you present it now`,
         );
       }
     }
@@ -2288,6 +2370,11 @@ export class World {
   /** the end of window k: claims settle (expire or default), unmet needs and quotes lapse, issuers sell their AGU-lab income, sweeps, exits classified, NAV published */
   closeWindow(k: number): void {
     this.setTime(k, this.params.roundsPerWindow + 1);
+    // D144: a brief paid in claims and not delivered lapses now; its escrowed claims that were never presented go back to the payer first, so the payer is warned and
+    // they settle exactly as if it had kept them. Those the research agent presented stay in escrow to settle (a default's payout then goes to the payer, below)
+    for (const q of this.quotes)
+      if (q.status === "accepted" && q.claimEscrow !== undefined)
+        this.#releaseClaimEscrow(q, q.demand, (tokenId) => !this.chain.everPresented.has(`${tokenId}|${q.claimEscrow}`));
     // a claim that arrived after the last round's warnings still gets its one warning before the window ends
     this.lapseWarnings(k);
     this.clock.now = this.windowTo(k) + 1;
@@ -2363,12 +2450,16 @@ export class World {
         q.agu = undefined;
         q.usdcEscrowed = undefined;
       } else if (q.status === "accepted" && q.paidInClaims !== undefined) {
-        // v3a Phase 2 item 7: paid in claims at acceptance and never delivered -- the claims were the payment and stay with the research agent (they settle as its own claims
-        // just above: default if it presented them, expiry if not); the need lapses unmet like any other
+        // D144: a brief paid in claims that lapses refunds like a currency escrow: the unpresented claims already went back to the payer (above); the escrow's payouts
+        // for presented, unserved ones (defaults, settled above) go to the payer; and the research agent pays back the claim work it used
+        const payout = q.claimEscrow === undefined ? 0n : this.chain.balance(q.claimEscrow, "USDC");
+        if (payout > 0n) this.chain.transfer("USDC", q.claimEscrow as string, q.demand, payout);
+        const repaid = this.#repayUsedClaims(q);
         q.status = "lapsed";
         q.closed = { window: k, how: "lapsed-paid-in-claims" };
-        this.notify(q.demand, `quote ${q.id} lapsed undelivered at the end of window ${k}; the work claims you paid with stayed with ${q.researcher}`);
-        this.notify(q.researcher, `quote ${q.id} lapsed undelivered at the end of window ${k}; you kept the work claims ${q.demand} paid with`);
+        this.#log(GATE_RUNNER, "receipt", { brief: q.id, verdict: "lapsed", paidInClaims: q.paidInClaims, defaultPayoutToPayer: payout, repaidMicroUsd: repaid });
+        this.notify(q.demand, `quote ${q.id} lapsed undelivered at the end of window ${k}; your escrowed claims came back${payout > 0n ? `, with ${payout} µ$ of default payouts` : ""}${repaid > 0n ? `, and ${q.researcher} paid back ${repaid} µ$ for claim work it used` : ""}`);
+        this.notify(q.researcher, `quote ${q.id} lapsed undelivered at the end of window ${k}; the escrowed claims went back to ${q.demand}${repaid > 0n ? ` and you paid back ${repaid} µ$ for the claim work you used` : ""}`);
       } else if (q.status === "posted") {
         q.status = "lapsed";
         q.closed = { window: k, how: "lapsed" };

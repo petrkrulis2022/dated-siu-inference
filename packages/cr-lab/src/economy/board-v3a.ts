@@ -13,7 +13,7 @@
 import type { TaskId } from "../tasks/instances.js";
 import { RESERVE } from "./memory-chain.js";
 import { usdcForMicroSiu } from "./units.js";
-import type { ClaimRequest, Offer, RecordRow } from "./v3a-market.js";
+import { emptyRow, type ClaimRequest, type Offer, type RecordRow } from "./v3a-market.js";
 import type { MicroSiu, Role, World } from "./world.js";
 
 export interface V3aClaimView {
@@ -45,6 +45,8 @@ export interface V3aBoard {
   };
   wallet: { usdc: bigint; aguMicroSiu: bigint; claimsMicroSiu: bigint; valueMicroUsd: bigint };
   claims: V3aClaimView[];
+  /** D144: claims held in escrow for this research agent's accepted briefs, which it may present for those briefs' own tasks */
+  escrowedClaims: (V3aClaimView & { quote: string })[];
   participant: { askMicroUsdPerSiu: bigint; bidMicroUsdPerSiu: bigint; canSellMicroSiu: bigint };
   rollNanoPerSiu: bigint;
   faces: Partial<Record<TaskId, bigint>>;
@@ -63,7 +65,8 @@ export interface V3aBoard {
   armB?: { holdShareBps: bigint; windowsAhead: number; requiredMicroSiu: MicroSiu; heldMicroSiu: MicroSiu };
   offers: Offer[];
   requests: ClaimRequest[];
-  record: { issuer: string; window: number; row: RecordRow }[];
+  /** the claims record per issuer and window, with every discount PROVIDER posted there (D144: its discount history) */
+  record: { issuer: string; window: number; row: RecordRow; discounts: { task: string; discountBps: bigint; status: string; offer: string }[] }[];
   provider?: { profitMicroSiu: MicroSiu; headroom: { issuer: string; task: string; milli: bigint }[] };
 }
 
@@ -109,6 +112,26 @@ export function v3aBoardFor(w: World, agent: string, role: Role): V3aBoard {
       provider: v.providerTokens.has(tokenId),
     });
   }
+  const escrowedClaims: (V3aClaimView & { quote: string })[] = [];
+  for (const q of w.quotes.filter((x) => x.researcher === agent && x.status === "accepted" && x.claimEscrow !== undefined))
+    for (const [tokenId, holders] of w.chain.claims) {
+      const milli = holders.get(q.claimEscrow as string) ?? 0n;
+      const ct = w.chain.claimTypes.get(tokenId);
+      if (milli === 0n || ct === undefined || ct.windowTo <= w.clock.now) continue;
+      const presentableNow = w.clock.now >= ct.windowFrom && w.clock.now < ct.windowTo;
+      escrowedClaims.push({
+        claim: tokenId,
+        task: ct.classId,
+        issuer: ct.issuer,
+        milli,
+        window: windowOf(ct.windowFrom),
+        presentableNow,
+        ...(presentableNow ? { roundsLeft: w.params.roundsPerWindow - w.round } : {}),
+        valueMicroUsd: usdcForMicroSiu(milli * 1_000n, rate),
+        provider: v.providerTokens.has(tokenId),
+        quote: q.id,
+      });
+    }
   const q = supply > 0n ? w.participant.quote(1_000_000n, rate) : { ask: 0n, bid: 0n };
   // the participant's quote for one whole AGU-lab, restated per SIU of AGU-lab value
   const perSiu = (usdc: bigint): bigint => (navMicro === 0n ? 0n : (usdc * 1_000_000n) / navMicro);
@@ -133,8 +156,20 @@ export function v3aBoardFor(w: World, agent: string, role: Role): V3aBoard {
           heldMicroSiu: w.siuOf(w.chain.balance(agent, "AGU")) + w.claimsValueMicroSiu(agent, (x) => x > k && x <= k + p.armB.windowsAhead),
         }
       : undefined;
-  const record = [...v.record]
-    .map(([key, row]) => ({ issuer: key.split("|")[0] as string, window: Number(key.split("|")[1]), row }))
+  const keys = new Set([...v.record.keys(), ...v.offers.map((o) => `${o.issuer}|${o.window}`)]);
+  const record = [...keys]
+    .map((key) => {
+      const issuer = key.split("|")[0] as string;
+      const window = Number(key.split("|")[1]);
+      return {
+        issuer,
+        window,
+        row: v.record.get(key) ?? emptyRow(),
+        discounts: v.offers
+          .filter((o) => o.issuer === issuer && o.window === window)
+          .map((o) => ({ task: o.task, discountBps: o.discountBps, status: o.status, offer: o.id })),
+      };
+    })
     .filter((r) => r.window >= k - 2 && r.window <= k + p.providerRules.maxWindowsAhead)
     .sort((a, b) => (a.issuer === b.issuer ? a.window - b.window : a.issuer.localeCompare(b.issuer)));
   return {
@@ -160,6 +195,7 @@ export function v3aBoardFor(w: World, agent: string, role: Role): V3aBoard {
       valueMicroUsd: w.valueMicroUsd(agent),
     },
     claims,
+    escrowedClaims,
     participant: { askMicroUsdPerSiu: perSiu(q.ask), bidMicroUsdPerSiu: perSiu(q.bid), canSellMicroSiu: w.siuOf(w.participantCanSell()) },
     rollNanoPerSiu: (rate * (10_000n - w.params.reserve.discountBps)) / 10_000n,
     faces: v.faces.commodity,
@@ -295,6 +331,13 @@ export function renderV3aBoard(c: RenderCtx, b: V3aBoard): string {
         `  - ${x.claim}: ${group(x.milli)} mSIU of ${x.task} from ${x.issuer}${x.provider ? " (sold by PROVIDER)" : ""}, window ${x.window}${x.presentableNow ? `, presentable NOW, ${x.roundsLeft} round(s) left before it lapses worthless` : `, deadline: the end of window ${x.window}`}; value ${musd(x.valueMicroUsd)}`,
       );
   }
+  if (b.escrowedClaims.length > 0) {
+    L.push("Work claims held in escrow for your accepted briefs (present them for the brief's own tasks; what is left is yours when the brief passes):");
+    for (const x of b.escrowedClaims)
+      L.push(
+        `  - ${x.claim}: ${group(x.milli)} mSIU of ${x.task} from ${x.issuer}, for ${x.quote}, window ${x.window}${x.presentableNow ? `, presentable NOW, ${x.roundsLeft} round(s) left` : ""}; value ${musd(x.valueMicroUsd)}`,
+      );
+  }
   L.push(
     `One task's work: ${Object.entries(b.faces)
       .map(([t, f]) => `${t} ${f} mSIU`)
@@ -335,7 +378,7 @@ export function renderV3aBoard(c: RenderCtx, b: V3aBoard): string {
       const price = q.priceUnit === "usdc" ? bothUsd(q.priceUsdcMicro ?? 0n) : both(q.priceMicroSiu);
       const held =
         q.paidInClaims !== undefined
-          ? `, paid in work claims (${group(q.paidInClaims.reduce((s, x) => s + x.milli, 0n))} mSIU, now held by ${q.researcher})`
+          ? `, paid in work claims (${group(q.paidInClaims.reduce((s, x) => s + x.milli, 0n))} mSIU, held in escrow until the brief passes)`
           : q.agu !== undefined
             ? ", in escrow in AGU-lab"
             : q.usdcEscrowed !== undefined
@@ -364,10 +407,11 @@ export function renderV3aBoard(c: RenderCtx, b: V3aBoard): string {
     L.push(`Issuers' headroom for claims now: ${b.provider.headroom.map((h) => `${h.issuer} ${h.task} ${group(h.milli)} mSIU`).join(", ")}.`);
   }
   if (b.record.length > 0) {
-    L.push("Claims record (mSIU minted; tasks presented and redeemed; mSIU defaulted and expired in agents' hands):");
+    L.push("Claims record (mSIU minted; tasks presented and redeemed; mSIU defaulted and expired in agents' hands; every discount PROVIDER posted):");
+    const pctOff = (bps: bigint): string => (bps >= 0n ? `${Number(bps) / 100}% off` : `${-Number(bps) / 100}% premium`);
     for (const r of b.record)
       L.push(
-        `  - ${r.issuer} window ${r.window}: minted ${group(r.row.mintedMilli)}, presented ${r.row.presented}, redeemed ${r.row.served}, defaulted ${group(r.row.defaultedMilli)}, expired ${group(r.row.expiredMilli)}`,
+        `  - ${r.issuer} window ${r.window}: minted ${group(r.row.mintedMilli)}, presented ${r.row.presented}, redeemed ${r.row.served}, defaulted ${group(r.row.defaultedMilli)}, expired ${group(r.row.expiredMilli)}${r.discounts.length > 0 ? `; PROVIDER posted ${r.discounts.map((d) => `${d.task} ${pctOff(d.discountBps)} (${d.status})`).join(", ")}` : ""}`,
       );
   }
   if (c.outputs.length > 0) {

@@ -420,76 +420,87 @@ describe("Phase 2 item 7: work claims transfer as payment, and a brief built on 
     return { w, worker, need, claims, q: w.quotes.at(-1) as Quote };
   }
 
-  it("mint, transfer, present, deliver: the demand agent pays with its claims, the research agent presents them, and the brief meets the demand agent's need", async () => {
+  // D144 (the owner, 2026-11-12): a claim payment goes into escrow like a USDC or AGU-lab payment and comes back if the brief fails or lapses -- no currency may carry a
+  // refund disadvantage. The research agent may still present the escrowed claims for the brief's own work (Phase 2 item 7).
+  it("mint, escrow, present, deliver: the claims are held in escrow for the brief, the research agent presents them, the brief meets the need, and the rest is released", async () => {
     const { w, need, claims, q } = await demandHoldsClaimsForItsNeed("p2-claims-life");
     const usdc = w.chain.balance("DEMAND-1", "USDC");
-    const agu = w.chain.balance("DEMAND-1", "AGU");
-    const acc = await w.act(
-      "DEMAND-1",
-      { tool: "accept_quote", quote: q.id, claims },
-      "paying with the claims I bought ahead",
-    );
+    const acc = await w.act("DEMAND-1", { tool: "accept_quote", quote: q.id, claims }, "paying with the claims I bought ahead");
     expect(acc.ok, acc.note).toBe(true);
     expect(q.status).toBe("accepted");
-    // transfer: free, at once, to the research agent; no currency moved and no escrow opened
+    const escrow = `claims-escrow:${q.id}`;
     for (const c of claims) {
       expect(w.chain.claimBalance("DEMAND-1", c)).toBe(0n);
-      expect(w.chain.claimBalance("RESEARCH-1", c)).toBe(250n);
+      expect(w.chain.claimBalance("RESEARCH-1", c)).toBe(0n); // not the research agent's until the brief passes
+      expect(w.chain.claimBalance(escrow, c)).toBe(250n);
     }
     expect(w.chain.balance("DEMAND-1", "USDC")).toBe(usdc);
-    expect(w.chain.balance("DEMAND-1", "AGU")).toBe(agu);
-    expect(q.escrow).toBeUndefined();
-    expect(
-      w.log.of("claim-transfer").filter((e) => e.quote === q.id && e.to === "RESEARCH-1"),
-    ).toHaveLength(2);
-    // present: the new holder presents; a pass retires the claim
+    expect(w.log.of("claim-transfer").filter((e) => e.quote === q.id && e.to === escrow)).toHaveLength(2);
+    // present: the research agent presents the escrowed claims for the brief's work; a pass uses up that task's work from the escrow
     for (const c of claims) {
       const p = await w.act("RESEARCH-1", { tool: "present_claim", claim: c }, "r");
       expect(p.ok, p.note).toBe(true);
-      expect(w.chain.claimBalance("RESEARCH-1", c)).toBe(0n);
+      expect(w.chain.claimBalance(escrow, c)).toBe(0n);
     }
-    // deliver: the outputs from those claims meet DEMAND-1's need
     const d = await w.act("RESEARCH-1", { tool: "deliver_brief", quote: q.id }, "r");
     expect(d.ok, d.note).toBe(true);
     expect(q.status).toBe("delivered");
     expect(need.status).toBe("met");
     const gate = w.log.of("gate").find((e) => e.brief === q.id);
-    expect((gate?.components as { fromClaim?: string }[]).map((c) => c.fromClaim).sort()).toEqual(
-      [...claims].sort(),
-    );
+    expect((gate?.components as { fromClaim?: string }[]).map((c) => c.fromClaim).sort()).toEqual([...claims].sort());
     expect(boardFor(w, "DEMAND-1").quotes.map((x) => x.id)).not.toContain(q.id);
     w.checkInvariants();
   });
 
-  it("present: a fail leaves the transferred claim alive to present again; the next pass retires it", async () => {
+  it("present: a fail leaves the escrowed claim alive to present again; the next pass uses it", async () => {
     const { w, worker, claims, q } = await demandHoldsClaimsForItsNeed("p2-claims-refail");
     await w.act("DEMAND-1", { tool: "accept_quote", quote: q.id, claims }, "r");
     const c = claims[0] as string;
     worker.queue.push(false, true);
     await w.act("RESEARCH-1", { tool: "present_claim", claim: c }, "r");
-    expect(w.chain.claimBalance("RESEARCH-1", c)).toBe(250n);
+    expect(w.chain.claimBalance(`claims-escrow:${q.id}`, c)).toBe(250n);
     await w.act("RESEARCH-1", { tool: "present_claim", claim: c }, "r");
-    expect(w.chain.claimBalance("RESEARCH-1", c)).toBe(0n);
+    expect(w.chain.claimBalance(`claims-escrow:${q.id}`, c)).toBe(0n);
   });
 
-  it("close: a transferred claim presented but never served defaults to its new holder at the print; one never presented expires, after its warning", async () => {
+  it("a failed brief returns the unused claims to the payer, and the research agent pays back the work it used from them at the print", async () => {
+    const { w, claims, q, need } = await demandHoldsClaimsForItsNeed("p2-claims-fail");
+    await w.act("DEMAND-1", { tool: "accept_quote", quote: q.id, claims }, "r");
+    const [used, unused] = claims as [string, string];
+    const usedTask = w.chain.claimTypes.get(used)?.classId as TaskId;
+    const unusedTask = w.chain.claimTypes.get(unused)?.classId as TaskId;
+    await w.act("RESEARCH-1", { tool: "present_claim", claim: used }, "r"); // passes: 250 mSIU used
+    pushOutputs(w, "RESEARCH-1", [unusedTask], false); // the other part comes from failed work
+    const usdc = w.chain.balance("DEMAND-1", "USDC");
+    const d = await w.act("RESEARCH-1", { tool: "deliver_brief", quote: q.id }, "r");
+    expect(d.ok, d.note).toBe(true);
+    expect(q.status).toBe("failed");
+    expect(need.status).toBe("open");
+    expect(w.chain.claimBalance("DEMAND-1", unused)).toBe(250n);
+    const owed = (250n * w.rates.commodity + 999_999n) / 1_000_000n; // the used claim's face at the grade print, as the bond pays a default
+    expect(w.chain.balance("DEMAND-1", "USDC")).toBe(usdc + owed);
+    expect(usedTask).not.toBe(unusedTask);
+    w.checkInvariants();
+  });
+
+  it("a lapsed brief: unpresented claims return to the payer (warned, then expiring as its own); a presented, unserved one defaults and its payout goes to the payer", async () => {
     const { w, worker, claims, q } = await demandHoldsClaimsForItsNeed("p2-claims-close");
     await w.act("DEMAND-1", { tool: "accept_quote", quote: q.id, claims }, "r");
     const [presented, idle] = claims as [string, string];
     worker.queue.push(false);
     await w.act("RESEARCH-1", { tool: "present_claim", claim: presented }, "r");
-    const usdc = w.chain.balance("RESEARCH-1", "USDC");
+    const usdc = w.chain.balance("DEMAND-1", "USDC");
     w.closeWindow(2);
     const closes = w.log.of("claim-close");
-    const d = closes.find((e) => e.tokenId === presented && e.holder === "RESEARCH-1");
+    const d = closes.find((e) => e.tokenId === presented && e.holder === `claims-escrow:${q.id}`);
     expect(d?.outcome).toBe("defaulted");
-    expect(w.chain.balance("RESEARCH-1", "USDC")).toBe(usdc + (d?.usdc as bigint));
-    const x = closes.find((e) => e.tokenId === idle && e.holder === "RESEARCH-1");
+    expect(w.chain.balance("DEMAND-1", "USDC")).toBe(usdc + (d?.usdc as bigint));
+    const x = closes.find((e) => e.tokenId === idle && e.holder === "DEMAND-1");
     expect(x?.outcome).toBe("expired");
     expect(x?.lapsedAfterWarning).toBe(true);
-    // the quote was paid but its brief never delivered: it lapses and leaves the board; the claims were the payment and are not returned
     expect(q.status).toBe("lapsed");
     expect(boardFor(w, "DEMAND-1").quotes.map((y) => y.id)).not.toContain(q.id);
+    w.checkInvariants();
   });
 
   it("refuses, naming the quote, claims that do not cover the price, a claim for another window, or a claim not held -- and moves nothing", async () => {
@@ -545,14 +556,13 @@ describe("Phase 2 item 7: work claims transfer as payment, and a brief built on 
     expect(w.log.of("claim-transfer")).toHaveLength(0);
   });
 
-  it("the board shows a quote paid in claims as paid, never as in escrow", async () => {
+  it("the board shows a quote paid in claims, and that the claims are held in escrow", async () => {
     const { w, claims, q } = await demandHoldsClaimsForItsNeed("p2-claims-board");
     await w.act("DEMAND-1", { tool: "accept_quote", quote: q.id, claims }, "r");
     const line = renderBoard(boardFor(w, "DEMAND-1"))
       .split("\n")
       .find((l) => l.includes(q.id));
-    expect(line).toMatch(/accepted, paid in work claims \(0\.500 SIU, now held by RESEARCH-1\)/);
-    expect(line).not.toMatch(/in escrow/);
+    expect(line).toMatch(/accepted, paid in work claims \(0\.500 SIU, held in escrow until the brief passes\)/);
   });
 
   it("parses accept_quote's optional list of claims, and rejects one that is not a list of claim ids", () => {

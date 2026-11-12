@@ -154,7 +154,7 @@ export class ScriptedV3aAgent implements Agent {
   }
 
   #research(b: Board, v: V3aBoard): AgentReply {
-    const presentable = v.claims.find((c) => c.presentableNow && c.milli >= (v.faces[c.task as TaskId] ?? 1n));
+    const presentable = [...v.escrowedClaims, ...v.claims].find((c) => c.presentableNow && c.milli >= (v.faces[c.task as TaskId] ?? 1n));
     if (presentable !== undefined)
       return reply(`Presenting ${presentable.claim} for the brief's work.`, "present_claim", { claim: presentable.claim });
     const issuer = this.id === "RESEARCH-1" ? "ISSUER-C1" : this.id === "RESEARCH-2" ? "ISSUER-X" : "ISSUER-C2";
@@ -166,7 +166,7 @@ export class ScriptedV3aAgent implements Agent {
       const pay = payFor(b, v, cost + v.dataPriceMicroSiu * 2n);
       if (pay !== undefined && q.paidInClaims === undefined)
         return reply(`Commissioning ${missing.join(" + ")} for ${q.id}.`, "commission_task", { tasks: missing, issuer, pay });
-      if (pay !== undefined && q.paidInClaims !== undefined && !v.claims.some((c) => c.presentableNow))
+      if (pay !== undefined && q.paidInClaims !== undefined && !v.escrowedClaims.some((c) => c.quote === q.id && c.presentableNow))
         return reply(`Commissioning what the claims did not cover for ${q.id}.`, "commission_task", { tasks: missing, issuer, pay });
     }
     const idx = Number(this.id.slice(-1)) - 1;

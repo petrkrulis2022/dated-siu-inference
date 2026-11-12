@@ -535,3 +535,27 @@ describe("publishNav (found building v3a): NAV with the buffer adds the buffer's
     expect(Number(e.navWithBuffer)).toBeGreaterThan(Number(e.reserveNav) + 0.01); // a 0.5 USDC buffer is visible, not 0.001 of it
   });
 });
+
+describe("D144: PROVIDER's discount history in the claims record; holdings valued against both NAVs", () => {
+  it("shows every discount PROVIDER posted for an issuer and window, revised and withdrawn ones included", async () => {
+    const { w } = v3aWorld("v3a-discounts");
+    const post = (discountBps: bigint, replaces?: string) =>
+      w.act("PROVIDER", { tool: "post_offer", issuer: "ISSUER-X", task: "CR-UO", window: 2, milli: 200n, discountBps, accept: "both", to: "all", ...(replaces !== undefined ? { replaces } : {}) }, "r");
+    await post(1_500n);
+    await post(1_200n, w.v3a?.offers[0]?.id);
+    await w.act("PROVIDER", { tool: "withdraw_offer", offer: w.v3a?.offers[1]?.id as string }, "r");
+    const row = boardFor(w, "DEMAND-1").v3a?.record.find((r) => r.issuer === "ISSUER-X" && r.window === 2);
+    expect(row?.discounts.map((d) => [d.task, d.discountBps, d.status])).toEqual([
+      ["CR-UO", 1_500n, "replaced"],
+      ["CR-UO", 1_200n, "withdrawn"],
+    ]);
+    expect(renderBoard(boardFor(w, "DEMAND-1"))).toMatch(/ISSUER-X window 2: .*PROVIDER posted CR-UO 15% off \(replaced\), CR-UO 12% off \(withdrawn\)/);
+  });
+
+  it("logs each agent's AGU-lab at NAV and at NAV with the buffer, and both work shares", () => {
+    const { w } = v3aWorld("v3a-hold-buffer", { start: false });
+    const h = w.log.entries.find((e) => e.kind === "holdings" && e.actor === "DEMAND-1") as LogEntry;
+    expect((h.aguMicroSiuWithBuffer as bigint) > (h.aguMicroSiu as bigint)).toBe(true);
+    expect((h.workShareBpsWithBuffer as bigint) > (h.workShareBps as bigint)).toBe(true);
+  });
+});

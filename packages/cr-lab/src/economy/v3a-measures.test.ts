@@ -59,11 +59,12 @@ describe("v3a exchange: AGU-lab's share of freely chosen payments where both cur
           pay("agu", 9_999n, { payeeAcceptsBoth: false }),
         ]),
       ],
-      3,
+      2,
     );
-    expect(x.payments).toBe(3);
-    expect(x.aguShare).toBe(0.3);
-    expect(x.claimsShare).toBe(0.1);
+    // D144: a claim payment is not in the denominator (the claim's purchase was already a payment in USDC or AGU-lab); it is reported under deferred payment
+    expect(x.payments).toBe(2);
+    expect(x.aguShare).toBeCloseTo(1 / 3);
+    expect(x.claimPaymentsLeftOut).toBe(1);
     expect(x.verdict).toBe("signal");
     expect(x.excluded).toEqual({ forced: 1, scripted: 1, payerCouldNotPayBoth: 1, payeeDidNotAcceptBoth: 1 });
   });
@@ -127,6 +128,14 @@ describe("v3a account: blind coding, kappa, binding quotes", () => {
 
 describe("v3a store of value: the median work share at window 8; the kill only in low volatility", () => {
   const h = (actor: string, close: number, bps: bigint): LogEntry => e(`d${close}`, actor, { kind: "holdings", atClose: close, workShareBps: bps });
+  it("D144: reports the median against NAV with the buffer beside the reserve NAV", () => {
+    const hb = (actor: string, bps: bigint, withBuffer: bigint): LogEntry =>
+      e("d8", actor, { kind: "holdings", atClose: 8, workShareBps: bps, workShareBpsWithBuffer: withBuffer });
+    const s = scoreStoreOfValue([run("a", [genesis("low"), hb("A", 4_000n, 5_000n), hb("B", 4_400n, 5_200n), hb("C", 5_000n, 6_000n)])], 8, 3);
+    expect(s.finalMedian).toBe(0.44);
+    expect(s.withBuffer.finalMedian).toBe(0.52);
+  });
+
   it("takes the median across every agent of every run at the last close", () => {
     const s = scoreStoreOfValue([run("a", [genesis("low"), h("A", 8, 1_000n), h("B", 8, 1_200n), h("C", 8, 9_000n)])], 8, 3);
     expect(s.finalMedian).toBe(0.12);
@@ -146,6 +155,7 @@ describe("v3a deferred payment: missed worthwhile purchases", () => {
       e("d1", "DEMAND-1", { kind: "opportunity", forWindow: 3, task: "CR-SM", worthwhile: false }),
       e("d1", "DEMAND-1", { kind: "claim-mint", forWindow: 2, task: "CR-PL" }),
       e("d1", "DEMAND-1", { kind: "payment", what: "claims", currency: "agu", forWindow: 2, valueMicroSiu: 301_000n }),
+      e("d1", "DEMAND-2", { kind: "payment", what: "brief", currency: "claims", forWindow: 1, valueMicroSiu: 431_000n }),
     ];
     const d = scoreDeferredPayment([run("r", log)], 2);
     expect(d.worthwhile).toBe(2);
@@ -153,6 +163,8 @@ describe("v3a deferred payment: missed worthwhile purchases", () => {
     expect(d.missedShare).toBe(0.5);
     expect(d.verdict).toBe("signal");
     expect(d.forwardShares.agu).toBe(1);
+    // D144: claims paid for briefs are reported here, never in the exchange measure
+    expect(d.claimTransfers).toEqual({ count: 1, valueMicroSiu: 431_000n });
     expect(scoreDeferredPayment([run("r", log)], 20).verdict).toBe("n/a");
   });
 });
@@ -215,7 +227,14 @@ describe("v3a validity gates and a full scripted run, scored end to end", () => 
     const stale = log.map((x, i) => (i === later ? { ...x, boardQuotes: [paid?.brief] } : x));
     expect(checkGates(stale, params)[2]?.ok).toBe(false);
     // the seed: a counted cell whose hash is not the frozen one
-    expect(checkGates(log, params, { cell: "A-low-1" })[3]?.ok).toBe(false);
+    expect(checkGates(log, params, { cell: "A-low-1" }).find((g) => g.name.startsWith("the run's seed"))?.ok).toBe(false);
+    // D144: the buffer must not run dry before the end of window 8 -- a roll that could not restore the face, or a NAV published with the buffer at zero
+    const buffer = (g: ReturnType<typeof checkGates>) => g.find((x) => x.name.startsWith("the buffer"));
+    expect(buffer(gates)?.ok).toBe(true);
+    const dry = log.map((x) => (x.kind === "nav" && x.window === log.find((y) => y.kind === "price" && y.atWindow === 6)?.window ? { ...x, bufferUsdc: 0n } : x));
+    expect(buffer(checkGates(dry, params))?.ok).toBe(false);
+    const short = log.map((x) => (x.kind === "roll-buy" && x.summary === true && x.refused === undefined ? { ...x, faceBought: 0n } : x));
+    expect(buffer(checkGates(short, params))?.ok).toBe(false);
   }, 60_000);
 
   it("scores both arms of scripted runs end to end and renders the report", async () => {

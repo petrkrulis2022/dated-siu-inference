@@ -85,6 +85,23 @@ export function checkGates(log: readonly LogEntry[], params: EconomyParams, opts
     detail: `${stale.length} stale quote(s)${stale.length > 0 ? ` (${stale.slice(0, 3).join("; ")})` : ""}; ${unnamed.length} refusal(s) without a named subject or reason${unnamed.length > 0 ? ` (${unnamed.slice(0, 3).map((e) => `seq ${e.seq} ${String(e.tool)}`).join("; ")})` : ""}`,
   });
 
+  // D144: the buffer must not run dry before the end of window 8 -- every roll restores the face it retires, and no NAV is published with the buffer at zero
+  const rolls = log.filter((e) => e.kind === "roll-buy" && e.summary === true);
+  const shortRolls = rolls.filter(
+    (e) => e.refused !== undefined || (asBigInt(e.faceBought) ?? 0n) < (asBigInt(e.faceSold) ?? 0n) + (asBigInt(e.faceUnsold) ?? 0n),
+  );
+  const navs = log.filter((e) => e.kind === "nav");
+  const empty = navs.filter((e) => (asBigInt(e.bufferUsdc) ?? 0n) === 0n);
+  const lowest = navs.reduce<bigint | undefined>((m, e) => {
+    const b = asBigInt(e.bufferUsdc) ?? 0n;
+    return m === undefined || b < m ? b : m;
+  }, undefined);
+  gates.push({
+    name: "the buffer lasts the run: every roll restores the face it retires, and the buffer never reaches zero before the end of window 8",
+    ok: rolls.length > 0 && shortRolls.length === 0 && empty.length === 0,
+    detail: `${rolls.length} rolls, ${shortRolls.length} short of the face${shortRolls.length > 0 ? ` (first on ${shortRolls[0]?.window})` : ""}; buffer at its lowest ${lowest ?? "?"} µ$${empty.length > 0 ? `, empty from ${empty[0]?.window}` : ""}`,
+  });
+
   // seed from the log
   const meta = runMeta(log);
   const frozen = opts.cell === undefined ? undefined : v.printPath.seedHashes[opts.cell];

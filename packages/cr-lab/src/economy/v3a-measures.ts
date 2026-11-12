@@ -67,36 +67,37 @@ function median(xs: readonly number[]): number | null {
 // ---- exchange --------------------------------------------------------------------------------------------------------------------------------------
 export interface Exchange {
   payments: number;
-  byCurrencyMicroSiu: { agu: bigint; usdc: bigint; claims: bigint };
+  byCurrencyMicroSiu: { agu: bigint; usdc: bigint };
   aguShare: number | null;
-  claimsShare: number | null;
+  /** D144: briefs paid in work claims, left out of the denominator (the claims' purchase was already counted as a payment in USDC or AGU-lab); reported under deferred payment */
+  claimPaymentsLeftOut: number;
   excluded: { forced: number; scripted: number; payerCouldNotPayBoth: number; payeeDidNotAcceptBoth: number };
   verdict: Verdict;
 }
 export function scoreExchange(runs: readonly V3aRunLog[], min: number): Exchange {
-  const by = { agu: 0n, usdc: 0n, claims: 0n };
+  const by = { agu: 0n, usdc: 0n };
   const excluded = { forced: 0, scripted: 0, payerCouldNotPayBoth: 0, payeeDidNotAcceptBoth: 0 };
   let n = 0;
+  let claimPayments = 0;
   for (const r of runs)
     for (const e of r.log) {
       if (e.kind !== "payment") continue;
-      if (e.forced === true) excluded.forced++;
+      if (e.currency === "claims") claimPayments++;
+      else if (e.forced === true) excluded.forced++;
       else if (e.scripted === true) excluded.scripted++;
       else if (e.couldPayBoth !== true) excluded.payerCouldNotPayBoth++;
       else if (e.payeeAcceptsBoth !== true) excluded.payeeDidNotAcceptBoth++;
       else {
         n++;
-        const c = e.currency as "agu" | "usdc" | "claims";
-        by[c] += big(e.valueMicroSiu);
+        by[e.currency as "agu" | "usdc"] += big(e.valueMicroSiu);
       }
     }
-  const total = by.agu + by.usdc + by.claims;
-  const aguShare = share(by.agu, total);
+  const aguShare = share(by.agu, by.agu + by.usdc);
   return {
     payments: n,
     byCurrencyMicroSiu: by,
     aguShare,
-    claimsShare: share(by.claims, total),
+    claimPaymentsLeftOut: claimPayments,
     excluded,
     verdict: n < min || aguShare === null ? "n/a" : aguShare >= 0.3 ? "signal" : aguShare < 0.1 ? "kill" : "neither",
   };
@@ -165,14 +166,19 @@ export interface StoreOfValue {
   /** the kill is judged in the low-volatility runs only */
   lowVolFinalMedian: number | null;
   lowVolFinalN: number;
+  /**
+   * D144: the same shares with AGU-lab valued at NAV WITH the buffer, reported beside the verdict. The verdict uses the reserve NAV every price, creation and redemption
+   * uses; the buffer pays the roll's cost of unsold front work, so NAV with the buffer is where that carrying cost shows as it drains.
+   */
+  withBuffer: { medianByClose: { close: number; median: number | null; n: number }[]; finalMedian: number | null; lowVolFinalMedian: number | null };
   verdict: Verdict;
 }
 export function scoreStoreOfValue(runs: readonly V3aRunLog[], finalClose: number, min: number): StoreOfValue {
-  const at = (close: number, rs: readonly V3aRunLog[]): number[] =>
+  const at = (close: number, rs: readonly V3aRunLog[], field = "workShareBps"): number[] =>
     rs.flatMap((r) =>
       r.log
-        .filter((e) => e.kind === "holdings" && e.atClose === close && e.workShareBps !== null)
-        .map((e) => Number(big(e.workShareBps)) / 10_000),
+        .filter((e) => e.kind === "holdings" && e.atClose === close && e[field] !== null && e[field] !== undefined)
+        .map((e) => Number(big(e[field])) / 10_000),
     );
   const medianByClose = Array.from({ length: finalClose + 1 }, (_, close) => {
     const xs = at(close, runs);
@@ -186,7 +192,17 @@ export function scoreStoreOfValue(runs: readonly V3aRunLog[], finalClose: number
   const finalMedian = median(final);
   const lowMedian = median(low);
   const kill = low.length >= min && lowMedian !== null && lowMedian < 0.15;
+  const lowRuns = runs.filter((r) => runMeta(r.log)?.volatility === "low");
+  const withBuffer = {
+    medianByClose: Array.from({ length: finalClose + 1 }, (_, close) => {
+      const xs = at(close, runs, "workShareBpsWithBuffer");
+      return { close, median: median(xs), n: xs.length };
+    }),
+    finalMedian: median(at(finalClose, runs, "workShareBpsWithBuffer")),
+    lowVolFinalMedian: median(at(finalClose, lowRuns, "workShareBpsWithBuffer")),
+  };
   return {
+    withBuffer,
     medianByClose,
     finalMedian,
     finalN: final.length,
@@ -199,6 +215,8 @@ export function scoreStoreOfValue(runs: readonly V3aRunLog[], finalClose: number
 // ---- deferred payment ------------------------------------------------------------------------------------------------------------------------------
 export interface DeferredPayment {
   forwardByCurrencyMicroSiu: { agu: bigint; usdc: bigint; claims: bigint };
+  /** D144: briefs paid in work claims (the claims were bought earlier, a payment already counted in its own currency): reported here, never in exchange */
+  claimTransfers: { count: number; valueMicroSiu: bigint };
   forwardShares: { agu: number | null; usdc: number | null };
   worthwhile: number;
   missed: number;
@@ -207,12 +225,18 @@ export interface DeferredPayment {
 }
 export function scoreDeferredPayment(runs: readonly V3aRunLog[], min: number): DeferredPayment {
   const fwd = { agu: 0n, usdc: 0n, claims: 0n };
+  const claimTransfers = { count: 0, valueMicroSiu: 0n };
   let worthwhile = 0;
   let missed = 0;
   for (const r of runs) {
     const win = engineWindows(r.log);
     for (const e of r.log)
       if (e.kind === "payment" && e.forced !== true && e.scripted !== true) {
+        if (e.currency === "claims") {
+          claimTransfers.count++;
+          claimTransfers.valueMicroSiu += big(e.valueMicroSiu);
+          continue;
+        }
         const now = win.get(e.window) ?? 0;
         const forward = e.what === "front claims" || (e.what === "claims" && Number(e.forWindow) > now);
         if (forward) fwd[e.currency as "agu" | "usdc" | "claims"] += big(e.valueMicroSiu);
@@ -243,6 +267,7 @@ export function scoreDeferredPayment(runs: readonly V3aRunLog[], min: number): D
   const total = fwd.agu + fwd.usdc;
   return {
     forwardByCurrencyMicroSiu: fwd,
+    claimTransfers,
     forwardShares: { agu: share(fwd.agu, total), usdc: share(fwd.usdc, total) },
     worthwhile,
     missed,
@@ -441,7 +466,7 @@ export function renderArmScore(s: ArmScore): string {
   const L: string[] = [`## Arm ${s.arm} (${s.runs.length} run${s.runs.length === 1 ? "" : "s"}: ${s.runs.join(", ")})`, ""];
   const x = s.exchange;
   L.push(
-    `- **Exchange** — ${x.verdict}: AGU-lab ${pct(x.aguShare)} of ${x.payments} eligible payments by value (AGU-lab ${msiu(x.byCurrencyMicroSiu.agu)}, USDC ${msiu(x.byCurrencyMicroSiu.usdc)}, work claims ${msiu(x.byCurrencyMicroSiu.claims)}, so claims ${pct(x.claimsShare)}); left out: ${x.excluded.forced} forced, ${x.excluded.scripted} code, ${x.excluded.payerCouldNotPayBoth} where the payer could not pay in both, ${x.excluded.payeeDidNotAcceptBoth} where the payee did not accept both.`,
+    `- **Exchange** — ${x.verdict}: AGU-lab ${pct(x.aguShare)} of ${x.payments} eligible payments by value (AGU-lab ${msiu(x.byCurrencyMicroSiu.agu)}, USDC ${msiu(x.byCurrencyMicroSiu.usdc)}); left out: ${x.excluded.forced} forced, ${x.excluded.scripted} code, ${x.excluded.payerCouldNotPayBoth} where the payer could not pay in both, ${x.excluded.payeeDidNotAcceptBoth} where the payee did not accept both, and ${x.claimPaymentsLeftOut} briefs paid in work claims (reported under deferred payment).`,
   );
   const a = s.account;
   L.push(
@@ -449,11 +474,11 @@ export function renderArmScore(s: ArmScore): string {
   );
   const sv = s.storeOfValue;
   L.push(
-    `- **Store of value** — ${sv.verdict}: median work share at window 8 ${pct(sv.finalMedian)} (${sv.finalN} agents); in the low-volatility runs ${pct(sv.lowVolFinalMedian)} (${sv.lowVolFinalN}); by close: ${sv.medianByClose.map((c) => `w${c.close} ${pct(c.median)}`).join(", ")}.`,
+    `- **Store of value** — ${sv.verdict}: median work share at window 8 ${pct(sv.finalMedian)} (${sv.finalN} agents); in the low-volatility runs ${pct(sv.lowVolFinalMedian)} (${sv.lowVolFinalN}); by close: ${sv.medianByClose.map((c) => `w${c.close} ${pct(c.median)}`).join(", ")}. Against NAV with the buffer: ${pct(sv.withBuffer.finalMedian)} at window 8 (low volatility ${pct(sv.withBuffer.lowVolFinalMedian)}); by close: ${sv.withBuffer.medianByClose.map((c) => `w${c.close} ${pct(c.median)}`).join(", ")}.`,
   );
   const d = s.deferredPayment;
   L.push(
-    `- **Deferred payment** — ${d.verdict}: missed ${d.missed} of ${d.worthwhile} worthwhile purchases (${pct(d.missedShare)}); forward commitments by value: AGU-lab ${pct(d.forwardShares.agu)}, USDC ${pct(d.forwardShares.usdc)} (and ${msiu(d.forwardByCurrencyMicroSiu.claims)} in claims).`,
+    `- **Deferred payment** — ${d.verdict}: missed ${d.missed} of ${d.worthwhile} worthwhile purchases (${pct(d.missedShare)}); forward commitments by value: AGU-lab ${pct(d.forwardShares.agu)}, USDC ${pct(d.forwardShares.usdc)}; briefs paid in work claims: ${d.claimTransfers.count} (${msiu(d.claimTransfers.valueMicroSiu)}).`,
   );
   const c = s.comparability;
   L.push(
