@@ -490,3 +490,62 @@ describe("the roll's rules match AguLab's (found by the DW1 replay on anvil, 202
     expect(c.probeOpen.has("C1")).toBe(false);
   });
 });
+
+describe("v3a: pooled direct mint (D145, v6) -- the roll places a lot across issuers with headroom when none can take it whole", () => {
+  /** a chain whose C1 and C2 CR-PL lots have the given limits (limit = hours × rate × 0.5), with or without pooled direct mint */
+  function chainWith(c1Limit: bigint, c2Limit: bigint, pooledMint: boolean): MemoryChain {
+    const p = new MemoryChain({ ...PARAMS, ...(pooledMint ? { pooledMint } : {}) }, "agu-issuer", () => now);
+    p.mintTestUsdc("C1", 50_000_000n);
+    p.mintTestUsdc("C2", 50_000_000n);
+    p.mintTestUsdc(PARTICIPANT, 20_000_000n);
+    p.createLot("C1", "CR-PL", 1n, c1Limit * 2n, 10_000_000n);
+    p.createLot("C2", "CR-PL", 1n, c2Limit * 2n, 10_000_000n);
+    p.seedBuffer("C2", 1_000_000n);
+    return p;
+  }
+  /** the participant creates a window-1 front lot of `milli` (routed first-fit: C1) */
+  function front(p: MemoryChain, milli: bigint): string {
+    const id = p.mint(PARTICIPANT, "CR-PL", "commodity", milli, w(1).from, w(1).to, RATE);
+    p.create(PARTICIPANT, id, milli);
+    return id;
+  }
+  const rollOn = (p: MemoryChain, lot: string, milli: bigint) => {
+    now = w(1).from + 60;
+    return p.roll("agu-issuer", { rate: RATE, frontLots: [lot], sales: [], buys: [{ classId: "CR-PL", milli }], buyFrom: w(2).from, buyTo: w(2).to });
+  };
+
+  it("splits the lot across the issuers in router order when no single issuer has room for it whole", () => {
+    const p = chainWith(2_000n, 1_000n, true);
+    const lot = front(p, 1_500n); // C1 has 500 left, C2 1,000: neither takes 1,500 whole, together they do
+    const r = rollOn(p, lot, 1_500n);
+    expect(r.minted.map((m) => [m.issuer, m.milli])).toEqual([
+      ["C1", 500n],
+      ["C2", 1_000n],
+    ]);
+    expect(r.faceBought).toBe(1_500n);
+    expect(p.liveFace()).toBe(1_500n);
+    expect([p.headroom("C1", "CR-PL"), p.headroom("C2", "CR-PL")]).toEqual([0n, 0n]);
+    // the peak of live issuance in the class: the front lot stays live until its window closes, so 1,500 + 1,500
+    expect(p.peakIssued.get("CR-PL")).toBe(3_000n);
+  });
+
+  it("places the lot whole with the router's issuer when one can take it, exactly as before", () => {
+    const p = chainWith(2_000n, 2_000n, true);
+    const lot = front(p, 1_500n);
+    expect(rollOn(p, lot, 1_500n).minted.map((m) => [m.issuer, m.milli])).toEqual([["C2", 1_500n]]);
+  });
+
+  it("refuses with nothing moved when even the issuers' total headroom is short: v6's issuance limit binds", () => {
+    const p = chainWith(2_000n, 900n, true);
+    const lot = front(p, 1_500n);
+    expect(() => rollOn(p, lot, 1_500n)).toThrow(/NoTotalHeadroom\(CR-PL, 1500, 1400\)/);
+    expect(p.liveFace()).toBe(1_500n);
+    expect(p.retired.has(lot)).toBe(false);
+  });
+
+  it("is off unless asked for: without it the roll still needs one issuer with room for the whole lot, as the deployed router does", () => {
+    const p = chainWith(2_000n, 1_000n, false);
+    const lot = front(p, 1_500n);
+    expect(() => rollOn(p, lot, 1_500n)).toThrow(/NoIssuerWithHeadroom\(CR-PL, 1500\)/);
+  });
+});

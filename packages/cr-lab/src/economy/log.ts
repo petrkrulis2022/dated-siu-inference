@@ -54,6 +54,8 @@ export const LOG_KINDS = [
   "board",
   "price",
   "provider-profit",
+  // D145: v6's issuance limit bound -- a roll or a creation could not place what it wanted for lack of the issuers' total headroom (a validity gate)
+  "issuance-limit",
 ] as const;
 export type LogKind = (typeof LOG_KINDS)[number];
 

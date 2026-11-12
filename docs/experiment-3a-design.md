@@ -102,7 +102,7 @@ Issuers are code: each commissioned task passes or fails by a seeded draw from t
 | ISSUER-F | claude-sonnet-5 | All four, including CR-VS | Trial, per task type |
 
 - **Pass-rate table:** exported from the trial ledger in `dsi-cr-trial` at freeze, with counts per model and task type, and hashed with the config.
-- **Prices in SIU** come from the class prints, as in v2. Issuers accept payment in either currency.
+- **Prices in SIU** come from the class prints, as in v2. Issuers accept payment in either currency. The roll places each lot through pooled direct mint, split across every issuer with headroom (v6). Issuers' measured capacity is sized to cover the largest reserve any v3a run reaches, with a 2× margin; v6's issuance limit stays in code.
 - **Data price is proportionate.** In v2 a day's dataset cost $0.001 against $0.0002 of tasks, so data dominated research costs and was paid in USDC. In v3a a dataset costs about one task's value, payable in either currency.
 - **Real data comes later, with executed tasks.** Real versus stand-in data can only change behaviour if agents' outputs depend on it. That needs executed tasks, which is a separate run once v3a has a clean result.
 
@@ -145,7 +145,7 @@ Each function of money gets its own share-based measure, scored per currency and
 A counted run is scored only if it passes every gate below; a failed run is reported as invalid with its reason, never rerun quietly.
 
 - **Lost turns (parse or service failures):** 1% or fewer.
-- **Starting balances:** every role holds both currencies at equal value, checked from the genesis log entry. AGU-lab's buffer must also last to the end of window 8.
+- **Starting balances:** every role holds both currencies at equal value, checked from the genesis log entry. AGU-lab's buffer must also last to the end of window 8, and v6's issuance limit must never bind: a creation or roll refused for lack of total headroom makes the run invalid.
 - **Board integrity:** no paid or refunded quote appears as open; every refusal carries its reason.
 - **Scorer reads the seed from the log,** never from the config default (the D133 lesson).
 - **Enough data:** each measure states its own minimum count; below it, that measure reports n/a.
@@ -184,4 +184,4 @@ If you do want STU itself to become a token, that is a board decision that chang
 | 7 | v3b's third currency | CAP-lab, measured in STU; STU itself stays a unit |
 | 8 | Cause of the 400 errors in window 7 | Claude Code finds it before any fix is built |
 
-Phase 3 decisions, also approved 11 Nov 2026: PROVIDER sells through standing offers; sweeps are a fixed dollar demand; arm B's rule is stated, checked and scored, never enforced; ISSUER-X uses D119's 80% floor and lists 15% below C1/C2; the DATA seller is the seventh scripted actor. Phase 3 report decisions (D144): the buffer is 1.5 USDC with its own validity gate; failed work stays refunded; claims paid for briefs go into escrow; claim transfers are excluded from the exchange denominator; the participant swap is dropped; PROVIDER's discount history is shown; low volatility is 0.6549% a day; the spend cap of $2 a window is an API-cost safety stop, not an agent limit; the board shows the buffer's draw and a shadow NAV, never a NAV that includes the buffer.
+Phase 3 decisions, also approved 11 Nov 2026: PROVIDER sells through standing offers; sweeps are a fixed dollar demand; arm B's rule is stated, checked and scored, never enforced; ISSUER-X uses D119's 80% floor and lists 15% below C1/C2; the DATA seller is the seventh scripted actor. Phase 3 report decisions (D144): the buffer is 1.5 USDC with its own validity gate; failed work stays refunded; claims paid for briefs go into escrow; claim transfers are excluded from the exchange denominator; the participant swap is dropped; PROVIDER's discount history is shown; low volatility is 0.6549% a day; the spend cap of $2 a window is an API-cost safety stop, not an agent limit; the board shows the buffer's draw and a shadow NAV, never a NAV that includes the buffer. D145: the roll uses pooled direct mint across issuers with headroom; capacity covers the largest reserve reached, with a 2× margin; a binding issuance limit makes a run invalid; sweeps sell AGU-lab first, then live claims, soonest-expiring first.

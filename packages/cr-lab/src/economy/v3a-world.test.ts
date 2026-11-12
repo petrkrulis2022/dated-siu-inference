@@ -12,6 +12,7 @@ import { ScriptedV3aAgent } from "./agents-v3a.js";
 import { boardFor, renderBoard } from "./board.js";
 import { EconomyLog, type LogEntry } from "./log.js";
 import { PARTICIPANT } from "./memory-chain.js";
+import { checkGates } from "./v3a-gates.js";
 import { instructionsForV3a } from "./model-agent.js";
 import { loadParams, type EconomyParams, type IssuerParams } from "./params.js";
 import { parseToolCall, toolDefsForRole } from "./parse.js";
@@ -93,7 +94,8 @@ describe("v3a: a full scripted run (8 windows, arm B, stand-in issuers at the co
   }
 
   it("runs every window with every invariant holding, and exercises every v3a path", async () => {
-    const { log } = await run("v3a-full");
+    // D145: the scripted agents size offers by issuer headroom, so the capacity change moved their paths; the old seed no longer paid a brief in claims, this one does
+    const { log } = await run("v3a-full-3");
     const of = (k: string) => log.filter((e) => e.kind === k);
     const turns = of("turn").filter((e) => e.parsed === true);
     expect(of("turn").filter((e) => e.parsed === false)).toEqual([]); // every scripted reply parses under the v3a tools
@@ -607,6 +609,69 @@ describe("v3a sweeps convert claims too when USDC and AGU-lab fall short (the de
     expect(w.log.entries.some((e) => e.kind === "payment" && e.actor === "DEMAND-2" && e.what === "sweep conversion" && e.currency === "claims" && e.forced === true)).toBe(true);
     // the rule is on the agent's board
     expect(renderBoard(boardFor(w, "DEMAND-2"))).toMatch(/your work claims too, soonest-expiring first, at the same bid/);
+    w.checkInvariants();
+  });
+});
+
+describe("D145 (owner, 2026-11-12): pooled direct mint, capacity sized for the largest reserve, and v6's issuance limit as a validity gate", () => {
+  const RESERVE_ISSUERS = ["ISSUER-C1", "ISSUER-C2", "ISSUER-X"];
+  /** the CR-PL face the window-k roll retires and must place again */
+  const frontPl = (w: World, k: number): bigint =>
+    w.chain.reserveLots
+      .filter((id) => w.chain.claimTypes.get(id)?.classId === "CR-PL" && w.chain.claimTypes.get(id)?.windowFrom === w.windowFrom(k))
+      .reduce((n, id) => n + w.chain.claimBalance("reserve", id), 0n);
+  /** consume each reserve issuer's CR-PL headroom down to `left`, with a live claim held outside the reserve (after a close: expiries at a close free headroom) */
+  function leaveHeadroom(w: World, left: bigint): void {
+    for (const id of RESERVE_ISSUERS) {
+      const h = w.chain.headroom(id, "CR-PL");
+      if (h > left)
+        w.chain.mint("OWNER-X", "CR-PL", "commodity", h - left, w.windowFrom(6), w.windowTo(6), w.commodityRate, { issuer: id, prepaid: true, tag: "fill" });
+    }
+  }
+
+  it("bonds each reserve-grade issuer's lots at the configured committed capacity hours (v6: capacity = hours × measured rate); the Frontier issuer's stay at one", () => {
+    const { w } = v3aWorld("v3a-capacity");
+    const hours = w.params.v3a?.capacityHours as bigint;
+    expect(hours > 1n).toBe(true);
+    for (const id of RESERVE_ISSUERS) for (const c of ["CR-PL", "CR-UO", "CR-SM"]) expect(w.chain.bondLots.get(`${id}|${c}`)?.committedCapacityHours).toBe(hours);
+    expect(w.chain.bondLots.get("ISSUER-F|CR-VS")?.committedCapacityHours).toBe(1n);
+    // the NAV log carries each reserve class's live issuance, its peak so far, and the issuers' total limit
+    const nav = w.log.entries.filter((e) => e.kind === "nav").at(-1) as LogEntry;
+    const pl = (nav.issuance as Record<string, { issued: bigint; peak: bigint; limit: bigint }>)["CR-PL"];
+    expect(pl?.limit).toBe(RESERVE_ISSUERS.reduce((n, id) => n + w.chain.headroom(id, "CR-PL"), 0n) + (pl?.issued ?? 0n));
+    expect((pl?.peak as bigint) >= (pl?.issued as bigint)).toBe(true);
+  });
+
+  it("splits the roll's lot across issuers when none can take it whole; the ladder creation after it finds too little left and logs the limit binding", () => {
+    const { w, needsFor } = v3aWorld("v3a-pooled");
+    w.closeWindow(1);
+    const lot = frontPl(w, 2);
+    const left = (lot * 2n) / 5n + 1n; // C1 and C2 each hold a little over two fifths of the lot, X the rest: none can take it whole, together they can
+    leaveHeadroom(w, left);
+    w.startWindow(2, needsFor);
+    const lots = w.log.entries.filter((e) => e.kind === "roll-buy" && e.summary !== true && e.task === "CR-PL" && e.window === w.log.entries.at(-1)?.window);
+    expect(lots.map((e) => [e.issuer, e.milli])).toEqual([
+      ["ISSUER-C1", left],
+      ["ISSUER-C2", left],
+      ["ISSUER-X", lot - 2n * left],
+    ]);
+    // the ladder creation after the roll wants a window's 1,000 mSIU of CR-PL and finds only X's remainder
+    const bound = w.log.entries.filter((e) => e.kind === "issuance-limit");
+    expect(bound.map((e) => [e.what, e.task, e.wanted, e.placed])).toEqual([["ladder creation", "CR-PL", 1_000n, 3n * left - lot]]);
+    expect(checkGates(w.log.entries, w.params).find((g) => g.name.startsWith("v6's issuance limit"))?.ok).toBe(false);
+    w.checkInvariants();
+  });
+
+  it("logs the limit binding when even the issuers' total headroom cannot take the roll's lot, and the run fails the gate", () => {
+    const { w, needsFor } = v3aWorld("v3a-bound");
+    w.closeWindow(1);
+    const lot = frontPl(w, 2);
+    const left = (lot * 3n) / 10n; // three issuers with three tenths each: nine tenths of the lot in all
+    leaveHeadroom(w, left);
+    w.startWindow(2, needsFor);
+    const roll = w.log.entries.find((e) => e.kind === "issuance-limit" && e.what === "roll") as LogEntry;
+    expect(String(roll.refused)).toBe(`NoTotalHeadroom(CR-PL, ${lot}, ${3n * left})`);
+    expect(checkGates(w.log.entries, w.params).find((g) => g.name.startsWith("v6's issuance limit"))?.ok).toBe(false);
     w.checkInvariants();
   });
 });

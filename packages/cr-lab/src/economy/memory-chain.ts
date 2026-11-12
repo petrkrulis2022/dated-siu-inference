@@ -85,6 +85,11 @@ export interface AguParams {
   discountBps: bigint;
   /** the buffer's target, test USDC base units */
   bufferTarget: UsdcUnits;
+  /**
+   * v3a (D145, v6's pooled direct mint): the roll places each lot whole with the issuer the router picks, as `EligibleClaimRouter` does, and when no single issuer can
+   * take it whole, splits it across the eligible issuers with headroom, in router order. Off (absent) for v1/v2, so their journals still match the deployed contracts.
+   */
+  pooledMint?: boolean;
 }
 
 export interface Sale {
@@ -141,6 +146,7 @@ export const MUTATING = [
 export type Mutating = (typeof MUTATING)[number];
 
 interface Saved {
+  peakIssued: Map<string, MilliSiu>;
   usdc: Map<Account, UsdcUnits>;
   agu: Map<Account, AguUnits>;
   claims: Map<string, Map<Account, MilliSiu>>;
@@ -172,6 +178,8 @@ export class MemoryChain {
   readonly everPresented = new Set<string>();
   readonly settledPositions = new Set<string>();
   readonly bondLots = new Map<string, BondLot>();
+  /** v3a (D145): the highest live issuance each class has reached, for sizing capacity and reporting how close the limit came; a read model, nothing routes on it */
+  readonly peakIssued = new Map<string, MilliSiu>();
   /** registration order per class, as `CapacityBond.issuersForClass` keeps it (append-only) */
   readonly issuersForClass = new Map<string, Account[]>();
   readonly skipped = new Set<Account>();
@@ -219,6 +227,7 @@ export class MemoryChain {
 
   #save(): Saved {
     return structuredClone({
+      peakIssued: this.peakIssued,
       usdc: this.usdc,
       agu: this.agu,
       claims: this.claims,
@@ -246,6 +255,7 @@ export class MemoryChain {
       target.clear();
       for (const v of from) target.add(v);
     };
+    refill(this.peakIssued, s.peakIssued);
     refill(this.usdc, s.usdc);
     refill(this.agu, s.agu);
     refill(this.claims, s.claims);
@@ -333,6 +343,38 @@ export class MemoryChain {
     const limit =
       (lot.committedCapacityHours * lot.measuredRateMilliSiuPerHour * ISSUANCE_RATIO_BPS) / BPS;
     return limit > lot.outstanding ? limit - lot.outstanding : 0n;
+  }
+  /** live issuance in a class: every issuer's outstanding claims of it */
+  issued(classId: string): MilliSiu {
+    return (this.issuersForClass.get(classId) ?? []).reduce((n, i) => n + (this.bondLots.get(`${i}|${classId}`)?.outstanding ?? 0n), 0n);
+  }
+  /** v6's issuance limit in a class: every issuer's limit (committed hours × measured rate × the issuance ratio), skipped ones included */
+  issuanceLimit(classId: string): MilliSiu {
+    return (this.issuersForClass.get(classId) ?? []).reduce((n, i) => n + this.headroom(i, classId) + (this.bondLots.get(`${i}|${classId}`)?.outstanding ?? 0n), 0n);
+  }
+  /**
+   * v3a (D145): where a roll's lot goes under pooled direct mint -- whole to the issuer `route` would pick when one can take it, else split across the issuers not
+   * skipped, in registration order, each taking what its headroom allows. Refuses when even their total is short: v6's issuance limit binds.
+   */
+  #placePooled(classId: string, milli: MilliSiu): { issuer: Account; milli: MilliSiu }[] {
+    const candidates = this.issuersForClass.get(classId) ?? [];
+    const whole =
+      candidates.find((i) => this.probeOpen.has(i) && this.headroom(i, classId) >= milli) ??
+      candidates.find((i) => !this.skipped.has(i) && this.headroom(i, classId) >= milli);
+    if (whole !== undefined) return [{ issuer: whole, milli }];
+    const parts: { issuer: Account; milli: MilliSiu }[] = [];
+    let left = milli;
+    for (const i of candidates) {
+      if (left === 0n) break;
+      if (this.skipped.has(i)) continue;
+      const h = this.headroom(i, classId);
+      if (h === 0n) continue;
+      const take = h < left ? h : left;
+      parts.push({ issuer: i, milli: take });
+      left -= take;
+    }
+    if (left > 0n) return refuse(`NoTotalHeadroom(${classId}, ${milli}, ${milli - left})`);
+    return parts;
   }
   /** `EligibleClaimRouter.route`: an open probe first, then first-fit in registration order among issuers not skipped */
   route(classId: string, milli: MilliSiu): Account {
@@ -423,6 +465,8 @@ export class MemoryChain {
       });
     const lot = this.bondLots.get(`${issuer}|${classId}`) as BondLot;
     lot.outstanding += milli;
+    const live = this.issued(classId);
+    if (live > (this.peakIssued.get(classId) ?? 0n)) this.peakIssued.set(classId, live);
     this.#moveClaim(tokenId, undefined, buyer, milli);
     if (opts.prepaid !== true) {
       const pay = usdcFor(milli, rate);
@@ -698,23 +742,28 @@ export class MemoryChain {
       // _buyNext
       const minted: RollResult["minted"] = [];
       for (const b of args.buys) {
-        const id = this.mint(
-          RESERVE,
-          b.classId,
-          this.agu_.reserveSeries,
-          b.milli,
-          args.buyFrom,
-          args.buyTo,
-          args.rate,
-        );
-        if (this.retired.has(id)) refuse(`LotRetired: ${id}`);
-        if (!this.reserveLots.includes(id)) this.reserveLots.push(id);
-        minted.push({
-          tokenId: id,
-          issuer: (this.claimTypes.get(id) as ClaimType).issuer,
-          classId: b.classId,
-          milli: b.milli,
-        });
+        // v3a (D145): pooled direct mint places the lot across issuers when none can take it whole; otherwise one routed mint, as AguLab does
+        const parts = this.agu_.pooledMint === true ? this.#placePooled(b.classId, b.milli) : [{ issuer: undefined, milli: b.milli }];
+        for (const part of parts) {
+          const id = this.mint(
+            RESERVE,
+            b.classId,
+            this.agu_.reserveSeries,
+            part.milli,
+            args.buyFrom,
+            args.buyTo,
+            args.rate,
+            part.issuer === undefined ? {} : { issuer: part.issuer },
+          );
+          if (this.retired.has(id)) refuse(`LotRetired: ${id}`);
+          if (!this.reserveLots.includes(id)) this.reserveLots.push(id);
+          minted.push({
+            tokenId: id,
+            issuer: (this.claimTypes.get(id) as ClaimType).issuer,
+            classId: b.classId,
+            milli: part.milli,
+          });
+        }
       }
       // _sendLeftover: carry (full face) tops the buffer up to its target and the rest goes to income; after an underbuy every remainder goes to the buffer
       const left = this.balance(RESERVE, "USDC");

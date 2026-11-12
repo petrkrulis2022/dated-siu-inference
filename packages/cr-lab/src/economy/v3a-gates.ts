@@ -6,6 +6,8 @@
  *  - Starting balances: every role holds both currencies at equal value, checked from the genesis holdings.
  *  - Board integrity: no paid or refunded quote appears as open on any board (checked against the log's own settlements, not the board's filter), and every refusal
  *    carries its reason (a refusal on a quote, need, offer or request names it first).
+ *  - The buffer lasts the run (D144): every roll restores the face it retires, and the buffer never reaches zero before the end of window 8.
+ *  - v6's issuance limit never binds (D145): no roll or creation is refused for lack of the issuers' total headroom; binding would mean capacity was sized wrong.
  *  - The scorer reads the seed from the log, never from the config default (D133); for a counted cell, the log's price-path seed hash must be the one frozen in the config.
  *  - Enough data is each measure's own rule (`v3a-measures.ts`): below its minimum count a measure reports n/a; that is not a gate on the run.
  */
@@ -100,6 +102,26 @@ export function checkGates(log: readonly LogEntry[], params: EconomyParams, opts
     name: "the buffer lasts the run: every roll restores the face it retires, and the buffer never reaches zero before the end of window 8",
     ok: rolls.length > 0 && shortRolls.length === 0 && empty.length === 0,
     detail: `${rolls.length} rolls, ${shortRolls.length} short of the face${shortRolls.length > 0 ? ` (first on ${shortRolls[0]?.window})` : ""}; buffer at its lowest ${lowest ?? "?"} µ$${empty.length > 0 ? `, empty from ${empty[0]?.window}` : ""}`,
+  });
+
+  // D145: v6's issuance limit stays in code and must never bind -- a roll or a creation refused for lack of the issuers' total headroom makes the run invalid
+  const bound = log.filter(
+    (e) => e.kind === "issuance-limit" || (e.kind === "roll-buy" && e.summary === true && typeof e.refused === "string" && /Headroom/.test(e.refused)),
+  );
+  let closest: { task: string; peak: bigint; limit: bigint } | undefined;
+  for (const e of log)
+    if (e.kind === "nav" && e.issuance !== undefined && e.issuance !== null)
+      for (const [task, x] of Object.entries(e.issuance as Record<string, { peak: unknown; limit: unknown }>)) {
+        const peak = asBigInt(x.peak) ?? 0n;
+        const limit = asBigInt(x.limit) ?? 0n;
+        if (limit > 0n && (closest === undefined || peak * closest.limit > closest.peak * limit)) closest = { task, peak, limit };
+      }
+  gates.push({
+    name: "v6's issuance limit never binds: no roll or creation is refused for lack of the issuers' total headroom",
+    ok: bound.length === 0,
+    detail: `${bound.length} time(s) bound${bound.length > 0 ? ` (first on ${bound[0]?.window}: ${String(bound[0]?.what ?? "roll")} ${String(bound[0]?.task ?? bound[0]?.refused ?? "")})` : ""}${
+      closest !== undefined ? `; closest approach ${closest.task}, peak ${closest.peak} of ${closest.limit} mSIU (${(closest.peak * 100n) / closest.limit}%)` : ""
+    }`,
   });
 
   // seed from the log

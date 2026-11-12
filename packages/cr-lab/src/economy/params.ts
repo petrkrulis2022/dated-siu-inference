@@ -81,6 +81,11 @@ export interface V3aParams {
   /** the least AGU-lab value (mSIU) an agent may redeem, and the least claim face it may create with */
   minRedeemMilli: bigint;
   minCreateMilli: bigint;
+  /**
+   * D145: each reserve-grade issuer's committed capacity, in windows of its measured rate (v6: capacity = committed hours × measured rate; one hour is one window
+   * here), sized so the issuers' total covers the largest live issuance any v3a run reaches with a 2× margin. A bigger bond never raises issuance (v6 C6); only this does.
+   */
+  capacityHours: bigint;
   seats: { counted: string; dev: string };
   /** each measure's own minimum count below which it reports n/a */
   minCounts: Record<string, number>;
@@ -143,6 +148,11 @@ export interface EconomyParams {
   v3a?: V3aParams;
 }
 
+const positive = (v: unknown, what: string): bigint => {
+  const n = big(v, what);
+  if (n < 1n) throw new Error(`${what} must be at least 1`);
+  return n;
+};
 const big = (v: unknown, what: string): bigint => {
   if (typeof v !== "string" || !/^\d+$/.test(v))
     throw new Error(`economy params: ${what} must be a string of digits, got ${JSON.stringify(v)}`);
@@ -335,6 +345,7 @@ function parseV3a(r: Record<string, unknown>): V3aParams {
     },
     minRedeemMilli: big(r.minRedeemMilli, "v3a.minRedeemMilli"),
     minCreateMilli: big(r.minCreateMilli, "v3a.minCreateMilli"),
+    capacityHours: positive(r.capacityHours, "v3a.capacityHours"),
     seats: { counted: String(seats.counted), dev: String(seats.dev) },
     minCounts: Object.fromEntries(Object.entries(o(r.minCounts, "minCounts")).map(([k, v]) => [k, num(v, `minCounts.${k}`)])),
   };

@@ -125,6 +125,8 @@
     },
     "minRedeemMilli": "250",
     "minCreateMilli": "250",
+    "capacityHours": "2",
+    "capacityNote": "D145 (owner, 2026-11-12): each reserve-grade issuer (C1, C2, X) commits 2 windows of its measured rate (v6: capacity = committed hours x measured rate; a bigger bond never raises issuance, C6). Sized from the four scripted cells (arms A and B, low and high volatility; price seeds shadow-check-<arm>-<vol>, run seeds shadow-<arm>-<vol>), run 2026-11-12 with 1000 hours so the limit could not bind: the largest live issuance relative to capacity was CR-PL in arm B high (run v3a-scripted-armB-high-2026-11-12T13-01-28-706Z), 20,516 mSIU against the issuers' 29,018 mSIU per hour, so twice that peak needs 1.41 hours; 2 is the smallest whole number covering it (2.83x in that run, more in the others). The largest live issuance in absolute terms was 28,176 mSIU of CR-PL in arm A high, against 50,372 mSIU per hour there. Live issuance counts the reserve and every other live claim on the same capacity (PROVIDER's sales), so it is at least the reserve. The issuers' measured rate varies with the print at genesis; v6's issuance limit stays in code and a validity gate fails any run in which it binds.",
     "seats": { "counted": "claude-sonnet-5", "dev": "claude-haiku-5-5" },
     "minCounts": {
       "exchange": 20,

@@ -341,6 +341,8 @@ export class World {
         minTenorSeconds: params.reserve.minTenorSeconds,
         discountBps: params.reserve.discountBps,
         bufferTarget: params.reserve.bufferTargetUsdc,
+        // D145: v3a's roll uses v6's pooled direct mint; v1/v2 keep the deployed router's single-issuer placement
+        ...(params.v3a !== undefined ? { pooledMint: true } : {}),
       },
       AGU_ISSUER,
       () => clock.now,
@@ -640,7 +642,19 @@ export class World {
     let made = 0n;
     while (made < milli) {
       const room = this.#largestHeadroom(classId) - keep;
-      if (room <= 0n) break;
+      if (room <= 0n) {
+        // D145: the issuers' headroom ran out before the creation was done -- v6's issuance limit binding, which makes a v3a run invalid
+        if (this.v3a !== undefined)
+          this.#log(PARTICIPANT, "issuance-limit", {
+            what: onDemand ? "on-demand creation" : "ladder creation",
+            task: classId,
+            forWindow: k,
+            wanted: milli,
+            placed: made,
+            ...(keep > 0n ? { keptForTheRoll: keep } : {}),
+          });
+        break;
+      }
       const want = milli - made;
       const m = want < room ? want : room;
       try {
@@ -1901,8 +1915,10 @@ export class World {
       // the classes the issuer bonds (`lotClasses`), the bond split across those
       const rate = this.#issuerRateMilliPerWindow(i);
       const lots = i.lotClasses ?? i.classes;
-      for (const c of lots) this.chain.createLot(i.id, c, 1n, rate, i.bondUsdc / BigInt(lots.length));
-      this.#log(i.id, "setup", { lots, rateMilliPerWindow: rate, bondUsdc: i.bondUsdc });
+      // D145: v3a's reserve-grade issuers commit the configured capacity hours (v6: capacity = committed hours × measured rate); everyone else, one window's worth
+      const hours = p.v3a !== undefined && i.grade === p.reserve.series ? p.v3a.capacityHours : 1n;
+      for (const c of lots) this.chain.createLot(i.id, c, hours, rate, i.bondUsdc / BigInt(lots.length));
+      this.#log(i.id, "setup", { lots, rateMilliPerWindow: rate, bondUsdc: i.bondUsdc, ...(p.v3a !== undefined ? { capacityHours: hours } : {}) });
     }
     this.mint(PARTICIPANT, p.participant.usdc);
     this.mint("OWNER", p.reserve.bufferSeedUsdc);
@@ -2269,6 +2285,9 @@ export class World {
         refused: e.message,
         frontLots: front.length,
       });
+      // D145: a roll refused for lack of the issuers' total headroom is v6's issuance limit binding, which makes a v3a run invalid
+      if (this.v3a !== undefined && /Headroom/.test(e.message))
+        this.#log(AGU_ISSUER, "issuance-limit", { what: "roll", forWindow: k + this.params.ladderWindows, refused: e.message });
       return;
     }
     this.#bufferOut += r.cover;
@@ -2362,6 +2381,13 @@ export class World {
         : {
             shadowNav: reserveNav === null ? null : reserveNav.times(String(this.#shadowPpm)).div(1_000_000).toFixed(9),
             bufferDrawUsdc: this.#bufferDraw,
+            // D145: each reserve class's live issuance, its peak so far and v6's issuance limit (all issuers' capacity), mSIU
+            issuance: Object.fromEntries(
+              this.#reserveClasses().map((c) => [
+                c,
+                { issued: this.chain.issued(c), peak: this.chain.peakIssued.get(c) ?? 0n, limit: this.chain.issuanceLimit(c) },
+              ]),
+            ),
           }),
       supply: this.chain.aguSupply,
       liveFaceMilli: this.chain.liveFace(),

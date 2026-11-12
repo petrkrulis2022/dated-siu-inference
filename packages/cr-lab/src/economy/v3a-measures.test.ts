@@ -236,6 +236,19 @@ describe("v3a validity gates and a full scripted run, scored end to end", () => 
     expect(buffer(checkGates(dry, params))?.ok).toBe(false);
     const short = log.map((x) => (x.kind === "roll-buy" && x.summary === true && x.refused === undefined ? { ...x, faceBought: 0n } : x));
     expect(buffer(checkGates(short, params))?.ok).toBe(false);
+    // D145: v6's issuance limit must never bind -- a creation or a roll refused for lack of total headroom makes the run invalid
+    const issuance = (g: ReturnType<typeof checkGates>) => g.find((x) => x.name.startsWith("v6's issuance limit"));
+    expect(issuance(gates)?.ok).toBe(true);
+    const last = log.at(-1) as LogEntry;
+    const bound: LogEntry[] = [
+      ...log,
+      { ...last, seq: last.seq + 1, actor: "PARTICIPANT", kind: "issuance-limit", what: "ladder creation", task: "CR-PL", wanted: 1_000n, placed: 200n } as LogEntry,
+    ];
+    expect(issuance(checkGates(bound, params))?.ok).toBe(false);
+    const refusedRoll = log.map((x) =>
+      x.kind === "roll-buy" && x.summary === true && x.refused === undefined ? { ...x, refused: "NoTotalHeadroom(CR-PL, 4514, 3000)" } : x,
+    );
+    expect(issuance(checkGates(refusedRoll, params))?.ok).toBe(false);
   }, 60_000);
 
   it("scores both arms of scripted runs end to end and renders the report", async () => {
