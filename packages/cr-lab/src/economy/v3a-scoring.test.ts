@@ -9,8 +9,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CR_PUBLIC_DIR, REPO_ROOT } from "../paths.js";
+import { TASKS, type TaskId } from "../tasks/instances.js";
 import type { LogEntry } from "./log.js";
 import { loadParams } from "./params.js";
+import { needsSchedule } from "./runner.js";
 import { onwardSpends } from "./report.js";
 import {
   renderScoringReport,
@@ -22,6 +24,7 @@ import {
   scoreIssuerExits,
   scoreQuotingInDollars,
   scoreRun,
+  windowIndexOf,
 } from "./scoring.js";
 
 const params = loadParams(join(CR_PUBLIC_DIR, "economy-params.v2.json"));
@@ -303,4 +306,37 @@ describe("Phase 2 item 8: a diagnostic re-score is headed as one, and never over
     expect(r.stderr).toMatch(/already exists/);
     expect(readFileSync(out, "utf-8")).toBe("the recorded verdict\n");
   }, 60_000);
+});
+
+describe("v2 scorer off-by-one (found in Phase 3; D144): genesis's own day is window 0, never window 1", () => {
+  const needs = needsSchedule(params.seed, TASKS.filter((t): t is TaskId => t !== "CR-VS"));
+  const a = params.agents.demand[0] as string;
+  const task = [...new Set(needs(a, 2))][0] as TaskId;
+  // genesis on its own day (as every engine run writes it: World.genesis runs before window 1), then windows 1 and 2
+  const log = (): LogEntry[] => [
+    entry("2026-11-02", 0, "AGU-ISSUER", { kind: "genesis", seed: params.seed, t0: 0 }),
+    entry("2026-11-02", 0, "ISSUER-C1", { kind: "setup" }),
+    entry("2026-11-03", 0, a, { kind: "message", to: "AGU-ISSUER", text: `front-claim order: 0.250 SIU of ${task} for the next window` }),
+    entry("2026-11-04", 0, "RESEARCH-1", { kind: "quote", quote: "q1", need: "n1", priceMicroSiu: 100_000n }),
+    entry("2026-11-04", 0, "RESEARCH-2", { kind: "quote", quote: "q2", need: "n1", priceMicroSiu: 200_000n }),
+    entry("2026-11-04", 1, a, { kind: "escrow-open", escrow: "e1", quote: "q1", to: "RESEARCH-1", agu: 1_000n }),
+    entry("2026-11-04", 2, "GATE-RUNNER", { kind: "gate", brief: "q1", passed: true, components: [] }),
+  ];
+
+  it("maps the genesis day to 0 and the windows to 1..N", () => {
+    const idx = windowIndexOf(log());
+    expect([idx.get("2026-11-02"), idx.get("2026-11-03"), idx.get("2026-11-04")]).toEqual([0, 1, 2]);
+  });
+
+  it("scores buying ahead window by window as the engine numbers them: a window-1 order covers window 2's need, and no window past the last", () => {
+    const r = scoreBuyingAhead(log(), params);
+    expect(r.perWindow.map((w) => w.window)).toEqual([1]);
+    expect(r.perWindow[0]?.covered).toBe(1);
+  });
+
+  it("gives each comparability decision its window's own display order (window 2 shows SIU first)", () => {
+    const c = scoreComparability(log());
+    expect(c.siuFirstSample).toBe(1);
+    expect(c.dollarsFirstSample).toBe(0);
+  });
 });

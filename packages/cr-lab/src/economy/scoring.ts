@@ -43,11 +43,19 @@ const BLIND_TAGGED: readonly ExitClass[] = ["dollar cost", "price move", "fear",
 /** v3a Phase 2 item 3: a receipt-based measure, scored separately for each currency a payment can move in */
 export type PerCurrency<T> = Record<Currency, T>;
 
-/** the log's own window (a day label) in run order, mapped back to the numeric window index 1..N every other part of the engine uses */
+/** the log's own window (a day label) in run order, mapped back to the numeric window index every other part of the engine uses: 0 for genesis's own day, 1..N for the windows */
 export function windowIndexOf(log: readonly LogEntry[]): Map<string, number> {
   const order: string[] = [];
   for (const e of log) if (!order.includes(e.window)) order.push(e.window);
-  return new Map(order.map((d, i) => [d, i + 1]));
+  // D144 (found in Phase 3): genesis runs before window 1 and writes on its own day, so a log that begins with genesis's day numbers that day 0 and the windows 1..N,
+  // as the engine does. This counted genesis's day as window 1, shifting every window by one: buying ahead was checked against the wrong window's needs, half the
+  // comparability decisions took the wrong display order, and a window past the last was scored. A log with no genesis day (a constructed fixture) numbers from 1.
+  const first = order[0];
+  const genesisDay =
+    first !== undefined &&
+    log.some((e) => e.window === first && (e.kind === "genesis" || e.kind === "setup")) &&
+    !log.some((e) => e.window === first && e.kind === "turn");
+  return new Map(order.map((d, i) => [d, genesisDay ? i : i + 1]));
 }
 
 const modelAgentIds = (params: EconomyParams): ReadonlySet<string> =>
@@ -390,7 +398,8 @@ export function genesisSeedOf(log: readonly LogEntry[]): string | undefined {
 /** "the hedger and demand agents cover at least a quarter of the next window's known needs in most windows" (§16.9) */
 export function scoreBuyingAhead(log: readonly LogEntry[], params: EconomyParams): BuyingAheadScoring {
   const dayIndex = windowIndexOf(log);
-  const windowCount = dayIndex.size;
+  // the last window's number (D144: never the count of day labels, which includes genesis's own day)
+  const windowCount = Math.max(0, ...dayIndex.values());
   const needsFor = needsSchedule(
     genesisSeedOf(log) ?? params.seed,
     TASKS.filter((t): t is TaskId => t !== "CR-VS"),

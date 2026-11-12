@@ -322,7 +322,8 @@ describe("scoreBuyingAhead", () => {
     );
     const realNextTask = [...new Set(needsFor(a, 2))][0];
     const log: LogEntry[] = [
-      entry("2026-10-29", 0, "AGU-ISSUER", { kind: "genesis", seed: realSeed, backend: "stand-in", t0: 0 }),
+      // genesis on its own day, before window 1, as every engine run writes it (D144: that day is window 0)
+      entry("2026-10-28", 0, "AGU-ISSUER", { kind: "genesis", seed: realSeed, backend: "stand-in", t0: 0 }),
       entry("2026-10-29", 1, a, {
         kind: "message",
         to: "AGU-ISSUER",
