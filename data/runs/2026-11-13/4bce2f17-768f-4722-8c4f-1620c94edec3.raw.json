@@ -1,0 +1,39 @@
+{
+  "id": "99433fca-6313-98ea-b991-6df2fedf9ff5",
+  "object": "chat.completion",
+  "created": 1794543959,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "66DB7A\n93CE8B\n05B20D\nEDE788",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes: 66DB7A for the southern annex, 93CE8B for the lower annex, 05B20D for the upper annex, and EDE788 for the eastern annex. I am checking for additional codes.\n\nNo additional access codes were found. The document ends after the fourth entry.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21622,
+    "completion_tokens": 18,
+    "total_tokens": 21990,
+    "prompt_tokens_details": {
+      "text_tokens": 21622,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 350,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 446840000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

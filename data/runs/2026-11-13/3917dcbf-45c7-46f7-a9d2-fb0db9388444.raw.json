@@ -1,0 +1,39 @@
+{
+  "id": "8af00ee8-dcbc-9d3b-9d8c-a2a18305963d",
+  "object": "chat.completion",
+  "created": 1794543960,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "CC6B99\n8F7D07\n4BA052\n875F5A",
+        "reasoning_content": "I am scanning the document for archival access codes.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21918,
+    "completion_tokens": 19,
+    "total_tokens": 22128,
+    "prompt_tokens_details": {
+      "text_tokens": 21918,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 191,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 443280000
+  },
+  "system_fingerprint": "fp_bd136647c5",
+  "service_tier": "default"
+}
