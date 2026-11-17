@@ -123,6 +123,9 @@ export interface Incident {
    * attempt's own record, chained rather than lost. Absent means this is the first attempt. */
   prior_attempts?: PriorAttemptDisclosure[] | null;
   occurred_at: string;
+  /** A plain-language note the publisher added to the record afterwards, stating why the day has
+   * no print. Never written by the workflow; the workflow's own fields above stay as recorded. */
+  note?: string | null;
 }
 
 /**

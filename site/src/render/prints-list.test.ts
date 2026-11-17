@@ -250,6 +250,42 @@ describe("renderPrintsList", () => {
     expect(html).not.toContain("No print has been published yet");
   });
 
+  it("shows the publisher's note on a missed day first, above the run's own refusal reason", () => {
+    const html = renderPrintsList({
+      allPrints: [],
+      incidents: [
+        {
+          date: "2026-11-15",
+          run_url: "https://github.com/petrkrulis2022/dated-siu-inference/actions/runs/43676508434",
+          reason: "Refusing to publish: only 2 of 6 frontier-tier models qualified (minimum 4)",
+          note: "Prepaid API credit ran out at Anthropic, Google and xAI.",
+          occurred_at: "2026-11-15T04:25:00Z",
+        },
+      ],
+      basePath: "../",
+      chain: CHAIN,
+    });
+    expect(html).toContain('<span class="incident-note">Prepaid API credit ran out at Anthropic, Google and xAI.</span>');
+    expect(html.indexOf("Prepaid API credit ran out")).toBeLessThan(html.indexOf(">Refusing to publish"));
+  });
+
+  it("adds no note element to a missed day that has none", () => {
+    const html = renderPrintsList({
+      allPrints: [],
+      incidents: [
+        {
+          date: "2026-08-25",
+          run_url: "https://github.com/petrkrulis2022/dated-siu-inference/actions/runs/32793706266",
+          reason: "Refusing to publish: only 3 of 5 registered models qualified (minimum 4).",
+          occurred_at: "2026-08-25T00:33:35Z",
+        },
+      ],
+      basePath: "../",
+      chain: CHAIN,
+    });
+    expect(html).not.toContain("incident-note");
+  });
+
   it("shows the qualifying-set counts, spend, and a chained prior-attempt note on a second failure", () => {
     const html = renderPrintsList({
       allPrints: [],

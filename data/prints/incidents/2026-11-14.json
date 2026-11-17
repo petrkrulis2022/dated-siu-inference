@@ -7,5 +7,6 @@
   "registered_models": null,
   "cost_usd": null,
   "prior_attempts": null,
-  "occurred_at": "2026-11-14T04:24:53Z"
+  "occurred_at": "2026-11-14T04:24:53Z",
+  "note": "No print for 14 Nov 2026: prepaid API credit ran out at Anthropic (from 9 Nov) and Google (from 14 Nov), so Claude Sonnet 5, Claude Haiku 4.5 and Gemini 3.1 Pro produced no runs. The publication rule refuses a print that keeps fewer than 4 of its 6 frontier-tier models."
 }

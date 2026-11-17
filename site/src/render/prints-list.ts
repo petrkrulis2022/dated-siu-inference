@@ -98,10 +98,13 @@ function renderIncidentRow(incident: Incident): string {
     incident.prior_attempts && incident.prior_attempts.length > 0
       ? `<br />An earlier attempt the same day also failed: ${esc(incident.prior_attempts[0]!.reason)}`
       : "";
+  // The publisher's note, when one was added afterwards, comes first: it says in plain words why
+  // the day has no print; the run's own refusal reason and breakdown follow unchanged.
+  const note = incident.note ? `<span class="incident-note">${esc(incident.note)}</span><br />` : "";
   return `<tr class="incident">
     <td>${esc(formatDate(incident.date))}</td>
     <td><a class="badge status-failed" href="${esc(incident.run_url)}" title="${esc(incident.reason)}" target="_blank" rel="noopener">no print — run failed</a></td>
-    <td colspan="5" class="muted" title="${esc(incident.reason)}">${esc(incident.reason)}${counts}${retryNote}${breakdown}</td>
+    <td colspan="5" class="muted" title="${esc(incident.reason)}">${note}${esc(incident.reason)}${counts}${retryNote}${breakdown}</td>
   </tr>`;
 }
 

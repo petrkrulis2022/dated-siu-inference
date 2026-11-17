@@ -7,5 +7,6 @@
   "registered_models": null,
   "cost_usd": null,
   "prior_attempts": null,
-  "occurred_at": "2026-11-16T04:31:08Z"
+  "occurred_at": "2026-11-16T04:31:08Z",
+  "note": "No print for 16 Nov 2026: prepaid API credit was still out at Anthropic, Google and xAI, so Claude Sonnet 5, Claude Haiku 4.5, Gemini 3.1 Pro and Grok 4.6 produced no runs. The publication rule refuses a print that keeps fewer than 4 of its 6 frontier-tier models."
 }
