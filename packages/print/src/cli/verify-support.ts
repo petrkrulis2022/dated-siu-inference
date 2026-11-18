@@ -115,6 +115,9 @@ export async function buildVerifyInput(print: Print): Promise<BuiltVerifyInput> 
     // different qualifying set than the one actually signed — a false discrepancy, not a real one.
     const revisionDate = print.methodology_revision?.match(/^rules-(\d{4}-\d{2}-\d{2})/)?.[1];
     const carryForwardApplies = !print.series && revisionDate !== undefined && revisionDate >= "2026-09-26";
+    // One weight per model family from rules-2026-11-18 on, for tier prints as well as the blend,
+    // keyed on the print's own declared revision for the same reason as carry-forward above.
+    const familyWeightingApplies = revisionDate !== undefined && revisionDate >= "2026-11-18";
 
     const input: PrintInput = {
       version: BASKET_VERSION,
@@ -127,6 +130,7 @@ export async function buildVerifyInput(print: Print): Promise<BuiltVerifyInput> 
         T3: TASK_CLASSES.T3.weight,
       },
       models,
+      ...(familyWeightingApplies ? { weightByModelFamily: true } : {}),
       // Found live, 2026-09-26: never passing this meant every print published before the
       // 2026-09-25 significant-figures rounding fix (dated_siu_dp: 4, not dated_siu_sig_figs: 4)
       // was recomputed under TODAY's rounding rule regardless — a real verifier bug producing a

@@ -237,6 +237,9 @@ export function buildModelInputs(
     }
     models.push({
       model_id: entry.id,
+      // Same model_string = the same open weights on different hosts = one model family
+      // (docs/methodology.md, host weighting); read only under rules-2026-11-18 and later.
+      family: entry.model_string,
       price: {
         price_in_usd_per_1m: price.price_in_usd_per_1m,
         price_out_usd_per_1m: price.price_out_usd_per_1m,

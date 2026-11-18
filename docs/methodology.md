@@ -317,6 +317,10 @@ combined weight is never multiplied by the number of hosts it happens to be list
 routed-market-share weighting is wired (§ Registry inclusion policy, below), a multi-host open
 weight's family share is computed once, not once per host. Under the current equal-weighting
 default, one weight is allocated per qualifying model family, not per registry row.
+**Applied in code from `rules-2026-11-18`.** Until then the print code weighted per registry row.
+That made no difference while no two entries of one family qualified on the same day; the first
+time two did, in the first 2026-11-18 print (Mistral Small 3.2 on Parasail and on DeepInfra), each
+got a full weight. That print is superseded by `2026-11-18b` (Index governance, supersession rule).
 
 ### Promotional and free tiers
 
@@ -540,6 +544,7 @@ that actually applied, by date.
 | `rules-2026-09-25` | 2026-09-25 | `dated_siu` rounds to 4 significant figures, not a fixed 4 decimal places. | `d729ef4` |
 | `rules-2026-09-25b` | 2026-09-25 | Found live: `rules-2026-09-13`'s own fix never actually took effect. The cost formula, the schema field, and the snapshot sourcing all landed on 2026-09-13 — but `buildModelInputs` (`packages/print/src/cli/load-inputs.ts`), the one function every publish/verify path uses to turn a snapshot entry into the price the cost formula receives, never copied `price_cached_in_usd_per_1m` through. Every real print from 2026-09-14 through 2026-09-24 still priced cached_input at zero, silently, for every model — this row is the actual effective date. See this section's "Verification discipline for pricing fixes" note below for why this stayed undetected for twelve days. | `327d7b9` |
 | `rules-2026-09-26` | 2026-09-26 | A model missing today (run/provider failure, never a registry removal) carries its last real, published cost forward for up to 3 calendar days before being excluded; `dated_siu_median_diagnostic` published alongside `dated_siu` as a diagnostic only — see this section's own Aggregation policy above for the retro-validated evidence. | `5e4ca39` |
+| `rules-2026-11-18` | 2026-11-18 | One equal weight per model family, split equally between that family's qualifying entries (registry entries with the same `model_string`: the same open weights on different hosts), as the host-weighting rule has always stated; the minimum-qualifying counts, overall and per tier, count model families. Found live: in the first 2026-11-18 print two hosts of Mistral Small 3.2 both qualified and each got a full weight (that print's own correction notes). Builds on `rules-2026-09-26`. The unweighted median diagnostic still counts entries. | `packages/print/src/compute/weights.ts` |
 
 A print's own `date` field, checked against this table, tells a reader which row applied even for
 a print published before `methodology_revision` existed — this table is the durable record; the
@@ -1079,10 +1084,12 @@ provider is treated like a print-day-unavailable model and processed as a regist
 next review cycle onward, so until then it is excluded from each print it cannot complete, with the
 reason disclosed. Removing it now would also
 take it out of the recomputation of every published print it is part of, since verification reads
-the current registry. **Open risk, disclosed:** the host-weighting rule above allocates one weight
-per model family, but the print code weights per registry row, so on a day when Parasail completed
-the whole basket again both Mistral entries would qualify and Mistral would carry two weights.
-Parasail still answered every T1 instance in the 04:23 run. Mistral AI having retired the model
+the current registry. **The risk this left open happened the same day:** the host-weighting rule
+above allocates one weight per model family, but the print code then weighted per registry row, and
+in the run that published the first 2026-11-18 print Parasail completed the whole basket again, so
+both Mistral entries qualified and Mistral carried two of the nine weights. Disclosed on that print,
+fixed in `rules-2026-11-18` (Revision history, above), and the print superseded by a same-day redo,
+`2026-11-18b`. Mistral AI having retired the model
 means DeepInfra may stop serving it too; choosing a replacement is a separate decision, not made
 here.
 
@@ -1345,7 +1352,14 @@ anchored; neither is edited or deleted. The superseded print carries a `supersed
 signature or its on-chain anchor) naming the print of record and the cause, stated in the same
 terms as the cause itself — e.g. "insufficient qualifying set," not "we preferred the other
 number." Defined causes, so far: **insufficient qualifying set** (below the minimum in this
-section, above). **Found live, not hypothesised:** on 2026-08-22, a harness run against an
+section, above); and, added 2026-11-18, **a computation that did not apply a published rule**.
+The first case of the second: the first 2026-11-18 print gave two host entries of one model family
+a full weight each, against the host-weighting rule; the redo `2026-11-18b` is a same-day re-run
+under `rules-2026-11-18`, so it carries fresh measurements as well as the corrected weighting, and
+the figure the first print would have shown with one weight per family is stated in that print's
+own correction note. Its frontier print, whose value the error did not touch, is superseded by
+`2026-11-18b-frontier` only because the redo re-measured every constituent and a day has one print
+of record per series. **Found live, not hypothesised:** on 2026-08-22, a harness run against an
 unfunded free-tier provider key qualified only 2 of 6 registered models and published anyway (the
 minimum-qualifying-set guard above didn't exist yet). A same-day re-run under a funded key
 qualified 4 of 6. The first print (`2026-08-22`) is superseded by the second (`2026-08-22b`) for

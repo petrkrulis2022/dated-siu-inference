@@ -80,7 +80,11 @@ const CARRY_FORWARD_ENABLED = process.env.TOUCHSTONE_CARRY_FORWARD_ENABLED === "
 /** docs/methodology.md's Revision history table — bump this when a future rule change alters
  * published values, and add the matching row there. Every print from this one onward states
  * which rule set produced it, forward-only; no historical print needs the field retroactively. */
-const METHODOLOGY_REVISION = CARRY_FORWARD_ENABLED ? "rules-2026-09-26" : "rules-2026-09-25";
+/** rules-2026-11-18 (one weight per model family) builds on rules-2026-09-26 and ships with it:
+ * the production path (carry-forward on) gets both; the legacy rules-2026-09-25 path is left
+ * exactly as it was. */
+const WEIGHT_BY_MODEL_FAMILY = CARRY_FORWARD_ENABLED;
+const METHODOLOGY_REVISION = CARRY_FORWARD_ENABLED ? "rules-2026-11-18" : "rules-2026-09-25";
 
 const printId = process.argv[2] || new Date().toISOString().slice(0, 10);
 const printDate = DATE_PATTERN.test(printId) ? printId : new Date().toISOString().slice(0, 10);
@@ -349,6 +353,7 @@ try {
     price_snapshot_ref: snapshotFile,
     methodology_version: "v0-draft",
     methodology_revision: METHODOLOGY_REVISION,
+    weightByModelFamily: WEIGHT_BY_MODEL_FAMILY,
     privateKeyHex,
     attestationClient,
     secondaryAttestations,
@@ -447,6 +452,7 @@ try {
         price_snapshot_ref: snapshotFile,
         methodology_version: "v0-draft",
         methodology_revision: METHODOLOGY_REVISION,
+        weightByModelFamily: WEIGHT_BY_MODEL_FAMILY,
         privateKeyHex,
         attestationClient,
         secondaryAttestations,

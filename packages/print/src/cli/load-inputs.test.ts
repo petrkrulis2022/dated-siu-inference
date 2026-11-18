@@ -47,6 +47,11 @@ describe("buildModelInputs", () => {
     expect(zeroRecordEntry?.records).toEqual([]);
   });
 
+  it("carries each entry's model_string through as its model family (rules-2026-11-18)", () => {
+    const { models } = buildModelInputs(REGISTRY, SNAPSHOT, [runRecord()]);
+    expect(models.map((m) => m.family)).toEqual(["x", "x"]);
+  });
+
   it("carries a snapshot entry's price_cached_in_usd_per_1m through into ModelInput.price", () => {
     // Found live, 2026-09-25: this field was added to the schema, the cost formula, and
     // litellm.ts's snapshot sourcing (29d4be2, 2026-09-13), but never copied through here — so

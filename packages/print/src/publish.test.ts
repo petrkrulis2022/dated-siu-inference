@@ -636,3 +636,61 @@ describe("computeConstituentChangesForSeries", () => {
     ).toEqual([{ model_id: "claude-sonnet-5", change: "admitted" }]);
   });
 });
+
+describe("publishPrint — the minimum counts model families when weighting by family (rules-2026-11-18)", () => {
+  let familyDir: string;
+  beforeEach(async () => {
+    familyDir = await mkdtemp(join(tmpdir(), "touchstone-family-"));
+  });
+  afterEach(async () => {
+    await rm(familyDir, { recursive: true, force: true });
+  });
+
+  // A, B, C and E qualify (D fails a class by the fixture's design): four entries. Making E a
+  // second host of A's weights leaves three model families, below MINIMUM_QUALIFYING_MODELS.
+  function eSharesAFamily(overrides: Partial<PublishInput> = {}): PublishInput {
+    const base = publishInput();
+    return publishInput({
+      models: base.models.map((m) => (m.model_id === "E" ? { ...m, family: "A" } : m)),
+      ...overrides,
+    });
+  }
+
+  it("refuses when four qualifying entries are only three model families", async () => {
+    const err = await publishPrint(familyDir, eSharesAFamily({ weightByModelFamily: true })).catch(
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(QualifyingSetError);
+    expect((err as QualifyingSetError).qualifying).toBe(3);
+    expect((err as QualifyingSetError).registered).toBe(4);
+  });
+
+  it("applies the same family count to the per-tier gate", async () => {
+    const base = publishInput();
+    const frontierFillers = ["F", "G", "H", "I"].map(extraQualifyingModel);
+    const input = eSharesAFamily({
+      weightByModelFamily: true,
+      models: [...base.models.map((m) => (m.model_id === "E" ? { ...m, family: "A" } : m)), ...frontierFillers],
+      openWeightsById: new Map([
+        ["A", true],
+        ["B", true],
+        ["C", true],
+        ["D", false],
+        ["E", true],
+        ["F", false],
+        ["G", false],
+        ["H", false],
+        ["I", false],
+      ]),
+    });
+    const err = await publishPrint(familyDir, input).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(TierCollapseError);
+    expect((err as TierCollapseError).tier).toBe("commodity");
+    expect((err as TierCollapseError).qualifying).toBe(3);
+  });
+
+  it("still counts entries for a print that does not weight by family", async () => {
+    const result = await publishPrint(familyDir, eSharesAFamily());
+    expect(result.print.dated_siu).toBeTruthy();
+  });
+});

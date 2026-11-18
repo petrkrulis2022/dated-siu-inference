@@ -183,3 +183,38 @@ describe("computePrint — dated_siu_median_diagnostic (2026-09-26 methodology f
     expect(Number(computed.medianDiagnostic.toString())).toBeCloseTo(expectedMedian, 9);
   });
 });
+
+describe("computePrint — one weight per model family (rules-2026-11-18)", () => {
+  // A and B are made two hosts of one model family; C is its own. D fails a class in this
+  // fixture, so the qualifying set is A, B, C. Equal weights, not the fixture's routed shares.
+  function twoHostInput(weightByModelFamily: boolean) {
+    const base = workedExampleInput();
+    return {
+      ...base,
+      observedShares: undefined,
+      models: base.models.map((m) =>
+        m.model_id === "A" || m.model_id === "B" ? { ...m, family: "fam-AB" } : m,
+      ),
+      weightByModelFamily,
+    };
+  }
+
+  it("gives two qualifying hosts of one family half of one family weight each", () => {
+    const { computed, body } = computePrint(twoHostInput(true));
+    const cost = (id: string) => computed.basketCosts.get(id)!;
+    const expected = cost("A").plus(cost("B")).dividedBy(4).plus(cost("C").dividedBy(2));
+    expect(computed.datedSiu.toString()).toBe(expected.toString());
+    expect(body.weights.values).toEqual([
+      { model_id: "A", weight: "0.250000" },
+      { model_id: "B", weight: "0.250000" },
+      { model_id: "C", weight: "0.500000" },
+    ]);
+  });
+
+  it("keeps per-entry equal weights when the print does not weight by family (every print before rules-2026-11-18)", () => {
+    const { computed } = computePrint(twoHostInput(false));
+    const cost = (id: string) => computed.basketCosts.get(id)!;
+    const expected = cost("A").plus(cost("B")).plus(cost("C")).dividedBy(3);
+    expect(computed.datedSiu.toString()).toBe(expected.toString());
+  });
+});

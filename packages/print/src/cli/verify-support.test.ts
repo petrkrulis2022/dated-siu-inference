@@ -117,6 +117,25 @@ describe("buildVerifyInput — historical pricing rules (2026-09-27 fix)", () =>
     expect(result.ok).toBe(true);
   });
 
+  it("2026-11-18 (two hosts of one model family both qualified, per-entry weights) still verifies with an exact match", async () => {
+    // Computed under rules-2026-09-26, before one weight per model family existed in code: it is
+    // verified under the rules it was actually computed with, and its error is disclosed on the
+    // print itself (correction_notes), never hidden by recomputing it under later rules.
+    const print = await loadPrint(join(printsDir(), "2026-11-18.json"));
+    const { input, loadErrorMessage } = await buildVerifyInput(print);
+    expect(loadErrorMessage).toBeUndefined();
+    expect(input?.weightByModelFamily).toBeFalsy();
+    const result = verifyPrint(print, input!);
+    expect(result.discrepancies).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  it("recomputes a rules-2026-11-18 print with one weight per model family", async () => {
+    const print = await loadPrint(join(printsDir(), "2026-11-18.json"));
+    const { input } = await buildVerifyInput({ ...print, methodology_revision: "rules-2026-11-18" });
+    expect(input?.weightByModelFamily).toBe(true);
+  });
+
   it("2026-09-26 (first print with both fixes genuinely live) still verifies with an exact match", async () => {
     const print = await loadPrint(join(printsDir(), "2026-09-26.json"));
     const { input, loadErrorMessage } = await buildVerifyInput(print);

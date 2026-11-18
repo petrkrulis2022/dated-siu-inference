@@ -103,3 +103,35 @@ describe("computeDatedSiu", () => {
     expect(() => computeDatedSiu(costs, weights)).toThrow(/ghost/);
   });
 });
+
+describe("resolveWeights — one weight per model family (rules-2026-11-18)", () => {
+  // Found live, 2026-11-18: two registry entries for the same open weights on different hosts
+  // (Mistral Small 3.2 on Parasail and on DeepInfra) both qualified, and each got a full equal
+  // weight. The methodology's host-weighting rule allocates one weight per model family.
+  const FAMILY = new Map([
+    ["B1", "B"],
+    ["B2", "B"],
+  ]);
+
+  it("splits one family's equal weight between its qualifying host entries", () => {
+    const { source, weights } = resolveWeights(["A", "B1", "B2"], undefined, FAMILY);
+    expect(source).toBe("equal");
+    expect(weights.get("A")?.toString()).toBe("0.5");
+    expect(weights.get("B1")?.toString()).toBe("0.25");
+    expect(weights.get("B2")?.toString()).toBe("0.25");
+  });
+
+  it("gives a family with only one qualifying entry the whole family weight", () => {
+    const { weights } = resolveWeights(["A", "B1"], undefined, FAMILY);
+    expect(weights.get("A")?.toString()).toBe("0.5");
+    expect(weights.get("B1")?.toString()).toBe("0.5");
+  });
+
+  it("matches per-entry equal weights when no two qualifying entries share a family", () => {
+    const withFamilies = resolveWeights(["A", "B1", "C"], undefined, FAMILY).weights;
+    const perEntry = resolveWeights(["A", "B1", "C"]).weights;
+    expect([...withFamilies.entries()].map(([k, v]) => [k, v.toString()])).toEqual(
+      [...perEntry.entries()].map(([k, v]) => [k, v.toString()]),
+    );
+  });
+});

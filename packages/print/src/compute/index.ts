@@ -45,6 +45,10 @@ export interface CarryForwardDay {
 
 export interface ModelInput {
   model_id: string;
+  /** The model family this entry belongs to for weighting: entries sharing one are hosts of the
+   * same open weights (the registry's model_string). Absent means the entry is its own family.
+   * Read only when PrintInput.weightByModelFamily is set. */
+  family?: string;
   price: ModelPrice;
   /** Every run record for this model, across all classes and attempts. */
   records: RunRecord[];
@@ -59,6 +63,10 @@ export interface PrintInput {
   models: ModelInput[];
   /** Routed-market share per model id. Omit to fall back to equal weights (declared in the print). */
   observedShares?: Map<string, string>;
+  /** rules-2026-11-18: one equal weight per model family (ModelInput.family), split between that
+   * family's qualifying entries, as docs/methodology.md's host-weighting rule states. Omitted for
+   * every print computed before that revision, which weighted per registry entry. */
+  weightByModelFamily?: boolean;
   floor?: { value: string; notes?: string };
   price_snapshot_ref: string;
   methodology_version: string;
@@ -138,6 +146,7 @@ function computeIndex(
   observedShares: Map<string, string> | undefined,
   date: string,
   carryForwardHistory: CarryForwardDay[] | undefined,
+  familyOf: Map<string, string> | undefined,
   variant?: PolicyVariant,
 ): ComputedIndex {
   const basketCosts = new Map<string, DecimalValue | undefined>();
@@ -195,7 +204,7 @@ function computeIndex(
     .filter(([, cost]) => cost !== undefined)
     .map(([id]) => id);
 
-  const { source, weights } = resolveWeights(qualifying, observedShares);
+  const { source, weights } = resolveWeights(qualifying, observedShares, familyOf);
   const qualifyingCosts = new Map<string, DecimalValue>();
   for (const id of qualifying) {
     qualifyingCosts.set(id, basketCosts.get(id) as DecimalValue);
@@ -212,6 +221,11 @@ function computeIndex(
   };
 }
 
+/** Model id -> model family, for every entry (an entry with no `family` is its own). */
+export function familyMapOf(models: Pick<ModelInput, "model_id" | "family">[]): Map<string, string> {
+  return new Map(models.map((m) => [m.model_id, m.family ?? m.model_id]));
+}
+
 export interface ComputePrintResult {
   /** The print body — everything except `signature` and `public_key`, which signing adds. */
   body: Omit<Print, "signature" | "public_key">;
@@ -221,12 +235,14 @@ export interface ComputePrintResult {
 
 export function computePrint(input: PrintInput): ComputePrintResult {
   const rounding = input.rounding ?? DEFAULT_ROUNDING;
+  const familyOf = input.weightByModelFamily ? familyMapOf(input.models) : undefined;
   const base = computeIndex(
     input.models,
     input.classWeights,
     input.observedShares,
     input.date,
     input.carryForwardHistory,
+    familyOf,
   );
 
   const basket_costs = [...base.basketCosts.entries()].map(([model_id, cost]) => {
@@ -268,6 +284,7 @@ export function computePrint(input: PrintInput): ComputePrintResult {
       input.observedShares,
       input.date,
       input.carryForwardHistory,
+      familyOf,
       variant,
     );
     return {

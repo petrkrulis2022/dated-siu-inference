@@ -60,7 +60,11 @@ const CARRY_FORWARD_ENABLED = process.env.TOUCHSTONE_CARRY_FORWARD_ENABLED === "
 /** docs/methodology.md's Revision history table — see publish-unattended.ts's identical
  * constant for the doc comment; kept in sync manually since the two CLIs don't share a common
  * module for this one line. */
-const METHODOLOGY_REVISION = CARRY_FORWARD_ENABLED ? "rules-2026-09-26" : "rules-2026-09-25";
+/** rules-2026-11-18 (one weight per model family) builds on rules-2026-09-26 and ships with it:
+ * the production path (carry-forward on) gets both; the legacy rules-2026-09-25 path is left
+ * exactly as it was. */
+const WEIGHT_BY_MODEL_FAMILY = CARRY_FORWARD_ENABLED;
+const METHODOLOGY_REVISION = CARRY_FORWARD_ENABLED ? "rules-2026-11-18" : "rules-2026-09-25";
 
 const printId = process.argv[2] ?? new Date().toISOString().slice(0, 10);
 const printDate = DATE_PATTERN.test(printId) ? printId : new Date().toISOString().slice(0, 10);
@@ -215,6 +219,7 @@ const result = await publishPrint(printsDir(), {
   price_snapshot_ref: snapshotFile,
   methodology_version: "v0-draft",
   methodology_revision: METHODOLOGY_REVISION,
+  weightByModelFamily: WEIGHT_BY_MODEL_FAMILY,
   privateKeyHex,
   attestationClient,
   runsDirPath: runsDirFor(printId),
@@ -303,6 +308,7 @@ for (const { series, seriesModels, registryIds } of tierGroups) {
       price_snapshot_ref: snapshotFile,
       methodology_version: "v0-draft",
       methodology_revision: METHODOLOGY_REVISION,
+      weightByModelFamily: WEIGHT_BY_MODEL_FAMILY,
       privateKeyHex,
       attestationClient,
       series,
