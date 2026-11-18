@@ -1,0 +1,234 @@
+{
+  "version": "SIU-2026a",
+  "print_id": "2026-11-18b",
+  "date": "2026-11-18",
+  "status": "provisional",
+  "basket_costs": [
+    {
+      "model_id": "deepseek-v3.2",
+      "cost_usd": "0.001841"
+    },
+    {
+      "model_id": "llama-3.3-70b-deepinfra",
+      "cost_usd": "0.000714"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-instruct",
+      "cost_usd": "0.000655",
+      "carried_forward_from": "2026-11-17"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-deepinfra",
+      "cost_usd": "0.000546"
+    },
+    {
+      "model_id": "qwen-2.5-72b-instruct",
+      "cost_usd": "0.002026"
+    },
+    {
+      "model_id": "claude-sonnet-5",
+      "cost_usd": "0.023589"
+    },
+    {
+      "model_id": "gpt-5.1",
+      "cost_usd": "0.009174"
+    },
+    {
+      "model_id": "gemini-3.1-pro-preview",
+      "cost_usd": "0.040811"
+    },
+    {
+      "model_id": "grok-4.6",
+      "excluded_reason": "undefined class: T1 (no run records for this class); T2 (no run records for this class); T3 (no run records for this class)"
+    },
+    {
+      "model_id": "claude-haiku-4-5",
+      "cost_usd": "0.007733"
+    },
+    {
+      "model_id": "gpt-5.4-mini",
+      "cost_usd": "0.005332"
+    }
+  ],
+  "weights": {
+    "source": "equal",
+    "values": [
+      {
+        "model_id": "deepseek-v3.2",
+        "weight": "0.111111"
+      },
+      {
+        "model_id": "llama-3.3-70b-deepinfra",
+        "weight": "0.111111"
+      },
+      {
+        "model_id": "mistral-small-3.2-24b-instruct",
+        "weight": "0.055556"
+      },
+      {
+        "model_id": "mistral-small-3.2-24b-deepinfra",
+        "weight": "0.055556"
+      },
+      {
+        "model_id": "qwen-2.5-72b-instruct",
+        "weight": "0.111111"
+      },
+      {
+        "model_id": "claude-sonnet-5",
+        "weight": "0.111111"
+      },
+      {
+        "model_id": "gpt-5.1",
+        "weight": "0.111111"
+      },
+      {
+        "model_id": "gemini-3.1-pro-preview",
+        "weight": "0.111111"
+      },
+      {
+        "model_id": "claude-haiku-4-5",
+        "weight": "0.111111"
+      },
+      {
+        "model_id": "gpt-5.4-mini",
+        "weight": "0.111111"
+      }
+    ]
+  },
+  "dated_siu": "0.01020",
+  "exchange_rate_table": [
+    {
+      "model_id": "deepseek-v3.2",
+      "usd_per_siu": "0.0018",
+      "spread_to_index": "-0.8196",
+      "siu_per_usd": "543.1"
+    },
+    {
+      "model_id": "llama-3.3-70b-deepinfra",
+      "usd_per_siu": "0.0007",
+      "spread_to_index": "-0.9300",
+      "siu_per_usd": "1400.9"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-instruct",
+      "usd_per_siu": "0.0007",
+      "spread_to_index": "-0.9358",
+      "siu_per_usd": "1525.8"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-deepinfra",
+      "usd_per_siu": "0.0005",
+      "spread_to_index": "-0.9464",
+      "siu_per_usd": "1830.2"
+    },
+    {
+      "model_id": "qwen-2.5-72b-instruct",
+      "usd_per_siu": "0.0020",
+      "spread_to_index": "-0.8014",
+      "siu_per_usd": "493.4"
+    },
+    {
+      "model_id": "claude-sonnet-5",
+      "usd_per_siu": "0.0236",
+      "spread_to_index": "1.3122",
+      "siu_per_usd": "42.3"
+    },
+    {
+      "model_id": "gpt-5.1",
+      "usd_per_siu": "0.0092",
+      "spread_to_index": "-0.1008",
+      "siu_per_usd": "109.0"
+    },
+    {
+      "model_id": "gemini-3.1-pro-preview",
+      "usd_per_siu": "0.0408",
+      "spread_to_index": "3.0002",
+      "siu_per_usd": "24.5"
+    },
+    {
+      "model_id": "grok-4.6",
+      "excluded_reason": "undefined class: T1 (no run records for this class); T2 (no run records for this class); T3 (no run records for this class)"
+    },
+    {
+      "model_id": "claude-haiku-4-5",
+      "usd_per_siu": "0.0077",
+      "spread_to_index": "-0.2420",
+      "siu_per_usd": "129.3"
+    },
+    {
+      "model_id": "gpt-5.4-mini",
+      "usd_per_siu": "0.0053",
+      "spread_to_index": "-0.4774",
+      "siu_per_usd": "187.5"
+    }
+  ],
+  "sensitivity_block": [
+    {
+      "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
+      "dated_siu": "0.007365",
+      "delta": "-0.2781",
+      "applies_to": [
+        "deepseek-v3.2",
+        "llama-3.3-70b-deepinfra",
+        "mistral-small-3.2-24b-instruct",
+        "mistral-small-3.2-24b-deepinfra",
+        "qwen-2.5-72b-instruct",
+        "claude-sonnet-5",
+        "gpt-5.1",
+        "gemini-3.1-pro-preview",
+        "grok-4.6",
+        "claude-haiku-4-5",
+        "gpt-5.4-mini"
+      ]
+    },
+    {
+      "policy_variant": "batch-discount: 50% off input and output",
+      "dated_siu": "0.005164",
+      "delta": "-0.4938",
+      "applies_to": [
+        "deepseek-v3.2",
+        "llama-3.3-70b-deepinfra",
+        "mistral-small-3.2-24b-instruct",
+        "mistral-small-3.2-24b-deepinfra",
+        "qwen-2.5-72b-instruct",
+        "claude-sonnet-5",
+        "gpt-5.1",
+        "gemini-3.1-pro-preview",
+        "grok-4.6",
+        "claude-haiku-4-5",
+        "gpt-5.4-mini"
+      ]
+    }
+  ],
+  "rounding": {
+    "dated_siu_sig_figs": 4,
+    "basket_cost_dp": 6,
+    "usd_per_siu_dp": 4,
+    "spread_dp": 4,
+    "siu_per_usd_dp": 1,
+    "mode": "ROUND_HALF_UP",
+    "siu_per_usd_mode": "ROUND_DOWN",
+    "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. dated_siu rounds to significant figures, not a fixed decimal-place count, so its precision scales with the price rather than being lost as it falls (found live, 2026-09-25 — see docs/methodology.md's Rounding section). basket_cost carries more decimal places than dated_siu needs at any price level so the published print stays reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
+  },
+  "cost_of_production_usd": "1.4755",
+  "price_snapshot_ref": "price-snapshot-merged-2026-11-18T14-14-53.368Z.json",
+  "methodology_version": "v0-draft",
+  "dated_siu_median_diagnostic": "0.003679",
+  "methodology_revision": "rules-2026-11-18",
+  "signature": "0x0af4d880723c3610db33987eb64eba87edd4d9d1d79df55a4cb3158fde5b28645a2fb42810c2ce912037b2b48d6dd7ba017fec6cda6ce73b572a68748069cf55",
+  "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
+  "anchor": {
+    "chain": "base-sepolia",
+    "status": "anchored",
+    "tx_hash": "0x6ee58f2f0a5a140c46d10ea1861f45cdd95977e36e23118f2b36855422e9dc5f",
+    "posted_at": "2026-11-18T14:26:31.000Z",
+    "additional_anchors": [
+      {
+        "chain": "arc-testnet",
+        "status": "anchored",
+        "tx_hash": "0x94662a356f7c15acbcac77f1cde19e08eb35a32ff85cf524ceda8ee8ab84a854",
+        "posted_at": "2026-11-18T14:26:33.000Z"
+      }
+    ]
+  }
+}
