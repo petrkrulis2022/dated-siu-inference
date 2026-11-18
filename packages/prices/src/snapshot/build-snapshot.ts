@@ -55,7 +55,15 @@ export async function buildPriceSnapshotFromOpenRouter(
 
   for (const reg of openRouterEntries) {
     const endpoints = endpointsByModelString.get(reg.model_string) ?? [];
-    const match = endpoints.find((e) => e.provider_name.toLowerCase() === reg.host.toLowerCase());
+    // A host may name one exact endpoint ("deepinfra/fp8") rather than a whole provider: found
+    // live 2026-11-18, OpenRouter lists one endpoint per service tier under a single provider name,
+    // each at its own price, and a provider-name match takes whichever is listed first. The
+    // harness pins its calls to the same string (adapters/index.ts, provider.only), so pricing
+    // from that exact endpoint prices the tier the calls are actually billed at.
+    const host = reg.host.toLowerCase();
+    const match =
+      endpoints.find((e) => e.tag?.toLowerCase() === host) ??
+      endpoints.find((e) => e.provider_name.toLowerCase() === host);
     if (!match) {
       unmatched.push(reg.id);
       continue;

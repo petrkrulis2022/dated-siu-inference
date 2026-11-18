@@ -96,7 +96,7 @@ async function main(): Promise<void> {
     }
     return entry;
   }
-  const modelA = requireModel("mistral-small-3.2-24b-instruct");
+  const modelA = requireModel("mistral-small-3.2-24b-deepinfra");
   const modelB = requireModel("qwen-2.5-72b-instruct");
 
   const snapshotFile = await latestPriceSnapshotFile("openrouter");

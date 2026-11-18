@@ -1030,6 +1030,62 @@ margin over the new ≈$1.05 baseline, sized the same way as before: to absorb T
 reasoning-token variance, and day-to-day provider price movement without tripping, while still
 catching a genuine runaway.
 
+**Admitted 2026-11-18: `mistral-small-3.2-24b-deepinfra` (host DeepInfra), alongside
+`mistral-small-3.2-24b-instruct` (host Parasail), which Parasail has stopped serving.** Same open
+weights, a different host, so a separate constituent (the serving surface is part of the
+constituent, below).
+
+_Why._ On 2026-11-18 Parasail's own status page listed 21 models and no Mistral model; OpenRouter's
+endpoint listing showed Parasail's endpoint for this model down, with 5.9% uptime over the previous
+day; in the second scheduled run for the 18 Nov print (04:23 UTC,
+`data/prints/incidents/2026-11-18.json`) Parasail failed every T3 instance and four of five T2
+instances (OpenRouter 502 "Provider returned error", or a response with no usage block), and a
+1-token test call the same afternoon got the same 502. Mistral AI itself lists Mistral Small 3.2
+(`mistral-small-2506`) as deprecated on 2026-04-29 and retired from its own API on 2026-07-30, with
+Mistral Small 4 as its replacement. Both scheduled runs for 18 Nov refused to publish: 2 of 4
+commodity-tier models qualified (Mistral for this reason; Qwen's T2 because OpenRouter credit had
+run out, since topped up). This index answers a thin tier by expanding the registry, never by
+loosening the gate.
+
+_Evidence._ DeepInfra still serves the same weights. The new entry met every admission criterion on
+its own evidence run (`data/runs/admission-2026-11-18/`): 15 of 15 instances passed, zero
+deviations, 116,308 input and 774 output tokens, billed $0.0099. A first evidence run the same day,
+before the host was pinned to one exact endpoint (below), also passed 15 of 15 and was replaced by
+this one; it was never published.
+
+_What differs from the Parasail entry._ DeepInfra serves an fp8 quantisation, where Parasail served
+bf16. DeepInfra's list price for its default endpoint is $0.075 in / $0.20 out per 1M tokens, with
+no separate cached-input rate; Parasail's, in the last snapshot it was priced from (2026-11-17), was
+$0.09 in / $0.30 out, $0.05 cached input. Mistral's basket cost therefore changes with the host as
+well as with the market, which is why the print records the change.
+
+_Pricing the exact endpoint._ OpenRouter lists three DeepInfra endpoints for this model, one per
+service tier: `deepinfra/fp8/flex` ($0.06 / $0.16), `deepinfra/fp8` ($0.075 / $0.20) and
+`deepinfra/fp8/priority` ($0.1125 / $0.30). The price snapshot used to match on provider name only
+and take the first one listed, the flex endpoint, a rate no evidence-run call was billed at. The
+registry host is therefore the exact endpoint, `deepinfra/fp8`, which the harness also pins its
+calls to, and the snapshot builder now prices a host that names an exact endpoint from that endpoint
+(`packages/prices/src/snapshot/build-snapshot.ts`; hosts that name a provider are matched as
+before). **Disclosed limitation:** the pin does not fix the service tier. DeepInfra served 7 of the
+15 evidence-run calls on its priority tier, billed at $0.1125 / $0.30. The snapshot prices every
+call at the default endpoint's list rate, so on the evidence run's own mix the priced cost
+($0.0089) is 10.4% below the billed cost ($0.0099).
+
+_Timing, and why the Parasail entry stays registered._ The admission takes effect in the 18 Nov
+print, as Grok's admission on 2026-09-08 took effect in the next print; that print's
+`constituent_changes` records it, and a note on the print says why. The Parasail entry is not
+removed today: under Index governance's constituent-change rule, a model retired mid-cycle by its
+provider is treated like a print-day-unavailable model and processed as a registry removal from the
+next review cycle onward, so until then it is excluded from each print it cannot complete, with the
+reason disclosed. Removing it now would also
+take it out of the recomputation of every published print it is part of, since verification reads
+the current registry. **Open risk, disclosed:** the host-weighting rule above allocates one weight
+per model family, but the print code weights per registry row, so on a day when Parasail completed
+the whole basket again both Mistral entries would qualify and Mistral would carry two weights.
+Parasail still answered every T1 instance in the 04:23 run. Mistral AI having retired the model
+means DeepInfra may stop serving it too; choosing a replacement is a separate decision, not made
+here.
+
 **Removal:** a registry entry is removed when its price source stops publishing a price for it,
 its provider adapter stops functioning and no replacement adapter is available within one review
 cycle, the underlying model is discontinued by its provider, or it fails criterion 5 above

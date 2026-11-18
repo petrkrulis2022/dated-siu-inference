@@ -64,6 +64,47 @@ describe("buildPriceSnapshotFromOpenRouter", () => {
     );
   });
 
+  it("prices a host naming one exact endpoint (deepinfra/fp8) from that endpoint, not the provider's first-listed one", async () => {
+    // Found live, 2026-11-18: OpenRouter lists several endpoints under one provider name, one per
+    // service tier (DeepInfra: "deepinfra/fp8/flex", "deepinfra/fp8", "deepinfra/fp8/priority"),
+    // each at its own price. A host of just "deepinfra" matches the first one listed (flex here),
+    // while the calls themselves are billed at whichever tier serves them. A registry host that
+    // names the exact endpoint the harness pins its calls to must be priced from that endpoint.
+    const registry: ModelRegistryEntry[] = [
+      {
+        id: "mistral-small-3.2-24b-deepinfra",
+        provider: "openrouter",
+        endpoint: "https://openrouter.ai/api/v1/chat/completions",
+        model_string: "mistralai/mistral-small-3.2-24b-instruct",
+        tier: "open-weight-hosted",
+        open_weights: true,
+        host: "deepinfra/fp8",
+      },
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          data: {
+            id: "mistralai/mistral-small-3.2-24b-instruct",
+            endpoints: [
+              { provider_name: "DeepInfra", tag: "deepinfra/fp8/flex", pricing: { prompt: "0.00000006", completion: "0.00000016" } },
+              { provider_name: "DeepInfra", tag: "deepinfra/fp8", pricing: { prompt: "0.000000075", completion: "0.0000002" } },
+              { provider_name: "DeepInfra", tag: "deepinfra/fp8/priority", pricing: { prompt: "0.0000001125", completion: "0.0000003" } },
+            ],
+          },
+        }),
+      })),
+    );
+
+    const { snapshot, unmatched } = await buildPriceSnapshotFromOpenRouter(registry, "t", "t");
+    expect(unmatched).toEqual([]);
+    expect(snapshot.entries[0].price_in_usd_per_1m).toBe("0.075");
+    expect(snapshot.entries[0].price_out_usd_per_1m).toBe("0.2");
+  });
+
   it("captures a published input_cache_read as price_cached_in_usd_per_1m", async () => {
     // Found live, 2026-09-25: OpenRouter's own per-host endpoint pricing already carries this
     // field when the host publishes one — this builder simply never read it before, so real,

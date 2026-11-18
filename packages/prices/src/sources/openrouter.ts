@@ -14,6 +14,9 @@ export interface OpenRouterModel {
 
 export interface OpenRouterEndpoint {
   provider_name: string;
+  /** This one endpoint's own slug, e.g. "deepinfra/fp8" or "deepinfra/fp8/flex": a provider can
+   * list several endpoints for one model, one per service tier, each at its own price. */
+  tag?: string;
   pricing: {
     prompt: string;
     completion: string;
