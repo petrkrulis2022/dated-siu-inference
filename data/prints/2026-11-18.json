@@ -238,5 +238,15 @@
         "posted_at": "2026-11-18T13:09:14.000Z"
       }
     ]
-  }
+  },
+  "correction_notes": [
+    {
+      "published_at": "2026-11-18",
+      "note": "Registry change on this print: Mistral Small 3.2 24B is now also measured through DeepInfra (mistral-small-3.2-24b-deepinfra, pinned to DeepInfra's default fp8 endpoint), admitted on 18 Nov alongside the existing Parasail entry (mistral-small-3.2-24b-instruct). Parasail had failed most of its requests that morning, and both scheduled runs for this date refused to publish with only 2 of 4 commodity-tier models qualifying (Qwen was also short of OpenRouter credit, since topped up). Same open weights, different host: DeepInfra serves an fp8 quantisation where Parasail serves bf16, at a lower list price ($0.075 in / $0.20 out per 1M tokens, against $0.09 / $0.30). Evidence run and reasons: data/runs/admission-2026-11-18/ and docs/methodology.md, registry inclusion policy, entry of 2026-11-18."
+    },
+    {
+      "published_at": "2026-11-18",
+      "note": "Error in this print, disclosed before any correction is published: Parasail recovered in time for this run, so both Mistral entries qualified and each received a full equal weight, giving one model family two of the 9 weights. The methodology's host-weighting rule allocates one weight per model family, not per registry row, and the print code did not yet apply it. This dated_siu (0.005686) therefore reads 10.1% below the same print with one weight for Mistral split equally between its two hosts (0.006322, computed from this print's own published basket costs; 8 model families). A corrected print will be published as a same-day redo, and this print will then be marked superseded."
+    }
+  ]
 }
