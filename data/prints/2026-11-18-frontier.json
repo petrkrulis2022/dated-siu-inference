@@ -143,5 +143,9 @@
         "posted_at": "2026-11-18T13:09:21.000Z"
       }
     ]
+  },
+  "superseded_by": {
+    "print_id": "2026-11-18b-frontier",
+    "reason": "Superseded together with its blend, 2026-11-18, whose computation did not apply the host-weighting rule (cause stated there). This frontier print's own value was not affected by that error: the same-day re-run re-measured every constituent, and a day has one print of record per series. 2026-11-18b-frontier differs from it mainly because Gemini 3.1 Pro, out of prepaid credit when this print ran, is measured in the re-run."
   }
 }

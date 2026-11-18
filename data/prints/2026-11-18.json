@@ -239,6 +239,10 @@
       }
     ]
   },
+  "superseded_by": {
+    "print_id": "2026-11-18b",
+    "reason": "A computation that did not apply a published rule: this print gave the two host entries of Mistral Small 3.2 (Parasail and DeepInfra) a full equal weight each, against the methodology's host-weighting rule of one weight per model family, as disclosed in this print's own correction notes. 2026-11-18b is a same-day re-run under rules-2026-11-18, which applies that rule. It also carries fresh measurements, including Gemini 3.1 Pro, whose prepaid credit was restored between the two runs, so its value differs from this one for both reasons."
+  },
   "correction_notes": [
     {
       "published_at": "2026-11-18",
