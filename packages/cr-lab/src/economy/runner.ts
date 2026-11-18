@@ -22,7 +22,7 @@ import { parseToolCall } from "./parse.js";
 import type { NanoUsdPerSiu } from "./units.js";
 import { taskFaces, type V3aRun } from "./v3a-market.js";
 import type { MicroSiu, TaskWorker } from "./world.js";
-import { World } from "./world.js";
+import { World, subjectOf } from "./world.js";
 
 export interface CrPrintFile {
   issuers: {
@@ -319,10 +319,13 @@ export async function runWindows(opts: {
             });
           }
           const out = await w.act(a.id, parsed.action, parsed.reasoning);
+          const subject = w.v3a !== undefined ? subjectOf(parsed.action) : undefined;
           w.log.write(board.day, r, a.id, "turn", {
             seat: a.seat,
             parsed: true,
             tool: parsed.action.tool,
+            // D148a: the ID the agent gave, so a refusal naming it counts as named
+            ...(subject !== undefined ? { subject } : {}),
             ok: out.ok,
             note: out.note,
             flags: parsed.flags,

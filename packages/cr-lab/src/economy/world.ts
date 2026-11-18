@@ -134,6 +134,24 @@ export interface Need {
   window: number;
   status: "open" | "met" | "lapsed";
 }
+/** D148a: the quote, need, offer or request ID an action names, exactly as the agent gave it (the board-integrity gate checks a refusal names it) */
+export function subjectOf(a: Action): string | undefined {
+  switch (a.tool) {
+    case "accept_quote":
+    case "deliver_brief":
+      return a.quote;
+    case "post_quote":
+      return a.need;
+    case "buy_offer":
+    case "withdraw_offer":
+      return a.offer;
+    case "decline_request":
+      return a.request;
+    default:
+      return undefined;
+  }
+}
+
 export interface Quote {
   id: string;
   researcher: string;
@@ -170,6 +188,8 @@ export interface Quote {
    * quote, and any later action on it is refused with this as the reason.
    */
   closed?: { window: number; how: "paid" | "refunded" | "lapsed" | "lapsed-refunded" | "lapsed-paid-in-claims" };
+  /** D148a: the window and round the demand agent accepted the quote in, so a repeat acceptance can say so */
+  accepted?: { window: number; round: number };
 }
 export interface FrontOrder {
   agent: string;
@@ -231,6 +251,8 @@ export interface ObjectiveLedger {
   /** the hedger only: briefs delivered on time vs. late or never, by count */
   onTime: number;
   late: number;
+  /** D149 item 8 (v3a): the hedger's late-brief penalties, kept apart from its income and spending (v1/v2 subtract them from usdcNet, as before; absent there) */
+  penaltyMicroUsd?: bigint;
 }
 
 /** v3a: what a v3a world keeps beyond v2's state (docs/experiment-3a-design.md; D143); absent in a v1 or v2 world */
@@ -447,16 +469,8 @@ export class World {
           ...(detail !== undefined ? { detail } : {}),
         });
         // v3a Phase 2 item 1: a refusal on a quote or a need names it, so an agent holding several can tell which one the chain refused
-        const subject =
-          action.tool === "accept_quote" || action.tool === "deliver_brief"
-            ? `${action.quote}: `
-            : action.tool === "post_quote"
-              ? `${action.need}: `
-              : action.tool === "buy_offer" || action.tool === "withdraw_offer"
-                ? `${action.offer}: `
-                : action.tool === "decline_request"
-                  ? `${action.request}: `
-                  : "";
+        const id = subjectOf(action);
+        const subject = id === undefined ? "" : `${id}: `;
         return this.#result(agent, { ok: false, note: `${subject}refused: ${e.message}${suffix}` });
       }
       throw e;
@@ -541,7 +555,8 @@ export class World {
       case "accept_quote":
         return this.#acceptQuote(agent, role, a.quote, a.claims, a.pay);
       case "buy_data":
-        if (this.v3a !== undefined && a.pay === undefined) return { ok: false, note: "say which currency pays: usdc or agu" };
+        // D148b: v3a has no DATA seller; issuers' task prices include the data (the v3a toolset has no buy_data, so only a hand-built action reaches this)
+        if (this.v3a !== undefined) return { ok: false, note: "there is no data to buy: issuers' task prices include it" };
         return this.#buyData(agent, a.dataset, a.pay);
       case "commission_task": {
         if (a.tasks.length < 1 || a.tasks.length > 4 || new Set(a.tasks).size !== a.tasks.length)
@@ -551,7 +566,15 @@ export class World {
         const notes: string[] = [];
         let anyOk = false;
         for (const t of a.tasks) {
-          const r = await this.#commission(agent, t, a.issuer, a.pay);
+          let r: Outcome;
+          try {
+            r = await this.#commission(agent, t, a.issuer, a.pay);
+          } catch (e) {
+            // D148b: v3a commissions a brief's two tasks in one call, so a task the chain refuses (e.g. not enough of the currency left for the second) is that task's own
+            // refusal, never the whole call's -- the tasks before it did run. v1/v2 keep the whole-call refusal.
+            if (this.v3a === undefined || !(e instanceof ChainRule || e instanceof ParticipantRefused)) throw e;
+            r = { ok: false, note: `refused: ${e.message}` };
+          }
           anyOk ||= r.ok;
           notes.push(`${t}: ${r.note}`);
         }
@@ -1017,7 +1040,7 @@ export class World {
   #objectiveFor(agent: string): ObjectiveLedger {
     let o = this.objective.get(agent);
     if (o === undefined) {
-      o = { usdcNet: 0n, aguNet: 0n, unmetMicroSiu: 0n, onTime: 0, late: 0 };
+      o = { usdcNet: 0n, aguNet: 0n, unmetMicroSiu: 0n, onTime: 0, late: 0, penaltyMicroUsd: 0n };
       this.objective.set(agent, o);
     }
     return o;
@@ -1122,6 +1145,10 @@ export class World {
     const q = this.quotes.find((x) => x.id === id);
     if (q === undefined) return { ok: false, note: `${id}: no such quote` };
     if (q.demand !== agent) return { ok: false, note: `${id}: offered to ${q.demand}, not to you` };
+    // D148a: accepting again a quote you already accepted is refused with when you accepted it and what happens next (the rehearsal saw 13 such repeats)
+    // (quotes are window-bound: an accepted one settles or lapses at its window's close, so the repeat is always in the same window)
+    if (this.v3a !== undefined && q.status === "accepted" && q.accepted !== undefined)
+      return { ok: false, note: `${id}: you accepted ${id} in round ${q.accepted.round}; it is in escrow, wait for delivery` };
     if (q.status !== "posted") return { ok: false, note: `${id}: ${this.#whyNotOpen(q, "buyer")}` };
     const other = this.quotes.find((x) => x.need === q.need && x.status === "accepted");
     if (other !== undefined) return { ok: false, note: `${id}: you already accepted ${other.id} for ${q.need}` };
@@ -1178,6 +1205,7 @@ export class World {
       this.spentAguThisWindow.set(agent, spent + aguEquivalent);
       this.#addSpend(agent, this.window, q.priceMicroSiu);
       q.status = "accepted";
+      q.accepted = { window: this.window, round: this.round };
       q.escrow = escrow;
       q.usdcEscrowed = usdcOwed;
       this.#log(agent, "escrow-open", {
@@ -1199,6 +1227,7 @@ export class World {
     this.spentAguThisWindow.set(agent, spent + aguEquivalent);
     this.#addSpend(agent, this.window, q.priceMicroSiu);
     q.status = "accepted";
+    q.accepted = { window: this.window, round: this.round };
     q.escrow = escrow;
     q.agu = units;
     this.#log(agent, "escrow-open", {
@@ -1430,6 +1459,8 @@ export class World {
     if (pay !== undefined) this.#payment(provider, issuer, "issuer cost", pay, cost, { payeeAcceptsBoth: true, scripted: true, ref: task });
     if (pay === "usdc") this.chain.transfer("USDC", provider, issuer, usdc);
     else if (pay === "agu") this.chain.transfer("AGU", provider, issuer, agu);
+    // D149 item 5: the exact amount, for the store-of-value replay (the payment entry carries only values)
+    if (pay !== undefined) this.#log(provider, "wallet-transfer", { to: issuer, ...(pay === "usdc" ? { usdc } : { agu }), for: "issuer cost", ref: task });
     this.#log(provider, "provider-profit", {
       cost,
       issuer,
@@ -1478,12 +1509,15 @@ export class World {
     if (usdc >= owed) {
       this.#payment(q.researcher, q.demand, "claim work repaid", "usdc", value, { payeeAcceptsBoth: true, scripted: true, ref: q.id });
       this.chain.transfer("USDC", q.researcher, q.demand, owed);
+      // D149 item 5: the exact amount, for the store-of-value replay (the payment entry carries only values)
+      this.#log(q.researcher, "wallet-transfer", { to: q.demand, usdc: owed, for: "claim work repaid", ref: q.id });
       return owed;
     }
     const agu = this.aguFor(value);
     if (this.chain.balance(q.researcher, "AGU") >= agu) {
       this.#payment(q.researcher, q.demand, "claim work repaid", "agu", value, { payeeAcceptsBoth: true, scripted: true, ref: q.id });
       this.chain.transfer("AGU", q.researcher, q.demand, agu);
+      this.#log(q.researcher, "wallet-transfer", { to: q.demand, agu, for: "claim work repaid", ref: q.id });
       return owed;
     }
     this.#log(q.researcher, "error", { quote: q.id, claimWorkUnrepaid: owed, reason: "holds too little USDC or AGU-lab to pay back the claim work it used" });
@@ -1557,6 +1591,7 @@ export class World {
     });
     this.#addSpend(agent, this.window, q.priceMicroSiu);
     q.status = "accepted";
+    q.accepted = { window: this.window, round: this.round };
     q.paidInClaims = plan.map((p) => ({ tokenId: p.tokenId, milli: p.milli }));
     q.claimEscrow = escrowAccount;
     const face = plan.reduce((n, p) => n + p.milli, 0n);
@@ -1582,21 +1617,13 @@ export class World {
     const key = `${agent}|${this.window}|${dataset}`;
     if (this.dataBought.has(key))
       return { ok: false, note: `you already bought ${dataset} this window` };
-    // v3a: a dataset costs about one task's value, priced in mSIU and payable in either currency at today's print (design, "Data price is proportionate")
-    const v3aValue = this.params.v3a === undefined ? undefined : this.params.v3a.dataPriceMilli * 1_000n;
-    const usdcPrice =
-      v3aValue === undefined ? this.params.dataShadowPriceUsdc : usdcForMicroSiuCeil(v3aValue, this.commodityRate);
-    const both = v3aValue === undefined ? false : this.#canPayBoth(agent, v3aValue);
-    const recordPayment = (): void => {
-      if (v3aValue !== undefined)
-        this.#payment(agent, DATA_AGENT, "data", pay, v3aValue, { payeeAcceptsBoth: true, ref: dataset, couldPayBoth: both });
-    };
+    // v1/v2 only: D148b removed the data step from v3a (v3a's own proportionate data price, "Data price is proportionate", went with it)
+    const usdcPrice = this.params.dataShadowPriceUsdc;
     if (pay === "agu") {
       const rate = this.commodityRate;
-      const agu = this.aguFor(v3aValue ?? microSiuForUsdcCeil(usdcPrice, rate));
+      const agu = this.aguFor(microSiuForUsdcCeil(usdcPrice, rate));
       this.chain.transfer("AGU", agent, DATA_AGENT, agu);
       this.dataBought.add(key);
-      recordPayment();
       this.#objectiveFor(agent).aguNet -= agu; // v2 item 8: a research cost
       this.#log(agent, "data-purchase", {
         dataset,
@@ -1612,7 +1639,6 @@ export class World {
     }
     this.chain.transfer("USDC", agent, DATA_AGENT, usdcPrice);
     this.dataBought.add(key);
-    recordPayment();
     this.#objectiveFor(agent).usdcNet -= usdcPrice; // v2 item 8: a research cost
     this.#log(agent, "data-purchase", {
       dataset,
@@ -1638,13 +1664,14 @@ export class World {
     if (price === undefined) return { ok: false, note: `${issuerId} has no price for ${task}` };
     if (this.workSpendUsd.gte(this.params.spendCapUsdPerWindow))
       return { ok: false, note: "the window's work budget is spent" };
-    // a research agent works from today's data: the first commission on a dataset buys it (v1/v2: in USDC; v3a: in the currency the commission is paid in, never a
-    // currency chosen for it)
+    // v1/v2: a research agent works from today's data, and its first commission on a dataset buys it, in USDC. D148b: v3a has no data step -- issuers' task prices
+    // include the data
     if (
+      this.v3a === undefined &&
       role === "research" &&
       !this.dataBought.has(`${agent}|${this.window}|${DATASET_FOR[task]}`)
     ) {
-      const bought = this.#buyData(agent, DATASET_FOR[task], this.v3a !== undefined ? pay : "usdc");
+      const bought = this.#buyData(agent, DATASET_FOR[task], "usdc");
       if (!bought.ok) return bought;
     }
     const both = this.v3a !== undefined && this.#canPayBoth(agent, price);
@@ -2000,6 +2027,17 @@ export class World {
       ...p.agents.demand.map((a): [string, bigint] => [a, v.startingUsdc.demand]),
       [p.agents.hedger, v.startingUsdc.hedger],
     ];
+    // D149 item 6 (owner, 2026-11-18): arm B starts every role all in USDC, at the same total value as arm A's equal split, so the owner's rule has to be met by
+    // building a work reserve rather than being met by the starting balances (the Phase 4 rehearsal held 3,947 mSIU against 431 mSIU required)
+    if (this.v3a?.run.arm === "B") {
+      for (const [agent, usdc] of roles) {
+        this.mint(agent, 2n * usdc);
+        this.v3a.startValueMicroUsd.set(agent, 2n * usdc);
+      }
+      this.v3a.startValueMicroUsd.set(v.provider, 0n);
+      this.logHoldings(0);
+      return;
+    }
     // the participant creates the AGU-lab the wallets need evenly across the ladder's windows, one share per window and class, so the reserve's face rolls a third at a
     // time (found building v3a: topping up on demand put it all on window 3's lots, and that one roll then cost half the buffer at once)
     {
@@ -2061,6 +2099,11 @@ export class World {
         workShareBps: total === 0n ? null : ((aguMicroSiu + claimsMicroSiu) * 10_000n) / total,
         aguMicroSiuShadow: aguShadow,
         workShareBpsShadow: totalShadow === 0n ? null : ((aguShadow + claimsMicroSiu) * 10_000n) / totalShadow,
+        // D149 item 5: this close's valuation, so the scorer values the passive benchmark exactly as these holdings are valued
+        rate,
+        navNum: this.chain.nav().num,
+        navDen: this.chain.nav().den,
+        shadowPpm: this.#shadowPpm,
       });
     }
   }
@@ -2182,6 +2225,25 @@ export class World {
         this.#log(a, "notice", { need: need.id, tasks: need.tasks });
       }
     }
+  }
+
+  /**
+   * D149 item 7: the front claims the roll will sell for window k + 1, by task class -- what the reserve holds in that window's live front lots, less what orders
+   * placed this window already take (the roll fills orders at window k + 1's start, first come first served, from these same lots)
+   */
+  rollAvailable(k: number): Map<TaskId, MilliSiu> {
+    const out = new Map<TaskId, MilliSiu>();
+    for (const id of this.chain.reserveLots) {
+      const t = this.chain.claimTypes.get(id);
+      if (this.chain.retired.has(id) || t === undefined || t.windowFrom !== this.windowFrom(k + 1)) continue;
+      const task = t.classId as TaskId;
+      out.set(task, (out.get(task) ?? 0n) + this.chain.claimBalance(RESERVE, id));
+    }
+    for (const o of this.frontOrders.filter((x) => x.forWindow === k + 1)) {
+      const left = (out.get(o.task) ?? 0n) - o.milli;
+      if (out.has(o.task)) out.set(o.task, left > 0n ? left : 0n);
+    }
+    return out;
   }
 
   /** R5 to R7 for the front window k */
@@ -2656,7 +2718,10 @@ export class World {
         o.onTime += onTimeThisWindow;
       }
       if (lateThisWindow > 0) {
-        o.usdcNet -= this.params.hedger.latePenaltyUsdcPerBrief * BigInt(lateThisWindow);
+        const penalty = this.params.hedger.latePenaltyUsdcPerBrief * BigInt(lateThisWindow);
+        // D149 item 8: in v3a a penalty is a penalty, never shown as "net in USDC" (the Phase 4 hedger read -100,000 µ$ net in USDC with its USDC untouched)
+        if (this.v3a !== undefined) o.penaltyMicroUsd = (o.penaltyMicroUsd ?? 0n) + penalty;
+        else o.usdcNet -= penalty;
         o.late += lateThisWindow;
       }
       if (onTimeThisWindow > 0 || lateThisWindow > 0)

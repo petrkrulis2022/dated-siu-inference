@@ -3,9 +3,9 @@
  * every one, and a failed run is reported as invalid with its reason, never rerun quietly.
  *
  *  - Lost turns (parse or service failures): 1% or fewer.
- *  - Starting balances: every role holds both currencies at equal value, checked from the genesis holdings.
+ *  - Starting balances: arm A, every role holds both currencies at equal value; arm B (D149 item 6), all in USDC at the same total value; checked from the genesis holdings.
  *  - Board integrity: no paid or refunded quote appears as open on any board (checked against the log's own settlements, not the board's filter), and every refusal
- *    carries its reason (a refusal on a quote, need, offer or request names it first).
+ *    carries its reason (a refusal on a quote, need, offer or request names it first: D148a, the ID the agent gave, whatever it was).
  *  - (D144's buffer gate is gone: D146 replaced the finite buffer with an open-ended lab subsidy, whose total the scorer reports per run.)
  *  - v6's issuance limit never binds (D145): no roll or creation is refused for lack of the issuers' total headroom; binding would mean capacity was sized wrong.
  *  - The scorer reads the seed from the log, never from the config default (D133); for a counted cell, the log's price-path seed hash must be the one frozen in the config.
@@ -23,6 +23,12 @@ export interface Gate {
 
 const SUBJECT_TOOLS = new Set(["accept_quote", "deliver_brief", "post_quote", "buy_offer", "withdraw_offer", "decline_request"]);
 const SUBJECT = /^(?:quote|need|offer|request)-\d+: \S/;
+/** D148a: a refusal names its subject when it starts with the ID the agent gave (logged as `subject`), whatever that ID was; a log without it keeps the pattern above */
+function namesSubject(e: LogEntry, note: string): boolean {
+  if (SUBJECT.test(note)) return true;
+  const id = typeof e.subject === "string" ? e.subject : "";
+  return id !== "" && note.startsWith(`${id}: `) && /\S/.test(note.slice(id.length + 2));
+}
 
 export function checkGates(log: readonly LogEntry[], params: EconomyParams, opts: { cell?: string } = {}): Gate[] {
   const v = params.v3a;
@@ -39,7 +45,8 @@ export function checkGates(log: readonly LogEntry[], params: EconomyParams, opts
     detail: `${parse + service} of ${turns.length} lost (${parse} parse, ${service} service)`,
   });
 
-  // starting balances
+  // starting balances: arm A, both currencies at equal value; D149 item 6, arm B, all in USDC at the same total value (the arm is read from the log's genesis entry)
+  const armB = runMeta(log)?.arm === "B";
   const start = log.filter((e) => e.kind === "holdings" && e.atClose === 0);
   const bad: string[] = [];
   for (const e of start) {
@@ -50,13 +57,20 @@ export function checkGates(log: readonly LogEntry[], params: EconomyParams, opts
     const want = e.role === "research" ? v.startingUsdc.research : e.role === "demand" ? v.startingUsdc.demand : v.startingUsdc.hedger;
     const usdc = asBigInt(e.usdc) ?? -1n;
     const agu = asBigInt(e.aguValueMicroUsd) ?? -1n;
-    if (usdc !== want || agu - usdc > 1n || usdc - agu > 1n) bad.push(`${e.actor}: ${usdc} µ$ USDC, ${agu} µ$ of AGU-lab, ${want} expected`);
+    if (armB) {
+      if (usdc !== 2n * want || agu !== 0n) bad.push(`${e.actor}: ${usdc} µ$ USDC, ${agu} µ$ of AGU-lab, ${2n * want} µ$ USDC and no AGU-lab expected`);
+    } else if (usdc !== want || agu - usdc > 1n || usdc - agu > 1n) bad.push(`${e.actor}: ${usdc} µ$ USDC, ${agu} µ$ of AGU-lab, ${want} expected`);
   }
   const roles = params.agents.research.length + params.agents.demand.length + 2;
   gates.push({
-    name: "every role starts with both currencies at equal value",
+    name: armB ? "every role starts all in USDC at arm A's total value (arm B)" : "every role starts with both currencies at equal value",
     ok: start.length === roles && bad.length === 0,
-    detail: bad.length === 0 ? `${start.length} wallets, each half USDC and half AGU-lab to within 1 µ$` : bad.join("; "),
+    detail:
+      bad.length > 0
+        ? bad.join("; ")
+        : armB
+          ? `${start.length} wallets, each all USDC at twice the role's USDC allowance`
+          : `${start.length} wallets, each half USDC and half AGU-lab to within 1 µ$`,
   });
 
   // board integrity: a quote is settled at its first receipt or lapse entry, and is window-bound (an unaccepted one lapses unlogged at its window's close)
@@ -79,7 +93,7 @@ export function checkGates(log: readonly LogEntry[], params: EconomyParams, opts
     (e) =>
       e.parsed === true &&
       e.ok === false &&
-      (typeof e.note !== "string" || e.note.trim() === "" || (SUBJECT_TOOLS.has(String(e.tool)) && !SUBJECT.test(e.note))),
+      (typeof e.note !== "string" || e.note.trim() === "" || (SUBJECT_TOOLS.has(String(e.tool)) && !namesSubject(e, e.note))),
   );
   gates.push({
     name: "board integrity: no settled quote shown as open; every refusal carries its reason",

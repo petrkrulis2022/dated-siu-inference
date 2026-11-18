@@ -386,7 +386,6 @@ export const TOOLS_V3A_BY_ROLE: Readonly<Record<Role, readonly string[]>> = {
     "request_claims",
     "buy_offer",
     "post_quote",
-    "buy_data",
     "commission_task",
     "deliver_brief",
   ],
@@ -438,7 +437,6 @@ export const TOOL_HELP_V3A: Readonly<Record<string, string>> = {
     "offer a brief to the demand agent with that need, priced in whole mSIU or in whole µ$ (name exactly one), and say which currencies you accept (usdc, agu or both); work claims for the brief's window are always accepted",
   accept_quote:
     "accept a quote, paying in usdc or agu (a currency the quote accepts; escrowed, released only if the brief passes), or in claims: work claims you hold for this window, which move to the research agent at once at face and are not refunded",
-  buy_data: "buy today's dataset for a task type (about one task's value), paid in usdc or agu; a research agent's first task on a dataset each day also buys it, in the commission's currency",
   commission_task: "pay an issuer to do these tasks now, in usdc or agu, escrowed and paid per task only on a pass",
   deliver_brief: "deliver a brief from your passing outputs of today; a currency payment is released only if every component passed",
   deliver_forward: "deliver one of the briefs you sold forward, from two passing outputs of different task types from today",
@@ -495,10 +493,6 @@ const ARG_SCHEMAS_V3A: Readonly<Record<string, { properties: Record<string, unkn
       claims: { type: "array", items: { type: "string" }, description: "with pay claims: the ids of work claims you hold for this window" },
     },
     required: ["quote", "pay"],
-  },
-  buy_data: {
-    properties: { dataset: { type: "string", enum: ["perp", "lending", "tokens", "stablecoins"] }, pay: PAY_V3A },
-    required: ["dataset", "pay"],
   },
   commission_task: {
     properties: { tasks: { type: "array", items: TASK_ENUM, minItems: 1 }, issuer: { type: "string" }, pay: PAY_V3A },
@@ -596,8 +590,6 @@ function toActionV3a(tool: string, args: Obj): Action {
         throw new Error("with pay claims, args.claims must list the claim ids you pay with");
       return { tool: "accept_quote", quote: str(args, "quote"), pay: "claims", claims: (claims as string[]).slice(0, 8) };
     }
-    case "buy_data":
-      return { tool: "buy_data", dataset: str(args, "dataset"), pay: payV3a(args) };
     case "commission_task":
       return { tool: "commission_task", tasks: tasksArg(args), issuer: str(args, "issuer"), pay: payV3a(args) };
     default:

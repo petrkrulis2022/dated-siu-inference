@@ -361,20 +361,9 @@ describe("v3a quotes: the research agent states what it accepts; the payer choos
 });
 
 describe("v3a commissions and data: currency always named; the refund rule is the owner's switch", () => {
-  it("refuses a commission or a dataset with no currency named", async () => {
+  it("refuses a commission with no currency named", async () => {
     const { w } = v3aWorld("v3a-pay-named");
     expect((await w.act("RESEARCH-1", { tool: "commission_task", tasks: ["CR-UO"], issuer: "ISSUER-C1" }, "r")).note).toBe("say which currency pays: usdc or agu");
-    expect((await w.act("RESEARCH-1", { tool: "buy_data", dataset: "tokens" }, "r")).note).toBe("say which currency pays: usdc or agu");
-  });
-
-  it("prices a dataset at about one task's value in mSIU, and buys a commission's first dataset in the commission's own currency", async () => {
-    const { w } = v3aWorld("v3a-data");
-    const agu = w.chain.balance("RESEARCH-1", "AGU");
-    await w.act("RESEARCH-1", { tool: "commission_task", tasks: ["CR-UO"], issuer: "ISSUER-C1", pay: "agu" }, "r");
-    const data = w.log.entries.find((e) => e.kind === "data-purchase");
-    expect(data?.payUnit).toBe("agu");
-    expect(w.chain.balance("RESEARCH-1", "AGU")).toBeLessThan(agu);
-    expect(w.log.entries.find((e) => e.kind === "payment" && e.what === "data")?.valueMicroSiu).toBe(148_000n);
   });
 
   it("refunds a failed task by default; with failedWorkPays the issuer is paid for it", async () => {
@@ -384,7 +373,6 @@ describe("v3a commissions and data: currency always named; the refund rule is th
           (p.v3a as NonNullable<EconomyParams["v3a"]>).failedWorkPays = pays;
         },
       });
-      await w.act("RESEARCH-1", { tool: "buy_data", dataset: "tokens", pay: "usdc" }, "r");
       worker.queue.push(false);
       const usdc = w.chain.balance("RESEARCH-1", "USDC");
       await w.act("RESEARCH-1", { tool: "commission_task", tasks: ["CR-UO"], issuer: "ISSUER-C1", pay: "usdc" }, "r");
@@ -728,7 +716,7 @@ describe("D146 (owner, 2026-11-12): the SIU's definition, the unmet-need penalty
     const text = renderBoard(boardFor(w, "DEMAND-1"));
     const line = text.split("\n").find((l) => l.includes("window 1 (now)")) as string;
     // the window decides which unit comes first; both are there either way
-    expect(line).toMatch(new RegExp(`work content [^;]*\\b${(work / 1_000n).toLocaleString("en-US")} mSIU[^;]*, before research costs such as data`));
+    expect(line).toMatch(new RegExp(`work content [^;]*\\b${(work / 1_000n).toLocaleString("en-US")} mSIU[^;]*; if unmet`)); // D148b: no "before research costs such as data" -- there is no data step
     expect(line).toMatch(new RegExp(`if unmet at the window's end, [^;]*\\b${((3n * work) / 1_000n).toLocaleString("en-US")} mSIU`));
     w.closeWindow(1);
     const lapsed = w.log.entries.find((e) => e.kind === "need-lapsed" && e.need === need.id) as LogEntry;
@@ -795,5 +783,150 @@ describe("D146 minor: the dev verdict's NAV check names what a v3a run publishes
     const check = judgeDevWindows(w, []).checks.find((c) => c.name.startsWith("NAV published"));
     expect(check?.name).toBe("NAV published every window (v3a: with the shadow NAV; v2: with and without the buffer)");
     expect(check?.ok).toBe(true);
+  });
+});
+
+describe("D148a: re-accepting a quote you already accepted", () => {
+  it("says when you accepted it and that it is in escrow, waiting for delivery", async () => {
+    const { w } = v3aWorld("v3a-reaccept");
+    const need = w.needs.find((n) => n.agent === "DEMAND-1") as NonNullable<World["needs"][number]>;
+    await w.act("RESEARCH-1", { tool: "post_quote", need: need.id, tasks: need.tasks, priceMicroSiu: 500_000n, accepts: "usdc" }, "r");
+    const q = w.quotes.at(-1)?.id as string;
+    w.setTime(1, 2);
+    expect((await w.act("DEMAND-1", { tool: "accept_quote", quote: q, pay: "usdc" }, "r")).ok).toBe(true);
+    w.setTime(1, 5);
+    const again = await w.act("DEMAND-1", { tool: "accept_quote", quote: q, pay: "usdc" }, "r");
+    expect(again.ok).toBe(false);
+    expect(again.note).toBe(`${q}: you accepted ${q} in round 2; it is in escrow, wait for delivery`);
+  });
+});
+
+describe("D148b: no DATA seller in v3a -- issuers' task prices include the data", () => {
+  it("a research agent commissions both of a brief's tasks in one call and delivers: two actions, no data purchase", async () => {
+    const { w } = v3aWorld("v3a-nodata");
+    const need = w.needs.find((n) => n.agent === "DEMAND-1") as NonNullable<World["needs"][number]>;
+    await w.act("RESEARCH-1", { tool: "post_quote", need: need.id, tasks: need.tasks, priceMicroSiu: 900_000n, accepts: "both" }, "r");
+    const q = w.quotes.at(-1)?.id as string;
+    expect((await w.act("DEMAND-1", { tool: "accept_quote", quote: q, pay: "usdc" }, "r")).ok).toBe(true);
+    const commission = await w.act("RESEARCH-1", { tool: "commission_task", tasks: need.tasks, issuer: "ISSUER-C1", pay: "usdc" }, "r");
+    expect(commission.ok, commission.note).toBe(true);
+    const delivered = await w.act("RESEARCH-1", { tool: "deliver_brief", quote: q }, "r");
+    expect(delivered.ok, delivered.note).toBe(true);
+    expect(w.log.entries.filter((e) => e.kind === "data-purchase" || (e.kind === "payment" && e.what === "data"))).toEqual([]);
+  });
+
+  it("offers research no data tool, and neither its instructions nor its board mention data", () => {
+    expect(toolDefsForRole("research", "v3a").map((d) => d.name)).not.toContain("buy_data");
+    expect(parseToolCall({ tool: "buy_data", args: { reasoning: "r", dataset: "tokens", pay: "usdc" } }, "research", undefined, "v3a").ok).toBe(false);
+    for (const siuFirst of [true, false]) expect(instructionsForV3a("research", siuFirst)).not.toMatch(/\bdata(sets?)?\b/i);
+    const { w } = v3aWorld("v3a-nodata-board");
+    expect(renderBoard(boardFor(w, "RESEARCH-1"))).not.toMatch(/\bdata(sets?)?\b/i);
+  });
+
+  it("a commission of two tasks reports each task's own result when only the first can be paid", async () => {
+    const probe = v3aWorld("v3a-two-tasks");
+    const before = probe.w.chain.balance("RESEARCH-1", "USDC");
+    await probe.w.act("RESEARCH-1", { tool: "commission_task", tasks: ["CR-UO"], issuer: "ISSUER-C1", pay: "usdc" }, "r");
+    const oneTask = before - probe.w.chain.balance("RESEARCH-1", "USDC");
+    expect(oneTask).toBeGreaterThan(0n);
+    const { w } = v3aWorld("v3a-two-tasks");
+    w.chain.transfer("USDC", "RESEARCH-1", "OWNER-X", w.chain.balance("RESEARCH-1", "USDC") - oneTask - 10n);
+    const r = await w.act("RESEARCH-1", { tool: "commission_task", tasks: ["CR-UO", "CR-PL"], issuer: "ISSUER-C1", pay: "usdc" }, "r");
+    expect(r.ok, r.note).toBe(true);
+    expect(r.note).toMatch(/^CR-UO: .+; CR-PL: refused: /);
+    expect(w.log.entries.filter((e) => e.kind === "escrow-open" && e.actor === "RESEARCH-1").map((e) => e.task)).toEqual(["CR-UO"]);
+  });
+});
+
+
+describe("D149 item 6: arm B starts every role all in USDC, at arm A's total value", () => {
+  const start = (w: World) => new Map(w.log.entries.filter((e) => e.kind === "holdings" && e.atClose === 0 && e.role !== "provider").map((e) => [e.actor, e]));
+
+  it("mints twice the role's USDC and no AGU-lab, the same total value as arm A's equal split", () => {
+    const a = v3aWorld("v3a-armb-start", { arm: "A" });
+    const b = v3aWorld("v3a-armb-start", { arm: "B" });
+    const v = b.params.v3a as NonNullable<EconomyParams["v3a"]>;
+    const startA = start(a.w);
+    for (const [agent, e] of start(b.w)) {
+      const role = e.role as "research" | "demand" | "hedger";
+      expect(b.w.chain.balance(agent, "AGU"), agent).toBe(0n);
+      expect(b.w.chain.balance(agent, "USDC"), agent).toBe(2n * v.startingUsdc[role]);
+      const ea = startA.get(agent) as LogEntry;
+      const totalA = (ea.usdc as bigint) + (ea.aguValueMicroUsd as bigint);
+      const diff = totalA - (e.usdc as bigint);
+      expect(diff >= -1n && diff <= 1n, `${agent}: arm A ${totalA} µ$, arm B ${String(e.usdc)} µ$`).toBe(true);
+    }
+    expect(checkGates(b.w.log.entries, b.params)[1]).toMatchObject({ ok: true, name: "every role starts all in USDC at arm A's total value (arm B)" });
+    const halfAgu = b.w.log.entries.map((e) => (e.kind === "holdings" && e.atClose === 0 && e.actor === "DEMAND-1" ? { ...e, aguValueMicroUsd: 1n } : e));
+    expect(checkGates(halfAgu, b.params)[1]?.ok).toBe(false);
+    expect(checkGates(a.w.log.entries, a.params)[1]).toMatchObject({ ok: true, name: "every role starts with both currencies at equal value" });
+  });
+
+  it("so the owner's rule binds: with known needs and no AGU-lab or claims, the first close is not compliant", () => {
+    const { w } = v3aWorld("v3a-armb-binds", { arm: "B" });
+    w.closeWindow(1);
+    const d1 = w.log.entries.find((e) => e.kind === "rule-check" && e.actor === "DEMAND-1");
+    expect((d1?.requiredMicroSiu as bigint) > 0n).toBe(true);
+    expect(d1?.heldMicroSiu).toBe(0n);
+    expect(d1?.compliant).toBe(false);
+  });
+});
+
+describe("D149 item 7: buying ahead is discoverable", () => {
+  it("the demand role text describes the path in one neutral sentence", () => {
+    for (const siuFirst of [true, false])
+      expect(instructionsForV3a("demand", siuFirst)).toContain(
+        "You can also get work for a later window's need now: buy work claims for that window from PROVIDER or the roll, then pay a research agent with them.",
+      );
+  });
+
+  it("the board shows the roll's front claims for the next window by task class, net of orders already placed", async () => {
+    const { w } = v3aWorld("v3a-roll-by-class");
+    const avail = w.rollAvailable(1);
+    expect([...avail.keys()].sort()).toEqual(["CR-PL", "CR-SM", "CR-UO"]);
+    expect([...avail.values()].every((m) => m > 0n)).toBe(true);
+    const line = (): string => renderBoard(boardFor(w, "DEMAND-1")).split("\n").find((l) => l.startsWith("Front-claim roll:")) as string;
+    const shown = (t: string): string => (line().match(new RegExp(`${t} ([\\d,]+) mSIU`)) as RegExpMatchArray)[1] as string;
+    expect(shown("CR-UO")).toBe(avail.get("CR-UO")?.toLocaleString("en-US"));
+    const ok = await w.act("DEMAND-1", { tool: "order_front_claim", task: "CR-UO", milli: 100n, pay: "usdc" }, "r");
+    expect(ok.ok, ok.note).toBe(true);
+    expect(w.rollAvailable(1).get("CR-UO")).toBe((avail.get("CR-UO") as bigint) - 100n);
+    expect(shown("CR-UO")).toBe(((avail.get("CR-UO") as bigint) - 100n).toLocaleString("en-US"));
+  });
+});
+
+describe("D149 item 8: penalties shown as penalties, apart from income and spending; the hedger told how to deliver", () => {
+  const lines = (w: World, agent: string) => renderBoard(boardFor(w, agent)).split("\n");
+
+  it("names the hedger's delivery action in its role text", () => {
+    for (const siuFirst of [true, false]) expect(instructionsForV3a("hedger", siuFirst)).toMatch(/\bdeliver_forward\b/);
+  });
+
+  it("a late brief's penalty is on its own line, never in the hedger's net in USDC, and its wallet is untouched", () => {
+    const { w } = v3aWorld("v3a-penalty-hedger");
+    const usdc = w.chain.balance("HEDGER", "USDC");
+    w.closeWindow(1); // one brief owed by window 1's close, none delivered
+    const L = lines(w, "HEDGER");
+    const result = L.find((l) => l.startsWith("Your running result:")) as string;
+    expect(result).not.toMatch(/50,000/);
+    expect(result).toMatch(/\b0 (µ\$|mSIU)/);
+    expect(L.find((l) => l.startsWith("Your penalties:"))).toMatch(/50,000 µ\$.* for late or missing briefs \(0 on time, 1 late or missing\)/);
+    expect(L.find((l) => l.startsWith("Your combined result:"))).toMatch(/-50,000 µ\$/);
+    expect(w.chain.balance("HEDGER", "USDC")).toBe(usdc);
+  });
+
+  it("a demand agent's unmet-need charge is on the penalties line, not in its running result", () => {
+    const { w } = v3aWorld("v3a-penalty-demand");
+    w.closeWindow(1); // DEMAND-1's window-1 need lapses unmet
+    const L = lines(w, "DEMAND-1");
+    expect(L.find((l) => l.startsWith("Your running result:"))).not.toMatch(/unmet/);
+    expect(L.find((l) => l.startsWith("Your penalties:"))).toMatch(/charged for unmet needs/);
+    expect(L.some((l) => l.startsWith("Your combined result:"))).toBe(true);
+  });
+
+  it("an agent with no penalty shows no penalties line", () => {
+    const { w } = v3aWorld("v3a-penalty-none");
+    w.closeWindow(1);
+    expect(lines(w, "RESEARCH-1").some((l) => l.startsWith("Your penalties:"))).toBe(false);
   });
 });

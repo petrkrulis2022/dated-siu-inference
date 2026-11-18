@@ -12,7 +12,7 @@
  */
 import type { TaskId } from "../tasks/instances.js";
 import { RESERVE } from "./memory-chain.js";
-import { usdcForMicroSiu } from "./units.js";
+import { usdcForMicroSiu, type MilliSiu } from "./units.js";
 import { emptyRow, type ClaimRequest, type Offer, type RecordRow } from "./v3a-market.js";
 import type { MicroSiu, Role, World } from "./world.js";
 
@@ -52,9 +52,10 @@ export interface V3aBoard {
   escrowedClaims: (V3aClaimView & { quote: string })[];
   participant: { askMicroUsdPerSiu: bigint; bidMicroUsdPerSiu: bigint; canSellMicroSiu: bigint };
   rollNanoPerSiu: bigint;
+  /** D149 item 7: the roll's front claims for the next window, by task class, net of orders already placed */
+  rollAvailable: { task: TaskId; milli: MilliSiu }[];
   faces: Partial<Record<TaskId, bigint>>;
   frontierFaces: Partial<Record<TaskId, bigint>>;
-  dataPriceMicroSiu: MicroSiu;
   issuerList: { issuer: string; task: TaskId; priceMicroSiu: MicroSiu; served: number; presented: number }[];
   needsAhead: { window: number; tasks: TaskId[]; workMicroSiu: MicroSiu; valueMicroUsd: bigint; unmetMicroSiu: MicroSiu }[];
   mandate?: {
@@ -198,9 +199,9 @@ export function v3aBoardFor(w: World, agent: string, role: Role): V3aBoard {
     escrowedClaims,
     participant: { askMicroUsdPerSiu: perSiu(q.ask), bidMicroUsdPerSiu: perSiu(q.bid), canSellMicroSiu: w.siuOf(w.participantCanSell()) },
     rollNanoPerSiu: (rate * (10_000n - w.params.reserve.discountBps)) / 10_000n,
+    rollAvailable: [...w.rollAvailable(w.window)].map(([task, milli]) => ({ task, milli })).sort((x, y) => (x.task < y.task ? -1 : 1)),
     faces: v.faces.commodity,
     frontierFaces: v.faces.frontier,
-    dataPriceMicroSiu: p.dataPriceMilli * 1_000n,
     issuerList: w.params.issuers.flatMap((i) =>
       i.classes.map((t) => {
         const d = (w.delivery.get(i.id) ?? []).reduce((a, x) => ({ presented: a.presented + x.presented, served: a.served + x.served }), {
@@ -288,7 +289,7 @@ export interface RenderCtx {
   outputs: { id: string; task: string; issuer: string; passed: boolean }[];
   notices: string[];
   lastResult?: string;
-  objective?: { usdcNet: string; aguNet: string; unmetSiu: string; combinedUsd: string; raw?: { usdcNet: bigint; aguNetMicroSiu: bigint; unmetMicroSiu: bigint; combinedUsdc: bigint }; onTime?: number; late?: number };
+  objective?: { usdcNet: string; aguNet: string; unmetSiu: string; combinedUsd: string; raw?: { usdcNet: bigint; aguNetMicroSiu: bigint; unmetMicroSiu: bigint; penaltyMicroUsd: bigint; combinedUsdc: bigint }; onTime?: number; late?: number };
   forward?: { sold: number; delivered: number };
 }
 
@@ -348,7 +349,11 @@ export function renderV3aBoard(c: RenderCtx, b: V3aBoard): string {
       .map(([t, f]) => `${t} ${f} mSIU`)
       .join(", ")} (Frontier). Fixed for the run: a claim always buys this much work.`,
   );
-  L.push(`Front-claim roll: claims for the next window at ${perSiu(b.rollNanoPerSiu)} per SIU, payable in USDC or AGU-lab.`);
+  L.push(
+    `Front-claim roll: claims for the next window at ${perSiu(b.rollNanoPerSiu)} per SIU, payable in USDC or AGU-lab${
+      b.rollAvailable.length > 0 ? `; still available, by task type: ${b.rollAvailable.map((x) => `${x.task} ${x.milli.toLocaleString("en-US")} mSIU`).join(", ")}` : ""
+    }.`,
+  );
   L.push(`Agents: ${c.agents.map((a) => `${a.id} (${a.role})`).join(", ")}. A message goes to one of them, or to "all".`);
   if (b.mandate !== undefined) {
     const m = b.mandate;
@@ -370,7 +375,7 @@ export function renderV3aBoard(c: RenderCtx, b: V3aBoard): string {
     L.push("Your needs (each a brief covering two task types), with each one's work content and what it costs your result if it is still unmet when its window ends:");
     for (const x of b.needsAhead)
       L.push(
-        `  - window ${x.window}${x.window === c.window ? " (now)" : ""}: ${x.tasks.join(" + ")}, work content ${both(x.workMicroSiu)}, before research costs such as data; if unmet at the window's end, ${both(x.unmetMicroSiu)} is charged to your result`,
+        `  - window ${x.window}${x.window === c.window ? " (now)" : ""}: ${x.tasks.join(" + ")}, work content ${both(x.workMicroSiu)}; if unmet at the window's end, ${both(x.unmetMicroSiu)} is charged to your result`,
       );
   }
   if (c.needs.length > 0) {
@@ -428,14 +433,20 @@ export function renderV3aBoard(c: RenderCtx, b: V3aBoard): string {
     for (const i of b.issuerList)
       L.push(`  - ${i.issuer} ${i.task}: ${both(i.priceMicroSiu)}; ${i.served} of ${i.presented} tasks passed`);
   }
-  if (c.role === "research") L.push(`A dataset costs ${both(b.dataPriceMicroSiu)} a day, in USDC or AGU-lab; buy it before a task on it.`);
   // D146: the running result in board units, the other unit beside each amount
   if (c.objective?.raw !== undefined && c.role !== "provider") {
     const o = c.objective;
     const r = o.raw as NonNullable<typeof o.raw>;
-    L.push(
-      `Your running result: ${bothUsd(r.usdcNet)} net in USDC, ${both(r.aguNetMicroSiu)} net in AGU-lab${r.unmetMicroSiu !== 0n ? `, ${both(r.unmetMicroSiu)} charged for unmet needs` : ""} -- combined, ${bothUsd(r.combinedUsdc)}${o.onTime !== undefined ? ` (${o.onTime} on time, ${o.late} late or missing)` : ""}.`,
-    );
+    // D149 item 8: income and spending, penalties and the combined result on separate lines, so a penalty never reads as money spent
+    L.push(`Your running result: ${bothUsd(r.usdcNet)} net in USDC, ${both(r.aguNetMicroSiu)} net in AGU-lab, from your income and spending.`);
+    const penalties = [
+      ...(r.penaltyMicroUsd !== 0n || o.onTime !== undefined
+        ? [`${bothUsd(r.penaltyMicroUsd)} for late or missing briefs (${o.onTime ?? 0} on time, ${o.late ?? 0} late or missing)`]
+        : []),
+      ...(r.unmetMicroSiu !== 0n ? [`${both(r.unmetMicroSiu)} charged for unmet needs`] : []),
+    ];
+    if (penalties.length > 0) L.push(`Your penalties: ${penalties.join("; ")}.`);
+    L.push(`Your combined result: ${bothUsd(r.combinedUsdc)}.`);
   }
   if (c.notices.length > 0) {
     L.push("Since your last turn:");

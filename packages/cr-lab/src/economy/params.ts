@@ -67,8 +67,6 @@ export interface V3aParams {
   passRates: { path: string; sha256: string };
   /** a failed task is paid for (true) or refunded in full (false, the design's rule) */
   failedWorkPays: boolean;
-  /** a dataset's price in mSIU (about one task's value), payable in either currency */
-  dataPriceMilli: bigint;
   armB: { holdShareBps: bigint; windowsAhead: number; agents: string[] };
   providerRules: {
     /** each default on a claim PROVIDER sold costs its SIU profit this share of the bond's payout */
@@ -333,7 +331,6 @@ function parseV3a(r: Record<string, unknown>): V3aParams {
     },
     passRates: { path: String(pr.path), sha256: String(pr.sha256) },
     failedWorkPays: r.failedWorkPays === true,
-    dataPriceMilli: big(r.dataPriceMilli, "v3a.dataPriceMilli"),
     armB: {
       holdShareBps: big(b.holdShareBps, "v3a.armB.holdShareBps"),
       windowsAhead: num(b.windowsAhead, "armB.windowsAhead"),

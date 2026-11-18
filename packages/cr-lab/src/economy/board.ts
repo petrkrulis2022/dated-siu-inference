@@ -89,7 +89,7 @@ export interface Board {
     unmetSiu: string;
     combinedUsd: string;
     /** D146: the same figures in base units (USDC, Commodity micro-SIU), for the v3a board */
-    raw?: { usdcNet: bigint; aguNetMicroSiu: bigint; unmetMicroSiu: bigint; combinedUsdc: bigint };
+    raw?: { usdcNet: bigint; aguNetMicroSiu: bigint; unmetMicroSiu: bigint; penaltyMicroUsd: bigint; combinedUsdc: bigint };
     onTime?: number;
     late?: number;
   };
@@ -201,14 +201,16 @@ export function boardFor(w: World, agent: string): Board {
 function objectiveView(o: ObjectiveLedger, rate: bigint, w: World): NonNullable<Board["objective"]> {
   const aguAsMicroSiu = w.siuOf(o.aguNet);
   const combinedMicroSiu = aguAsMicroSiu - o.unmetMicroSiu;
-  const combinedUsd = o.usdcNet + usdcForMicroSiu(combinedMicroSiu, rate);
+  // D149 item 8: v3a's penalties sit apart from usdcNet and come off the combined figure here (always 0 in v1/v2, which keep them inside usdcNet)
+  const penaltyMicroUsd = o.penaltyMicroUsd ?? 0n;
+  const combinedUsd = o.usdcNet + usdcForMicroSiu(combinedMicroSiu, rate) - penaltyMicroUsd;
   return {
     usdcNet: show(o.usdcNet),
     aguNet: show(o.aguNet),
     unmetSiu: show(o.unmetMicroSiu),
     combinedUsd: show(combinedUsd),
     // D146: the same ledger in base units, for the v3a board's own units (mSIU and µ$, never decimals)
-    raw: { usdcNet: o.usdcNet, aguNetMicroSiu: aguAsMicroSiu, unmetMicroSiu: o.unmetMicroSiu, combinedUsdc: combinedUsd },
+    raw: { usdcNet: o.usdcNet, aguNetMicroSiu: aguAsMicroSiu, unmetMicroSiu: o.unmetMicroSiu, penaltyMicroUsd, combinedUsdc: combinedUsd },
     ...(o.onTime > 0 || o.late > 0 ? { onTime: o.onTime, late: o.late } : {}),
   };
 }

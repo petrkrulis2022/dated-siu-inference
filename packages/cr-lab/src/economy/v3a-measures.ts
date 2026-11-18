@@ -27,6 +27,7 @@ import { group } from "./units.js";
 import type { EconomyParams } from "./params.js";
 import { extractPricedDecisions, kappa, KAPPA_FLOOR, type UnitLabel } from "./v3a-coding.js";
 import type { Arm } from "./v3a-market.js";
+import { replayPassive, type Conversions } from "./v3a-passive.js";
 
 export interface V3aRunLog {
   label: string;
@@ -162,57 +163,77 @@ export function scoreAccount(runs: readonly V3aRunLog[], codings: Codings | unde
 
 // ---- store of value --------------------------------------------------------------------------------------------------------------------------------
 export interface StoreOfValue {
-  /** the median work share (AGU-lab and fSIU) across every model agent of every run, at each close */
+  /**
+   * D149 item 5 (owner, 2026-11-18): the median, across every agent of every run, of each agent's work share (AGU-lab and fSIU) minus its passive benchmark (the share
+   * it would hold had it spent both currencies in proportion to its holdings and made no conversions, receipts counted as they arrived -- `v3a-passive.ts`), at each
+   * close, as a fraction (0.10 is 10 points). Inertia scores 0 here, never a signal.
+   */
   medianByClose: { close: number; median: number | null; n: number }[];
   finalMedian: number | null;
   finalN: number;
   /** the kill is judged in the low-volatility runs only */
   lowVolFinalMedian: number | null;
   lowVolFinalN: number;
+  /** context beside the verdict: the median actual and passive work shares at the last close */
+  actualFinalMedian: number | null;
+  passiveFinalMedian: number | null;
   /**
-   * D144 (owner, 2026-11-12): the same shares with AGU-lab valued at the shadow NAV, what the reserve alone would support with no buffer support, reported beside the
-   * verdict. The verdict uses the NAV every price, creation and redemption uses; the buffer pays the roll's cost of unsold front work, and the shadow NAV shows what AGU-lab
-   * would be worth had it not. No NAV that includes the buffer is ever scored or shown.
+   * D144 (owner, 2026-11-12): the same differences with AGU-lab valued at the shadow NAV, what the reserve alone would support with no subsidy, reported beside the
+   * verdict. The verdict uses the NAV every price, creation and redemption uses.
    */
   shadow: { medianByClose: { close: number; median: number | null; n: number }[]; finalMedian: number | null; lowVolFinalMedian: number | null };
+  /** each agent's own conversions in each run (participant buys and sells of AGU-lab, creations, redemptions), reported beside the verdict */
+  conversions: ({ run: string; agent: string } & Conversions)[];
+  /** why the measure reports n/a when a run's flows do not reproduce its balances (the replay's own check) */
+  invalid?: string;
   verdict: Verdict;
 }
 export function scoreStoreOfValue(runs: readonly V3aRunLog[], finalClose: number, min: number): StoreOfValue {
-  const at = (close: number, rs: readonly V3aRunLog[], field = "workShareBps"): number[] =>
-    rs.flatMap((r) =>
-      r.log
-        .filter((e) => e.kind === "holdings" && e.atClose === close && e[field] !== null && e[field] !== undefined)
-        .map((e) => Number(big(e[field])) / 10_000),
+  const replays = runs.map((r) => ({ run: r, replay: replayPassive(r.log) }));
+  const bad = replays.find((x) => x.replay.mismatches.length > 0);
+  const diffs = (close: number, rs: typeof replays, shadow = false): number[] =>
+    rs.flatMap((x) =>
+      x.replay.closes
+        .filter((c) => c.atClose === close)
+        .flatMap((c) => {
+          const actual = shadow ? c.workShareBpsShadow : c.workShareBps;
+          const passive = shadow ? c.passiveWorkShareBpsShadow : c.passiveWorkShareBps;
+          return actual === null || passive === null ? [] : [Number(actual - passive) / 10_000];
+        }),
     );
-  const medianByClose = Array.from({ length: finalClose + 1 }, (_, close) => {
-    const xs = at(close, runs);
-    return { close, median: median(xs), n: xs.length };
-  });
-  const final = at(finalClose, runs);
-  const low = at(
-    finalClose,
-    runs.filter((r) => runMeta(r.log)?.volatility === "low"),
-  );
-  const finalMedian = median(final);
-  const lowMedian = median(low);
-  const kill = low.length >= min && lowMedian !== null && lowMedian < 0.15;
-  const lowRuns = runs.filter((r) => runMeta(r.log)?.volatility === "low");
-  const shadow = {
-    medianByClose: Array.from({ length: finalClose + 1 }, (_, close) => {
-      const xs = at(close, runs, "workShareBpsShadow");
+  const shares = (close: number, which: "workShareBps" | "passiveWorkShareBps"): number[] =>
+    replays.flatMap((x) => x.replay.closes.filter((c) => c.atClose === close && c[which] !== null).map((c) => Number(c[which]) / 10_000));
+  const byClose = (shadow: boolean) =>
+    Array.from({ length: finalClose + 1 }, (_, close) => {
+      const xs = diffs(close, replays, shadow);
       return { close, median: median(xs), n: xs.length };
-    }),
-    finalMedian: median(at(finalClose, runs, "workShareBpsShadow")),
-    lowVolFinalMedian: median(at(finalClose, lowRuns, "workShareBpsShadow")),
-  };
+    });
+  const low = replays.filter((x) => runMeta(x.run.log)?.volatility === "low");
+  const final = diffs(finalClose, replays);
+  const lowFinal = diffs(finalClose, low);
+  const finalMedian = median(final);
+  const lowMedian = median(lowFinal);
+  const kill = lowFinal.length >= min && lowMedian !== null && lowMedian <= -0.15;
+  const invalid = bad === undefined ? undefined : `${bad.run.label}: ${bad.replay.mismatches[0] as string}`;
   return {
-    shadow,
-    medianByClose,
+    medianByClose: byClose(false),
     finalMedian,
     finalN: final.length,
     lowVolFinalMedian: lowMedian,
-    lowVolFinalN: low.length,
-    verdict: final.length < min || finalMedian === null ? "n/a" : finalMedian >= 0.4 ? "signal" : kill ? "kill" : "neither",
+    lowVolFinalN: lowFinal.length,
+    actualFinalMedian: median(shares(finalClose, "workShareBps")),
+    passiveFinalMedian: median(shares(finalClose, "passiveWorkShareBps")),
+    shadow: { medianByClose: byClose(true), finalMedian: median(diffs(finalClose, replays, true)), lowVolFinalMedian: median(diffs(finalClose, low, true)) },
+    conversions: replays.flatMap((x) => [...x.replay.conversions].map(([agent, c]) => ({ run: x.run.label, agent, ...c }))),
+    ...(invalid !== undefined ? { invalid } : {}),
+    verdict:
+      invalid !== undefined || final.length < min || finalMedian === null
+        ? "n/a"
+        : finalMedian >= 0.1
+          ? "signal"
+          : kill
+            ? "kill"
+            : "neither",
   };
 }
 
@@ -484,6 +505,26 @@ export function scoreArm(
 }
 
 const pct = (x: number | null): string => (x === null ? "n/a" : `${(x * 100).toFixed(1)}%`);
+/** D149 item 5: a difference in work share, in percentage points */
+const pts = (x: number | null): string => (x === null ? "n/a" : `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)} points`);
+const convText = (cs: StoreOfValue["conversions"]): string => {
+  const active = cs.filter((c) => c.buys + c.sells + c.creates + c.redeems > 0);
+  if (active.length === 0) return "none";
+  const m = (x: bigint): string => `${group(x / 1_000n)} mSIU`;
+  return active
+    .map(
+      (c) =>
+        `${c.run} ${c.agent} ${[
+          c.buys > 0 ? `${c.buys} bought (${m(c.buyMicroSiu)})` : "",
+          c.sells > 0 ? `${c.sells} sold (${m(c.sellMicroSiu)})` : "",
+          c.creates > 0 ? `${c.creates} created (${m(c.createMicroSiu)})` : "",
+          c.redeems > 0 ? `${c.redeems} redeemed (${m(c.redeemMicroSiu)})` : "",
+        ]
+          .filter((x) => x !== "")
+          .join(", ")}`,
+    )
+    .join("; ");
+};
 const msiu = (micro: bigint): string => `${micro / 1_000n} mSIU`;
 
 export function renderArmScore(s: ArmScore): string {
@@ -498,7 +539,7 @@ export function renderArmScore(s: ArmScore): string {
   );
   const sv = s.storeOfValue;
   L.push(
-    `- **Store of value** — ${sv.verdict}: median work share at window 8 ${pct(sv.finalMedian)} (${sv.finalN} agents); in the low-volatility runs ${pct(sv.lowVolFinalMedian)} (${sv.lowVolFinalN}); by close: ${sv.medianByClose.map((c) => `w${c.close} ${pct(c.median)}`).join(", ")}. Against the shadow NAV (no subsidy): ${pct(sv.shadow.finalMedian)} at window 8 (low volatility ${pct(sv.shadow.lowVolFinalMedian)}); by close: ${sv.shadow.medianByClose.map((c) => `w${c.close} ${pct(c.median)}`).join(", ")}.`,
+    `- **Store of value** — ${sv.verdict}${sv.invalid !== undefined ? ` (${sv.invalid})` : ""}: median work share minus the passive benchmark at window 8 ${pts(sv.finalMedian)} (${sv.finalN} agents); in the low-volatility runs ${pts(sv.lowVolFinalMedian)} (${sv.lowVolFinalN}); actual ${pct(sv.actualFinalMedian)} against passive ${pct(sv.passiveFinalMedian)} (medians); by close: ${sv.medianByClose.map((c) => `w${c.close} ${pts(c.median)}`).join(", ")}. Against the shadow NAV (no subsidy): ${pts(sv.shadow.finalMedian)} at window 8 (low volatility ${pts(sv.shadow.lowVolFinalMedian)}). Conversions (participant buys and sells, creations, redemptions): ${convText(sv.conversions)}.`,
   );
   const d = s.deferredPayment;
   L.push(

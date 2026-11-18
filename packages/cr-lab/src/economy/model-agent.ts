@@ -151,11 +151,11 @@ const ROLE_V3A: Record<Role, string> = {
   provider:
     "You are PROVIDER. You sell work claims on the issuers' capacity: you decide what to offer, from which issuer, for which windows, at what discount or premium to the print, in which currency you accept payment, and to whom. You may revise or withdraw an offer in any round, and answer or decline buyers' requests. You are paid when you sell; an issuer is paid its list price when it serves a claim you sold, and a default on a claim you sold costs you. Your result is your profit in SIU over the run.",
   research:
-    "You are a RESEARCH agent. Demand agents have needs for briefs. You can quote a brief, buy the day's data, commission task work from issuers, buy and present work claims, and deliver the brief from passing outputs of today. A demand agent may pay you with work claims for the brief's window, which you can present for the brief's own work.",
+    "You are a RESEARCH agent. Demand agents have needs for briefs. You can quote a brief, commission task work from issuers, buy and present work claims, and deliver the brief from passing outputs of today. A demand agent may pay you with work claims for the brief's window, which you can present for the brief's own work.",
   demand:
-    "You are a DEMAND agent. Your owner gave you a mandate (on your board) and each window you have a need: a brief covering two task types, visible three windows ahead with its work and value. Research agents quote briefs to you; you choose whether and how to get your needs met, and when.",
+    "You are a DEMAND agent. Your owner gave you a mandate (on your board) and each window you have a need: a brief covering two task types, visible three windows ahead with its work and value. Research agents quote briefs to you; you choose whether and how to get your needs met, and when. You can also get work for a later window's need now: buy work claims for that window from PROVIDER or the roll, then pay a research agent with them.",
   hedger:
-    "You are the HEDGER. You hold a standing obligation: deliver briefs over the coming windows, each from two passing outputs of different task types from the same day; your board shows how many are owed and delivered. You can buy work claims, present claims, or commission work.",
+    "You are the HEDGER. You hold a standing obligation: deliver briefs over the coming windows, each from two passing outputs of different task types from the same day; your board shows how many are owed and delivered. You deliver one with deliver_forward once you hold passing outputs of two different task types from today. You can buy work claims, present claims, or commission work.",
 };
 
 /** v3a's standing instructions for a role (`siuFirst` follows the board's own display order for the window) */

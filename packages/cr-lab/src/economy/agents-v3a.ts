@@ -163,7 +163,7 @@ export class ScriptedV3aAgent implements Agent {
       if (q.tasks.every((t) => passing.has(t))) return reply(`Delivering ${q.id}.`, "deliver_brief", { quote: q.id });
       const missing = q.tasks.filter((t) => !passing.has(t));
       const cost = missing.reduce((s, t) => s + (v.issuerList.find((i) => i.issuer === issuer && i.task === t)?.priceMicroSiu ?? 0n), 0n);
-      const pay = payFor(b, v, cost + v.dataPriceMicroSiu * 2n);
+      const pay = payFor(b, v, cost);
       if (pay !== undefined && q.paidInClaims === undefined)
         return reply(`Commissioning ${missing.join(" + ")} for ${q.id}.`, "commission_task", { tasks: missing, issuer, pay });
       if (pay !== undefined && q.paidInClaims !== undefined && !v.escrowedClaims.some((c) => c.quote === q.id && c.presentableNow))

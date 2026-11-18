@@ -32,25 +32,25 @@ Every row is a reason v2's verdict could not speak to AGU-lab. All are confirmed
 
 ## Cast
 
-Nine model agents and seven scripted actors; the gate runner is infrastructure, not an actor. All model agents run claude-sonnet-5 in counted runs and claude-haiku-5-5 in development, so no model difference confounds a result.
+Nine model agents and six scripted actors; the gate runner is infrastructure, not an actor. All model agents run claude-sonnet-5 in counted runs and claude-haiku-5-5 in development, so no model difference confounds a result.
 
 | Agent | Kind | Decides | Starts with (equal value at the opening print) |
 | --- | --- | --- | --- |
 | PROVIDER | Model | How much fSIU to mint each window, the discount to the print, which buyers to sell to, in which currency | Headroom per window from issuers' capacity; bond held by code |
-| RESEARCH-1, -2, -3 | Model | Quotes (either unit), data, commissions, delivery | 0.025 USDC + the same value in AGU-lab |
+| RESEARCH-1, -2, -3 | Model | Quotes (either unit), commissions, delivery | 0.025 USDC + the same value in AGU-lab |
 | DEMAND-1, -2 | Model, identical mandates | Accepting quotes, buying ahead, holding | 0.05 USDC + the same value in AGU-lab |
 | DEMAND-3 | Model, cautious mandate | Same | Same |
 | DEMAND-4 | Model, permissive mandate | Same | Same |
 | HEDGER | Model | Commissions, claims, forward deliveries | 0.05 USDC + the same value in AGU-lab |
-| AGU issuer | Code | Reserve, NAV, roll, creation and redemption at NAV (v6 AGU-lab mechanics) | Seeded reserve; buffer 1.5 USDC, sized to hold NAV through window 8 |
+| AGU issuer | Code | Reserve, NAV, roll, creation and redemption at NAV (v6 AGU-lab mechanics) | Seeded reserve; an open-ended lab subsidy pays for front work the roll cannot sell (D146) |
 | PARTICIPANT | Code | Buys and sells AGU-lab at NAV × print ± 1%, buybacks capped at 10% of supply per window | 2 USDC |
 | ISSUER-C1, -C2, -X, -F | Code | Serve tasks; pass or fail by seeded draw | Headroom; bonds |
 
-The seventh scripted actor is the DATA seller: code, selling each dataset at about one task's value, payable in either currency.
+There is no DATA seller in v3a (D148): issuers' task prices include data, so a brief takes two actions, commission and deliver.
 
 - **Three research agents, not two,** so most needs draw two or more competing quotes. Comparability needs that.
 - **Two identical demand agents** measure noise between runs of the same mandate (v6, section 11).
-- **Needs:** one per demand agent per window, visible three windows ahead. Each need states its tasks, its work content in mSIU and its value at today's print.
+- **Needs:** one per demand agent per window, visible three windows ahead. Each need states its tasks, its work content in mSIU and its value at today's print, and an unmet need costs three times that value. The demand role text says plainly that work for a later need can be bought now as claims, from PROVIDER or the roll, and used to pay a research agent; the roll's claims are shown by task class.
 - **Mandates** cap spend per window of delivery, not per window of purchase, and keep a minimum value buffer in either currency. Cautious and permissive differ only in cap size and buffer.
 - **Every balance and price is shown in both units:** AGU-lab in whole mSIU, USDC in micro-dollars, each with its value in the other unit beside it.
 
@@ -87,7 +87,7 @@ Agents learn what fSIU and AGU-lab are worth by watching claims get minted, pres
 
 **What every agent can see on the board:**
 
-- **NAV derivation each window:** reserve claims in SIU, expected default losses, supply, NAV in SIU and in dollars, the buffer remaining and its draw this window, and the shadow NAV the reserve alone would support without the buffer.
+- **NAV derivation each window:** reserve claims in SIU, expected default losses, supply, NAV in SIU and in dollars, the lab subsidy paid so far and at this roll, and the shadow NAV the reserve alone would support with no subsidy.
 - **The claims record:** for each issuer and window, claims minted, presented, redeemed, defaulted and expired, plus PROVIDER's current and past discounts.
 - **Its own position:** every claim held, its window, its deadline and its value at today's print.
 
@@ -103,7 +103,7 @@ Issuers are code: each commissioned task passes or fails by a seeded draw from t
 
 - **Pass-rate table:** exported from the trial ledger in `dsi-cr-trial` at freeze, with counts per model and task type, and hashed with the config.
 - **Prices in SIU** come from the class prints, as in v2. Issuers accept payment in either currency. The roll places each lot through pooled direct mint, split across every issuer with headroom (v6). Issuers' measured capacity is sized to cover the largest reserve any v3a run reaches, with a 2× margin; v6's issuance limit stays in code.
-- **Data price is proportionate.** In v2 a day's dataset cost $0.001 against $0.0002 of tasks, so data dominated research costs and was paid in USDC. In v3a a dataset costs about one task's value, payable in either currency.
+- **No separate data purchase (D148).** In v2 data dominated research costs and was paid in USDC. Data content never affects an outcome in v3a, so issuers' task prices include it.
 - **Real data comes later, with executed tasks.** Real versus stand-in data can only change behaviour if agents' outputs depend on it. That needs executed tasks, which is a separate run once v3a has a clean result.
 
 ## Arms, runs and budget
@@ -113,7 +113,7 @@ Eight counted runs: two arms, two volatility settings, two seeds each, at about 
 | Arm | Who decides holdings | What it tests |
 | --- | --- | --- |
 | A: free choice | Agents, within mandates | Whether agents choose AGU-lab for each function unprompted |
-| B: owner reserve | Owners set a rule: at each window close, hold at least 50% of the next three windows' known needs in AGU-lab or fSIU; agents choose instrument and timing. The rule and current shortfall are on the board and compliance is checked at every close, never forced. Applies to the four demand agents and the hedger, whose owed briefs count as known needs | Whether AGU-lab reaches balance sheets through owners' treasury rules, the board's route |
+| B: owner reserve | Every role starts in USDC only, at the same total value as arm A. Owners set a rule: at each window close, hold at least 50% of the next three windows' known needs in AGU-lab or fSIU; agents choose instrument and timing. The rule and current shortfall are on the board and compliance is checked at every close, never forced. Applies to the four demand agents and the hedger, whose owed briefs count as known needs | Whether AGU-lab reaches balance sheets through owners' treasury rules, the board's route |
 
 - **Arm B measures more than obedience:** whether agents spend the reserve on work, unwind it right after each check, or work around the rule. Those are scored, not just compliance.
 - **Size:** 8 windows × 8 rounds × 9 model agents = 576 turns per run. v2 cost $0.0115 a turn, so about $6.60; the richer board pushes it towards $7–8.
@@ -128,9 +128,9 @@ Each function of money gets its own share-based measure, scored per currency and
 | --- | --- | --- | --- | --- |
 | Exchange | AGU-lab share of payments, by value | Payments where the payer held enough of both and the payee accepted both; claim transfers are excluded (buying the claim was the payment) and reported under deferred payment | ≥ 30% | < 10% |
 | Account | Unit used in reasoning, coded blind: SIU, dollars, both, none | Every priced decision (quote, counter, accept, mint, buy ahead) | SIU in ≥ 40% of decisions | SIU in < 20% and binding quotes in mSIU < 10% |
-| Store of value | Share of each agent's wealth in AGU-lab and fSIU at each window close, valued at the print, verdict on the NAV prices use, with the shadow NAV (no buffer support) reported beside it | Every agent, every close | Median ≥ 40% at window 8 (start is 50%) | Median < 15% at window 8 in the low-volatility setting |
+| Store of value | Share of each agent's wealth in AGU-lab and fSIU at each window close, valued at the print, compared with a passive benchmark (the share it would hold had it spent both currencies in proportion to its holdings and made no conversions; receipts count as they arrived), verdict on the NAV prices use, with the shadow NAV (no subsidy) reported beside it | Every agent, every close | Median at window 8 at least 10 points above the passive benchmark | Median at window 8 at least 15 points below the passive benchmark, low volatility |
 | Deferred payment | Share of forward commitments in each currency; missed worthwhile purchases | Opportunities computed as worthwhile in advance | Missed ≤ 50% of worthwhile purchases | Missed ≥ 80%, with at least 20 worthwhile opportunities |
-| Comparability | Share of choices that take the cheapest offer per accepted mSIU, SIU-first display vs dollars-first | Decisions with two or more offers that could all pass | SIU-first beats dollars-first by ≥ 10 points | No difference, with at least 40 decisions per display |
+| Comparability | Share of choices that take the cheapest offer per accepted mSIU, SIU-first display vs dollars-first | Decisions with two or more offers that could all pass and share the same pass rate (ISSUER-X excluded) | SIU-first beats dollars-first by ≥ 10 points | No difference, with at least 40 decisions per display |
 
 **How "worthwhile" is computed:** for each round where an agent can see a need in a later window, code compares the best posted forward price with the expected spot price (today's print, since drift is zero), less the expected loss from default and expiry taken from the claims record at that moment. Only information the agent could see at that moment counts. If fewer than 20 opportunities qualify across an arm, the deferred-payment measure reports n/a, not a failure.
 
@@ -145,7 +145,7 @@ Each function of money gets its own share-based measure, scored per currency and
 A counted run is scored only if it passes every gate below; a failed run is reported as invalid with its reason, never rerun quietly.
 
 - **Lost turns (parse or service failures):** 1% or fewer.
-- **Starting balances:** every role holds both currencies at equal value, checked from the genesis log entry. AGU-lab's buffer must also last to the end of window 8, and v6's issuance limit must never bind: a creation or roll refused for lack of total headroom makes the run invalid.
+- **Starting balances:** in arm A every role holds both currencies at equal value, and in arm B every role starts in USDC only at the same total value, checked from the genesis log entry. v6's issuance limit must never bind: a creation or roll refused for lack of total headroom makes the run invalid.
 - **Board integrity:** no paid or refunded quote appears as open; every refusal carries its reason.
 - **Scorer reads the seed from the log,** never from the config default (the D133 lesson).
 - **Enough data:** each measure states its own minimum count; below it, that measure reports n/a.
@@ -184,4 +184,4 @@ If you do want STU itself to become a token, that is a board decision that chang
 | 7 | v3b's third currency | CAP-lab, measured in STU; STU itself stays a unit |
 | 8 | Cause of the 400 errors in window 7 | Claude Code finds it before any fix is built |
 
-Phase 3 decisions, also approved 11 Nov 2026: PROVIDER sells through standing offers; sweeps are a fixed dollar demand; arm B's rule is stated, checked and scored, never enforced; ISSUER-X uses D119's 80% floor and lists 15% below C1/C2; the DATA seller is the seventh scripted actor. Phase 3 report decisions (D144): the buffer is 1.5 USDC with its own validity gate; failed work stays refunded; claims paid for briefs go into escrow; claim transfers are excluded from the exchange denominator; the participant swap is dropped; PROVIDER's discount history is shown; low volatility is 0.6549% a day; the spend cap of $2 a window is an API-cost safety stop, not an agent limit; the board shows the buffer's draw and a shadow NAV, never a NAV that includes the buffer. D145: the roll uses pooled direct mint across issuers with headroom; capacity covers the largest reserve reached, with a 2× margin; a binding issuance limit makes a run invalid; sweeps sell AGU-lab first, then live claims, soonest-expiring first.
+Phase 3 decisions, also approved 11 Nov 2026: PROVIDER sells through standing offers; sweeps are a fixed dollar demand; arm B's rule is stated, checked and scored, never enforced; ISSUER-X uses D119's 80% floor and lists 15% below C1/C2; the DATA seller is the seventh scripted actor (reversed by D148). Phase 3 report decisions (D144): the buffer is 1.5 USDC with its own validity gate; failed work stays refunded; claims paid for briefs go into escrow; claim transfers are excluded from the exchange denominator; the participant swap is dropped; PROVIDER's discount history is shown; low volatility is 0.6549% a day; the spend cap of $2 a window is an API-cost safety stop, not an agent limit; the board shows the buffer's draw and a shadow NAV, never a NAV that includes the buffer. D145: the roll uses pooled direct mint across issuers with headroom; capacity covers the largest reserve reached, with a 2× margin; a binding issuance limit makes a run invalid; sweeps sell AGU-lab first, then live claims, soonest-expiring first. D146: an open-ended lab subsidy replaces the 1.5 USDC buffer and its gate; the SIU is defined to agents as a fixed unit of work; an unmet need costs three times its value; every amount agents read is in mSIU and µ$; comparability excludes ISSUER-X. D148: no DATA seller, so a brief takes two actions; a refusal that names what the agent gave counts as explained. D149: store of value is scored against a passive benchmark; arm B starts in USDC only; the demand role describes buying ahead; the hedger's role names its delivery action, and penalties are shown apart from spending. Stop rule: after one more Haiku rehearsal and one Sonnet 5 pilot, the design freezes unless a validity gate fails or a measure cannot produce a real result; smaller issues go to v3b.

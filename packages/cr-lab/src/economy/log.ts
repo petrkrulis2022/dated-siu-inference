@@ -58,6 +58,8 @@ export const LOG_KINDS = [
   "issuance-limit",
   // D146: the lab subsidy funded a roll's cover (it replaces v3a's finite buffer)
   "lab-subsidy",
+  // D149 item 5: an exact wallet move the store-of-value replay needs that no other entry carries (claim work repaid, PROVIDER paying an issuer)
+  "wallet-transfer",
 ] as const;
 export type LogKind = (typeof LOG_KINDS)[number];
 

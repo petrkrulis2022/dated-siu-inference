@@ -25,6 +25,7 @@ import {
   type V3aRunLog,
 } from "./v3a-measures.js";
 import { buildV3aWorld, v3aAgentIds } from "./v3a-run.js";
+import { replayPassive } from "./v3a-passive.js";
 import type { Role } from "./world.js";
 
 const params = loadParams(join(CR_PUBLIC_DIR, "economy-params.v3a.json"));
@@ -126,23 +127,45 @@ describe("v3a account: blind coding, kappa, binding quotes", () => {
   });
 });
 
-describe("v3a store of value: the median work share at window 8; the kill only in low volatility", () => {
-  const h = (actor: string, close: number, bps: bigint): LogEntry => e(`d${close}`, actor, { kind: "holdings", atClose: close, workShareBps: bps });
-  it("D144: reports the median against the shadow NAV (no buffer support) beside the verdict's NAV", () => {
-    const hs = (actor: string, bps: bigint, shadow: bigint): LogEntry =>
-      e("d8", actor, { kind: "holdings", atClose: 8, workShareBps: bps, workShareBpsShadow: shadow });
-    const s = scoreStoreOfValue([run("a", [genesis("low"), hs("A", 4_000n, 3_000n), hs("B", 4_400n, 3_400n), hs("C", 5_000n, 4_000n)])], 8, 3);
-    expect(s.finalMedian).toBe(0.44);
-    expect(s.shadow.finalMedian).toBe(0.34);
-    expect(s).not.toHaveProperty("withBuffer");
+describe("v3a store of value (D149 item 5): the median difference from the passive benchmark at window 8; the kill only in low volatility", () => {
+  const VAL = { rate: 1_000_000_000n, navNum: 1n, navDen: 1n, shadowPpm: 1_000_000n };
+  const hold = (actor: string, atClose: number, usdc: bigint, agu: bigint): LogEntry =>
+    e(`d${atClose}`, actor, { kind: "holdings", atClose, role: "demand", usdc, agu, claimsMicroSiu: 0n, workShareBps: (agu * 10_000n) / (usdc + agu), workShareBpsShadow: (agu * 10_000n) / (usdc + agu), ...VAL });
+  // each agent starts 50/50 at 2,000 µSIU and converts `bought` µ$ into AGU-lab (negative: sells AGU-lab); the passive agent converts nothing, so it stays at 50%
+  const agent = (actor: string, bought: bigint): LogEntry[] => [
+    hold(actor, 0, 1_000n, 1_000n),
+    ...(bought > 0n
+      ? [e("d1", "participant", { kind: "participant-sell", to: actor, agu: bought, usdc: bought, asked: bought })]
+      : bought < 0n
+        ? [e("d1", "participant", { kind: "participant-buyback", from: actor, agu: -bought, usdc: -bought })]
+        : []),
+    hold(actor, 8, 1_000n - bought, 1_000n + bought),
+  ];
+  const score = (vol: "low" | "high", moves: bigint[]) =>
+    scoreStoreOfValue([run("a", [genesis(vol), ...moves.flatMap((m, i) => agent(`A${i}`, m))])], 8, 3);
+
+  it("inertia is not a signal: agents that never choose stay exactly at the benchmark", () => {
+    const s = score("low", [0n, 0n, 0n]);
+    expect(s.finalMedian).toBe(0);
+    expect(s.actualFinalMedian).toBe(0.5);
+    expect(s.verdict).toBe("neither");
   });
 
-  it("takes the median across every agent of every run at the last close", () => {
-    const s = scoreStoreOfValue([run("a", [genesis("low"), h("A", 8, 1_000n), h("B", 8, 1_200n), h("C", 8, 9_000n)])], 8, 3);
-    expect(s.finalMedian).toBe(0.12);
-    expect(s.verdict).toBe("kill");
-    const high = scoreStoreOfValue([run("a", [genesis("high"), h("A", 8, 1_000n), h("B", 8, 1_200n), h("C", 8, 9_000n)])], 8, 3);
-    expect(high.verdict).toBe("neither"); // the kill is judged in low-volatility runs only
+  it("a signal needs a median at least 10 points above passive; a kill at least 15 points below, judged in low volatility only", () => {
+    expect(score("low", [200n, 200n, 0n]).finalMedian).toBe(0.1); // 60% against 50%
+    expect(score("low", [200n, 200n, 0n]).verdict).toBe("signal");
+    expect(score("low", [180n, 180n, 0n]).verdict).toBe("neither");
+    expect(score("low", [-300n, -300n, 0n]).verdict).toBe("kill"); // 35% against 50%
+    expect(score("high", [-300n, -300n, 0n]).verdict).toBe("neither");
+  });
+
+  it("reports each agent's conversions beside the verdict, and is n/a when a run's flows do not reproduce its balances", () => {
+    const s = score("low", [200n, -300n, 0n]);
+    expect(s.conversions.find((c) => c.agent === "A0")).toMatchObject({ buys: 1, sells: 0 });
+    expect(s.conversions.find((c) => c.agent === "A1")).toMatchObject({ buys: 0, sells: 1 });
+    const broken = scoreStoreOfValue([run("a", [genesis("low"), hold("A0", 0, 1_000n, 1_000n), hold("A0", 8, 1_000n, 900n)])], 8, 1);
+    expect(broken.verdict).toBe("n/a");
+    expect(broken.invalid).toMatch(/A0 at close 8/);
   });
 });
 
@@ -211,6 +234,32 @@ describe("v3a validity gates and a full scripted run, scored end to end", () => 
     });
     return log.entries;
   }
+
+  it("D148a: turns record the ID the agent gave, and a refusal that names that ID counts as named", async () => {
+    const log = await scripted("v3a-gates-subject", "A");
+    const subjectTools = ["accept_quote", "deliver_brief", "post_quote", "buy_offer", "withdraw_offer", "decline_request"];
+    const onSubjects = log.filter((x) => x.kind === "turn" && x.mirror !== true && x.parsed === true && subjectTools.includes(String(x.tool)));
+    expect(onSubjects.length).toBeGreaterThan(0);
+    expect(onSubjects.every((x) => typeof x.subject === "string" && x.subject !== "")).toBe(true);
+    // the Phase 4 rehearsal's case: a demand agent passed a seller's name, or "none", as the quote id
+    const i = log.findIndex((x) => x.kind === "turn" && x.mirror !== true && x.parsed === true);
+    const withRefusal = (fields: Record<string, unknown>) => log.map((x, j) => (j === i ? ({ ...x, tool: "accept_quote", ok: false, ...fields } as LogEntry) : x));
+    const integrity = (l: LogEntry[]) => checkGates(l, params)[2];
+    expect(integrity(log)?.ok).toBe(true);
+    expect(integrity(withRefusal({ note: "RESEARCH-1: no such quote", subject: "RESEARCH-1" }))?.ok).toBe(true);
+    expect(integrity(withRefusal({ note: "none: no such quote", subject: "none" }))?.ok).toBe(true);
+    // without a recorded ID (a log from before D148) the old rule applies; and a refusal that names nothing is never named
+    expect(integrity(withRefusal({ note: "RESEARCH-1: no such quote" }))?.ok).toBe(false);
+    expect(integrity(withRefusal({ note: "no such quote", subject: "RESEARCH-1" }))?.ok).toBe(false);
+  });
+
+  it("D149 item 5: a full scripted run in either arm replays every agent's USDC and AGU-lab exactly, at every close", async () => {
+    for (const arm of ["A", "B"] as const) {
+      const r = replayPassive(await scripted(`v3a-passive-${arm}`, arm));
+      expect(r.mismatches, arm).toEqual([]);
+      expect(r.closes.filter((c) => c.atClose === 8).length, arm).toBe(9);
+    }
+  });
 
   it("passes every gate on a clean scripted run, and fails each gate on a log that breaks it", async () => {
     const log = await scripted("v3a-gates", "B");
