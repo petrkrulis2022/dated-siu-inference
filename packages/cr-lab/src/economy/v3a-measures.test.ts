@@ -159,6 +159,20 @@ describe("v3a store of value (D149 item 5): the median difference from the passi
     expect(score("high", [-300n, -300n, 0n]).verdict).toBe("neither");
   });
 
+  it("D151: the verdict scores holding choices only; paying in one currency moves the spending-mix effect, reported beside it, never the verdict", () => {
+    const payer = (actor: string): LogEntry[] => [
+      hold(actor, 0, 1_000n, 1_000n),
+      e("d1", actor, { kind: "escrow-open", escrow: `escrow-${actor}`, quote: `quote-${actor}`, to: "R", usdc: 400n }),
+      e("d1", "GATE-RUNNER", { kind: "escrow-settle", escrow: `escrow-${actor}`, paid: 400n, refunded: 0n }),
+      hold(actor, 8, 600n, 1_000n),
+    ];
+    const s = scoreStoreOfValue([run("a", [genesis("low"), ...payer("A0"), ...payer("A1"), ...payer("A2")])], 8, 3);
+    expect(s.finalMedian).toBe(0);
+    expect(s.verdict).toBe("neither");
+    expect(s.spendingMix.finalMedian).toBe(0.125); // 62.5% against D149's pro-rata benchmark at 50%
+    expect(s.shortfalls).toBe(0);
+  });
+
   it("reports each agent's conversions beside the verdict, and is n/a when a run's flows do not reproduce its balances", () => {
     const s = score("low", [200n, -300n, 0n]);
     expect(s.conversions.find((c) => c.agent === "A0")).toMatchObject({ buys: 1, sells: 0 });
@@ -255,9 +269,12 @@ describe("v3a validity gates and a full scripted run, scored end to end", () => 
 
   it("D149 item 5: a full scripted run in either arm replays every agent's USDC and AGU-lab exactly, at every close", async () => {
     for (const arm of ["A", "B"] as const) {
-      const r = replayPassive(await scripted(`v3a-passive-${arm}`, arm));
-      expect(r.mismatches, arm).toEqual([]);
-      expect(r.closes.filter((c) => c.atClose === 8).length, arm).toBe(9);
+      const log = await scripted(`v3a-passive-${arm}`, arm);
+      for (const benchmark of ["holding", "pro-rata"] as const) {
+        const r = replayPassive(log, benchmark);
+        expect(r.mismatches, `${arm} ${benchmark}`).toEqual([]);
+        expect(r.closes.filter((c) => c.atClose === 8).length, arm).toBe(9);
+      }
     }
   });
 
