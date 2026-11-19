@@ -807,7 +807,10 @@ export class World {
 
   #redeem(agent: string, units: AguUnits): Outcome {
     const r = this.chain.redeem(agent, units);
-    this.#log(agent, "redeem", { agu: units, lots: r.lots });
+    // v3a (D149 amendment): each lot's window, so the passive benchmark stops missing that claim at its window's close
+    const lots =
+      this.v3a !== undefined ? r.lots.map((l) => ({ ...l, forWindow: this.#windowOf(this.chain.claimTypes.get(l.tokenId)?.windowFrom ?? this.t0) })) : r.lots;
+    this.#log(agent, "redeem", { agu: units, lots });
     for (const l of r.lots) {
       const ct = this.chain.claimTypes.get(l.tokenId);
       // R12: every claim received in kind gets the same arrival notice with its deadline as a bought claim
@@ -1438,7 +1441,9 @@ export class World {
       throw e;
     }
     this.chain.transfer("AGU", PARTICIPANT, agent, units);
-    this.#log(agent, "create", { tokenId, milli, agu: units, inKindBy: agent });
+    // D149 amendment: the claim's window, so the passive benchmark's kept claim lapses at that window's close
+    const forWindow = this.#windowOf(this.chain.claimTypes.get(tokenId)?.windowFrom ?? this.t0);
+    this.#log(agent, "create", { tokenId, milli, agu: units, inKindBy: agent, forWindow });
     return { ok: true, note: `created ${this.#agu(units)} with ${this.#work(milli, this.#seriesOfClaim(tokenId))} of ${tokenId}` };
   }
 
@@ -2814,7 +2819,17 @@ export class World {
         forced: true,
         ref: c.tokenId,
       });
-      this.#log(PARTICIPANT, "claim-transfer", { tokenId: c.tokenId, from: agent, to: PARTICIPANT, milli: m, usdc: bid, forced: "sweep" });
+      // D149 amendment: the claim's window and its face in Commodity µSIU, so the passive benchmark keeps it at face and lets it lapse at that window's close
+      this.#log(PARTICIPANT, "claim-transfer", {
+        tokenId: c.tokenId,
+        from: agent,
+        to: PARTICIPANT,
+        milli: m,
+        usdc: bid,
+        forced: "sweep",
+        forWindow: this.#windowOf(ct.windowFrom),
+        microSiu: this.#toCommodity(m * 1_000n, ct.series),
+      });
       need -= bid;
       sold += m;
     }

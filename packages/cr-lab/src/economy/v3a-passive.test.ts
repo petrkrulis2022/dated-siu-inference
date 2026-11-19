@@ -77,6 +77,55 @@ describe("replayPassive", () => {
     expect(close(r, "D", 8)?.passiveWorkShareBps).toBe(5_500n);
   });
 
+  describe("D149 amendment (owner, 2026-11-19): a passive agent never presents, so a claim it holds lapses to zero at its window's close", () => {
+    it("a claim kept because the agent created AGU-lab with it counts at face while its window is open, and nothing from that window's close on", () => {
+      const log = [
+        holdings("D", 0, 1_000n, 1_000n, 1_000n),
+        e("D", { kind: "create", tokenId: "t2", milli: 1n, agu: 1_000n, inKindBy: "D", forWindow: 2 }),
+        holdings("D", 1, 1_000n, 2_000n),
+        holdings("D", 2, 1_000n, 2_000n),
+        holdings("D", 3, 1_000n, 2_000n),
+      ];
+      const r = replayPassive(log);
+      expect(r.mismatches).toEqual([]);
+      expect(close(r, "D", 1)?.passiveWorkShareBps).toBe(6_666n); // 1,000 units + the 1,000 claim, of 3,000
+      expect(close(r, "D", 2)?.passiveWorkShareBps).toBe(5_000n); // window 2 closed: the claim lapsed, 1,000 of 2,000
+      expect(close(r, "D", 3)?.passiveWorkShareBps).toBe(5_000n);
+    });
+
+    it("a claim kept instead of a sweep's forced sale counts at face (not at the participant's bid) until its window closes", () => {
+      const log = [
+        holdings("D", 0, 1_000n, 1_000n, 1_000n),
+        e("participant", { kind: "claim-transfer", tokenId: "t2", from: "D", to: "participant", milli: 1n, usdc: 900n, forced: "sweep", forWindow: 2, microSiu: 1_000n }),
+        holdings("D", 1, 1_900n, 1_000n),
+        holdings("D", 2, 1_900n, 1_000n),
+      ];
+      const r = replayPassive(log);
+      expect(r.mismatches).toEqual([]);
+      expect(close(r, "D", 1)?.passiveWorkShareBps).toBe(6_666n); // 1,000 units + the 1,000 claim at face, of 3,000
+      expect(close(r, "D", 2)?.passiveWorkShareBps).toBe(5_000n);
+    });
+
+    it("a claim the passive agent lacks (the agent redeemed for it, the passive agent did not) stops counting against it once its window closes", () => {
+      const log = [
+        holdings("D", 0, 1_000n, 2_000n),
+        e("D", { kind: "redeem", agu: 1_000n, lots: [{ tokenId: "t2", milli: 1n, windowTo: 123, forWindow: 2 }] }),
+        holdings("D", 1, 1_000n, 1_000n, 1_000n),
+        // D holds a different, later claim at window 2's close (received as a payment)
+        holdings("D", 2, 1_000n, 1_000n, 500n),
+      ];
+      const r = replayPassive(log);
+      expect(r.mismatches).toEqual([]);
+      expect(close(r, "D", 1)?.passiveWorkShareBps).toBe(6_666n); // 2,000 units, no claims, of 3,000
+      expect(close(r, "D", 2)?.passiveWorkShareBps).toBe((2_500n * 10_000n) / 3_500n); // the later claim counts in full
+    });
+
+    it("refuses a kept or given-up claim whose window the log does not record (a log written before this amendment)", () => {
+      const r = replayPassive([holdings("D", 0, 1_000n, 1_000n, 1_000n), e("D", { kind: "create", tokenId: "t2", milli: 1n, agu: 1_000n, inKindBy: "D" }), holdings("D", 1, 1_000n, 2_000n)]);
+      expect(r.mismatches).toEqual(["D's create of t2 records no claim window (a log written before the D149 lapse amendment)"]);
+    });
+  });
+
   it("reports a mismatch when the flows do not reproduce a close's balances, and refuses a log without the valuation fields", () => {
     const bad = replayPassive([holdings("D", 0, 1_000n, 1_000n), holdings("D", 8, 900n, 1_000n)]);
     expect(bad.mismatches[0]).toMatch(/^D at close 8: replayed 1000 µ\$ USDC and 1000 AGU-lab units, logged 900 and 1000/);

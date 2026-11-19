@@ -7,8 +7,10 @@
  *  - every spend (a brief or a task escrowed, claims bought from PROVIDER or the roll, a sweep, a repayment, an issuer's cost) is paid from both currencies in proportion
  *    to their value in the passive wallet at that moment, at the window's print and the NAV of the last close;
  *  - an escrow refund returns the passive wallet the same mix it paid into that escrow;
- *  - conversions are not made: buying or selling AGU-lab with the participant, creating or redeeming it, and the forced sales of a sweep. Claims the passive agent keeps
- *    because it made no creation or forced sale (or gives up because it made no redemption) are carried at face to the end of the run; their expiry is not modelled;
+ *  - conversions are not made: buying or selling AGU-lab with the participant, creating or redeeming it, and the forced sales of a sweep. A claim the passive agent keeps
+ *    because it made no creation or forced sale counts at face while its window is open and lapses to zero at that window's close, because a passive agent never
+ *    presents (D149 amendment, owner, 2026-11-19); a claim it gives up because it made no redemption stops counting against it at the same close, when the agent's own
+ *    claim of that window has been presented or lapsed too;
  *  - work claims are otherwise held exactly as the agent held them (bought, received, presented, paid away), so the benchmark isolates the choice between the currencies.
  *
  * The same flows also replay the agent's ACTUAL USDC and AGU-lab, which must equal the `holdings` entry at every close to the base unit. A mismatch means a flow the
@@ -47,8 +49,8 @@ interface Wallet {
   agu: bigint;
 }
 interface Passive extends Wallet {
-  /** claims, in µSIU at face, that the passive agent holds beyond the agent's own (positive) or lacks (negative) */
-  claimsAdj: bigint;
+  /** by the window the claims belong to: claims, in µSIU at face, that the passive agent holds beyond the agent's own (positive) or lacks (negative) */
+  claimsAdj: Map<number, bigint>;
 }
 
 const big = (x: unknown): bigint => asBigInt(x) ?? 0n;
@@ -68,6 +70,16 @@ export function replayPassive(log: readonly LogEntry[]): PassiveReplay {
   let navDen = 0n;
 
   const isAgent = (a: unknown): a is string => typeof a === "string" && actual.has(a);
+  /** the passive agent holds `delta` µSIU more (or less) of window `forWindow`'s claims than the agent; an entry with no window is a log written before the lapse rule */
+  const adjustClaims = (a: string, forWindow: unknown, delta: bigint, what: string): void => {
+    if (typeof forWindow !== "number") {
+      const why = `${a}'s ${what} records no claim window (a log written before the D149 lapse amendment)`;
+      if (!mismatches.includes(why)) mismatches.push(why);
+      return;
+    }
+    const adj = (passive.get(a) as Passive).claimsAdj;
+    adj.set(forWindow, (adj.get(forWindow) ?? 0n) + delta);
+  };
   const usdcValue = (usdc: bigint): bigint => (rate === 0n ? 0n : (usdc * 1_000_000_000n) / rate);
   const aguValue = (agu: bigint): bigint => (navDen === 0n ? 0n : (agu * navNum) / navDen);
   const conv = (a: string): Conversions => {
@@ -117,7 +129,7 @@ export function replayPassive(log: readonly LogEntry[]): PassiveReplay {
         const agu = big(e.agu);
         if (e.atClose === 0) {
           actual.set(a, { usdc, agu });
-          passive.set(a, { usdc, agu, claimsAdj: 0n });
+          passive.set(a, { usdc, agu, claimsAdj: new Map() });
           roles.set(a, String(e.role));
         }
         const w = actual.get(a);
@@ -125,7 +137,11 @@ export function replayPassive(log: readonly LogEntry[]): PassiveReplay {
         if (w.usdc !== usdc || w.agu !== agu)
           mismatches.push(`${a} at close ${String(e.atClose)}: replayed ${w.usdc} µ$ USDC and ${w.agu} AGU-lab units, logged ${usdc} and ${agu}`);
         const p = passive.get(a) as Passive;
-        const claims = big(e.claimsMicroSiu) + p.claimsAdj > 0n ? big(e.claimsMicroSiu) + p.claimsAdj : 0n;
+        // a window's claims settle at its close, before the holdings are logged: the passive agent's lapse then, worthless, and its missing ones are gone from the agent too
+        const k = Number(e.atClose);
+        for (const w of [...p.claimsAdj.keys()]) if (w <= k) p.claimsAdj.delete(w);
+        const adjusted = big(e.claimsMicroSiu) + [...p.claimsAdj.values()].reduce((n, v) => n + v, 0n);
+        const claims = adjusted > 0n ? adjusted : 0n;
         const shadowPpm = e.shadowPpm === undefined ? 1_000_000n : big(e.shadowPpm);
         const pu = usdcValue(p.usdc);
         const pg = aguValue(p.agu);
@@ -163,15 +179,16 @@ export function replayPassive(log: readonly LogEntry[]): PassiveReplay {
       case "create":
         if (!isAgent(e.actor) || e.inKindBy === undefined) break;
         move(e.actor, "agu", big(e.agu), false);
-        (passive.get(e.actor) as Passive).claimsAdj += big(e.milli) * 1_000n;
+        adjustClaims(e.actor, e.forWindow, big(e.milli) * 1_000n, `create of ${String(e.tokenId)}`);
         conv(e.actor).creates++;
         conv(e.actor).createMicroSiu += big(e.milli) * 1_000n;
         break;
       case "redeem": {
         if (!isAgent(e.actor)) break;
         move(e.actor, "agu", -big(e.agu), false);
-        const face = ((e.lots as { milli?: unknown }[] | undefined) ?? []).reduce((n, l) => n + big(l.milli) * 1_000n, 0n);
-        (passive.get(e.actor) as Passive).claimsAdj -= face;
+        const lots = (e.lots as { tokenId?: unknown; milli?: unknown; forWindow?: unknown }[] | undefined) ?? [];
+        const face = lots.reduce((n, l) => n + big(l.milli) * 1_000n, 0n);
+        for (const l of lots) adjustClaims(e.actor, l.forWindow, -big(l.milli) * 1_000n, `redemption of ${String(l.tokenId)}`);
         conv(e.actor).redeems++;
         conv(e.actor).redeemMicroSiu += face;
         break;
@@ -223,10 +240,11 @@ export function replayPassive(log: readonly LogEntry[]): PassiveReplay {
         break;
       case "claim-transfer":
         if (typeof e.to === "string" && e.to.startsWith("claims-escrow:") && isAgent(e.from)) claimsEscrowPayer.set(e.to, e.from);
-        // a sweep's forced sale of claims: the agent gets USDC, the passive agent keeps the claims
+        // a sweep's forced sale of claims: the agent gets USDC, the passive agent keeps the claims, at face (Commodity µSIU, as the holdings value them) until they lapse
         if (e.forced === "sweep" && isAgent(e.from)) {
           move(e.from, "usdc", big(e.usdc), false);
-          (passive.get(e.from) as Passive).claimsAdj += usdcValue(big(e.usdc));
+          if (e.microSiu === undefined) adjustClaims(e.from, undefined, 0n, `forced sale of ${String(e.tokenId)}`);
+          else adjustClaims(e.from, e.forWindow, big(e.microSiu), `forced sale of ${String(e.tokenId)}`);
         }
         break;
       case "wallet-transfer": {
