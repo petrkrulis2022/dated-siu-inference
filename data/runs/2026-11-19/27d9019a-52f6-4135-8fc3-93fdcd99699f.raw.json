@@ -1,0 +1,39 @@
+{
+  "id": "a0d31311-c7b9-91d1-897b-925397242ea2",
+  "object": "chat.completion",
+  "created": 1795048930,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"tracking_id\": \"SH-31881E\",\n  \"origin_city\": \"Osaka\",\n  \"destination_city\": \"Perth\",\n  \"weight_kg\": 329,\n  \"status\": \"in_transit\",\n  \"priority\": \"standard\"\n}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nThe report contains shipment SH-31881E from Osaka to Perth. It weighs 329 kilograms with standard priority and is in transit. All required fields are present.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1549,
+    "completion_tokens": 64,
+    "total_tokens": 1874,
+    "prompt_tokens_details": {
+      "text_tokens": 1549,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 261,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 42800000
+  },
+  "system_fingerprint": "fp_92a0a6ffe2",
+  "service_tier": "default"
+}

@@ -1,0 +1,46 @@
+{
+  "id": "gen-1795048776-gINExNvfKNlYg2u5xSHk",
+  "object": "chat.completion",
+  "created": 1795048776,
+  "model": "deepseek/deepseek-v3.2",
+  "provider": "DeepInfra",
+  "system_fingerprint": null,
+  "service_tier": "default",
+  "choices": [
+    {
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": "stop",
+      "native_finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "3659C4\nC6FC72\nD803A7\n36CCD7",
+        "refusal": null,
+        "reasoning": null
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21641,
+    "completion_tokens": 20,
+    "total_tokens": 21661,
+    "cost": 0.00563426,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": 0.00563426,
+      "upstream_inference_prompt_cost": 0.00562666,
+      "upstream_inference_completions_cost": 0.0000076
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "image_tokens": 0,
+      "audio_tokens": 0
+    }
+  }
+}

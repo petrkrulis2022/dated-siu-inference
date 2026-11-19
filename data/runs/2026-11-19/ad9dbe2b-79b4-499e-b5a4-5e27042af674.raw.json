@@ -1,0 +1,39 @@
+{
+  "id": "14b78bf2-3842-9105-bb45-26afeb6541e8",
+  "object": "chat.completion",
+  "created": 1795048934,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"tracking_id\": \"SH-BAC6A9\",\n  \"origin_city\": \"Lisbon\",\n  \"destination_city\": \"Cebu\",\n  \"weight_kg\": 340,\n  \"status\": \"delayed\",\n  \"priority\": \"express\"\n}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nThe report contains a shipment record for SH-BAC6A9 from Lisbon to Cebu. It weighs 340 kilograms and has express priority. The current status is delayed.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1607,
+    "completion_tokens": 64,
+    "total_tokens": 1952,
+    "prompt_tokens_details": {
+      "text_tokens": 1607,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 281,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 45160000
+  },
+  "system_fingerprint": "fp_92a0a6ffe2",
+  "service_tier": "default"
+}
