@@ -16,6 +16,9 @@ import { toolDefsForRole } from "./parse.js";
 import type { Role } from "./world.js";
 
 export class ModelAgent implements Agent {
+  /** the conversation of this agent's last reply, kept for a retry (D150): the messages sent, the tools offered, the assistant turn and its tool call's id */
+  #last: { prompt: string; board: Board; messages: unknown[]; specs: unknown; assistant: unknown; toolUseId: string | undefined } | undefined;
+
   constructor(
     readonly id: string,
     readonly role: Role,
@@ -29,6 +32,38 @@ export class ModelAgent implements Agent {
   ) {}
 
   async reply(board: Board, prompt: string): Promise<AgentReply> {
+    // v3a: a v3a board carries its own section, and its agents get v3a's tools (amounts in mSIU and µ$, every payment naming its currency)
+    const specs = this.chat.toolSpecs(toolDefsForRole(this.role, board.v3a !== undefined ? "v3a" : "v2"));
+    this.#last = undefined;
+    return this.#call(board, prompt, this.chat.init(prompt), specs, "");
+  }
+
+  /**
+   * D150 item 1: one corrected call within the same turn. A reply that named a tool gets the parser's error back as that call's tool result, in the same conversation
+   * (the assistant turn exactly as returned, so its thinking stays valid), forced to call a tool again; a reply that named none is asked again from the start, the error
+   * after the board. Billed through the ledger like any call.
+   */
+  async retry(error: string): Promise<AgentReply> {
+    const last = this.#last;
+    if (last === undefined) throw new Error(`${this.id}: no turn to retry`);
+    this.#last = undefined;
+    if (last.toolUseId === undefined) {
+      const prompt = `${last.prompt}\n\nYour reply could not be used: ${error}. Nothing happened. Call one tool with corrected arguments, reasoning first; if this call cannot be used either, your turn this round is lost.`;
+      return this.#call(last.board, prompt, this.chat.init(prompt), last.specs, " retry");
+    }
+    const messages = last.messages;
+    this.chat.appendAssistant(messages, last.assistant);
+    this.chat.appendToolResults(messages, [
+      {
+        id: last.toolUseId,
+        isError: true,
+        text: `This call could not be used: ${error}. Nothing happened. Call one tool again with corrected arguments, reasoning first; if this call cannot be used either, your turn this round is lost.`,
+      },
+    ]);
+    return this.#call(last.board, JSON.stringify(messages), messages, last.specs, " retry");
+  }
+
+  async #call(board: Board, prompt: string, messages: unknown[], specs: unknown, label: string): Promise<AgentReply> {
     // a generous projection: a token is at least three characters of English, and the whole allowance is assumed spent
     const projected = usageCostUsd(
       {
@@ -47,12 +82,10 @@ export class ModelAgent implements Agent {
         part: "economy",
         model: this.seat,
         key: this.keyName,
-        what: `${this.id} w${board.window} r${board.round}`,
+        what: `${this.id} w${board.window} r${board.round}${label}`,
       },
       async () => {
-        // v3a: a v3a board carries its own section, and its agents get v3a's tools (amounts in mSIU and µ$, every payment naming its currency)
-        const specs = this.chat.toolSpecs(toolDefsForRole(this.role, board.v3a !== undefined ? "v3a" : "v2"));
-        const turn = await this.chat.send(this.chat.init(prompt), specs, this.maxTokens, {
+        const turn = await this.chat.send(messages, specs, this.maxTokens, {
           forceTool: true,
         });
         if (turn.status !== 200 || turn.reply === undefined)
@@ -74,6 +107,7 @@ export class ModelAgent implements Agent {
           this.chat.provider,
         );
         const use = turn.reply.toolUses[0];
+        this.#last = { prompt, board, messages, specs, assistant: turn.reply.assistant, toolUseId: use?.id };
         return {
           usd: usd.toFixed(6),
           toolCall: use === undefined ? undefined : { tool: use.name, args: use.args },

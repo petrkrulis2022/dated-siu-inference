@@ -4,8 +4,10 @@
  * The passive benchmark is the work share an agent would hold at each close had it spent both currencies in proportion to its holdings and made no conversions:
  *  - receipts count as they actually arrived, in the currency the payer chose (a brief's payment, a claim sale's proceeds, a repayment, a default payout), so the
  *    benchmark removes only the agent's own choices, never other agents';
- *  - every spend (a brief or a task escrowed, claims bought from PROVIDER or the roll, a sweep, a repayment, an issuer's cost) is paid from both currencies in proportion
+ *  - every spend (a brief or a task escrowed, claims bought from PROVIDER or the roll, a repayment, an issuer's cost) is paid from both currencies in proportion
  *    to their value in the passive wallet at that moment, at the window's print and the NAV of the last close;
+ *  - a sweep (the owner's fixed dollar demand) is paid as the engine pays it: USDC first, AGU-lab at the bid only for a shortfall, then the claims the passive agent kept
+ *    (D150 item 2, owner, 2026-11-19 -- paying it pro rata was itself a conversion);
  *  - an escrow refund returns the passive wallet the same mix it paid into that escrow;
  *  - conversions are not made: buying or selling AGU-lab with the participant, creating or redeeming it, and the forced sales of a sweep. A claim the passive agent keeps
  *    because it made no creation or forced sale counts at face while its window is open and lapses to zero at that window's close, because a passive agent never
@@ -17,6 +19,7 @@
  * replay does not know, and the measure that uses this reports n/a with the reason rather than a benchmark built on missing money.
  */
 import { asBigInt, type LogEntry } from "./log.js";
+import { participantBid } from "./participant.js";
 
 export interface PassiveClose {
   agent: string;
@@ -106,6 +109,77 @@ export function replayPassive(log: readonly LogEntry[]): PassiveReplay {
     p.usdc -= usdc;
     p.agu -= agu;
     return { usdc, agu };
+  };
+  /**
+   * D150 item 2 (owner, 2026-11-19): the passive agent pays its owner's sweep -- a fixed dollar demand -- exactly as the engine pays the agent's (`World.#v3aSweep`): from
+   * USDC first; if that is short, the fewest AGU-lab units whose bid covers the rest, at the terms the sweep logged; then the claims it kept instead of a creation or a
+   * forced sale, soonest window first, at the participant's bid on face. Paying it pro rata, as D149 did, was itself a conversion the passive agent never makes, and moved
+   * every demand agent's difference by the sweep alone. Anything still unpaid stays unpaid when the agent's own sweep was short too (neither has anything left to
+   * sell); otherwise the rest would come from claims the agent holds, which the replay does not track, and the measure reports n/a with the reason.
+   */
+  const paySweep = (e: LogEntry): void => {
+    const a = e.actor;
+    const p = passive.get(a) as Passive;
+    const demanded = asBigInt(e.demanded);
+    const where = `at close ${String(e.atClose ?? e.window)}`;
+    if (demanded === undefined) {
+      const why = `${a}'s sweep ${where} records no demand (a log written before D143)`;
+      if (!mismatches.includes(why)) mismatches.push(why);
+      return;
+    }
+    const fromUsdc = p.usdc < demanded ? p.usdc : demanded;
+    p.usdc -= fromUsdc;
+    let short = demanded - fromUsdc;
+    if (short === 0n) return;
+    const sweepRate = asBigInt(e.rate);
+    const num = asBigInt(e.navNum);
+    const den = asBigInt(e.navDen);
+    const spreadBps = asBigInt(e.spreadBps);
+    const atClose = typeof e.atClose === "number" ? e.atClose : undefined;
+    if (sweepRate === undefined || num === undefined || den === undefined || spreadBps === undefined || atClose === undefined) {
+      if (p.agu > 0n || [...p.claimsAdj.values()].some((v) => v > 0n)) {
+        const why = `${a}'s sweep ${where} needs AGU-lab sold in the passive benchmark, but records no bid terms (a log written before the D150 sweep fix)`;
+        if (!mismatches.includes(why)) mismatches.push(why);
+      }
+      return;
+    }
+    // AGU-lab at the bid: the fewest units whose bid covers the shortfall, or all of it
+    if (p.agu > 0n && num > 0n && den > 0n) {
+      const bid = (units: bigint): bigint => participantBid(units, num, den, sweepRate, spreadBps);
+      let units = p.agu;
+      if (bid(units) >= short) {
+        let lo = 0n;
+        while (lo + 1n < units) {
+          const mid = (lo + units) / 2n;
+          if (bid(mid) >= short) units = mid;
+          else lo = mid;
+        }
+      }
+      const got = bid(units);
+      p.agu -= units;
+      const paid = got < short ? got : short;
+      p.usdc += got - paid;
+      short -= paid;
+    }
+    // the claims it kept, soonest window first, at the bid on face: floor(µSIU × rate × (20,000 − spread) ÷ (1e9 × 20,000)), as the engine's claim tier
+    const keep = 20_000n - spreadBps;
+    for (const w of [...p.claimsAdj.keys()].filter((w) => w > atClose).sort((x, y) => x - y)) {
+      if (short === 0n) break;
+      const held = p.claimsAdj.get(w) ?? 0n;
+      if (held <= 0n) continue;
+      const bid = (micro: bigint): bigint => (micro * sweepRate * keep) / (1_000_000_000n * 20_000n);
+      let micro = (short * 1_000_000_000n * 20_000n + sweepRate * keep - 1n) / (sweepRate * keep);
+      if (micro > held) micro = held;
+      const got = bid(micro);
+      p.claimsAdj.set(w, held - micro);
+      const paid = got < short ? got : short;
+      p.usdc += got - paid;
+      short -= paid;
+    }
+    if (short > 0n && (asBigInt(e.shortfall) ?? 0n) === 0n)
+      mismatches.push(
+        `${a}'s passive benchmark is ${short} µ$ short of its owner's sweep ${where} after its USDC, AGU-lab and the claims it kept, while the agent paid in full: the rest would come from claims the replay does not track`,
+      );
   };
   const assetOf = (e: LogEntry): "usdc" | "agu" | undefined => (e.usdc !== undefined && e.usdc !== null ? "usdc" : e.agu !== undefined && e.agu !== null ? "agu" : undefined);
   const valueOf = (asset: "usdc" | "agu", amount: bigint): bigint => (asset === "usdc" ? usdcValue(amount) : aguValue(amount));
@@ -236,7 +310,7 @@ export function replayPassive(log: readonly LogEntry[]): PassiveReplay {
       case "sweep":
         if (!isAgent(e.actor)) break;
         move(e.actor, "usdc", -big(e.usdc), false);
-        spend(e.actor, usdcValue(big(e.usdc)));
+        paySweep(e);
         break;
       case "claim-transfer":
         if (typeof e.to === "string" && e.to.startsWith("claims-escrow:") && isAgent(e.from)) claimsEscrowPayer.set(e.to, e.from);

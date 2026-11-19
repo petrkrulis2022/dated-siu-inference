@@ -2,7 +2,8 @@
  * v3a's validity gates (docs/experiment-3a-design.md, "Validity gates and freeze"), checked automatically from a run's own log: a counted run is scored only if it passes
  * every one, and a failed run is reported as invalid with its reason, never rerun quietly.
  *
- *  - Lost turns (parse or service failures): 1% or fewer.
+ *  - Lost turns (parse or service failures): 1% or fewer. Since D150 a v3a call that fails the schema is asked again once within its turn; a turn is lost only if the
+ *    retry is unusable too, and the gate itself is unchanged.
  *  - Starting balances: arm A, every role holds both currencies at equal value; arm B (D149 item 6), all in USDC at the same total value; checked from the genesis holdings.
  *  - Board integrity: no paid or refunded quote appears as open on any board (checked against the log's own settlements, not the board's filter), and every refusal
  *    carries its reason (a refusal on a quote, need, offer or request names it first: D148a, the ID the agent gave, whatever it was).
@@ -30,6 +31,11 @@ function namesSubject(e: LogEntry, note: string): boolean {
   return id !== "" && note.startsWith(`${id}: `) && /\S/.test(note.slice(id.length + 2));
 }
 
+function retryDetail(log: readonly LogEntry[]): string {
+  const retries = log.filter((e) => e.kind === "retry");
+  return retries.length === 0 ? "" : `; ${retries.length} retried, ${retries.filter((e) => e.outcome === "corrected").length} corrected`;
+}
+
 export function checkGates(log: readonly LogEntry[], params: EconomyParams, opts: { cell?: string } = {}): Gate[] {
   const v = params.v3a;
   if (v === undefined) throw new Error("not a v3a parameters file");
@@ -42,7 +48,8 @@ export function checkGates(log: readonly LogEntry[], params: EconomyParams, opts
   gates.push({
     name: "lost turns at most 1% (parse and service failures)",
     ok: turns.length > 0 && (parse + service) * 100 <= turns.length,
-    detail: `${parse + service} of ${turns.length} lost (${parse} parse, ${service} service)`,
+    // D150 item 1: how many failed calls were asked again within their turn (the gate counts only the turns that stayed lost; a log from before D150 has no retries)
+    detail: `${parse + service} of ${turns.length} lost (${parse} parse, ${service} service)${retryDetail(log)}`,
   });
 
   // starting balances: arm A, both currencies at equal value; D149 item 6, arm B, all in USDC at the same total value (the arm is read from the log's genesis entry)

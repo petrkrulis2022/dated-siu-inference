@@ -22,6 +22,14 @@ export class ParticipantRefused extends Error {
 
 const ceilDiv = (a: bigint, b: bigint): bigint => (a + b - 1n) / b;
 
+/**
+ * The USDC the participant pays for `units` of AGU-lab -- its bid, rounded down -- at NAV `num`/`den` × `rate`, less half `spreadBps`. The one formula `quote` uses,
+ * shared with the store-of-value replay, which prices the passive benchmark's forced sale at a sweep exactly as the engine prices the agent's (D150 item 2).
+ */
+export function participantBid(units: AguUnits, num: bigint, den: bigint, rate: NanoUsdPerSiu, spreadBps: bigint): UsdcUnits {
+  return (units * num * rate * (2n * BPS - spreadBps)) / (den * NANO * 2n * BPS);
+}
+
 export class Participant {
   #capBase = 0n;
   #boughtBack = 0n;
@@ -59,7 +67,7 @@ export class Participant {
     const base = units * num * rate;
     return {
       ask: ceilDiv(base * (2n * BPS + this.spreadBps), den * NANO * 2n * BPS),
-      bid: (base * (2n * BPS - this.spreadBps)) / (den * NANO * 2n * BPS),
+      bid: participantBid(units, num, den, rate, this.spreadBps),
     };
   }
 

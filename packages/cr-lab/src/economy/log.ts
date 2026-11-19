@@ -60,6 +60,8 @@ export const LOG_KINDS = [
   "lab-subsidy",
   // D149 item 5: an exact wallet move the store-of-value replay needs that no other entry carries (claim work repaid, PROVIDER paying an issuer)
   "wallet-transfer",
+  // D150 item 1: a model's call failed the schema and it was given the parser's error and one corrected call within the same turn (agent, round, error, outcome)
+  "retry",
 ] as const;
 export type LogKind = (typeof LOG_KINDS)[number];
 

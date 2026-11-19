@@ -32,6 +32,11 @@ export interface Agent {
   /** "scripted" or a model id */
   seat: string;
   reply(board: Board, prompt: string): Promise<AgentReply>;
+  /**
+   * D150 item 1 (owner, 2026-11-19), v3a only: the agent's last reply named a call that failed the schema; `error` is the parser's own message. The agent gets one
+   * corrected call within the same turn, nothing else having happened in between. Absent (scripted seats), a failed call loses the turn as before.
+   */
+  retry?(error: string): Promise<AgentReply>;
 }
 
 export class StandInWorker implements TaskWorker {

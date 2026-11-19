@@ -2702,7 +2702,7 @@ export class World {
         this.#log(a, "sweep", { usdc: over, to: `OWNER-${a}` });
       }
     }
-    if (this.params.v3a?.sweep.windows.includes(k) === true) this.#v3aSweep();
+    if (this.params.v3a?.sweep.windows.includes(k) === true) this.#v3aSweep(k);
     // v2 item 8: the hedger's on-time bonus / late penalty against its own due-by-window schedule. Opt-in: needs totalWindows (the caller's own choice to supply it)
     // and a stated latePenaltyUsdcPerBrief; a no-op otherwise, so every existing caller/test is unaffected. priceUsdcPerBrief was parsed and never read anywhere
     // before this (confirmed by the redesign's own research) -- this is its first real use.
@@ -2756,11 +2756,14 @@ export class World {
    * participant the same way, soonest-expiring first, at the same bid (face at the grade print, less half the spread), so holding claims neither dodges nor worsens a sweep.
    * Claims in escrow are not the agent's and are never sold. Anything still short is logged as the shortfall.
    */
-  #v3aSweep(): void {
+  #v3aSweep(k: number): void {
     const rate = this.commodityRate;
     for (const a of this.params.agents.demand) {
       const demand = this.v3aSweepMicroUsd(a) ?? 0n;
       if (demand === 0n) continue;
+      // D150 item 2: the terms a forced sale is priced at now, logged with the sweep so the passive benchmark pays its own sweep exactly as this one is paid
+      const nav = this.chain.nav();
+      const terms = { atClose: k, rate, navNum: nav.num, navDen: nav.den, spreadBps: this.participant.spreadBps };
       let forcedAgu = 0n;
       const usdcHeld = this.chain.balance(a, "USDC");
       if (usdcHeld < demand) {
@@ -2785,7 +2788,7 @@ export class World {
         this.#payment(a, `OWNER-${a}`, "sweep", "usdc", (pay * 1_000_000_000n) / rate, { payeeAcceptsBoth: false, forced: true });
         this.chain.transfer("USDC", a, `OWNER-${a}`, pay);
       }
-      this.#log(a, "sweep", { usdc: pay, demanded: demand, forcedAgu, forcedClaimsMilli, shortfall: demand - pay, to: `OWNER-${a}` });
+      this.#log(a, "sweep", { usdc: pay, demanded: demand, forcedAgu, forcedClaimsMilli, shortfall: demand - pay, to: `OWNER-${a}`, ...terms });
       if (forcedAgu > 0n || forcedClaimsMilli > 0n || pay < demand)
         this.notify(
           a,

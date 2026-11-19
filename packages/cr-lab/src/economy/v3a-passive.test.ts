@@ -126,6 +126,95 @@ describe("replayPassive", () => {
     });
   });
 
+  describe("D150 item 2 (owner, 2026-11-19): the passive agent pays its owner's sweep as the engine does -- USDC first, AGU-lab at the bid only for a shortfall", () => {
+    // the bid terms the engine logs with every v3a sweep: the print, the NAV and the participant's spread at that moment (spread 100 bps: the bid on n units is floor(n × 0.995))
+    const TERMS = { rate: 1_000_000_000n, navNum: 1n, navDen: 1n, spreadBps: 100n };
+    const sweep = (actor: string, atClose: number, paid: bigint, demanded: bigint, extra: Record<string, unknown> = {}, terms: Record<string, unknown> = TERMS) =>
+      e(actor, { kind: "sweep", usdc: paid, demanded, forcedClaimsMilli: 0n, shortfall: demanded - paid, to: `OWNER-${actor}`, atClose, forcedAgu: 0n, ...extra, ...terms });
+    const receipt = (to: string, usdc: bigint, n: number) => [
+      e("R", { kind: "escrow-open", escrow: `escrow-r${n}`, quote: `quote-r${n}`, to, usdc }),
+      e("GATE-RUNNER", { kind: "escrow-settle", escrow: `escrow-r${n}`, paid: usdc, refunded: 0n }),
+    ];
+
+    it("pays a sweep from USDC when it holds enough, exactly as the agent did: an agent whose only flow is a sweep matches its passive benchmark", () => {
+      const log = [holdings("D", 0, 1_000n, 1_000n), sweep("D", 1, 400n, 400n), holdings("D", 1, 600n, 1_000n)];
+      const r = replayPassive(log);
+      expect(r.mismatches).toEqual([]);
+      expect(close(r, "D", 1)).toMatchObject({ workShareBps: 6_250n, passiveWorkShareBps: 6_250n }); // 1,000 of 1,600 for both
+      expect(r.conversions.get("D")).toBeUndefined();
+    });
+
+    it("short of USDC, sells the fewest AGU-lab units whose bid covers the shortfall, at the terms the sweep logged", () => {
+      const log = [
+        holdings("D", 0, 300n, 2_000n),
+        holdings("R", 0, 2_000n, 0n, 0n, "research"),
+        // the agent sells 500 units on its own (a conversion the passive agent does not make), so it pays the sweep from USDC alone
+        e("participant", { kind: "participant-buyback", from: "D", agu: 500n, usdc: 500n }),
+        sweep("D", 1, 400n, 400n),
+        ...receipt("D", 1_000n, 1),
+        holdings("D", 1, 1_400n, 1_500n),
+        holdings("R", 1, 1_000n, 0n, 0n, "research"),
+      ];
+      const r = replayPassive(log);
+      expect(r.mismatches).toEqual([]);
+      // passive: 300 µ$ of USDC, then 101 units at the bid (floor(101 × 0.995) = 100; 100 units would bid 99) for the other 100 µ$; then the 1,000 µ$ receipt
+      expect(close(r, "D", 1)?.passiveWorkShareBps).toBe((1_899n * 10_000n) / 2_899n);
+      expect(r.conversions.get("D")).toMatchObject({ sells: 1, sellMicroSiu: 500n });
+    });
+
+    it("then sells the claims it kept instead of a creation, soonest window first, at the participant's bid on face", () => {
+      const log = [
+        holdings("D", 0, 100n, 100n, 2_000n),
+        holdings("R", 0, 2_000n, 0n, 0n, "research"),
+        e("D", { kind: "create", tokenId: "t3", milli: 1n, agu: 1_000n, inKindBy: "D", forWindow: 3 }),
+        e("D", { kind: "create", tokenId: "t2", milli: 1n, agu: 1_000n, inKindBy: "D", forWindow: 2 }),
+        // the agent: 100 µ$, then 302 of its 2,100 units (bid 300) -- the passive agent has 100 µ$, 100 units (bid 99) and the two claims it kept
+        e("participant", { kind: "participant-buyback", from: "D", agu: 302n, usdc: 300n, forced: "sweep" }),
+        sweep("D", 1, 400n, 400n, { forcedAgu: 302n }),
+        ...receipt("D", 1_000n, 1),
+        holdings("D", 1, 1_000n, 1_798n),
+        holdings("R", 1, 1_000n, 0n, 0n, "research"),
+        holdings("D", 2, 1_000n, 1_798n),
+        holdings("R", 2, 1_000n, 0n, 0n, "research"),
+      ];
+      const r = replayPassive(log);
+      expect(r.mismatches).toEqual([]);
+      // the last 201 µ$ from window 2's kept claim: 203 µSIU of face bid floor(203 × 0.995) = 201, leaving 797 of it and all 1,000 of window 3's
+      expect(close(r, "D", 1)?.passiveWorkShareBps).toBe(((797n + 1_000n) * 10_000n) / (1_000n + 797n + 1_000n));
+      // window 2's kept claim lapses at its close; window 3's is still whole
+      expect(close(r, "D", 2)?.passiveWorkShareBps).toBe((1_000n * 10_000n) / 2_000n);
+    });
+
+    it("leaves a shortfall unpaid when the agent's own sweep was short too: neither has anything left to sell", () => {
+      const log = [
+        holdings("D", 0, 100n, 100n),
+        e("participant", { kind: "participant-buyback", from: "D", agu: 100n, usdc: 99n, forced: "sweep" }),
+        sweep("D", 1, 199n, 400n, { forcedAgu: 100n }),
+        holdings("D", 1, 0n, 0n),
+      ];
+      const r = replayPassive(log);
+      expect(r.mismatches).toEqual([]);
+      expect(close(r, "D", 1)).toMatchObject({ workShareBps: null, passiveWorkShareBps: null });
+    });
+
+    it("reports n/a when the passive agent would have to sell claims the agent kept (the replay does not track them), or the sweep logged no bid terms", () => {
+      const lapsed = [
+        holdings("D", 0, 100n, 0n, 1_000n),
+        // the agent creates AGU-lab with its window-1 claim; the passive agent keeps the claim, which lapses at close 1
+        e("D", { kind: "create", tokenId: "t1", milli: 1n, agu: 1_000n, inKindBy: "D", forWindow: 1 }),
+        holdings("D", 1, 100n, 1_000n),
+        e("participant", { kind: "participant-buyback", from: "D", agu: 302n, usdc: 300n, forced: "sweep" }),
+        sweep("D", 2, 400n, 400n, { forcedAgu: 302n }),
+        holdings("D", 2, 0n, 698n),
+      ];
+      expect(replayPassive(lapsed).mismatches).toEqual([
+        "D's passive benchmark is 300 µ$ short of its owner's sweep at close 2 after its USDC, AGU-lab and the claims it kept, while the agent paid in full: the rest would come from claims the replay does not track",
+      ]);
+      const old = [holdings("D", 0, 100n, 1_000n), sweep("D", 1, 100n, 400n, {}, {}), holdings("D", 1, 0n, 1_000n)];
+      expect(replayPassive(old).mismatches).toEqual(["D's sweep at close 1 needs AGU-lab sold in the passive benchmark, but records no bid terms (a log written before the D150 sweep fix)"]);
+    });
+  });
+
   it("reports a mismatch when the flows do not reproduce a close's balances, and refuses a log without the valuation fields", () => {
     const bad = replayPassive([holdings("D", 0, 1_000n, 1_000n), holdings("D", 8, 900n, 1_000n)]);
     expect(bad.mismatches[0]).toMatch(/^D at close 8: replayed 1000 µ\$ USDC and 1000 AGU-lab units, logged 900 and 1000/);

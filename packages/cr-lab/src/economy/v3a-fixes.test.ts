@@ -103,6 +103,8 @@ const stats = (over: Partial<WindowStats> = {}): WindowStats => ({
   turns: 48,
   parseFailures: 0,
   serviceFailures: 0,
+  retries: 0,
+  retriesCorrected: 0,
   flagged: [],
   mirrors: [],
   agentCostUsd: new D(0),

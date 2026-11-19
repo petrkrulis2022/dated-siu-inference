@@ -1,13 +1,16 @@
 /**
  * `pnpm --filter @touchstone/cr-lab run v3a-window -- --params <v3a params> --arm A|B --vol low|high --price-seed <seed> [--cell <counted cell>]
- *    [--agents scripted|model] [--model <id, default the config's dev seat>] [--seed <run seed>] [--windows 8] [--yes-spend --ledger <path> [--budgets <path>]]`
+ *    [--agents scripted|model] [--model <id, default the config's dev seat>] [--seed <run seed>] [--windows 8]
+ *    [--yes-spend --ledger <path> --run-cap-usd <usd> [--budgets <path>]]`
  *
  * Runs v3a (docs/experiment-3a-design.md): 9 model agents (or their scripted stand-ins, free), 8 windows of 8 rounds, the stand-in issuers at the committed pass rates, the
  * seeded price path. The price seed is never written into the log until the run has ended (genesis records only its hash); with `--cell` the seed's hash must match the
  * one frozen in the parameters file for that counted cell, or the run refuses to start.
  *
  * Model agents spend real money through the trial's spend ledger, exactly as `economy-window` does: the run refuses without `--yes-spend`, `--ledger` must name the
- * ledger the trial writes, and `--budgets` can point at a scoped budgets file whose cap stops the run (a rehearsal's own dollar cap). Writes privately: the ordered log,
+ * ledger the trial writes, and the run has its own spend cap (D150: per run, never per UTC day, so other runs that day cannot eat into it) -- `--run-cap-usd`, required
+ * unless `--cell` names a counted cell, whose cap is the parameters file's $12 (a lower `--run-cap-usd` may tighten it). `--budgets` points at the budgets file whose
+ * provider budgets still apply (default the trial's own, which protects the print). Writes privately: the ordered log,
  * the report (validity gates, lost turns, cost, mechanics, NAV by window, this run's own measures, the overview of payments with the agents' reasons) and the sample
  * boards every agent saw at window 3, round 0.
  */
@@ -32,7 +35,7 @@ import { judgeDevWindows } from "../economy/report.js";
 import { loadCrPrint, loadV3aPassRates, runWindows, StopRule, type WindowStats } from "../economy/runner.js";
 import { checkGates, gatesPass } from "../economy/v3a-gates.js";
 import { renderArmScore, scoreArm } from "../economy/v3a-measures.js";
-import { buildV3aWorld, v3aAgentIds } from "../economy/v3a-run.js";
+import { buildV3aWorld, v3aAgentIds, v3aRunCapUsd } from "../economy/v3a-run.js";
 import { AGU_ISSUER, type Role } from "../economy/world.js";
 
 const arg = (name: string, dflt?: string): string | undefined => {
@@ -79,8 +82,14 @@ if (spends && ledgerPath === undefined) {
   console.error("--ledger <path> is required with model agents, so the trial's daily cap covers this run too");
   process.exit(2);
 }
+// D150 item 4: the run's own cap, checked before anything is built
+const runCapUsd = spends ? v3aRunCapUsd(params, { ...(cell !== undefined ? { cell } : {}), ...(arg("run-cap-usd") !== undefined ? { given: arg("run-cap-usd") as string } : {}) }) : undefined;
 const ledger = spends
-  ? new SpendLedger({ store: new FileLedgerStore(ledgerPath as string), policy: policyFromBudgets(loadBudgets(arg("budgets"))) })
+  ? new SpendLedger({
+      store: new FileLedgerStore(ledgerPath as string),
+      policy: policyFromBudgets(loadBudgets(arg("budgets"))),
+      runCapUsd: (runCapUsd as NonNullable<typeof runCapUsd>).toFixed(2),
+    })
   : undefined;
 
 const runId = `v3a-${mode}-arm${arm}-${vol}${cell !== undefined ? `-${cell}` : ""}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
@@ -118,15 +127,17 @@ else {
   agents = ids.map(([id, role]) => new ModelAgent(id, role, model, chat, priceFor(model, snapshot), ledger as SpendLedger, keyName));
 }
 
-let stats: WindowStats[] = [];
+// D150 item 3: the stats are filled as the run goes, so a run that stops partway still reports the turns and the cost it actually ran
+const stats: WindowStats[] = [];
 let stopped: string | undefined;
 try {
-  stats = await runWindows({
+  await runWindows({
     world,
     agents,
     windows: Array.from({ length: windowCount }, (_, i) => i + 1),
     needsFor,
     instructions: (role, siuFirst) => instructionsForV3a(role as Role, siuFirst, v3a.failedWorkPays),
+    stats,
   });
 } catch (e) {
   if (!(e instanceof StopRule) && !(e instanceof Error && e.name === "SpendStopped")) throw e;
@@ -152,7 +163,10 @@ const closes = of("claim-close").filter((e) => e.reserveLot !== true);
 let report = `# v3a ${stopped !== undefined ? "STOPPED" : "run"} ${runId}\n\n`;
 report += `- ${mode} agents${mode === "model" ? ` (${model})` : ""}; arm ${arm}; ${vol} volatility; run seed ${seed}; ${windowCount} windows${cell !== undefined ? `; counted cell ${cell}` : " (not a counted cell)"}\n`;
 if (stopped !== undefined) report += `- **stopped: ${stopped}**\n`;
-report += `- model cost $${cost.toFixed(4)}\n\n## Validity gates — ${gatesPass(gates) ? "ALL PASS" : "FAILED (the run is invalid; never rerun quietly)"}\n\n`;
+const turnsRun = stats.reduce((n, s) => n + s.turns, 0);
+const retries = stats.reduce((n, s) => n + s.retries, 0);
+const corrected = stats.reduce((n, s) => n + s.retriesCorrected, 0);
+report += `- model cost $${cost.toFixed(4)}${runCapUsd !== undefined ? ` of this run's $${runCapUsd.toFixed(2)} cap` : ""}; ${turnsRun} turns run over ${stats.length} windows; ${retries} schema retries (${corrected} corrected)\n\n## Validity gates — ${gatesPass(gates) ? "ALL PASS" : "FAILED (the run is invalid; never rerun quietly)"}\n\n`;
 for (const g of gates) report += `- ${g.ok ? "PASS" : "FAIL"} ${g.name}: ${g.detail}\n`;
 report += `\n## Mechanics\n\n`;
 report += `- PROVIDER: ${of("offer").filter((e) => e.withdrawn !== true).length} offers posted (${of("offer").filter((e) => e.replaces !== undefined).length} revisions, ${of("offer").filter((e) => e.withdrawn === true).length} withdrawals); ${of("claim-request").filter((e) => e.declined !== true).length} requests, ${of("claim-request").filter((e) => e.declined === true).length} declined; ${of("claim-mint").filter((e) => e.offer !== undefined).length} sales\n`;

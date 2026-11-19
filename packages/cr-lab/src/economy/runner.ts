@@ -187,8 +187,12 @@ export function needsSchedule(seed: string, tasks: readonly TaskId[]) {
 export interface WindowStats {
   window: number;
   turns: number;
+  /** turns lost: a call that failed the schema (after its retry, in v3a) */
   parseFailures: number;
   serviceFailures: number;
+  /** D150 item 1 (v3a): calls that failed the schema and were asked again within the turn, and how many of those retries were usable */
+  retries: number;
+  retriesCorrected: number;
   flagged: { agent: string; round: number; flags: string[] }[];
   /** the mirrored sample: the same board asked again with the other display, never executed */
   mirrors: {
@@ -216,15 +220,22 @@ export async function runWindows(opts: {
   needsFor: (agent: string, k: number) => TaskId[];
   /** the system prompt a model agent gets before its board; scripted agents ignore it */
   instructions?: (role: string, siuFirst: boolean) => string;
+  /**
+   * D150 item 3: the array each window's stats are pushed into as the window starts, so a caller still has what actually ran -- turns and cost -- when the run stops
+   * partway (a spend guard or a stop rule throws out of this function). Defaults to a fresh array.
+   */
+  stats?: WindowStats[];
 }): Promise<WindowStats[]> {
   const w = opts.world;
-  const stats: WindowStats[] = [];
+  const stats: WindowStats[] = opts.stats ?? [];
   for (const k of opts.windows) {
     const s: WindowStats = {
       window: k,
       turns: 0,
       parseFailures: 0,
       serviceFailures: 0,
+      retries: 0,
+      retriesCorrected: 0,
       flagged: [],
       mirrors: [],
       agentCostUsd: new D(0),
@@ -232,122 +243,166 @@ export async function runWindows(opts: {
     };
     stats.push(s);
     w.workSpendUsd = new D(0);
-    w.startWindow(k, opts.needsFor);
-    w.checkInvariants();
-    for (let r = 0; r < w.params.roundsPerWindow; r++) {
-      w.setTime(k, r);
-      if (r === w.params.roundsPerWindow - 1) w.lapseWarnings(k);
-      // v3a: the deferred-payment measure's opportunities, as each round opens (a no-op outside v3a)
-      w.logOpportunities();
-      const agents = typeof opts.agents === "function" ? opts.agents(k) : opts.agents;
-      const order = seededOrder(w.params.seed, k, r, agents);
-      for (const a of order) {
-        const board = boardFor(w, a.id);
-        // the last log entry before this agent's board was drawn: anything settled after it cannot have been on the board (the board-integrity gate)
-        const boardSeq = w.log.entries.at(-1)?.seq ?? 0;
-        const prompt = `${opts.instructions?.(a.role, board.siuFirst) ?? ""}\n\n${renderBoard(board)}`;
-        // v3a: every agent's full prompt at window 3, round 0 -- the sample boards a rehearsal report shows, one per role (Phase 4)
-        if (w.v3a !== undefined && k === 3 && r === 0) w.log.write(board.day, r, a.id, "board", { role: a.role, text: prompt });
-        const rep = await a.reply(board, prompt);
-        s.turns++;
-        s.agentCostUsd = s.agentCostUsd.plus(rep.costUsd);
-        // v3a Phase 2 item 5: a service failure no longer `continue`s past the checks at the bottom of this loop -- it skipped the stop rule, so a window could lose every
-        // turn to failed calls and run on (v2's window 7)
-        const parsed = rep.serviceFailure === undefined ? parseToolCall(rep.toolCall, a.role, board) : undefined;
-        const shown = w.v3a !== undefined ? { boardQuotes: board.quotes.map((q) => q.id), boardSeq } : {};
-        if (parsed === undefined) {
-          s.serviceFailures++;
-          w.log.write(board.day, r, a.id, "turn", {
-            seat: a.seat,
-            parsed: false,
-            serviceFailure: rep.serviceFailure,
-            ...shown,
-          });
-          w.lastResult.set(a.id, "your last turn was lost to a service failure; nothing happened");
-        } else if (!parsed.ok) {
-          s.parseFailures++;
-          w.log.write(board.day, r, a.id, "turn", {
-            seat: a.seat,
-            parsed: false,
-            error: parsed.error,
-            ...(rep.stopReason !== undefined ? { stopReason: rep.stopReason } : {}),
-            ...(rep.toolCall !== undefined
-              ? { raw: JSON.stringify(rep.toolCall).slice(0, 2000) }
-              : {}),
-            ...shown,
-          });
-          w.lastResult.set(a.id, `your last turn could not be used (${parsed.error})`);
-        } else {
-          w.log.write(board.day, r, a.id, "reasoning", {
-            seat: a.seat,
-            text: parsed.reasoning,
-            ...(rep.reasoningSummary !== undefined ? { providerSummary: rep.reasoningSummary } : {}),
-          });
-          if (parsed.flags.length > 0)
-            s.flagged.push({ agent: a.id, round: r, flags: parsed.flags });
-          // the mirrored sample (D82): a seeded share of model turns is asked again with the other display (SIU first versus dollars first); the mirror is never executed
-          if (
-            a.seat !== "scripted" &&
-            mirrored(w.params.seed, k, r, a.id, w.params.mirroredShareBps)
-          ) {
-            const flipped = { ...board, siuFirst: !board.siuFirst, notices: [] };
-            const m = await a.reply(
-              flipped,
-              `${opts.instructions?.(a.role, flipped.siuFirst) ?? ""}\n\n${renderBoard(flipped)}`,
-            );
-            s.agentCostUsd = s.agentCostUsd.plus(m.costUsd);
-            const mp =
-              m.serviceFailure === undefined ? parseToolCall(m.toolCall, a.role, flipped) : undefined;
-            const entry = {
-              siuFirst: flipped.siuFirst,
-              parsed: mp?.ok === true,
-              flags: mp?.ok === true ? mp.flags : [],
-              tool: mp?.ok === true ? mp.action.tool : undefined,
-            };
-            s.mirrors.push({
-              agent: a.id,
-              round: r,
-              original: { siuFirst: board.siuFirst, tool: parsed.action.tool, flags: parsed.flags },
-              mirror: entry,
-            });
-            w.log.write(board.day, r, a.id, "turn", {
-              seat: a.seat,
-              mirror: true,
-              executed: false,
-              ...entry,
-              ...(mp !== undefined && !mp.ok ? { error: mp.error } : {}),
-            });
-          }
-          const out = await w.act(a.id, parsed.action, parsed.reasoning);
-          const subject = w.v3a !== undefined ? subjectOf(parsed.action) : undefined;
-          w.log.write(board.day, r, a.id, "turn", {
-            seat: a.seat,
-            parsed: true,
-            tool: parsed.action.tool,
-            // D148a: the ID the agent gave, so a refusal naming it counts as named
-            ...(subject !== undefined ? { subject } : {}),
-            ok: out.ok,
-            note: out.note,
-            flags: parsed.flags,
-            // v3a: the quotes this agent's board showed, for the board-integrity gate (no paid or refunded quote may appear as open)
-            ...shown,
-          });
-        }
-        w.checkInvariants();
-        // v3a Phase 2 item 5: a turn lost to a service failure counts as lost, exactly like one that could not be parsed
-        if (s.turns >= 20 && (s.parseFailures + s.serviceFailures) * 5 > s.turns)
-          throw new StopRule(
-            `more than a fifth of ${s.turns} turns were lost (${s.parseFailures} parse failures, ${s.serviceFailures} service failures)`,
-          );
-        if (s.agentCostUsd.plus(w.workSpendUsd).gt(w.params.spendCapUsdPerWindow))
-          throw new StopRule("the window's spend cap is reached");
-      }
+    try {
+      await runWindow(w, k, s, opts);
+    } finally {
+      s.workCostUsd = w.workSpendUsd;
     }
-    w.closeWindow(k);
-    w.checkInvariants();
-    s.workCostUsd = w.workSpendUsd;
   }
   return stats;
+}
+
+/** one window of `runWindows`: its rounds, then its close; `s` is updated as each turn runs */
+async function runWindow(
+  w: World,
+  k: number,
+  s: WindowStats,
+  opts: Pick<Parameters<typeof runWindows>[0], "agents" | "needsFor" | "instructions">,
+): Promise<void> {
+  w.startWindow(k, opts.needsFor);
+  w.checkInvariants();
+  for (let r = 0; r < w.params.roundsPerWindow; r++) {
+    w.setTime(k, r);
+    if (r === w.params.roundsPerWindow - 1) w.lapseWarnings(k);
+    // v3a: the deferred-payment measure's opportunities, as each round opens (a no-op outside v3a)
+    w.logOpportunities();
+    const agents = typeof opts.agents === "function" ? opts.agents(k) : opts.agents;
+    const order = seededOrder(w.params.seed, k, r, agents);
+    for (const a of order) {
+      const board = boardFor(w, a.id);
+      // the last log entry before this agent's board was drawn: anything settled after it cannot have been on the board (the board-integrity gate)
+      const boardSeq = w.log.entries.at(-1)?.seq ?? 0;
+      const prompt = `${opts.instructions?.(a.role, board.siuFirst) ?? ""}\n\n${renderBoard(board)}`;
+      // v3a: every agent's full prompt at window 3, round 0 -- the sample boards a rehearsal report shows, one per role (Phase 4)
+      if (w.v3a !== undefined && k === 3 && r === 0) w.log.write(board.day, r, a.id, "board", { role: a.role, text: prompt });
+      let rep = await a.reply(board, prompt);
+      s.turns++;
+      s.agentCostUsd = s.agentCostUsd.plus(rep.costUsd);
+      // v3a Phase 2 item 5: a service failure no longer `continue`s past the checks at the bottom of this loop -- it skipped the stop rule, so a window could lose every
+      // turn to failed calls and run on (v2's window 7)
+      let parsed = rep.serviceFailure === undefined ? parseToolCall(rep.toolCall, a.role, board) : undefined;
+      const shown = w.v3a !== undefined ? { boardQuotes: board.quotes.map((q) => q.id), boardSeq } : {};
+      // D150 item 1 (owner, 2026-11-19), v3a only: a call that fails the schema gets the parser's error back and one corrected call within this turn, before anything
+      // else happens; every retry is logged (agent, round, the error, the outcome). The turn is lost only if the retry is unusable too. v2 is frozen (D138) and never retries.
+      let retried: "corrected" | "failed again" | "service failure" | undefined;
+      if (w.v3a !== undefined && parsed !== undefined && !parsed.ok && a.retry !== undefined) {
+        const first = parsed.error;
+        const firstRaw = rep.toolCall === undefined ? undefined : JSON.stringify(rep.toolCall).slice(0, 2000);
+        const again = await a.retry(first);
+        s.retries++;
+        s.agentCostUsd = s.agentCostUsd.plus(again.costUsd);
+        const p2 = again.serviceFailure === undefined ? parseToolCall(again.toolCall, a.role, board) : undefined;
+        retried = p2 === undefined ? "service failure" : p2.ok ? "corrected" : "failed again";
+        w.log.write(board.day, r, a.id, "retry", {
+          seat: a.seat,
+          error: first,
+          ...(firstRaw !== undefined ? { raw: firstRaw } : {}),
+          ...(rep.stopReason !== undefined ? { stopReason: rep.stopReason } : {}),
+          outcome: retried,
+          ...(again.serviceFailure !== undefined ? { serviceFailure: again.serviceFailure } : {}),
+          ...(p2 !== undefined && !p2.ok
+            ? { retryError: p2.error, ...(again.toolCall !== undefined ? { retryRaw: JSON.stringify(again.toolCall).slice(0, 2000) } : {}) }
+            : {}),
+        });
+        if (p2 !== undefined) {
+          if (p2.ok) s.retriesCorrected++;
+          parsed = p2;
+          rep = again;
+        }
+      }
+      const retry = retried !== undefined ? { retry: retried } : {};
+      if (parsed === undefined) {
+        s.serviceFailures++;
+        w.log.write(board.day, r, a.id, "turn", {
+          seat: a.seat,
+          parsed: false,
+          serviceFailure: rep.serviceFailure,
+          ...shown,
+        });
+        w.lastResult.set(a.id, "your last turn was lost to a service failure; nothing happened");
+      } else if (!parsed.ok) {
+        s.parseFailures++;
+        w.log.write(board.day, r, a.id, "turn", {
+          seat: a.seat,
+          parsed: false,
+          error: parsed.error,
+          ...(rep.stopReason !== undefined ? { stopReason: rep.stopReason } : {}),
+          ...(rep.toolCall !== undefined
+            ? { raw: JSON.stringify(rep.toolCall).slice(0, 2000) }
+            : {}),
+          ...retry,
+          ...shown,
+        });
+        w.lastResult.set(a.id, `your last turn could not be used (${parsed.error})`);
+      } else {
+        w.log.write(board.day, r, a.id, "reasoning", {
+          seat: a.seat,
+          text: parsed.reasoning,
+          ...(rep.reasoningSummary !== undefined ? { providerSummary: rep.reasoningSummary } : {}),
+        });
+        if (parsed.flags.length > 0)
+          s.flagged.push({ agent: a.id, round: r, flags: parsed.flags });
+        // the mirrored sample (D82): a seeded share of model turns is asked again with the other display (SIU first versus dollars first); the mirror is never executed
+        if (
+          a.seat !== "scripted" &&
+          mirrored(w.params.seed, k, r, a.id, w.params.mirroredShareBps)
+        ) {
+          const flipped = { ...board, siuFirst: !board.siuFirst, notices: [] };
+          const m = await a.reply(
+            flipped,
+            `${opts.instructions?.(a.role, flipped.siuFirst) ?? ""}\n\n${renderBoard(flipped)}`,
+          );
+          s.agentCostUsd = s.agentCostUsd.plus(m.costUsd);
+          const mp =
+            m.serviceFailure === undefined ? parseToolCall(m.toolCall, a.role, flipped) : undefined;
+          const entry = {
+            siuFirst: flipped.siuFirst,
+            parsed: mp?.ok === true,
+            flags: mp?.ok === true ? mp.flags : [],
+            tool: mp?.ok === true ? mp.action.tool : undefined,
+          };
+          s.mirrors.push({
+            agent: a.id,
+            round: r,
+            original: { siuFirst: board.siuFirst, tool: parsed.action.tool, flags: parsed.flags },
+            mirror: entry,
+          });
+          w.log.write(board.day, r, a.id, "turn", {
+            seat: a.seat,
+            mirror: true,
+            executed: false,
+            ...entry,
+            ...(mp !== undefined && !mp.ok ? { error: mp.error } : {}),
+          });
+        }
+        const out = await w.act(a.id, parsed.action, parsed.reasoning);
+        const subject = w.v3a !== undefined ? subjectOf(parsed.action) : undefined;
+        w.log.write(board.day, r, a.id, "turn", {
+          seat: a.seat,
+          parsed: true,
+          tool: parsed.action.tool,
+          // D148a: the ID the agent gave, so a refusal naming it counts as named
+          ...(subject !== undefined ? { subject } : {}),
+          ok: out.ok,
+          note: out.note,
+          flags: parsed.flags,
+          ...retry,
+          // v3a: the quotes this agent's board showed, for the board-integrity gate (no paid or refunded quote may appear as open)
+          ...shown,
+        });
+      }
+      w.checkInvariants();
+      // v3a Phase 2 item 5: a turn lost to a service failure counts as lost, exactly like one that could not be parsed
+      if (s.turns >= 20 && (s.parseFailures + s.serviceFailures) * 5 > s.turns)
+        throw new StopRule(
+          `more than a fifth of ${s.turns} turns were lost (${s.parseFailures} parse failures, ${s.serviceFailures} service failures)`,
+        );
+      if (s.agentCostUsd.plus(w.workSpendUsd).gt(w.params.spendCapUsdPerWindow))
+        throw new StopRule("the window's spend cap is reached");
+    }
+  }
+  w.closeWindow(k);
+  w.checkInvariants();
 }
 
 function mirrored(seed: string, k: number, r: number, agent: string, shareBps: bigint): boolean {

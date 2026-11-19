@@ -80,12 +80,21 @@ export class SpendLedger {
   readonly #policy: SpendPolicy;
   readonly #now: () => Date;
   readonly #pending = new Map<number, Pending>();
+  readonly #runCapUsd: string | undefined;
+  /** what this ledger itself recorded: under a run cap, one ledger is one run (D150) */
+  #runSpent = new D(0);
   #seq = 0;
 
-  constructor(opts: { store?: LedgerStore; policy: SpendPolicy; now?: () => Date }) {
+  /**
+   * `runCapUsd` (D150, owner 2026-11-19: "cap each run, not the UTC day"): this ledger's own spend, calls in flight included, may not pass it, and the UTC-day cap does
+   * not apply to its calls, so other runs that day cannot eat into it. The provider's budget still applies. Build one ledger per run.
+   */
+  constructor(opts: { store?: LedgerStore; policy: SpendPolicy; now?: () => Date; runCapUsd?: string }) {
     this.#store = opts.store ?? new MemoryLedgerStore();
     this.#policy = opts.policy;
     this.#now = opts.now ?? (() => new Date());
+    if (opts.runCapUsd !== undefined) parseUsd(opts.runCapUsd, "runCapUsd");
+    this.#runCapUsd = opts.runCapUsd;
   }
 
   /** The check a call would face now, without reserving anything. */
@@ -97,6 +106,7 @@ export class SpendLedger {
       provider,
       projectedUsd,
       policy: this.#policy,
+      ...(this.#runCapUsd !== undefined ? { run: { capUsd: this.#runCapUsd, spentUsd: fmtUsd(this.#runSpent) } } : {}),
     });
   }
 
@@ -119,6 +129,7 @@ export class SpendLedger {
       ...meta,
     });
     this.#store.append(entry);
+    this.#runSpent = this.#runSpent.plus(entry.usd);
     this.#pending.delete(reservation.id);
     return entry;
   }

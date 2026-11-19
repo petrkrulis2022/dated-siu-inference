@@ -4,6 +4,7 @@
  * The price path comes from a price seed that stays out of the world: only its hash goes into the log at genesis (`World.genesis`), and the run command writes the seed
  * itself into the log only when the run has ended. For a counted cell the seed's hash must equal the one frozen in the parameters file, or the run refuses to start.
  */
+import { D, type DecimalValue } from "@touchstone/sdk";
 import { TASKS, type TaskId } from "../tasks/instances.js";
 import { StandInWorker } from "./agents.js";
 import type { EconomyLog } from "./log.js";
@@ -14,6 +15,27 @@ import type { Arm } from "./v3a-market.js";
 import type { Role, TaskWorker, World } from "./world.js";
 
 export const BRIEF_TASKS: readonly TaskId[] = TASKS.filter((t): t is TaskId => t !== "CR-VS");
+
+/**
+ * D150 item 4 (owner, 2026-11-19): a model run's own spend cap, USD -- per run, never per UTC day. A counted cell is capped at the parameters file's `countedRunCapUsd`
+ * ($12), or lower if a lower cap is given; a run that is not a counted cell must name its own with `--run-cap-usd`.
+ */
+export function v3aRunCapUsd(params: EconomyParams, opts: { cell?: string; given?: string }): DecimalValue {
+  const v = params.v3a;
+  if (v === undefined) throw new Error("not a v3a parameters file");
+  let given: DecimalValue | undefined;
+  if (opts.given !== undefined) {
+    if (!/^\d+(\.\d+)?$/.test(opts.given) || new D(opts.given).lte(0)) throw new Error(`--run-cap-usd must be a positive decimal, got ${JSON.stringify(opts.given)}`);
+    given = new D(opts.given);
+  }
+  if (opts.cell === undefined) {
+    if (given === undefined) throw new Error("a model run needs its own spend cap: --run-cap-usd <usd> (D150: spend is capped per run, not per UTC day)");
+    return given;
+  }
+  if (given !== undefined && given.gt(v.countedRunCapUsd))
+    throw new Error(`--run-cap-usd ${given.toFixed(2)} is above the counted run cap of $${v.countedRunCapUsd.toFixed(2)} (D150)`);
+  return given ?? v.countedRunCapUsd;
+}
 
 export function v3aPath(params: EconomyParams, wp0: CrPrintFile, priceSeed: string, volatility: "low" | "high"): PathPoint[] {
   const v = params.v3a;

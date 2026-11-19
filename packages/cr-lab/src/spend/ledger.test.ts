@@ -157,6 +157,37 @@ describe("the guard stops the trial", () => {
   });
 });
 
+describe("a run cap (D150, owner 2026-11-19: cap each run, not the UTC day)", () => {
+  it("counts only this run's own spend: other runs that day cannot eat into it, and the call that would pass it is refused before it starts", async () => {
+    const c = clock("2026-11-19T12:00:00Z");
+    // $8.50 already spent today by other runs: with a $9 day cap, a $1 call would be refused
+    const store = new MemoryLedgerStore([validateEntry({ at: "2026-11-19T09:00:00Z", provider: "anthropic", usd: "8.5", ...META })]);
+    const ledger = new SpendLedger({ store, policy: POLICY, now: c.now, runCapUsd: "2" });
+    await ledger.guard("anthropic", "1", META, call("0.9"));
+    await ledger.guard("anthropic", "1", META, call("0.9"));
+    let started = false;
+    await expect(
+      ledger.guard("anthropic", "0.25", META, async () => {
+        started = true;
+        return { usd: "0.25" };
+      }),
+    ).rejects.toMatchObject({ name: "SpendStopped", code: "run-cap", provider: "anthropic" });
+    expect(started).toBe(false);
+    expect(ledger.check("anthropic", "0.1")).toMatchObject({ ok: true, runSpent: "1.800000", runRemaining: "0.200000" });
+    // the provider budget, which protects the print, still applies under a run cap
+    const tight = new SpendLedger({ policy: { ...POLICY, providers: { anthropic: { budgetUsd: "1", since: "2026-10-01T00:00:00Z" } } }, now: c.now, runCapUsd: "12" });
+    await expect(tight.guard("anthropic", "1.5", META, call("1"))).rejects.toMatchObject({ code: "provider-budget" });
+  });
+
+  it("counts calls in flight against the run cap too", async () => {
+    const { c } = ledgerAt("2026-11-19T12:00:00Z");
+    const ledger = new SpendLedger({ policy: POLICY, now: c.now, runCapUsd: "5" });
+    const slow = (usd: string) => () => new Promise<{ usd: string }>((r) => setTimeout(() => r({ usd }), 5));
+    const results = await Promise.allSettled([1, 2, 3].map(() => ledger.guard("anthropic", "2", META, slow("2"))));
+    expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled", "rejected"]);
+  });
+});
+
 describe("report", () => {
   it("splits today by part and shows each provider's budget, spend and what is left", async () => {
     const { ledger } = ledgerAt();

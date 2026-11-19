@@ -2,7 +2,7 @@
  * May the trial spend `projectedUsd` more on `provider`, now? The pure rule behind the ledger; no I/O, so it can be tested exhaustively.
  *
  * Two limits, both counted **with the calls in flight** so concurrent calls cannot jointly overshoot:
- *  - the daily cap: everything the trial spent today (UTC), across providers (D73);
+ *  - the daily cap: everything the trial spent today (UTC), across providers (D73) -- or, for a run given its own cap (D150), that run's own spend instead;
  *  - the provider's budget: what that provider may spend on the trial in total, since its balance was read (D72). The budget is the balance minus 30 days of the
  *    print's own spend there, so the print is protected by construction. A provider with no budget is refused: the guard fails closed.
  */
@@ -11,7 +11,7 @@ import { D } from "@touchstone/sdk";
 import { fmtUsd, parseUsd } from "./money.js";
 import type { Pending, SpendEntry, SpendPolicy } from "./types.js";
 
-export type StopCode = "daily-cap" | "provider-budget" | "no-budget";
+export type StopCode = "daily-cap" | "run-cap" | "provider-budget" | "no-budget";
 
 export type SpendCheck =
   | {
@@ -20,6 +20,9 @@ export type SpendCheck =
       remainingToday: string;
       providerSpent: string;
       providerRemaining: string;
+      /** under a run cap (D150): what this run has spent, counting its calls in flight, and what is left of its cap */
+      runSpent?: string;
+      runRemaining?: string;
     }
   | { ok: false; code: StopCode; reason: string; spentToday: string; providerSpent: string };
 
@@ -32,6 +35,11 @@ export function checkSpend(input: {
   provider: Provider;
   projectedUsd: string;
   policy: SpendPolicy;
+  /**
+   * D150 (owner, 2026-11-19): a cap on one run's own spend -- what this run recorded (`spentUsd`) plus its calls in flight -- which replaces the daily cap for its calls, so
+   * other runs on the same UTC day cannot eat into it. The provider's budget, which protects the print, still applies.
+   */
+  run?: { capUsd: string; spentUsd: string };
 }): SpendCheck {
   const projected = parseUsd(input.projectedUsd, "projectedUsd");
   const cap = parseUsd(input.policy.dailyCapUsd, "dailyCapUsd");
@@ -62,7 +70,19 @@ export function checkSpend(input: {
         "and it is recorded in data/lab/cr/budgets.json.",
     };
   }
-  if (spentToday.plus(projected).greaterThan(cap)) {
+  const runSpent = input.run === undefined ? undefined : parseUsd(input.run.spentUsd, "run.spentUsd").plus(inFlight);
+  const runCap = input.run === undefined ? undefined : parseUsd(input.run.capUsd, "run.capUsd");
+  if (runSpent !== undefined && runCap !== undefined && runSpent.plus(projected).greaterThan(runCap)) {
+    return {
+      ok: false,
+      code: "run-cap",
+      ...base,
+      reason:
+        `this run has spent $${fmtUsd(runSpent)}, counting calls in flight, of its $${runCap.toFixed(2)} cap, and this call would add about $${fmtUsd(projected)}, ` +
+        "which is more than is left. The cap is this run's own; other runs that day do not count against it.",
+    };
+  }
+  if (input.run === undefined && spentToday.plus(projected).greaterThan(cap)) {
     return {
       ok: false,
       code: "daily-cap",
@@ -88,5 +108,6 @@ export function checkSpend(input: {
     ...base,
     remainingToday: fmtUsd(cap.minus(spentToday)),
     providerRemaining: fmtUsd(providerBudget.minus(providerSpent)),
+    ...(runSpent !== undefined && runCap !== undefined ? { runSpent: fmtUsd(runSpent), runRemaining: fmtUsd(runCap.minus(runSpent)) } : {}),
   };
 }
