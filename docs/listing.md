@@ -131,11 +131,20 @@ form or a PR against the registry's own repo.
       and a short description; confirm the current form at submission time.
 - [ ] **mcp.so** — directory submission, typically repo URL + description + category. Category:
       pricing/finance/data.
-- [ ] **Circle Agent Marketplace** (seller) — no confirmed self-serve API found in Circle's docs as
-      of this session (same finding as before deployment); check
-      [developers.circle.com](https://developers.circle.com) directly for the current Agent
-      Marketplace seller intake before submitting, since this is exactly the kind of thing that
-      moves between when this is written and when it's read.
+- [ ] **Circle Agent Marketplace** (seller) — the intake is a Google Form,
+      <https://forms.gle/7YFzvdmMcn1JH5tF6> (from Circle's own "Get listed" page,
+      developers.circle.com/agent-stack/agent-marketplace/get-listed, read 2026-10-27). It asks for the
+      endpoint URL, the payout wallet and a short description; the listing is then reviewed and approved
+      by hand, the payout wallet is sanctions-screened, and a listed service is health-checked
+      continuously ("stays listed only while it is reachable"). The service must answer 402 to an
+      unpaid request and publish an OpenAPI spec. Both exist now as the REST routes
+      (`packages/mcp-server/README.md`, "REST routes"): endpoint `https://mcp.touchstoneassay.com/v1/quote`,
+      spec `https://mcp.touchstoneassay.com/openapi.json`, payout wallet = `TOUCHSTONE_SELLER_ADDRESS`.
+      **Submit only once the service is on the mainnet profile**: the reviewer and the health check
+      probe the live endpoint, and both the 402 and the spec are per profile, so a submission made on
+      testnet would show testnet networks. Circle's pages state no fees or revenue share, and no
+      review time. The marketplace lists HTTP routes, not MCP tools, which is why `/mcp` alone does
+      not qualify.
 - [ ] **x402 ecosystem directories, incl. x402scan** (x402scan.com and similar) — some x402
       directories index on-chain settlement activity automatically rather than taking manual
       submissions; x402scan's own submission mechanics weren't confirmed live this session (its

@@ -30,6 +30,18 @@
 
   "kv_namespaces": [{ "binding": "PRINTS_CACHE", "id": "e057dc9329f342828d4a61c9912b8944" }],
 
+  // The settlement log (brief decision 4): one row per paid call — tool, network, route, amount,
+  // payer, Gateway transfer id or tx hash. Its own database, never the print repo; no endpoint
+  // reads it. The table is created from SETTLEMENTS_SCHEMA in src/workers/settlement-log.ts.
+  // The id is a resource identifier, not a secret.
+  "d1_databases": [
+    {
+      "binding": "SETTLEMENTS",
+      "database_name": "touchstone-settlements",
+      "database_id": "1411a148-1ea5-4da7-a328-367edbc81066",
+    },
+  ],
+
   // Usage evidence only — call counts per tool, distinct payer addresses for the three paid
   // tools. No request bodies, no PII. See src/workers/analytics.ts.
   "analytics_engine_datasets": [{ "binding": "USAGE", "dataset": "touchstone_mcp_usage" }],
@@ -40,12 +52,20 @@
 
   // Every value below is non-sensitive: a chain name, a contract address (already public in
   // data/deployments/base-sepolia.json), a public RPC endpoint (same classification ci.yml
-  // already gives it), and TOUCHSTONE_TREASURY — the existing escrow fee address, reused here as
-  // where Circle Gateway pays out (a receiving address needs no private key on this Worker at
-  // all). The one real secret, TOUCHSTONE_ATTESTATION_KEY, is set via `wrangler secret put`, not
+  // already gives it), and the payTo address (a receiving address needs no private key on this
+  // Worker at all). The real secrets — TOUCHSTONE_ATTESTATION_KEY, and the optional
+  // KITE_SETTLER_PRIVATE_KEY and CIRCLE_LIVE_API_KEY — are set via `wrangler secret put`, never
   // here — see README.md's deploy section.
   "vars": {
-    "TOUCHSTONE_SELLER_ADDRESS": "0xD7CA8219C8AfA07b455Ab7e004FC5381B3727B1e",
+    // payTo for EVERY network and profile: the Touchstone revenue wallet (TOUCHSTONE_MAINNET_TREASURY,
+    // a software-wallet EOA the owner controls, not a Safe: Circle Nanopayments does not support
+    // ERC-1271 contract accounts). A public address; this Worker never holds its key. Replaces the
+    // old testnet deployer address, whose key sat in a plaintext .env.
+    "TOUCHSTONE_SELLER_ADDRESS": "0x470571461B28C371E2D38766505E572350f43B75",
+    // Default network profile when the KV flag `config:network-profile` (in PRINTS_CACHE) is unset:
+    // "mainnet" | "testnet" | "base-sepolia" (the old Base-Sepolia-only behaviour). Anything else
+    // falls back to testnet. Switching is a `wrangler kv key put`, never a deploy — see README.md.
+    "TOUCHSTONE_NETWORK_PROFILE": "testnet",
     "TOUCHSTONE_CHAIN_NAME": "base-sepolia",
     "TOUCHSTONE_ESCROW_ADDRESS": "0x3eC06FFe8d5250d5Edf8Fff26b163aaaD65c8a00",
     "BASE_SEPOLIA_RPC_URL": "https://sepolia.base.org"

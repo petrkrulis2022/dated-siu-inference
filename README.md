@@ -45,6 +45,7 @@ Full record — transaction hashes, block numbers, constructor arguments, compil
 - DeployArcTestnet.s.sol is chain-guarded to 5042002; a mainnet deployment needs its own script and its own review.
 - Arc mainnet's own chain ID and USDC contract address must be independently re-verified against Circle's/Arc's own documentation at deploy time — never copied from this testnet record, even though Arc's testnet USDC happens to sit at a distinctive, memorable address (0x3600...0000).
 - Arc's public mainnet launches 2026-09-16 — see packages/contracts/script/DeployArcMainnet.s.sol, prepared but not run, with its chain-id guard deliberately left as an env-var placeholder rather than a guessed constant.
+- TouchstoneAttestationV2: admin_ must be the owner's real hardware-wallet address, generated independently of every other key in this file — it has no rotation path once set.
 
 ### Base Sepolia
 
@@ -62,6 +63,7 @@ Full record — transaction hashes, block numbers, constructor arguments, compil
 - treasury MUST be a Safe/multisig, not an EOA. It is immutable with no setter, so a lost key makes fee revenue permanently unrecoverable and the only remedy is redeploying the escrow and migrating every integrator.
 - Generate TOUCHSTONE_PUBLISHER_KEY on an air-gapped machine. The testnet key used here has passed through repository-adjacent files.
 - Deploy.s.sol is chain-guarded to 84532; a mainnet deployment needs its own script and its own review.
+- TouchstoneAttestationV2: admin_ must be the owner's real hardware-wallet address, generated independently of every other key in this file — it has no rotation path once set.
 
 ### Verify a print independently
 
