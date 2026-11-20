@@ -33,6 +33,15 @@ export interface PassiveClose {
   passiveWorkShareBps: bigint | null;
   workShareBpsShadow: bigint | null;
   passiveWorkShareBpsShadow: bigint | null;
+  /**
+   * D152 (owner, 2026-11-20): value held in work -- AGU-lab at NAV plus live claims at face, Commodity µSIU -- for the agent and the passive agent, and the agent's
+   * starting value (everything it held at close 0, valued then). Store of value is (work − passive work) ÷ start: a lapsed claim is 0 on both sides, never holding.
+   */
+  workMicroSiu: bigint;
+  passiveWorkMicroSiu: bigint;
+  workMicroSiuShadow: bigint;
+  passiveWorkMicroSiuShadow: bigint;
+  startMicroSiu: bigint;
 }
 /** an agent's own conversions (the participant's buys and sells of AGU-lab, creations, redemptions), by count and by value in µSIU at the time */
 export interface Conversions {
@@ -110,6 +119,7 @@ export function replayPassive(log: readonly LogEntry[], benchmark: Benchmark): P
   const actual = new Map<string, Wallet>();
   const passive = new Map<string, Passive>();
   const roles = new Map<string, string>();
+  const startValue = new Map<string, bigint>();
   const conversions = new Map<string, Conversions>();
   const closes: PassiveClose[] = [];
   const mismatches: string[] = [];
@@ -347,7 +357,16 @@ export function replayPassive(log: readonly LogEntry[], benchmark: Benchmark): P
         const pg = aguValue(p.agu);
         const pgShadow = (pg * shadowPpm) / 1_000_000n;
         const share = (work: bigint, total: bigint): bigint | null => (total === 0n ? null : (work * 10_000n) / total);
+        // D152: value held in work, both sides valued with the same formula at this close; the starting value is everything the agent held at close 0
+        const aw = aguValue(agu);
+        const agentClaims = big(e.claimsMicroSiu);
+        if (e.atClose === 0) startValue.set(a, usdcValue(usdc) + aw + agentClaims);
         closes.push({
+          workMicroSiu: aw + agentClaims,
+          passiveWorkMicroSiu: pg + claims,
+          workMicroSiuShadow: (aw * shadowPpm) / 1_000_000n + agentClaims,
+          passiveWorkMicroSiuShadow: pgShadow + claims,
+          startMicroSiu: startValue.get(a) ?? 0n,
           agent: a,
           role: roles.get(a) ?? String(e.role),
           atClose: Number(e.atClose),

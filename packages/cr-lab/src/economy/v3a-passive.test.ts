@@ -287,6 +287,14 @@ describe("replayPassive", () => {
       expect(close(r, "D", 2)).toMatchObject({ workShareBps: 7_407n, passiveWorkShareBps: 5_000n });
     });
 
+    it("D152: reports value held in work (AGU-lab at NAV plus live claims at face) for the agent and the passive agent, and the agent's starting value", () => {
+      const log = [holdings("D", 0, 1_000n, 1_000n), mint("D", "t2", 2, 300n), holdings("D", 1, 700n, 1_000n, 1_000n), e("GATE-RUNNER", { kind: "claim-close", tokenId: "t2", holder: "D", outcome: "expired", milli: 1n, usdc: 0n }), holdings("D", 2, 700n, 1_000n)];
+      const r = replayPassive(log, "holding");
+      expect(close(r, "D", 0)).toMatchObject({ startMicroSiu: 2_000n, workMicroSiu: 1_000n, passiveWorkMicroSiu: 1_000n });
+      expect(close(r, "D", 1)).toMatchObject({ startMicroSiu: 2_000n, workMicroSiu: 2_000n, passiveWorkMicroSiu: 1_000n }); // the claim held unused
+      expect(close(r, "D", 2)).toMatchObject({ workMicroSiu: 1_000n, passiveWorkMicroSiu: 1_000n }); // lapsed: worth nothing on either side
+    });
+
     it("values a Frontier claim the passive agent did not buy at the close's own prints, exactly as the holdings value it", () => {
       const log = [
         holdings("D", 0, 1_000n, 1_000n),

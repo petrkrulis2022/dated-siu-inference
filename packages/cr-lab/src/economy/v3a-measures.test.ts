@@ -169,8 +169,29 @@ describe("v3a store of value (D149 item 5): the median difference from the passi
     const s = scoreStoreOfValue([run("a", [genesis("low"), ...payer("A0"), ...payer("A1"), ...payer("A2")])], 8, 3);
     expect(s.finalMedian).toBe(0);
     expect(s.verdict).toBe("neither");
-    expect(s.spendingMix.finalMedian).toBe(0.125); // 62.5% against D149's pro-rata benchmark at 50%
+    // D152: 1,000 µSIU of AGU-lab against the pro-rata benchmark's 800, of a 2,000 starting value (it was 62.5% against 50% as a share of wealth)
+    expect(s.spendingMix.finalMedian).toBe(0.1);
     expect(s.shortfalls).toBe(0);
+  });
+
+  it("D152: value held in work, in points of starting value -- a bought claim that lapses unused is 0, never a holding signal; one held at a close is", () => {
+    const claimer = (actor: string, lapses: boolean): LogEntry[] => [
+      hold(actor, 0, 1_000n, 1_000n),
+      e("d1", actor, { kind: "claim-mint", tokenId: `t-${actor}`, offer: "offer-1", forWindow: 8, series: "commodity", milli: 1n, usdc: 400n, payUnit: "usdc" }),
+      ...(lapses ? [e("d8", "GATE-RUNNER", { kind: "claim-close", tokenId: `t-${actor}`, holder: actor, outcome: "expired", milli: 1n, usdc: 0n })] : []),
+      lapses
+        ? hold(actor, 8, 600n, 1_000n)
+        : { ...hold(actor, 7, 600n, 1_000n), claimsMicroSiu: 1_000n, workShareBps: (2_000n * 10_000n) / 2_600n },
+    ];
+    // as a share of wealth the lapse read +12.5 points (1,000 of 1,600 against 1,000 of 2,000); as value held in work it is 1,000 against 1,000
+    const lapsed = scoreStoreOfValue([run("a", [genesis("low"), ...["A0", "A1", "A2"].flatMap((a) => claimer(a, true))])], 8, 3);
+    expect(lapsed.finalMedian).toBe(0);
+    expect(lapsed.verdict).toBe("neither");
+    // a claim held at close 7: 1,000 of AGU-lab and 1,000 of claim against the benchmark's 1,000, of 2,000: +50 points
+    const held = scoreStoreOfValue([run("a", [genesis("low"), ...["A0", "A1", "A2"].flatMap((a) => claimer(a, false))])], 7, 3);
+    expect(held.finalMedian).toBe(0.5);
+    expect(held.actualFinalMedian).toBe(1);
+    expect(held.passiveFinalMedian).toBe(0.5);
   });
 
   it("reports each agent's conversions beside the verdict, and is n/a when a run's flows do not reproduce its balances", () => {
@@ -327,8 +348,8 @@ describe("v3a validity gates and a full scripted run, scored end to end", () => 
     const sa = scoreArm("A", [run("a", a)], params, pass);
     const sb = scoreArm("B", [run("b", b)], params, pass);
     expect(sa.exchange.payments).toBeGreaterThan(0);
-    // every model agent with any wealth left at the last close (a share of nothing is not a share)
-    expect(sa.storeOfValue.finalN).toBe(a.filter((x) => x.kind === "holdings" && x.atClose === 8 && x.workShareBps !== null).length);
+    // D152: every model agent with a starting value (points of starting value; PROVIDER starts with none, so it has no points to score)
+    expect(sa.storeOfValue.finalN).toBe(a.filter((x) => x.kind === "holdings" && x.atClose === 0 && BigInt(String(x.totalMicroSiu)) > 0n).length);
     expect(sa.storeOfValue.finalN).toBeGreaterThan(0);
     expect(sa.account.verdict).toBe("n/a"); // not coded: never a kill signal
     expect(sa.killSignals).not.toContain("account");

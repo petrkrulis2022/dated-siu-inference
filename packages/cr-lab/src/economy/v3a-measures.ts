@@ -164,8 +164,9 @@ export function scoreAccount(runs: readonly V3aRunLog[], codings: Codings | unde
 // ---- store of value --------------------------------------------------------------------------------------------------------------------------------
 export interface StoreOfValue {
   /**
-   * D149 item 5 (owner, 2026-11-18), amended by D151 (owner, 2026-11-19): the median, across every agent of every run, of each agent's work share (AGU-lab and fSIU)
-   * minus its passive benchmark, at each close, as a fraction (0.10 is 10 points). Since D151 the benchmark is the holding one (`v3a-passive.ts`): each payment in the
+   * D149 item 5 (owner, 2026-11-18), amended by D151 (owner, 2026-11-19) and D152 (owner, 2026-11-20): the median, across every agent of every run, of the value
+   * each agent holds in work (AGU-lab at NAV plus live claims at face) minus what its passive benchmark holds, in points of the agent's starting value (0.10 is 10
+   * points) -- not a share of current wealth, where a lapsed claim raised the AGU-lab share by shrinking the wealth (a loss read as holding). Since D151 the benchmark is the holding one (`v3a-passive.ts`): each payment in the
    * agent's own currency, no conversions, and only claims held unused count -- so the difference measures deliberate holding choices only. Inertia scores 0.
    */
   medianByClose: { close: number; median: number | null; n: number }[];
@@ -174,7 +175,7 @@ export interface StoreOfValue {
   /** the kill is judged in the low-volatility runs only */
   lowVolFinalMedian: number | null;
   lowVolFinalN: number;
-  /** context beside the verdict: the median actual and passive work shares at the last close */
+  /** context beside the verdict: the median value held in work at the last close, agent and passive, as a fraction of starting value (D152) */
   actualFinalMedian: number | null;
   passiveFinalMedian: number | null;
   /**
@@ -207,13 +208,15 @@ export function scoreStoreOfValue(runs: readonly V3aRunLog[], finalClose: number
       x.replay.closes
         .filter((c) => c.atClose === close)
         .flatMap((c) => {
-          const actual = shadow ? c.workShareBpsShadow : c.workShareBps;
-          const passive = shadow ? c.passiveWorkShareBpsShadow : c.passiveWorkShareBps;
-          return actual === null || passive === null ? [] : [Number(actual - passive) / 10_000];
+          // D152: value held in work, agent minus passive benchmark, as a fraction of the agent's starting value (0.10 is 10 points); no starting value, no difference
+          if (c.startMicroSiu === 0n) return [];
+          const actual = shadow ? c.workMicroSiuShadow : c.workMicroSiu;
+          const passive = shadow ? c.passiveWorkMicroSiuShadow : c.passiveWorkMicroSiu;
+          return [Number(actual - passive) / Number(c.startMicroSiu)];
         }),
     );
-  const shares = (close: number, which: "workShareBps" | "passiveWorkShareBps"): number[] =>
-    replays.flatMap((x) => x.replay.closes.filter((c) => c.atClose === close && c[which] !== null).map((c) => Number(c[which]) / 10_000));
+  const shares = (close: number, which: "workMicroSiu" | "passiveWorkMicroSiu"): number[] =>
+    replays.flatMap((x) => x.replay.closes.filter((c) => c.atClose === close && c.startMicroSiu !== 0n).map((c) => Number(c[which]) / Number(c.startMicroSiu)));
   const byClose = (shadow: boolean) =>
     Array.from({ length: finalClose + 1 }, (_, close) => {
       const xs = diffs(close, replays, shadow);
@@ -232,8 +235,8 @@ export function scoreStoreOfValue(runs: readonly V3aRunLog[], finalClose: number
     finalN: final.length,
     lowVolFinalMedian: lowMedian,
     lowVolFinalN: lowFinal.length,
-    actualFinalMedian: median(shares(finalClose, "workShareBps")),
-    passiveFinalMedian: median(shares(finalClose, "passiveWorkShareBps")),
+    actualFinalMedian: median(shares(finalClose, "workMicroSiu")),
+    passiveFinalMedian: median(shares(finalClose, "passiveWorkMicroSiu")),
     shadow: { medianByClose: byClose(true), finalMedian: median(diffs(finalClose, replays, true)), lowVolFinalMedian: median(diffs(finalClose, low, true)) },
     conversions: replays.flatMap((x) => [...x.replay.conversions].map(([agent, c]) => ({ run: x.run.label, agent, ...c }))),
     claimHolds: replays.flatMap((x) => [...x.replay.claimHolds].map(([agent, c]) => ({ run: x.run.label, agent, ...c }))),
@@ -568,7 +571,7 @@ export function renderArmScore(s: ArmScore): string {
   );
   const sv = s.storeOfValue;
   L.push(
-    `- **Store of value** — ${sv.verdict}${sv.invalid !== undefined ? ` (${sv.invalid})` : ""}: median work share minus the passive benchmark at window 8 ${pts(sv.finalMedian)} (${sv.finalN} agents); in the low-volatility runs ${pts(sv.lowVolFinalMedian)} (${sv.lowVolFinalN}); actual ${pct(sv.actualFinalMedian)} against passive ${pct(sv.passiveFinalMedian)} (medians); by close: ${sv.medianByClose.map((c) => `w${c.close} ${pts(c.median)}`).join(", ")}. Against the shadow NAV (no subsidy): ${pts(sv.shadow.finalMedian)} at window 8 (low volatility ${pts(sv.shadow.lowVolFinalMedian)}). Conversions (participant buys and sells, creations, redemptions): ${convText(sv.conversions)}. Claim purchases (D151: only those held unused are holding choices): ${holdsText(sv.claimHolds)}; payments the benchmark covered from the other currency: ${sv.shortfalls}. Spending-mix effect (D149's pro-rata benchmark; descriptive, never scored): ${sv.spendingMix.invalid !== undefined ? `n/a (${sv.spendingMix.invalid})` : `${pts(sv.spendingMix.finalMedian)} at window 8 (low volatility ${pts(sv.spendingMix.lowVolFinalMedian)}); by close: ${sv.spendingMix.medianByClose.map((c) => `w${c.close} ${pts(c.median)}`).join(", ")}`}.`,
+    `- **Store of value** — ${sv.verdict}${sv.invalid !== undefined ? ` (${sv.invalid})` : ""}: median value held in work minus the passive benchmark at window 8, in points of starting value, ${pts(sv.finalMedian)} (${sv.finalN} agents); in the low-volatility runs ${pts(sv.lowVolFinalMedian)} (${sv.lowVolFinalN}); held in work ${pct(sv.actualFinalMedian)} of starting value against passive ${pct(sv.passiveFinalMedian)} (medians); by close: ${sv.medianByClose.map((c) => `w${c.close} ${pts(c.median)}`).join(", ")}. Against the shadow NAV (no subsidy): ${pts(sv.shadow.finalMedian)} at window 8 (low volatility ${pts(sv.shadow.lowVolFinalMedian)}). Conversions (participant buys and sells, creations, redemptions): ${convText(sv.conversions)}. Claim purchases (D151: only those held unused are holding choices): ${holdsText(sv.claimHolds)}; payments the benchmark covered from the other currency: ${sv.shortfalls}. Spending-mix effect (D149's pro-rata benchmark; descriptive, never scored): ${sv.spendingMix.invalid !== undefined ? `n/a (${sv.spendingMix.invalid})` : `${pts(sv.spendingMix.finalMedian)} at window 8 (low volatility ${pts(sv.spendingMix.lowVolFinalMedian)}); by close: ${sv.spendingMix.medianByClose.map((c) => `w${c.close} ${pts(c.median)}`).join(", ")}`}.`,
   );
   const d = s.deferredPayment;
   L.push(
