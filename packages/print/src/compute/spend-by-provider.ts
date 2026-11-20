@@ -1,6 +1,6 @@
 import type { ModelRegistryEntry, RunRecord } from "@touchstone/sdk";
-import { D, callCost, type DecimalValue } from "../decimal.js";
-import type { ModelPrice } from "./class-cost.js";
+import { D, type DecimalValue } from "../decimal.js";
+import { callCostOf, type CallPricing, type ModelPrice } from "./class-cost.js";
 
 /** Decimal-string USD, keyed by provider (e.g. "anthropic", "google") — sorted by key so the
  * written file is stable and diffable. */
@@ -24,7 +24,7 @@ export type ProviderSpend = Record<string, string>;
 export function computeSpendByProvider(
   records: RunRecord[],
   registry: ModelRegistryEntry[],
-  pricesByModelId: Map<string, ModelPrice>,
+  pricesByModelId: Map<string, ModelPrice | CallPricing>,
 ): ProviderSpend {
   const providerById = new Map(registry.map((r) => [r.id, r.provider]));
   const totals = new Map<string, DecimalValue>();
@@ -32,14 +32,8 @@ export function computeSpendByProvider(
     const provider = providerById.get(record.model_id);
     const price = pricesByModelId.get(record.model_id);
     if (!provider || !price) continue; // Deregistered or unpriced model — nothing to attribute real spend to.
-    const cost = callCost(
-      record.usage.input,
-      record.usage.output + record.usage.reasoning,
-      price.price_in_usd_per_1m,
-      price.price_out_usd_per_1m,
-      record.usage.cached_input,
-      price.price_cached_in_usd_per_1m,
-    );
+    // Priced exactly as the print prices a call (class-cost.ts's callCostOf): from rules-2026-11-20, what the response says was billed.
+    const cost = callCostOf(record, "price_in_usd_per_1m" in price ? { price } : price);
     totals.set(provider, (totals.get(provider) ?? new D(0)).plus(cost));
   }
 

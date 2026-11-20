@@ -33,7 +33,23 @@
     },
     "host": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "description": "Where the calls are bought. For an OpenRouter-routed entry: one exact endpoint tag (e.g. \"deepinfra/fp8\"), which the harness pins its calls to and the price snapshot reads; a bare provider name matching more than one endpoint fails the price fetch."
+    },
+    "service_tier": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The service tier this constituent is declared to buy, as the provider's responses name it (e.g. \"default\"). Part of the declared purchase path with host, model_string, adapter and quantization (docs/methodology.md, rules-2026-11-20)."
+    },
+    "quantization": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The numeric format the pinned endpoint serves (e.g. \"fp8\", \"bf16\"), as OpenRouter's endpoint listing states it. Part of the declared purchase path."
+    },
+    "listed_tiers": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "The tier endpoints OpenRouter listed under the pinned endpoint when this purchase path was last measured (e.g. [\"deepinfra/fp8/flex\", \"deepinfra/fp8/priority\"]); empty when none. A listing that differs, a tier added, removed or renamed, fails the price fetch: the constituent is re-measured before it is priced again (docs/methodology.md, rules-2026-11-20)."
     },
     "sampling": {
       "type": "object",

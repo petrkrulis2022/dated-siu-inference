@@ -57,6 +57,16 @@
       "type": "array",
       "items": { "type": "string" },
       "description": "Every deviation a provider forced from standard execution settings — build1-spec.md §3. Empty if none."
+    },
+    "service_tier": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "description": "The service tier the provider's own response says served this call (e.g. \"default\", \"priority\", \"standard\"), copied verbatim; null when the response names none. Part of the constituent's purchase path (docs/methodology.md, rules-2026-11-20). Absent on records written before 2026-11-21: their raw response still carries it."
+    },
+    "billed_usd": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)?$",
+      "description": "What the provider billed for this call, in USD, read from its own response (OpenRouter's usage.cost). The price of the call from rules-2026-11-20 onward; a list price is only a cross-check against it. Absent when the response reports no billed figure, and on records written before 2026-11-21, whose raw response still carries it."
     }
   },
   "required": [

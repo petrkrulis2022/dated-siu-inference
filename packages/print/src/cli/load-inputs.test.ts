@@ -3,7 +3,15 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ModelRegistryEntry, PriceSnapshot, RunRecord } from "@touchstone/sdk";
-import { buildModelInputs, loadCarryForwardHistory, loadRunRecords, printsDir, repoRoot } from "./load-inputs.js";
+import {
+  attachResponseBilling,
+  buildModelInputs,
+  loadCarryForwardHistory,
+  loadRunRecords,
+  NON_RUN_RECORD_FILES,
+  printsDir,
+  repoRoot,
+} from "./load-inputs.js";
 import { computePrint } from "../compute/index.js";
 
 const REGISTRY: ModelRegistryEntry[] = [
@@ -170,6 +178,67 @@ describe("buildModelInputs", () => {
     // The healthy model still qualifies normally — this fix doesn't touch models with real data.
     const healthyRow = body.basket_costs.find((b) => b.model_id === "healthy-model");
     expect(healthyRow?.cost_usd).toBeDefined();
+  });
+});
+
+describe("rules-2026-11-20 inputs", () => {
+  it("carries a snapshot entry's tier prices through, keyed by the tier name a response reports", () => {
+    const snapshot: PriceSnapshot = {
+      snapshot_id: "s1",
+      timestamp: "2026-11-21T00:00:00Z",
+      source: "merged",
+      entries: [
+        {
+          model_id: "healthy-model",
+          price_in_usd_per_1m: "0.075",
+          price_out_usd_per_1m: "0.2",
+          endpoint_tag: "deepinfra/fp8",
+          tiers: [
+            { tag: "deepinfra/fp8/flex", service_tier: "flex", price_in_usd_per_1m: "0.06", price_out_usd_per_1m: "0.16" },
+            { tag: "deepinfra/fp8/priority", service_tier: "priority", price_in_usd_per_1m: "0.1125", price_out_usd_per_1m: "0.3" },
+          ],
+        },
+      ],
+    };
+    const { models } = buildModelInputs([REGISTRY[0] as ModelRegistryEntry], snapshot, [runRecord()]);
+    expect(models[0]?.tierPrices).toEqual({
+      flex: { price_in_usd_per_1m: "0.06", price_out_usd_per_1m: "0.16" },
+      priority: { price_in_usd_per_1m: "0.1125", price_out_usd_per_1m: "0.3" },
+    });
+  });
+
+  it("leaves tierPrices out for a snapshot written before tiers were recorded, so historical prints recompute as published", () => {
+    const { models } = buildModelInputs([REGISTRY[0] as ModelRegistryEntry], SNAPSHOT, [runRecord()]);
+    expect(models[0]).not.toHaveProperty("tierPrices");
+  });
+
+  it("never reads the daily price check (price-check.json) as a run record", () => {
+    expect(NON_RUN_RECORD_FILES.has("price-check.json")).toBe(true);
+  });
+
+  describe("attachResponseBilling", () => {
+    let dir: string;
+    afterEach(async () => {
+      if (dir) await rm(dir, { recursive: true, force: true });
+    });
+
+    it("reads the tier and billed cost from the stored raw response of a record written before those fields existed", async () => {
+      dir = await mkdtemp(join(tmpdir(), "billing-"));
+      await writeFile(join(dir, "a.raw.json"), JSON.stringify({ provider: "DeepInfra", service_tier: "priority", usage: { cost: 0.00248685 } }));
+      const [record] = await attachResponseBilling([runRecord({ raw_response_ref: "a.raw.json" })], dir);
+      expect(record).toMatchObject({ service_tier: "priority", billed_usd: "0.00248685" });
+    });
+
+    it("keeps what a record already carries, without reading its raw response", async () => {
+      dir = await mkdtemp(join(tmpdir(), "billing-"));
+      const recorded = runRecord({ raw_response_ref: "missing.raw.json", service_tier: null, billed_usd: "0.1" });
+      expect(await attachResponseBilling([recorded], dir)).toEqual([recorded]);
+    });
+
+    it("fails loudly when the raw response a record points to is missing", async () => {
+      dir = await mkdtemp(join(tmpdir(), "billing-"));
+      await expect(attachResponseBilling([runRecord({ raw_response_ref: "missing.raw.json" })], dir)).rejects.toThrow(/missing\.raw\.json/);
+    });
   });
 });
 

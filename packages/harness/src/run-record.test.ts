@@ -84,4 +84,27 @@ describe("buildRunRecord", () => {
     );
     expect(record.gate_passed).toBe(false);
   });
+
+  it("records the service tier and the billed cost the response reports (rules-2026-11-20)", () => {
+    const record = buildRunRecord(
+      "run-005",
+      "mistral-small-3.2-24b-deepinfra",
+      instance,
+      1,
+      {
+        ...adapterResult,
+        raw: { provider: "DeepInfra", service_tier: "priority", usage: { cost: 0.00248685 } },
+      },
+      { passed: true },
+      "ref.json",
+    );
+    expect(record.service_tier).toBe("priority");
+    expect(record.billed_usd).toBe("0.00248685");
+  });
+
+  it("records a null tier, and no billed cost, when the response reports neither", () => {
+    const record = buildRunRecord("run-006", "model-a", instance, 1, adapterResult, { passed: true }, "ref.json");
+    expect(record.service_tier).toBeNull();
+    expect(record).not.toHaveProperty("billed_usd");
+  });
 });

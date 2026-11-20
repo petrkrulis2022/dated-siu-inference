@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { ModelRegistryEntry, PriceSnapshot, Print, RunManifest, RunRecord } from "@touchstone/sdk";
 import { CARRY_FORWARD_CAP_DAYS, type CarryForwardDay, type ModelInput } from "../compute/index.js";
+import { billingFromRaw } from "@touchstone/harness";
 
 /** pnpm always runs package scripts with cwd = the package directory. */
 export function repoRoot(): string {
@@ -28,7 +29,28 @@ export function runsDirFor(printId: string): string {
  * was actually just this file. `.raw.json` files are excluded by a suffix check instead (there
  * being no fixed number of them), not by this set.
  */
-export const NON_RUN_RECORD_FILES = new Set(["index.json", "reconciliation.json", "spend-by-provider.json"]);
+export const NON_RUN_RECORD_FILES = new Set(["index.json", "reconciliation.json", "spend-by-provider.json", "price-check.json"]);
+
+/**
+ * rules-2026-11-20: every record carries the service tier and billed cost its response reported. A record written before those fields existed
+ * (before 2026-11-21) gets them from its own stored raw response, read with the same function the harness uses (billingFromRaw), so a correction
+ * or a verification of a print under that rule prices historical calls exactly as a new run would. A record that already carries the tier is left
+ * as it is. A missing raw response fails loudly: the response is the source of the price.
+ */
+export async function attachResponseBilling(records: RunRecord[], runsDir: string): Promise<RunRecord[]> {
+  return Promise.all(
+    records.map(async (record) => {
+      if (record.service_tier !== undefined) return record;
+      const path = join(runsDir, record.raw_response_ref);
+      const raw: unknown = JSON.parse(
+        await readFile(path, "utf-8").catch(() => {
+          throw new Error(`Run record ${record.run_id} points to a raw response that is not there: ${path}.`);
+        }),
+      );
+      return { ...record, ...billingFromRaw(raw) };
+    }),
+  );
+}
 
 export function printsDir(): string {
   return resolve(repoRoot(), "data/prints");
@@ -255,6 +277,22 @@ export function buildModelInputs(
           ? { price_cached_in_usd_per_1m: price.price_cached_in_usd_per_1m }
           : {}),
       },
+      // rules-2026-11-20: the list price of each other tier under the pinned endpoint, so a call is list-priced at the tier its response
+      // reports. Absent for a snapshot written before tiers were recorded.
+      ...(price.tiers !== undefined && price.tiers.length > 0
+        ? {
+            tierPrices: Object.fromEntries(
+              price.tiers.map((t) => [
+                t.service_tier,
+                {
+                  price_in_usd_per_1m: t.price_in_usd_per_1m,
+                  price_out_usd_per_1m: t.price_out_usd_per_1m,
+                  ...(t.price_cached_in_usd_per_1m != null ? { price_cached_in_usd_per_1m: t.price_cached_in_usd_per_1m } : {}),
+                },
+              ]),
+            ),
+          }
+        : {}),
       records: modelRecords,
     });
   }

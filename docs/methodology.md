@@ -117,9 +117,13 @@ generator's opinions about your deployment.
 descending order, and only the first is ever an input to the print itself:
 
 1. **Executed runs and reconciled invoices.** `@touchstone/harness` actually calls each registered
-   model with the real basket, captures real token usage, and prices it against a pinned price
-   snapshot. This is the only tier that ever produces a number in `exchange_rate_table` or
-   `dated_siu`.
+   model with the real basket and captures real token usage, the service tier that served each
+   call, and what the call was billed. From `rules-2026-11-20` a call's cost is the amount its
+   provider's own response says was billed (OpenRouter's `usage.cost`, xAI's
+   `cost_in_usd_ticks`). Where a response reports no billed figure (Anthropic, OpenAI, Google),
+   its tokens are priced against a pinned price snapshot at the list price of the tier the
+   response reports, and the provider's invoice reconciles it (§7). This is the only tier that
+   ever produces a number in `exchange_rate_table` or `dated_siu`.
 2. **Routed-market realised flows.** Where a defensible source of real usage share across models
    exists, it informs _weights_ — never costs. See §3's host-weighting note and the registry
    inclusion policy below for exactly where this tier can and cannot enter the computation.
@@ -129,8 +133,9 @@ descending order, and only the first is ever an input to the print itself:
 
 This ordering is a hard invariant, not a style preference: mixing evidence tiers inside a single
 computed figure is exactly the kind of thing an outside auditor would be right to flag, and
-`packages/harness`'s run records (`RunRecord.usage`, captured from the real provider response,
-never from a list price) are the only thing `packages/print`'s cost computation reads.
+`packages/harness`'s run records (`RunRecord.usage`, `service_tier` and `billed_usd`, captured from
+the real provider response, never from a list price) are the only thing `packages/print`'s cost
+computation reads, with the price snapshot only for a call whose response reports no billed figure.
 
 **A fourth category exists and belongs to none of these tiers: telemetry from Touchstone's own
 demo agents** (`data/agent-runs/`, `packages/agents`). It is never an input to the print, at any
@@ -545,6 +550,7 @@ that actually applied, by date.
 | `rules-2026-09-25b` | 2026-09-25 | Found live: `rules-2026-09-13`'s own fix never actually took effect. The cost formula, the schema field, and the snapshot sourcing all landed on 2026-09-13 — but `buildModelInputs` (`packages/print/src/cli/load-inputs.ts`), the one function every publish/verify path uses to turn a snapshot entry into the price the cost formula receives, never copied `price_cached_in_usd_per_1m` through. Every real print from 2026-09-14 through 2026-09-24 still priced cached_input at zero, silently, for every model — this row is the actual effective date. See this section's "Verification discipline for pricing fixes" note below for why this stayed undetected for twelve days. | `327d7b9` |
 | `rules-2026-09-26` | 2026-09-26 | A model missing today (run/provider failure, never a registry removal) carries its last real, published cost forward for up to 3 calendar days before being excluded; `dated_siu_median_diagnostic` published alongside `dated_siu` as a diagnostic only — see this section's own Aggregation policy above for the retro-validated evidence. | `5e4ca39` |
 | `rules-2026-11-18` | 2026-11-18 | One equal weight per model family, split equally between that family's qualifying entries (registry entries with the same `model_string`: the same open weights on different hosts), as the host-weighting rule has always stated; the minimum-qualifying counts, overall and per tier, count model families. Found live: in the first 2026-11-18 print two hosts of Mistral Small 3.2 both qualified and each got a full weight (that print's own correction notes). Builds on `rules-2026-09-26`. The unweighted median diagnostic still counts entries. | `packages/print/src/compute/weights.ts` |
+| `rules-2026-11-20` | 2026-11-21 | A call's cost is what its response says it was billed, where the response reports one; elsewhere its list price at the tier the response reports. Every run record carries the service tier and billed figure its response reported. An OpenRouter constituent is pinned to one exact endpoint tag and declares its purchase path (tag, numeric format, service tier, and the tier endpoints listed under it); the price fetch fails when a host matches more than one endpoint or the path has changed. A daily price check compares billed and listed cost per constituent and flags a gap over 1%. Applies what §2 already required: two errors against it, found live, are set out under "Pricing at the billed figure" below. Builds on `rules-2026-11-18`. | `packages/print/src/compute/class-cost.ts`, `price-check.ts`, `packages/prices/src/snapshot/build-snapshot.ts` |
 
 A print's own `date` field, checked against this table, tells a reader which row applied even for
 a print published before `methodology_revision` existed — this table is the durable record; the
@@ -1092,6 +1098,40 @@ fixed in `rules-2026-11-18` (Revision history, above), and the print superseded 
 `2026-11-18b`. Mistral AI having retired the model
 means DeepInfra may stop serving it too; choosing a replacement is a separate decision, not made
 here.
+
+**Pricing at the billed figure (2026-11-20, `rules-2026-11-20`).** §2 has always said a constituent's
+cost comes from executed runs, and that a price a provider merely advertises is not evidence anyone
+paid it. Two errors against that rule were found on 2026-11-20 by comparing each call's priced cost
+with the amount its own OpenRouter response says was billed (`usage.cost`, stored in every run's raw
+response since the first print):
+
+1. _Qwen 2.5 72B was priced at a tier none of its calls was bought on._ Its registry host was the
+   provider name `deepinfra`. From the 2026-11-17 snapshot OpenRouter listed two DeepInfra endpoints
+   for the model, the flex tier (`deepinfra/fp8/flex`, $0.288 / $0.32 per 1M tokens) first and the
+   standard endpoint (`deepinfra/fp8`, $0.36 / $0.40) second, and the snapshot builder took the
+   first one listed. Every Qwen call on and after 2026-11-17 was served by DeepInfra on its standard
+   tier and billed at $0.36 / $0.40, so its cost in the prints of 17–20 November was 20% below what
+   was paid. The 2026-11-18 fix above (an exact endpoint tag is priced from that endpoint) did not
+   reach it, because its host named a provider, not an endpoint.
+2. _DeepInfra's Mistral Small 3.2 calls on the priority tier were priced at the standard rate._ The
+   admission note above disclosed this as a limitation of the pin. Under §2 it is an error: those
+   calls were billed at $0.1125 / $0.30, and the prints of 18–20 November priced them at $0.075 /
+   $0.20. Of the 60 counted calls from 18 to 20 November, 17 were served on the priority tier.
+
+Neither error came from OpenRouter's routing: every call recorded since 18 August was served by the
+host it was pinned to. What `rules-2026-11-20` changes, from the 2026-11-21 print on: a call's cost
+is its billed figure where the response reports one, and a list price, at the tier the response
+reports, only where it does not; every run record carries its service tier and billed figure; each
+OpenRouter constituent is pinned to one exact endpoint tag and declares its purchase path (host tag,
+numeric format, service tier, and the tier endpoints listed under it); the price fetch fails, rather
+than choosing, when a host matches more than one endpoint, and fails when a declared path has changed
+(a tier added, removed or renamed, or another numeric format), so the constituent is re-measured
+before it is priced again; and a daily price check (`data/runs/<print_id>/price-check.json`) compares
+each constituent's billed cost with its listed cost and flags a gap over 1%. The priority tier is
+not yet kept out of the request: OpenRouter documents a request parameter for that, and changing the
+request is a separate decision. The prints of 17–20 November are to be corrected as numbered
+revisions under the revision policy, each pointing to its original; the originals keep their
+signatures and anchors.
 
 **Removal:** a registry entry is removed when its price source stops publishing a price for it,
 its provider adapter stops functioning and no replacement adapter is available within one review

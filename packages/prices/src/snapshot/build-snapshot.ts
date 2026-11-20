@@ -53,21 +53,64 @@ export async function buildPriceSnapshotFromOpenRouter(
     ),
   );
 
+  // A purchase path that no longer matches what was measured fails the whole fetch, loudly, rather than pricing anything from it: every problem is
+  // collected first so one run names them all.
+  const problems: string[] = [];
+
   for (const reg of openRouterEntries) {
     const endpoints = endpointsByModelString.get(reg.model_string) ?? [];
-    // A host may name one exact endpoint ("deepinfra/fp8") rather than a whole provider: found
-    // live 2026-11-18, OpenRouter lists one endpoint per service tier under a single provider name,
-    // each at its own price, and a provider-name match takes whichever is listed first. The
-    // harness pins its calls to the same string (adapters/index.ts, provider.only), so pricing
-    // from that exact endpoint prices the tier the calls are actually billed at.
+    // rules-2026-11-20. OpenRouter lists one endpoint per service tier under a single provider name, each at its own price (found live 2026-11-18,
+    // DeepInfra's three Mistral endpoints). A host that names one exact endpoint ("deepinfra/fp8") is priced from that endpoint only. A host that
+    // names a whole provider is priced only when that provider lists exactly one endpoint: matching on the name and taking whichever endpoint is
+    // listed first priced qwen-2.5-72b-instruct at DeepInfra's flex tier from the 2026-11-17 snapshot, a rate none of its calls was billed at.
+    // There is no first-listed fallback.
     const host = reg.host.toLowerCase();
-    const match =
-      endpoints.find((e) => e.tag?.toLowerCase() === host) ??
-      endpoints.find((e) => e.provider_name.toLowerCase() === host);
-    if (!match) {
+    const exact = host.includes("/");
+    const candidates = exact
+      ? endpoints.filter((e) => e.tag?.toLowerCase() === host)
+      : endpoints.filter((e) => e.provider_name.toLowerCase() === host);
+    if (candidates.length === 0) {
       unmatched.push(reg.id);
       continue;
     }
+    if (candidates.length > 1) {
+      problems.push(
+        `${reg.id}: host "${reg.host}" matches ${candidates.length} endpoints (${candidates.map((e) => e.tag ?? e.provider_name).join(", ")}); ` +
+          `pin the registry host to the one exact endpoint tag the calls are bought on`,
+      );
+      continue;
+    }
+    const match = candidates[0] as (typeof candidates)[number];
+
+    // The tier endpoints OpenRouter routes a pin on this endpoint to as well: its docs say a slug matches every endpoint sharing it as a prefix, and
+    // tier endpoints already in the routing pool (priority endpoints of open-weight models) match their base slug. 17 of 60 counted calls pinned to
+    // deepinfra/fp8 were served on deepinfra/fp8/priority between 2026-11-18 and 2026-11-20.
+    const base = (match.tag ?? host).toLowerCase();
+    const tierEndpoints = endpoints.filter((e) => e !== match && e.tag?.toLowerCase().startsWith(`${base}/`));
+
+    // The declared purchase path (rules-2026-11-20): numeric format and the tiers listed under the endpoint when it was measured. A difference is
+    // a different purchase, so it is re-measured before it is priced, not just given a new price.
+    if (reg.quantization !== undefined && match.quantization !== reg.quantization) {
+      problems.push(
+        `${reg.id}: purchase path changed: ${match.tag ?? reg.host} now lists numeric format ${match.quantization ?? "(none)"}, ` +
+          `declared ${reg.quantization}; re-measure the constituent and update the registry before it is priced again`,
+      );
+      continue;
+    }
+    if (reg.listed_tiers === undefined) {
+      problems.push(`${reg.id}: declares no listed_tiers; an OpenRouter constituent declares the tier endpoints listed under its host`);
+      continue;
+    }
+    const listed = tierEndpoints.map((e) => e.tag as string).sort();
+    const declared = [...reg.listed_tiers].sort();
+    if (JSON.stringify(listed) !== JSON.stringify(declared)) {
+      problems.push(
+        `${reg.id}: purchase path changed: OpenRouter now lists tiers [${listed.join(", ")}] under ${base}, declared [${declared.join(", ")}]; ` +
+          `re-measure the constituent and update the registry before it is priced again`,
+      );
+      continue;
+    }
+
     entries.push({
       model_id: reg.id,
       price_in_usd_per_1m: perTokenToPer1M(match.pricing.prompt),
@@ -81,7 +124,20 @@ export async function buildPriceSnapshotFromOpenRouter(
       ...(match.pricing.input_cache_read != null
         ? { price_cached_in_usd_per_1m: perTokenToPer1M(match.pricing.input_cache_read) }
         : {}),
+      ...(match.tag !== undefined ? { endpoint_tag: match.tag } : {}),
+      // Each tier at its own list price: a call is priced at the tier its response reports, as a cross-check against what it was billed.
+      tiers: tierEndpoints.map((e) => ({
+        tag: e.tag as string,
+        service_tier: e.service_tier ?? (e.tag as string).slice(base.length + 1),
+        price_in_usd_per_1m: perTokenToPer1M(e.pricing.prompt),
+        price_out_usd_per_1m: perTokenToPer1M(e.pricing.completion),
+        ...(e.pricing.input_cache_read != null ? { price_cached_in_usd_per_1m: perTokenToPer1M(e.pricing.input_cache_read) } : {}),
+      })),
     });
+  }
+
+  if (problems.length > 0) {
+    throw new Error(`OpenRouter price fetch refused (docs/methodology.md, rules-2026-11-20):\n  ${problems.join("\n  ")}`);
   }
 
   if (otherEntries.length > 0) {

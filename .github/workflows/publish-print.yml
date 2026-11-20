@@ -233,6 +233,22 @@ jobs:
             exit 1
           fi
 
+      # rules-2026-11-20's daily reconciliation (data/runs/<print_id>/price-check.json): what each
+      # constituent was billed, from its own responses, against the same calls at the list price of
+      # the tier each response reports. The billed figure is the price, so a flag never stops the
+      # print; this marks the run failed after the print is committed, so GitHub emails it. always()
+      # so it still runs when the billing step above already failed the job.
+      - name: Fail loudly on a price-check flag
+        if: always() && steps.publish.outputs.status == 'published'
+        env:
+          PRINT_ID: ${{ steps.resolve.outputs.print_id }}
+        run: |
+          if grep -q "^PRICE_CHECK_FLAG " publish.log; then
+            echo "::error title=Price check flagged::A constituent's billed cost and its list price differ by more than 1%, or a call was served on a tier with no list price. The print used the billed figures; check whether a list price, a tier or a pin has moved. See data/runs/${PRINT_ID}/price-check.json."
+            grep "^PRICE_CHECK_FLAG " publish.log | sed 's/^PRICE_CHECK_FLAG //'
+            exit 1
+          fi
+
       # Fails the run when the tweet did not post, so GitHub emails the failure. `outcome` is the
       # step's result BEFORE continue-on-error is applied (`conclusion` would read "success"), and
       # always() so this still runs when the billing step above already failed the job. Skipped, not

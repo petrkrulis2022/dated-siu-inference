@@ -43,6 +43,7 @@ import {
   loadPriceSnapshot,
   loadRegistry,
   loadRunRecords,
+  attachResponseBilling,
   printsDir,
   runsDirFor,
 } from "./load-inputs.js";
@@ -64,7 +65,9 @@ const CARRY_FORWARD_ENABLED = process.env.TOUCHSTONE_CARRY_FORWARD_ENABLED === "
  * the production path (carry-forward on) gets both; the legacy rules-2026-09-25 path is left
  * exactly as it was. */
 const WEIGHT_BY_MODEL_FAMILY = CARRY_FORWARD_ENABLED;
-const METHODOLOGY_REVISION = CARRY_FORWARD_ENABLED ? "rules-2026-11-18" : "rules-2026-09-25";
+/** rules-2026-11-20: see cli/publish-unattended.ts's identical constant. */
+const BILLED_COST_WHERE_REPORTED = CARRY_FORWARD_ENABLED;
+const METHODOLOGY_REVISION = CARRY_FORWARD_ENABLED ? "rules-2026-11-20" : "rules-2026-09-25";
 
 const printId = process.argv[2] ?? new Date().toISOString().slice(0, 10);
 const printDate = DATE_PATTERN.test(printId) ? printId : new Date().toISOString().slice(0, 10);
@@ -160,7 +163,7 @@ if (billingExhaustedOutcomes.length > 0) {
 
 // 4. Compute -> sign -> write -> anchor. publishPrint refuses if any loaded record fails
 // schema validation, and always publishes provisional.
-const records = await loadRunRecords(printId);
+const records = await attachResponseBilling(await loadRunRecords(printId), runsDirFor(printId));
 const { models, unpriced } = buildModelInputs(registry, snapshot, records);
 if (unpriced.length > 0) {
   console.warn(
@@ -220,6 +223,7 @@ const result = await publishPrint(printsDir(), {
   methodology_version: "v0-draft",
   methodology_revision: METHODOLOGY_REVISION,
   weightByModelFamily: WEIGHT_BY_MODEL_FAMILY,
+  billedCostWhereReported: BILLED_COST_WHERE_REPORTED,
   privateKeyHex,
   attestationClient,
   runsDirPath: runsDirFor(printId),
@@ -243,7 +247,9 @@ console.log(`Anchor: ${result.anchor.status} (${result.anchor.chain})`);
 
 // Per-provider daily spend summary — see cli/publish-unattended.ts's identical block / the
 // compute function's own doc comment for why this differs from cost_of_production_usd.
-const priceByModelId = new Map(models.map((m) => [m.model_id, m.price]));
+const priceByModelId = new Map(
+  models.map((m) => [m.model_id, { price: m.price, tierPrices: m.tierPrices, billed: BILLED_COST_WHERE_REPORTED }]),
+);
 const spendByProvider = computeSpendByProvider(records, registry, priceByModelId);
 const spendPath = join(runsDirFor(printId), "spend-by-provider.json");
 await writeFile(
@@ -309,6 +315,7 @@ for (const { series, seriesModels, registryIds } of tierGroups) {
       methodology_version: "v0-draft",
       methodology_revision: METHODOLOGY_REVISION,
       weightByModelFamily: WEIGHT_BY_MODEL_FAMILY,
+      billedCostWhereReported: BILLED_COST_WHERE_REPORTED,
       privateKeyHex,
       attestationClient,
       series,

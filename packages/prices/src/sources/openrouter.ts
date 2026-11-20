@@ -17,6 +17,10 @@ export interface OpenRouterEndpoint {
   /** This one endpoint's own slug, e.g. "deepinfra/fp8" or "deepinfra/fp8/flex": a provider can
    * list several endpoints for one model, one per service tier, each at its own price. */
   tag?: string;
+  /** null for the standard endpoint; "flex", "priority", ... for a tier endpoint (confirmed in the live listing, 2026-11-20). */
+  service_tier?: string | null;
+  /** The numeric format the endpoint serves, e.g. "fp8". */
+  quantization?: string;
   pricing: {
     prompt: string;
     completion: string;
