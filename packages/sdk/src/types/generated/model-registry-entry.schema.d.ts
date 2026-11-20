@@ -26,7 +26,7 @@ export interface ModelRegistryEntry {
    */
   host: string;
   /**
-   * The service tier this constituent is declared to buy, as the provider's responses name it (e.g. "default"). Part of the declared purchase path with host, model_string, adapter and quantization (docs/methodology.md, rules-2026-11-20).
+   * The service tier this constituent is declared to buy, as the provider's responses name it (e.g. "default"); an OpenRouter request asks for exactly this tier. Absent for a host that lists no tiers and whose responses name none (Parasail): no tier is requested. Part of the declared purchase path with host, model_string, adapter and quantization (docs/methodology.md, rules-2026-11-20).
    */
   service_tier?: string;
   /**

@@ -39,7 +39,6 @@
     "tier": "open-weight-hosted",
     "open_weights": true,
     "host": "parasail",
-    "service_tier": "default",
     "quantization": "bf16",
     "listed_tiers": [],
     "sampling": {

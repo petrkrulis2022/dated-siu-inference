@@ -1127,9 +1127,12 @@ numeric format, service tier, and the tier endpoints listed under it); the price
 than choosing, when a host matches more than one endpoint, and fails when a declared path has changed
 (a tier added, removed or renamed, or another numeric format), so the constituent is re-measured
 before it is priced again; and a daily price check (`data/runs/<print_id>/price-check.json`) compares
-each constituent's billed cost with its listed cost and flags a gap over 1%. The priority tier is
-not yet kept out of the request: OpenRouter documents a request parameter for that, and changing the
-request is a separate decision. The prints of 17–20 November are to be corrected as numbered
+each constituent's billed cost with its listed cost and flags a gap over 1%. Each request also asks
+for the constituent's declared service tier (`service_tier: "default"` for the four DeepInfra
+entries), which OpenRouter documents as keeping priority endpoints out of the pool; a live call on
+2026-11-20 confirmed each DeepInfra pin served on the default tier. The Parasail entry declares no
+tier and requests none: its endpoint lists no tiers, its responses name none, and a call with the
+parameter got a 429 that the same call without it did not. The prints of 17–20 November are to be corrected as numbered
 revisions under the revision policy, each pointing to its original; the originals keep their
 signatures and anchors.
 
