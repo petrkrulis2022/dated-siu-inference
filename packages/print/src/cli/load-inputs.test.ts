@@ -65,7 +65,7 @@ describe("buildModelInputs", () => {
 
   it("marks whether each entry's provider counts reasoning tokens inside its output (rules-2026-11-21): Anthropic and OpenAI", () => {
     const registry = [...REGISTRY, { ...REGISTRY[0], id: "gpt", provider: "openai" }];
-    const snapshot = { ...SNAPSHOT, entries: [...SNAPSHOT.entries, { ...SNAPSHOT.entries[0], model_id: "gpt" }] };
+    const snapshot = { ...SNAPSHOT, entries: [...SNAPSHOT.entries, { ...SNAPSHOT.entries[0], model_id: "gpt" }] } as PriceSnapshot;
     const { models } = buildModelInputs(registry, snapshot, [runRecord()]);
     expect(models.map((m) => [m.model_id, m.reasoningInsideOutput])).toEqual([
       ["healthy-model", false],
