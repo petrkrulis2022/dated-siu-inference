@@ -202,9 +202,15 @@ jobs:
       # day's -frontier/-commodity sub-prints, so this is one tweet a day. Verified live,
       # 2026-09-13, against the real API before this step was added —
       # https://x.com/touchstoneassay/status/2099389774620450981.
+      #
+      # Switched off on 2026-11-21 until the owner decides on X API credits: with the account out of
+      # credits every run failed on the tweet alone, and real failures were lost among those. The
+      # step runs only when the repository variable TWEET_PRINTS is "on" (GitHub: Settings, Secrets
+      # and variables, Actions, Variables), so turning it back on needs no code change. While it is
+      # off the step is skipped, so "Fail loudly on tweet failure" below never fires.
       - name: Tweet the print
         id: tweet
-        if: steps.publish.outputs.status == 'published'
+        if: steps.publish.outputs.status == 'published' && vars.TWEET_PRINTS == 'on'
         continue-on-error: true
         env:
           X_API_KEY: ${{ secrets.X_API_KEY }}
