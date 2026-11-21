@@ -25,6 +25,7 @@ export function computeCostOfProduction(models: ModelInput[], billed = false, ca
           tierPrices: model.tierPrices,
           billed,
           cachedInsideInput: cachedOnce && model.cachedInsideInput === true,
+          reasoningInsideOutput: cachedOnce && model.reasoningInsideOutput === true,
         }),
       ),
     ),

@@ -127,6 +127,7 @@ YOUR JOB THIS RUN
   const result = await runSmokePass({
     adapter,
     modelString: MODEL_STRING,
+    provider: "openai",
     prices: PRICES,
     maxOutputTokens: 500,
     maxTurns: MAX_TURNS,

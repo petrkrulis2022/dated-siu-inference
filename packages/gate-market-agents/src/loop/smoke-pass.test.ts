@@ -100,6 +100,7 @@ const SUBMIT_JOB_ARGS = JSON.stringify({
 function baseOptions(runsRoot: string) {
   return {
     modelString: "gpt-5.1",
+    provider: "openai",
     prices: PRICES,
     maxOutputTokens: 2000,
     maxTurns: 20,

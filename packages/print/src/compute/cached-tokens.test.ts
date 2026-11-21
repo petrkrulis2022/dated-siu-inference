@@ -83,9 +83,17 @@ describe("callCostOf (rules-2026-11-21): a cached token is priced once", () => {
     expect(callCostOf(call, { price: GEMINI, billed: true, cachedInsideInput: true }).toString()).toBe("1.2");
   });
 
+  it("does not add reasoning tokens a provider already counts inside its output (OpenAI, Anthropic), under the same rule", () => {
+    const call = rec("i6", { input: 0, output: 100_000, reasoning: 50_000 });
+    expect(callCostOf(call, { price: GEMINI, cachedInsideInput: true, reasoningInsideOutput: true }).toString()).toBe("1.2");
+    // Before the rule, and for Google and xAI, reasoning is added at the output rate: 150k x $12.
+    expect(callCostOf(call, { price: GEMINI }).toString()).toBe("1.8");
+    expect(callCostOf(call, { price: GEMINI, cachedInsideInput: true, reasoningInsideOutput: false }).toString()).toBe("1.8");
+  });
+
   it("refuses a record whose cached count exceeds the prompt it is supposed to be part of", () => {
     const broken = rec("i5", { input: 100, cached_input: 200 });
-    expect(() => callCostOf(broken, { price: GEMINI, cachedInsideInput: true })).toThrow(/cached_input 200 exceeds usage\.input 100/);
+    expect(() => callCostOf(broken, { price: GEMINI, cachedInsideInput: true })).toThrow(/cached_input 200 exceeds/);
   });
 });
 

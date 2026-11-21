@@ -420,6 +420,7 @@ try {
         tierPrices: m.tierPrices,
         billed: BILLED_COST_WHERE_REPORTED,
         cachedInsideInput: CACHED_TOKENS_COUNTED_ONCE && m.cachedInsideInput === true,
+        reasoningInsideOutput: CACHED_TOKENS_COUNTED_ONCE && m.reasoningInsideOutput === true,
       }]),
   );
   const spendByProvider = computeSpendByProvider(records, registry, priceByModelId);

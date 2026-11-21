@@ -145,6 +145,7 @@ TO SUBMIT YOUR GATE, respond with exactly:
   const result = await runGateAuthoringPass({
     adapter,
     modelString: MODEL_STRING,
+    provider: "google",
     prices: PRICES,
     maxOutputTokens: 3000,
     maxTurns: MAX_TURNS,

@@ -58,6 +58,9 @@ export interface ModelInput {
   /** Whether this constituent's provider counts cached prompt tokens inside usage.input (class-cost.ts's cachedTokensInsideInput): every provider
    * but Anthropic. Read only when PrintInput.cachedTokensCountedOnce is set. */
   cachedInsideInput?: boolean;
+  /** Whether this constituent's provider counts reasoning tokens inside usage.output (OpenAI, Anthropic). Read only when
+   * PrintInput.cachedTokensCountedOnce is set. */
+  reasoningInsideOutput?: boolean;
   /** Every run record for this model, across all classes and attempts. */
   records: RunRecord[];
 }
@@ -180,6 +183,7 @@ function computeIndex(
         tierPrices: model.tierPrices,
         billed,
         cachedInsideInput: cachedOnce && model.cachedInsideInput === true,
+        reasoningInsideOutput: cachedOnce && model.reasoningInsideOutput === true,
         adjustment: variant?.adjust(model.model_id, cls),
       });
     }
@@ -206,6 +210,7 @@ function computeIndex(
           tierPrices: model.tierPrices,
           billed: false,
           cachedInsideInput: cachedOnce && model.cachedInsideInput === true,
+        reasoningInsideOutput: cachedOnce && model.reasoningInsideOutput === true,
           adjustment: variant?.adjust(model.model_id, cls),
         });
       }

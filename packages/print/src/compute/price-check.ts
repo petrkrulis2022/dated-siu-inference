@@ -85,7 +85,11 @@ export function computePriceCheck(
     const billed = sum(billedCalls.map((r) => new D(r.billed_usd as string)));
     // The list price as the method states it today: each cached token counted once for a provider whose usage.input includes them (rules-2026-11-21).
     const listed = sum(
-      billedCalls.map((r) => callCostOf(r, { price: listPriceAt(model, r.service_tier), cachedInsideInput: model.cachedInsideInput === true })),
+      billedCalls.map((r) => callCostOf(r, {
+          price: listPriceAt(model, r.service_tier),
+          cachedInsideInput: model.cachedInsideInput === true,
+          reasoningInsideOutput: model.reasoningInsideOutput === true,
+        })),
     );
     const gap = listed.isZero() ? new D(0) : billed.dividedBy(listed).minus(1);
     if (gap.abs().greaterThan(tolerance)) {

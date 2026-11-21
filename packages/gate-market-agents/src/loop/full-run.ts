@@ -1613,11 +1613,7 @@ export async function runFullRunWindow(
       continue;
     }
 
-    const realizedUsd = realizedTurnCostUsd(
-      adapterResult.usage.input,
-      adapterResult.usage.output,
-      agent.prices,
-    );
+    const realizedUsd = realizedTurnCostUsd(adapterResult.usage, agent.prices, agent.provider);
     totalRealizedUsd += Number(realizedUsd);
     realizedUsdByProvider[agent.provider] =
       (realizedUsdByProvider[agent.provider] ?? 0) + Number(realizedUsd);

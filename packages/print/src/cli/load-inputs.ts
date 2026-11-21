@@ -1,9 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { ModelRegistryEntry, PriceSnapshot, Print, RunManifest, RunRecord } from "@touchstone/sdk";
+import { runRecordUsageConvention, type ModelRegistryEntry, type PriceSnapshot, type Print, type RunManifest, type RunRecord } from "@touchstone/sdk";
 import { CARRY_FORWARD_CAP_DAYS, type CarryForwardDay, type ModelInput } from "../compute/index.js";
 import { billingFromRaw } from "@touchstone/harness";
-import { cachedTokensInsideInput } from "../compute/class-cost.js";
 
 /** pnpm always runs package scripts with cwd = the package directory. */
 export function repoRoot(): string {
@@ -264,7 +263,8 @@ export function buildModelInputs(
       // (docs/methodology.md, host weighting); read only under rules-2026-11-18 and later.
       family: entry.model_string,
       // rules-2026-11-21: whether this provider's usage.input already includes its cached tokens; read only under that revision and later.
-      cachedInsideInput: cachedTokensInsideInput(entry.provider),
+      cachedInsideInput: runRecordUsageConvention(entry.provider).cachedInsideInput,
+      reasoningInsideOutput: runRecordUsageConvention(entry.provider).reasoningInsideOutput,
       price: {
         price_in_usd_per_1m: price.price_in_usd_per_1m,
         price_out_usd_per_1m: price.price_out_usd_per_1m,

@@ -106,6 +106,7 @@ function baseOptions(
 ): Omit<GateAuthoringPassOptions, "adapter"> {
   return {
     modelString: "gemini-3.1-pro-preview",
+    provider: "google",
     prices: PRICES,
     maxOutputTokens: 3000,
     maxTurns: 40,

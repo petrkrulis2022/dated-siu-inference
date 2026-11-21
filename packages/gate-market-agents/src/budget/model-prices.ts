@@ -36,6 +36,7 @@ export function modelPricesFor(
   return {
     priceInUsdPer1M: priced.price_in_usd_per_1m,
     priceOutUsdPer1M: priced.price_out_usd_per_1m,
+    ...(priced.price_cached_in_usd_per_1m != null ? { priceCachedInUsdPer1M: priced.price_cached_in_usd_per_1m } : {}),
   };
 }
 

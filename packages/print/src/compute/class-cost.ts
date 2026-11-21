@@ -1,5 +1,5 @@
-import type { RunRecord } from "@touchstone/sdk";
-import { D, callCost, mean, type DecimalValue } from "../decimal.js";
+import { callCostUsd, runRecordUsageConvention, type RunRecord } from "@touchstone/sdk";
+import { D, mean, type DecimalValue } from "../decimal.js";
 
 export interface ModelPrice {
   price_in_usd_per_1m: string;
@@ -35,16 +35,18 @@ export interface CallPricing {
    * priced once, at the cached rate, and only the rest of the prompt at the input rate. Absent or false: cached tokens are added on top of
    * usage.input, which is right for Anthropic and is the formula every print before that revision used for every provider. */
   cachedInsideInput?: boolean;
+  /** rules-2026-11-21: the constituent's provider counts reasoning tokens inside usage.output (OpenAI, Anthropic), so they are not added again.
+   * Absent or false: reasoning is added at the output rate, as every earlier print did for every provider (no OpenAI or Anthropic call in a
+   * print had reported reasoning tokens by then). */
+  reasoningInsideOutput?: boolean;
 }
 
 /**
- * Whether a provider's usage counts cached prompt tokens inside usage.input (rules-2026-11-21). Anthropic reports cache reads apart from
- * input_tokens, which exclude them (adapters/anthropic.ts). Every other adapter records the whole prompt as usage.input: OpenAI-shaped responses
- * (OpenAI, OpenRouter, xAI and the other OpenAI-compatible hosts) count prompt_tokens_details.cached_tokens inside prompt_tokens, and Google counts
- * cachedContentTokenCount inside promptTokenCount (its totalTokenCount is prompt + candidates + thoughts, with no separate cached term).
+ * Whether a provider's usage counts cached prompt tokens inside usage.input (rules-2026-11-21): every provider but Anthropic, as the harness
+ * adapters record them (@touchstone/sdk's runRecordUsageConvention, the one place that convention is stated).
  */
 export function cachedTokensInsideInput(provider: string): boolean {
-  return provider !== "anthropic";
+  return runRecordUsageConvention(provider).cachedInsideInput;
 }
 
 /** Tier names a response uses for the standard tier: OpenRouter and OpenAI say "default", Anthropic and Google "standard"; Parasail names none. */
@@ -57,33 +59,22 @@ export function listPriceAt(pricing: Pick<CallPricing, "price" | "tierPrices">, 
   return pricing.tierPrices?.[serviceTier] ?? pricing.price;
 }
 
-function listCost(record: RunRecord, price: ModelPrice, cachedInsideInput = false): DecimalValue {
-  // usage.output + usage.reasoning, and cached_input at its own rate when one is published: see computeClassCost's comment for both histories.
-  const cached = record.usage.cached_input;
-  if (cachedInsideInput && cached > 0 && price.price_cached_in_usd_per_1m != null) {
-    // rules-2026-11-21: the cached tokens are part of usage.input, so they are taken out of it and priced once, at the cached rate.
-    if (cached > record.usage.input) {
-      throw new Error(
-        `${record.run_id}: cached_input ${cached} exceeds usage.input ${record.usage.input}, of which it is supposed to be part (rules-2026-11-21).`,
-      );
-    }
-    return callCost(
-      record.usage.input - cached,
-      record.usage.output + record.usage.reasoning,
-      price.price_in_usd_per_1m,
-      price.price_out_usd_per_1m,
-      cached,
-      price.price_cached_in_usd_per_1m,
-    );
-  }
-  return callCost(
-    record.usage.input,
-    record.usage.output + record.usage.reasoning,
-    price.price_in_usd_per_1m,
-    price.price_out_usd_per_1m,
-    record.usage.cached_input,
-    price.price_cached_in_usd_per_1m,
+function listCost(record: RunRecord, price: ModelPrice, pricing: Pick<CallPricing, "cachedInsideInput" | "reasoningInsideOutput"> = {}): DecimalValue {
+  // The one shared cost function (@touchstone/sdk's callCostUsd). Before rules-2026-11-21 (both flags off): usage.input at the input rate,
+  // usage.output + usage.reasoning at the output rate, and cached_input at its own rate when one is published, added on top; see
+  // computeClassCost's comment for those histories. From rules-2026-11-21 each cached token is priced once, and reasoning is added only where the
+  // provider reports it apart from the output.
+  const cost = callCostUsd(
+    record.usage,
+    {
+      priceInUsdPer1M: price.price_in_usd_per_1m,
+      priceOutUsdPer1M: price.price_out_usd_per_1m,
+      ...(price.price_cached_in_usd_per_1m != null ? { priceCachedInUsdPer1M: price.price_cached_in_usd_per_1m } : {}),
+    },
+    { cachedInsideInput: pricing.cachedInsideInput === true, reasoningInsideOutput: pricing.reasoningInsideOutput === true },
   );
+  // This package's own Decimal constructor (decimal.ts), exactly: the string form of a decimal is lossless.
+  return new D(cost.toString());
 }
 
 function adjusted(price: ModelPrice, adjustment: CallPricing["adjustment"]): ModelPrice {
@@ -101,12 +92,10 @@ export function callCostOf(record: RunRecord, pricing: CallPricing): DecimalValu
   if (pricing.billed && record.billed_usd !== undefined) {
     const billed = new D(record.billed_usd);
     if (!pricing.adjustment) return billed;
-    const base = listCost(record, list, pricing.cachedInsideInput);
-    return base.isZero()
-      ? billed
-      : billed.times(listCost(record, adjusted(list, pricing.adjustment), pricing.cachedInsideInput)).dividedBy(base);
+    const base = listCost(record, list, pricing);
+    return base.isZero() ? billed : billed.times(listCost(record, adjusted(list, pricing.adjustment), pricing)).dividedBy(base);
   }
-  return listCost(record, adjusted(list, pricing.adjustment), pricing.cachedInsideInput);
+  return listCost(record, adjusted(list, pricing.adjustment), pricing);
 }
 
 export interface ClassCost {

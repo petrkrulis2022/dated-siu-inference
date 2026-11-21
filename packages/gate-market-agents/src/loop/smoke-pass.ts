@@ -28,6 +28,8 @@ import { ModelResponseParseError, parseModelResponse } from "./parse-tool-call.j
 export interface SmokePassOptions {
   adapter: Adapter;
   modelString: string;
+  /** The adapter's provider, for the usage convention its token counts follow (@touchstone/sdk's runRecordUsageConvention). */
+  provider: string;
   prices: ModelPrices;
   maxOutputTokens: number;
   maxTurns: number;
@@ -180,11 +182,7 @@ export async function runSmokePass(options: SmokePassOptions): Promise<SmokePass
 
     const adapterResult = await options.adapter(options.modelString, prompt, ADAPTER_PARAMS);
 
-    const realizedUsd = realizedTurnCostUsd(
-      adapterResult.usage.input,
-      adapterResult.usage.output,
-      options.prices,
-    );
+    const realizedUsd = realizedTurnCostUsd(adapterResult.usage, options.prices, options.provider);
     totalRealizedUsd += Number(realizedUsd);
 
     let intent;
