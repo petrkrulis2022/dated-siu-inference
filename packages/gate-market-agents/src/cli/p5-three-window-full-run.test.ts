@@ -10,6 +10,7 @@ import {
   buildRoster,
   scheduleFacts,
   reservedQuoteHashes,
+  spendByProviderAcross,
   type RosterInput,
 } from "./p5-three-window-full-run.js";
 import type { AdapterResult } from "@touchstone/harness";
@@ -1230,5 +1231,22 @@ describe("the schedule renders the REAL window bounds, not anything stale", () =
     const a = scheduleFacts(1, mk(1_790_000_000n), 2);
     const b = scheduleFacts(1, mk(1_800_000_000n), 2);
     expect(a).not.toEqual(b);
+  });
+});
+
+describe("spendByProviderAcross: the run's spend per provider, summed over its windows", () => {
+  const outcome = (spendByProvider: Record<string, string>) =>
+    ({ result: { spendByProvider } }) as unknown as Parameters<typeof spendByProviderAcross>[0][number];
+
+  it("sums each provider's window totals exactly, without floating point (invariant 4)", () => {
+    // Large enough that a float cannot hold a micro-dollar: summed as Number it read 9007199254.740995.
+    expect(spendByProviderAcross([outcome({ xai: "9007199254.740993" }), outcome({ xai: "0.000001" })])).toEqual({ xai: "9007199254.740994" });
+  });
+
+  it("keeps providers apart, in name order", () => {
+    expect(
+      spendByProviderAcross([outcome({ xai: "0.000002", anthropic: "1.5" }), outcome({ google: "0.25", xai: "0.000001" })]),
+    ).toEqual({ anthropic: "1.500000", google: "0.250000", xai: "0.000003" });
+    expect(Object.keys(spendByProviderAcross([outcome({ xai: "1", anthropic: "1" })]))).toEqual(["anthropic", "xai"]);
   });
 });

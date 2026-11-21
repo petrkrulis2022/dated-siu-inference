@@ -184,6 +184,31 @@ describe("runGateAuthoringPass", () => {
     expect(result.turnLogs[2].gateResult?.passed).toBe(true);
   });
 
+  it("totals realized spend exactly, rounded once to whole micro-dollars (invariant 4)", async () => {
+    // Calls of 3 and 7 prompt tokens at $0.25 per 1M cost exactly $0.0000025: 3 micro-dollars, half-up. Summed as floats it read $0.000002.
+    const inputs = [3, 7];
+    let call = 0;
+    const adapter: Adapter = async () => {
+      const i = call++;
+      return {
+        text: JSON.stringify({ tool: "submit_job", args: { source: "export async function gate(){ return {accept:false,reason:'x'}; }" } }),
+        usage: { input: inputs[i], output: 0, cached_input: 0, reasoning: 0 },
+        latency_ms: 1,
+        raw: {},
+        deviations: [],
+      };
+    };
+    const result = await runGateAuthoringPass({
+      ...baseOptions(runsRoot, async () => failResult("never right")),
+      prices: { priceInUsdPer1M: "0.25", priceOutUsdPer1M: "1" },
+      maxTurns: 2,
+      adapter,
+    });
+
+    expect(result.turnsUsed).toBe(2);
+    expect(result.totalRealizedUsd).toBe("0.000003");
+  });
+
   it("halts at exactly maxTurns if the gate never passes", async () => {
     const result = await runGateAuthoringPass({
       ...baseOptions(runsRoot, async () => failResult("never right")),

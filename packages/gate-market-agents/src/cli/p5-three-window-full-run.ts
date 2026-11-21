@@ -39,6 +39,7 @@ import { CANONICAL_ASSET_DESCRIPTION } from "../skills/asset-description.js";
 import { milliSiuToDecimalSiu } from "../loop/siu-units.js";
 import { BudgetCeiling } from "../budget/ceiling.js";
 import { ExperimentBudget } from "../budget/experiment-budget.js";
+import { SpendTally } from "../budget/spend-tally.js";
 import { validateModelAssignment, type ModelAssignments } from "../pack/model-assignment.js";
 import { erc8004IdFor, type AgentId } from "../identity/resolve.js";
 import type { RunnerDeps } from "../deps.js";
@@ -2214,6 +2215,15 @@ async function settleOutstandingAgentClaims(input: {
   }
 }
 
+/** The run's real spend per provider: each window's totals summed exactly (invariant 4), providers in name order. */
+export function spendByProviderAcross(outcomes: readonly WindowOutcome[]): Record<string, string> {
+  const spend = new SpendTally();
+  for (const o of outcomes) {
+    for (const [provider, usd] of Object.entries(o.result.spendByProvider)) spend.add(usd, provider);
+  }
+  return spend.byProviderUsd();
+}
+
 export function reservedQuoteHashes(outcomes: readonly WindowOutcome[]): string[] {
   return outcomes.flatMap((o) =>
     o.result.capacityEvents
@@ -2871,14 +2881,8 @@ function printRunSummary(
   );
 
   console.log("\n=== SPEND ===");
-  const byProvider: Record<string, number> = {};
-  for (const o of outcomes) {
-    for (const [provider, usd] of Object.entries(o.result.spendByProvider)) {
-      byProvider[provider] = (byProvider[provider] ?? 0) + Number(usd);
-    }
-  }
-  for (const [provider, usd] of Object.entries(byProvider).sort(([a], [b]) => a.localeCompare(b))) {
-    console.log(`  ${provider}: $${usd.toFixed(6)}`);
+  for (const [provider, usd] of Object.entries(spendByProviderAcross(outcomes))) {
+    console.log(`  ${provider}: $${usd}`);
   }
   // Real spend first and labelled as such; the projection is shown beside it because the cap is
   // enforced against the projection, so a run can halt on a number that is not what it spent.

@@ -25,6 +25,7 @@ import {
 } from "../budget/inference-cost.js";
 import { ExperimentBudget, ExperimentCapExceededError } from "../budget/experiment-budget.js";
 import { CeilingExceededError } from "../budget/ceiling.js";
+import { SpendTally } from "../budget/spend-tally.js";
 import { gateResultsMatch } from "../gate/determinism.js";
 import { signRateAttestation } from "../chain/rate-attestation.js";
 import { Runner } from "../runner.js";
@@ -927,8 +928,7 @@ export async function runFullRunWindow(
   const turnsByAgent: Record<string, number> = {};
   const haltedReason: FullRunWindowResult["haltedReason"] = {};
   const turnLogsByAgent: Record<string, TurnLog[]> = {};
-  let totalRealizedUsd = 0;
-  const realizedUsdByProvider: Record<string, number> = {};
+  const spend = new SpendTally();
   const attacks: AttackRecord[] = [];
   const forwardInvitations: { agentId: AgentId; turn: number }[] = [];
   const capacityEvents: CapacityEvent[] = [];
@@ -1614,9 +1614,7 @@ export async function runFullRunWindow(
     }
 
     const realizedUsd = realizedTurnCostUsd(adapterResult.usage, agent.prices, agent.provider);
-    totalRealizedUsd += Number(realizedUsd);
-    realizedUsdByProvider[agent.provider] =
-      (realizedUsdByProvider[agent.provider] ?? 0) + Number(realizedUsd);
+    spend.add(realizedUsd, agent.provider);
     // Recorded for the ledger and every report; gates nothing, since the call has already
     // happened. The pre-call projection above is what the caps are enforced against.
     options.budget.recordRealizedInferenceSpend(realizedUsd);
@@ -2541,18 +2539,14 @@ export async function runFullRunWindow(
       ? { incompleteBecause: completion.incompleteBecause }
       : {}),
     passedBy,
-    totalRealizedUsd: totalRealizedUsd.toFixed(6),
+    totalRealizedUsd: spend.totalUsd(),
     attacks,
     gateVersions: attackContext.gateVersions.map(({ version, submittedBy, turn: t }) => ({
       version,
       submittedBy,
       turn: t,
     })),
-    spendByProvider: Object.fromEntries(
-      Object.entries(realizedUsdByProvider)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([provider, usd]) => [provider, usd.toFixed(6)]),
-    ),
+    spendByProvider: spend.byProviderUsd(),
     forwardQuotes: forwardBook.all(),
     forwardInvitations,
     capacityEvents,

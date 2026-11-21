@@ -1,3 +1,4 @@
+import { D } from "@touchstone/sdk";
 import type { AgentId } from "../identity/resolve.js";
 
 /**
@@ -79,7 +80,7 @@ export class ForwardQuoteBook {
   openFor(window: number): ForwardQuote[] {
     return this.#quotes
       .filter((q) => q.forWindow === window && q.takenInWindow === null)
-      .sort((a, b) => Number(a.rateUsdPerSiu) - Number(b.rateUsdPerSiu));
+      .sort((a, b) => new D(a.rateUsdPerSiu).comparedTo(b.rateUsdPerSiu));
   }
 
   quotesBy(issuer: AgentId): ForwardQuote[] {
