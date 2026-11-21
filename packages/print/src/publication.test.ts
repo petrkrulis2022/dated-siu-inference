@@ -7,10 +7,13 @@ import {
   buildPrintsIndex,
   isBlendedDatedSiuPrint,
   loadReconciledPrintIds,
+  markSuperseded,
   writePrint,
   writePrintsIndex,
   writeReconciliation,
 } from "./publication.js";
+import { printBodyHashHex } from "./sign/canonicalise.js";
+import { signPrintBody, verifyPrintSignature } from "./sign/sign.js";
 
 let dir: string;
 
@@ -264,5 +267,53 @@ describe("buildPrintsIndex / writePrintsIndex", () => {
 
   it("returns an empty list for an empty directory", async () => {
     expect(await buildPrintsIndex(dir)).toEqual([]);
+  });
+});
+
+describe("writePrint: latest.json and corrections", () => {
+  // A correction of an earlier day is a blended print too; latest.json must keep pointing at the newest day.
+  it("never overwrites latest.json with an older date: a correction of an earlier print leaves it alone", async () => {
+    await writePrint(dir, print({ print_id: "2026-11-22", date: "2026-11-22" }));
+    const result = await writePrint(dir, print({ print_id: "2026-10-15b", date: "2026-10-15" }));
+    const latest = JSON.parse(await readFile(join(dir, "latest.json"), "utf-8")) as Print;
+    expect(latest.print_id).toBe("2026-11-22");
+    expect(result.latestWritten).toBe(false);
+  });
+
+  it("replaces latest.json with a same-day correction of the print it mirrors", async () => {
+    await writePrint(dir, print({ print_id: "2026-11-21", date: "2026-11-21" }));
+    const result = await writePrint(dir, print({ print_id: "2026-11-21b", date: "2026-11-21" }));
+    const latest = JSON.parse(await readFile(join(dir, "latest.json"), "utf-8")) as Print;
+    expect(latest.print_id).toBe("2026-11-21b");
+    expect(result.latestWritten).toBe(true);
+  });
+});
+
+describe("markSuperseded", () => {
+  const KEY = `0x${"55".repeat(32)}`;
+  const signed = () => {
+    const full = print({ print_id: "2026-10-15", date: "2026-10-15" });
+    const body = Object.fromEntries(Object.entries(full).filter(([k]) => k !== "signature" && k !== "public_key"));
+    return signPrintBody(body as Parameters<typeof signPrintBody>[0], KEY);
+  };
+  const by = { print_id: "2026-10-15b", reason: "Corrects the pricing errors set out in the dated notice of 21 November 2026." };
+
+  it("records superseded_by on the original without touching its signed body", async () => {
+    const original = signed();
+    await writePrint(dir, original);
+    await markSuperseded(dir, "2026-10-15", by);
+    const after = JSON.parse(await readFile(join(dir, "2026-10-15.json"), "utf-8")) as Print;
+    expect(after.superseded_by).toEqual(by);
+    expect(printBodyHashHex(after)).toBe(printBodyHashHex(original));
+    expect(verifyPrintSignature(after).valid).toBe(true);
+  });
+
+  it("refuses a print that is already superseded: each print is corrected once", async () => {
+    await writePrint(dir, { ...signed(), superseded_by: { print_id: "2026-10-15b", reason: "earlier" } });
+    await expect(markSuperseded(dir, "2026-10-15", { ...by, print_id: "2026-10-15c" })).rejects.toThrow(/already superseded by 2026-10-15b/);
+  });
+
+  it("refuses a print that does not exist", async () => {
+    await expect(markSuperseded(dir, "2026-10-15", by)).rejects.toThrow(/2026-10-15/);
   });
 });

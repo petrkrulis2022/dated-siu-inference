@@ -145,3 +145,38 @@ describe("buildVerifyInput — historical pricing rules (2026-09-27 fix)", () =>
     expect(result.ok).toBe(true);
   });
 });
+
+// A correction recomputed from its original's run records (print.supersedes, no runs directory of its own) changes pricing only: it keeps the
+// original's weighting and carry-forward rules, whatever later revision it is computed under (correction.ts's correctionInput does the same).
+describe("buildVerifyInput — a correction keeps its original's non-pricing rules", () => {
+  const correctionOf = (original: Awaited<ReturnType<typeof loadPrint>>, revisionId: string) => ({
+    ...original,
+    print_id: revisionId,
+    methodology_revision: "rules-2026-11-21",
+    supersedes: { print_id: original.print_id, reason: "test" },
+    superseded_by: undefined,
+  });
+
+  it("2026-09-26 was computed under rules-2026-09-25: its correction applies neither carry-forward nor family weighting", async () => {
+    const original = await loadPrint(join(printsDir(), "2026-09-26.json"));
+    const { input } = await buildVerifyInput(correctionOf(original, "2026-09-26b"));
+    expect(input?.cachedTokensCountedOnce).toBe(true);
+    expect(input?.billedCostWhereReported).toBe(true);
+    expect(input?.carryForwardHistory).toBeUndefined();
+    expect(input?.weightByModelFamily).toBeUndefined();
+  });
+
+  it("2026-10-15 (rules-2026-09-26): carry-forward, per-entry weights", async () => {
+    const original = await loadPrint(join(printsDir(), "2026-10-15.json"));
+    const { input } = await buildVerifyInput(correctionOf(original, "2026-10-15b"));
+    expect(input?.carryForwardHistory).toBeDefined();
+    expect(input?.weightByModelFamily).toBeUndefined();
+  });
+
+  it("2026-11-19 (rules-2026-11-18): carry-forward and one weight per model family", async () => {
+    const original = await loadPrint(join(printsDir(), "2026-11-19.json"));
+    const { input } = await buildVerifyInput(correctionOf(original, "2026-11-19b"));
+    expect(input?.carryForwardHistory).toBeDefined();
+    expect(input?.weightByModelFamily).toBe(true);
+  });
+});

@@ -282,6 +282,22 @@ describe("renderPrintPage", () => {
     expect(html).toContain("…"); // truncation marker present for the long hex fields
   });
 
+  it("shows on a correction's own page which print it corrects and why, linking to the original", () => {
+    const html = renderPrintPage({
+      print: basePrint({
+        print_id: "2026-10-15b",
+        supersedes: { print_id: "2026-10-15", reason: "Corrects the pricing errors set out in the dated notice of 21 November 2026." },
+      }),
+      allPrints: [],
+      basePath: "",
+      runsBaseUrl: RUNS_BASE,
+      chain: CHAIN,
+    });
+    expect(html).toContain("Correction");
+    expect(html).toContain('href="prints/2026-10-15.html"');
+    expect(html).toContain("dated notice of 21 November 2026");
+  });
+
   it("shows a supersession notice on the superseded print's own page, with reason and successor link", () => {
     const html = renderPrintPage({
       print: basePrint({

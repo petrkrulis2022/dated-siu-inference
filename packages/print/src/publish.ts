@@ -212,6 +212,9 @@ export interface PublishInput extends Omit<PrintInput, "status"> {
    * its own overall check) or a synthetic-fixture unit test that doesn't care about tiers. Real
    * CLI callers always pass it, built from the same registry they already load. */
   openWeightsById?: Map<string, boolean>;
+  /** Present on a correction (publish-correction.ts): the print this numbered revision corrects and why. Known before signing, so part of the
+   * signed body; the original gains superseded_by, outside its own signed body. */
+  supersedes?: NonNullable<Print["supersedes"]>;
 }
 
 export interface PublishResult {
@@ -339,6 +342,7 @@ export async function publishPrint(printsDir: string, input: PublishInput): Prom
       ? { constituent_changes: input.constituentChanges }
       : {}),
     ...(input.series ? { series: input.series } : {}),
+    ...(input.supersedes ? { supersedes: input.supersedes } : {}),
   };
   const signed = signPrintBody(bodyWithDisclosures, input.privateKeyHex);
 

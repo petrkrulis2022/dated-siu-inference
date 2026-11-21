@@ -1,4 +1,5 @@
 import { access, readdir } from "node:fs/promises";
+import { join } from "node:path";
 import type { Print } from "@touchstone/sdk";
 import { TASK_CLASSES, BASKET_VERSION } from "@touchstone/basket";
 import type { RoundingRules } from "../rounding.js";
@@ -11,6 +12,7 @@ import {
   buildModelInputs,
   loadCarryForwardHistory,
   loadDeclaredRunRecords,
+  loadPrint,
   loadPriceSnapshot,
   loadRegistry,
   loadRunManifest,
@@ -128,10 +130,17 @@ export async function buildVerifyInput(print: Print): Promise<BuiltVerifyInput> 
     // see docs/methodology.md's rules-2026-09-25b entry for the same class of same-day edge
     // case). Applying carry-forward to a print that was never computed with it would recompute a
     // different qualifying set than the one actually signed — a false discrepancy, not a real one.
-    const carryForwardApplies = !print.series && revisionDate !== undefined && revisionDate >= "2026-09-26";
+    //
+    // A correction recomputed from its original's run records (print.supersedes, no runs directory of its own) changes pricing only: the rules
+    // that are not about pricing (carry-forward, family weighting) are the ones its original's own revision applied (correction.ts).
+    const rulesRevisionDate =
+      !hasOwnRuns && print.supersedes !== undefined
+        ? (await loadPrint(join(printsDir(), `${print.supersedes.print_id}.json`))).methodology_revision?.match(/^rules-(\d{4}-\d{2}-\d{2})/)?.[1]
+        : revisionDate;
+    const carryForwardApplies = !print.series && rulesRevisionDate !== undefined && rulesRevisionDate >= "2026-09-26";
     // One weight per model family from rules-2026-11-18 on, for tier prints as well as the blend,
     // keyed on the print's own declared revision for the same reason as carry-forward above.
-    const familyWeightingApplies = revisionDate !== undefined && revisionDate >= "2026-11-18";
+    const familyWeightingApplies = rulesRevisionDate !== undefined && rulesRevisionDate >= "2026-11-18";
 
     const input: PrintInput = {
       version: BASKET_VERSION,

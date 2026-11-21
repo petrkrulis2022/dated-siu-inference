@@ -5,6 +5,9 @@ import type { PrintInput } from "./compute/index.js";
  * list price counts each cached prompt token once (rules-2026-11-21). */
 export const CORRECTION_RULES_REVISION = "rules-2026-11-21";
 
+/** The dated notice on the prints pages that discloses the errors these corrections fix (data/prints/notices/2026-11-21-pricing-errors.json). */
+export const CORRECTION_NOTICE = "dated notice of 21 November 2026";
+
 const PRINT_ID = /^(\d{4}-\d{2}-\d{2})([b-y]?)(-frontier|-commodity)?$/;
 
 /**
