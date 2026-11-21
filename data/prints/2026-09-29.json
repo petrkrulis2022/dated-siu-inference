@@ -211,5 +211,11 @@
     "status": "anchored",
     "tx_hash": "0x8cb0bc355b13ff96829f47afe6f07e9bb1534a82bd489b400bf01bf942e2e875",
     "posted_at": "2026-09-29T01:08:42.000Z"
-  }
+  },
+  "correction_notes": [
+    {
+      "published_at": "2026-11-21",
+      "note": "Error in this print, disclosed before its correction: some constituent costs in it differ from what was billed for the same calls, through the pricing errors set out in the dated notice of 21 November 2026 at the top of the Prints page. This print will be corrected once, as a numbered revision with its own correction record; it stays published as it is, with its signature and anchor unchanged."
+    }
+  ]
 }

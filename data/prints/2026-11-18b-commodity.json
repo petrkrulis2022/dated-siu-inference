@@ -138,6 +138,10 @@
     {
       "published_at": "2026-11-18",
       "note": "Registry change, recorded here because this print's constituent_changes is computed against the print it supersedes (2026-11-18), which already carried it: mistral-small-3.2-24b-deepinfra (Mistral Small 3.2 on DeepInfra's default fp8 endpoint) was admitted on 18 Nov alongside mistral-small-3.2-24b-instruct (Parasail), after Parasail failed most of its requests that morning. Same open weights, different host (fp8 where Parasail serves bf16, at a lower list price). See docs/methodology.md, registry inclusion policy, entry of 2026-11-18. In this tier print Mistral Small 3.2 is measured on DeepInfra only: the Parasail entry's two T2 instances that returned failed the quality gate and its T3 instances returned no run records, and tier prints do not carry a missing constituent forward. 4 qualifying entries from 4 model families."
+    },
+    {
+      "published_at": "2026-11-21",
+      "note": "Error in this print, disclosed before its correction: some constituent costs in it differ from what was billed for the same calls, through the pricing errors set out in the dated notice of 21 November 2026 at the top of the Prints page. This print will be corrected once, as a numbered revision with its own correction record; it stays published as it is, with its signature and anchor unchanged."
     }
   ]
 }

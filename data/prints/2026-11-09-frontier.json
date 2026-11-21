@@ -143,5 +143,11 @@
         "posted_at": "2026-11-09T00:43:59.000Z"
       }
     ]
-  }
+  },
+  "correction_notes": [
+    {
+      "published_at": "2026-11-21",
+      "note": "Error in this print, disclosed before its correction: some constituent costs in it differ from what was billed for the same calls, through the pricing errors set out in the dated notice of 21 November 2026 at the top of the Prints page. This print will be corrected once, as a numbered revision with its own correction record; it stays published as it is, with its signature and anchor unchanged."
+    }
+  ]
 }
