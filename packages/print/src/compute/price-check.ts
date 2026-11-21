@@ -83,7 +83,10 @@ export function computePriceCheck(
       reasons.push(`${model.records.length - billedCalls.length} of ${model.records.length} calls report no billed figure`);
     }
     const billed = sum(billedCalls.map((r) => new D(r.billed_usd as string)));
-    const listed = sum(billedCalls.map((r) => callCostOf(r, { price: listPriceAt(model, r.service_tier) })));
+    // The list price as the method states it today: each cached token counted once for a provider whose usage.input includes them (rules-2026-11-21).
+    const listed = sum(
+      billedCalls.map((r) => callCostOf(r, { price: listPriceAt(model, r.service_tier), cachedInsideInput: model.cachedInsideInput === true })),
+    );
     const gap = listed.isZero() ? new D(0) : billed.dividedBy(listed).minus(1);
     if (gap.abs().greaterThan(tolerance)) {
       reasons.push(`billed ${pct(gap)}% ${gap.isPositive() ? "above" : "below"} the list price of the tiers served`);

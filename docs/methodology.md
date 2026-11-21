@@ -122,8 +122,10 @@ descending order, and only the first is ever an input to the print itself:
    provider's own response says was billed (OpenRouter's `usage.cost`, xAI's
    `cost_in_usd_ticks`). Where a response reports no billed figure (Anthropic, OpenAI, Google),
    its tokens are priced against a pinned price snapshot at the list price of the tier the
-   response reports, and the provider's invoice reconciles it (§7). This is the only tier that
-   ever produces a number in `exchange_rate_table` or `dated_siu`.
+   response reports, and the provider's invoice reconciles it (§7). From `rules-2026-11-21` that
+   list price counts each cached prompt token once, at the cached rate: Anthropic reports cache
+   reads apart from the prompt, and every other provider counts them inside it. This is the only
+   tier that ever produces a number in `exchange_rate_table` or `dated_siu`.
 2. **Routed-market realised flows.** Where a defensible source of real usage share across models
    exists, it informs _weights_ — never costs. See §3's host-weighting note and the registry
    inclusion policy below for exactly where this tier can and cannot enter the computation.
@@ -551,6 +553,7 @@ that actually applied, by date.
 | `rules-2026-09-26` | 2026-09-26 | A model missing today (run/provider failure, never a registry removal) carries its last real, published cost forward for up to 3 calendar days before being excluded; `dated_siu_median_diagnostic` published alongside `dated_siu` as a diagnostic only — see this section's own Aggregation policy above for the retro-validated evidence. | `5e4ca39` |
 | `rules-2026-11-18` | 2026-11-18 | One equal weight per model family, split equally between that family's qualifying entries (registry entries with the same `model_string`: the same open weights on different hosts), as the host-weighting rule has always stated; the minimum-qualifying counts, overall and per tier, count model families. Found live: in the first 2026-11-18 print two hosts of Mistral Small 3.2 both qualified and each got a full weight (that print's own correction notes). Builds on `rules-2026-09-26`. The unweighted median diagnostic still counts entries. | `packages/print/src/compute/weights.ts` |
 | `rules-2026-11-20` | 2026-11-21 | A call's cost is what its response says it was billed, where the response reports one; elsewhere its list price at the tier the response reports. Every run record carries the service tier and billed figure its response reported. An OpenRouter constituent is pinned to one exact endpoint tag and declares its purchase path (tag, numeric format, service tier, and the tier endpoints listed under it); the price fetch fails when a host matches more than one endpoint or the path has changed. A daily price check compares billed and listed cost per constituent and flags a gap over 1%. Applies what §2 already required: two errors against it, found live, are set out under "Pricing at the billed figure" below. Builds on `rules-2026-11-18`. | `packages/print/src/compute/class-cost.ts`, `price-check.ts`, `packages/prices/src/snapshot/build-snapshot.ts` |
+| `rules-2026-11-21` | 2026-11-22 | A list price counts each cached prompt token once, at the cached rate. For every provider but Anthropic a response's prompt count already includes its cached tokens, and the earlier formula added them again at the cached rate. Applies to carried-forward rows and to the daily price check. Found live: see "Cached tokens counted once" below. Builds on `rules-2026-11-20`. A correction of an earlier print recomputes under this revision and keeps the original's own weighting and carry-forward rules. | `packages/print/src/compute/class-cost.ts`, `packages/print/src/correction.ts` |
 
 A print's own `date` field, checked against this table, tells a reader which row applied even for
 a print published before `methodology_revision` existed — this table is the durable record; the
@@ -1135,6 +1138,38 @@ tier and requests none: its endpoint lists no tiers, its responses name none, an
 parameter got a 429 that the same call without it did not. The prints of 17–20 November are to be corrected as numbered
 revisions under the revision policy, each pointing to its original; the originals keep their
 signatures and anchors.
+
+**Cached tokens counted once (2026-11-21, `rules-2026-11-21`).** The daily price check's first run,
+on the 2026-11-21 print, flagged grok-4.6 (billed 5.7% below its list price) and Mistral Small 3.2 on
+Parasail (1.1% below). The cause was the list-price formula, not the prices. It priced a call as its
+prompt tokens at the input rate plus its cached tokens at the cached rate. That is right for
+Anthropic, whose responses report cache reads apart from the prompt. Every other provider counts
+cached tokens inside the prompt (OpenAI-shaped responses inside `prompt_tokens`, Google inside
+`promptTokenCount`), so for them each cached token was priced twice: once at the full input rate and
+again at the cached rate. The error began with the 2026-09-26 print, the first in which a published
+cached rate reached the formula (`rules-2026-09-25b` above), and affects every print from then to
+2026-11-21 in which a constituent other than Anthropic's had cached tokens.
+
+Checked against what was billed. Every OpenRouter and xAI response since the first print reports its
+billed amount. Across the 2026-09-26 to 2026-11-21 runs, the corrected formula equals the billed
+figure on all 750 grok-4.6 calls (739 of them with cached tokens), and on all but 11 of the 1,523
+DeepSeek V3.2 and Parasail Mistral calls. The 11 are from the 2026-09-26 run, whose price snapshot
+had no cached rate for those two models, so their cached tokens were priced at the full input rate.
+Google's Gemini responses report no billed amount. Google's AI Studio charge for one day's Gemini
+calls, converted at the Czech National Bank's fixing for that day, matched the corrected formula to
+within 5% and was well below the earlier one: Google bills implicitly cached Gemini tokens at the
+cached rate. The OpenAI constituents' calls recorded no cached tokens and are unaffected.
+
+What `rules-2026-11-21` changes, from the 2026-11-22 print on: for every provider but Anthropic a
+cached token is taken out of the prompt count and priced once, at the cached rate (the tier's own
+cached rate where the response reports a tier); where no cached rate is published the whole prompt is
+priced at the input rate, as before. A call whose response reports a billed figure is still priced at
+that figure (`rules-2026-11-20`). Every print from 2026-09-26 to 2026-11-21 whose values the two
+errors changed is to be corrected once, as a numbered revision under the revision policy with its
+own correction record, recomputed under this revision with the original's own run records, price
+snapshot, weighting and carry-forward rules; the originals keep their signatures and anchors and
+each points to its correction. Both errors are disclosed in a dated notice on the prints page, and on
+each affected print, before any correction is published.
 
 **Removal:** a registry entry is removed when its price source stops publishing a price for it,
 its provider adapter stops functioning and no replacement adapter is available within one review

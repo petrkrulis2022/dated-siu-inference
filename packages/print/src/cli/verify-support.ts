@@ -63,6 +63,8 @@ export async function buildVerifyInput(print: Print): Promise<BuiltVerifyInput> 
     // rules-2026-11-20: a call is priced at what its response says it was billed. Records written before that carried the figure only in their raw
     // response, which attachResponseBilling reads — the same function the harness uses for a new record.
     const billedCostApplies = revisionDate !== undefined && revisionDate >= "2026-11-20";
+    // rules-2026-11-21: a cached prompt token is priced once, for a provider whose usage.input already includes it.
+    const cachedOnceApplies = revisionDate !== undefined && revisionDate >= "2026-11-21";
     const declaredRecords = await loadDeclaredRunRecords(baseRunsPrintId);
     const records = billedCostApplies
       ? await attachResponseBilling(declaredRecords, runsDirFor(baseRunsPrintId))
@@ -144,6 +146,7 @@ export async function buildVerifyInput(print: Print): Promise<BuiltVerifyInput> 
       models,
       ...(familyWeightingApplies ? { weightByModelFamily: true } : {}),
       ...(billedCostApplies ? { billedCostWhereReported: true } : {}),
+      ...(cachedOnceApplies ? { cachedTokensCountedOnce: true } : {}),
       // Found live, 2026-09-26: never passing this meant every print published before the
       // 2026-09-25 significant-figures rounding fix (dated_siu_dp: 4, not dated_siu_sig_figs: 4)
       // was recomputed under TODAY's rounding rule regardless — a real verifier bug producing a

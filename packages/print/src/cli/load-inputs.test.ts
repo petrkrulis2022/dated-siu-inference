@@ -55,6 +55,14 @@ describe("buildModelInputs", () => {
     expect(zeroRecordEntry?.records).toEqual([]);
   });
 
+  it("marks whether each entry's provider counts cached tokens inside usage.input (rules-2026-11-21): every provider but Anthropic", () => {
+    const { models } = buildModelInputs(REGISTRY, SNAPSHOT, [runRecord()]);
+    expect(models.map((m) => [m.model_id, m.cachedInsideInput])).toEqual([
+      ["healthy-model", true],
+      ["zero-record-model", false],
+    ]);
+  });
+
   it("carries each entry's model_string through as its model family (rules-2026-11-18)", () => {
     const { models } = buildModelInputs(REGISTRY, SNAPSHOT, [runRecord()]);
     expect(models.map((m) => m.family)).toEqual(["x", "x"]);

@@ -1,5 +1,5 @@
 /**
- * Computes the correction of published prints under rules-2026-11-20 (docs/methodology.md: a call's price is what its response says it was billed)
+ * Computes the correction of published prints under CORRECTION_RULES_REVISION (docs/methodology.md: a call's price is what its response says it was billed, and a list price counts each cached token once)
  * and shows each original beside its correction. Dry run only: it never signs, anchors or writes a print. Publishing a correction (a signed,
  * anchored numbered revision that names its original in `supersedes`, plus `superseded_by` and a correction note on the original) waits for the
  * owner's approval of these values.

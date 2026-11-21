@@ -55,6 +55,9 @@ export interface ModelInput {
   /** List prices of the other service tiers listed under that endpoint (the price snapshot entry's `tiers`), keyed by the tier name a response
    * reports, e.g. "priority". A call is list-priced at the tier its response says served it (class-cost.ts's callCostOf). */
   tierPrices?: Record<string, ModelPrice>;
+  /** Whether this constituent's provider counts cached prompt tokens inside usage.input (class-cost.ts's cachedTokensInsideInput): every provider
+   * but Anthropic. Read only when PrintInput.cachedTokensCountedOnce is set. */
+  cachedInsideInput?: boolean;
   /** Every run record for this model, across all classes and attempts. */
   records: RunRecord[];
 }
@@ -76,6 +79,10 @@ export interface PrintInput {
    * price, at the tier the response reports, where it does not. Omitted for every print computed before that revision. Carried-forward usage is
    * still repriced at today's list price, as the carry-forward rule says. */
   billedCostWhereReported?: boolean;
+  /** rules-2026-11-21: a cached prompt token is priced once, at the cached rate, for a provider whose usage.input already includes it
+   * (ModelInput.cachedInsideInput). Omitted for every print computed before that revision, which added cached tokens on top of usage.input for
+   * every provider. Applies to carried-forward rows too: they are repriced at today's list price under today's formula. */
+  cachedTokensCountedOnce?: boolean;
   floor?: { value: string; notes?: string };
   price_snapshot_ref: string;
   methodology_version: string;
@@ -157,6 +164,7 @@ function computeIndex(
   carryForwardHistory: CarryForwardDay[] | undefined,
   familyOf: Map<string, string> | undefined,
   billed: boolean,
+  cachedOnce: boolean,
   variant?: PolicyVariant,
 ): ComputedIndex {
   const basketCosts = new Map<string, DecimalValue | undefined>();
@@ -171,6 +179,7 @@ function computeIndex(
         price: model.price,
         tierPrices: model.tierPrices,
         billed,
+        cachedInsideInput: cachedOnce && model.cachedInsideInput === true,
         adjustment: variant?.adjust(model.model_id, cls),
       });
     }
@@ -196,6 +205,7 @@ function computeIndex(
           price: model.price,
           tierPrices: model.tierPrices,
           billed: false,
+          cachedInsideInput: cachedOnce && model.cachedInsideInput === true,
           adjustment: variant?.adjust(model.model_id, cls),
         });
       }
@@ -264,6 +274,7 @@ export function computePrint(input: PrintInput): ComputePrintResult {
     input.carryForwardHistory,
     familyOf,
     input.billedCostWhereReported === true,
+    input.cachedTokensCountedOnce === true,
   );
 
   const basket_costs = [...base.basketCosts.entries()].map(([model_id, cost]) => {
@@ -307,6 +318,7 @@ export function computePrint(input: PrintInput): ComputePrintResult {
       input.carryForwardHistory,
       familyOf,
       input.billedCostWhereReported === true,
+      input.cachedTokensCountedOnce === true,
       variant,
     );
     return {
@@ -334,7 +346,7 @@ export function computePrint(input: PrintInput): ComputePrintResult {
     // Deliberately every measured attempt for every model, not the qualifying/weighted
     // subset the index itself is built from — see cost-of-production.ts.
     cost_of_production_usd: roundHalfUp(
-      computeCostOfProduction(input.models, input.billedCostWhereReported === true),
+      computeCostOfProduction(input.models, input.billedCostWhereReported === true, input.cachedTokensCountedOnce === true),
       rounding.usd_per_siu_dp,
     ),
     price_snapshot_ref: input.price_snapshot_ref,

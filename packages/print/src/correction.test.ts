@@ -40,6 +40,33 @@ describe("correctionInput", () => {
     expect(input.billedCostWhereReported).toBe(true);
   });
 
+  it("counts each cached token once (rules-2026-11-21) as well as pricing each call at its billed figure", () => {
+    expect(CORRECTION_RULES_REVISION).toBe("rules-2026-11-21");
+    expect(correctionInput(original, recomputed).cachedTokensCountedOnce).toBe(true);
+  });
+
+  it("keeps the original's own weighting and carry-forward rules: a correction changes only how calls are priced", () => {
+    // The recomputation is built under the correction's own revision, which turns on every later rule; the correction keeps only the pricing ones.
+    const history = [{ date: "2026-09-25", records: new Map() }];
+    const built = { ...recomputed, print_id: "x", weightByModelFamily: true, carryForwardHistory: history } as PrintInput;
+    const blend = (id: string, revision: string) => ({ ...original, print_id: id, methodology_revision: revision }) as Print;
+
+    // Computed under rules-2026-09-25 although dated 2026-09-26: neither carry-forward nor family weighting applied.
+    const sept26 = correctionInput(blend("2026-09-26", "rules-2026-09-25"), built);
+    expect(sept26.weightByModelFamily).toBeUndefined();
+    expect(sept26.carryForwardHistory).toBeUndefined();
+
+    // rules-2026-09-26: carry-forward, per-entry weights.
+    const oct = correctionInput(blend("2026-10-20", "rules-2026-09-26"), built);
+    expect(oct.weightByModelFamily).toBeUndefined();
+    expect(oct.carryForwardHistory).toBe(history);
+
+    // rules-2026-11-18 on: both.
+    const nov = correctionInput(blend("2026-11-19", "rules-2026-11-18"), built);
+    expect(nov.weightByModelFamily).toBe(true);
+    expect(nov.carryForwardHistory).toBe(history);
+  });
+
   it("keeps exactly the original's constituents, never one admitted to the registry after it was published", () => {
     const input = correctionInput(original, recomputed);
     expect(input.models.map((m) => m.model_id)).toEqual(["deepseek-v3.2", "qwen-2.5-72b-instruct", "gone"]);

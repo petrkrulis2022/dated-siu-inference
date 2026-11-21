@@ -88,7 +88,10 @@ const WEIGHT_BY_MODEL_FAMILY = CARRY_FORWARD_ENABLED;
 /** rules-2026-11-20 (a call's price is what its response says it was billed; a list price, at the tier the response reports, only where it says
  * nothing) builds on rules-2026-11-18 and ships on the same production path. */
 const BILLED_COST_WHERE_REPORTED = CARRY_FORWARD_ENABLED;
-const METHODOLOGY_REVISION = CARRY_FORWARD_ENABLED ? "rules-2026-11-20" : "rules-2026-09-25";
+/** rules-2026-11-21 (a list price counts each cached prompt token once, at the cached rate, for a provider whose usage.input already includes it)
+ * builds on rules-2026-11-20 and ships on the same production path. */
+const CACHED_TOKENS_COUNTED_ONCE = CARRY_FORWARD_ENABLED;
+const METHODOLOGY_REVISION = CARRY_FORWARD_ENABLED ? "rules-2026-11-21" : "rules-2026-09-25";
 
 const printId = process.argv[2] || new Date().toISOString().slice(0, 10);
 const printDate = DATE_PATTERN.test(printId) ? printId : new Date().toISOString().slice(0, 10);
@@ -381,6 +384,7 @@ try {
     methodology_revision: METHODOLOGY_REVISION,
     weightByModelFamily: WEIGHT_BY_MODEL_FAMILY,
     billedCostWhereReported: BILLED_COST_WHERE_REPORTED,
+    cachedTokensCountedOnce: CACHED_TOKENS_COUNTED_ONCE,
     privateKeyHex,
     attestationClient,
     secondaryAttestations,
@@ -411,7 +415,12 @@ try {
   // top-up's remaining runway can be estimated from a day's real per-provider spend (the pattern
   // the correction notes above this print series now disclose was predictable nine days out).
   const priceByModelId = new Map(
-    models.map((m) => [m.model_id, { price: m.price, tierPrices: m.tierPrices, billed: BILLED_COST_WHERE_REPORTED }]),
+    models.map((m) => [m.model_id, {
+        price: m.price,
+        tierPrices: m.tierPrices,
+        billed: BILLED_COST_WHERE_REPORTED,
+        cachedInsideInput: CACHED_TOKENS_COUNTED_ONCE && m.cachedInsideInput === true,
+      }]),
   );
   const spendByProvider = computeSpendByProvider(records, registry, priceByModelId);
   const spendPath = join(runsDirFor(printId), "spend-by-provider.json");
@@ -483,6 +492,7 @@ try {
         methodology_revision: METHODOLOGY_REVISION,
         weightByModelFamily: WEIGHT_BY_MODEL_FAMILY,
         billedCostWhereReported: BILLED_COST_WHERE_REPORTED,
+        cachedTokensCountedOnce: CACHED_TOKENS_COUNTED_ONCE,
         privateKeyHex,
         attestationClient,
         secondaryAttestations,

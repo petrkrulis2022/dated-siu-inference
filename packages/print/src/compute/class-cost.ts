@@ -31,6 +31,20 @@ export interface CallPricing {
   /** A sensitivity variant's multipliers, applied to the list price; a billed call is scaled by the same ratio so the variant moves from the
    * billed level, through the same per-call arithmetic as the headline. */
   adjustment?: { inputMultiplier: string; outputMultiplier: string };
+  /** rules-2026-11-21: the constituent's provider counts cached prompt tokens inside usage.input (cachedTokensInsideInput), so a cached token is
+   * priced once, at the cached rate, and only the rest of the prompt at the input rate. Absent or false: cached tokens are added on top of
+   * usage.input, which is right for Anthropic and is the formula every print before that revision used for every provider. */
+  cachedInsideInput?: boolean;
+}
+
+/**
+ * Whether a provider's usage counts cached prompt tokens inside usage.input (rules-2026-11-21). Anthropic reports cache reads apart from
+ * input_tokens, which exclude them (adapters/anthropic.ts). Every other adapter records the whole prompt as usage.input: OpenAI-shaped responses
+ * (OpenAI, OpenRouter, xAI and the other OpenAI-compatible hosts) count prompt_tokens_details.cached_tokens inside prompt_tokens, and Google counts
+ * cachedContentTokenCount inside promptTokenCount (its totalTokenCount is prompt + candidates + thoughts, with no separate cached term).
+ */
+export function cachedTokensInsideInput(provider: string): boolean {
+  return provider !== "anthropic";
 }
 
 /** Tier names a response uses for the standard tier: OpenRouter and OpenAI say "default", Anthropic and Google "standard"; Parasail names none. */
@@ -43,8 +57,25 @@ export function listPriceAt(pricing: Pick<CallPricing, "price" | "tierPrices">, 
   return pricing.tierPrices?.[serviceTier] ?? pricing.price;
 }
 
-function listCost(record: RunRecord, price: ModelPrice): DecimalValue {
+function listCost(record: RunRecord, price: ModelPrice, cachedInsideInput = false): DecimalValue {
   // usage.output + usage.reasoning, and cached_input at its own rate when one is published: see computeClassCost's comment for both histories.
+  const cached = record.usage.cached_input;
+  if (cachedInsideInput && cached > 0 && price.price_cached_in_usd_per_1m != null) {
+    // rules-2026-11-21: the cached tokens are part of usage.input, so they are taken out of it and priced once, at the cached rate.
+    if (cached > record.usage.input) {
+      throw new Error(
+        `${record.run_id}: cached_input ${cached} exceeds usage.input ${record.usage.input}, of which it is supposed to be part (rules-2026-11-21).`,
+      );
+    }
+    return callCost(
+      record.usage.input - cached,
+      record.usage.output + record.usage.reasoning,
+      price.price_in_usd_per_1m,
+      price.price_out_usd_per_1m,
+      cached,
+      price.price_cached_in_usd_per_1m,
+    );
+  }
   return callCost(
     record.usage.input,
     record.usage.output + record.usage.reasoning,
@@ -70,10 +101,12 @@ export function callCostOf(record: RunRecord, pricing: CallPricing): DecimalValu
   if (pricing.billed && record.billed_usd !== undefined) {
     const billed = new D(record.billed_usd);
     if (!pricing.adjustment) return billed;
-    const base = listCost(record, list);
-    return base.isZero() ? billed : billed.times(listCost(record, adjusted(list, pricing.adjustment))).dividedBy(base);
+    const base = listCost(record, list, pricing.cachedInsideInput);
+    return base.isZero()
+      ? billed
+      : billed.times(listCost(record, adjusted(list, pricing.adjustment), pricing.cachedInsideInput)).dividedBy(base);
   }
-  return listCost(record, adjusted(list, pricing.adjustment));
+  return listCost(record, adjusted(list, pricing.adjustment), pricing.cachedInsideInput);
 }
 
 export interface ClassCost {
@@ -137,6 +170,10 @@ export function computeClassCost(records: RunRecord[], priceOrPricing: ModelPric
         // headline — this prices cache use that actually happened, in the headline itself.
         //
         // rules-2026-11-20: from then on a call is priced at what it was billed, where its response says (callCostOf).
+        //
+        // rules-2026-11-21: the formula above added cached_input on top of usage.input for every provider, which counted each cached token twice
+        // for every provider but Anthropic: their usage.input already includes the cached tokens (cachedTokensInsideInput). From then on a cached
+        // token is priced once, at the cached rate (CallPricing.cachedInsideInput).
         callCostOf(record, pricing),
       );
       if (record.gate_passed) {

@@ -14,11 +14,20 @@ import type { ModelInput } from "./index.js";
  *
  * Each call is priced exactly as the index prices it (class-cost.ts's callCostOf): usage.output + usage.reasoning, cached_input at its own rate
  * where published, at the list price of the tier the response reports, and from rules-2026-11-20 (`billed`) at the billed figure where the
- * response gives one.
+ * response gives one; from rules-2026-11-21 (`cachedOnce`) with each cached token counted once for a provider whose usage.input includes them.
  */
-export function computeCostOfProduction(models: ModelInput[], billed = false): DecimalValue {
+export function computeCostOfProduction(models: ModelInput[], billed = false, cachedOnce = false): DecimalValue {
   const perModelCosts = models.map((model) =>
-    sum(model.records.map((record) => callCostOf(record, { price: model.price, tierPrices: model.tierPrices, billed }))),
+    sum(
+      model.records.map((record) =>
+        callCostOf(record, {
+          price: model.price,
+          tierPrices: model.tierPrices,
+          billed,
+          cachedInsideInput: cachedOnce && model.cachedInsideInput === true,
+        }),
+      ),
+    ),
   );
   return sum(perModelCosts);
 }
