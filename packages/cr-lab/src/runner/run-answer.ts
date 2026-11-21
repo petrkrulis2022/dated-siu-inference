@@ -3,6 +3,7 @@
  * against the daily cap and the provider's budget BEFORE it is made and a refused call never starts (`SpendStopped` is not caught here: it stops the whole run).
  * Whatever else happens (a provider error, an empty or truncated reply, a wrong answer) becomes a record with a class, and the run goes on.
  */
+import { runRecordUsageConvention } from "@touchstone/sdk";
 import {
   REASONING_BUDGET_MULTIPLE,
   billedUsageOf,
@@ -107,13 +108,13 @@ export async function runAnswer(input: RunAnswerInput): Promise<AnswerRecord> {
       async () => {
         try {
           const res = await seat.adapter(seat.modelString, bundle.text, params);
-          return { usd: usageCostUsd(res.usage, seat.price, seat.provider).toFixed(), res };
+          return { usd: usageCostUsd(res.usage, seat.price, runRecordUsageConvention(seat.provider)).toFixed(), res };
         } catch (err) {
           // a retry that failed AFTER a billed first call: that call's cost is real and is booked (D120); the error is classified from the original, below
           const billed = billedUsageOf(err);
           if (billed === undefined) throw err;
           throw new SpendIncurred(
-            usageCostUsd(billed, seat.price, seat.provider).toFixed(),
+            usageCostUsd(billed, seat.price, runRecordUsageConvention(seat.provider)).toFixed(),
             "a retry failed after a billed first call",
             err,
             billed,

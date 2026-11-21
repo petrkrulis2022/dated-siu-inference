@@ -81,6 +81,7 @@ describe("what a call costs", () => {
     const c = usageCostUsd(
       { input: 1_000_000, output: 100_000, reasoning: 200_000, cached_input: 500_000 },
       price,
+      { cachedInsideInput: false, reasoningInsideOutput: false },
     );
     expect(c.toFixed()).toBe("2.55"); // 1 + (0.3 x 5) + (0.5 x 0.1) = 1 + 1.5 + 0.05
   });

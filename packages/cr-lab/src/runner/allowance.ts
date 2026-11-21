@@ -14,6 +14,7 @@
  * the other way round (`headlineCost`), by taking the wasted first call off. Where that is not possible (a retry that was itself cut off, so the true need is unknown) the answer is marked
  * not derivable and left out of the derived columns, never guessed. Every figure is exact decimal arithmetic; the only integers rounded are token counts.
  */
+import { runRecordUsageConvention } from "@touchstone/sdk";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { REASONING_BUDGET_MULTIPLE } from "@touchstone/harness";
@@ -124,7 +125,7 @@ const callCost = (
   input: number,
   output: number,
 ): DecimalValue =>
-  usageCostUsd({ input, output, cached_input: 0, reasoning: 0 }, price, r.provider);
+  usageCostUsd({ input, output, cached_input: 0, reasoning: 0 }, price, runRecordUsageConvention(r.provider));
 
 /** The headline cost (B): what the answer cost with no wasted cut-off call. */
 export function headlineCost(r: AnswerRecord, price: ModelPrice): BasisCost {

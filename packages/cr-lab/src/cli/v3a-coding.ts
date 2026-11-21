@@ -12,6 +12,7 @@
  * Every output file is new: nothing here overwrites an existing file.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { CHAT_LOOP_USAGE } from "@touchstone/sdk";
 import { join } from "node:path";
 import { D } from "@touchstone/sdk";
 import { trialKey } from "../keys.js";
@@ -105,7 +106,7 @@ if (step === "export") {
     const projected = usageCostUsd(
       { input: Math.ceil((CODING_INSTRUCTIONS.length + item.text.length) / 3), output: 2_000, cached_input: 0, reasoning: 0 },
       price,
-      chat.provider,
+      CHAT_LOOP_USAGE,
     );
     out[item.key] = await ledger.guard(chat.provider, projected.toFixed(6), { part: "economy", model, key: keyName, what: `v3a coding ${item.key}` }, async () => {
       const label = await coder(item);

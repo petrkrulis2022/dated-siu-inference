@@ -6,6 +6,7 @@
  * The instructions describe the market and say nothing about which way to pay: whether agents use AGU-lab when they are not forced to is what the economy measures (§16.9, the
  * thesis), so no instruction may lean on it.
  */
+import { CHAT_LOOP_USAGE } from "@touchstone/sdk";
 import { D } from "@touchstone/sdk";
 import type { ToolChat } from "../mcp/tool-loop.js";
 import { usageCostUsd, type ModelPrice } from "../runner/prices.js";
@@ -73,7 +74,7 @@ export class ModelAgent implements Agent {
         reasoning: 0,
       },
       this.price,
-      this.chat.provider,
+      CHAT_LOOP_USAGE,
     );
     const r = await this.ledger.guard(
       this.chat.provider,
@@ -104,7 +105,7 @@ export class ModelAgent implements Agent {
             reasoning: u.reasoning ?? 0,
           },
           this.price,
-          this.chat.provider,
+          CHAT_LOOP_USAGE,
         );
         const use = turn.reply.toolUses[0];
         this.#last = { prompt, board, messages, specs, assistant: turn.reply.assistant, toolUseId: use?.id };

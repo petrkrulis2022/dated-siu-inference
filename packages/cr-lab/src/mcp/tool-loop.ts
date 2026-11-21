@@ -10,6 +10,7 @@
  * What is logged: every tool call (tool, arguments, whether it failed, the size of the result, latency) and every turn (tokens, cost, stop reason, retries). The results themselves are kept in
  * the session record, privately, because the grader needs exactly what the model was shown.
  */
+import { CHAT_LOOP_USAGE } from "@touchstone/sdk";
 import { D, type DecimalValue } from "@touchstone/sdk";
 import type { Provider } from "../keys.js";
 import { SpendStopped, type SpendLedger } from "../spend/ledger.js";
@@ -222,12 +223,7 @@ export async function runToolLoop(input: RunLoopInput): Promise<SessionResult> {
       result.limit = "context-limit";
       return finish();
     }
-    const projected = projectedTurnCostUsd(
-      estInput,
-      limits.maxTokensPerTurn,
-      input.price,
-      provider,
-    );
+    const projected = projectedTurnCostUsd(estInput, limits.maxTokensPerTurn, input.price);
     if (spent.plus(projected).greaterThan(limits.maxSessionUsd)) {
       result.limit = "session-cap";
       return finish();
@@ -251,7 +247,7 @@ export async function runToolLoop(input: RunLoopInput): Promise<SessionResult> {
                   reasoning: 0,
                 },
                 input.price,
-                provider,
+                CHAT_LOOP_USAGE,
               ).toFixed()
             : "0";
           return { usd, r };

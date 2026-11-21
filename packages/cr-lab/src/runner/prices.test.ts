@@ -4,7 +4,8 @@ import { fixtureDay } from "../tasks/fixture-day.js";
 import { SpendLedger } from "../spend/ledger.js";
 import { MemoryLedgerStore } from "../spend/store.js";
 import { buildPrompt } from "./prompts.js";
-import { REASONING_IN_OUTPUT, usageCostUsd } from "./prices.js";
+import { CHAT_LOOP_USAGE, runRecordUsageConvention } from "@touchstone/sdk";
+import { usageCostUsd } from "./prices.js";
 import { runAnswer } from "./run-answer.js";
 import { standInSeat } from "./stand-in-models.js";
 import { drawInstances } from "../tasks/instances.js";
@@ -16,19 +17,37 @@ const live = { input: 12_534, output: 29_067, reasoning: 28_323, cached_input: 0
 describe("reasoning tokens are billed once", () => {
   it("for Anthropic, output already holds the thinking tokens, so reasoning is not added again", () => {
     // 12,534 x $2/M + 29,067 x $10/M
-    expect(usageCostUsd(live, price, "anthropic").toFixed()).toBe("0.315738");
+    expect(usageCostUsd(live, price, runRecordUsageConvention("anthropic")).toFixed()).toBe("0.315738");
   });
 
-  it("for a provider not yet shown to include it, reasoning is added as the print does (it can only over-count)", () => {
+  it("for a provider that reports reasoning apart from the output (Google), it is added at the output rate", () => {
     // 12,534 x $2/M + (29,067 + 28,323) x $10/M
-    expect(usageCostUsd(live, price, "google").toFixed()).toBe("0.598968");
-    expect(usageCostUsd(live, price).toFixed()).toBe("0.598968");
+    expect(usageCostUsd(live, price, runRecordUsageConvention("google")).toFixed()).toBe("0.598968");
   });
 
-  it("only Anthropic is marked as including reasoning in output, until another provider is checked", () => {
-    expect(REASONING_IN_OUTPUT).toEqual({ anthropic: true });
+  it("cr-lab's own chat loops leave reasoning inside the output for OpenAI as for Anthropic", () => {
+    expect(usageCostUsd(live, price, CHAT_LOOP_USAGE).toFixed()).toBe("0.315738");
+  });
+});
+
+// The one shared cost function (@touchstone/sdk's callCostUsd), 2026-11-21: the trial's dry run priced OpenRouter and OpenAI calls through the
+// harness adapters, whose prompt count includes the cached tokens, and added the cached tokens again at the cached rate.
+describe("cached tokens are billed once", () => {
+  const deepseek = { priceInUsdPer1M: "0.26", priceOutUsdPer1M: "0.38", priceCachedInUsdPer1M: "0.13" };
+
+  it("a harness-adapter call whose prompt includes its cached tokens prices them once, at the cached rate", () => {
+    // (1,000 - 256) x $0.26 + 65 x $0.38 + 256 x $0.13, per 1M
+    const usage = { input: 1_000, output: 65, cached_input: 256, reasoning: 0 };
+    expect(usageCostUsd(usage, deepseek, runRecordUsageConvention("openrouter")).toFixed()).toBe("0.00025142");
   });
 
+  it("cr-lab's own chat loops record the prompt without the cached tokens, so they are added", () => {
+    const usage = { input: 744, output: 65, cached_input: 256, reasoning: 0 };
+    expect(usageCostUsd(usage, deepseek, CHAT_LOOP_USAGE).toFixed()).toBe("0.00025142");
+  });
+});
+
+describe("a recorded answer", () => {
   it("a recorded answer from an Anthropic seat is priced on output alone, and the ledger agrees", async () => {
     const f = await fixtureDay();
     try {
