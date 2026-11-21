@@ -1,0 +1,39 @@
+{
+  "id": "8514607a-5b47-9799-9668-9f7a6029c661",
+  "object": "chat.completion",
+  "created": 1795221666,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "47E91C\n90D4A2\nCF1C1C\nC6FCF4",
+        "reasoning_content": "I will scan the archive log for access codes and list them in order.\n\nI found four access codes so far: 47E91C, 90D4A2, CF1C1C, and C6FCF4.\n\nI am scanning the remainder of the document for any additional access codes.\n\nNo additional access codes were found. The document contains only four codes.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21877,
+    "completion_tokens": 22,
+    "total_tokens": 22408,
+    "prompt_tokens_details": {
+      "text_tokens": 21877,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 509,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 461720000
+  },
+  "system_fingerprint": "fp_92a0a6ffe2",
+  "service_tier": "default"
+}

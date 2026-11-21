@@ -1,0 +1,143 @@
+{
+  "version": "SIU-2026a",
+  "print_id": "2026-11-21-commodity",
+  "date": "2026-11-21",
+  "status": "provisional",
+  "basket_costs": [
+    {
+      "model_id": "deepseek-v3.2",
+      "cost_usd": "0.001803"
+    },
+    {
+      "model_id": "llama-3.3-70b-deepinfra",
+      "cost_usd": "0.000702"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-instruct",
+      "cost_usd": "0.000647"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-deepinfra",
+      "cost_usd": "0.000540"
+    },
+    {
+      "model_id": "qwen-2.5-72b-instruct",
+      "cost_usd": "0.002501"
+    }
+  ],
+  "weights": {
+    "source": "equal",
+    "values": [
+      {
+        "model_id": "deepseek-v3.2",
+        "weight": "0.250000"
+      },
+      {
+        "model_id": "llama-3.3-70b-deepinfra",
+        "weight": "0.250000"
+      },
+      {
+        "model_id": "mistral-small-3.2-24b-instruct",
+        "weight": "0.125000"
+      },
+      {
+        "model_id": "mistral-small-3.2-24b-deepinfra",
+        "weight": "0.125000"
+      },
+      {
+        "model_id": "qwen-2.5-72b-instruct",
+        "weight": "0.250000"
+      }
+    ]
+  },
+  "dated_siu": "0.001400",
+  "exchange_rate_table": [
+    {
+      "model_id": "deepseek-v3.2",
+      "usd_per_siu": "0.0018",
+      "spread_to_index": "0.2877",
+      "siu_per_usd": "554.7"
+    },
+    {
+      "model_id": "llama-3.3-70b-deepinfra",
+      "usd_per_siu": "0.0007",
+      "spread_to_index": "-0.4984",
+      "siu_per_usd": "1424.0"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-instruct",
+      "usd_per_siu": "0.0006",
+      "spread_to_index": "-0.5380",
+      "siu_per_usd": "1546.0"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-deepinfra",
+      "usd_per_siu": "0.0005",
+      "spread_to_index": "-0.6141",
+      "siu_per_usd": "1851.2"
+    },
+    {
+      "model_id": "qwen-2.5-72b-instruct",
+      "usd_per_siu": "0.0025",
+      "spread_to_index": "0.7868",
+      "siu_per_usd": "399.7"
+    }
+  ],
+  "sensitivity_block": [
+    {
+      "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
+      "dated_siu": "0.0009340",
+      "delta": "-0.3328",
+      "applies_to": [
+        "deepseek-v3.2",
+        "llama-3.3-70b-deepinfra",
+        "mistral-small-3.2-24b-instruct",
+        "mistral-small-3.2-24b-deepinfra",
+        "qwen-2.5-72b-instruct"
+      ]
+    },
+    {
+      "policy_variant": "batch-discount: 50% off input and output",
+      "dated_siu": "0.0007010",
+      "delta": "-0.4992",
+      "applies_to": [
+        "deepseek-v3.2",
+        "llama-3.3-70b-deepinfra",
+        "mistral-small-3.2-24b-instruct",
+        "mistral-small-3.2-24b-deepinfra",
+        "qwen-2.5-72b-instruct"
+      ]
+    }
+  ],
+  "rounding": {
+    "dated_siu_sig_figs": 4,
+    "basket_cost_dp": 6,
+    "usd_per_siu_dp": 4,
+    "spread_dp": 4,
+    "siu_per_usd_dp": 1,
+    "mode": "ROUND_HALF_UP",
+    "siu_per_usd_mode": "ROUND_DOWN",
+    "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. dated_siu rounds to significant figures, not a fixed decimal-place count, so its precision scales with the price rather than being lost as it falls (found live, 2026-09-25 — see docs/methodology.md's Rounding section). basket_cost carries more decimal places than dated_siu needs at any price level so the published print stays reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
+  },
+  "cost_of_production_usd": "0.1007",
+  "price_snapshot_ref": "price-snapshot-merged-2026-11-21T00-38-22.503Z.json",
+  "methodology_version": "v0-draft",
+  "methodology_revision": "rules-2026-11-20",
+  "series": "commodity",
+  "signature": "0x3bdfea4c0b33ba370352ea2beb9cc2067accf810894b6112e738084275c70da65a30d377b8313027414dd28da1aedaab4bc17df3aad73af99e542ce52745231f",
+  "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
+  "anchor": {
+    "chain": "base-sepolia",
+    "status": "anchored",
+    "tx_hash": "0x9a828cdf459efa6b4ebaa77a829de5b6a94cc030236391443c372d23ef93b1de",
+    "posted_at": "2026-11-21T00:41:28.000Z",
+    "additional_anchors": [
+      {
+        "chain": "arc-testnet",
+        "status": "anchored",
+        "tx_hash": "0xbb242d038f5da72dbd825d19e4a27fca527e8fe6fc9bfeb2c8b3c353b033f610",
+        "posted_at": "2026-11-21T00:41:28.000Z"
+      }
+    ]
+  }
+}

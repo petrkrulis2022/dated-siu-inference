@@ -1,0 +1,39 @@
+{
+  "id": "ce6babc1-e5c8-91b9-9f01-87043446ab0e",
+  "object": "chat.completion",
+  "created": 1795221666,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "ECBA9F\n0BF5DD\n41627D\n66D308",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes in the log: ECBA9F, 0BF5DD, 41627D, and 66D308.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21742,
+    "completion_tokens": 17,
+    "total_tokens": 22129,
+    "prompt_tokens_details": {
+      "text_tokens": 21742,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 370,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 450380000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
