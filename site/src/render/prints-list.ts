@@ -1,5 +1,5 @@
 import type { Print } from "@touchstone/sdk";
-import type { ChainInfo, Incident } from "../data.js";
+import type { ChainInfo, Incident, Notice } from "../data.js";
 import { esc, formatDate, truncateHex, usd } from "../format.js";
 
 export interface PrintsListOptions {
@@ -7,6 +7,8 @@ export interface PrintsListOptions {
   allPrints: Print[];
   /** Days the scheduled run failed to produce a print — see data.ts's loadIncidents. */
   incidents?: Incident[];
+  /** Dated notices from the publisher (data.ts's loadNotices), shown above the list, newest first. */
+  notices?: Notice[];
   /** "../" — this page always lives one level deep, at prints/index.html. A tier page
    * (/frontier/prints/index.html) lives one level deeper still, so its basePath ("../../")
    * points all the way back to the shared root /prints/ detail-page directory — every link
@@ -108,9 +110,26 @@ function renderIncidentRow(incident: Incident): string {
   </tr>`;
 }
 
+/** A dated notice, anchored as `notice-<id>` so a print's correction note can point to it. */
+export function renderNotice(notice: Notice): string {
+  const sections = notice.sections
+    .map((section) => {
+      const heading = section.heading ? `<strong>${esc(section.heading)}</strong> ` : "";
+      const text = section.text || heading ? `<p>${heading}${section.text ? esc(section.text) : ""}</p>` : "";
+      const items = section.items && section.items.length > 0 ? `<ul>${section.items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : "";
+      return `${text}${items}`;
+    })
+    .join("\n");
+  return `<div class="change-note dated-notice" id="notice-${esc(notice.id)}">
+    <p><strong>${esc(notice.title)}</strong><br /><span class="muted">${esc(formatDate(notice.date))}</span></p>
+    ${sections}
+  </div>`;
+}
+
 export function renderPrintsList({
   allPrints,
   incidents = [],
+  notices = [],
   basePath,
   chain,
   reconciledPrintIds = new Set(),
@@ -155,6 +174,10 @@ export function renderPrintsList({
   <div class="label">${esc(seriesLabel)} Prints</div>
   <p class="note">Every published ${esc(seriesLabel)} print, newest first${incidents.length > 0 ? " — including days a scheduled run failed and no print was produced" : ""}.</p>
 </div>
+${[...notices]
+  .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id))
+  .map(renderNotice)
+  .join("\n")}
 
 <section class="block">
   <div class="table-scroll">

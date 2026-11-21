@@ -2,7 +2,7 @@ import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loadRunRecordsFor, recomputeDatedSiu } from "./data.js";
+import { loadNotices, loadRunRecordsFor, recomputeDatedSiu } from "./data.js";
 
 let runsDir: string;
 
@@ -157,3 +157,18 @@ describe("withAnchoringFromPrints: whether a further chain is live comes from th
   });
 });
 
+
+describe("loadNotices", () => {
+  it("reads every dated notice in the directory, oldest first, like the incidents", async () => {
+    const dir = join(runsDir, "notices");
+    await mkdir(dir);
+    await writeFile(join(dir, "2026-11-21-b.json"), JSON.stringify({ id: "2026-11-21-b", date: "2026-11-21", title: "B", sections: [] }));
+    await writeFile(join(dir, "2026-10-01-a.json"), JSON.stringify({ id: "2026-10-01-a", date: "2026-10-01", title: "A", sections: [] }));
+    await writeFile(join(dir, "README.md"), "not a notice");
+    expect((await loadNotices(dir)).map((n) => n.id)).toEqual(["2026-10-01-a", "2026-11-21-b"]);
+  });
+
+  it("returns no notices when the directory does not exist", async () => {
+    expect(await loadNotices(join(runsDir, "missing"))).toEqual([]);
+  });
+});

@@ -379,3 +379,37 @@ describe("renderPrintsList", () => {
     expect(oldestPrintIndex).toBeGreaterThan(latestPrintIndex);
   });
 });
+
+describe("renderPrintsList: dated notices", () => {
+  const notice = {
+    id: "2026-11-21-pricing-errors",
+    date: "2026-11-21",
+    title: "Pricing errors <in> prints",
+    sections: [
+      { text: "We found two errors & will correct them." },
+      { heading: "1. Cached tokens", text: "Counted twice.", items: ["Qwen at flex", "Mistral at standard"] },
+    ],
+  };
+
+  it("shows a dated notice above the list, escaped, with an anchor a print's correction note can point to", () => {
+    const html = renderPrintsList({ allPrints: [print()], notices: [notice], basePath: "../", chain: CHAIN });
+    expect(html).toContain('id="notice-2026-11-21-pricing-errors"');
+    expect(html).toContain("Pricing errors &lt;in&gt; prints");
+    expect(html).toContain("21 Nov 2026");
+    expect(html).toContain("We found two errors &amp; will correct them.");
+    expect(html).toContain("<strong>1. Cached tokens</strong>");
+    expect(html).toContain("<li>Qwen at flex</li>");
+    expect(html.indexOf("notice-2026-11-21-pricing-errors")).toBeLessThan(html.indexOf("<table>"));
+  });
+
+  it("shows the newest notice first", () => {
+    const older = { ...notice, id: "2026-10-01-older", date: "2026-10-01", title: "Older" };
+    const html = renderPrintsList({ allPrints: [print()], notices: [older, notice], basePath: "../", chain: CHAIN });
+    expect(html.indexOf("notice-2026-11-21-pricing-errors")).toBeLessThan(html.indexOf("notice-2026-10-01-older"));
+  });
+
+  it("adds no notice block when there is none", () => {
+    const html = renderPrintsList({ allPrints: [print()], basePath: "../", chain: CHAIN });
+    expect(html).not.toContain("dated-notice");
+  });
+});

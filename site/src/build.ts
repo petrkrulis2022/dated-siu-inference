@@ -7,6 +7,7 @@ import {
   loadAllPrints,
   loadChains,
   loadIncidents,
+  loadNotices,
   loadRunRecordsFor,
   recomputeDatedSiu,
   withAnchoringFromPrints,
@@ -27,6 +28,7 @@ const PRINTS_DIR = join(REPO_ROOT, "data/prints");
 const RUNS_DIR = join(REPO_ROOT, "data/runs");
 const RECONCILIATIONS_DIR = join(REPO_ROOT, "data/reconciliations");
 const INCIDENTS_DIR = join(REPO_ROOT, "data/prints/incidents");
+const NOTICES_DIR = join(REPO_ROOT, "data/prints/notices");
 const DEPLOYMENTS_DIR = join(REPO_ROOT, "data/deployments");
 // Deliberately not "dist" — tsc already compiles this package's own TypeScript to dist/, and
 // writing the deployable HTML/CSS site into the same directory would mix generator tooling
@@ -95,6 +97,7 @@ async function main(): Promise<void> {
 
   const allPublishedPrints = await loadAllPrints(PRINTS_DIR);
   const incidents = await loadIncidents(INCIDENTS_DIR);
+  const notices = await loadNotices(NOTICES_DIR);
   // Both chains' TouchstoneAttestation, Base Sepolia first. `chain` (the first) is what the list pages use; the print pages and the for-agents page show every chain.
   const chains = withAnchoringFromPrints(await loadChains(DEPLOYMENTS_DIR), allPublishedPrints);
   const chain = chains[0];
@@ -148,6 +151,7 @@ async function main(): Promise<void> {
       bodyHtml: renderPrintsList({
         allPrints: prints,
         incidents,
+        notices,
         basePath: "../",
         chain,
         reconciledPrintIds,
@@ -222,6 +226,7 @@ async function main(): Promise<void> {
         title: `Touchstone Assay — ${label} Prints`,
         bodyHtml: renderPrintsList({
           allPrints: tierPrints,
+          notices,
           basePath: "../../",
           chain,
           seriesLabel: label,

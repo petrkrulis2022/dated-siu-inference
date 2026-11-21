@@ -147,6 +147,29 @@ export async function loadIncidents(incidentsDir: string): Promise<Incident[]> {
   return incidents;
 }
 
+/**
+ * A dated notice the publisher posts on the prints pages (data/prints/notices/*.json): an error found in published prints, disclosed before its
+ * correction (docs/methodology.md, Index governance, error procedure). Plain text only, escaped on render. Written by hand, never by a workflow,
+ * and never edited after publication: a later development is a new notice.
+ */
+export interface Notice {
+  /** The file name without .json, e.g. "2026-11-21-pricing-errors"; the page anchor is `notice-<id>`, which a print's correction note can name. */
+  id: string;
+  /** The date the notice was published (YYYY-MM-DD). */
+  date: string;
+  title: string;
+  sections: Array<{ heading?: string; text?: string; items?: string[] }>;
+}
+
+export async function loadNotices(noticesDir: string): Promise<Notice[]> {
+  const files = (await readdir(noticesDir).catch(() => [] as string[])).filter((f) => f.endsWith(".json"));
+  const notices: Notice[] = await Promise.all(
+    files.map(async (f) => JSON.parse(await readFile(join(noticesDir, f), "utf-8")) as Notice),
+  );
+  notices.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+  return notices;
+}
+
 export interface ChainInfo {
   attestationAddress: string;
   publisherAddress: string;

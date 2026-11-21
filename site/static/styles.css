@@ -239,6 +239,15 @@ tr.incident td {
   font-family: var(--mono);
 }
 
+.dated-notice p {
+  margin: 0.4rem 0;
+}
+
+.dated-notice ul {
+  margin: 0.2rem 0 0.5rem 1.2rem;
+  padding: 0;
+}
+
 /* ---- sections ---- */
 
 section.block {
