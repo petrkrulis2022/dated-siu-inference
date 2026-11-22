@@ -1,0 +1,39 @@
+{
+  "id": "841900ab-90fa-9a49-a956-bbeb9e05e767",
+  "object": "chat.completion",
+  "created": 1795308221,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "62D0BC\n906499\n7E2216\n2DEA45",
+        "reasoning_content": "I am scanning the archive log for access codes. I will list each one in the order it appears.\n\nI found four access codes. The coastal annex has codes 62D0BC, 7E2216, and 2DEA45. The upper annex has code 906499.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 22015,
+    "completion_tokens": 16,
+    "total_tokens": 22401,
+    "prompt_tokens_details": {
+      "text_tokens": 22015,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 370,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 455780000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}
