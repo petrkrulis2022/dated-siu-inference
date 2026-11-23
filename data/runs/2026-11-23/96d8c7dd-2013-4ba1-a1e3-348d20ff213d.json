@@ -1,0 +1,20 @@
+{
+  "run_id": "96d8c7dd-2013-4ba1-a1e3-348d20ff213d",
+  "model_id": "mistral-small-3.2-24b-deepinfra",
+  "task_class": "T3",
+  "instance_id": "T3-03",
+  "seed": 581502478,
+  "attempt": 1,
+  "usage": {
+    "input": 102,
+    "output": 62,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 1587,
+  "gate_passed": true,
+  "raw_response_ref": "96d8c7dd-2013-4ba1-a1e3-348d20ff213d.raw.json",
+  "deviations": [],
+  "service_tier": "default",
+  "billed_usd": "0.00002005"
+}
