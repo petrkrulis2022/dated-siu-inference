@@ -1,0 +1,165 @@
+{
+  "print_id": "2026-11-24",
+  "date": "2026-11-24",
+  "price_snapshot_ref": "price-snapshot-merged-2026-11-24T00-36-26.472Z.json",
+  "tolerance": "0.01",
+  "flagged": true,
+  "rows": [
+    {
+      "model_id": "deepseek-v3.2",
+      "calls": 15,
+      "calls_billed": 15,
+      "billed_usd": "0.02958726",
+      "listed_usd": "0.02958726",
+      "gap": "0",
+      "tiers_served": {
+        "default": 15
+      },
+      "calls_off_declared_tier": 0,
+      "flagged": false,
+      "reasons": []
+    },
+    {
+      "model_id": "llama-3.3-70b-deepinfra",
+      "calls": 16,
+      "calls_billed": 16,
+      "billed_usd": "0.01155696",
+      "listed_usd": "0.01155696",
+      "gap": "0",
+      "tiers_served": {
+        "default": 16
+      },
+      "calls_off_declared_tier": 0,
+      "flagged": false,
+      "reasons": []
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-instruct",
+      "calls": 8,
+      "calls_billed": 8,
+      "billed_usd": "0.00435177",
+      "listed_usd": "0.00725829",
+      "gap": "-0.4004414262863567038517336728072314553428",
+      "tiers_served": {
+        "none": 8
+      },
+      "calls_off_declared_tier": 0,
+      "flagged": true,
+      "reasons": [
+        "billed 40.04% below the list price of the tiers served"
+      ]
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-deepinfra",
+      "calls": 15,
+      "calls_billed": 15,
+      "billed_usd": "0.008824225",
+      "listed_usd": "0.008824225",
+      "gap": "0",
+      "tiers_served": {
+        "default": 15
+      },
+      "calls_off_declared_tier": 0,
+      "flagged": false,
+      "reasons": []
+    },
+    {
+      "model_id": "qwen-2.5-72b-instruct",
+      "calls": 15,
+      "calls_billed": 15,
+      "billed_usd": "0.040979",
+      "listed_usd": "0.040979",
+      "gap": "0",
+      "tiers_served": {
+        "default": 15
+      },
+      "calls_off_declared_tier": 0,
+      "flagged": false,
+      "reasons": []
+    },
+    {
+      "model_id": "claude-sonnet-5",
+      "calls": 15,
+      "calls_billed": 0,
+      "billed_usd": null,
+      "listed_usd": null,
+      "gap": null,
+      "tiers_served": {
+        "standard": 15
+      },
+      "calls_off_declared_tier": 0,
+      "flagged": false,
+      "reasons": []
+    },
+    {
+      "model_id": "gpt-5.1",
+      "calls": 15,
+      "calls_billed": 0,
+      "billed_usd": null,
+      "listed_usd": null,
+      "gap": null,
+      "tiers_served": {
+        "default": 15
+      },
+      "calls_off_declared_tier": 0,
+      "flagged": false,
+      "reasons": []
+    },
+    {
+      "model_id": "gemini-3.1-pro-preview",
+      "calls": 15,
+      "calls_billed": 0,
+      "billed_usd": null,
+      "listed_usd": null,
+      "gap": null,
+      "tiers_served": {
+        "standard": 15
+      },
+      "calls_off_declared_tier": 0,
+      "flagged": false,
+      "reasons": []
+    },
+    {
+      "model_id": "grok-4.6",
+      "calls": 15,
+      "calls_billed": 15,
+      "billed_usd": "0.262062",
+      "listed_usd": "0.262062",
+      "gap": "0",
+      "tiers_served": {
+        "default": 15
+      },
+      "calls_off_declared_tier": 0,
+      "flagged": false,
+      "reasons": []
+    },
+    {
+      "model_id": "claude-haiku-4-5",
+      "calls": 15,
+      "calls_billed": 0,
+      "billed_usd": null,
+      "listed_usd": null,
+      "gap": null,
+      "tiers_served": {
+        "standard": 15
+      },
+      "calls_off_declared_tier": 0,
+      "flagged": false,
+      "reasons": []
+    },
+    {
+      "model_id": "gpt-5.4-mini",
+      "calls": 15,
+      "calls_billed": 0,
+      "billed_usd": null,
+      "listed_usd": null,
+      "gap": null,
+      "tiers_served": {
+        "default": 15
+      },
+      "calls_off_declared_tier": 0,
+      "flagged": false,
+      "reasons": []
+    }
+  ]
+}
