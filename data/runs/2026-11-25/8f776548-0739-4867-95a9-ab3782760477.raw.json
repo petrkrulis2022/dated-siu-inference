@@ -1,0 +1,46 @@
+{
+  "id": "gen-1795567242-2pfXcF9CcIgLA3P6d2bd",
+  "object": "chat.completion",
+  "created": 1795567242,
+  "model": "meta-llama/llama-3.3-70b-instruct",
+  "provider": "DeepInfra",
+  "system_fingerprint": null,
+  "service_tier": "default",
+  "choices": [
+    {
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": "stop",
+      "native_finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "Here are the archival access codes listed one per line in the order they appear:\n\n1. 5AD84F\n2. EAAC4C\n3. DDEB60\n4. 47C1ED",
+        "refusal": null,
+        "reasoning": null
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21611,
+    "completion_tokens": 46,
+    "total_tokens": 21657,
+    "cost": 0.00217582,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": 0.00217582,
+      "upstream_inference_prompt_cost": 0.0021611,
+      "upstream_inference_completions_cost": 0.00001472
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "image_tokens": 0,
+      "audio_tokens": 0
+    }
+  }
+}

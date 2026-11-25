@@ -1,0 +1,39 @@
+{
+  "id": "423d62f9-6324-9142-b624-523c9f00e031",
+  "object": "chat.completion",
+  "created": 1795567397,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"tracking_id\": \"SH-889FC6\",\n  \"origin_city\": \"Tallinn\",\n  \"destination_city\": \"Toronto\",\n  \"weight_kg\": 435,\n  \"status\": \"delayed\",\n  \"priority\": \"express\"\n}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nI found the shipment details in the report. The record is SH-889FC6 from Tallinn to Toronto weighing 435 kg with express priority and delayed status.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1591,
+    "completion_tokens": 61,
+    "total_tokens": 1962,
+    "prompt_tokens_details": {
+      "text_tokens": 1591,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 896
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 310,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 40640000
+  },
+  "system_fingerprint": "fp_6df9974d3109903b",
+  "service_tier": "default"
+}
