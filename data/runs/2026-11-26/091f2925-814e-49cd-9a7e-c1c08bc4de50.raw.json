@@ -1,0 +1,39 @@
+{
+  "id": "c996513c-5951-9302-acab-c836d463d278",
+  "object": "chat.completion",
+  "created": 1795653621,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "0D2821\nEF6C6F\nF36A1C\nF95D93",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes in the document. They are 0D2821, EF6C6F, F36A1C, and F95D93.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21820,
+    "completion_tokens": 21,
+    "total_tokens": 22188,
+    "prompt_tokens_details": {
+      "text_tokens": 21820,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 347,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 450800000
+  },
+  "system_fingerprint": "fp_a684b3bbac",
+  "service_tier": "default"
+}
