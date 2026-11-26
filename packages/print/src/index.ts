@@ -10,3 +10,4 @@ export * from "./anchor/recover.js";
 export * from "./publish.js";
 export * from "./cli/load-inputs.js";
 export * from "./siu-price.js";
+export * from "./paid-tools.js";

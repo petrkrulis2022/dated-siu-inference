@@ -87,6 +87,12 @@ jobs:
         # of silent second-source-of-truth drift this generator exists to prevent.
         run: pnpm run docs:deployments:check
 
+      - name: Agent-facing copies are in sync with the paid tools' facts
+        # Gating, like the deployments check: the marketing site's facts file and docs/listing.md's
+        # facts block are generated from @touchstone/print (needs the Build step above), so a
+        # stale copy can never tell agents to pay on a network the server doesn't accept.
+        run: pnpm run agent-surfaces:check
+
       # Runs the TypeScript suite and the Foundry suite. `test:all` chains them with `&&`, so a
       # Solidity failure fails the job even when every JS test passes.
       #

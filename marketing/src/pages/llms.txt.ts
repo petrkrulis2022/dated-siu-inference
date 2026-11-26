@@ -2,7 +2,16 @@ import type { APIRoute } from "astro";
 
 import { getPublishedPages } from "@/lib/content";
 import { SITE_CONFIG } from "@/site-config";
-import { FOR_AGENTS_URL, MCP_CONFIG_JSON, MCP_JSON_URL, MCP_TOOLS } from "@/lib/mcp-info";
+import {
+  FOR_AGENTS_URL,
+  LIVE_PRICES_URL,
+  MCP_CONFIG_JSON,
+  MCP_JSON_URL,
+  MCP_TOOLS,
+  NETWORK_NOTE,
+  SIU_PRICE_DOCS_URL,
+  SIU_PRICE_RULE,
+} from "@/lib/mcp-info";
 
 export const prerender = true;
 
@@ -55,11 +64,12 @@ export const GET: APIRoute = async ({ site }) => {
     "2. Call `get_index` with no arguments — free, no payment step, no x402 challenge.",
     "3. Read `dated_siu` for the current price and `exchange_rate_table` for how individual models compare.",
     "",
-    "The other three tools cost real money per call, over x402 (Circle Gateway nanopayments), settled in USDC on Base Sepolia (`eip155:84532`) — testbed, not mainnet, not traction:",
+    `The other three tools cost real money per call. ${NETWORK_NOTE}`,
+    `${SIU_PRICE_RULE} Today's figures: ${LIVE_PRICES_URL} · how it is computed: ${SIU_PRICE_DOCS_URL}`,
     "",
     ...MCP_TOOLS.map(
       (tool) =>
-        `- \`${tool.name}\` — ${tool.free ? "free" : `$${tool.priceUsd}`} — ${tool.description}`,
+        `- \`${tool.name}\` — ${tool.free ? "free" : `$${tool.priceUsd} USDC`} — ${tool.description}${tool.mainnetNote ? ` ${tool.mainnetNote}` : ""}`,
     ),
     "",
     `Full reference, human-readable: ${FOR_AGENTS_URL}`,

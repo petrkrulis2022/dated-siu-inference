@@ -8,6 +8,19 @@ describe("renderForAgentsPage", () => {
     expect(html).toContain(">free<");
   });
 
+  it("says the paid tools settle in real USDC on Base and Arc mainnet, and names no testnet as a payment network", () => {
+    const html = renderForAgentsPage();
+    expect(html).toContain("USDC on Base (eip155:8453) and Arc (eip155:5042) mainnet");
+    expect(html).not.toMatch(/live on Base Sepolia|a testbed, not\s+traction|settle in USDC on Base Sepolia|eip155:84532/);
+  });
+
+  it("says verify_receipt is not available on mainnet yet, and links the SIU price block's documentation", () => {
+    const html = renderForAgentsPage();
+    expect(html).toContain("not available on mainnet yet");
+    expect(html).toContain("#the-siu-price-in-every-402");
+    expect(html).toContain("mSIU at the latest Commodity print");
+  });
+
   it("lists all four tools with their real prices", () => {
     const html = renderForAgentsPage();
     expect(html).toContain(">get_quote<");

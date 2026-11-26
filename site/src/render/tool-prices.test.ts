@@ -91,7 +91,61 @@ describe("renderMcpJson", () => {
 
   it("drops any mSIU figure when there is no SIU price, rather than leave a stale one", () => {
     const out = JSON.parse(renderMcpJson(template, {}));
-    expect(out.tools[2]).toEqual({ name: "verify_receipt", price_usd: "0.01", free: false });
+    expect(out.tools[2].price_msiu).toBeUndefined();
+    expect(out.tools[2].siu_price).toBeUndefined();
+    expect(out.tools[2].price_usd).toBe("0.01");
+  });
+
+  it("states payment from the shared facts: Base and Arc mainnet USDC, the route, the SIU price docs", () => {
+    const stale = {
+      ...template,
+      network: { chain: "base-sepolia" },
+      settlement: { asset: "usdc" },
+    };
+    const out = JSON.parse(renderMcpJson(stale, {}));
+    expect(out.network).toBeUndefined();
+    expect(out.settlement).toBeUndefined();
+    expect(out.payment.networks).toEqual([
+      {
+        name: "Base",
+        eip155: "eip155:8453",
+        asset: "USDC",
+        address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      },
+      {
+        name: "Arc",
+        eip155: "eip155:5042",
+        asset: "USDC",
+        address: "0x3600000000000000000000000000000000000000",
+      },
+    ]);
+    expect(out.payment.route).toMatch(/Circle Gateway/);
+    expect(out.payment.siu_price.docs).toMatch(/#the-siu-price-in-every-402$/);
+    expect(JSON.stringify(out)).not.toMatch(/sepolia|84532/i);
+  });
+
+  it("marks verify_receipt as not available on mainnet yet; the other paid tools are", () => {
+    const out = JSON.parse(renderMcpJson(template, {}));
+    expect(out.tools[1].available_on_mainnet).toBe(true);
+    expect(out.tools[2].available_on_mainnet).toBe(false);
+    expect(out.tools[2].mainnet_note).toMatch(/not available on mainnet yet/i);
+    expect(out.tools[2].mainnet_note).toMatch(/answered without charge/);
+  });
+});
+
+describe("renderLlmsTxt, payment placeholders", () => {
+  it("fills the networks sentence, the SIU price docs link and verify_receipt's mainnet note", () => {
+    const text =
+      "Paid: {{payment_networks}}. Docs: {{siu_price_docs}}. {{mainnet_note:verify_receipt}}";
+    const out = renderLlmsTxt(text, {});
+    expect(out).toContain("USDC on Base (eip155:8453) and Arc (eip155:5042) mainnet");
+    expect(out).toMatch(/Docs: https:\/\/github\.com\/\S+#the-siu-price-in-every-402\./);
+    expect(out).toMatch(/not available on mainnet yet/i);
+    expect(out).not.toContain("You were not charged"); // that is the server's reply, not page text
+  });
+
+  it("refuses a mainnet note for a tool that has none", () => {
+    expect(() => renderLlmsTxt("{{mainnet_note:get_quote}}", {})).toThrow(/get_quote/);
   });
 });
 

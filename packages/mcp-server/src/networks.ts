@@ -1,3 +1,4 @@
+import { MAINNET_PAYMENT_NETWORKS, MAINNET_UNAVAILABLE_TOOLS } from "@touchstone/print";
 import { KITE_TESTNET, type SelfSettledNetwork } from "./self-settled.js";
 
 /**
@@ -40,17 +41,18 @@ const CIRCLE_TESTNET = "https://gateway-api-testnet.circle.com";
 export const PROFILES: Record<NetworkProfile, ProfileConfig> = {
   mainnet: {
     profile: "mainnet",
-    // CAIP-2 ids confirmed against Circle's live `GET /v1/x402/supported` on 2026-10-25
-    circle: { networks: ["eip155:8453", "eip155:5042"], facilitatorUrl: CIRCLE_MAINNET },
+    // From the one list every public page also states (@touchstone/print's paid-tools.ts), so the
+    // pages can never offer a network this profile doesn't. CAIP-2 ids confirmed against Circle's
+    // live `GET /v1/x402/supported` on 2026-10-25; paid with real USDC on 2026-11-26.
+    circle: {
+      networks: MAINNET_PAYMENT_NETWORKS.map((n) => n.caip2),
+      facilitatorUrl: CIRCLE_MAINNET,
+    },
     // Kite mainnet (KITE_MAINNET, built and testnet-proven) is held back: owner's decision of
     // 2026-11-26 to go live on Base and Arc first. It returns here, with a deploy, once its settler
     // holds KITE and Kite's own paid tests pass; until then no 402 or OpenAPI document names it.
     selfSettled: [],
-    unavailableTools: {
-      verify_receipt:
-        "verify_receipt is not available on mainnet yet: it reads escrow-backed settlements, which exist on testnet only, " +
-        "and mainnet receipt attestation is not built. You were not charged.",
-    },
+    unavailableTools: { ...MAINNET_UNAVAILABLE_TOOLS } as Record<string, string>,
   },
   testnet: {
     profile: "testnet",

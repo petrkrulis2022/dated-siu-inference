@@ -1,8 +1,13 @@
 import type { Print } from "@touchstone/sdk";
 import {
+  MAINNET_PAYMENT_NETWORKS,
+  MAINNET_UNAVAILABLE_NOTES,
   PAID_TOOL_PRICES_USD,
+  PAYMENT_ROUTE,
+  SIU_PRICE_DOCS_URL,
   SIU_PRICE_MAX_AGE_DAYS,
   commodityPrintCandidates,
+  paymentNetworksText,
   priceLabel,
   siuPriceFor,
   type PaidTool,
@@ -53,17 +58,45 @@ interface McpJsonTool {
   [key: string]: unknown;
 }
 
-/** static/mcp.json with every paid tool's price from the shared table, plus its mSIU figure. */
+/** How payment works, stated from the shared facts (@touchstone/print's paid-tools.ts). */
+function paymentBlock() {
+  return {
+    networks: MAINNET_PAYMENT_NETWORKS.map((n) => ({
+      name: n.name,
+      eip155: n.caip2,
+      asset: n.asset,
+      address: n.assetAddress,
+    })),
+    route: PAYMENT_ROUTE,
+    siu_price: {
+      where: "Each 402 payment offer also carries the price in mSIU, in extra.touchstone.",
+      docs: SIU_PRICE_DOCS_URL,
+    },
+  };
+}
+
+/**
+ * static/mcp.json with how payment works and every paid tool's price from the shared sources, plus
+ * its mSIU figure. Any `network`/`settlement` block left in the template is dropped: the networks
+ * stated are always exactly the ones the server's mainnet profile accepts.
+ */
 export function renderMcpJson(
   template: { tools?: McpJsonTool[]; [key: string]: unknown },
   siu: SiuPrices,
 ): string {
+  const { network: _network, settlement: _settlement, ...rest } = template;
+  void _network;
+  void _settlement;
   const tools = (template.tools ?? []).map((tool) => {
     if (!isPaidTool(tool.name)) return tool;
     // Never carry a figure over from the template: the mSIU fields are rebuilt below, or left out.
     const out: McpJsonTool = { ...tool, price_usd: PAID_TOOL_PRICES_USD[tool.name] };
     delete out.price_msiu;
     delete out.siu_price;
+    delete out.mainnet_note;
+    const note = MAINNET_UNAVAILABLE_NOTES[tool.name];
+    out.available_on_mainnet = note === undefined;
+    if (note) out.mainnet_note = note;
     const price = siu[tool.name];
     if (price) {
       out.price_msiu = price.price_msiu;
@@ -77,15 +110,28 @@ export function renderMcpJson(
     }
     return out;
   });
-  return `${JSON.stringify({ ...template, tools }, null, 2)}\n`;
+  return `${JSON.stringify({ ...rest, payment: paymentBlock(), tools }, null, 2)}\n`;
 }
 
-/** static/.well-known/llms.txt with each `{{price:<tool>}}` filled in; an unknown tool fails the build. */
+/**
+ * static/.well-known/llms.txt with its placeholders filled from the shared sources:
+ * `{{price:<tool>}}`, `{{payment_networks}}`, `{{siu_price_docs}}` and `{{mainnet_note:<tool>}}`.
+ * An unknown placeholder, or a mainnet note for a tool that has none, fails the build.
+ */
 export function renderLlmsTxt(template: string, siu: SiuPrices): string {
-  return template.replace(/\{\{price:([a-z_]+)\}\}/g, (_match, tool: string) => {
-    if (tool !== "get_index" && !isPaidTool(tool)) {
-      throw new Error(`llms.txt names an unknown tool in {{price:${tool}}}`);
-    }
-    return toolPriceLabel(tool, siu);
-  });
+  return template.replace(
+    /\{\{([a-z_]+)(?::([a-z_]+))?\}\}/g,
+    (match, key: string, arg: string | undefined) => {
+      if (key === "price" && arg !== undefined && (arg === "get_index" || isPaidTool(arg))) {
+        return toolPriceLabel(arg, siu);
+      }
+      if (key === "payment_networks" && arg === undefined) return paymentNetworksText();
+      if (key === "siu_price_docs" && arg === undefined) return SIU_PRICE_DOCS_URL;
+      if (key === "mainnet_note" && arg !== undefined && isPaidTool(arg)) {
+        const note = MAINNET_UNAVAILABLE_NOTES[arg];
+        if (note) return note;
+      }
+      throw new Error(`llms.txt has a placeholder this build cannot fill: ${match}`);
+    },
+  );
 }
