@@ -11,6 +11,8 @@ import { OnChainSettlementReader } from "../settlement/on-chain.js";
 import { paywallFor, restPaywallFor } from "./paywall-factory.js";
 import { singleReplyAsJson } from "./json-response.js";
 import { paymentFrom, recordCall } from "./record-call.js";
+import { recordChallenge, recordPaidInSession } from "./siu-measures.js";
+import { siuPricedFrom } from "../siu-price-402.js";
 import { createRestApp } from "./rest.js";
 import type { WorkerEnv } from "./worker-env.js";
 
@@ -176,10 +178,16 @@ app.post("/mcp", async (c) => {
     `[latency] paywall dispatch (Circle Gateway round-trip): ${Date.now() - tPaywall0}ms — ${nextCalled() ? "cleared/free" : "402 challenge"}`,
   );
 
+  const sessionId = c.req.header("mcp-session-id");
   if (!nextCalled()) {
     const result = getResult();
+    const status = result?.status ?? 402;
+    // The SIU-price measures (./siu-measures.ts): every 402, and whether it carried an SIU price.
+    if (toolName && status === 402) {
+      recordChallenge(c.env, c.executionCtx, toolName, profile, siuPricedFrom(req) ?? false, sessionId);
+    }
     return new Response(result?.body ?? "", {
-      status: result?.status ?? 402,
+      status,
       headers: { ...result?.headers, "x-touchstone-network-profile": profile },
     });
   }
@@ -187,13 +195,15 @@ app.post("/mcp", async (c) => {
   // Usage data point for every call and, for a paid one, the settlement-log row (brief decision 4):
   // never able to fail the call — see ./record-call.ts.
   if (toolName) {
+    const payment = paymentFrom(req);
     recordCall(
       c.env,
       c.executionCtx,
       toolName,
-      paymentFrom(req),
+      payment,
       profileConfig.selfSettled.map((n) => n.network),
     );
+    if (payment?.network) recordPaidInSession(c.env, c.executionCtx, toolName, profile, sessionId);
   }
 
   const tMcp0 = Date.now();
@@ -234,6 +244,9 @@ app.route(
       attestationPrivateKeyHex: env.TOUCHSTONE_ATTESTATION_KEY,
     }),
     record: recordCall,
+    // REST calls carry no session, so their 402s count toward coverage only.
+    recordChallenge: (env, ctx, tool, profile, siuPriced) =>
+      recordChallenge(env, ctx, tool, profile, siuPriced, undefined),
   }),
 );
 

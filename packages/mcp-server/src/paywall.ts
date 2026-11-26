@@ -7,16 +7,18 @@ import {
   type SelfSettler,
 } from "./self-settled.js";
 import { toolArgumentsAreValid } from "./tools/schemas.js";
+import { PAID_TOOL_PRICES_USD } from "@touchstone/print";
+import { withSiuPrice, type SiuPricing } from "./siu-price-402.js";
 
 /**
- * build1-spec.md §9's three paid-tool prices. get_index is deliberately absent — it is never
- * looked up here, which is what keeps it free (see ../tools/get-index.ts's header comment).
+ * build1-spec.md §9's three paid-tool prices, in the "$0.001" form Circle's middleware takes. The
+ * one source is @touchstone/print's PAID_TOOL_PRICES_USD, shared with the site's mcp.json, llms.txt
+ * and for-agents page. get_index is deliberately absent — it is never looked up here, which is what
+ * keeps it free (see ../tools/get-index.ts's header comment).
  */
-export const TOOL_PRICES: Record<string, string> = {
-  get_quote: "$0.001",
-  convert: "$0.001",
-  verify_receipt: "$0.01",
-};
+export const TOOL_PRICES: Record<string, string> = Object.fromEntries(
+  Object.entries(PAID_TOOL_PRICES_USD).map(([tool, usd]) => [tool, `$${usd}`]),
+);
 
 export interface PaywallOptions {
   sellerAddress?: string;
@@ -29,6 +31,11 @@ export interface PaywallOptions {
    * ./self-settled.ts. Absent means the paywall is exactly Circle's, unchanged.
    */
   selfSettled?: { networks: SelfSettledNetwork[]; settlers: Record<string, SelfSettler> };
+  /**
+   * States each 402's price in mSIU too, at the latest Commodity print (./siu-price-402.ts). Absent
+   * means 402s carry the USDC amounts only.
+   */
+  siuPricing?: SiuPricing;
 }
 
 export type ToolMiddleware = (
@@ -122,17 +129,17 @@ export function createToolPaywall(
 
   const circle = (price: string) => gateway.require(price) as ToolMiddleware;
   const selfSettled = options.selfSettled;
-  if (!selfSettled || selfSettled.networks.length === 0) {
-    return createDispatcher(circle, TOOL_PRICES, argumentsAreValid);
-  }
-  return createDispatcher(
-    (price) =>
-      withSelfSettledNetworks(price, circle(price), {
-        networks: selfSettled.networks,
-        settlers: selfSettled.settlers,
-        payTo: sellerAddress,
-      }),
-    TOOL_PRICES,
-    argumentsAreValid,
-  );
+  const offers =
+    !selfSettled || selfSettled.networks.length === 0
+      ? circle
+      : (price: string) =>
+          withSelfSettledNetworks(price, circle(price), {
+            networks: selfSettled.networks,
+            settlers: selfSettled.settlers,
+            payTo: sellerAddress,
+          });
+  // The SIU price goes on last, so it prices every offer in the finished 402, Kite's included.
+  const siuPricing = options.siuPricing;
+  const priced = siuPricing ? (price: string) => withSiuPrice(offers(price), siuPricing) : offers;
+  return createDispatcher(priced, TOOL_PRICES, argumentsAreValid);
 }

@@ -1,6 +1,9 @@
 import { createToolPaywall, type PaywallOptions } from "../paywall.js";
 import { PROFILES, type NetworkProfile } from "../networks.js";
 import { createSelfSettler, type SelfSettledNetwork, type SelfSettler } from "../self-settled.js";
+import { commodityPrintOfRecord } from "../siu-price-402.js";
+import { USDC_DECIMALS } from "@touchstone/sdk";
+import { githubDataSource } from "./data-source.js";
 import type { WorkerEnv } from "./worker-env.js";
 
 /**
@@ -56,19 +59,50 @@ export function paywallOptionsFor(
 
 type Paywall = ReturnType<typeof createToolPaywall>;
 
+/**
+ * The token decimals of every network a profile's 402 offers: USDC's 6 on Circle's networks, each
+ * self-settled network's own token otherwise (Kite Testnet's PYUSD has 18). Used to state each
+ * offer's amount in mSIU; a network not listed here is simply left unpriced.
+ */
+export function siuDecimalsFor(profile: NetworkProfile): (network: string) => number | undefined {
+  const config = PROFILES[profile];
+  const decimals = new Map<string, number>(config.circle.networks.map((n) => [n, USDC_DECIMALS]));
+  for (const n of config.selfSettled) decimals.set(n.network, n.decimals);
+  return (network) => decimals.get(network);
+}
+
+/** `load`, remembered for `ttlMs` per isolate; a failed load is not remembered. */
+export function remembered<T>(ttlMs: number, load: () => Promise<T>, clock: () => number = Date.now) {
+  let value: { v: T; at: number } | undefined;
+  return async (): Promise<T> => {
+    if (value && clock() - value.at < ttlMs) return value.v;
+    const v = await load();
+    value = { v, at: clock() };
+    return v;
+  };
+}
+
+// How long one isolate reuses the Commodity print it found for 402 SIU prices. The print changes
+// once a day; this only spares a KV read per 402.
+const SIU_PRINT_TTL_MS = 5 * 60_000;
+
 function buildPaywall(
   profile: NetworkProfile,
   env: WorkerEnv,
   argumentsAreValid?: (tool: string, args: unknown) => boolean,
 ): Paywall {
-  return createToolPaywall(
-    paywallOptionsFor(profile, env, createSelfSettler, (network) =>
-      console.warn(
-        `[paywall] ${profile}: not offering ${network}, no KITE_SETTLER_PRIVATE_KEY configured`,
-      ),
+  const options = paywallOptionsFor(profile, env, createSelfSettler, (network) =>
+    console.warn(
+      `[paywall] ${profile}: not offering ${network}, no KITE_SETTLER_PRIVATE_KEY configured`,
     ),
-    argumentsAreValid,
   );
+  options.siuPricing = {
+    loadPrint: remembered(SIU_PRINT_TTL_MS, () =>
+      commodityPrintOfRecord(githubDataSource(env.PRINTS_CACHE)),
+    ),
+    decimalsFor: siuDecimalsFor(profile),
+  };
+  return createToolPaywall(options, argumentsAreValid);
 }
 
 // One paywall per profile per isolate: building Circle's middleware is cheap but not free, and a

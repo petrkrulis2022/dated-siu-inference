@@ -135,8 +135,11 @@ function harness(
     }
     res.statusCode = 402;
     res.setHeader("PAYMENT-REQUIRED", "challenge-b64");
+    // What ../siu-price-402.ts's wrapper leaves on the request after pricing a 402.
+    (req as unknown as Record<string, boolean>).touchstoneSiuPriced = true;
     res.end("{}");
   }) as unknown as ReturnType<typeof createToolPaywall>;
+  const challenges: { tool: string; profile: NetworkProfile; siuPriced: boolean }[] = [];
 
   const deps: RestDeps<Record<string, never>> = {
     profileFor: async () => profile,
@@ -148,6 +151,9 @@ function harness(
     }),
     record: (_env, _ctx, tool, payment, selfSettled) => {
       recorded.push({ tool, payment, selfSettled });
+    },
+    recordChallenge: (_env, _ctx, tool, profileSeen, siuPriced) => {
+      challenges.push({ tool, profile: profileSeen, siuPriced });
     },
   };
   const app = createRestApp(deps);
@@ -163,7 +169,7 @@ function harness(
     headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
-  return { call, paid, post, paywallCalls, recorded };
+  return { call, paid, post, paywallCalls, recorded, challenges };
 }
 
 afterEach(() => vi.useRealTimers());
@@ -200,6 +206,14 @@ describe("a paid route with no payment attached", () => {
     expect(res.headers.get("PAYMENT-REQUIRED")).toBe("challenge-b64");
     expect(res.headers.get("x-touchstone-network-profile")).toBe("testnet");
     expect(h.recorded).toHaveLength(0);
+  });
+
+  it("logs each 402 it sends, with whether it carried an SIU price; a paid call logs none", async () => {
+    const h = harness();
+    await h.call("/v1/quote");
+    expect(h.challenges).toEqual([{ tool: "get_quote", profile: "testnet", siuPriced: true }]);
+    await h.call("/v1/quote?task_class=extract&model=claude-haiku-4-5", h.paid());
+    expect(h.challenges).toHaveLength(1);
   });
 
   it("builds the tool call the paywall sees from the route, with the route's own URL", async () => {

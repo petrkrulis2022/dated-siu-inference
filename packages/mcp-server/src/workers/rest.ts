@@ -8,6 +8,7 @@ import { runTool, type ToolDeps, type ToolName } from "../tools/run.js";
 import { createNodeShim } from "./node-shim.js";
 import { buildOpenApi } from "./openapi.js";
 import { paymentFrom, type PaymentInfo } from "./record-call.js";
+import { siuPricedFrom } from "../siu-price-402.js";
 
 type Paywall = ReturnType<typeof createToolPaywall>;
 
@@ -22,6 +23,14 @@ export interface RestDeps<E> {
     tool: string,
     payment: PaymentInfo | undefined,
     selfSettledNetworks: readonly string[],
+  ): void;
+  /** One 402 sent, and whether it carried an SIU price (./siu-measures.ts). Optional for tests. */
+  recordChallenge?(
+    env: E,
+    ctx: ExecutionContextLike,
+    tool: string,
+    profile: NetworkProfile,
+    siuPriced: boolean,
   ): void;
 }
 
@@ -164,8 +173,12 @@ async function serve<E extends object>(
 
   if (!shim.nextCalled()) {
     const challenge = shim.getResult();
+    const status = challenge?.status ?? 402;
+    if (status === 402) {
+      d.recordChallenge?.(c.env, c.executionCtx, tool, profile, siuPricedFrom(shim.req) ?? false);
+    }
     return new Response(challenge?.body ?? "", {
-      status: challenge?.status ?? 402,
+      status,
       headers: { ...challenge?.headers, "x-touchstone-network-profile": profile },
     });
   }

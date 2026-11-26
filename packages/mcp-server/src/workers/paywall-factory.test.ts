@@ -1,6 +1,40 @@
 import { describe, expect, it, vi } from "vitest";
-import { paywallOptionsFor } from "./paywall-factory.js";
+import { paywallOptionsFor, remembered, siuDecimalsFor } from "./paywall-factory.js";
 import type { SelfSettler } from "../self-settled.js";
+
+describe("siuDecimalsFor", () => {
+  it("knows every network each profile offers: USDC's 6 on Circle's, the token's own on Kite", () => {
+    const mainnet = siuDecimalsFor("mainnet");
+    expect(["eip155:8453", "eip155:5042", "eip155:2366"].map(mainnet)).toEqual([6, 6, 6]);
+    const testnet = siuDecimalsFor("testnet");
+    expect(["eip155:84532", "eip155:5042002", "eip155:2368"].map(testnet)).toEqual([6, 6, 18]);
+    expect(mainnet("eip155:84532")).toBeUndefined();
+  });
+});
+
+describe("remembered", () => {
+  it("reuses a loaded value within its lifetime, reloads after it, and never keeps a failure", async () => {
+    let now = 0;
+    let loads = 0;
+    let fail = true;
+    const load = remembered(
+      1000,
+      async () => {
+        loads++;
+        if (fail) throw new Error("KV down");
+        return loads;
+      },
+      () => now,
+    );
+    await expect(load()).rejects.toThrow("KV down");
+    fail = false;
+    expect(await load()).toBe(2);
+    now = 999;
+    expect(await load()).toBe(2);
+    now = 1000;
+    expect(await load()).toBe(3);
+  });
+});
 
 const TREASURY = "0xB514882859f43DbF3df664C899D707f649E0CF4A";
 const fakeSettler: SelfSettler = { verifyAndSettle: async () => ({ ok: false, reason: "test" }) };
