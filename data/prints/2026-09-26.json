@@ -226,6 +226,14 @@
     {
       "published_at": "2026-09-27",
       "note": "Follow-up to this print's second correction note above, which stated a carry-forward figure of /bin/bash.010787 for gemini-3.1-pro-preview — that figure reused 2026-09-25's own already-published cost (/bin/bash.039236) verbatim, which is not the method actually adopted. The shipped implementation (packages/print/src/compute/index.ts) carries forward the last valid measured USAGE and reprices it at the current print's own price snapshot, never the source day's already-computed cost. Recomputing this print under that adopted method, using the real production code path, gives gemini-3.1-pro-preview a carried-forward cost of /bin/bash.040218 (not /bin/bash.039236) and a resulting dated_siu of /bin/bash.010885 (not /bin/bash.010787) — still for reference only, never a replacement for the signed value above. The figures differ because CACHED_INPUT_PRICING_EFFECTIVE_DATE (packages/print/src/cli/historical-pricing-rules.ts) is 2026-09-26 itself, one day after the carry-forward source (2026-09-25): repricing that day's real cached-token usage under 2026-09-26's own rules correctly prices cached-input tokens the source day's own published cost never did. See docs/methodology.md's Aggregation section (rules-2026-09-26) for the corrected retro-validation table and the full explanation."
+    },
+    {
+      "published_at": "2026-11-21",
+      "note": "Error in this print, disclosed before its correction: some constituent costs in it differ from what was billed for the same calls, through the pricing errors set out in the dated notice of 21 November 2026 at the top of the Prints page. This print will be corrected once, as a numbered revision with its own correction record; it stays published as it is, with its signature and anchor unchanged."
     }
-  ]
+  ],
+  "superseded_by": {
+    "print_id": "2026-09-26b",
+    "reason": "Corrects the pricing errors set out in the dated notice of 21 November 2026: cached prompt tokens counted twice for grok-4.6; cached prompt tokens priced at the full input price, the price snapshot having no cached rate, for deepseek-v3.2, mistral-small-3.2-24b-instruct. Recomputed under rules-2026-11-21 from this print's own run records and price snapshot, keeping its weighting and carry-forward rules; the qualifying set is unchanged."
+  }
 }

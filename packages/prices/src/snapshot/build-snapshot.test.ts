@@ -26,6 +26,7 @@ describe("buildPriceSnapshotFromOpenRouter", () => {
         tier: "open-weight-hosted",
         open_weights: true,
         host: "hosta",
+        listed_tiers: [],
       },
       {
         id: "llama-host-b",
@@ -35,6 +36,7 @@ describe("buildPriceSnapshotFromOpenRouter", () => {
         tier: "open-weight-hosted",
         open_weights: true,
         host: "hostb",
+        listed_tiers: [],
       },
     ];
 
@@ -64,6 +66,48 @@ describe("buildPriceSnapshotFromOpenRouter", () => {
     );
   });
 
+  it("prices a host naming one exact endpoint (deepinfra/fp8) from that endpoint, not the provider's first-listed one", async () => {
+    // Found live, 2026-11-18: OpenRouter lists several endpoints under one provider name, one per
+    // service tier (DeepInfra: "deepinfra/fp8/flex", "deepinfra/fp8", "deepinfra/fp8/priority"),
+    // each at its own price. A host of just "deepinfra" matches the first one listed (flex here),
+    // while the calls themselves are billed at whichever tier serves them. A registry host that
+    // names the exact endpoint the harness pins its calls to must be priced from that endpoint.
+    const registry: ModelRegistryEntry[] = [
+      {
+        id: "mistral-small-3.2-24b-deepinfra",
+        provider: "openrouter",
+        endpoint: "https://openrouter.ai/api/v1/chat/completions",
+        model_string: "mistralai/mistral-small-3.2-24b-instruct",
+        tier: "open-weight-hosted",
+        open_weights: true,
+        host: "deepinfra/fp8",
+        listed_tiers: ["deepinfra/fp8/flex", "deepinfra/fp8/priority"],
+      },
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          data: {
+            id: "mistralai/mistral-small-3.2-24b-instruct",
+            endpoints: [
+              { provider_name: "DeepInfra", tag: "deepinfra/fp8/flex", pricing: { prompt: "0.00000006", completion: "0.00000016" } },
+              { provider_name: "DeepInfra", tag: "deepinfra/fp8", pricing: { prompt: "0.000000075", completion: "0.0000002" } },
+              { provider_name: "DeepInfra", tag: "deepinfra/fp8/priority", pricing: { prompt: "0.0000001125", completion: "0.0000003" } },
+            ],
+          },
+        }),
+      })),
+    );
+
+    const { snapshot, unmatched } = await buildPriceSnapshotFromOpenRouter(registry, "t", "t");
+    expect(unmatched).toEqual([]);
+    expect(snapshot.entries[0].price_in_usd_per_1m).toBe("0.075");
+    expect(snapshot.entries[0].price_out_usd_per_1m).toBe("0.2");
+  });
+
   it("captures a published input_cache_read as price_cached_in_usd_per_1m", async () => {
     // Found live, 2026-09-25: OpenRouter's own per-host endpoint pricing already carries this
     // field when the host publishes one — this builder simply never read it before, so real,
@@ -79,6 +123,7 @@ describe("buildPriceSnapshotFromOpenRouter", () => {
         tier: "open-weight-hosted",
         open_weights: true,
         host: "deepinfra",
+        listed_tiers: [],
       },
     ];
 
@@ -116,6 +161,7 @@ describe("buildPriceSnapshotFromOpenRouter", () => {
         tier: "open-weight-hosted",
         open_weights: true,
         host: "deepinfra",
+        listed_tiers: [],
       },
     ];
 
@@ -136,6 +182,108 @@ describe("buildPriceSnapshotFromOpenRouter", () => {
 
     const { snapshot } = await buildPriceSnapshotFromOpenRouter(registry, "t", "t");
     expect(snapshot.entries[0]).not.toHaveProperty("price_cached_in_usd_per_1m");
+  });
+
+  // rules-2026-11-20. Found live: from the 2026-11-17 snapshot, qwen-2.5-72b-instruct (host "deepinfra") was priced at DeepInfra's flex tier,
+  // listed first, $0.288/$0.32, while every one of its calls was billed at the standard endpoint's $0.36/$0.40.
+  const QWEN_ENDPOINTS = [
+    { provider_name: "DeepInfra", tag: "deepinfra/fp8/flex", service_tier: "flex", quantization: "fp8", pricing: { prompt: "0.000000288", completion: "0.00000032" } },
+    { provider_name: "DeepInfra", tag: "deepinfra/fp8", service_tier: null, quantization: "fp8", pricing: { prompt: "0.00000036", completion: "0.0000004" } },
+  ];
+  const MISTRAL_ENDPOINTS = [
+    { provider_name: "DeepInfra", tag: "deepinfra/fp8/flex", service_tier: "flex", quantization: "fp8", pricing: { prompt: "0.00000006", completion: "0.00000016" } },
+    { provider_name: "DeepInfra", tag: "deepinfra/fp8", service_tier: null, quantization: "fp8", pricing: { prompt: "0.000000075", completion: "0.0000002" } },
+    { provider_name: "Parasail", tag: "parasail/bf16", service_tier: null, quantization: "bf16", pricing: { prompt: "0.00000009", completion: "0.0000003" } },
+    { provider_name: "DeepInfra", tag: "deepinfra/fp8/priority", service_tier: "priority", quantization: "fp8", pricing: { prompt: "0.0000001125", completion: "0.0000003" } },
+  ];
+  function stubEndpoints(id: string, endpoints: unknown[]) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => ({ data: { id, endpoints } }) })),
+    );
+  }
+  function entry(over: Partial<ModelRegistryEntry>): ModelRegistryEntry {
+    return {
+      id: "qwen-2.5-72b-instruct",
+      provider: "openrouter",
+      endpoint: "https://openrouter.ai/api/v1/chat/completions",
+      model_string: "qwen/qwen-2.5-72b-instruct",
+      tier: "open-weight-hosted",
+      open_weights: true,
+      host: "deepinfra/fp8",
+      service_tier: "default",
+      quantization: "fp8",
+      listed_tiers: ["deepinfra/fp8/flex"],
+      ...over,
+    };
+  }
+
+  it("fails loudly when a bare provider host matches more than one endpoint, never taking the first listed", async () => {
+    stubEndpoints("qwen/qwen-2.5-72b-instruct", QWEN_ENDPOINTS);
+    await expect(buildPriceSnapshotFromOpenRouter([entry({ host: "deepinfra", listed_tiers: [] })], "t", "t")).rejects.toThrow(
+      /qwen-2\.5-72b-instruct.*"deepinfra" matches 2 endpoints.*deepinfra\/fp8\/flex.*deepinfra\/fp8/s,
+    );
+  });
+
+  it("prices the exact standard endpoint and records it, with every tier endpoint under it at its own price", async () => {
+    stubEndpoints("mistralai/mistral-small-3.2-24b-instruct", MISTRAL_ENDPOINTS);
+    const { snapshot, unmatched } = await buildPriceSnapshotFromOpenRouter(
+      [
+        entry({
+          id: "mistral-small-3.2-24b-deepinfra",
+          model_string: "mistralai/mistral-small-3.2-24b-instruct",
+          listed_tiers: ["deepinfra/fp8/flex", "deepinfra/fp8/priority"],
+        }),
+      ],
+      "t",
+      "t",
+    );
+    expect(unmatched).toEqual([]);
+    expect(snapshot.entries[0]).toEqual({
+      model_id: "mistral-small-3.2-24b-deepinfra",
+      price_in_usd_per_1m: "0.075",
+      price_out_usd_per_1m: "0.2",
+      endpoint_tag: "deepinfra/fp8",
+      tiers: [
+        { tag: "deepinfra/fp8/flex", service_tier: "flex", price_in_usd_per_1m: "0.06", price_out_usd_per_1m: "0.16" },
+        { tag: "deepinfra/fp8/priority", service_tier: "priority", price_in_usd_per_1m: "0.1125", price_out_usd_per_1m: "0.3" },
+      ],
+    });
+  });
+
+  it("fails loudly when the provider has added, removed or renamed a tier under the constituent: re-measure before pricing", async () => {
+    stubEndpoints("qwen/qwen-2.5-72b-instruct", [
+      ...QWEN_ENDPOINTS,
+      { provider_name: "DeepInfra", tag: "deepinfra/fp8/priority", service_tier: "priority", quantization: "fp8", pricing: { prompt: "0.00000054", completion: "0.0000006" } },
+    ]);
+    await expect(buildPriceSnapshotFromOpenRouter([entry({})], "t", "t")).rejects.toThrow(
+      /qwen-2\.5-72b-instruct.*purchase path changed.*deepinfra\/fp8\/priority.*re-measure/s,
+    );
+  });
+
+  it("fails loudly when an OpenRouter entry declares no listed tiers", async () => {
+    stubEndpoints("qwen/qwen-2.5-72b-instruct", QWEN_ENDPOINTS);
+    const undeclared = entry({});
+    delete undeclared.listed_tiers;
+    await expect(buildPriceSnapshotFromOpenRouter([undeclared], "t", "t")).rejects.toThrow(/declares no listed_tiers/);
+  });
+
+  it("fails loudly when the pinned endpoint now serves another numeric format than declared", async () => {
+    stubEndpoints("qwen/qwen-2.5-72b-instruct", QWEN_ENDPOINTS);
+    await expect(buildPriceSnapshotFromOpenRouter([entry({ quantization: "bf16" })], "t", "t")).rejects.toThrow(
+      /purchase path changed.*fp8.*bf16/s,
+    );
+  });
+
+  it("still reports an exact tag nobody lists as unmatched, never pricing a neighbour", async () => {
+    stubEndpoints("qwen/qwen-2.5-72b-instruct", QWEN_ENDPOINTS);
+    const { snapshot, unmatched } = await buildPriceSnapshotFromOpenRouter(
+      [entry({ host: "deepinfra/bf16" }), entry({ id: "qwen-ok" })],
+      "t",
+      "t",
+    );
+    expect(unmatched).toEqual(["qwen-2.5-72b-instruct"]);
+    expect(snapshot.entries.map((e) => e.model_id)).toEqual(["qwen-ok"]);
   });
 });
 

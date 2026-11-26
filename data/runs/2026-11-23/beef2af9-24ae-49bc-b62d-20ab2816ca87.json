@@ -1,0 +1,19 @@
+{
+  "run_id": "beef2af9-24ae-49bc-b62d-20ab2816ca87",
+  "model_id": "gpt-5.4-mini",
+  "task_class": "T1",
+  "instance_id": "T1-04",
+  "seed": 3478819965,
+  "attempt": 1,
+  "usage": {
+    "input": 934,
+    "output": 42,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 704,
+  "gate_passed": true,
+  "raw_response_ref": "beef2af9-24ae-49bc-b62d-20ab2816ca87.raw.json",
+  "deviations": [],
+  "service_tier": "default"
+}

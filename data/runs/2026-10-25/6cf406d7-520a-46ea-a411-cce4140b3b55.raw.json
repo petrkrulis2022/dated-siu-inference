@@ -1,0 +1,39 @@
+{
+  "id": "9a360320-4962-94df-964a-a8b226aa8482",
+  "object": "chat.completion",
+  "created": 1792890202,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"tracking_id\": \"SH-C121DE\",\n  \"origin_city\": \"Osaka\",\n  \"destination_city\": \"Denver\",\n  \"weight_kg\": 399,\n  \"status\": \"delayed\",\n  \"priority\": \"express\"\n}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nThe shipment record is SH-C121DE from Osaka to Denver. It weighs 399 kilograms with express priority and is currently delayed.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1484,
+    "completion_tokens": 62,
+    "total_tokens": 1819,
+    "prompt_tokens_details": {
+      "text_tokens": 1484,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 273,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 42100000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

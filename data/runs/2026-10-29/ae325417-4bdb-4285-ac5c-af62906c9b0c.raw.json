@@ -1,0 +1,39 @@
+{
+  "id": "f2adcf1e-2896-9983-aa2b-c06d94346260",
+  "object": "chat.completion",
+  "created": 1793248105,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"tracking_id\":\"SH-2D14DE\",\"origin_city\":\"Denver\",\"destination_city\":\"Toronto\",\"weight_kg\":253,\"status\":\"pending\",\"priority\":\"standard\"}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nThe report contains shipment SH-2D14DE from Denver to Toronto weighing 253 kg with standard priority and pending status. All required fields are present.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1572,
+    "completion_tokens": 44,
+    "total_tokens": 1873,
+    "prompt_tokens_details": {
+      "text_tokens": 1572,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 257,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 41820000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

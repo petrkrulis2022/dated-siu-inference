@@ -1,0 +1,39 @@
+{
+  "id": "6ad1790d-8ea4-924c-86a5-0185c4fa7477",
+  "object": "chat.completion",
+  "created": 1793752834,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"tracking_id\":\"SH-DC8A32\",\"origin_city\":\"Osaka\",\"destination_city\":\"Perth\",\"weight_kg\":434,\"status\":\"delayed\",\"priority\":\"standard\"}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1550,
+    "completion_tokens": 45,
+    "total_tokens": 1871,
+    "prompt_tokens_details": {
+      "text_tokens": 1550,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 276,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 42580000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

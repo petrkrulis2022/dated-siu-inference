@@ -1,10 +1,13 @@
 import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Print, ReconciliationRecord, RunRecord } from "@touchstone/sdk";
+import { printBodyHashHex } from "./sign/canonicalise.js";
 
 export interface WritePrintResult {
   path: string;
   latestPath: string;
+  /** Whether latest.json now mirrors this print: a blended print no older than the one latest.json already mirrors. */
+  latestWritten: boolean;
 }
 
 /**
@@ -66,12 +69,47 @@ export async function writePrint(printsDir: string, print: Print): Promise<Write
   const json = `${JSON.stringify(print, null, 2)}\n`;
   await writeFile(path, json, "utf-8");
 
+  // Never back to an older date: a correction of an earlier day is a blended print too, and latest.json must keep mirroring the newest day. A
+  // same-day print (a redo, or a correction of the day latest.json mirrors) replaces it.
   const latestPath = join(printsDir, "latest.json");
-  if (isBlendedDatedSiuPrint(print)) {
+  const latestDate = await readFile(latestPath, "utf-8")
+    .then((raw) => (JSON.parse(raw) as Pick<Print, "date">).date)
+    .catch(() => undefined);
+  const latestWritten = isBlendedDatedSiuPrint(print) && (latestDate === undefined || print.date >= latestDate);
+  if (latestWritten) {
     await writeFile(latestPath, json, "utf-8");
   }
 
-  return { path, latestPath };
+  return { path, latestPath, latestWritten };
+}
+
+/**
+ * Records on a published print that a correction supersedes it (the revision policy's error procedure). superseded_by sits outside the signed
+ * body (printBodyOf), so the print's signature and on-chain anchor stay valid; nothing else in the file changes. Each print is corrected once:
+ * a print that already carries superseded_by is refused.
+ */
+export async function markSuperseded(
+  printsDir: string,
+  printId: string,
+  supersededBy: NonNullable<Print["superseded_by"]>,
+): Promise<Print> {
+  const path = join(printsDir, `${printId}.json`);
+  const raw = await readFile(path, "utf-8").catch(() => {
+    throw new Error(`Cannot mark ${printId} superseded: no print at ${path}.`);
+  });
+  const print = JSON.parse(raw) as Print;
+  if (print.superseded_by) {
+    throw new Error(
+      `Refusing to mark ${printId} superseded by ${supersededBy.print_id}: it is already superseded by ${print.superseded_by.print_id}. ` +
+        `Each print is corrected once.`,
+    );
+  }
+  const updated: Print = { ...print, superseded_by: supersededBy };
+  if (printBodyHashHex(updated) !== printBodyHashHex(print)) {
+    throw new Error(`Refusing to mark ${printId} superseded: the change would alter its signed body.`);
+  }
+  await writeFile(path, `${JSON.stringify(updated, null, 2)}\n`, "utf-8");
+  return updated;
 }
 
 /**

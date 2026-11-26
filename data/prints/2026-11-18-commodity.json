@@ -1,0 +1,163 @@
+{
+  "version": "SIU-2026a",
+  "print_id": "2026-11-18-commodity",
+  "date": "2026-11-18",
+  "status": "provisional",
+  "basket_costs": [
+    {
+      "model_id": "deepseek-v3.2",
+      "cost_usd": "0.001819"
+    },
+    {
+      "model_id": "llama-3.3-70b-deepinfra",
+      "cost_usd": "0.000705"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-instruct",
+      "cost_usd": "0.000658"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-deepinfra",
+      "cost_usd": "0.000541"
+    },
+    {
+      "model_id": "qwen-2.5-72b-instruct",
+      "cost_usd": "0.002005"
+    }
+  ],
+  "weights": {
+    "source": "equal",
+    "values": [
+      {
+        "model_id": "deepseek-v3.2",
+        "weight": "0.200000"
+      },
+      {
+        "model_id": "llama-3.3-70b-deepinfra",
+        "weight": "0.200000"
+      },
+      {
+        "model_id": "mistral-small-3.2-24b-instruct",
+        "weight": "0.200000"
+      },
+      {
+        "model_id": "mistral-small-3.2-24b-deepinfra",
+        "weight": "0.200000"
+      },
+      {
+        "model_id": "qwen-2.5-72b-instruct",
+        "weight": "0.200000"
+      }
+    ]
+  },
+  "dated_siu": "0.001146",
+  "exchange_rate_table": [
+    {
+      "model_id": "deepseek-v3.2",
+      "usd_per_siu": "0.0018",
+      "spread_to_index": "0.5877",
+      "siu_per_usd": "549.7"
+    },
+    {
+      "model_id": "llama-3.3-70b-deepinfra",
+      "usd_per_siu": "0.0007",
+      "spread_to_index": "-0.3845",
+      "siu_per_usd": "1418.2"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-instruct",
+      "usd_per_siu": "0.0007",
+      "spread_to_index": "-0.4257",
+      "siu_per_usd": "1520.0"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-deepinfra",
+      "usd_per_siu": "0.0005",
+      "spread_to_index": "-0.5281",
+      "siu_per_usd": "1849.6"
+    },
+    {
+      "model_id": "qwen-2.5-72b-instruct",
+      "usd_per_siu": "0.0020",
+      "spread_to_index": "0.7506",
+      "siu_per_usd": "498.6"
+    }
+  ],
+  "sensitivity_block": [
+    {
+      "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
+      "dated_siu": "0.0007667",
+      "delta": "-0.3307",
+      "applies_to": [
+        "deepseek-v3.2",
+        "llama-3.3-70b-deepinfra",
+        "mistral-small-3.2-24b-instruct",
+        "mistral-small-3.2-24b-deepinfra",
+        "qwen-2.5-72b-instruct"
+      ]
+    },
+    {
+      "policy_variant": "batch-discount: 50% off input and output",
+      "dated_siu": "0.0005739",
+      "delta": "-0.4991",
+      "applies_to": [
+        "deepseek-v3.2",
+        "llama-3.3-70b-deepinfra",
+        "mistral-small-3.2-24b-instruct",
+        "mistral-small-3.2-24b-deepinfra",
+        "qwen-2.5-72b-instruct"
+      ]
+    }
+  ],
+  "rounding": {
+    "dated_siu_sig_figs": 4,
+    "basket_cost_dp": 6,
+    "usd_per_siu_dp": 4,
+    "spread_dp": 4,
+    "siu_per_usd_dp": 1,
+    "mode": "ROUND_HALF_UP",
+    "siu_per_usd_mode": "ROUND_DOWN",
+    "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. dated_siu rounds to significant figures, not a fixed decimal-place count, so its precision scales with the price rather than being lost as it falls (found live, 2026-09-25 — see docs/methodology.md's Rounding section). basket_cost carries more decimal places than dated_siu needs at any price level so the published print stays reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
+  },
+  "cost_of_production_usd": "0.0930",
+  "price_snapshot_ref": "price-snapshot-merged-2026-11-18T13-07-45.472Z.json",
+  "methodology_version": "v0-draft",
+  "methodology_revision": "rules-2026-09-26",
+  "constituent_changes": [
+    {
+      "model_id": "mistral-small-3.2-24b-deepinfra",
+      "change": "admitted"
+    }
+  ],
+  "series": "commodity",
+  "signature": "0x6550ef47926a051e1fbf02cc5f1d20f610d9d45ed330cd65b609f57d52cd139f2052a68787194f6491127ea4a311c8f40911c91d22e18721aa2bf7d8910277c8",
+  "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
+  "anchor": {
+    "chain": "base-sepolia",
+    "status": "anchored",
+    "tx_hash": "0x6b7671345b7c8696b9e72f3d29abf82435b5fec6679d6206304f52836f3958f8",
+    "posted_at": "2026-11-18T13:09:15.000Z",
+    "additional_anchors": [
+      {
+        "chain": "arc-testnet",
+        "status": "anchored",
+        "tx_hash": "0xde6a861490cecbd2d77419ef0a704e21e7010c07fdd3cfc91eb08101fe0700bb",
+        "posted_at": "2026-11-18T13:09:16.000Z"
+      }
+    ]
+  },
+  "superseded_by": {
+    "print_id": "2026-11-18b-commodity",
+    "reason": "A computation that did not apply a published rule: this print gave the two host entries of Mistral Small 3.2 (Parasail and DeepInfra) a full equal weight each, against the methodology's host-weighting rule of one weight per model family, as disclosed in this print's own correction notes. 2026-11-18b-commodity is a same-day re-run under rules-2026-11-18, which applies that rule, with fresh measurements."
+  },
+  "correction_notes": [
+    {
+      "published_at": "2026-11-18",
+      "note": "Registry change on this print: Mistral Small 3.2 24B is now also measured through DeepInfra (mistral-small-3.2-24b-deepinfra, pinned to DeepInfra's default fp8 endpoint), admitted on 18 Nov alongside the existing Parasail entry (mistral-small-3.2-24b-instruct). Parasail had failed most of its requests that morning, and both scheduled runs for this date refused to publish with only 2 of 4 commodity-tier models qualifying (Qwen was also short of OpenRouter credit, since topped up). Same open weights, different host: DeepInfra serves an fp8 quantisation where Parasail serves bf16, at a lower list price ($0.075 in / $0.20 out per 1M tokens, against $0.09 / $0.30). Evidence run and reasons: data/runs/admission-2026-11-18/ and docs/methodology.md, registry inclusion policy, entry of 2026-11-18."
+    },
+    {
+      "published_at": "2026-11-18",
+      "note": "Error in this print, disclosed before any correction is published: Parasail recovered in time for this run, so both Mistral entries qualified and each received a full equal weight, giving one model family two of the 5 weights. The methodology's host-weighting rule allocates one weight per model family, not per registry row, and the print code did not yet apply it. This dated_siu (0.001146) therefore reads 10.6% below the same print with one weight for Mistral split equally between its two hosts (0.001282, computed from this print's own published basket costs; 4 model families). A corrected print will be published as a same-day redo, and this print will then be marked superseded."
+    }
+  ]
+}

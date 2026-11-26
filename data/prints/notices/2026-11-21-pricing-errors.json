@@ -1,0 +1,36 @@
+{
+  "id": "2026-11-21-pricing-errors",
+  "date": "2026-11-21",
+  "title": "Pricing errors found in prints from 26 September 2026",
+  "sections": [
+    {
+      "text": "We have found two errors in how constituent costs were computed. Both affect published prints. Every affected print will be corrected once, as a numbered revision with its own correction record. The original prints stay published, with their signatures and on-chain anchors unchanged, and each will point to its correction."
+    },
+    {
+      "heading": "1. Cached tokens counted twice, since 26 September.",
+      "text": "For every provider except Anthropic, the cost formula charged cached input tokens at the full input price and again at the cached price. These providers count cached tokens inside the prompt. The largest effect is on Gemini 3.1 Pro Preview, whose cost was overstated by about 40% on a typical day; we confirmed this against Google's billing, converted at the Czech National Bank's exchange rate. grok-4.6, DeepSeek V3.2 and Mistral Small 3.2 (Parasail) were overstated by smaller amounts. On 26 September itself, DeepSeek V3.2's and Mistral Small 3.2's cached tokens were instead priced at the full input price, because that day's price snapshot had no cached rate for them; their correction uses what was billed."
+    },
+    {
+      "heading": "2. Service-tier mismatch, since 17 November.",
+      "text": "OpenRouter lists more than one service tier for some models.",
+      "items": [
+        "From 17 November, Qwen 2.5 72B was priced at DeepInfra's flex tier, while its calls were bought and billed on the standard tier.",
+        "From 18 November, DeepInfra's Mistral Small 3.2 calls that were served on the more expensive priority tier were priced at the standard rate."
+      ]
+    },
+    {
+      "text": "Both made those constituents look cheaper than they were."
+    },
+    {
+      "heading": "What this means for the prints.",
+      "text": "Gemini 3.1 Pro Preview and grok-4.6 are Frontier constituents, so the Frontier print and the headline Dated SIU were overstated on every day from 26 September to 21 November, except 17 November, when neither model was in the print. The Commodity print was slightly overstated by the cached-token error from 26 September to 16 November, understated by the tier mismatch from 17 to 20 November, and is correct from 21 November."
+    },
+    {
+      "heading": "What has changed.",
+      "text": "From the 21 November print, a constituent's cost is what its provider billed for each call, read from the call's own response, wherever the response reports it. That covers every OpenRouter-routed model and grok-4.6. Each OpenRouter constituent is pinned to one endpoint, DeepInfra calls ask for the standard tier, and a daily check compares billed with listed cost. Gemini's responses don't report a billed amount, so its cost comes from the list price. From the 22 November print, the list-price formula counts each cached token once, at the cached rate, so Gemini's cost in new prints is correct from that date. The 21 November print is among those to be corrected."
+    },
+    {
+      "text": "Corrected values will be published with the corrections. The method is set out in the methodology under \"Pricing at the billed figure\" and \"Cached tokens counted once\"."
+    }
+  ]
+}

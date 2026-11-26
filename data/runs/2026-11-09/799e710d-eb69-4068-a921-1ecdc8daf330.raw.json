@@ -1,0 +1,39 @@
+{
+  "id": "b0f3f07e-a796-9f18-a703-f5d585f49cb1",
+  "object": "chat.completion",
+  "created": 1794184986,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "934DED\n999F16\n0F3943\n7623EA",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nFour access codes were found in the log. The southern annex is 934DED. The northern annex is 999F16. The southern annex is 0F3943. The western annex is 7623EA.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21280,
+    "completion_tokens": 15,
+    "total_tokens": 21525,
+    "prompt_tokens_details": {
+      "text_tokens": 21280,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 230,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 432620000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

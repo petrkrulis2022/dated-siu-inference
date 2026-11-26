@@ -1,0 +1,39 @@
+{
+  "id": "990c4d30-6925-4da2-9a41-02a52bf0c6e9",
+  "object": "chat.completion",
+  "created": 1795480759,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"tracking_id\": \"SH-FF556F\",\n  \"origin_city\": \"Denver\",\n  \"destination_city\": \"Nairobi\",\n  \"weight_kg\": 364,\n  \"status\": \"in_transit\",\n  \"priority\": \"standard\"\n}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nThe shipment SH-FF556F originated in Denver and is destined for Nairobi. It weighs 364 kilograms with standard priority and is currently in transit.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1575,
+    "completion_tokens": 64,
+    "total_tokens": 1920,
+    "prompt_tokens_details": {
+      "text_tokens": 1575,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 281,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 44520000
+  },
+  "system_fingerprint": "fp_92a0a6ffe2",
+  "service_tier": "default"
+}

@@ -1,5 +1,5 @@
-import type { RunRecord } from "@touchstone/sdk";
-import { D, callCost, mean, type DecimalValue } from "../decimal.js";
+import { callCostUsd, runRecordUsageConvention, type RunRecord } from "@touchstone/sdk";
+import { D, mean, type DecimalValue } from "../decimal.js";
 
 export interface ModelPrice {
   price_in_usd_per_1m: string;
@@ -11,6 +11,91 @@ export interface ModelPrice {
    * models a hypothetical alternative cache-adoption policy as a delta off the headline number —
    * this field prices cache use that actually happened, in the headline number itself. */
   price_cached_in_usd_per_1m?: string;
+}
+
+/**
+ * How one call is priced (docs/methodology.md, rules-2026-11-20).
+ *
+ * The price of a call is what its provider billed for it, read from the call's own response (RunRecord.billed_usd: OpenRouter's usage.cost, xAI's
+ * cost_in_usd_ticks). A list price is the fallback for a provider whose response reports no billed figure (Anthropic, OpenAI, Google: their
+ * invoices reconcile them, methodology §7), and otherwise only a cross-check. A list price is always the one for the service tier the response says
+ * served the call: OpenRouter lists one endpoint per tier, and calls pinned to one endpoint have been served on its priority tier.
+ */
+export interface CallPricing {
+  /** The list price of the constituent's declared endpoint (its standard tier). */
+  price: ModelPrice;
+  /** List prices of the other tiers listed under that endpoint, keyed by the name a response reports (e.g. "priority"). */
+  tierPrices?: Record<string, ModelPrice>;
+  /** rules-2026-11-20: price a call at its billed figure where the response reports one. Off for every print computed under an earlier rule. */
+  billed?: boolean;
+  /** A sensitivity variant's multipliers, applied to the list price; a billed call is scaled by the same ratio so the variant moves from the
+   * billed level, through the same per-call arithmetic as the headline. */
+  adjustment?: { inputMultiplier: string; outputMultiplier: string };
+  /** rules-2026-11-21: the constituent's provider counts cached prompt tokens inside usage.input (cachedTokensInsideInput), so a cached token is
+   * priced once, at the cached rate, and only the rest of the prompt at the input rate. Absent or false: cached tokens are added on top of
+   * usage.input, which is right for Anthropic and is the formula every print before that revision used for every provider. */
+  cachedInsideInput?: boolean;
+  /** rules-2026-11-21: the constituent's provider counts reasoning tokens inside usage.output (OpenAI, Anthropic), so they are not added again.
+   * Absent or false: reasoning is added at the output rate, as every earlier print did for every provider (no OpenAI or Anthropic call in a
+   * print had reported reasoning tokens by then). */
+  reasoningInsideOutput?: boolean;
+}
+
+/**
+ * Whether a provider's usage counts cached prompt tokens inside usage.input (rules-2026-11-21): every provider but Anthropic, as the harness
+ * adapters record them (@touchstone/sdk's runRecordUsageConvention, the one place that convention is stated).
+ */
+export function cachedTokensInsideInput(provider: string): boolean {
+  return runRecordUsageConvention(provider).cachedInsideInput;
+}
+
+/** Tier names a response uses for the standard tier: OpenRouter and OpenAI say "default", Anthropic and Google "standard"; Parasail names none. */
+const STANDARD_TIERS = new Set(["default", "standard"]);
+
+/** The list price of the tier a call's response reports. A tier with no listed price falls back to the declared endpoint's price; the price check
+ * flags it. */
+export function listPriceAt(pricing: Pick<CallPricing, "price" | "tierPrices">, serviceTier: string | null | undefined): ModelPrice {
+  if (serviceTier === undefined || serviceTier === null || STANDARD_TIERS.has(serviceTier)) return pricing.price;
+  return pricing.tierPrices?.[serviceTier] ?? pricing.price;
+}
+
+function listCost(record: RunRecord, price: ModelPrice, pricing: Pick<CallPricing, "cachedInsideInput" | "reasoningInsideOutput"> = {}): DecimalValue {
+  // The one shared cost function (@touchstone/sdk's callCostUsd). Before rules-2026-11-21 (both flags off): usage.input at the input rate,
+  // usage.output + usage.reasoning at the output rate, and cached_input at its own rate when one is published, added on top; see
+  // computeClassCost's comment for those histories. From rules-2026-11-21 each cached token is priced once, and reasoning is added only where the
+  // provider reports it apart from the output.
+  const cost = callCostUsd(
+    record.usage,
+    {
+      priceInUsdPer1M: price.price_in_usd_per_1m,
+      priceOutUsdPer1M: price.price_out_usd_per_1m,
+      ...(price.price_cached_in_usd_per_1m != null ? { priceCachedInUsdPer1M: price.price_cached_in_usd_per_1m } : {}),
+    },
+    { cachedInsideInput: pricing.cachedInsideInput === true, reasoningInsideOutput: pricing.reasoningInsideOutput === true },
+  );
+  // This package's own Decimal constructor (decimal.ts), exactly: the string form of a decimal is lossless.
+  return new D(cost.toString());
+}
+
+function adjusted(price: ModelPrice, adjustment: CallPricing["adjustment"]): ModelPrice {
+  if (!adjustment) return price;
+  return {
+    ...price,
+    price_in_usd_per_1m: new D(price.price_in_usd_per_1m).times(adjustment.inputMultiplier).toString(),
+    price_out_usd_per_1m: new D(price.price_out_usd_per_1m).times(adjustment.outputMultiplier).toString(),
+  };
+}
+
+/** The cost of one call under `pricing` — the one place a call is priced. */
+export function callCostOf(record: RunRecord, pricing: CallPricing): DecimalValue {
+  const list = listPriceAt(pricing, record.service_tier);
+  if (pricing.billed && record.billed_usd !== undefined) {
+    const billed = new D(record.billed_usd);
+    if (!pricing.adjustment) return billed;
+    const base = listCost(record, list, pricing);
+    return base.isZero() ? billed : billed.times(listCost(record, adjusted(list, pricing.adjustment), pricing)).dividedBy(base);
+  }
+  return listCost(record, adjusted(list, pricing.adjustment), pricing);
 }
 
 export interface ClassCost {
@@ -32,7 +117,8 @@ export interface ClassCost {
  * Records are grouped by instance and ordered by attempt number rather than by array
  * position, so the result does not depend on the order files happened to be read off disk.
  */
-export function computeClassCost(records: RunRecord[], price: ModelPrice): ClassCost {
+export function computeClassCost(records: RunRecord[], priceOrPricing: ModelPrice | CallPricing): ClassCost {
+  const pricing: CallPricing = "price_in_usd_per_1m" in priceOrPricing ? { price: priceOrPricing } : priceOrPricing;
   const byInstance = new Map<string, RunRecord[]>();
   for (const record of records) {
     const list = byInstance.get(record.instance_id) ?? [];
@@ -71,14 +157,13 @@ export function computeClassCost(records: RunRecord[], price: ModelPrice): Class
         // unpriced for it rather than guessed. Distinct from sensitivity.ts's cachePolicyVariant,
         // which prices a hypothetical alternative cache-adoption policy as a delta off the
         // headline — this prices cache use that actually happened, in the headline itself.
-        callCost(
-          record.usage.input,
-          record.usage.output + record.usage.reasoning,
-          price.price_in_usd_per_1m,
-          price.price_out_usd_per_1m,
-          record.usage.cached_input,
-          price.price_cached_in_usd_per_1m,
-        ),
+        //
+        // rules-2026-11-20: from then on a call is priced at what it was billed, where its response says (callCostOf).
+        //
+        // rules-2026-11-21: the formula above added cached_input on top of usage.input for every provider, which counted each cached token twice
+        // for every provider but Anthropic: their usage.input already includes the cached tokens (cachedTokensInsideInput). From then on a cached
+        // token is priced once, at the cached rate (CallPricing.cachedInsideInput).
+        callCostOf(record, pricing),
       );
       if (record.gate_passed) {
         passed = true;

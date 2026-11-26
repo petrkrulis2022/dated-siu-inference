@@ -5,7 +5,7 @@ import { computeClassCost, type ModelPrice } from "./class-cost.js";
 import { computeBasketCost, type ClassWeights, type TaskClass } from "./basket-cost.js";
 import { computeDatedSiu, resolveWeights } from "./weights.js";
 import { computeExchangeRateTable } from "./exchange-rate.js";
-import { applyAdjustment, type PolicyVariant } from "./sensitivity.js";
+import type { PolicyVariant } from "./sensitivity.js";
 import { computeCostOfProduction } from "./cost-of-production.js";
 
 export * from "./class-cost.js";
@@ -15,6 +15,7 @@ export * from "./exchange-rate.js";
 export * from "./sensitivity.js";
 export * from "./cost-of-production.js";
 export * from "./spend-by-provider.js";
+export * from "./price-check.js";
 
 const TASK_CLASSES: TaskClass[] = ["T1", "T2", "T3"];
 
@@ -45,7 +46,21 @@ export interface CarryForwardDay {
 
 export interface ModelInput {
   model_id: string;
+  /** The model family this entry belongs to for weighting: entries sharing one are hosts of the
+   * same open weights (the registry's model_string). Absent means the entry is its own family.
+   * Read only when PrintInput.weightByModelFamily is set. */
+  family?: string;
+  /** The list price of the constituent's declared endpoint. */
   price: ModelPrice;
+  /** List prices of the other service tiers listed under that endpoint (the price snapshot entry's `tiers`), keyed by the tier name a response
+   * reports, e.g. "priority". A call is list-priced at the tier its response says served it (class-cost.ts's callCostOf). */
+  tierPrices?: Record<string, ModelPrice>;
+  /** Whether this constituent's provider counts cached prompt tokens inside usage.input (class-cost.ts's cachedTokensInsideInput): every provider
+   * but Anthropic. Read only when PrintInput.cachedTokensCountedOnce is set. */
+  cachedInsideInput?: boolean;
+  /** Whether this constituent's provider counts reasoning tokens inside usage.output (OpenAI, Anthropic). Read only when
+   * PrintInput.cachedTokensCountedOnce is set. */
+  reasoningInsideOutput?: boolean;
   /** Every run record for this model, across all classes and attempts. */
   records: RunRecord[];
 }
@@ -59,6 +74,18 @@ export interface PrintInput {
   models: ModelInput[];
   /** Routed-market share per model id. Omit to fall back to equal weights (declared in the print). */
   observedShares?: Map<string, string>;
+  /** rules-2026-11-18: one equal weight per model family (ModelInput.family), split between that
+   * family's qualifying entries, as docs/methodology.md's host-weighting rule states. Omitted for
+   * every print computed before that revision, which weighted per registry entry. */
+  weightByModelFamily?: boolean;
+  /** rules-2026-11-20: a call's price is what its response says it was billed (RunRecord.billed_usd), where the response reports one; a list
+   * price, at the tier the response reports, where it does not. Omitted for every print computed before that revision. Carried-forward usage is
+   * still repriced at today's list price, as the carry-forward rule says. */
+  billedCostWhereReported?: boolean;
+  /** rules-2026-11-21: a cached prompt token is priced once, at the cached rate, for a provider whose usage.input already includes it
+   * (ModelInput.cachedInsideInput). Omitted for every print computed before that revision, which added cached tokens on top of usage.input for
+   * every provider. Applies to carried-forward rows too: they are repriced at today's list price under today's formula. */
+  cachedTokensCountedOnce?: boolean;
   floor?: { value: string; notes?: string };
   price_snapshot_ref: string;
   methodology_version: string;
@@ -138,6 +165,9 @@ function computeIndex(
   observedShares: Map<string, string> | undefined,
   date: string,
   carryForwardHistory: CarryForwardDay[] | undefined,
+  familyOf: Map<string, string> | undefined,
+  billed: boolean,
+  cachedOnce: boolean,
   variant?: PolicyVariant,
 ): ComputedIndex {
   const basketCosts = new Map<string, DecimalValue | undefined>();
@@ -148,8 +178,14 @@ function computeIndex(
     const byClass = {} as Record<TaskClass, ReturnType<typeof computeClassCost>>;
     for (const cls of TASK_CLASSES) {
       const classRecords = model.records.filter((r) => r.task_class === cls);
-      const price = applyAdjustment(model.price, variant?.adjust(model.model_id, cls));
-      byClass[cls] = computeClassCost(classRecords, price);
+      byClass[cls] = computeClassCost(classRecords, {
+        price: model.price,
+        tierPrices: model.tierPrices,
+        billed,
+        cachedInsideInput: cachedOnce && model.cachedInsideInput === true,
+        reasoningInsideOutput: cachedOnce && model.reasoningInsideOutput === true,
+        adjustment: variant?.adjust(model.model_id, cls),
+      });
     }
 
     const basket = computeBasketCost(byClass, classWeights);
@@ -167,8 +203,16 @@ function computeIndex(
       const carriedByClass = {} as Record<TaskClass, ReturnType<typeof computeClassCost>>;
       for (const cls of TASK_CLASSES) {
         const classRecords = carried.records.filter((r) => r.task_class === cls);
-        const price = applyAdjustment(model.price, variant?.adjust(model.model_id, cls));
-        carriedByClass[cls] = computeClassCost(classRecords, price);
+        // Never the billed figure of the day the usage was measured: the carried row is repriced at today's list price (rules-2026-11-20 keeps
+        // the carry-forward rule as it was), at the tier each carried call's response reported.
+        carriedByClass[cls] = computeClassCost(classRecords, {
+          price: model.price,
+          tierPrices: model.tierPrices,
+          billed: false,
+          cachedInsideInput: cachedOnce && model.cachedInsideInput === true,
+        reasoningInsideOutput: cachedOnce && model.reasoningInsideOutput === true,
+          adjustment: variant?.adjust(model.model_id, cls),
+        });
       }
       const carriedBasket = computeBasketCost(carriedByClass, classWeights);
       if (carriedBasket.cost !== undefined) {
@@ -195,7 +239,7 @@ function computeIndex(
     .filter(([, cost]) => cost !== undefined)
     .map(([id]) => id);
 
-  const { source, weights } = resolveWeights(qualifying, observedShares);
+  const { source, weights } = resolveWeights(qualifying, observedShares, familyOf);
   const qualifyingCosts = new Map<string, DecimalValue>();
   for (const id of qualifying) {
     qualifyingCosts.set(id, basketCosts.get(id) as DecimalValue);
@@ -212,6 +256,11 @@ function computeIndex(
   };
 }
 
+/** Model id -> model family, for every entry (an entry with no `family` is its own). */
+export function familyMapOf(models: Pick<ModelInput, "model_id" | "family">[]): Map<string, string> {
+  return new Map(models.map((m) => [m.model_id, m.family ?? m.model_id]));
+}
+
 export interface ComputePrintResult {
   /** The print body — everything except `signature` and `public_key`, which signing adds. */
   body: Omit<Print, "signature" | "public_key">;
@@ -221,12 +270,16 @@ export interface ComputePrintResult {
 
 export function computePrint(input: PrintInput): ComputePrintResult {
   const rounding = input.rounding ?? DEFAULT_ROUNDING;
+  const familyOf = input.weightByModelFamily ? familyMapOf(input.models) : undefined;
   const base = computeIndex(
     input.models,
     input.classWeights,
     input.observedShares,
     input.date,
     input.carryForwardHistory,
+    familyOf,
+    input.billedCostWhereReported === true,
+    input.cachedTokensCountedOnce === true,
   );
 
   const basket_costs = [...base.basketCosts.entries()].map(([model_id, cost]) => {
@@ -268,6 +321,9 @@ export function computePrint(input: PrintInput): ComputePrintResult {
       input.observedShares,
       input.date,
       input.carryForwardHistory,
+      familyOf,
+      input.billedCostWhereReported === true,
+      input.cachedTokensCountedOnce === true,
       variant,
     );
     return {
@@ -295,7 +351,7 @@ export function computePrint(input: PrintInput): ComputePrintResult {
     // Deliberately every measured attempt for every model, not the qualifying/weighted
     // subset the index itself is built from — see cost-of-production.ts.
     cost_of_production_usd: roundHalfUp(
-      computeCostOfProduction(input.models),
+      computeCostOfProduction(input.models, input.billedCostWhereReported === true, input.cachedTokensCountedOnce === true),
       rounding.usd_per_siu_dp,
     ),
     price_snapshot_ref: input.price_snapshot_ref,

@@ -1,0 +1,39 @@
+{
+  "id": "96abbd82-2916-982f-9973-456ba0792a25",
+  "object": "chat.completion",
+  "created": 1792890215,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "A49199\n59448E\n000293\nB2BEAD",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes in the log: A49199 for the coastal annex, 59448E for the central annex, 000293 for the southern annex, and B2BEAD for the southern annex.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 22109,
+    "completion_tokens": 15,
+    "total_tokens": 22649,
+    "prompt_tokens_details": {
+      "text_tokens": 22109,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 525,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 466900000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

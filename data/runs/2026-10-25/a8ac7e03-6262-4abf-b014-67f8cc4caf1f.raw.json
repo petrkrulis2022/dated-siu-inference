@@ -1,0 +1,39 @@
+{
+  "id": "a055c451-e578-9e80-8d36-1d05337a5fcc",
+  "object": "chat.completion",
+  "created": 1792890198,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"tracking_id\": \"SH-8DEA42\",\n  \"origin_city\": \"Osaka\",\n  \"destination_city\": \"Tallinn\",\n  \"weight_kg\": 166,\n  \"status\": \"delayed\",\n  \"priority\": \"standard\"\n}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nThe shipment SH-8DEA42 originated in Osaka and is destined for Tallinn. It weighs 166 kilograms with standard priority and is currently delayed.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1620,
+    "completion_tokens": 62,
+    "total_tokens": 1983,
+    "prompt_tokens_details": {
+      "text_tokens": 1620,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 301,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 46500000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

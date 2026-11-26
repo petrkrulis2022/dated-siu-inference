@@ -1,0 +1,39 @@
+{
+  "id": "6801de09-60f0-4bb6-8e60-2289d9b0fc39",
+  "object": "chat.completion",
+  "created": 1795653630,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```javascript\nexport function nthLargest(nums, n) {\n  return [...nums].sort((a, b) => b - a)[n - 1];\n}\n```",
+        "reasoning_content": "I need to implement a JavaScript function `nthLargest(nums, n)` that returns the nth largest value in `nums`. Duplicate values count as separate positions.\n\nThe approach is to sort the array in descending order and return the element at index n-1.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 760,
+    "completion_tokens": 38,
+    "total_tokens": 1040,
+    "prompt_tokens_details": {
+      "text_tokens": 760,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 242,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 24320000
+  },
+  "system_fingerprint": "fp_a684b3bbac",
+  "service_tier": "default"
+}

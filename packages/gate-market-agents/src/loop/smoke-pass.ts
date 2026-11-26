@@ -6,6 +6,7 @@ import {
   type ModelPrices,
 } from "../budget/inference-cost.js";
 import { BudgetCeiling, CeilingExceededError } from "../budget/ceiling.js";
+import { SpendTally } from "../budget/spend-tally.js";
 import { Runner } from "../runner.js";
 import type { RunnerDeps } from "../deps.js";
 import type { AgentId } from "../identity/resolve.js";
@@ -28,6 +29,8 @@ import { ModelResponseParseError, parseModelResponse } from "./parse-tool-call.j
 export interface SmokePassOptions {
   adapter: Adapter;
   modelString: string;
+  /** The adapter's provider, for the usage convention its token counts follow (@touchstone/sdk's runRecordUsageConvention). */
+  provider: string;
   prices: ModelPrices;
   maxOutputTokens: number;
   maxTurns: number;
@@ -119,13 +122,13 @@ export async function runSmokePass(options: SmokePassOptions): Promise<SmokePass
   };
 
   const turnLogs: TurnLog[] = [];
-  let totalRealizedUsd = 0;
+  const spend = new SpendTally();
 
   for (let turn = 1; turn <= options.maxTurns; turn++) {
     if (ceiling.isHalted(AGENT_ID, WINDOW_ID)) {
       return finalize({
         turnsUsed: turn - 1,
-        totalRealizedUsd: totalRealizedUsd.toFixed(6),
+        totalRealizedUsd: spend.totalUsd(),
         done: false,
         haltedReason: "ceiling",
         turnLogs,
@@ -144,7 +147,7 @@ export async function runSmokePass(options: SmokePassOptions): Promise<SmokePass
       if (err instanceof ContextValidationError) recorder.recordValidatorVerdict(AGENT_ID, turn, err);
       return finalize({
         turnsUsed: turn - 1,
-        totalRealizedUsd: totalRealizedUsd.toFixed(6),
+        totalRealizedUsd: spend.totalUsd(),
         done: false,
         haltedReason: "validation_failed",
         turnLogs,
@@ -169,7 +172,7 @@ export async function runSmokePass(options: SmokePassOptions): Promise<SmokePass
       if (err instanceof CeilingExceededError) {
         return finalize({
           turnsUsed: turn - 1,
-          totalRealizedUsd: totalRealizedUsd.toFixed(6),
+          totalRealizedUsd: spend.totalUsd(),
           done: false,
           haltedReason: "ceiling",
           turnLogs,
@@ -180,12 +183,8 @@ export async function runSmokePass(options: SmokePassOptions): Promise<SmokePass
 
     const adapterResult = await options.adapter(options.modelString, prompt, ADAPTER_PARAMS);
 
-    const realizedUsd = realizedTurnCostUsd(
-      adapterResult.usage.input,
-      adapterResult.usage.output,
-      options.prices,
-    );
-    totalRealizedUsd += Number(realizedUsd);
+    const realizedUsd = realizedTurnCostUsd(adapterResult.usage, options.prices, options.provider);
+    spend.add(realizedUsd);
 
     let intent;
     try {
@@ -203,7 +202,7 @@ export async function runSmokePass(options: SmokePassOptions): Promise<SmokePass
       if (err instanceof ModelResponseParseError) {
         return finalize({
           turnsUsed: turn,
-          totalRealizedUsd: totalRealizedUsd.toFixed(6),
+          totalRealizedUsd: spend.totalUsd(),
           done: false,
           haltedReason: "parse_error",
           turnLogs,
@@ -234,7 +233,7 @@ export async function runSmokePass(options: SmokePassOptions): Promise<SmokePass
     if ("done" in intent) {
       return finalize({
         turnsUsed: turn,
-        totalRealizedUsd: totalRealizedUsd.toFixed(6),
+        totalRealizedUsd: spend.totalUsd(),
         done: true,
         summary: intent.summary,
         turnLogs,
@@ -255,7 +254,7 @@ export async function runSmokePass(options: SmokePassOptions): Promise<SmokePass
       if (err instanceof CeilingExceededError) {
         return finalize({
           turnsUsed: turn,
-          totalRealizedUsd: totalRealizedUsd.toFixed(6),
+          totalRealizedUsd: spend.totalUsd(),
           done: false,
           haltedReason: "ceiling",
           turnLogs,
@@ -267,7 +266,7 @@ export async function runSmokePass(options: SmokePassOptions): Promise<SmokePass
 
   return finalize({
     turnsUsed: options.maxTurns,
-    totalRealizedUsd: totalRealizedUsd.toFixed(6),
+    totalRealizedUsd: spend.totalUsd(),
     done: false,
     haltedReason: "max_turns",
     turnLogs,

@@ -1,0 +1,39 @@
+{
+  "id": "a205dafd-fc48-95ec-90d8-d3b4befd806c",
+  "object": "chat.completion",
+  "created": 1794012410,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "99A355\n1D37F1\n4DED26\n5CF5D4",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes in the document: 99A355 for the northern annex, 1D37F1 for the central annex, 4DED26 for the upper annex, and 5CF5D4 for the coastal annex.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21390,
+    "completion_tokens": 19,
+    "total_tokens": 21905,
+    "prompt_tokens_details": {
+      "text_tokens": 21390,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 496,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 451020000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

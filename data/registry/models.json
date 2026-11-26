@@ -6,7 +6,10 @@
     "model_string": "deepseek/deepseek-v3.2",
     "tier": "open-weight-hosted",
     "open_weights": true,
-    "host": "deepinfra",
+    "host": "deepinfra/fp4",
+    "service_tier": "default",
+    "quantization": "fp4",
+    "listed_tiers": [],
     "sampling": {
       "temperature": 0
     },
@@ -19,7 +22,10 @@
     "model_string": "meta-llama/llama-3.3-70b-instruct",
     "tier": "open-weight-hosted",
     "open_weights": true,
-    "host": "deepinfra",
+    "host": "deepinfra/turbo",
+    "service_tier": "default",
+    "quantization": "fp8",
+    "listed_tiers": [],
     "sampling": {
       "temperature": 0
     },
@@ -33,10 +39,31 @@
     "tier": "open-weight-hosted",
     "open_weights": true,
     "host": "parasail",
+    "quantization": "bf16",
+    "listed_tiers": [],
     "sampling": {
       "temperature": 0
     },
     "notes": "Cheapest-tier contrast point in the registry."
+  },
+  {
+    "id": "mistral-small-3.2-24b-deepinfra",
+    "provider": "openrouter",
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "model_string": "mistralai/mistral-small-3.2-24b-instruct",
+    "tier": "open-weight-hosted",
+    "open_weights": true,
+    "host": "deepinfra/fp8",
+    "service_tier": "default",
+    "quantization": "fp8",
+    "listed_tiers": [
+      "deepinfra/fp8/flex",
+      "deepinfra/fp8/priority"
+    ],
+    "sampling": {
+      "temperature": 0
+    },
+    "notes": "Cheapest-tier contrast point in the registry. Admitted 2026-11-18 alongside mistral-small-3.2-24b-instruct (same weights, host Parasail), which Parasail no longer lists among the models it serves and which failed nearly every request routed to it on 2026-11-18; Mistral AI itself deprecated the model on 2026-04-29 and retired it from its own API on 2026-07-30. DeepInfra serves an fp8 quantisation, where Parasail served bf16. The host names one exact OpenRouter endpoint, deepinfra/fp8 (DeepInfra's default service tier): DeepInfra also lists flex and priority endpoints for this model at other prices, and the price snapshot is taken from the exact endpoint the calls are pinned to. See docs/methodology.md, registry inclusion policy, entry of 2026-11-18."
   },
   {
     "id": "qwen-2.5-72b-instruct",
@@ -45,7 +72,12 @@
     "model_string": "qwen/qwen-2.5-72b-instruct",
     "tier": "open-weight-hosted",
     "open_weights": true,
-    "host": "deepinfra",
+    "host": "deepinfra/fp8",
+    "service_tier": "default",
+    "quantization": "fp8",
+    "listed_tiers": [
+      "deepinfra/fp8/flex"
+    ],
     "sampling": {
       "temperature": 0
     },

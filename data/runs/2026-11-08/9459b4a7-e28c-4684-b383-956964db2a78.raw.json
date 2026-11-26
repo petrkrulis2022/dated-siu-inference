@@ -1,0 +1,39 @@
+{
+  "id": "12018a1d-a0ff-9a22-b147-608bc8f18a13",
+  "object": "chat.completion",
+  "created": 1794098590,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "4AB947\n203A71\n40D396\nF4B0DF",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes so far: 4AB947 for the coastal annex, 203A71 for the western annex, 40D396 for the coastal annex, and F4B0DF for the northern annex. I am scanning the rest of the document to confirm there are no more.\n\nI found four access codes in total. No additional codes appear in the remaining text.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21684,
+    "completion_tokens": 17,
+    "total_tokens": 22111,
+    "prompt_tokens_details": {
+      "text_tokens": 21684,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 410,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 451620000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

@@ -131,6 +131,73 @@ describe("renderPrintsList", () => {
     expect(html).toContain('href="../prints/2026-08-27.html"');
   });
 
+  it("marks a print whose constituent produced no run records on every class with an incomplete badge naming it", () => {
+    const html = renderPrintsList({
+      allPrints: [
+        print({
+          print_id: "2026-10-29",
+          date: "2026-10-29",
+          basket_costs: [
+            { model_id: "deepseek-v3.2", cost_usd: "0.001820" },
+            {
+              model_id: "gemini-3.1-pro-preview",
+              excluded_reason:
+                "undefined class: T1 (no run records for this class); T2 (no run records for this class); T3 (no run records for this class)",
+            } as never,
+          ],
+        }),
+      ],
+      basePath: "../",
+      chain: CHAIN,
+    });
+    expect(html).toContain('class="badge status-incomplete"');
+    expect(html).toContain(">incomplete<");
+    expect(html).toContain("gemini-3.1-pro-preview produced no run records");
+    expect(html).toContain('href="../prints/2026-10-29.html"');
+  });
+
+  it("does not mark a print whose excluded constituent ran on some class (a quality-gate exclusion is not a missing model)", () => {
+    const html = renderPrintsList({
+      allPrints: [
+        print({
+          print_id: "2026-08-26",
+          date: "2026-08-26",
+          basket_costs: [
+            { model_id: "deepseek-v3.2", cost_usd: "0.001820" },
+            {
+              model_id: "llama-3.3-70b-novita",
+              excluded_reason:
+                "undefined class: T1 (all 5 instance(s) failed the quality gate); T2 (no run records for this class)",
+            } as never,
+          ],
+        }),
+      ],
+      basePath: "../",
+      chain: CHAIN,
+    });
+    expect(html).not.toContain("status-incomplete");
+  });
+
+  it("marks the day a missing model was dropped without a gap row from its correction note", () => {
+    const html = renderPrintsList({
+      allPrints: [
+        print({
+          print_id: "2026-09-08",
+          date: "2026-09-08",
+          correction_notes: [
+            {
+              published_at: "2026-09-08",
+              note: "claude-sonnet-5 and claude-haiku-4-5 (both frontier-tier) produced zero run records for this print",
+            },
+          ],
+        }),
+      ],
+      basePath: "../",
+      chain: CHAIN,
+    });
+    expect(html).toContain('class="badge status-incomplete"');
+  });
+
   it("shows final only for a print with a signed reconciliation record, never from print.status", () => {
     // print.status is "provisional" on both fixtures here (the field never changes on the
     // signed body, by design) — the badge must derive purely from reconciledPrintIds.
@@ -181,6 +248,42 @@ describe("renderPrintsList", () => {
     expect(html).toContain("no print — run failed");
     expect(html).toContain("only 3 of 5 registered models qualified");
     expect(html).not.toContain("No print has been published yet");
+  });
+
+  it("shows the publisher's note on a missed day first, above the run's own refusal reason", () => {
+    const html = renderPrintsList({
+      allPrints: [],
+      incidents: [
+        {
+          date: "2026-11-15",
+          run_url: "https://github.com/petrkrulis2022/dated-siu-inference/actions/runs/43676508434",
+          reason: "Refusing to publish: only 2 of 6 frontier-tier models qualified (minimum 4)",
+          note: "Prepaid API credit ran out at Anthropic, Google and xAI.",
+          occurred_at: "2026-11-15T04:25:00Z",
+        },
+      ],
+      basePath: "../",
+      chain: CHAIN,
+    });
+    expect(html).toContain('<span class="incident-note">Prepaid API credit ran out at Anthropic, Google and xAI.</span>');
+    expect(html.indexOf("Prepaid API credit ran out")).toBeLessThan(html.indexOf(">Refusing to publish"));
+  });
+
+  it("adds no note element to a missed day that has none", () => {
+    const html = renderPrintsList({
+      allPrints: [],
+      incidents: [
+        {
+          date: "2026-08-25",
+          run_url: "https://github.com/petrkrulis2022/dated-siu-inference/actions/runs/32793706266",
+          reason: "Refusing to publish: only 3 of 5 registered models qualified (minimum 4).",
+          occurred_at: "2026-08-25T00:33:35Z",
+        },
+      ],
+      basePath: "../",
+      chain: CHAIN,
+    });
+    expect(html).not.toContain("incident-note");
   });
 
   it("shows the qualifying-set counts, spend, and a chained prior-attempt note on a second failure", () => {
@@ -274,5 +377,39 @@ describe("renderPrintsList", () => {
     expect(incidentIndex).toBeGreaterThan(-1);
     expect(latestPrintIndex).toBeGreaterThan(incidentIndex); // newest first: the miss sorts above it
     expect(oldestPrintIndex).toBeGreaterThan(latestPrintIndex);
+  });
+});
+
+describe("renderPrintsList: dated notices", () => {
+  const notice = {
+    id: "2026-11-21-pricing-errors",
+    date: "2026-11-21",
+    title: "Pricing errors <in> prints",
+    sections: [
+      { text: "We found two errors & will correct them." },
+      { heading: "1. Cached tokens", text: "Counted twice.", items: ["Qwen at flex", "Mistral at standard"] },
+    ],
+  };
+
+  it("shows a dated notice above the list, escaped, with an anchor a print's correction note can point to", () => {
+    const html = renderPrintsList({ allPrints: [print()], notices: [notice], basePath: "../", chain: CHAIN });
+    expect(html).toContain('id="notice-2026-11-21-pricing-errors"');
+    expect(html).toContain("Pricing errors &lt;in&gt; prints");
+    expect(html).toContain("21 Nov 2026");
+    expect(html).toContain("We found two errors &amp; will correct them.");
+    expect(html).toContain("<strong>1. Cached tokens</strong>");
+    expect(html).toContain("<li>Qwen at flex</li>");
+    expect(html.indexOf("notice-2026-11-21-pricing-errors")).toBeLessThan(html.indexOf("<table>"));
+  });
+
+  it("shows the newest notice first", () => {
+    const older = { ...notice, id: "2026-10-01-older", date: "2026-10-01", title: "Older" };
+    const html = renderPrintsList({ allPrints: [print()], notices: [older, notice], basePath: "../", chain: CHAIN });
+    expect(html.indexOf("notice-2026-11-21-pricing-errors")).toBeLessThan(html.indexOf("notice-2026-10-01-older"));
+  });
+
+  it("adds no notice block when there is none", () => {
+    const html = renderPrintsList({ allPrints: [print()], basePath: "../", chain: CHAIN });
+    expect(html).not.toContain("dated-notice");
   });
 });

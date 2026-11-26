@@ -1,0 +1,147 @@
+{
+  "version": "SIU-2026a",
+  "print_id": "2026-11-20-commodity",
+  "date": "2026-11-20",
+  "status": "provisional",
+  "basket_costs": [
+    {
+      "model_id": "deepseek-v3.2",
+      "cost_usd": "0.001819"
+    },
+    {
+      "model_id": "llama-3.3-70b-deepinfra",
+      "cost_usd": "0.000711"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-instruct",
+      "excluded_reason": "undefined class: T1 (no run records for this class); T2 (no run records for this class); T3 (no run records for this class)"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-deepinfra",
+      "cost_usd": "0.000540"
+    },
+    {
+      "model_id": "qwen-2.5-72b-instruct",
+      "cost_usd": "0.002003"
+    }
+  ],
+  "weights": {
+    "source": "equal",
+    "values": [
+      {
+        "model_id": "deepseek-v3.2",
+        "weight": "0.250000"
+      },
+      {
+        "model_id": "llama-3.3-70b-deepinfra",
+        "weight": "0.250000"
+      },
+      {
+        "model_id": "mistral-small-3.2-24b-deepinfra",
+        "weight": "0.250000"
+      },
+      {
+        "model_id": "qwen-2.5-72b-instruct",
+        "weight": "0.250000"
+      }
+    ]
+  },
+  "dated_siu": "0.001268",
+  "exchange_rate_table": [
+    {
+      "model_id": "deepseek-v3.2",
+      "usd_per_siu": "0.0018",
+      "spread_to_index": "0.4343",
+      "siu_per_usd": "549.8"
+    },
+    {
+      "model_id": "llama-3.3-70b-deepinfra",
+      "usd_per_siu": "0.0007",
+      "spread_to_index": "-0.4395",
+      "siu_per_usd": "1407.1"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-instruct",
+      "excluded_reason": "undefined class: T1 (no run records for this class); T2 (no run records for this class); T3 (no run records for this class)"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-deepinfra",
+      "usd_per_siu": "0.0005",
+      "spread_to_index": "-0.5742",
+      "siu_per_usd": "1852.2"
+    },
+    {
+      "model_id": "qwen-2.5-72b-instruct",
+      "usd_per_siu": "0.0020",
+      "spread_to_index": "0.5795",
+      "siu_per_usd": "499.3"
+    }
+  ],
+  "sensitivity_block": [
+    {
+      "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
+      "dated_siu": "0.0008488",
+      "delta": "-0.3306",
+      "applies_to": [
+        "deepseek-v3.2",
+        "llama-3.3-70b-deepinfra",
+        "mistral-small-3.2-24b-instruct",
+        "mistral-small-3.2-24b-deepinfra",
+        "qwen-2.5-72b-instruct"
+      ]
+    },
+    {
+      "policy_variant": "batch-discount: 50% off input and output",
+      "dated_siu": "0.0006349",
+      "delta": "-0.4993",
+      "applies_to": [
+        "deepseek-v3.2",
+        "llama-3.3-70b-deepinfra",
+        "mistral-small-3.2-24b-instruct",
+        "mistral-small-3.2-24b-deepinfra",
+        "qwen-2.5-72b-instruct"
+      ]
+    }
+  ],
+  "rounding": {
+    "dated_siu_sig_figs": 4,
+    "basket_cost_dp": 6,
+    "usd_per_siu_dp": 4,
+    "spread_dp": 4,
+    "siu_per_usd_dp": 1,
+    "mode": "ROUND_HALF_UP",
+    "siu_per_usd_mode": "ROUND_DOWN",
+    "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. dated_siu rounds to significant figures, not a fixed decimal-place count, so its precision scales with the price rather than being lost as it falls (found live, 2026-09-25 — see docs/methodology.md's Rounding section). basket_cost carries more decimal places than dated_siu needs at any price level so the published print stays reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
+  },
+  "cost_of_production_usd": "0.0822",
+  "price_snapshot_ref": "price-snapshot-merged-2026-11-20T00-37-16.182Z.json",
+  "methodology_version": "v0-draft",
+  "methodology_revision": "rules-2026-11-18",
+  "series": "commodity",
+  "signature": "0xb1990e26f1806c14caa3378b8e023fddcf9a0262ff8e54b43cf2e5855506ccec615f5c3f9076f7f681f92f7cd3d58096c3059727d73880c27b17c8a839756c0c",
+  "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
+  "anchor": {
+    "chain": "base-sepolia",
+    "status": "anchored",
+    "tx_hash": "0xa56590ed4256dd3cb4faad86ff8f4d654547e930527480b5c10ead42a9c51c3c",
+    "posted_at": "2026-11-20T00:40:58.000Z",
+    "additional_anchors": [
+      {
+        "chain": "arc-testnet",
+        "status": "anchored",
+        "tx_hash": "0x8e5576681b52f76a70b075a03ce0155329a374e25eb36c43d414bb98d0f6164c",
+        "posted_at": "2026-11-20T00:40:58.000Z"
+      }
+    ]
+  },
+  "correction_notes": [
+    {
+      "published_at": "2026-11-21",
+      "note": "Error in this print, disclosed before its correction: some constituent costs in it differ from what was billed for the same calls, through the pricing errors set out in the dated notice of 21 November 2026 at the top of the Prints page. This print will be corrected once, as a numbered revision with its own correction record; it stays published as it is, with its signature and anchor unchanged."
+    }
+  ],
+  "superseded_by": {
+    "print_id": "2026-11-20b-commodity",
+    "reason": "Corrects the pricing errors set out in the dated notice of 21 November 2026: cached prompt tokens counted twice for deepseek-v3.2; calls priced at a service tier other than the one they were billed on, for mistral-small-3.2-24b-deepinfra, qwen-2.5-72b-instruct. Recomputed under rules-2026-11-21 from this print's own run records and price snapshot, keeping its weighting and carry-forward rules; the qualifying set is unchanged."
+  }
+}

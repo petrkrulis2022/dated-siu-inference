@@ -1,0 +1,163 @@
+{
+  "version": "SIU-2026a",
+  "print_id": "2026-11-07b-frontier",
+  "date": "2026-11-07",
+  "status": "provisional",
+  "basket_costs": [
+    {
+      "model_id": "claude-sonnet-5",
+      "cost_usd": "0.023392"
+    },
+    {
+      "model_id": "gpt-5.1",
+      "cost_usd": "0.009094"
+    },
+    {
+      "model_id": "gemini-3.1-pro-preview",
+      "cost_usd": "0.030243"
+    },
+    {
+      "model_id": "grok-4.6",
+      "cost_usd": "0.016235"
+    },
+    {
+      "model_id": "claude-haiku-4-5",
+      "cost_usd": "0.007666"
+    },
+    {
+      "model_id": "gpt-5.4-mini",
+      "cost_usd": "0.005285"
+    }
+  ],
+  "weights": {
+    "source": "equal",
+    "values": [
+      {
+        "model_id": "claude-sonnet-5",
+        "weight": "0.166667"
+      },
+      {
+        "model_id": "gpt-5.1",
+        "weight": "0.166667"
+      },
+      {
+        "model_id": "gemini-3.1-pro-preview",
+        "weight": "0.166667"
+      },
+      {
+        "model_id": "grok-4.6",
+        "weight": "0.166667"
+      },
+      {
+        "model_id": "claude-haiku-4-5",
+        "weight": "0.166667"
+      },
+      {
+        "model_id": "gpt-5.4-mini",
+        "weight": "0.166667"
+      }
+    ]
+  },
+  "dated_siu": "0.01532",
+  "exchange_rate_table": [
+    {
+      "model_id": "claude-sonnet-5",
+      "usd_per_siu": "0.0234",
+      "spread_to_index": "0.5270",
+      "siu_per_usd": "42.7"
+    },
+    {
+      "model_id": "gpt-5.1",
+      "usd_per_siu": "0.0091",
+      "spread_to_index": "-0.4064",
+      "siu_per_usd": "109.9"
+    },
+    {
+      "model_id": "gemini-3.1-pro-preview",
+      "usd_per_siu": "0.0302",
+      "spread_to_index": "0.9742",
+      "siu_per_usd": "33.0"
+    },
+    {
+      "model_id": "grok-4.6",
+      "usd_per_siu": "0.0162",
+      "spread_to_index": "0.0598",
+      "siu_per_usd": "61.5"
+    },
+    {
+      "model_id": "claude-haiku-4-5",
+      "usd_per_siu": "0.0077",
+      "spread_to_index": "-0.4996",
+      "siu_per_usd": "130.4"
+    },
+    {
+      "model_id": "gpt-5.4-mini",
+      "usd_per_siu": "0.0053",
+      "spread_to_index": "-0.6550",
+      "siu_per_usd": "189.2"
+    }
+  ],
+  "sensitivity_block": [
+    {
+      "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
+      "dated_siu": "0.01131",
+      "delta": "-0.2620",
+      "applies_to": [
+        "claude-sonnet-5",
+        "gpt-5.1",
+        "gemini-3.1-pro-preview",
+        "grok-4.6",
+        "claude-haiku-4-5",
+        "gpt-5.4-mini"
+      ]
+    },
+    {
+      "policy_variant": "batch-discount: 50% off input and output",
+      "dated_siu": "0.007774",
+      "delta": "-0.4925",
+      "applies_to": [
+        "claude-sonnet-5",
+        "gpt-5.1",
+        "gemini-3.1-pro-preview",
+        "grok-4.6",
+        "claude-haiku-4-5",
+        "gpt-5.4-mini"
+      ]
+    }
+  ],
+  "rounding": {
+    "dated_siu_sig_figs": 4,
+    "basket_cost_dp": 6,
+    "usd_per_siu_dp": 4,
+    "spread_dp": 4,
+    "siu_per_usd_dp": 1,
+    "mode": "ROUND_HALF_UP",
+    "siu_per_usd_mode": "ROUND_DOWN",
+    "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. dated_siu rounds to significant figures, not a fixed decimal-place count, so its precision scales with the price rather than being lost as it falls (found live, 2026-09-25 — see docs/methodology.md's Rounding section). basket_cost carries more decimal places than dated_siu needs at any price level so the published print stays reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
+  },
+  "cost_of_production_usd": "1.4708",
+  "price_snapshot_ref": "price-snapshot-merged-2026-11-07T00-36-47.594Z.json",
+  "methodology_version": "v0-draft",
+  "methodology_revision": "rules-2026-11-21",
+  "series": "frontier",
+  "supersedes": {
+    "print_id": "2026-11-07-frontier",
+    "reason": "Corrects the pricing errors set out in the dated notice of 21 November 2026: cached prompt tokens counted twice for gemini-3.1-pro-preview, grok-4.6. Recomputed under rules-2026-11-21 from this print's own run records and price snapshot, keeping its weighting and carry-forward rules; the qualifying set is unchanged."
+  },
+  "signature": "0xb6edfb8305cfdff7555d2701c7f45310e528f704c6ba4c500cc7fa664c0d066b603e96469084b13d3deeeae5c3f1c44e088a5ae3d984f59664b51cfbe26c0a51",
+  "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
+  "anchor": {
+    "chain": "base-sepolia",
+    "status": "anchored",
+    "tx_hash": "0x5304d409e86ef5e5f8ab1c459a6d3331f67f71549ac98be6d9cc26124ef3ea08",
+    "posted_at": "2026-11-22T11:23:42.000Z",
+    "additional_anchors": [
+      {
+        "chain": "arc-testnet",
+        "status": "anchored",
+        "tx_hash": "0x409ce6e6b3b2ee31b87fdb9d0242af1a09dc7412d899ce9795f8af9f454803c2",
+        "posted_at": "2026-11-22T11:23:42.000Z"
+      }
+    ]
+  }
+}

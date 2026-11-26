@@ -1,4 +1,5 @@
-import { readdir } from "node:fs/promises";
+import { access, readdir } from "node:fs/promises";
+import { join } from "node:path";
 import type { Print } from "@touchstone/sdk";
 import { TASK_CLASSES, BASKET_VERSION } from "@touchstone/basket";
 import type { RoundingRules } from "../rounding.js";
@@ -7,9 +8,11 @@ import type { PrintInput, ModelInput } from "../compute/index.js";
 import type { Discrepancy } from "../verify.js";
 import { historicalPricingRulesFor } from "./historical-pricing-rules.js";
 import {
+  attachResponseBilling,
   buildModelInputs,
   loadCarryForwardHistory,
   loadDeclaredRunRecords,
+  loadPrint,
   loadPriceSnapshot,
   loadRegistry,
   loadRunManifest,
@@ -50,10 +53,24 @@ export async function buildVerifyInput(print: Print): Promise<BuiltVerifyInput> 
     // running, not even once. Fixed: load records from the underlying blended print_id instead,
     // then filter to this tier's own registered models exactly as cli/publish.ts's own tier loop
     // does (open_weights true = commodity, false = frontier).
-    const baseRunsPrintId = print.series
-      ? print.print_id.replace(/-frontier$|-commodity$/, "")
-      : print.print_id;
-    const records = await loadDeclaredRunRecords(baseRunsPrintId);
+    const stripSeries = (id: string) => id.replace(/-frontier$|-commodity$/, "");
+    // A correction (print.supersedes) recomputed from its original's own run records has no runs directory of its own: it reads the original's.
+    // A same-day redo that re-measured has its own, and reads that.
+    const ownRunsPrintId = stripSeries(print.print_id);
+    const hasOwnRuns = await access(runsDirFor(ownRunsPrintId))
+      .then(() => true)
+      .catch(() => false);
+    const baseRunsPrintId = hasOwnRuns || print.supersedes === undefined ? ownRunsPrintId : stripSeries(print.supersedes.print_id);
+    const revisionDate = print.methodology_revision?.match(/^rules-(\d{4}-\d{2}-\d{2})/)?.[1];
+    // rules-2026-11-20: a call is priced at what its response says it was billed. Records written before that carried the figure only in their raw
+    // response, which attachResponseBilling reads — the same function the harness uses for a new record.
+    const billedCostApplies = revisionDate !== undefined && revisionDate >= "2026-11-20";
+    // rules-2026-11-21: a cached prompt token is priced once, for a provider whose usage.input already includes it.
+    const cachedOnceApplies = revisionDate !== undefined && revisionDate >= "2026-11-21";
+    const declaredRecords = await loadDeclaredRunRecords(baseRunsPrintId);
+    const records = billedCostApplies
+      ? await attachResponseBilling(declaredRecords, runsDirFor(baseRunsPrintId))
+      : declaredRecords;
 
     // Declared-vs-actual drift check: the manifest is supposed to be the authoritative list of
     // this print's constituent run records (docs/methodology.md), but nothing stops the directory
@@ -113,8 +130,17 @@ export async function buildVerifyInput(print: Print): Promise<BuiltVerifyInput> 
     // see docs/methodology.md's rules-2026-09-25b entry for the same class of same-day edge
     // case). Applying carry-forward to a print that was never computed with it would recompute a
     // different qualifying set than the one actually signed — a false discrepancy, not a real one.
-    const revisionDate = print.methodology_revision?.match(/^rules-(\d{4}-\d{2}-\d{2})/)?.[1];
-    const carryForwardApplies = !print.series && revisionDate !== undefined && revisionDate >= "2026-09-26";
+    //
+    // A correction recomputed from its original's run records (print.supersedes, no runs directory of its own) changes pricing only: the rules
+    // that are not about pricing (carry-forward, family weighting) are the ones its original's own revision applied (correction.ts).
+    const rulesRevisionDate =
+      !hasOwnRuns && print.supersedes !== undefined
+        ? (await loadPrint(join(printsDir(), `${print.supersedes.print_id}.json`))).methodology_revision?.match(/^rules-(\d{4}-\d{2}-\d{2})/)?.[1]
+        : revisionDate;
+    const carryForwardApplies = !print.series && rulesRevisionDate !== undefined && rulesRevisionDate >= "2026-09-26";
+    // One weight per model family from rules-2026-11-18 on, for tier prints as well as the blend,
+    // keyed on the print's own declared revision for the same reason as carry-forward above.
+    const familyWeightingApplies = rulesRevisionDate !== undefined && rulesRevisionDate >= "2026-11-18";
 
     const input: PrintInput = {
       version: BASKET_VERSION,
@@ -127,6 +153,9 @@ export async function buildVerifyInput(print: Print): Promise<BuiltVerifyInput> 
         T3: TASK_CLASSES.T3.weight,
       },
       models,
+      ...(familyWeightingApplies ? { weightByModelFamily: true } : {}),
+      ...(billedCostApplies ? { billedCostWhereReported: true } : {}),
+      ...(cachedOnceApplies ? { cachedTokensCountedOnce: true } : {}),
       // Found live, 2026-09-26: never passing this meant every print published before the
       // 2026-09-25 significant-figures rounding fix (dated_siu_dp: 4, not dated_siu_sig_figs: 4)
       // was recomputed under TODAY's rounding rule regardless — a real verifier bug producing a

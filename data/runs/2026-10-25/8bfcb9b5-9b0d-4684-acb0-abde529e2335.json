@@ -1,0 +1,24 @@
+{
+  "run_id": "8bfcb9b5-9b0d-4684-acb0-abde529e2335",
+  "model_id": "gemini-3.1-pro-preview",
+  "task_class": "T3",
+  "instance_id": "T3-03",
+  "seed": 2425744117,
+  "attempt": 1,
+  "usage": {
+    "input": 99,
+    "output": 25,
+    "cached_input": 0,
+    "reasoning": 418
+  },
+  "latency_ms": 4017,
+  "gate_passed": true,
+  "raw_response_ref": "8bfcb9b5-9b0d-4684-acb0-abde529e2335.raw.json",
+  "deviations": [
+    "retry 1: Google request failed: 429",
+    "retry 2: Google request failed: 429",
+    "retry 3: Google request failed: 429",
+    "retry 4: Google request failed: 429",
+    "retry 5: Google request failed: 429"
+  ]
+}

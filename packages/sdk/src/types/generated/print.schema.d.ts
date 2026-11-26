@@ -230,6 +230,19 @@ export interface Print {
     reason: string;
   };
   /**
+   * Present on a correction: the numbered revision of an earlier print, computed from the same run records under the rule the original failed to apply (the revision policy's error procedure — methodology.md). Points to the original, which stays published with its own signature and anchor untouched and carries superseded_by pointing here. Known before signing, so part of this print's signed body.
+   */
+  supersedes?: {
+    /**
+     * The print_id this revision corrects.
+     */
+    print_id: string;
+    /**
+     * The defined, disclosed cause, in the same terms as the original's superseded_by.reason.
+     */
+    reason: string;
+  };
+  /**
    * build1-spec.md §6 Signing: TouchstoneAttestation.postPrint(bodyHash, version) on Base, timestamping the hash via a third party. 'stub' until the real contract (P13) exists — never presented as a real transaction.
    */
   anchor?: {

@@ -20,10 +20,18 @@ export interface ResolvedWeights {
  * Falls back to equal weights — and says so in the returned `source`, which the print
  * publishes — when no share data covers the qualifying set, or when the shares that do
  * cover it sum to zero.
+ *
+ * `familyOf` (rules-2026-11-18) applies docs/methodology.md's host-weighting rule to equal
+ * weights: one weight per model family, split equally between that family's qualifying entries
+ * (two hosts of the same open weights), never one per registry entry. An entry absent from the
+ * map is its own family. Found live, 2026-11-18: Mistral Small 3.2 on Parasail and on DeepInfra
+ * both qualified and each got a full weight. Routed-market shares are per entry already and are
+ * left as they are.
  */
 export function resolveWeights(
   qualifyingModelIds: string[],
   observedShares?: Map<string, string>,
+  familyOf?: Map<string, string>,
 ): ResolvedWeights {
   if (qualifyingModelIds.length === 0) {
     throw new Error(
@@ -47,6 +55,20 @@ export function resolveWeights(
         return { source: "routed-market-share", weights };
       }
     }
+  }
+
+  if (familyOf) {
+    const familyKey = (id: string) => familyOf.get(id) ?? id;
+    const entriesPerFamily = new Map<string, number>();
+    for (const id of qualifyingModelIds) {
+      entriesPerFamily.set(familyKey(id), (entriesPerFamily.get(familyKey(id)) ?? 0) + 1);
+    }
+    const familyWeight = new D(1).dividedBy(entriesPerFamily.size);
+    const weights = new Map<string, DecimalValue>();
+    for (const id of qualifyingModelIds) {
+      weights.set(id, familyWeight.dividedBy(entriesPerFamily.get(familyKey(id)) as number));
+    }
+    return { source: "equal", weights };
   }
 
   const equal = new D(1).dividedBy(qualifyingModelIds.length);

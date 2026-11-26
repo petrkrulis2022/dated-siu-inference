@@ -100,6 +100,7 @@ const SUBMIT_JOB_ARGS = JSON.stringify({
 function baseOptions(runsRoot: string) {
   return {
     modelString: "gpt-5.1",
+    provider: "openai",
     prices: PRICES,
     maxOutputTokens: 2000,
     maxTurns: 20,
@@ -141,6 +142,21 @@ describe("runSmokePass", () => {
     expect(result.summary).toBe("job passed G1-G5");
     expect(Number(result.totalRealizedUsd)).toBeGreaterThan(0);
     expect(result.turnLogs).toHaveLength(2);
+  });
+
+  it("totals realized spend exactly, rounded once to whole micro-dollars (invariant 4)", async () => {
+    // Calls of 3 and 7 prompt tokens at $0.25 per 1M cost exactly $0.0000025: 3 micro-dollars, half-up. Summed as floats it read $0.000002.
+    const texts = [`{"tool": "submit_job", "args": ${SUBMIT_JOB_ARGS}}`, '{"done": true, "summary": "done"}'];
+    const inputs = [3, 7];
+    let call = 0;
+    const adapter: Adapter = async () => {
+      const i = call++;
+      return { text: texts[i], usage: { input: inputs[i], output: 0, cached_input: 0, reasoning: 0 }, latency_ms: 1, raw: {}, deviations: [] };
+    };
+    const result = await runSmokePass({ ...baseOptions(runsRoot), prices: { priceInUsdPer1M: "0.25", priceOutUsdPer1M: "1" }, adapter });
+
+    expect(result.turnsUsed).toBe(2);
+    expect(result.totalRealizedUsd).toBe("0.000003");
   });
 
   it("halts with parse_error on an unparseable response rather than retrying or guessing", async () => {

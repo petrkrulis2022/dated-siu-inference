@@ -1,0 +1,39 @@
+{
+  "id": "ac03cbae-35e6-9a75-a9c0-fc030beb50ac",
+  "object": "chat.completion",
+  "created": 1795221670,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "2F248F\nA83A01\n2DE7AE\nF38AE2",
+        "reasoning_content": "I am scanning the archive log for internal notes containing archival access codes for named annexes.\n\nFour access codes were found: 2F248F, A83A01, 2DE7AE, and F38AE2.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21574,
+    "completion_tokens": 19,
+    "total_tokens": 21949,
+    "prompt_tokens_details": {
+      "text_tokens": 21574,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 356,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 446300000
+  },
+  "system_fingerprint": "fp_92a0a6ffe2",
+  "service_tier": "default"
+}

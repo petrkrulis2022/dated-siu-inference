@@ -212,5 +212,15 @@
     "status": "anchored",
     "tx_hash": "0x8639a721ab3e98237a3e7676e8f976a82c7cd776d030cbea93985bc4d13f5b1c",
     "posted_at": "2026-10-02T01:06:56.000Z"
+  },
+  "correction_notes": [
+    {
+      "published_at": "2026-11-21",
+      "note": "Error in this print, disclosed before its correction: some constituent costs in it differ from what was billed for the same calls, through the pricing errors set out in the dated notice of 21 November 2026 at the top of the Prints page. This print will be corrected once, as a numbered revision with its own correction record; it stays published as it is, with its signature and anchor unchanged."
+    }
+  ],
+  "superseded_by": {
+    "print_id": "2026-10-02b",
+    "reason": "Corrects the pricing errors set out in the dated notice of 21 November 2026: cached prompt tokens counted twice for deepseek-v3.2, mistral-small-3.2-24b-instruct, gemini-3.1-pro-preview (carried forward from 2026-10-01), grok-4.6. Recomputed under rules-2026-11-21 from this print's own run records and price snapshot, keeping its weighting and carry-forward rules; the qualifying set is unchanged."
   }
 }

@@ -1,0 +1,39 @@
+{
+  "id": "b7f60289-b35c-9493-9628-f2d95b382bcb",
+  "object": "chat.completion",
+  "created": 1793407158,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"tracking_id\":\"SH-BDE130\",\"origin_city\":\"Perth\",\"destination_city\":\"Lisbon\",\"weight_kg\":279,\"status\":\"delivered\",\"priority\":\"express\"}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nThe report contains a single shipment record. Tracking ID SH-BDE130 originated in Perth and is destined for Lisbon. The consignment weighs 279 kilograms with express priority status delivered.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1475,
+    "completion_tokens": 44,
+    "total_tokens": 1792,
+    "prompt_tokens_details": {
+      "text_tokens": 1475,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 273,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 40840000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

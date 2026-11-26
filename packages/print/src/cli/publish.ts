@@ -43,6 +43,7 @@ import {
   loadPriceSnapshot,
   loadRegistry,
   loadRunRecords,
+  attachResponseBilling,
   printsDir,
   runsDirFor,
 } from "./load-inputs.js";
@@ -60,7 +61,15 @@ const CARRY_FORWARD_ENABLED = process.env.TOUCHSTONE_CARRY_FORWARD_ENABLED === "
 /** docs/methodology.md's Revision history table — see publish-unattended.ts's identical
  * constant for the doc comment; kept in sync manually since the two CLIs don't share a common
  * module for this one line. */
-const METHODOLOGY_REVISION = CARRY_FORWARD_ENABLED ? "rules-2026-09-26" : "rules-2026-09-25";
+/** rules-2026-11-18 (one weight per model family) builds on rules-2026-09-26 and ships with it:
+ * the production path (carry-forward on) gets both; the legacy rules-2026-09-25 path is left
+ * exactly as it was. */
+const WEIGHT_BY_MODEL_FAMILY = CARRY_FORWARD_ENABLED;
+/** rules-2026-11-20: see cli/publish-unattended.ts's identical constant. */
+const BILLED_COST_WHERE_REPORTED = CARRY_FORWARD_ENABLED;
+/** rules-2026-11-21: see cli/publish-unattended.ts's identical constant. */
+const CACHED_TOKENS_COUNTED_ONCE = CARRY_FORWARD_ENABLED;
+const METHODOLOGY_REVISION = CARRY_FORWARD_ENABLED ? "rules-2026-11-21" : "rules-2026-09-25";
 
 const printId = process.argv[2] ?? new Date().toISOString().slice(0, 10);
 const printDate = DATE_PATTERN.test(printId) ? printId : new Date().toISOString().slice(0, 10);
@@ -156,7 +165,7 @@ if (billingExhaustedOutcomes.length > 0) {
 
 // 4. Compute -> sign -> write -> anchor. publishPrint refuses if any loaded record fails
 // schema validation, and always publishes provisional.
-const records = await loadRunRecords(printId);
+const records = await attachResponseBilling(await loadRunRecords(printId), runsDirFor(printId));
 const { models, unpriced } = buildModelInputs(registry, snapshot, records);
 if (unpriced.length > 0) {
   console.warn(
@@ -215,6 +224,9 @@ const result = await publishPrint(printsDir(), {
   price_snapshot_ref: snapshotFile,
   methodology_version: "v0-draft",
   methodology_revision: METHODOLOGY_REVISION,
+  weightByModelFamily: WEIGHT_BY_MODEL_FAMILY,
+  billedCostWhereReported: BILLED_COST_WHERE_REPORTED,
+  cachedTokensCountedOnce: CACHED_TOKENS_COUNTED_ONCE,
   privateKeyHex,
   attestationClient,
   runsDirPath: runsDirFor(printId),
@@ -238,7 +250,15 @@ console.log(`Anchor: ${result.anchor.status} (${result.anchor.chain})`);
 
 // Per-provider daily spend summary — see cli/publish-unattended.ts's identical block / the
 // compute function's own doc comment for why this differs from cost_of_production_usd.
-const priceByModelId = new Map(models.map((m) => [m.model_id, m.price]));
+const priceByModelId = new Map(
+  models.map((m) => [m.model_id, {
+        price: m.price,
+        tierPrices: m.tierPrices,
+        billed: BILLED_COST_WHERE_REPORTED,
+        cachedInsideInput: CACHED_TOKENS_COUNTED_ONCE && m.cachedInsideInput === true,
+        reasoningInsideOutput: CACHED_TOKENS_COUNTED_ONCE && m.reasoningInsideOutput === true,
+      }]),
+);
 const spendByProvider = computeSpendByProvider(records, registry, priceByModelId);
 const spendPath = join(runsDirFor(printId), "spend-by-provider.json");
 await writeFile(
@@ -303,6 +323,9 @@ for (const { series, seriesModels, registryIds } of tierGroups) {
       price_snapshot_ref: snapshotFile,
       methodology_version: "v0-draft",
       methodology_revision: METHODOLOGY_REVISION,
+      weightByModelFamily: WEIGHT_BY_MODEL_FAMILY,
+      billedCostWhereReported: BILLED_COST_WHERE_REPORTED,
+      cachedTokensCountedOnce: CACHED_TOKENS_COUNTED_ONCE,
       privateKeyHex,
       attestationClient,
       series,

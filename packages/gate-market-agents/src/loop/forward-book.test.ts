@@ -73,3 +73,13 @@ describe("ForwardQuoteBook", () => {
     expect(book.renderFor("ISSUER-A", 1, true)).toBe("");
   });
 });
+
+describe("ForwardQuoteBook.openFor ordering", () => {
+  it("orders by the rate's exact decimal value, not a float approximation of it (invariant 4)", () => {
+    // Equal as floats, so a Number comparison left them in insertion order.
+    const book = new ForwardQuoteBook();
+    book.record({ ...base, issuer: "ISSUER-A", rateUsdPerSiu: "0.10000000000000001" });
+    book.record({ ...base, issuer: "ISSUER-B", rateUsdPerSiu: "0.1" });
+    expect(book.openFor(2).map((q) => q.issuer)).toEqual(["ISSUER-B", "ISSUER-A"]);
+  });
+});

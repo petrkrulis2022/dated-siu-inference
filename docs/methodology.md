@@ -117,9 +117,15 @@ generator's opinions about your deployment.
 descending order, and only the first is ever an input to the print itself:
 
 1. **Executed runs and reconciled invoices.** `@touchstone/harness` actually calls each registered
-   model with the real basket, captures real token usage, and prices it against a pinned price
-   snapshot. This is the only tier that ever produces a number in `exchange_rate_table` or
-   `dated_siu`.
+   model with the real basket and captures real token usage, the service tier that served each
+   call, and what the call was billed. From `rules-2026-11-20` a call's cost is the amount its
+   provider's own response says was billed (OpenRouter's `usage.cost`, xAI's
+   `cost_in_usd_ticks`). Where a response reports no billed figure (Anthropic, OpenAI, Google),
+   its tokens are priced against a pinned price snapshot at the list price of the tier the
+   response reports, and the provider's invoice reconciles it (§7). From `rules-2026-11-21` that
+   list price counts each cached prompt token once, at the cached rate: Anthropic reports cache
+   reads apart from the prompt, and every other provider counts them inside it. This is the only
+   tier that ever produces a number in `exchange_rate_table` or `dated_siu`.
 2. **Routed-market realised flows.** Where a defensible source of real usage share across models
    exists, it informs _weights_ — never costs. See §3's host-weighting note and the registry
    inclusion policy below for exactly where this tier can and cannot enter the computation.
@@ -129,8 +135,9 @@ descending order, and only the first is ever an input to the print itself:
 
 This ordering is a hard invariant, not a style preference: mixing evidence tiers inside a single
 computed figure is exactly the kind of thing an outside auditor would be right to flag, and
-`packages/harness`'s run records (`RunRecord.usage`, captured from the real provider response,
-never from a list price) are the only thing `packages/print`'s cost computation reads.
+`packages/harness`'s run records (`RunRecord.usage`, `service_tier` and `billed_usd`, captured from
+the real provider response, never from a list price) are the only thing `packages/print`'s cost
+computation reads, with the price snapshot only for a call whose response reports no billed figure.
 
 **A fourth category exists and belongs to none of these tiers: telemetry from Touchstone's own
 demo agents** (`data/agent-runs/`, `packages/agents`). It is never an input to the print, at any
@@ -317,6 +324,10 @@ combined weight is never multiplied by the number of hosts it happens to be list
 routed-market-share weighting is wired (§ Registry inclusion policy, below), a multi-host open
 weight's family share is computed once, not once per host. Under the current equal-weighting
 default, one weight is allocated per qualifying model family, not per registry row.
+**Applied in code from `rules-2026-11-18`.** Until then the print code weighted per registry row.
+That made no difference while no two entries of one family qualified on the same day; the first
+time two did, in the first 2026-11-18 print (Mistral Small 3.2 on Parasail and on DeepInfra), each
+got a full weight. That print is superseded by `2026-11-18b` (Index governance, supersession rule).
 
 ### Promotional and free tiers
 
@@ -540,6 +551,9 @@ that actually applied, by date.
 | `rules-2026-09-25` | 2026-09-25 | `dated_siu` rounds to 4 significant figures, not a fixed 4 decimal places. | `d729ef4` |
 | `rules-2026-09-25b` | 2026-09-25 | Found live: `rules-2026-09-13`'s own fix never actually took effect. The cost formula, the schema field, and the snapshot sourcing all landed on 2026-09-13 — but `buildModelInputs` (`packages/print/src/cli/load-inputs.ts`), the one function every publish/verify path uses to turn a snapshot entry into the price the cost formula receives, never copied `price_cached_in_usd_per_1m` through. Every real print from 2026-09-14 through 2026-09-24 still priced cached_input at zero, silently, for every model — this row is the actual effective date. See this section's "Verification discipline for pricing fixes" note below for why this stayed undetected for twelve days. | `327d7b9` |
 | `rules-2026-09-26` | 2026-09-26 | A model missing today (run/provider failure, never a registry removal) carries its last real, published cost forward for up to 3 calendar days before being excluded; `dated_siu_median_diagnostic` published alongside `dated_siu` as a diagnostic only — see this section's own Aggregation policy above for the retro-validated evidence. | `5e4ca39` |
+| `rules-2026-11-18` | 2026-11-18 | One equal weight per model family, split equally between that family's qualifying entries (registry entries with the same `model_string`: the same open weights on different hosts), as the host-weighting rule has always stated; the minimum-qualifying counts, overall and per tier, count model families. Found live: in the first 2026-11-18 print two hosts of Mistral Small 3.2 both qualified and each got a full weight (that print's own correction notes). Builds on `rules-2026-09-26`. The unweighted median diagnostic still counts entries. | `packages/print/src/compute/weights.ts` |
+| `rules-2026-11-20` | 2026-11-21 | A call's cost is what its response says it was billed, where the response reports one; elsewhere its list price at the tier the response reports. Every run record carries the service tier and billed figure its response reported. An OpenRouter constituent is pinned to one exact endpoint tag and declares its purchase path (tag, numeric format, service tier, and the tier endpoints listed under it); the price fetch fails when a host matches more than one endpoint or the path has changed. A daily price check compares billed and listed cost per constituent and flags a gap over 1%. Applies what §2 already required: two errors against it, found live, are set out under "Pricing at the billed figure" below. Builds on `rules-2026-11-18`. | `packages/print/src/compute/class-cost.ts`, `price-check.ts`, `packages/prices/src/snapshot/build-snapshot.ts` |
+| `rules-2026-11-21` | 2026-11-22 | A list price counts each cached prompt token once, at the cached rate. For every provider but Anthropic a response's prompt count already includes its cached tokens, and the earlier formula added them again at the cached rate. Applies to carried-forward rows and to the daily price check. Found live: see "Cached tokens counted once" below. Builds on `rules-2026-11-20`. A correction of an earlier print recomputes under this revision and keeps the original's own weighting and carry-forward rules. | `packages/print/src/compute/class-cost.ts`, `packages/print/src/correction.ts` |
 
 A print's own `date` field, checked against this table, tells a reader which row applied even for
 a print published before `methodology_revision` existed — this table is the durable record; the
@@ -1030,6 +1044,133 @@ margin over the new ≈$1.05 baseline, sized the same way as before: to absorb T
 reasoning-token variance, and day-to-day provider price movement without tripping, while still
 catching a genuine runaway.
 
+**Admitted 2026-11-18: `mistral-small-3.2-24b-deepinfra` (host DeepInfra), alongside
+`mistral-small-3.2-24b-instruct` (host Parasail), which Parasail has stopped serving.** Same open
+weights, a different host, so a separate constituent (the serving surface is part of the
+constituent, below).
+
+_Why._ On 2026-11-18 Parasail's own status page listed 21 models and no Mistral model; OpenRouter's
+endpoint listing showed Parasail's endpoint for this model down, with 5.9% uptime over the previous
+day; in the second scheduled run for the 18 Nov print (04:23 UTC,
+`data/prints/incidents/2026-11-18.json`) Parasail failed every T3 instance and four of five T2
+instances (OpenRouter 502 "Provider returned error", or a response with no usage block), and a
+1-token test call the same afternoon got the same 502. Mistral AI itself lists Mistral Small 3.2
+(`mistral-small-2506`) as deprecated on 2026-04-29 and retired from its own API on 2026-07-30, with
+Mistral Small 4 as its replacement. Both scheduled runs for 18 Nov refused to publish: 2 of 4
+commodity-tier models qualified (Mistral for this reason; Qwen's T2 because OpenRouter credit had
+run out, since topped up). This index answers a thin tier by expanding the registry, never by
+loosening the gate.
+
+_Evidence._ DeepInfra still serves the same weights. The new entry met every admission criterion on
+its own evidence run (`data/runs/admission-2026-11-18/`): 15 of 15 instances passed, zero
+deviations, 116,308 input and 774 output tokens, billed $0.0099. A first evidence run the same day,
+before the host was pinned to one exact endpoint (below), also passed 15 of 15 and was replaced by
+this one; it was never published.
+
+_What differs from the Parasail entry._ DeepInfra serves an fp8 quantisation, where Parasail served
+bf16. DeepInfra's list price for its default endpoint is $0.075 in / $0.20 out per 1M tokens, with
+no separate cached-input rate; Parasail's, in the last snapshot it was priced from (2026-11-17), was
+$0.09 in / $0.30 out, $0.05 cached input. Mistral's basket cost therefore changes with the host as
+well as with the market, which is why the print records the change.
+
+_Pricing the exact endpoint._ OpenRouter lists three DeepInfra endpoints for this model, one per
+service tier: `deepinfra/fp8/flex` ($0.06 / $0.16), `deepinfra/fp8` ($0.075 / $0.20) and
+`deepinfra/fp8/priority` ($0.1125 / $0.30). The price snapshot used to match on provider name only
+and take the first one listed, the flex endpoint, a rate no evidence-run call was billed at. The
+registry host is therefore the exact endpoint, `deepinfra/fp8`, which the harness also pins its
+calls to, and the snapshot builder now prices a host that names an exact endpoint from that endpoint
+(`packages/prices/src/snapshot/build-snapshot.ts`; hosts that name a provider are matched as
+before). **Disclosed limitation:** the pin does not fix the service tier. DeepInfra served 7 of the
+15 evidence-run calls on its priority tier, billed at $0.1125 / $0.30. The snapshot prices every
+call at the default endpoint's list rate, so on the evidence run's own mix the priced cost
+($0.0089) is 10.4% below the billed cost ($0.0099).
+
+_Timing, and why the Parasail entry stays registered._ The admission takes effect in the 18 Nov
+print, as Grok's admission on 2026-09-08 took effect in the next print; that print's
+`constituent_changes` records it, and a note on the print says why. The Parasail entry is not
+removed today: under Index governance's constituent-change rule, a model retired mid-cycle by its
+provider is treated like a print-day-unavailable model and processed as a registry removal from the
+next review cycle onward, so until then it is excluded from each print it cannot complete, with the
+reason disclosed. Removing it now would also
+take it out of the recomputation of every published print it is part of, since verification reads
+the current registry. **The risk this left open happened the same day:** the host-weighting rule
+above allocates one weight per model family, but the print code then weighted per registry row, and
+in the run that published the first 2026-11-18 print Parasail completed the whole basket again, so
+both Mistral entries qualified and Mistral carried two of the nine weights. Disclosed on that print,
+fixed in `rules-2026-11-18` (Revision history, above), and the print superseded by a same-day redo,
+`2026-11-18b`. Mistral AI having retired the model
+means DeepInfra may stop serving it too; choosing a replacement is a separate decision, not made
+here.
+
+**Pricing at the billed figure (2026-11-20, `rules-2026-11-20`).** §2 has always said a constituent's
+cost comes from executed runs, and that a price a provider merely advertises is not evidence anyone
+paid it. Two errors against that rule were found on 2026-11-20 by comparing each call's priced cost
+with the amount its own OpenRouter response says was billed (`usage.cost`, stored in every run's raw
+response since the first print):
+
+1. _Qwen 2.5 72B was priced at a tier none of its calls was bought on._ Its registry host was the
+   provider name `deepinfra`. From the 2026-11-17 snapshot OpenRouter listed two DeepInfra endpoints
+   for the model, the flex tier (`deepinfra/fp8/flex`, $0.288 / $0.32 per 1M tokens) first and the
+   standard endpoint (`deepinfra/fp8`, $0.36 / $0.40) second, and the snapshot builder took the
+   first one listed. Every Qwen call on and after 2026-11-17 was served by DeepInfra on its standard
+   tier and billed at $0.36 / $0.40, so its cost in the prints of 17–20 November was 20% below what
+   was paid. The 2026-11-18 fix above (an exact endpoint tag is priced from that endpoint) did not
+   reach it, because its host named a provider, not an endpoint.
+2. _DeepInfra's Mistral Small 3.2 calls on the priority tier were priced at the standard rate._ The
+   admission note above disclosed this as a limitation of the pin. Under §2 it is an error: those
+   calls were billed at $0.1125 / $0.30, and the prints of 18–20 November priced them at $0.075 /
+   $0.20. Of the 60 counted calls from 18 to 20 November, 17 were served on the priority tier.
+
+Neither error came from OpenRouter's routing: every call recorded since 18 August was served by the
+host it was pinned to. What `rules-2026-11-20` changes, from the 2026-11-21 print on: a call's cost
+is its billed figure where the response reports one, and a list price, at the tier the response
+reports, only where it does not; every run record carries its service tier and billed figure; each
+OpenRouter constituent is pinned to one exact endpoint tag and declares its purchase path (host tag,
+numeric format, service tier, and the tier endpoints listed under it); the price fetch fails, rather
+than choosing, when a host matches more than one endpoint, and fails when a declared path has changed
+(a tier added, removed or renamed, or another numeric format), so the constituent is re-measured
+before it is priced again; and a daily price check (`data/runs/<print_id>/price-check.json`) compares
+each constituent's billed cost with its listed cost and flags a gap over 1%. Each request also asks
+for the constituent's declared service tier (`service_tier: "default"` for the four DeepInfra
+entries), which OpenRouter documents as keeping priority endpoints out of the pool; a live call on
+2026-11-20 confirmed each DeepInfra pin served on the default tier. The Parasail entry declares no
+tier and requests none: its endpoint lists no tiers, its responses name none, and a call with the
+parameter got a 429 that the same call without it did not. The prints of 17–20 November are to be corrected as numbered
+revisions under the revision policy, each pointing to its original; the originals keep their
+signatures and anchors.
+
+**Cached tokens counted once (2026-11-21, `rules-2026-11-21`).** The daily price check's first run,
+on the 2026-11-21 print, flagged grok-4.6 (billed 5.7% below its list price) and Mistral Small 3.2 on
+Parasail (1.1% below). The cause was the list-price formula, not the prices. It priced a call as its
+prompt tokens at the input rate plus its cached tokens at the cached rate. That is right for
+Anthropic, whose responses report cache reads apart from the prompt. Every other provider counts
+cached tokens inside the prompt (OpenAI-shaped responses inside `prompt_tokens`, Google inside
+`promptTokenCount`), so for them each cached token was priced twice: once at the full input rate and
+again at the cached rate. The error began with the 2026-09-26 print, the first in which a published
+cached rate reached the formula (`rules-2026-09-25b` above), and affects every print from then to
+2026-11-21 in which a constituent other than Anthropic's had cached tokens.
+
+Checked against what was billed. Every OpenRouter and xAI response since the first print reports its
+billed amount. Across the 2026-09-26 to 2026-11-21 runs, the corrected formula equals the billed
+figure on all 750 grok-4.6 calls (739 of them with cached tokens), and on all but 11 of the 1,523
+DeepSeek V3.2 and Parasail Mistral calls. The 11 are from the 2026-09-26 run, whose price snapshot
+had no cached rate for those two models, so their cached tokens were priced at the full input rate.
+Google's Gemini responses report no billed amount. Google's AI Studio charge for one day's Gemini
+calls, converted at the Czech National Bank's fixing for that day, matched the corrected formula to
+within 5% and was well below the earlier one: Google bills implicitly cached Gemini tokens at the
+cached rate. The OpenAI constituents' calls recorded no cached tokens and are unaffected.
+
+What `rules-2026-11-21` changes, from the 2026-11-22 print on: for every provider but Anthropic a
+cached token is taken out of the prompt count and priced once, at the cached rate (the tier's own
+cached rate where the response reports a tier); where no cached rate is published the whole prompt is
+priced at the input rate, as before. A call whose response reports a billed figure is still priced at
+that figure (`rules-2026-11-20`). Every print from 2026-09-26 to 2026-11-21 whose values the two
+errors changed is to be corrected once, as a numbered revision under the revision policy with its
+own correction record, recomputed under this revision with the original's own run records, price
+snapshot, weighting and carry-forward rules; the originals keep their signatures and anchors and
+each points to its correction. Both errors are disclosed in a dated notice on the prints page, and on
+each affected print, before any correction is published.
+
 **Removal:** a registry entry is removed when its price source stops publishing a price for it,
 its provider adapter stops functioning and no replacement adapter is available within one review
 cycle, the underlying model is discontinued by its provider, or it fails criterion 5 above
@@ -1289,7 +1430,14 @@ anchored; neither is edited or deleted. The superseded print carries a `supersed
 signature or its on-chain anchor) naming the print of record and the cause, stated in the same
 terms as the cause itself — e.g. "insufficient qualifying set," not "we preferred the other
 number." Defined causes, so far: **insufficient qualifying set** (below the minimum in this
-section, above). **Found live, not hypothesised:** on 2026-08-22, a harness run against an
+section, above); and, added 2026-11-18, **a computation that did not apply a published rule**.
+The first case of the second: the first 2026-11-18 print gave two host entries of one model family
+a full weight each, against the host-weighting rule; the redo `2026-11-18b` is a same-day re-run
+under `rules-2026-11-18`, so it carries fresh measurements as well as the corrected weighting, and
+the figure the first print would have shown with one weight per family is stated in that print's
+own correction note. Its frontier print, whose value the error did not touch, is superseded by
+`2026-11-18b-frontier` only because the redo re-measured every constituent and a day has one print
+of record per series. **Found live, not hypothesised:** on 2026-08-22, a harness run against an
 unfunded free-tier provider key qualified only 2 of 6 registered models and published anyway (the
 minimum-qualifying-set guard above didn't exist yet). A same-day re-run under a funded key
 qualified 4 of 6. The first print (`2026-08-22`) is superseded by the second (`2026-08-22b`) for

@@ -2,6 +2,7 @@ import type { RunRecord } from "@touchstone/sdk";
 import { validateRunRecord } from "@touchstone/sdk";
 import type { GradeResult, TaskInstance } from "@touchstone/basket";
 import type { AdapterResult } from "./adapters/types.js";
+import { billingFromRaw } from "./billing.js";
 
 /**
  * Takes `runId` as a parameter rather than generating one internally — the orchestrator
@@ -29,6 +30,8 @@ export function buildRunRecord(
     gate_passed: grade.passed,
     raw_response_ref: rawResponseRef,
     deviations: adapterResult.deviations,
+    // The tier that served the call and what it was billed, as the response states them (rules-2026-11-20): every record carries the tier.
+    ...billingFromRaw(adapterResult.raw),
   };
 
   const result = validateRunRecord(record);

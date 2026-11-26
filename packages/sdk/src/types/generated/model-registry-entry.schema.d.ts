@@ -21,7 +21,22 @@ export interface ModelRegistryEntry {
    */
   tier: "frontier" | "mid" | "open-weight-hosted";
   open_weights: boolean;
+  /**
+   * Where the calls are bought. For an OpenRouter-routed entry: one exact endpoint tag (e.g. "deepinfra/fp8"), which the harness pins its calls to and the price snapshot reads; a bare provider name matching more than one endpoint fails the price fetch.
+   */
   host: string;
+  /**
+   * The service tier this constituent is declared to buy, as the provider's responses name it (e.g. "default"); an OpenRouter request asks for exactly this tier. Absent for a host that lists no tiers and whose responses name none (Parasail): no tier is requested. Part of the declared purchase path with host, model_string, adapter and quantization (docs/methodology.md, rules-2026-11-20).
+   */
+  service_tier?: string;
+  /**
+   * The numeric format the pinned endpoint serves (e.g. "fp8", "bf16"), as OpenRouter's endpoint listing states it. Part of the declared purchase path.
+   */
+  quantization?: string;
+  /**
+   * The tier endpoints OpenRouter listed under the pinned endpoint when this purchase path was last measured (e.g. ["deepinfra/fp8/flex", "deepinfra/fp8/priority"]); empty when none. A listing that differs, a tier added, removed or renamed, fails the price fetch: the constituent is re-measured before it is priced again (docs/methodology.md, rules-2026-11-20).
+   */
+  listed_tiers?: string[];
   /**
    * The sampling this model is measured at, written down (docs/methodology.md, Sampling settings). `temperature` is a number the print sends as it is, or "provider-default" when the print sends no temperature at all because the model accepts no other value. The print sends exactly this and refuses a measurement whose request went out with anything else.
    */

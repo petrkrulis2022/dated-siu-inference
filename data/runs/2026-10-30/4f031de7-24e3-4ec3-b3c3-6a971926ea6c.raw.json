@@ -1,0 +1,39 @@
+{
+  "id": "a7aea428-2c02-917e-93ee-42a99eec66bf",
+  "object": "chat.completion",
+  "created": 1793321247,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "6F8BC0\nF155C8\nCF4436\n618282",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes so far: 6F8BC0 for the southern annex, F155C8 for the western annex, CF4436 for the coastal annex, and 618282 for the northern annex. I am continuing to scan the rest of the document.\n\nI have finished scanning the document. No additional access codes appear after the four already listed.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21673,
+    "completion_tokens": 17,
+    "total_tokens": 22178,
+    "prompt_tokens_details": {
+      "text_tokens": 21673,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 488,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 456080000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

@@ -42,6 +42,20 @@ export interface PriceSnapshot {
        * true when this price is observed below the computed hardware floor — build1-spec.md §5's subsidised-supply policy. Included in the exchange-rate table but excluded from the headline reference set.
        */
       subsidised?: boolean;
+      /**
+       * The one OpenRouter endpoint this entry's price was read from (e.g. "deepinfra/fp8"): the registry host's exact tag. Absent for an entry not priced from OpenRouter's per-endpoint listing.
+       */
+      endpoint_tag?: string;
+      /**
+       * Every endpoint OpenRouter lists under this entry's pinned endpoint, one per service tier (e.g. deepinfra/fp8/priority), with its own list price. Used to price a call at the tier its response reports, as a cross-check against the billed figure, and to detect a provider adding or renaming tiers under a constituent (docs/methodology.md, rules-2026-11-20).
+       */
+      tiers?: {
+        tag: string;
+        service_tier: string;
+        price_in_usd_per_1m: DecimalString;
+        price_out_usd_per_1m: DecimalString;
+        price_cached_in_usd_per_1m?: DecimalString;
+      }[];
     },
     ...{
       model_id: string;
@@ -55,6 +69,20 @@ export interface PriceSnapshot {
        * true when this price is observed below the computed hardware floor — build1-spec.md §5's subsidised-supply policy. Included in the exchange-rate table but excluded from the headline reference set.
        */
       subsidised?: boolean;
+      /**
+       * The one OpenRouter endpoint this entry's price was read from (e.g. "deepinfra/fp8"): the registry host's exact tag. Absent for an entry not priced from OpenRouter's per-endpoint listing.
+       */
+      endpoint_tag?: string;
+      /**
+       * Every endpoint OpenRouter lists under this entry's pinned endpoint, one per service tier (e.g. deepinfra/fp8/priority), with its own list price. Used to price a call at the tier its response reports, as a cross-check against the billed figure, and to detect a provider adding or renaming tiers under a constituent (docs/methodology.md, rules-2026-11-20).
+       */
+      tiers?: {
+        tag: string;
+        service_tier: string;
+        price_in_usd_per_1m: DecimalString;
+        price_out_usd_per_1m: DecimalString;
+        price_cached_in_usd_per_1m?: DecimalString;
+      }[];
     }[]
   ];
 }

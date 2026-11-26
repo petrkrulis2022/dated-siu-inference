@@ -1,0 +1,39 @@
+{
+  "id": "fc2ce533-86ed-9a54-96dd-028f067c454d",
+  "object": "chat.completion",
+  "created": 1794457542,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"tracking_id\": \"SH-555276\",\n  \"origin_city\": \"Nairobi\",\n  \"destination_city\": \"Auckland\",\n  \"weight_kg\": 305,\n  \"status\": \"delayed\",\n  \"priority\": \"express\"\n}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nThe report describes shipment SH-555276 from Nairobi to Auckland. It weighs 305 kilograms with express priority and is currently delayed.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1596,
+    "completion_tokens": 61,
+    "total_tokens": 1954,
+    "prompt_tokens_details": {
+      "text_tokens": 1596,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 297,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 45720000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

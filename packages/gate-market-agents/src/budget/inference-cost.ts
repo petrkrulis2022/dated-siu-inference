@@ -1,5 +1,5 @@
 import { callCost } from "@touchstone/print";
-import { D } from "@touchstone/sdk";
+import { D, callCostUsd, runRecordUsageConvention, type CallUsage } from "@touchstone/sdk";
 
 /** Real per-token USD prices — same shape `packages/agents/src/pricing.ts`'s
  * `PriceSnapshotEntryPrices` already uses, matching `data/registry/price-snapshot-merged-*.json`'s
@@ -8,6 +8,8 @@ import { D } from "@touchstone/sdk";
 export interface ModelPrices {
   priceInUsdPer1M: string;
   priceOutUsdPer1M: string;
+  /** The published cached-input rate, where the snapshot has one. */
+  priceCachedInUsdPer1M?: string;
 }
 
 /** A rough, honestly-approximate token estimate (chars/4) — the same heuristic
@@ -46,24 +48,11 @@ export function projectedTurnCostUsd(
   ).toString();
 }
 
-/** The real dollar cost of a real, already-completed call — mirrors
- * `packages/agents/src/pricing.ts`'s `realizedCost`, for the post-call true-up once a real turn
- * loop knows the real token usage. */
-export function realizedTurnCostUsd(
-  inputTokens: number,
-  outputTokens: number,
-  prices: ModelPrices,
-  cachedTokens = 0,
-  cachedPricePerMillion?: string,
-): string {
-  return callCost(
-    inputTokens,
-    outputTokens,
-    prices.priceInUsdPer1M,
-    prices.priceOutUsdPer1M,
-    cachedTokens,
-    cachedPricePerMillion,
-  ).toString();
+/** The real dollar cost of a real, already-completed call, for the post-call true-up: the call's whole usage priced through the one shared cost
+ * function (@touchstone/sdk's callCostUsd), in the harness adapters' usage convention for the agent's provider. Until 2026-11-21 this priced
+ * input and output only, so a Gemini or grok call's reasoning tokens went unpriced and cached tokens were charged at the full input rate. */
+export function realizedTurnCostUsd(usage: CallUsage, prices: ModelPrices, provider: string): string {
+  return callCostUsd(usage, prices, runRecordUsageConvention(provider)).toString();
 }
 
 /** `true` if `usdAmount` is exactly `"0"` — `BudgetCeiling.recordInferenceSpend` skips the

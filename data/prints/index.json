@@ -504,6 +504,24 @@
     "dated_siu": "0.007626"
   },
   {
+    "print_id": "2026-09-26b-commodity",
+    "date": "2026-09-26",
+    "status": "provisional",
+    "dated_siu": "0.001423"
+  },
+  {
+    "print_id": "2026-09-26b-frontier",
+    "date": "2026-09-26",
+    "status": "provisional",
+    "dated_siu": "0.01243"
+  },
+  {
+    "print_id": "2026-09-26b",
+    "date": "2026-09-26",
+    "status": "provisional",
+    "dated_siu": "0.007540"
+  },
+  {
     "print_id": "2026-09-27-commodity",
     "date": "2026-09-27",
     "status": "provisional",
@@ -520,6 +538,24 @@
     "date": "2026-09-27",
     "status": "provisional",
     "dated_siu": "0.01100"
+  },
+  {
+    "print_id": "2026-09-27b-commodity",
+    "date": "2026-09-27",
+    "status": "provisional",
+    "dated_siu": "0.001425"
+  },
+  {
+    "print_id": "2026-09-27b-frontier",
+    "date": "2026-09-27",
+    "status": "provisional",
+    "dated_siu": "0.01559"
+  },
+  {
+    "print_id": "2026-09-27b",
+    "date": "2026-09-27",
+    "status": "provisional",
+    "dated_siu": "0.009922"
   },
   {
     "print_id": "2026-09-28-commodity",
@@ -540,6 +576,24 @@
     "dated_siu": "0.01096"
   },
   {
+    "print_id": "2026-09-28b-commodity",
+    "date": "2026-09-28",
+    "status": "provisional",
+    "dated_siu": "0.001418"
+  },
+  {
+    "print_id": "2026-09-28b-frontier",
+    "date": "2026-09-28",
+    "status": "provisional",
+    "dated_siu": "0.01551"
+  },
+  {
+    "print_id": "2026-09-28b",
+    "date": "2026-09-28",
+    "status": "provisional",
+    "dated_siu": "0.009874"
+  },
+  {
     "print_id": "2026-09-29-commodity",
     "date": "2026-09-29",
     "status": "provisional",
@@ -556,6 +610,24 @@
     "date": "2026-09-29",
     "status": "provisional",
     "dated_siu": "0.01097"
+  },
+  {
+    "print_id": "2026-09-29b-commodity",
+    "date": "2026-09-29",
+    "status": "provisional",
+    "dated_siu": "0.001418"
+  },
+  {
+    "print_id": "2026-09-29b-frontier",
+    "date": "2026-09-29",
+    "status": "provisional",
+    "dated_siu": "0.01550"
+  },
+  {
+    "print_id": "2026-09-29b",
+    "date": "2026-09-29",
+    "status": "provisional",
+    "dated_siu": "0.009867"
   },
   {
     "print_id": "2026-09-30-commodity",
@@ -576,6 +648,24 @@
     "dated_siu": "0.01093"
   },
   {
+    "print_id": "2026-09-30b-commodity",
+    "date": "2026-09-30",
+    "status": "provisional",
+    "dated_siu": "0.001410"
+  },
+  {
+    "print_id": "2026-09-30b-frontier",
+    "date": "2026-09-30",
+    "status": "provisional",
+    "dated_siu": "0.01232"
+  },
+  {
+    "print_id": "2026-09-30b",
+    "date": "2026-09-30",
+    "status": "provisional",
+    "dated_siu": "0.009858"
+  },
+  {
     "print_id": "2026-10-01-commodity",
     "date": "2026-10-01",
     "status": "provisional",
@@ -592,6 +682,24 @@
     "date": "2026-10-01",
     "status": "provisional",
     "dated_siu": "0.01093"
+  },
+  {
+    "print_id": "2026-10-01b-commodity",
+    "date": "2026-10-01",
+    "status": "provisional",
+    "dated_siu": "0.001434"
+  },
+  {
+    "print_id": "2026-10-01b-frontier",
+    "date": "2026-10-01",
+    "status": "provisional",
+    "dated_siu": "0.01546"
+  },
+  {
+    "print_id": "2026-10-01b",
+    "date": "2026-10-01",
+    "status": "provisional",
+    "dated_siu": "0.009852"
   },
   {
     "print_id": "2026-10-02-commodity",
@@ -612,6 +720,24 @@
     "dated_siu": "0.01092"
   },
   {
+    "print_id": "2026-10-02b-commodity",
+    "date": "2026-10-02",
+    "status": "provisional",
+    "dated_siu": "0.001434"
+  },
+  {
+    "print_id": "2026-10-02b-frontier",
+    "date": "2026-10-02",
+    "status": "provisional",
+    "dated_siu": "0.01244"
+  },
+  {
+    "print_id": "2026-10-02b",
+    "date": "2026-10-02",
+    "status": "provisional",
+    "dated_siu": "0.009831"
+  },
+  {
     "print_id": "2026-10-03-commodity",
     "date": "2026-10-03",
     "status": "provisional",
@@ -628,6 +754,24 @@
     "date": "2026-10-03",
     "status": "provisional",
     "dated_siu": "0.01081"
+  },
+  {
+    "print_id": "2026-10-03b-commodity",
+    "date": "2026-10-03",
+    "status": "provisional",
+    "dated_siu": "0.001418"
+  },
+  {
+    "print_id": "2026-10-03b-frontier",
+    "date": "2026-10-03",
+    "status": "provisional",
+    "dated_siu": "0.01527"
+  },
+  {
+    "print_id": "2026-10-03b",
+    "date": "2026-10-03",
+    "status": "provisional",
+    "dated_siu": "0.009727"
   },
   {
     "print_id": "2026-10-04-commodity",
@@ -648,6 +792,24 @@
     "dated_siu": "0.01084"
   },
   {
+    "print_id": "2026-10-04b-commodity",
+    "date": "2026-10-04",
+    "status": "provisional",
+    "dated_siu": "0.001434"
+  },
+  {
+    "print_id": "2026-10-04b-frontier",
+    "date": "2026-10-04",
+    "status": "provisional",
+    "dated_siu": "0.01531"
+  },
+  {
+    "print_id": "2026-10-04b",
+    "date": "2026-10-04",
+    "status": "provisional",
+    "dated_siu": "0.009758"
+  },
+  {
     "print_id": "2026-10-05-commodity",
     "date": "2026-10-05",
     "status": "provisional",
@@ -664,6 +826,24 @@
     "date": "2026-10-05",
     "status": "provisional",
     "dated_siu": "0.01117"
+  },
+  {
+    "print_id": "2026-10-05b-commodity",
+    "date": "2026-10-05",
+    "status": "provisional",
+    "dated_siu": "0.001431"
+  },
+  {
+    "print_id": "2026-10-05b-frontier",
+    "date": "2026-10-05",
+    "status": "provisional",
+    "dated_siu": "0.01586"
+  },
+  {
+    "print_id": "2026-10-05b",
+    "date": "2026-10-05",
+    "status": "provisional",
+    "dated_siu": "0.01009"
   },
   {
     "print_id": "2026-10-06-commodity",
@@ -684,6 +864,24 @@
     "dated_siu": "0.01085"
   },
   {
+    "print_id": "2026-10-06b-commodity",
+    "date": "2026-10-06",
+    "status": "provisional",
+    "dated_siu": "0.001430"
+  },
+  {
+    "print_id": "2026-10-06b-frontier",
+    "date": "2026-10-06",
+    "status": "provisional",
+    "dated_siu": "0.01532"
+  },
+  {
+    "print_id": "2026-10-06b",
+    "date": "2026-10-06",
+    "status": "provisional",
+    "dated_siu": "0.009761"
+  },
+  {
     "print_id": "2026-10-09-commodity",
     "date": "2026-10-09",
     "status": "provisional",
@@ -700,6 +898,24 @@
     "date": "2026-10-09",
     "status": "provisional",
     "dated_siu": "0.01083"
+  },
+  {
+    "print_id": "2026-10-09b-commodity",
+    "date": "2026-10-09",
+    "status": "provisional",
+    "dated_siu": "0.001417"
+  },
+  {
+    "print_id": "2026-10-09b-frontier",
+    "date": "2026-10-09",
+    "status": "provisional",
+    "dated_siu": "0.01532"
+  },
+  {
+    "print_id": "2026-10-09b",
+    "date": "2026-10-09",
+    "status": "provisional",
+    "dated_siu": "0.009756"
   },
   {
     "print_id": "2026-10-10-commodity",
@@ -720,6 +936,24 @@
     "dated_siu": "0.01087"
   },
   {
+    "print_id": "2026-10-10b-commodity",
+    "date": "2026-10-10",
+    "status": "provisional",
+    "dated_siu": "0.001432"
+  },
+  {
+    "print_id": "2026-10-10b-frontier",
+    "date": "2026-10-10",
+    "status": "provisional",
+    "dated_siu": "0.01534"
+  },
+  {
+    "print_id": "2026-10-10b",
+    "date": "2026-10-10",
+    "status": "provisional",
+    "dated_siu": "0.009779"
+  },
+  {
     "print_id": "2026-10-11-commodity",
     "date": "2026-10-11",
     "status": "provisional",
@@ -736,6 +970,24 @@
     "date": "2026-10-11",
     "status": "provisional",
     "dated_siu": "0.01087"
+  },
+  {
+    "print_id": "2026-10-11b-commodity",
+    "date": "2026-10-11",
+    "status": "provisional",
+    "dated_siu": "0.001418"
+  },
+  {
+    "print_id": "2026-10-11b-frontier",
+    "date": "2026-10-11",
+    "status": "provisional",
+    "dated_siu": "0.01515"
+  },
+  {
+    "print_id": "2026-10-11b",
+    "date": "2026-10-11",
+    "status": "provisional",
+    "dated_siu": "0.009658"
   },
   {
     "print_id": "2026-10-12-commodity",
@@ -756,6 +1008,24 @@
     "dated_siu": "0.01090"
   },
   {
+    "print_id": "2026-10-12b-commodity",
+    "date": "2026-10-12",
+    "status": "provisional",
+    "dated_siu": "0.001421"
+  },
+  {
+    "print_id": "2026-10-12b-frontier",
+    "date": "2026-10-12",
+    "status": "provisional",
+    "dated_siu": "0.01518"
+  },
+  {
+    "print_id": "2026-10-12b",
+    "date": "2026-10-12",
+    "status": "provisional",
+    "dated_siu": "0.009676"
+  },
+  {
     "print_id": "2026-10-13-commodity",
     "date": "2026-10-13",
     "status": "provisional",
@@ -772,6 +1042,24 @@
     "date": "2026-10-13",
     "status": "provisional",
     "dated_siu": "0.01078"
+  },
+  {
+    "print_id": "2026-10-13b-commodity",
+    "date": "2026-10-13",
+    "status": "provisional",
+    "dated_siu": "0.001409"
+  },
+  {
+    "print_id": "2026-10-13b-frontier",
+    "date": "2026-10-13",
+    "status": "provisional",
+    "dated_siu": "0.01500"
+  },
+  {
+    "print_id": "2026-10-13b",
+    "date": "2026-10-13",
+    "status": "provisional",
+    "dated_siu": "0.009563"
   },
   {
     "print_id": "2026-10-14-commodity",
@@ -792,6 +1080,24 @@
     "dated_siu": "0.01085"
   },
   {
+    "print_id": "2026-10-14b-commodity",
+    "date": "2026-10-14",
+    "status": "provisional",
+    "dated_siu": "0.001423"
+  },
+  {
+    "print_id": "2026-10-14b-frontier",
+    "date": "2026-10-14",
+    "status": "provisional",
+    "dated_siu": "0.01510"
+  },
+  {
+    "print_id": "2026-10-14b",
+    "date": "2026-10-14",
+    "status": "provisional",
+    "dated_siu": "0.009629"
+  },
+  {
     "print_id": "2026-10-15-commodity",
     "date": "2026-10-15",
     "status": "provisional",
@@ -808,6 +1114,24 @@
     "date": "2026-10-15",
     "status": "provisional",
     "dated_siu": "0.01074"
+  },
+  {
+    "print_id": "2026-10-15b-commodity",
+    "date": "2026-10-15",
+    "status": "provisional",
+    "dated_siu": "0.001412"
+  },
+  {
+    "print_id": "2026-10-15b-frontier",
+    "date": "2026-10-15",
+    "status": "provisional",
+    "dated_siu": "0.01529"
+  },
+  {
+    "print_id": "2026-10-15b",
+    "date": "2026-10-15",
+    "status": "provisional",
+    "dated_siu": "0.009742"
   },
   {
     "print_id": "2026-10-16-commodity",
@@ -828,6 +1152,24 @@
     "dated_siu": "0.01089"
   },
   {
+    "print_id": "2026-10-16b-commodity",
+    "date": "2026-10-16",
+    "status": "provisional",
+    "dated_siu": "0.001420"
+  },
+  {
+    "print_id": "2026-10-16b-frontier",
+    "date": "2026-10-16",
+    "status": "provisional",
+    "dated_siu": "0.01516"
+  },
+  {
+    "print_id": "2026-10-16b",
+    "date": "2026-10-16",
+    "status": "provisional",
+    "dated_siu": "0.009663"
+  },
+  {
     "print_id": "2026-10-17-commodity",
     "date": "2026-10-17",
     "status": "provisional",
@@ -844,6 +1186,24 @@
     "date": "2026-10-17",
     "status": "provisional",
     "dated_siu": "0.01087"
+  },
+  {
+    "print_id": "2026-10-17b-commodity",
+    "date": "2026-10-17",
+    "status": "provisional",
+    "dated_siu": "0.001421"
+  },
+  {
+    "print_id": "2026-10-17b-frontier",
+    "date": "2026-10-17",
+    "status": "provisional",
+    "dated_siu": "0.01238"
+  },
+  {
+    "print_id": "2026-10-17b",
+    "date": "2026-10-17",
+    "status": "provisional",
+    "dated_siu": "0.009647"
   },
   {
     "print_id": "2026-10-18-commodity",
@@ -864,6 +1224,24 @@
     "dated_siu": "0.01088"
   },
   {
+    "print_id": "2026-10-18b-commodity",
+    "date": "2026-10-18",
+    "status": "provisional",
+    "dated_siu": "0.001422"
+  },
+  {
+    "print_id": "2026-10-18b-frontier",
+    "date": "2026-10-18",
+    "status": "provisional",
+    "dated_siu": "0.01514"
+  },
+  {
+    "print_id": "2026-10-18b",
+    "date": "2026-10-18",
+    "status": "provisional",
+    "dated_siu": "0.009652"
+  },
+  {
     "print_id": "2026-10-19-commodity",
     "date": "2026-10-19",
     "status": "provisional",
@@ -880,6 +1258,24 @@
     "date": "2026-10-19",
     "status": "provisional",
     "dated_siu": "0.01096"
+  },
+  {
+    "print_id": "2026-10-19b-commodity",
+    "date": "2026-10-19",
+    "status": "provisional",
+    "dated_siu": "0.001421"
+  },
+  {
+    "print_id": "2026-10-19b-frontier",
+    "date": "2026-10-19",
+    "status": "provisional",
+    "dated_siu": "0.01527"
+  },
+  {
+    "print_id": "2026-10-19b",
+    "date": "2026-10-19",
+    "status": "provisional",
+    "dated_siu": "0.009733"
   },
   {
     "print_id": "2026-10-20-commodity",
@@ -900,6 +1296,24 @@
     "dated_siu": "0.01084"
   },
   {
+    "print_id": "2026-10-20b-commodity",
+    "date": "2026-10-20",
+    "status": "provisional",
+    "dated_siu": "0.001422"
+  },
+  {
+    "print_id": "2026-10-20b-frontier",
+    "date": "2026-10-20",
+    "status": "provisional",
+    "dated_siu": "0.01508"
+  },
+  {
+    "print_id": "2026-10-20b",
+    "date": "2026-10-20",
+    "status": "provisional",
+    "dated_siu": "0.009616"
+  },
+  {
     "print_id": "2026-10-21-commodity",
     "date": "2026-10-21",
     "status": "provisional",
@@ -916,6 +1330,24 @@
     "date": "2026-10-21",
     "status": "provisional",
     "dated_siu": "0.01093"
+  },
+  {
+    "print_id": "2026-10-21b-commodity",
+    "date": "2026-10-21",
+    "status": "provisional",
+    "dated_siu": "0.001423"
+  },
+  {
+    "print_id": "2026-10-21b-frontier",
+    "date": "2026-10-21",
+    "status": "provisional",
+    "dated_siu": "0.01522"
+  },
+  {
+    "print_id": "2026-10-21b",
+    "date": "2026-10-21",
+    "status": "provisional",
+    "dated_siu": "0.009699"
   },
   {
     "print_id": "2026-10-22-commodity",
@@ -936,6 +1368,24 @@
     "dated_siu": "0.01084"
   },
   {
+    "print_id": "2026-10-22b-commodity",
+    "date": "2026-10-22",
+    "status": "provisional",
+    "dated_siu": "0.001423"
+  },
+  {
+    "print_id": "2026-10-22b-frontier",
+    "date": "2026-10-22",
+    "status": "provisional",
+    "dated_siu": "0.01507"
+  },
+  {
+    "print_id": "2026-10-22b",
+    "date": "2026-10-22",
+    "status": "provisional",
+    "dated_siu": "0.009610"
+  },
+  {
     "print_id": "2026-10-23-commodity",
     "date": "2026-10-23",
     "status": "provisional",
@@ -954,6 +1404,24 @@
     "dated_siu": "0.01085"
   },
   {
+    "print_id": "2026-10-23b-commodity",
+    "date": "2026-10-23",
+    "status": "provisional",
+    "dated_siu": "0.001419"
+  },
+  {
+    "print_id": "2026-10-23b-frontier",
+    "date": "2026-10-23",
+    "status": "provisional",
+    "dated_siu": "0.01509"
+  },
+  {
+    "print_id": "2026-10-23b",
+    "date": "2026-10-23",
+    "status": "provisional",
+    "dated_siu": "0.009622"
+  },
+  {
     "print_id": "2026-10-24-commodity",
     "date": "2026-10-24",
     "status": "provisional",
@@ -970,5 +1438,1019 @@
     "date": "2026-10-24",
     "status": "provisional",
     "dated_siu": "0.01081"
+  },
+  {
+    "print_id": "2026-10-24b-commodity",
+    "date": "2026-10-24",
+    "status": "provisional",
+    "dated_siu": "0.001414"
+  },
+  {
+    "print_id": "2026-10-24b-frontier",
+    "date": "2026-10-24",
+    "status": "provisional",
+    "dated_siu": "0.01504"
+  },
+  {
+    "print_id": "2026-10-24b",
+    "date": "2026-10-24",
+    "status": "provisional",
+    "dated_siu": "0.009591"
+  },
+  {
+    "print_id": "2026-10-25-commodity",
+    "date": "2026-10-25",
+    "status": "provisional",
+    "dated_siu": "0.001434"
+  },
+  {
+    "print_id": "2026-10-25-frontier",
+    "date": "2026-10-25",
+    "status": "provisional",
+    "dated_siu": "0.01704"
+  },
+  {
+    "print_id": "2026-10-25",
+    "date": "2026-10-25",
+    "status": "provisional",
+    "dated_siu": "0.01080"
+  },
+  {
+    "print_id": "2026-10-25b-commodity",
+    "date": "2026-10-25",
+    "status": "provisional",
+    "dated_siu": "0.001428"
+  },
+  {
+    "print_id": "2026-10-25b-frontier",
+    "date": "2026-10-25",
+    "status": "provisional",
+    "dated_siu": "0.01498"
+  },
+  {
+    "print_id": "2026-10-25b",
+    "date": "2026-10-25",
+    "status": "provisional",
+    "dated_siu": "0.009560"
+  },
+  {
+    "print_id": "2026-10-26-commodity",
+    "date": "2026-10-26",
+    "status": "provisional",
+    "dated_siu": "0.001423"
+  },
+  {
+    "print_id": "2026-10-26-frontier",
+    "date": "2026-10-26",
+    "status": "provisional",
+    "dated_siu": "0.01249"
+  },
+  {
+    "print_id": "2026-10-26",
+    "date": "2026-10-26",
+    "status": "provisional",
+    "dated_siu": "0.01071"
+  },
+  {
+    "print_id": "2026-10-26b-commodity",
+    "date": "2026-10-26",
+    "status": "provisional",
+    "dated_siu": "0.001415"
+  },
+  {
+    "print_id": "2026-10-26b-frontier",
+    "date": "2026-10-26",
+    "status": "provisional",
+    "dated_siu": "0.01228"
+  },
+  {
+    "print_id": "2026-10-26b",
+    "date": "2026-10-26",
+    "status": "provisional",
+    "dated_siu": "0.009479"
+  },
+  {
+    "print_id": "2026-10-27-commodity",
+    "date": "2026-10-27",
+    "status": "provisional",
+    "dated_siu": "0.001440"
+  },
+  {
+    "print_id": "2026-10-27-frontier",
+    "date": "2026-10-27",
+    "status": "provisional",
+    "dated_siu": "0.01266"
+  },
+  {
+    "print_id": "2026-10-27",
+    "date": "2026-10-27",
+    "status": "provisional",
+    "dated_siu": "0.01080"
+  },
+  {
+    "print_id": "2026-10-27b-commodity",
+    "date": "2026-10-27",
+    "status": "provisional",
+    "dated_siu": "0.001435"
+  },
+  {
+    "print_id": "2026-10-27b-frontier",
+    "date": "2026-10-27",
+    "status": "provisional",
+    "dated_siu": "0.01246"
+  },
+  {
+    "print_id": "2026-10-27b",
+    "date": "2026-10-27",
+    "status": "provisional",
+    "dated_siu": "0.009574"
+  },
+  {
+    "print_id": "2026-10-28-commodity",
+    "date": "2026-10-28",
+    "status": "provisional",
+    "dated_siu": "0.001420"
+  },
+  {
+    "print_id": "2026-10-28-frontier",
+    "date": "2026-10-28",
+    "status": "provisional",
+    "dated_siu": "0.01252"
+  },
+  {
+    "print_id": "2026-10-28",
+    "date": "2026-10-28",
+    "status": "provisional",
+    "dated_siu": "0.01072"
+  },
+  {
+    "print_id": "2026-10-28b-commodity",
+    "date": "2026-10-28",
+    "status": "provisional",
+    "dated_siu": "0.001415"
+  },
+  {
+    "print_id": "2026-10-28b-frontier",
+    "date": "2026-10-28",
+    "status": "provisional",
+    "dated_siu": "0.01231"
+  },
+  {
+    "print_id": "2026-10-28b",
+    "date": "2026-10-28",
+    "status": "provisional",
+    "dated_siu": "0.009492"
+  },
+  {
+    "print_id": "2026-10-29-commodity",
+    "date": "2026-10-29",
+    "status": "provisional",
+    "dated_siu": "0.001415"
+  },
+  {
+    "print_id": "2026-10-29-frontier",
+    "date": "2026-10-29",
+    "status": "provisional",
+    "dated_siu": "0.01249"
+  },
+  {
+    "print_id": "2026-10-29",
+    "date": "2026-10-29",
+    "status": "provisional",
+    "dated_siu": "0.007569"
+  },
+  {
+    "print_id": "2026-10-29b-commodity",
+    "date": "2026-10-29",
+    "status": "provisional",
+    "dated_siu": "0.001411"
+  },
+  {
+    "print_id": "2026-10-29b-frontier",
+    "date": "2026-10-29",
+    "status": "provisional",
+    "dated_siu": "0.01228"
+  },
+  {
+    "print_id": "2026-10-29b",
+    "date": "2026-10-29",
+    "status": "provisional",
+    "dated_siu": "0.007451"
+  },
+  {
+    "print_id": "2026-10-30-commodity",
+    "date": "2026-10-30",
+    "status": "provisional",
+    "dated_siu": "0.001433"
+  },
+  {
+    "print_id": "2026-10-30-frontier",
+    "date": "2026-10-30",
+    "status": "provisional",
+    "dated_siu": "0.01261"
+  },
+  {
+    "print_id": "2026-10-30",
+    "date": "2026-10-30",
+    "status": "provisional",
+    "dated_siu": "0.007644"
+  },
+  {
+    "print_id": "2026-10-30b-commodity",
+    "date": "2026-10-30",
+    "status": "provisional",
+    "dated_siu": "0.001426"
+  },
+  {
+    "print_id": "2026-10-30b-frontier",
+    "date": "2026-10-30",
+    "status": "provisional",
+    "dated_siu": "0.01240"
+  },
+  {
+    "print_id": "2026-10-30b",
+    "date": "2026-10-30",
+    "status": "provisional",
+    "dated_siu": "0.007525"
+  },
+  {
+    "print_id": "2026-10-31-commodity",
+    "date": "2026-10-31",
+    "status": "provisional",
+    "dated_siu": "0.001420"
+  },
+  {
+    "print_id": "2026-10-31-frontier",
+    "date": "2026-10-31",
+    "status": "provisional",
+    "dated_siu": "0.01251"
+  },
+  {
+    "print_id": "2026-10-31",
+    "date": "2026-10-31",
+    "status": "provisional",
+    "dated_siu": "0.007582"
+  },
+  {
+    "print_id": "2026-10-31b-commodity",
+    "date": "2026-10-31",
+    "status": "provisional",
+    "dated_siu": "0.001414"
+  },
+  {
+    "print_id": "2026-10-31b-frontier",
+    "date": "2026-10-31",
+    "status": "provisional",
+    "dated_siu": "0.01230"
+  },
+  {
+    "print_id": "2026-10-31b",
+    "date": "2026-10-31",
+    "status": "provisional",
+    "dated_siu": "0.007463"
+  },
+  {
+    "print_id": "2026-11-01-commodity",
+    "date": "2026-11-01",
+    "status": "provisional",
+    "dated_siu": "0.001420"
+  },
+  {
+    "print_id": "2026-11-01-frontier",
+    "date": "2026-11-01",
+    "status": "provisional",
+    "dated_siu": "0.01256"
+  },
+  {
+    "print_id": "2026-11-01",
+    "date": "2026-11-01",
+    "status": "provisional",
+    "dated_siu": "0.007609"
+  },
+  {
+    "print_id": "2026-11-01b-commodity",
+    "date": "2026-11-01",
+    "status": "provisional",
+    "dated_siu": "0.001415"
+  },
+  {
+    "print_id": "2026-11-01b-frontier",
+    "date": "2026-11-01",
+    "status": "provisional",
+    "dated_siu": "0.01235"
+  },
+  {
+    "print_id": "2026-11-01b",
+    "date": "2026-11-01",
+    "status": "provisional",
+    "dated_siu": "0.007492"
+  },
+  {
+    "print_id": "2026-11-02-commodity",
+    "date": "2026-11-02",
+    "status": "provisional",
+    "dated_siu": "0.001438"
+  },
+  {
+    "print_id": "2026-11-02-frontier",
+    "date": "2026-11-02",
+    "status": "provisional",
+    "dated_siu": "0.01265"
+  },
+  {
+    "print_id": "2026-11-02",
+    "date": "2026-11-02",
+    "status": "provisional",
+    "dated_siu": "0.007665"
+  },
+  {
+    "print_id": "2026-11-02b-commodity",
+    "date": "2026-11-02",
+    "status": "provisional",
+    "dated_siu": "0.001434"
+  },
+  {
+    "print_id": "2026-11-02b-frontier",
+    "date": "2026-11-02",
+    "status": "provisional",
+    "dated_siu": "0.01244"
+  },
+  {
+    "print_id": "2026-11-02b",
+    "date": "2026-11-02",
+    "status": "provisional",
+    "dated_siu": "0.007548"
+  },
+  {
+    "print_id": "2026-11-03-commodity",
+    "date": "2026-11-03",
+    "status": "provisional",
+    "dated_siu": "0.001425"
+  },
+  {
+    "print_id": "2026-11-03-frontier",
+    "date": "2026-11-03",
+    "status": "provisional",
+    "dated_siu": "0.01254"
+  },
+  {
+    "print_id": "2026-11-03",
+    "date": "2026-11-03",
+    "status": "provisional",
+    "dated_siu": "0.007600"
+  },
+  {
+    "print_id": "2026-11-03b-commodity",
+    "date": "2026-11-03",
+    "status": "provisional",
+    "dated_siu": "0.001419"
+  },
+  {
+    "print_id": "2026-11-03b-frontier",
+    "date": "2026-11-03",
+    "status": "provisional",
+    "dated_siu": "0.01233"
+  },
+  {
+    "print_id": "2026-11-03b",
+    "date": "2026-11-03",
+    "status": "provisional",
+    "dated_siu": "0.007481"
+  },
+  {
+    "print_id": "2026-11-04-commodity",
+    "date": "2026-11-04",
+    "status": "provisional",
+    "dated_siu": "0.001431"
+  },
+  {
+    "print_id": "2026-11-04-frontier",
+    "date": "2026-11-04",
+    "status": "provisional",
+    "dated_siu": "0.01258"
+  },
+  {
+    "print_id": "2026-11-04",
+    "date": "2026-11-04",
+    "status": "provisional",
+    "dated_siu": "0.007623"
+  },
+  {
+    "print_id": "2026-11-04b-commodity",
+    "date": "2026-11-04",
+    "status": "provisional",
+    "dated_siu": "0.001426"
+  },
+  {
+    "print_id": "2026-11-04b-frontier",
+    "date": "2026-11-04",
+    "status": "provisional",
+    "dated_siu": "0.01237"
+  },
+  {
+    "print_id": "2026-11-04b",
+    "date": "2026-11-04",
+    "status": "provisional",
+    "dated_siu": "0.007505"
+  },
+  {
+    "print_id": "2026-11-05-commodity",
+    "date": "2026-11-05",
+    "status": "provisional",
+    "dated_siu": "0.001429"
+  },
+  {
+    "print_id": "2026-11-05-frontier",
+    "date": "2026-11-05",
+    "status": "provisional",
+    "dated_siu": "0.01715"
+  },
+  {
+    "print_id": "2026-11-05",
+    "date": "2026-11-05",
+    "status": "provisional",
+    "dated_siu": "0.01086"
+  },
+  {
+    "print_id": "2026-11-05b-commodity",
+    "date": "2026-11-05",
+    "status": "provisional",
+    "dated_siu": "0.001424"
+  },
+  {
+    "print_id": "2026-11-05b-frontier",
+    "date": "2026-11-05",
+    "status": "provisional",
+    "dated_siu": "0.01511"
+  },
+  {
+    "print_id": "2026-11-05b",
+    "date": "2026-11-05",
+    "status": "provisional",
+    "dated_siu": "0.009637"
+  },
+  {
+    "print_id": "2026-11-06-commodity",
+    "date": "2026-11-06",
+    "status": "provisional",
+    "dated_siu": "0.001436"
+  },
+  {
+    "print_id": "2026-11-06-frontier",
+    "date": "2026-11-06",
+    "status": "provisional",
+    "dated_siu": "0.01713"
+  },
+  {
+    "print_id": "2026-11-06",
+    "date": "2026-11-06",
+    "status": "provisional",
+    "dated_siu": "0.01085"
+  },
+  {
+    "print_id": "2026-11-06b-commodity",
+    "date": "2026-11-06",
+    "status": "provisional",
+    "dated_siu": "0.001432"
+  },
+  {
+    "print_id": "2026-11-06b-frontier",
+    "date": "2026-11-06",
+    "status": "provisional",
+    "dated_siu": "0.01582"
+  },
+  {
+    "print_id": "2026-11-06b",
+    "date": "2026-11-06",
+    "status": "provisional",
+    "dated_siu": "0.01007"
+  },
+  {
+    "print_id": "2026-11-07-commodity",
+    "date": "2026-11-07",
+    "status": "provisional",
+    "dated_siu": "0.001423"
+  },
+  {
+    "print_id": "2026-11-07-frontier",
+    "date": "2026-11-07",
+    "status": "provisional",
+    "dated_siu": "0.01735"
+  },
+  {
+    "print_id": "2026-11-07",
+    "date": "2026-11-07",
+    "status": "provisional",
+    "dated_siu": "0.01098"
+  },
+  {
+    "print_id": "2026-11-07b-commodity",
+    "date": "2026-11-07",
+    "status": "provisional",
+    "dated_siu": "0.001418"
+  },
+  {
+    "print_id": "2026-11-07b-frontier",
+    "date": "2026-11-07",
+    "status": "provisional",
+    "dated_siu": "0.01532"
+  },
+  {
+    "print_id": "2026-11-07b",
+    "date": "2026-11-07",
+    "status": "provisional",
+    "dated_siu": "0.009759"
+  },
+  {
+    "print_id": "2026-11-08-commodity",
+    "date": "2026-11-08",
+    "status": "provisional",
+    "dated_siu": "0.001440"
+  },
+  {
+    "print_id": "2026-11-08-frontier",
+    "date": "2026-11-08",
+    "status": "provisional",
+    "dated_siu": "0.01717"
+  },
+  {
+    "print_id": "2026-11-08",
+    "date": "2026-11-08",
+    "status": "provisional",
+    "dated_siu": "0.01088"
+  },
+  {
+    "print_id": "2026-11-08b-commodity",
+    "date": "2026-11-08",
+    "status": "provisional",
+    "dated_siu": "0.001435"
+  },
+  {
+    "print_id": "2026-11-08b-frontier",
+    "date": "2026-11-08",
+    "status": "provisional",
+    "dated_siu": "0.01511"
+  },
+  {
+    "print_id": "2026-11-08b",
+    "date": "2026-11-08",
+    "status": "provisional",
+    "dated_siu": "0.009642"
+  },
+  {
+    "print_id": "2026-11-09-commodity",
+    "date": "2026-11-09",
+    "status": "provisional",
+    "dated_siu": "0.001431"
+  },
+  {
+    "print_id": "2026-11-09-frontier",
+    "date": "2026-11-09",
+    "status": "provisional",
+    "dated_siu": "0.01794"
+  },
+  {
+    "print_id": "2026-11-09",
+    "date": "2026-11-09",
+    "status": "provisional",
+    "dated_siu": "0.01089"
+  },
+  {
+    "print_id": "2026-11-09b-commodity",
+    "date": "2026-11-09",
+    "status": "provisional",
+    "dated_siu": "0.001426"
+  },
+  {
+    "print_id": "2026-11-09b-frontier",
+    "date": "2026-11-09",
+    "status": "provisional",
+    "dated_siu": "0.01487"
+  },
+  {
+    "print_id": "2026-11-09b",
+    "date": "2026-11-09",
+    "status": "provisional",
+    "dated_siu": "0.009656"
+  },
+  {
+    "print_id": "2026-11-10-commodity",
+    "date": "2026-11-10",
+    "status": "provisional",
+    "dated_siu": "0.001436"
+  },
+  {
+    "print_id": "2026-11-10-frontier",
+    "date": "2026-11-10",
+    "status": "provisional",
+    "dated_siu": "0.01797"
+  },
+  {
+    "print_id": "2026-11-10",
+    "date": "2026-11-10",
+    "status": "provisional",
+    "dated_siu": "0.01090"
+  },
+  {
+    "print_id": "2026-11-10b-commodity",
+    "date": "2026-11-10",
+    "status": "provisional",
+    "dated_siu": "0.001430"
+  },
+  {
+    "print_id": "2026-11-10b-frontier",
+    "date": "2026-11-10",
+    "status": "provisional",
+    "dated_siu": "0.01489"
+  },
+  {
+    "print_id": "2026-11-10b",
+    "date": "2026-11-10",
+    "status": "provisional",
+    "dated_siu": "0.009662"
+  },
+  {
+    "print_id": "2026-11-11-commodity",
+    "date": "2026-11-11",
+    "status": "provisional",
+    "dated_siu": "0.001425"
+  },
+  {
+    "print_id": "2026-11-11-frontier",
+    "date": "2026-11-11",
+    "status": "provisional",
+    "dated_siu": "0.01788"
+  },
+  {
+    "print_id": "2026-11-11",
+    "date": "2026-11-11",
+    "status": "provisional",
+    "dated_siu": "0.01086"
+  },
+  {
+    "print_id": "2026-11-11b-commodity",
+    "date": "2026-11-11",
+    "status": "provisional",
+    "dated_siu": "0.001421"
+  },
+  {
+    "print_id": "2026-11-11b-frontier",
+    "date": "2026-11-11",
+    "status": "provisional",
+    "dated_siu": "0.01482"
+  },
+  {
+    "print_id": "2026-11-11b",
+    "date": "2026-11-11",
+    "status": "provisional",
+    "dated_siu": "0.009633"
+  },
+  {
+    "print_id": "2026-11-12-commodity",
+    "date": "2026-11-12",
+    "status": "provisional",
+    "dated_siu": "0.001430"
+  },
+  {
+    "print_id": "2026-11-12-frontier",
+    "date": "2026-11-12",
+    "status": "provisional",
+    "dated_siu": "0.01785"
+  },
+  {
+    "print_id": "2026-11-12",
+    "date": "2026-11-12",
+    "status": "provisional",
+    "dated_siu": "0.009639"
+  },
+  {
+    "print_id": "2026-11-12b-commodity",
+    "date": "2026-11-12",
+    "status": "provisional",
+    "dated_siu": "0.001423"
+  },
+  {
+    "print_id": "2026-11-12b-frontier",
+    "date": "2026-11-12",
+    "status": "provisional",
+    "dated_siu": "0.01479"
+  },
+  {
+    "print_id": "2026-11-12b",
+    "date": "2026-11-12",
+    "status": "provisional",
+    "dated_siu": "0.008108"
+  },
+  {
+    "print_id": "2026-11-13-commodity",
+    "date": "2026-11-13",
+    "status": "provisional",
+    "dated_siu": "0.001427"
+  },
+  {
+    "print_id": "2026-11-13-frontier",
+    "date": "2026-11-13",
+    "status": "provisional",
+    "dated_siu": "0.01784"
+  },
+  {
+    "print_id": "2026-11-13",
+    "date": "2026-11-13",
+    "status": "provisional",
+    "dated_siu": "0.009632"
+  },
+  {
+    "print_id": "2026-11-13b-commodity",
+    "date": "2026-11-13",
+    "status": "provisional",
+    "dated_siu": "0.001422"
+  },
+  {
+    "print_id": "2026-11-13b-frontier",
+    "date": "2026-11-13",
+    "status": "provisional",
+    "dated_siu": "0.01478"
+  },
+  {
+    "print_id": "2026-11-13b",
+    "date": "2026-11-13",
+    "status": "provisional",
+    "dated_siu": "0.008101"
+  },
+  {
+    "print_id": "2026-11-17-commodity",
+    "date": "2026-11-17",
+    "status": "provisional",
+    "dated_siu": "0.001293"
+  },
+  {
+    "print_id": "2026-11-17-frontier",
+    "date": "2026-11-17",
+    "status": "provisional",
+    "dated_siu": "0.01131"
+  },
+  {
+    "print_id": "2026-11-17",
+    "date": "2026-11-17",
+    "status": "provisional",
+    "dated_siu": "0.006301"
+  },
+  {
+    "print_id": "2026-11-17b-commodity",
+    "date": "2026-11-17",
+    "status": "provisional",
+    "dated_siu": "0.001413"
+  },
+  {
+    "print_id": "2026-11-17b",
+    "date": "2026-11-17",
+    "status": "provisional",
+    "dated_siu": "0.006361"
+  },
+  {
+    "print_id": "2026-11-18-commodity",
+    "date": "2026-11-18",
+    "status": "provisional",
+    "dated_siu": "0.001146"
+  },
+  {
+    "print_id": "2026-11-18-frontier",
+    "date": "2026-11-18",
+    "status": "provisional",
+    "dated_siu": "0.01136"
+  },
+  {
+    "print_id": "2026-11-18",
+    "date": "2026-11-18",
+    "status": "provisional",
+    "dated_siu": "0.005686"
+  },
+  {
+    "print_id": "2026-11-18b-commodity",
+    "date": "2026-11-18",
+    "status": "provisional",
+    "dated_siu": "0.001282"
+  },
+  {
+    "print_id": "2026-11-18b-frontier",
+    "date": "2026-11-18",
+    "status": "provisional",
+    "dated_siu": "0.01733"
+  },
+  {
+    "print_id": "2026-11-18b",
+    "date": "2026-11-18",
+    "status": "provisional",
+    "dated_siu": "0.01020"
+  },
+  {
+    "print_id": "2026-11-18c-commodity",
+    "date": "2026-11-18",
+    "status": "provisional",
+    "dated_siu": "0.001431"
+  },
+  {
+    "print_id": "2026-11-18c-frontier",
+    "date": "2026-11-18",
+    "status": "provisional",
+    "dated_siu": "0.01507"
+  },
+  {
+    "print_id": "2026-11-18c",
+    "date": "2026-11-18",
+    "status": "provisional",
+    "dated_siu": "0.009008"
+  },
+  {
+    "print_id": "2026-11-19-commodity",
+    "date": "2026-11-19",
+    "status": "provisional",
+    "dated_siu": "0.001303"
+  },
+  {
+    "print_id": "2026-11-19-frontier",
+    "date": "2026-11-19",
+    "status": "provisional",
+    "dated_siu": "0.01737"
+  },
+  {
+    "print_id": "2026-11-19",
+    "date": "2026-11-19",
+    "status": "provisional",
+    "dated_siu": "0.01094"
+  },
+  {
+    "print_id": "2026-11-19b-commodity",
+    "date": "2026-11-19",
+    "status": "provisional",
+    "dated_siu": "0.001431"
+  },
+  {
+    "print_id": "2026-11-19b-frontier",
+    "date": "2026-11-19",
+    "status": "provisional",
+    "dated_siu": "0.01569"
+  },
+  {
+    "print_id": "2026-11-19b",
+    "date": "2026-11-19",
+    "status": "provisional",
+    "dated_siu": "0.009984"
+  },
+  {
+    "print_id": "2026-11-20-commodity",
+    "date": "2026-11-20",
+    "status": "provisional",
+    "dated_siu": "0.001268"
+  },
+  {
+    "print_id": "2026-11-20-frontier",
+    "date": "2026-11-20",
+    "status": "provisional",
+    "dated_siu": "0.01692"
+  },
+  {
+    "print_id": "2026-11-20",
+    "date": "2026-11-20",
+    "status": "provisional",
+    "dated_siu": "0.01067"
+  },
+  {
+    "print_id": "2026-11-20b-commodity",
+    "date": "2026-11-20",
+    "status": "provisional",
+    "dated_siu": "0.001415"
+  },
+  {
+    "print_id": "2026-11-20b-frontier",
+    "date": "2026-11-20",
+    "status": "provisional",
+    "dated_siu": "0.01489"
+  },
+  {
+    "print_id": "2026-11-20b",
+    "date": "2026-11-20",
+    "status": "provisional",
+    "dated_siu": "0.009501"
+  },
+  {
+    "print_id": "2026-11-21-commodity",
+    "date": "2026-11-21",
+    "status": "provisional",
+    "dated_siu": "0.001400"
+  },
+  {
+    "print_id": "2026-11-21-frontier",
+    "date": "2026-11-21",
+    "status": "provisional",
+    "dated_siu": "0.01685"
+  },
+  {
+    "print_id": "2026-11-21",
+    "date": "2026-11-21",
+    "status": "provisional",
+    "dated_siu": "0.01067"
+  },
+  {
+    "print_id": "2026-11-21b-frontier",
+    "date": "2026-11-21",
+    "status": "provisional",
+    "dated_siu": "0.01500"
+  },
+  {
+    "print_id": "2026-11-21b",
+    "date": "2026-11-21",
+    "status": "provisional",
+    "dated_siu": "0.009558"
+  },
+  {
+    "print_id": "2026-11-22-commodity",
+    "date": "2026-11-22",
+    "status": "provisional",
+    "dated_siu": "0.001411"
+  },
+  {
+    "print_id": "2026-11-22-frontier",
+    "date": "2026-11-22",
+    "status": "provisional",
+    "dated_siu": "0.01518"
+  },
+  {
+    "print_id": "2026-11-22",
+    "date": "2026-11-22",
+    "status": "provisional",
+    "dated_siu": "0.009674"
+  },
+  {
+    "print_id": "2026-11-23-commodity",
+    "date": "2026-11-23",
+    "status": "provisional",
+    "dated_siu": "0.001400"
+  },
+  {
+    "print_id": "2026-11-23-frontier",
+    "date": "2026-11-23",
+    "status": "provisional",
+    "dated_siu": "0.01520"
+  },
+  {
+    "print_id": "2026-11-23",
+    "date": "2026-11-23",
+    "status": "provisional",
+    "dated_siu": "0.009686"
+  },
+  {
+    "print_id": "2026-11-24-commodity",
+    "date": "2026-11-24",
+    "status": "provisional",
+    "dated_siu": "0.001399"
+  },
+  {
+    "print_id": "2026-11-24-frontier",
+    "date": "2026-11-24",
+    "status": "provisional",
+    "dated_siu": "0.01520"
+  },
+  {
+    "print_id": "2026-11-24",
+    "date": "2026-11-24",
+    "status": "provisional",
+    "dated_siu": "0.009683"
+  },
+  {
+    "print_id": "2026-11-25-commodity",
+    "date": "2026-11-25",
+    "status": "provisional",
+    "dated_siu": "0.001404"
+  },
+  {
+    "print_id": "2026-11-25-frontier",
+    "date": "2026-11-25",
+    "status": "provisional",
+    "dated_siu": "0.01516"
+  },
+  {
+    "print_id": "2026-11-25",
+    "date": "2026-11-25",
+    "status": "provisional",
+    "dated_siu": "0.009659"
+  },
+  {
+    "print_id": "2026-11-26-commodity",
+    "date": "2026-11-26",
+    "status": "provisional",
+    "dated_siu": "0.001409"
+  },
+  {
+    "print_id": "2026-11-26-frontier",
+    "date": "2026-11-26",
+    "status": "provisional",
+    "dated_siu": "0.01236"
+  },
+  {
+    "print_id": "2026-11-26",
+    "date": "2026-11-26",
+    "status": "provisional",
+    "dated_siu": "0.009664"
   }
 ]

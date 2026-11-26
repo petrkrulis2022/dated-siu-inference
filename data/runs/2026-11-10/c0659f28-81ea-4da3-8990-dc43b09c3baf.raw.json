@@ -1,0 +1,39 @@
+{
+  "id": "685f5f15-3eb8-933b-bd50-7d0ec50fbc40",
+  "object": "chat.completion",
+  "created": 1794271165,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```javascript\nexport function cappedRunningTotal(nums, cap) {\n  let total = 0;\n  return nums.map((n) => (total = Math.min(total + n, cap)));\n}\n```",
+        "reasoning_content": "I need to implement a JavaScript function that computes a capped running total. The sum must never exceed the given cap, and once it does, all subsequent positions should be capped at that value.\n\nI drafted two implementations. The first uses a boolean flag to freeze the total once it exceeds the cap. The second uses `Math.min(total + num, cap)` in a single loop.\n\nI'll provide the function as a single code block. I also considered a more concise `map`-based version using a closure.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 778,
+    "completion_tokens": 44,
+    "total_tokens": 1501,
+    "prompt_tokens_details": {
+      "text_tokens": 778,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 679,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 51260000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

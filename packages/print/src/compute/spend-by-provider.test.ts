@@ -68,4 +68,26 @@ describe("computeSpendByProvider", () => {
   it("returns an empty object for no records", () => {
     expect(computeSpendByProvider([], registry, prices)).toEqual({});
   });
+
+  it("sums what each call was billed under rules-2026-11-20, at the tier its response reports where none is billed", () => {
+    const openrouter: ModelRegistryEntry[] = [
+      { id: "mistral", provider: "openrouter", endpoint: "e", model_string: "s", tier: "open-weight-hosted", open_weights: true, host: "deepinfra/fp8" },
+    ];
+    const pricing = new Map([
+      [
+        "mistral",
+        {
+          price: { price_in_usd_per_1m: "75", price_out_usd_per_1m: "200" },
+          tierPrices: { priority: { price_in_usd_per_1m: "112.5", price_out_usd_per_1m: "300" } },
+          billed: true,
+        },
+      ],
+    ]);
+    const records = [
+      record({ model_id: "mistral", service_tier: "priority", billed_usd: "0.4125" }),
+      record({ model_id: "mistral", service_tier: "priority" }),
+    ];
+    // 0.4125 billed + 1000 x 112.5/1M + 1000 x 300/1M = 0.4125 + 0.4125
+    expect(computeSpendByProvider(records, openrouter, pricing)).toEqual({ openrouter: "0.825" });
+  });
 });

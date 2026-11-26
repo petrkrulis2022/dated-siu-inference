@@ -202,9 +202,15 @@ jobs:
       # day's -frontier/-commodity sub-prints, so this is one tweet a day. Verified live,
       # 2026-09-13, against the real API before this step was added —
       # https://x.com/touchstoneassay/status/2099389774620450981.
+      #
+      # Switched off on 2026-11-21 until the owner decides on X API credits: with the account out of
+      # credits every run failed on the tweet alone, and real failures were lost among those. The
+      # step runs only when the repository variable TWEET_PRINTS is "on" (GitHub: Settings, Secrets
+      # and variables, Actions, Variables), so turning it back on needs no code change. While it is
+      # off the step is skipped, so "Fail loudly on tweet failure" below never fires.
       - name: Tweet the print
         id: tweet
-        if: steps.publish.outputs.status == 'published'
+        if: steps.publish.outputs.status == 'published' && vars.TWEET_PRINTS == 'on'
         continue-on-error: true
         env:
           X_API_KEY: ${{ secrets.X_API_KEY }}
@@ -230,6 +236,22 @@ jobs:
           if grep -q "^BILLING_EXHAUSTED_SUMMARY " publish.log; then
             echo "::error::Publisher's own prepaid provider credit ran out for at least one constituent today — the print above still published on whatever qualifying set remained, but this run is marked failed so it gets noticed. Top up the affected provider(s); see the summary line below and this print's own correction_notes."
             grep "^BILLING_EXHAUSTED_SUMMARY " publish.log | sed 's/^BILLING_EXHAUSTED_SUMMARY //'
+            exit 1
+          fi
+
+      # rules-2026-11-20's daily reconciliation (data/runs/<print_id>/price-check.json): what each
+      # constituent was billed, from its own responses, against the same calls at the list price of
+      # the tier each response reports. The billed figure is the price, so a flag never stops the
+      # print; this marks the run failed after the print is committed, so GitHub emails it. always()
+      # so it still runs when the billing step above already failed the job.
+      - name: Fail loudly on a price-check flag
+        if: always() && steps.publish.outputs.status == 'published'
+        env:
+          PRINT_ID: ${{ steps.resolve.outputs.print_id }}
+        run: |
+          if grep -q "^PRICE_CHECK_FLAG " publish.log; then
+            echo "::error title=Price check flagged::A constituent's billed cost and its list price differ by more than 1%, or a call was served on a tier with no list price. The print used the billed figures; check whether a list price, a tier or a pin has moved. See data/runs/${PRINT_ID}/price-check.json."
+            grep "^PRICE_CHECK_FLAG " publish.log | sed 's/^PRICE_CHECK_FLAG //'
             exit 1
           fi
 

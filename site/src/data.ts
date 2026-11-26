@@ -123,6 +123,9 @@ export interface Incident {
    * attempt's own record, chained rather than lost. Absent means this is the first attempt. */
   prior_attempts?: PriorAttemptDisclosure[] | null;
   occurred_at: string;
+  /** A plain-language note the publisher added to the record afterwards, stating why the day has
+   * no print. Never written by the workflow; the workflow's own fields above stay as recorded. */
+  note?: string | null;
 }
 
 /**
@@ -142,6 +145,29 @@ export async function loadIncidents(incidentsDir: string): Promise<Incident[]> {
   );
   incidents.sort((a, b) => a.date.localeCompare(b.date));
   return incidents;
+}
+
+/**
+ * A dated notice the publisher posts on the prints pages (data/prints/notices/*.json): an error found in published prints, disclosed before its
+ * correction (docs/methodology.md, Index governance, error procedure). Plain text only, escaped on render. Written by hand, never by a workflow,
+ * and never edited after publication: a later development is a new notice.
+ */
+export interface Notice {
+  /** The file name without .json, e.g. "2026-11-21-pricing-errors"; the page anchor is `notice-<id>`, which a print's correction note can name. */
+  id: string;
+  /** The date the notice was published (YYYY-MM-DD). */
+  date: string;
+  title: string;
+  sections: Array<{ heading?: string; text?: string; items?: string[] }>;
+}
+
+export async function loadNotices(noticesDir: string): Promise<Notice[]> {
+  const files = (await readdir(noticesDir).catch(() => [] as string[])).filter((f) => f.endsWith(".json"));
+  const notices: Notice[] = await Promise.all(
+    files.map(async (f) => JSON.parse(await readFile(join(noticesDir, f), "utf-8")) as Notice),
+  );
+  notices.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+  return notices;
 }
 
 export interface ChainInfo {

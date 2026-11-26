@@ -48,6 +48,27 @@
           "subsidised": {
             "type": "boolean",
             "description": "true when this price is observed below the computed hardware floor — build1-spec.md §5's subsidised-supply policy. Included in the exchange-rate table but excluded from the headline reference set."
+          },
+          "endpoint_tag": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The one OpenRouter endpoint this entry's price was read from (e.g. \"deepinfra/fp8\"): the registry host's exact tag. Absent for an entry not priced from OpenRouter's per-endpoint listing."
+          },
+          "tiers": {
+            "type": "array",
+            "description": "Every endpoint OpenRouter lists under this entry's pinned endpoint, one per service tier (e.g. deepinfra/fp8/priority), with its own list price. Used to price a call at the tier its response reports, as a cross-check against the billed figure, and to detect a provider adding or renaming tiers under a constituent (docs/methodology.md, rules-2026-11-20).",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "tag": { "type": "string", "minLength": 1 },
+                "service_tier": { "type": "string", "minLength": 1 },
+                "price_in_usd_per_1m": { "$ref": "#/definitions/decimalString" },
+                "price_out_usd_per_1m": { "$ref": "#/definitions/decimalString" },
+                "price_cached_in_usd_per_1m": { "$ref": "#/definitions/decimalString" }
+              },
+              "required": ["tag", "service_tier", "price_in_usd_per_1m", "price_out_usd_per_1m"]
+            }
           }
         },
         "required": ["model_id", "price_in_usd_per_1m", "price_out_usd_per_1m"]

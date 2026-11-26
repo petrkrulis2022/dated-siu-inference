@@ -1,0 +1,39 @@
+{
+  "id": "bfd4424d-ef18-9dd0-a6c2-e37d73dfebe4",
+  "object": "chat.completion",
+  "created": 1793062851,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "084CA6\n7BC505\nAA2B3F\nB14160",
+        "reasoning_content": "I will scan the archive log for access codes and list them in order.\n\nI found four access codes in the document. The southern annex is 084CA6. The coastal annex is 7BC505. The coastal annex is AA2B3F. The western annex is B14160.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21743,
+    "completion_tokens": 17,
+    "total_tokens": 22176,
+    "prompt_tokens_details": {
+      "text_tokens": 21743,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 416,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 453160000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

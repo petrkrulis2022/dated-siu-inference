@@ -1,0 +1,18 @@
+{
+  "run_id": "4aab2d06-a851-4dd1-a2d3-a86a6aafac1b",
+  "model_id": "claude-sonnet-5",
+  "task_class": "T3",
+  "instance_id": "T3-02",
+  "seed": 145713547,
+  "attempt": 1,
+  "usage": {
+    "input": 168,
+    "output": 47,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 1051,
+  "gate_passed": true,
+  "raw_response_ref": "4aab2d06-a851-4dd1-a2d3-a86a6aafac1b.raw.json",
+  "deviations": []
+}

@@ -1,5 +1,5 @@
 import { validateRunRecord, validatePrint, type Print } from "@touchstone/sdk";
-import { computePrint, computeCostOfProduction, type PrintInput } from "./compute/index.js";
+import { computePrint, computeCostOfProduction, familyMapOf, type PrintInput } from "./compute/index.js";
 import { signPrintBody } from "./sign/sign.js";
 import { printBodyHashHex } from "./sign/canonicalise.js";
 import {
@@ -212,6 +212,9 @@ export interface PublishInput extends Omit<PrintInput, "status"> {
    * its own overall check) or a synthetic-fixture unit test that doesn't care about tiers. Real
    * CLI callers always pass it, built from the same registry they already load. */
   openWeightsById?: Map<string, boolean>;
+  /** Present on a correction (publish-correction.ts): the print this numbered revision corrects and why. Known before signing, so part of the
+   * signed body; the original gains superseded_by, outside its own signed body. */
+  supersedes?: NonNullable<Print["supersedes"]>;
 }
 
 export interface PublishResult {
@@ -279,10 +282,16 @@ export async function publishPrint(printsDir: string, input: PublishInput): Prom
   const qualifyingIds = [...body.basket_costs]
     .filter((m) => m.cost_usd !== undefined && m.carried_forward_from === undefined)
     .map((m) => m.model_id);
-  if (qualifyingIds.length < MINIMUM_QUALIFYING_MODELS) {
+  // rules-2026-11-18: under one weight per model family, the minimum counts model families too —
+  // two hosts of the same open weights are one model's worth of the market, not two. Before that
+  // revision every entry counted as its own family, exactly as before.
+  const familyOf = input.weightByModelFamily ? familyMapOf(input.models) : undefined;
+  const countOf = (ids: string[]) =>
+    familyOf ? new Set(ids.map((id) => familyOf.get(id) ?? id)).size : ids.length;
+  if (countOf(qualifyingIds) < MINIMUM_QUALIFYING_MODELS) {
     throw new QualifyingSetError(
-      qualifyingIds.length,
-      body.basket_costs.length,
+      countOf(qualifyingIds),
+      countOf(body.basket_costs.map((m) => m.model_id)),
       body.cost_of_production_usd,
     );
   }
@@ -297,13 +306,15 @@ export async function publishPrint(printsDir: string, input: PublishInput): Prom
   if (!input.series && input.openWeightsById) {
     for (const wantOpenWeights of [true, false] as const) {
       const tier = wantOpenWeights ? "commodity" : "frontier";
-      const registeredInTier = [...input.openWeightsById.values()].filter(
-        (ow) => ow === wantOpenWeights,
-      ).length;
+      const registeredInTier = countOf(
+        [...input.openWeightsById.entries()]
+          .filter(([, ow]) => ow === wantOpenWeights)
+          .map(([id]) => id),
+      );
       if (registeredInTier === 0) continue;
-      const qualifyingInTier = qualifyingIds.filter(
-        (id) => input.openWeightsById!.get(id) === wantOpenWeights,
-      ).length;
+      const qualifyingInTier = countOf(
+        qualifyingIds.filter((id) => input.openWeightsById!.get(id) === wantOpenWeights),
+      );
       if (qualifyingInTier < MINIMUM_QUALIFYING_MODELS) {
         throw new TierCollapseError(tier, qualifyingInTier, registeredInTier);
       }
@@ -331,6 +342,7 @@ export async function publishPrint(printsDir: string, input: PublishInput): Prom
       ? { constituent_changes: input.constituentChanges }
       : {}),
     ...(input.series ? { series: input.series } : {}),
+    ...(input.supersedes ? { supersedes: input.supersedes } : {}),
   };
   const signed = signPrintBody(bodyWithDisclosures, input.privateKeyHex);
 

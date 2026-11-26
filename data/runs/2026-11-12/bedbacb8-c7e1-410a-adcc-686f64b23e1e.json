@@ -1,0 +1,18 @@
+{
+  "run_id": "bedbacb8-c7e1-410a-adcc-686f64b23e1e",
+  "model_id": "qwen-2.5-72b-instruct",
+  "task_class": "T2",
+  "instance_id": "T2-03",
+  "seed": 2993692428,
+  "attempt": 1,
+  "usage": {
+    "input": 21494,
+    "output": 26,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 259,
+  "gate_passed": true,
+  "raw_response_ref": "bedbacb8-c7e1-410a-adcc-686f64b23e1e.raw.json",
+  "deviations": []
+}

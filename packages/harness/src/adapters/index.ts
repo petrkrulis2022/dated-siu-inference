@@ -77,7 +77,7 @@ export interface AdapterRoutingOptions {
  * in this environment. Worth confirming against a real response once one is.
  */
 export function createAdapterFor(
-  entry: Pick<ModelRegistryEntry, "provider" | "host">,
+  entry: Pick<ModelRegistryEntry, "provider" | "host"> & Partial<Pick<ModelRegistryEntry, "service_tier">>,
   keys: ApiKeys,
   routing: AdapterRoutingOptions = {},
 ): Adapter {
@@ -92,9 +92,15 @@ export function createAdapterFor(
       return createOpenAiCompatibleAdapter({
         chatCompletionsUrl: OPENAI_COMPATIBLE_HOSTS.openrouter,
         apiKey: requireKey(keys, "openrouter", "OPENROUTER_API_KEY"),
-        ...(routing.allowUnpinnedRouting
-          ? {}
-          : { extraBody: { provider: { only: [entry.host] } } }),
+        extraBody: {
+          // The entry's declared service tier (rules-2026-11-20), pinned or not. OpenRouter's docs: priority endpoints of open-weight models
+          // compete for default traffic and match their base slug, so a pin alone does not keep a call off the priority tier (17 of 60 calls
+          // pinned to deepinfra/fp8 were billed on it, 18-20 Nov); a top-level service_tier of "default" keeps them out of the pool. Sent only
+          // when the entry declares a tier: on 2026-11-20 a Parasail call with service_tier "default" got a 429 and the same call without it
+          // succeeded. Parasail lists no tiers and its responses name none, so its entry declares none.
+          ...(entry.service_tier !== undefined ? { service_tier: entry.service_tier } : {}),
+          ...(routing.allowUnpinnedRouting ? {} : { provider: { only: [entry.host] } }),
+        },
       });
     case "together":
       return createOpenAiCompatibleAdapter({

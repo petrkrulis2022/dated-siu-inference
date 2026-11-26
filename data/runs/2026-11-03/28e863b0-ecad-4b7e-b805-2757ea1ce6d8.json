@@ -1,0 +1,18 @@
+{
+  "run_id": "28e863b0-ecad-4b7e-b805-2757ea1ce6d8",
+  "model_id": "deepseek-v3.2",
+  "task_class": "T3",
+  "instance_id": "T3-03",
+  "seed": 1960903715,
+  "attempt": 1,
+  "usage": {
+    "input": 106,
+    "output": 65,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 307,
+  "gate_passed": true,
+  "raw_response_ref": "28e863b0-ecad-4b7e-b805-2757ea1ce6d8.raw.json",
+  "deviations": []
+}

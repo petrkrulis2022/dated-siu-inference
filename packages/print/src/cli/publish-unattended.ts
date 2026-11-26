@@ -34,8 +34,9 @@ import {
   QualifyingSetError,
   type PriorAttempt,
 } from "../publish.js";
-import { computeSpendByProvider } from "../compute/index.js";
+import { computePriceCheck, computeSpendByProvider } from "../compute/index.js";
 import {
+  attachResponseBilling,
   buildModelInputs,
   latestPriceSnapshotFile,
   loadCarryForwardHistory,
@@ -80,7 +81,17 @@ const CARRY_FORWARD_ENABLED = process.env.TOUCHSTONE_CARRY_FORWARD_ENABLED === "
 /** docs/methodology.md's Revision history table — bump this when a future rule change alters
  * published values, and add the matching row there. Every print from this one onward states
  * which rule set produced it, forward-only; no historical print needs the field retroactively. */
-const METHODOLOGY_REVISION = CARRY_FORWARD_ENABLED ? "rules-2026-09-26" : "rules-2026-09-25";
+/** rules-2026-11-18 (one weight per model family) builds on rules-2026-09-26 and ships with it:
+ * the production path (carry-forward on) gets both; the legacy rules-2026-09-25 path is left
+ * exactly as it was. */
+const WEIGHT_BY_MODEL_FAMILY = CARRY_FORWARD_ENABLED;
+/** rules-2026-11-20 (a call's price is what its response says it was billed; a list price, at the tier the response reports, only where it says
+ * nothing) builds on rules-2026-11-18 and ships on the same production path. */
+const BILLED_COST_WHERE_REPORTED = CARRY_FORWARD_ENABLED;
+/** rules-2026-11-21 (a list price counts each cached prompt token once, at the cached rate, for a provider whose usage.input already includes it)
+ * builds on rules-2026-11-20 and ships on the same production path. */
+const CACHED_TOKENS_COUNTED_ONCE = CARRY_FORWARD_ENABLED;
+const METHODOLOGY_REVISION = CARRY_FORWARD_ENABLED ? "rules-2026-11-21" : "rules-2026-09-25";
 
 const printId = process.argv[2] || new Date().toISOString().slice(0, 10);
 const printDate = DATE_PATTERN.test(printId) ? printId : new Date().toISOString().slice(0, 10);
@@ -276,7 +287,8 @@ if (billingExhaustedOutcomes.length > 0) {
 
 // 5. Compute -> sign -> anchor -> write. publishPrint enforces the qualifying-set gate, the
 // spend ceiling, the anchor-must-succeed gate, and the append-only write — see publish.ts.
-const records = await loadRunRecords(printId);
+// Every record carries its response's service tier and billed cost; attachResponseBilling only fills them for a record written before they existed.
+const records = await attachResponseBilling(await loadRunRecords(printId), runsDirFor(printId));
 const { models, unpriced } = buildModelInputs(registry, snapshot, records);
 if (unpriced.length > 0) {
   console.warn(
@@ -286,6 +298,27 @@ if (unpriced.length > 0) {
 if (models.length === 0) {
   console.error("No priced models with run records — nothing to publish.");
   process.exit(1);
+}
+
+// The daily reconciliation of priced against billed cost (docs/methodology.md, rules-2026-11-20), written before publishing so a day whose print
+// is refused still has it. A flag never stops the print (the billed figure is the price): it is a greppable line the workflow's "Fail loudly on a
+// price-check flag" step turns into a failed run after the print is committed, so GitHub emails it.
+const priceCheck = computePriceCheck(
+  models,
+  new Map(registry.flatMap((r) => (r.service_tier !== undefined ? [[r.id, r.service_tier] as const] : []))),
+);
+const priceCheckPath = join(runsDirFor(printId), "price-check.json");
+await writeFile(
+  priceCheckPath,
+  `${JSON.stringify({ print_id: printId, date: printDate, price_snapshot_ref: snapshotFile, ...priceCheck }, null, 2)}\n`,
+  "utf-8",
+);
+console.log(`Price check: ${priceCheck.flagged ? "FLAGGED" : "clean"} (${priceCheckPath})`);
+for (const row of priceCheck.rows.filter((r) => r.flagged)) {
+  console.log(`PRICE_CHECK_FLAG ${row.model_id}: ${row.reasons.join("; ")}`);
+}
+for (const row of priceCheck.rows.filter((r) => r.calls_off_declared_tier > 0)) {
+  console.log(`Price check: ${row.model_id} served ${row.calls_off_declared_tier} of ${row.calls} calls off its declared tier ${JSON.stringify(row.tiers_served)}`);
 }
 
 const priorAttempts: PriorAttempt[] = priorIncident
@@ -349,6 +382,9 @@ try {
     price_snapshot_ref: snapshotFile,
     methodology_version: "v0-draft",
     methodology_revision: METHODOLOGY_REVISION,
+    weightByModelFamily: WEIGHT_BY_MODEL_FAMILY,
+    billedCostWhereReported: BILLED_COST_WHERE_REPORTED,
+    cachedTokensCountedOnce: CACHED_TOKENS_COUNTED_ONCE,
     privateKeyHex,
     attestationClient,
     secondaryAttestations,
@@ -378,7 +414,15 @@ try {
   // print body. Written from the same `records`/prices already loaded for this run, so a real
   // top-up's remaining runway can be estimated from a day's real per-provider spend (the pattern
   // the correction notes above this print series now disclose was predictable nine days out).
-  const priceByModelId = new Map(models.map((m) => [m.model_id, m.price]));
+  const priceByModelId = new Map(
+    models.map((m) => [m.model_id, {
+        price: m.price,
+        tierPrices: m.tierPrices,
+        billed: BILLED_COST_WHERE_REPORTED,
+        cachedInsideInput: CACHED_TOKENS_COUNTED_ONCE && m.cachedInsideInput === true,
+        reasoningInsideOutput: CACHED_TOKENS_COUNTED_ONCE && m.reasoningInsideOutput === true,
+      }]),
+  );
   const spendByProvider = computeSpendByProvider(records, registry, priceByModelId);
   const spendPath = join(runsDirFor(printId), "spend-by-provider.json");
   await writeFile(
@@ -447,6 +491,9 @@ try {
         price_snapshot_ref: snapshotFile,
         methodology_version: "v0-draft",
         methodology_revision: METHODOLOGY_REVISION,
+        weightByModelFamily: WEIGHT_BY_MODEL_FAMILY,
+        billedCostWhereReported: BILLED_COST_WHERE_REPORTED,
+        cachedTokensCountedOnce: CACHED_TOKENS_COUNTED_ONCE,
         privateKeyHex,
         attestationClient,
         secondaryAttestations,

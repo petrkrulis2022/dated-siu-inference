@@ -1,0 +1,18 @@
+{
+  "run_id": "6b04ed69-e32a-42b4-8c2e-e972872cd9f2",
+  "model_id": "mistral-small-3.2-24b-instruct",
+  "task_class": "T1",
+  "instance_id": "T1-02",
+  "seed": 2911939503,
+  "attempt": 1,
+  "usage": {
+    "input": 858,
+    "output": 63,
+    "cached_input": 256,
+    "reasoning": 0
+  },
+  "latency_ms": 1161,
+  "gate_passed": true,
+  "raw_response_ref": "6b04ed69-e32a-42b4-8c2e-e972872cd9f2.raw.json",
+  "deviations": []
+}

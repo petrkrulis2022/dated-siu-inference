@@ -1,0 +1,53 @@
+{
+  "id": "gen-1795480636-xF2ld1ESqRodIV87ugEs",
+  "object": "chat.completion",
+  "created": 1795480636,
+  "model": "mistralai/mistral-small-3.2-24b-instruct",
+  "provider": "Parasail",
+  "system_fingerprint": null,
+  "service_tier": null,
+  "choices": [
+    {
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": "error",
+      "native_finish_reason": null,
+      "error": {
+        "code": 502,
+        "message": "Upstream error from Parasail: EngineCore encountered an issue. See stack trace (above) for the root cause.",
+        "metadata": {
+          "error_type": "provider_unavailable"
+        }
+      },
+      "message": {
+        "role": "assistant",
+        "content": "Here",
+        "refusal": null,
+        "reasoning": null
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 30904,
+    "completion_tokens": 1,
+    "total_tokens": 30905,
+    "cost": 0,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": 0.00278166,
+      "upstream_inference_prompt_cost": 0.00278136,
+      "upstream_inference_completions_cost": 3e-7
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "image_tokens": 0,
+      "audio_tokens": 0
+    }
+  }
+}

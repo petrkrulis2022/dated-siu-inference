@@ -1,0 +1,39 @@
+{
+  "id": "a1f9860e-3656-9a7c-be04-d170ea65e268",
+  "object": "chat.completion",
+  "created": 1795135234,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "08FC02\nA3D9AF\nC36ACF\n0B7B79",
+        "reasoning_content": "I will scan the archive log for access codes and list each one in the order it appears.\n\nI found four access codes in the document. The northern annex is 08FC02. The western annex has three codes: A3D9AF, C36ACF, and 0B7B79.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21774,
+    "completion_tokens": 20,
+    "total_tokens": 22420,
+    "prompt_tokens_details": {
+      "text_tokens": 21774,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 626,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 466560000
+  },
+  "system_fingerprint": "fp_92a0a6ffe2",
+  "service_tier": "default"
+}

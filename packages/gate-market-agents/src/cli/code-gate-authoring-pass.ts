@@ -169,6 +169,7 @@ TO SUBMIT YOUR GATE, respond with exactly:
   const result = await runGateAuthoringPass({
     adapter,
     modelString: MODEL_STRING,
+    provider: "anthropic",
     prices: PRICES,
     maxOutputTokens: MAX_OUTPUT_TOKENS,
     maxTurns: MAX_TURNS,

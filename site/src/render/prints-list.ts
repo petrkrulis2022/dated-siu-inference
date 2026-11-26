@@ -1,5 +1,5 @@
 import type { Print } from "@touchstone/sdk";
-import type { ChainInfo, Incident } from "../data.js";
+import type { ChainInfo, Incident, Notice } from "../data.js";
 import { esc, formatDate, truncateHex, usd } from "../format.js";
 
 export interface PrintsListOptions {
@@ -7,6 +7,8 @@ export interface PrintsListOptions {
   allPrints: Print[];
   /** Days the scheduled run failed to produce a print — see data.ts's loadIncidents. */
   incidents?: Incident[];
+  /** Dated notices from the publisher (data.ts's loadNotices), shown above the list, newest first. */
+  notices?: Notice[];
   /** "../" — this page always lives one level deep, at prints/index.html. A tier page
    * (/frontier/prints/index.html) lives one level deeper still, so its basePath ("../../")
    * points all the way back to the shared root /prints/ detail-page directory — every link
@@ -25,6 +27,31 @@ export interface PrintsListOptions {
   seriesLabel?: string;
 }
 
+const NO_RUNS = "no run records for this class";
+
+/**
+ * The constituents that produced no run records at all for this print, on every task class of the basket: a billing failure or an outage on the publisher's side, not a
+ * quality-gate result. Such a print is correctly computed from the models that ran but averages fewer constituents than usual, so its level is not comparable with prints
+ * that include them (2026-11-04: gemini-3.1-pro-preview's prepaid credit ran out, and the headline read about 30% low from 2026-10-29). Read from the signed basket itself;
+ * the one day a missing model was dropped without a gap row (2026-09-08, fixed the same day) is read from its correction note instead.
+ */
+export function missingConstituents(print: Print): string[] {
+  const fromBasket = print.basket_costs
+    .filter((b) => {
+      const reason = (b as { excluded_reason?: string }).excluded_reason;
+      return (
+        reason !== undefined &&
+        ["T1", "T2", "T3"].every((t) => reason.includes(`${t} (${NO_RUNS})`))
+      );
+    })
+    .map((b) => b.model_id);
+  if (fromBasket.length > 0) return fromBasket;
+  const silent = (print.correction_notes ?? []).some((n) =>
+    /produced (zero|no) run records/i.test(n.note),
+  );
+  return silent ? ["(see the correction notice)"] : [];
+}
+
 function renderStatusCell(print: Print, basePath: string, reconciledPrintIds: Set<string>): string {
   const status = reconciledPrintIds.has(print.print_id) ? "final" : "provisional";
   const badges: string[] = [];
@@ -33,6 +60,13 @@ function renderStatusCell(print: Print, basePath: string, reconciledPrintIds: Se
     const title = `${count} earlier attempt(s) failed before this print was produced — see the print's own page for the full disclosure.`;
     badges.push(
       `<a class="badge status-late" href="${basePath}prints/${esc(print.print_id)}.html" title="${esc(title)}">late</a>`,
+    );
+  }
+  const missing = missingConstituents(print);
+  if (missing.length > 0) {
+    const title = `Incomplete: ${missing.join(", ")} produced no run records, so this print averages fewer constituents than usual and is not comparable with prints that include them. It is correctly computed from the models that ran; see the print's own page.`;
+    badges.push(
+      `<a class="badge status-incomplete" href="${basePath}prints/${esc(print.print_id)}.html" title="${esc(title)}">incomplete</a>`,
     );
   }
   if (print.superseded_by) {
@@ -66,16 +100,36 @@ function renderIncidentRow(incident: Incident): string {
     incident.prior_attempts && incident.prior_attempts.length > 0
       ? `<br />An earlier attempt the same day also failed: ${esc(incident.prior_attempts[0]!.reason)}`
       : "";
+  // The publisher's note, when one was added afterwards, comes first: it says in plain words why
+  // the day has no print; the run's own refusal reason and breakdown follow unchanged.
+  const note = incident.note ? `<span class="incident-note">${esc(incident.note)}</span><br />` : "";
   return `<tr class="incident">
     <td>${esc(formatDate(incident.date))}</td>
     <td><a class="badge status-failed" href="${esc(incident.run_url)}" title="${esc(incident.reason)}" target="_blank" rel="noopener">no print — run failed</a></td>
-    <td colspan="5" class="muted" title="${esc(incident.reason)}">${esc(incident.reason)}${counts}${retryNote}${breakdown}</td>
+    <td colspan="5" class="muted" title="${esc(incident.reason)}">${note}${esc(incident.reason)}${counts}${retryNote}${breakdown}</td>
   </tr>`;
+}
+
+/** A dated notice, anchored as `notice-<id>` so a print's correction note can point to it. */
+export function renderNotice(notice: Notice): string {
+  const sections = notice.sections
+    .map((section) => {
+      const heading = section.heading ? `<strong>${esc(section.heading)}</strong> ` : "";
+      const text = section.text || heading ? `<p>${heading}${section.text ? esc(section.text) : ""}</p>` : "";
+      const items = section.items && section.items.length > 0 ? `<ul>${section.items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : "";
+      return `${text}${items}`;
+    })
+    .join("\n");
+  return `<div class="change-note dated-notice" id="notice-${esc(notice.id)}">
+    <p><strong>${esc(notice.title)}</strong><br /><span class="muted">${esc(formatDate(notice.date))}</span></p>
+    ${sections}
+  </div>`;
 }
 
 export function renderPrintsList({
   allPrints,
   incidents = [],
+  notices = [],
   basePath,
   chain,
   reconciledPrintIds = new Set(),
@@ -120,6 +174,10 @@ export function renderPrintsList({
   <div class="label">${esc(seriesLabel)} Prints</div>
   <p class="note">Every published ${esc(seriesLabel)} print, newest first${incidents.length > 0 ? " — including days a scheduled run failed and no print was produced" : ""}.</p>
 </div>
+${[...notices]
+  .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id))
+  .map(renderNotice)
+  .join("\n")}
 
 <section class="block">
   <div class="table-scroll">

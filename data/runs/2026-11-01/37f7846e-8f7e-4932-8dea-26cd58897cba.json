@@ -1,0 +1,18 @@
+{
+  "run_id": "37f7846e-8f7e-4932-8dea-26cd58897cba",
+  "model_id": "gpt-5.4-mini",
+  "task_class": "T1",
+  "instance_id": "T1-04",
+  "seed": 3701819437,
+  "attempt": 1,
+  "usage": {
+    "input": 873,
+    "output": 41,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 690,
+  "gate_passed": true,
+  "raw_response_ref": "37f7846e-8f7e-4932-8dea-26cd58897cba.raw.json",
+  "deviations": []
+}

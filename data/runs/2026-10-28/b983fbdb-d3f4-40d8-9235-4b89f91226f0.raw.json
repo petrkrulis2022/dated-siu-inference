@@ -1,0 +1,39 @@
+{
+  "id": "ffab1029-15ea-9a91-9e09-19c8094151e6",
+  "object": "chat.completion",
+  "created": 1793148422,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"tracking_id\":\"SH-E4F1C2\",\"origin_city\":\"Denver\",\"destination_city\":\"Nairobi\",\"weight_kg\":412,\"status\":\"delivered\",\"priority\":\"express\"}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nThe report contains a single shipment record. Tracking ID SH-E4F1C2 originated in Denver and is destined for Nairobi. The consignment weighs 412 kilograms with express priority status.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1503,
+    "completion_tokens": 47,
+    "total_tokens": 1832,
+    "prompt_tokens_details": {
+      "text_tokens": 1503,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 282,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 42120000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

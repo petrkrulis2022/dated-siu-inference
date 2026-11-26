@@ -1,0 +1,243 @@
+{
+  "version": "SIU-2026a",
+  "print_id": "2026-11-19b",
+  "date": "2026-11-19",
+  "status": "provisional",
+  "basket_costs": [
+    {
+      "model_id": "deepseek-v3.2",
+      "cost_usd": "0.001830"
+    },
+    {
+      "model_id": "llama-3.3-70b-deepinfra",
+      "cost_usd": "0.000718"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-instruct",
+      "cost_usd": "0.000656"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-deepinfra",
+      "cost_usd": "0.000604"
+    },
+    {
+      "model_id": "qwen-2.5-72b-instruct",
+      "cost_usd": "0.002548"
+    },
+    {
+      "model_id": "claude-sonnet-5",
+      "cost_usd": "0.023645"
+    },
+    {
+      "model_id": "gpt-5.1",
+      "cost_usd": "0.009200"
+    },
+    {
+      "model_id": "gemini-3.1-pro-preview",
+      "cost_usd": "0.031617"
+    },
+    {
+      "model_id": "grok-4.6",
+      "cost_usd": "0.016541"
+    },
+    {
+      "model_id": "claude-haiku-4-5",
+      "cost_usd": "0.007764"
+    },
+    {
+      "model_id": "gpt-5.4-mini",
+      "cost_usd": "0.005346"
+    }
+  ],
+  "weights": {
+    "source": "equal",
+    "values": [
+      {
+        "model_id": "deepseek-v3.2",
+        "weight": "0.100000"
+      },
+      {
+        "model_id": "llama-3.3-70b-deepinfra",
+        "weight": "0.100000"
+      },
+      {
+        "model_id": "mistral-small-3.2-24b-instruct",
+        "weight": "0.050000"
+      },
+      {
+        "model_id": "mistral-small-3.2-24b-deepinfra",
+        "weight": "0.050000"
+      },
+      {
+        "model_id": "qwen-2.5-72b-instruct",
+        "weight": "0.100000"
+      },
+      {
+        "model_id": "claude-sonnet-5",
+        "weight": "0.100000"
+      },
+      {
+        "model_id": "gpt-5.1",
+        "weight": "0.100000"
+      },
+      {
+        "model_id": "gemini-3.1-pro-preview",
+        "weight": "0.100000"
+      },
+      {
+        "model_id": "grok-4.6",
+        "weight": "0.100000"
+      },
+      {
+        "model_id": "claude-haiku-4-5",
+        "weight": "0.100000"
+      },
+      {
+        "model_id": "gpt-5.4-mini",
+        "weight": "0.100000"
+      }
+    ]
+  },
+  "dated_siu": "0.009984",
+  "exchange_rate_table": [
+    {
+      "model_id": "deepseek-v3.2",
+      "usd_per_siu": "0.0018",
+      "spread_to_index": "-0.8167",
+      "siu_per_usd": "546.5"
+    },
+    {
+      "model_id": "llama-3.3-70b-deepinfra",
+      "usd_per_siu": "0.0007",
+      "spread_to_index": "-0.9281",
+      "siu_per_usd": "1392.8"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-instruct",
+      "usd_per_siu": "0.0007",
+      "spread_to_index": "-0.9343",
+      "siu_per_usd": "1524.4"
+    },
+    {
+      "model_id": "mistral-small-3.2-24b-deepinfra",
+      "usd_per_siu": "0.0006",
+      "spread_to_index": "-0.9395",
+      "siu_per_usd": "1656.4"
+    },
+    {
+      "model_id": "qwen-2.5-72b-instruct",
+      "usd_per_siu": "0.0025",
+      "spread_to_index": "-0.7448",
+      "siu_per_usd": "392.4"
+    },
+    {
+      "model_id": "claude-sonnet-5",
+      "usd_per_siu": "0.0236",
+      "spread_to_index": "1.3684",
+      "siu_per_usd": "42.2"
+    },
+    {
+      "model_id": "gpt-5.1",
+      "usd_per_siu": "0.0092",
+      "spread_to_index": "-0.0785",
+      "siu_per_usd": "108.6"
+    },
+    {
+      "model_id": "gemini-3.1-pro-preview",
+      "usd_per_siu": "0.0316",
+      "spread_to_index": "2.1668",
+      "siu_per_usd": "31.6"
+    },
+    {
+      "model_id": "grok-4.6",
+      "usd_per_siu": "0.0165",
+      "spread_to_index": "0.6567",
+      "siu_per_usd": "60.4"
+    },
+    {
+      "model_id": "claude-haiku-4-5",
+      "usd_per_siu": "0.0078",
+      "spread_to_index": "-0.2223",
+      "siu_per_usd": "128.7"
+    },
+    {
+      "model_id": "gpt-5.4-mini",
+      "usd_per_siu": "0.0053",
+      "spread_to_index": "-0.4646",
+      "siu_per_usd": "187.0"
+    }
+  ],
+  "sensitivity_block": [
+    {
+      "policy_variant": "cache-enabled: 40% of T2 input at 10% of input price",
+      "dated_siu": "0.007277",
+      "delta": "-0.2711",
+      "applies_to": [
+        "deepseek-v3.2",
+        "llama-3.3-70b-deepinfra",
+        "mistral-small-3.2-24b-instruct",
+        "mistral-small-3.2-24b-deepinfra",
+        "qwen-2.5-72b-instruct",
+        "claude-sonnet-5",
+        "gpt-5.1",
+        "gemini-3.1-pro-preview",
+        "grok-4.6",
+        "claude-haiku-4-5",
+        "gpt-5.4-mini"
+      ]
+    },
+    {
+      "policy_variant": "batch-discount: 50% off input and output",
+      "dated_siu": "0.005051",
+      "delta": "-0.4941",
+      "applies_to": [
+        "deepseek-v3.2",
+        "llama-3.3-70b-deepinfra",
+        "mistral-small-3.2-24b-instruct",
+        "mistral-small-3.2-24b-deepinfra",
+        "qwen-2.5-72b-instruct",
+        "claude-sonnet-5",
+        "gpt-5.1",
+        "gemini-3.1-pro-preview",
+        "grok-4.6",
+        "claude-haiku-4-5",
+        "gpt-5.4-mini"
+      ]
+    }
+  ],
+  "rounding": {
+    "dated_siu_sig_figs": 4,
+    "basket_cost_dp": 6,
+    "usd_per_siu_dp": 4,
+    "spread_dp": 4,
+    "siu_per_usd_dp": 1,
+    "mode": "ROUND_HALF_UP",
+    "siu_per_usd_mode": "ROUND_DOWN",
+    "notes": "Applied at publication only; all intermediate arithmetic is full-precision decimal. dated_siu rounds to significant figures, not a fixed decimal-place count, so its precision scales with the price rather than being lost as it falls (found live, 2026-09-25 — see docs/methodology.md's Rounding section). basket_cost carries more decimal places than dated_siu needs at any price level so the published print stays reproducible from its own published figures. siu_per_usd truncates so it never overstates the work a dollar buys."
+  },
+  "cost_of_production_usd": "1.6023",
+  "price_snapshot_ref": "price-snapshot-merged-2026-11-19T00-39-31.774Z.json",
+  "methodology_version": "v0-draft",
+  "dated_siu_median_diagnostic": "0.005346",
+  "methodology_revision": "rules-2026-11-21",
+  "supersedes": {
+    "print_id": "2026-11-19",
+    "reason": "Corrects the pricing errors set out in the dated notice of 21 November 2026: cached prompt tokens counted twice for deepseek-v3.2, mistral-small-3.2-24b-instruct, gemini-3.1-pro-preview, grok-4.6; calls priced at a service tier other than the one they were billed on, for mistral-small-3.2-24b-deepinfra, qwen-2.5-72b-instruct. Recomputed under rules-2026-11-21 from this print's own run records and price snapshot, keeping its weighting and carry-forward rules; the qualifying set is unchanged."
+  },
+  "signature": "0x09671c043866ecb5bdc7ad2485b4f85c937390fb4cf17446cc25460cede5b58303008803cd39c45e17bf955bdec8875e8fc4283327bdc398e04af8a605d945ef",
+  "public_key": "0x030c598ee35bd24b6942e9155bd36c1dbbe77936c700f859e75b0168b0e25cb299",
+  "anchor": {
+    "chain": "base-sepolia",
+    "status": "anchored",
+    "tx_hash": "0xaeb6961dda9fe236da8467a6c9807b90fb4ec9fe639ee6934d33317290d0dd2e",
+    "posted_at": "2026-11-22T11:26:16.000Z",
+    "additional_anchors": [
+      {
+        "chain": "arc-testnet",
+        "status": "anchored",
+        "tx_hash": "0xec850e2eb17d6a1e19b0ef2e590fd44443bacef29f99ffbef8cbc17122e26c4e",
+        "posted_at": "2026-11-22T11:26:17.000Z"
+      }
+    ]
+  }
+}

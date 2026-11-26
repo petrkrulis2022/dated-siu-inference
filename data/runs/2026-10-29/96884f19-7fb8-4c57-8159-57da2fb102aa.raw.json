@@ -1,0 +1,39 @@
+{
+  "id": "9796e510-9c9f-98a2-9c49-9037f4030be1",
+  "object": "chat.completion",
+  "created": 1793248109,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "F2125A\n214643\n825B35\nC8FB01",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes in the document. They are F2125A, 214643, 825B35, and C8FB01.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21884,
+    "completion_tokens": 16,
+    "total_tokens": 22260,
+    "prompt_tokens_details": {
+      "text_tokens": 21884,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 360,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 452560000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

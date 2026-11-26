@@ -1,0 +1,39 @@
+{
+  "id": "814de88e-2cb6-94c7-a108-7725e0305d39",
+  "object": "chat.completion",
+  "created": 1794271163,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "EE7BC8\n7148DC\nE5A89C\n10BFE4",
+        "reasoning_content": "I will scan the archive log for access codes and list each one in order.\n\nI found four access codes so far: EE7BC8, 7148DC, E5A89C, and 10BFE4.\n\nNo additional access codes were found. The document ends after the fourth code.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21982,
+    "completion_tokens": 19,
+    "total_tokens": 22499,
+    "prompt_tokens_details": {
+      "text_tokens": 21982,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 640
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 498,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 461060000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

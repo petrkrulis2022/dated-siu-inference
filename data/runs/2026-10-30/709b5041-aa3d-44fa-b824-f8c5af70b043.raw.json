@@ -1,0 +1,46 @@
+{
+  "id": "gen-1793321184-ydOdUlB5W7dKi05KX9Hc",
+  "object": "chat.completion",
+  "created": 1793321184,
+  "model": "mistralai/mistral-small-3.2-24b-instruct",
+  "provider": "Parasail",
+  "system_fingerprint": null,
+  "service_tier": null,
+  "choices": [
+    {
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": "stop",
+      "native_finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "```json\n{\n  \"tracking_id\": \"SH-BFDBE0\",\n  \"origin_city\": \"Denver\",\n  \"destination_city\": \"Recife\",\n  \"weight_kg\": 30,\n  \"status\": \"pending\",\n  \"priority\": \"standard\"\n}\n```",
+        "refusal": null,
+        "reasoning": null
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 881,
+    "completion_tokens": 62,
+    "total_tokens": 943,
+    "cost": 0.00009789,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": 0.00009789,
+      "upstream_inference_prompt_cost": 0.00007929,
+      "upstream_inference_completions_cost": 0.0000186
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "image_tokens": 0,
+      "audio_tokens": 0
+    }
+  }
+}

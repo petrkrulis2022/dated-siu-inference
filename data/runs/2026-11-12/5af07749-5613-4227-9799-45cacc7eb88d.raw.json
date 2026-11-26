@@ -1,0 +1,39 @@
+{
+  "id": "a8bd7349-2fb1-92ba-9f08-87ec07bd6d9f",
+  "object": "chat.completion",
+  "created": 1794457542,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "E05B50\nC485F8\n4382AC\nC2E40F",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nI found four access codes so far: E05B50 for the southern annex, C485F8 for the western annex, 4382AC for the eastern annex, and C2E40F for the coastal annex. I am checking the rest of the document for more.\n\nI have finished scanning the document. No additional access codes were found.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21761,
+    "completion_tokens": 19,
+    "total_tokens": 22218,
+    "prompt_tokens_details": {
+      "text_tokens": 21761,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 438,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 454960000
+  },
+  "system_fingerprint": "fp_bd136647c5",
+  "service_tier": "default"
+}

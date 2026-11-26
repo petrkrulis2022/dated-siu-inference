@@ -1,4 +1,5 @@
 import { Decimal as GlobalDecimal } from "decimal.js";
+import { callCostUsd } from "@touchstone/sdk";
 
 /**
  * A package-scoped Decimal constructor, NOT the global one.
@@ -21,15 +22,11 @@ export const D = GlobalDecimal.clone({
 
 export type DecimalValue = InstanceType<typeof D>;
 
-const MILLION = new D(1_000_000);
-
 /**
- * Cost of one call: (input ÷ 1e6 × price_in) + (output ÷ 1e6 × price_out) — build1-spec.md §6.1
- * — plus (cached ÷ 1e6 × price_cached) when both a nonzero cached token count and a published
- * cached rate are given. cachedTokens defaults to 0 and cachedPricePerMillion is optional so
- * every existing call site (and any model with no published cache rate) is unaffected; a model
- * with real cached_input usage but no cachedPricePerMillion still prices only input+output —
- * cached tokens go unpriced for it rather than at a guessed rate.
+ * Cost of one call from input and output token counts, through the one shared cost function (@touchstone/sdk's callCostUsd), for the callers
+ * that estimate or convert a cost from two counts (the demo agents, the MCP server's convert tool). Cached tokens, when given, are counted as
+ * apart from `inputTokens` and added at their own rate where one is published; a caller whose input count includes them uses callCostUsd with
+ * its own convention instead. The print prices its calls through class-cost.ts's callCostOf.
  */
 export function callCost(
   inputTokens: number,
@@ -39,14 +36,16 @@ export function callCost(
   cachedTokens = 0,
   cachedPricePerMillion?: string,
 ): DecimalValue {
-  let total = new D(inputTokens)
-    .dividedBy(MILLION)
-    .times(priceInPerMillion)
-    .plus(new D(outputTokens).dividedBy(MILLION).times(priceOutPerMillion));
-  if (cachedTokens > 0 && cachedPricePerMillion != null) {
-    total = total.plus(new D(cachedTokens).dividedBy(MILLION).times(cachedPricePerMillion));
-  }
-  return total;
+  const cost = callCostUsd(
+    { input: inputTokens, output: outputTokens, cached_input: cachedTokens },
+    {
+      priceInUsdPer1M: priceInPerMillion,
+      priceOutUsdPer1M: priceOutPerMillion,
+      ...(cachedPricePerMillion != null ? { priceCachedInUsdPer1M: cachedPricePerMillion } : {}),
+    },
+    { cachedInsideInput: false, reasoningInsideOutput: true },
+  );
+  return new D(cost.toString());
 }
 
 export function sum(values: DecimalValue[]): DecimalValue {

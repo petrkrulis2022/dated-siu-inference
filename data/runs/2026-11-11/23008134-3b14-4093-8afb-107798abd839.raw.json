@@ -1,0 +1,39 @@
+{
+  "id": "c577f51e-70ec-993d-81f0-d1d77d437a9f",
+  "object": "chat.completion",
+  "created": 1794357628,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"tracking_id\":\"SH-68DA9C\",\"origin_city\":\"Cebu\",\"destination_city\":\"Gdansk\",\"weight_kg\":328,\"status\":\"in_transit\",\"priority\":\"express\"}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nI found the shipment details in the report. The record is SH-68DA9C from Cebu to Gdansk. It weighs 328 kilograms with express priority and is currently in transit.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1545,
+    "completion_tokens": 48,
+    "total_tokens": 1864,
+    "prompt_tokens_details": {
+      "text_tokens": 1545,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 271,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 42360000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

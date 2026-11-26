@@ -1,0 +1,39 @@
+{
+  "id": "6bd55f47-b05e-983e-8186-2c6112ee58b9",
+  "object": "chat.completion",
+  "created": 1794457549,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "6E90B7\n87B915\nC077C5\n30FE13",
+        "reasoning_content": "I will read the archive log and list every access code found, one per line, in the order they appear.\n\nI found four access codes in the document:\n\n- 6E90B7\n- 87B915\n- C077C5\n- 30FE13",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21888,
+    "completion_tokens": 18,
+    "total_tokens": 22295,
+    "prompt_tokens_details": {
+      "text_tokens": 21888,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 389,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 454500000
+  },
+  "system_fingerprint": "fp_e41c6060b2628547",
+  "service_tier": "default"
+}

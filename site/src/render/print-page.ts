@@ -331,6 +331,14 @@ function renderPrintArchive(
  * Series chart aren't enough on their own. The original is never edited or deleted; this is
  * disclosure on the print's own face, per the revision policy.
  */
+/** On a correction's own page: the print it corrects and why (print.supersedes, part of this print's signed body). */
+function renderCorrectionOfNotice(print: Print, basePath: string): string {
+  if (!print.supersedes) return "";
+  return `<div class="change-note">
+    <strong>Correction</strong> of <a href="${basePath}prints/${esc(print.supersedes.print_id)}.html">${esc(print.supersedes.print_id)}</a>, which stays published as it was — ${esc(print.supersedes.reason)}
+  </div>`;
+}
+
 function renderSupersessionNotice(print: Print, basePath: string): string {
   if (!print.superseded_by) return "";
   return `<div class="change-note">
@@ -586,6 +594,7 @@ export function renderPrintPage({
   </div>
   ${renderCorrectionNotesNotice(print)}
   ${renderSupersessionNotice(print, basePath)}
+  ${renderCorrectionOfNotice(print, basePath)}
   ${renderPriorAttemptsNotice(print)}
   ${renderConstituentChangesNotice(print, previous)}
   ${renderChangeNote(print, previous)}
