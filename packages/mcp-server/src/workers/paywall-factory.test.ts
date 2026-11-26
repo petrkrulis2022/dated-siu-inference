@@ -5,7 +5,8 @@ import type { SelfSettler } from "../self-settled.js";
 describe("siuDecimalsFor", () => {
   it("knows every network each profile offers: USDC's 6 on Circle's, the token's own on Kite", () => {
     const mainnet = siuDecimalsFor("mainnet");
-    expect(["eip155:8453", "eip155:5042", "eip155:2366"].map(mainnet)).toEqual([6, 6, 6]);
+    expect(["eip155:8453", "eip155:5042"].map(mainnet)).toEqual([6, 6]);
+    expect(mainnet("eip155:2366")).toBeUndefined(); // Kite mainnet is not offered yet
     const testnet = siuDecimalsFor("testnet");
     expect(["eip155:84532", "eip155:5042002", "eip155:2368"].map(testnet)).toEqual([6, 6, 18]);
     expect(mainnet("eip155:84532")).toBeUndefined();
@@ -52,17 +53,23 @@ describe("paywallOptionsFor", () => {
     }
   });
 
-  it("mainnet asks Circle's live Gateway about Base and Arc, and settles Kite itself with the configured key", () => {
+  it("mainnet asks Circle's live Gateway about Base and Arc, and offers no Kite even with the settler key set", () => {
+    const makeSettler = vi.fn(() => fakeSettler);
+    const o = paywallOptionsFor("mainnet", env({ KITE_SETTLER_PRIVATE_KEY: "0xkey" }), makeSettler);
+    expect(o.networks).toEqual(["eip155:8453", "eip155:5042"]);
+    expect(o.facilitatorUrl).toBe("https://gateway-api.circle.com");
+    expect(o.selfSettled).toBeUndefined();
+    expect(makeSettler).not.toHaveBeenCalled();
+  });
+
+  it("testnet still settles Kite Testnet itself with the configured key", () => {
     const made: [string, string][] = [];
-    const o = paywallOptionsFor("mainnet", env({ KITE_SETTLER_PRIVATE_KEY: "0xkey" }), (n, k) => {
+    const o = paywallOptionsFor("testnet", env({ KITE_SETTLER_PRIVATE_KEY: "0xkey" }), (n, k) => {
       made.push([n.network, k]);
       return fakeSettler;
     });
-    expect(o.networks).toEqual(["eip155:8453", "eip155:5042"]);
-    expect(o.facilitatorUrl).toBe("https://gateway-api.circle.com");
-    expect(o.selfSettled?.networks.map((n) => n.network)).toEqual(["eip155:2366"]);
-    expect(Object.keys(o.selfSettled?.settlers ?? {})).toEqual(["eip155:2366"]);
-    expect(made).toEqual([["eip155:2366", "0xkey"]]);
+    expect(o.selfSettled?.networks.map((n) => n.network)).toEqual(["eip155:2368"]);
+    expect(made).toEqual([["eip155:2368", "0xkey"]]);
   });
 
   it("without a settler key Kite is left OUT rather than advertised and then refused, and the caller is told", () => {

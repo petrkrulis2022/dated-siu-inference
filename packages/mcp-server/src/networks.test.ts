@@ -18,11 +18,14 @@ const kv = (value: string | null | Error): KvReader => ({
 });
 
 describe("PROFILES", () => {
-  it("mainnet: Base 8453 and Arc 5042 through Circle's live Gateway, Kite 2366 settled here", () => {
+  it("mainnet: Base 8453 and Arc 5042 through Circle's live Gateway; Kite is not offered yet", () => {
+    // Owner, 2026-11-26: Base and Arc go live first. Kite mainnet joins only once its settler
+    // holds KITE and Kite's own paid tests pass; until then no 402, OpenAPI document or SIU price
+    // may name it.
     const p = PROFILES.mainnet;
     expect(p.circle.networks).toEqual(["eip155:8453", "eip155:5042"]);
     expect(p.circle.facilitatorUrl).toBe("https://gateway-api.circle.com");
-    expect(p.selfSettled.map((n) => n.network)).toEqual(["eip155:2366"]);
+    expect(p.selfSettled).toEqual([]);
   });
 
   it("testnet: Base Sepolia, Arc Testnet and Kite Testnet, through Circle's TESTNET Gateway", () => {

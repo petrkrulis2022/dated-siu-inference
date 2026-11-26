@@ -161,12 +161,15 @@ describe("buildOpenApi", () => {
     });
 
     it("says what Kite's per-call floor is, from the same constant the paywall uses", () => {
-      for (const profile of ["testnet", "mainnet"] as const) {
-        const kite = PROFILES[profile].selfSettled[0];
-        expect(doc(profile).paths["/v1/quote"]?.get?.description).toContain(
-          `charges at least $${kite?.minimumPriceUsd}`,
-        );
-      }
+      const kite = PROFILES.testnet.selfSettled[0];
+      expect(doc("testnet").paths["/v1/quote"]?.get?.description).toContain(
+        `charges at least $${kite?.minimumPriceUsd}`,
+      );
+    });
+
+    it("on mainnet, where Kite is held back, mentions no Kite network or floor", () => {
+      const text = JSON.stringify(doc("mainnet"));
+      expect(text).not.toMatch(/Kite|eip155:2366/);
     });
   });
 

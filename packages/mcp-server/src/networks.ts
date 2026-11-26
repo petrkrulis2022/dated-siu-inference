@@ -1,10 +1,11 @@
-import { KITE_MAINNET, KITE_TESTNET, type SelfSettledNetwork } from "./self-settled.js";
+import { KITE_TESTNET, type SelfSettledNetwork } from "./self-settled.js";
 
 /**
  * Which networks the paid tools accept payment on — mainnet-switch brief §2A and decision 5.
  *
- *  - `mainnet`      Base (8453) and Arc (5042) through Circle's live Gateway, Kite (2366) settled by
- *                   this server itself (Circle's Gateway does not cover Kite).
+ *  - `mainnet`      Base (8453) and Arc (5042) through Circle's live Gateway. Kite (2366), settled by
+ *                   this server itself (Circle's Gateway does not cover Kite), is held back until its
+ *                   settler is funded and tested — see the profile below.
  *  - `testnet`      Base Sepolia (84532) and Arc Testnet (5042002) through Circle's testnet Gateway,
  *                   Kite Testnet (2368) settled by this server.
  *  - `base-sepolia` Exactly the pre-switch behaviour: Base Sepolia only, through Circle's testnet
@@ -41,7 +42,10 @@ export const PROFILES: Record<NetworkProfile, ProfileConfig> = {
     profile: "mainnet",
     // CAIP-2 ids confirmed against Circle's live `GET /v1/x402/supported` on 2026-10-25
     circle: { networks: ["eip155:8453", "eip155:5042"], facilitatorUrl: CIRCLE_MAINNET },
-    selfSettled: [KITE_MAINNET],
+    // Kite mainnet (KITE_MAINNET, built and testnet-proven) is held back: owner's decision of
+    // 2026-11-26 to go live on Base and Arc first. It returns here, with a deploy, once its settler
+    // holds KITE and Kite's own paid tests pass; until then no 402 or OpenAPI document names it.
+    selfSettled: [],
     unavailableTools: {
       verify_receipt:
         "verify_receipt is not available on mainnet yet: it reads escrow-backed settlements, which exist on testnet only, " +

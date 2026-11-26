@@ -84,13 +84,13 @@ delete the file afterwards — it is gitignored.)
 Which networks a payment can be made on is a **profile**, chosen on every request from a flag, so
 switching never needs a deploy (`src/networks.ts`):
 
-| Profile        | Accepts                                                             | Settled by                                 |
-| -------------- | ------------------------------------------------------------------- | ------------------------------------------ |
-| `mainnet`      | Base `eip155:8453`, Arc `eip155:5042`                               | Circle Gateway (live)                      |
-|                | Kite `eip155:2366`, paid in USDC.e                                  | this Worker itself (`src/self-settled.ts`) |
-| `testnet`      | Base Sepolia `84532`, Arc Testnet `5042002`                         | Circle Gateway (testnet)                   |
-|                | Kite Testnet `2368`, paid in test PYUSD                             | this Worker itself                         |
-| `base-sepolia` | Base Sepolia only — exactly the behaviour before the mainnet switch | Circle Gateway (testnet)                   |
+| Profile        | Accepts                                                                              | Settled by                                 |
+| -------------- | ------------------------------------------------------------------------------------ | ------------------------------------------ |
+| `mainnet`      | Base `eip155:8453`, Arc `eip155:5042`                                                | Circle Gateway (live)                      |
+|                | Kite `eip155:2366`, paid in USDC.e: held back until its settler is funded and tested | this Worker itself (`src/self-settled.ts`) |
+| `testnet`      | Base Sepolia `84532`, Arc Testnet `5042002`                                          | Circle Gateway (testnet)                   |
+|                | Kite Testnet `2368`, paid in test PYUSD                                              | this Worker itself                         |
+| `base-sepolia` | Base Sepolia only — exactly the behaviour before the mainnet switch                  | Circle Gateway (testnet)                   |
 
 Every profile pays `TOUCHSTONE_SELLER_ADDRESS`. The profile is the KV key `config:network-profile`
 in the `PRINTS_CACHE` namespace, falling back to the `TOUCHSTONE_NETWORK_PROFILE` var in
