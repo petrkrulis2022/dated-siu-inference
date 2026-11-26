@@ -21,7 +21,7 @@ export const GET: APIRoute = () => {
   const body = {
     name: "io.github.petrkrulis2022/touchstone-mcp",
     description:
-      "Dated SIU, the benchmark price of AI inference: one free tool, three paid in USDC on Base and Arc.",
+      "Dated SIU, the benchmark price of AI inference: free index; paid quotes in USDC on Base and Arc.",
     remote: {
       type: "streamable-http",
       url: MCP_SERVER_URL,
