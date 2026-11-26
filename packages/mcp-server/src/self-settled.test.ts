@@ -9,7 +9,7 @@ import {
 } from "./self-settled.js";
 import type { ToolMiddleware } from "./paywall.js";
 
-const TREASURY = "0x470571461B28C371E2D38766505E572350f43B75";
+const TREASURY = "0xB514882859f43DbF3df664C899D707f649E0CF4A";
 const encode = (v: unknown) => Buffer.from(JSON.stringify(v)).toString("base64");
 const decode = (h: string) => JSON.parse(Buffer.from(h, "base64").toString("utf-8"));
 

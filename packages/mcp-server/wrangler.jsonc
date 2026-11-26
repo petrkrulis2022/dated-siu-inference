@@ -60,8 +60,10 @@
     // payTo for EVERY network and profile: the Touchstone revenue wallet (TOUCHSTONE_MAINNET_TREASURY,
     // a software-wallet EOA the owner controls, not a Safe: Circle Nanopayments does not support
     // ERC-1271 contract accounts). A public address; this Worker never holds its key. Replaces the
-    // old testnet deployer address, whose key sat in a plaintext .env.
-    "TOUCHSTONE_SELLER_ADDRESS": "0x470571461B28C371E2D38766505E572350f43B75",
+    // old testnet deployer address, whose key sat in a plaintext .env. Since 2026-11-26 this is
+    // 0xB514...CF4A, confirmed by the owner; the October testnet payments went to the earlier
+    // treasury 0x4705...3B75 (recorded in data/deployments/kite-testnet.json).
+    "TOUCHSTONE_SELLER_ADDRESS": "0xB514882859f43DbF3df664C899D707f649E0CF4A",
     // Default network profile when the KV flag `config:network-profile` (in PRINTS_CACHE) is unset:
     // "mainnet" | "testnet" | "base-sepolia" (the old Base-Sepolia-only behaviour). Anything else
     // falls back to testnet. Switching is a `wrangler kv key put`, never a deploy — see README.md.

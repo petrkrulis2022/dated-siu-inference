@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { paywallOptionsFor } from "./paywall-factory.js";
 import type { SelfSettler } from "../self-settled.js";
 
-const TREASURY = "0x470571461B28C371E2D38766505E572350f43B75";
+const TREASURY = "0xB514882859f43DbF3df664C899D707f649E0CF4A";
 const fakeSettler: SelfSettler = { verifyAndSettle: async () => ({ ok: false, reason: "test" }) };
 const env = (extra: Record<string, string> = {}) => ({
   TOUCHSTONE_SELLER_ADDRESS: TREASURY,

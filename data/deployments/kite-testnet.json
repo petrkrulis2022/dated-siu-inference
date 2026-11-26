@@ -48,7 +48,7 @@
     }
   },
   "paidToolSettlement": {
-    "description": "Live test payments on Kite testnet, settled by this repo's own server code (packages/mcp-server/src/self-settled.ts: @x402/evm's reference exact-scheme facilitator, gas paid by a settler key), buyer = the test buyer, payee = TOUCHSTONE_MAINNET_TREASURY.",
+    "description": "Live test payments on Kite testnet, settled by this repo's own server code (packages/mcp-server/src/self-settled.ts: @x402/evm's reference exact-scheme facilitator, gas paid by a settler key), buyer = the test buyer, payee = the treasury of the time, below (replaced as payTo by 0xB514882859f43DbF3df664C899D707f649E0CF4A on 2026-11-26).",
     "payTo": "0x470571461B28C371E2D38766505E572350f43B75",
     "payments": [
       {
