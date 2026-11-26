@@ -1,4 +1,4 @@
-import { cp, mkdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Print } from "@touchstone/sdk";
@@ -19,6 +19,7 @@ import { renderSeriesPage } from "./render/series-page.js";
 import { renderPrintsList } from "./render/prints-list.js";
 import { renderModelsPage, type ModelGatePoint } from "./render/models-page.js";
 import { renderForAgentsPage } from "./render/for-agents-page.js";
+import { renderLlmsTxt, renderMcpJson, siuPricesFromPrints } from "./render/tool-prices.js";
 import { buildVerificationSpec, verificationExampleOf } from "./verify-recipe.js";
 import { printBodyHashHex } from "@touchstone/print";
 
@@ -248,13 +249,20 @@ async function main(): Promise<void> {
     }),
   );
 
-  // FOR AGENTS — the human-readable counterpart to /mcp.json and /.well-known/llms.txt (copied
-  // wholesale from static/ above), all three published this same build so they can never drift.
+  // FOR AGENTS — the human-readable counterpart to /mcp.json and /.well-known/llms.txt, all three
+  // published this same build so they can never drift. Their paid-tool prices come from the one
+  // table the server's paywall reads, with each one's mSIU figure at the latest Commodity print
+  // (./render/tool-prices.ts); this build runs on every push, so the figures follow the daily print.
+  const siuPrices = siuPricesFromPrints(allPublishedPrints, new Date());
+  const mcpJsonTemplate = JSON.parse(await readFile(join(STATIC_DIR, "mcp.json"), "utf-8"));
+  await writeFile(join(OUT_DIR, "mcp.json"), renderMcpJson(mcpJsonTemplate, siuPrices), "utf-8");
+  const llmsTemplate = await readFile(join(STATIC_DIR, ".well-known", "llms.txt"), "utf-8");
+  await writeFile(join(OUT_DIR, ".well-known", "llms.txt"), renderLlmsTxt(llmsTemplate, siuPrices), "utf-8");
   await writeHtml(
     join(OUT_DIR, "for-agents.html"),
     renderLayout({
       title: "Touchstone Assay — For agents",
-      bodyHtml: renderForAgentsPage(chains),
+      bodyHtml: renderForAgentsPage(chains, siuPrices),
       basePath: "",
       mode: "for-agents",
     }),

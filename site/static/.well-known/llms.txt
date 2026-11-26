@@ -24,11 +24,11 @@ nanopayments), settled in USDC on Base Sepolia (`eip155:84532`) —
 TESTBED, not mainnet, not traction:
 
 - `get_index(version?, date?)` — free — the current signed print.
-- `get_quote(task_class, model)` — $0.001 — SIU + USD price for one call of a
+- `get_quote(task_class, model)` — {{price:get_quote}} — SIU + USD price for one call of a
   task class against a model.
-- `convert(model, input_tokens, output_tokens)` — $0.001 — SIU + USD
+- `convert(model, input_tokens, output_tokens)` — {{price:convert}} — SIU + USD
   equivalent for a specific token count.
-- `verify_receipt(chain, tx_hash)` — $0.01 — reads an on-chain settlement and
+- `verify_receipt(chain, tx_hash)` — {{price:verify_receipt}} — reads an on-chain settlement and
   returns a signed attestation of what was quoted versus what was actually
   paid.
 

@@ -32,10 +32,19 @@ export async function sessionTag(sessionId: string | undefined): Promise<string>
     .join("");
 }
 
-function write(env: UsageEnv, ctx: Ctx, sessionId: string | undefined, point: (tag: string) => unknown) {
+function write(
+  env: UsageEnv,
+  ctx: Ctx,
+  sessionId: string | undefined,
+  point: (tag: string) => unknown,
+) {
   ctx.waitUntil(
     sessionTag(sessionId)
-      .then((tag) => env.USAGE.writeDataPoint(point(tag) as Parameters<AnalyticsEngineDataset["writeDataPoint"]>[0]))
+      .then((tag) =>
+        env.USAGE.writeDataPoint(
+          point(tag) as Parameters<AnalyticsEngineDataset["writeDataPoint"]>[0],
+        ),
+      )
       .catch((err) => console.error("SIU measure logging failed:", err)),
   );
 }

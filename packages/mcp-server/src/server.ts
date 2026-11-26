@@ -1,7 +1,13 @@
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { printsDir } from "@touchstone/print";
+import {
+  PAID_TOOL_PRICES_USD,
+  printsDir,
+  priceLabel,
+  type PaidTool,
+  type SiuPrice,
+} from "@touchstone/print";
 import { runTool, type ToolDeps, type ToolName } from "./tools/run.js";
 import { createToolPaywall, type PaywallOptions } from "./paywall.js";
 import { TOOL_INPUT_SHAPES } from "./tools/schemas.js";
@@ -26,6 +32,26 @@ export interface McpServerOptions {
   attestationPrivateKeyHex: string;
   printsDirPath?: string;
   dataSource?: PrintDataSource;
+  /** Each paid tool's price in mSIU at the latest Commodity print, stated in its description. */
+  siuPrices?: Partial<Record<PaidTool, SiuPrice | undefined>>;
+}
+
+/**
+ * The four tools' descriptions. A paid tool's states its price the way every other surface does
+ * (@touchstone/print's priceLabel): USD, plus mSIU at the latest Commodity print when there is one.
+ * The 402 a call receives is the authority on the amount (Kite's floor is higher).
+ */
+export function toolDescriptions(
+  siuPrices: Partial<Record<PaidTool, SiuPrice | undefined>> = {},
+): Record<ToolName, string> {
+  const price = (tool: PaidTool) =>
+    `Price: ${priceLabel(PAID_TOOL_PRICES_USD[tool], siuPrices[tool])}.`;
+  return {
+    get_index: "The signed Dated SIU print. Free — citation is the business.",
+    get_quote: `SIU price, exchange rate and index refs for one task class and model. ${price("get_quote")}`,
+    convert: `Convert a model call's token counts into SIU and USD. ${price("convert")}`,
+    verify_receipt: `Reads an on-chain settlement and returns a signed attestation. ${price("verify_receipt")}`,
+  };
 }
 
 /** The four tools — build1-spec.md §9. Pricing is enforced entirely outside this function, by
@@ -42,6 +68,7 @@ export function createTouchstoneMcpServer(options: McpServerOptions): McpServer 
     settlementReader: options.settlementReader,
     attestationPrivateKeyHex: options.attestationPrivateKeyHex,
   };
+  const descriptions = toolDescriptions(options.siuPrices);
   const handler = (name: ToolName) => async (args: unknown) => {
     try {
       return toolResult(await runTool(name, args, toolDeps));
@@ -53,7 +80,7 @@ export function createTouchstoneMcpServer(options: McpServerOptions): McpServer 
   server.registerTool(
     "get_index",
     {
-      description: "The signed Dated SIU print. Free — citation is the business.",
+      description: descriptions.get_index,
       inputSchema: TOOL_INPUT_SHAPES.get_index,
     },
     handler("get_index"),
@@ -62,7 +89,7 @@ export function createTouchstoneMcpServer(options: McpServerOptions): McpServer 
   server.registerTool(
     "get_quote",
     {
-      description: "SIU price, exchange rate and index refs for one task class and model.",
+      description: descriptions.get_quote,
       inputSchema: TOOL_INPUT_SHAPES.get_quote,
     },
     handler("get_quote"),
@@ -71,7 +98,7 @@ export function createTouchstoneMcpServer(options: McpServerOptions): McpServer 
   server.registerTool(
     "convert",
     {
-      description: "Convert a model call's token counts into SIU and USD.",
+      description: descriptions.convert,
       inputSchema: TOOL_INPUT_SHAPES.convert,
     },
     handler("convert"),
@@ -80,7 +107,7 @@ export function createTouchstoneMcpServer(options: McpServerOptions): McpServer 
   server.registerTool(
     "verify_receipt",
     {
-      description: "Reads an on-chain settlement and returns a signed attestation.",
+      description: descriptions.verify_receipt,
       inputSchema: TOOL_INPUT_SHAPES.verify_receipt,
     },
     handler("verify_receipt"),

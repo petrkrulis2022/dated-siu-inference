@@ -70,9 +70,17 @@ function ageInDays(printDate: string, now: Date): number | undefined {
  * SIU_PRICE_MAX_AGE_DAYS, or the result would round to zero. Undefined means "state no SIU
  * price"; it never means zero.
  */
-export function siuPriceFor(priceUsd: string, print: Print | undefined, now: Date): SiuPrice | undefined {
+export function siuPriceFor(
+  priceUsd: string,
+  print: Print | undefined,
+  now: Date,
+): SiuPrice | undefined {
   if (!print) return undefined;
-  const p = print as Print & { series?: string; superseded_by?: unknown; methodology_revision?: string };
+  const p = print as Print & {
+    series?: string;
+    superseded_by?: unknown;
+    methodology_revision?: string;
+  };
   if (p.series !== SIU_PRICE_GRADE || p.superseded_by) return undefined;
   if (typeof p.methodology_version !== "string" || p.methodology_version === "") return undefined;
 
@@ -98,6 +106,15 @@ export function siuPriceFor(priceUsd: string, print: Print | undefined, now: Dat
   };
 }
 
+/**
+ * How every human- and agent-readable surface states a paid tool's price: "$0.001 USDC (710 mSIU at
+ * the 2026-11-26 Commodity print)", or just "$0.001 USDC" when there is no SIU price to state.
+ */
+export function priceLabel(priceUsd: string, siu: SiuPrice | undefined): string {
+  const usd = `$${priceUsd} USDC`;
+  return siu ? `${usd} (${siu.price_msiu} mSIU at the ${siu.print_date} Commodity print)` : usd;
+}
+
 const COMMODITY_ID = /^(\d{4}-\d{2}-\d{2})([b-z]?)-commodity$/;
 
 /**
@@ -110,7 +127,10 @@ export function commodityPrintCandidates(printIds: readonly string[]): string[] 
     .map((id) => ({ id, m: COMMODITY_ID.exec(id) }))
     .filter((x): x is { id: string; m: RegExpExecArray } => x.m !== null);
   if (parsed.length === 0) return [];
-  const newest = parsed.map((x) => x.m[1] as string).sort().at(-1);
+  const newest = parsed
+    .map((x) => x.m[1] as string)
+    .sort()
+    .at(-1);
   return parsed
     .filter((x) => x.m[1] === newest)
     .sort((a, b) => ((b.m[2] ?? "") > (a.m[2] ?? "") ? 1 : -1))

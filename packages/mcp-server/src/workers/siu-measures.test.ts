@@ -54,7 +54,14 @@ describe("recordChallenge", () => {
   it("never throws or rejects when logging fails", async () => {
     const c = ctx();
     expect(() =>
-      recordChallenge({ USAGE: usage(true).USAGE as never }, c.ctx, "get_quote", "mainnet", true, "s"),
+      recordChallenge(
+        { USAGE: usage(true).USAGE as never },
+        c.ctx,
+        "get_quote",
+        "mainnet",
+        true,
+        "s",
+      ),
     ).not.toThrow();
     await expect(Promise.all(c.pending)).resolves.toBeDefined();
   });
@@ -68,7 +75,11 @@ describe("recordPaidInSession", () => {
     recordPaidInSession({ USAGE: u.USAGE as never }, c.ctx, "get_quote", "mainnet", undefined);
     await Promise.all(c.pending);
     expect(u.points).toEqual([
-      { blobs: ["paid", "get_quote", "mainnet", "", await sessionTag("session-1")], doubles: [1], indexes: ["paid"] },
+      {
+        blobs: ["paid", "get_quote", "mainnet", "", await sessionTag("session-1")],
+        doubles: [1],
+        indexes: ["paid"],
+      },
     ]);
   });
 });

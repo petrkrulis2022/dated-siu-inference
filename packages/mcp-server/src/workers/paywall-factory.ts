@@ -72,7 +72,11 @@ export function siuDecimalsFor(profile: NetworkProfile): (network: string) => nu
 }
 
 /** `load`, remembered for `ttlMs` per isolate; a failed load is not remembered. */
-export function remembered<T>(ttlMs: number, load: () => Promise<T>, clock: () => number = Date.now) {
+export function remembered<T>(
+  ttlMs: number,
+  load: () => Promise<T>,
+  clock: () => number = Date.now,
+) {
   let value: { v: T; at: number } | undefined;
   return async (): Promise<T> => {
     if (value && clock() - value.at < ttlMs) return value.v;

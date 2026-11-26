@@ -1,6 +1,7 @@
 import type { ChainInfo } from "../data.js";
 import { esc } from "../format.js";
 import { EXCLUDED_FIELDS, RAW_PRINT_URL, VERIFY_JSON_URL, VERIFY_SCRIPT_URL, chainName } from "../verify-recipe.js";
+import { toolPriceLabel, type SiuPrices } from "./tool-prices.js";
 
 const MCP_URL = "https://mcp.touchstoneassay.com/mcp";
 const MCP_JSON_URL = "https://prints.touchstoneassay.com/mcp.json";
@@ -17,14 +18,15 @@ const MCP_CONFIG_JSON = `{
 interface ToolRow {
   name: string;
   args: string;
-  price: string;
 }
 
+// Prices are not written here: they come from the one shared table (./tool-prices.ts), with each
+// paid tool's mSIU figure at the latest Commodity print.
 const TOOLS: ToolRow[] = [
-  { name: "get_index", args: "version?, date?", price: "free" },
-  { name: "get_quote", args: "task_class, model", price: "$0.001" },
-  { name: "convert", args: "model, input_tokens, output_tokens", price: "$0.001" },
-  { name: "verify_receipt", args: "chain, tx_hash", price: "$0.01" },
+  { name: "get_index", args: "version?, date?" },
+  { name: "get_quote", args: "task_class, model" },
+  { name: "convert", args: "model, input_tokens, output_tokens" },
+  { name: "verify_receipt", args: "chain, tx_hash" },
 ];
 
 interface TryItHereTool {
@@ -58,10 +60,10 @@ const TRY_IT_HERE_TOOLS: TryItHereTool[] = [
  * script-count invariant, which this page doesn't affect) powering the "Try it here" section
  * below; every other section here is still plain text meant to be copied, not a live widget.
  */
-export function renderForAgentsPage(chains: ChainInfo[] = []): string {
+export function renderForAgentsPage(chains: ChainInfo[] = [], siu: SiuPrices = {}): string {
   const rows = TOOLS.map(
     (t) =>
-      `<tr><td><code>${esc(t.name)}</code></td><td><code>${esc(t.args)}</code></td><td>${esc(t.price)}</td></tr>`,
+      `<tr><td><code>${esc(t.name)}</code></td><td><code>${esc(t.args)}</code></td><td>${esc(toolPriceLabel(t.name, siu))}</td></tr>`,
   ).join("\n");
 
   return `<div class="headline">

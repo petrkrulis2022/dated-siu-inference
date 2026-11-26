@@ -170,6 +170,49 @@ needed. Differences worth knowing:
   Cached for 60 seconds so a profile switch shows quickly.
 - The usage and settlement logs do not record which door a call used.
 
+### The SIU price in every 402
+
+Every payment offer in a paid tool's 402, on MCP and REST alike, states the same price in SIU beside
+the USDC amount. It sits under its own key in x402's per-offer extension field, so it never replaces
+a field Circle or Kite set there, and clients that don't know it ignore it:
+
+```json
+"extra": {
+  "name": "…", "version": "…",
+  "touchstone": {
+    "price_msiu": "710",
+    "rate_usd_per_siu": "0.001409",
+    "grade": "commodity",
+    "print_id": "2026-11-26-commodity",
+    "print_date": "2026-11-26",
+    "print_hash": "0x…",
+    "methodology_version": "v0-draft",
+    "methodology_revision": "rules-2026-11-21"
+  }
+}
+```
+
+The values above are the 26 November 2026 Commodity print's, for `get_quote` at $0.001.
+
+- **What it is.** A comparison price only. The buyer pays the USDC amount in the same offer.
+- **How it is computed.** The offer's own amount, divided by the Commodity print's Dated SIU, in
+  thousandths of an SIU, rounded half-up to a whole mSIU once, at the end, with no floating point
+  (`@touchstone/print`'s `siuPriceFor`). Each offer is priced from its own amount, so Kite's higher
+  floor shows as a higher mSIU figure.
+- **It follows the daily print.** It is computed from whichever Commodity print is latest: from the
+  newest date, the latest correction that nothing supersedes. The print's id, date, body hash and
+  methodology identifiers come with it, exactly as the signed print carries them, so anyone can check
+  the rate.
+- **A print older than 7 days omits it.** When the latest Commodity print is more than 7 days old,
+  or there is none, or it cannot be read, the offer carries the USDC amount only. The figure is left
+  out, never guessed, and nothing about it can stop a 402 from being sent.
+- **Measured.** Each 402 is logged with whether it carried an SIU price (`src/workers/siu-measures.ts`).
+  On MCP, a one-way tag of the session id also lets a 402 be matched to a later payment in the same
+  session; REST calls have no session and count toward coverage only.
+
+The MCP tool descriptions, `mcp.json`, `llms.txt` and the for-agents page state the same figure from
+the same table (`PAID_TOOL_PRICES_USD`), each with the print date it used.
+
 ## Listing this server
 
 ### Official MCP registry (registry.modelcontextprotocol.io)

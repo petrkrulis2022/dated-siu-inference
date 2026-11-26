@@ -39,15 +39,44 @@ const CHALLENGE = {
   error: "Payment required",
   resource: { url: "/v1/quote" },
   accepts: [
-    { scheme: "exact", network: "eip155:8453", amount: "1000", asset: "0xusdc", payTo: "0xT", maxTimeoutSeconds: 60, extra: { name: "GatewayWalletBatched", version: "1", verifyingContract: "0xgw" } },
-    { scheme: "exact", network: "eip155:5042", amount: "1000", asset: "0xusdc", payTo: "0xT", maxTimeoutSeconds: 60, extra: { name: "GatewayWalletBatched", version: "1" } },
-    { scheme: "exact", network: "eip155:2366", amount: "5000", asset: "0xusdce", payTo: "0xT", maxTimeoutSeconds: 60, extra: { name: "Bridged USDC (Kite AI)", version: "2" } },
+    {
+      scheme: "exact",
+      network: "eip155:8453",
+      amount: "1000",
+      asset: "0xusdc",
+      payTo: "0xT",
+      maxTimeoutSeconds: 60,
+      extra: { name: "GatewayWalletBatched", version: "1", verifyingContract: "0xgw" },
+    },
+    {
+      scheme: "exact",
+      network: "eip155:5042",
+      amount: "1000",
+      asset: "0xusdc",
+      payTo: "0xT",
+      maxTimeoutSeconds: 60,
+      extra: { name: "GatewayWalletBatched", version: "1" },
+    },
+    {
+      scheme: "exact",
+      network: "eip155:2366",
+      amount: "5000",
+      asset: "0xusdce",
+      payTo: "0xT",
+      maxTimeoutSeconds: 60,
+      extra: { name: "Bridged USDC (Kite AI)", version: "2" },
+    },
   ],
 };
 
 describe("priceChallengeHeader", () => {
   it("adds the SIU price, per offer, beside each USDC amount, keeping every existing field", () => {
-    const { header, carried } = priceChallengeHeader(encode(CHALLENGE), COMMODITY, decimalsFor, NOW);
+    const { header, carried } = priceChallengeHeader(
+      encode(CHALLENGE),
+      COMMODITY,
+      decimalsFor,
+      NOW,
+    );
     const out = decode(header);
     expect(carried).toBe(true);
     expect(out.resource).toEqual(CHALLENGE.resource);
@@ -62,20 +91,38 @@ describe("priceChallengeHeader", () => {
       methodology_version: "v0-draft",
       methodology_revision: "rules-2026-11-21",
     });
-    expect(out.accepts[0]).toEqual({ ...CHALLENGE.accepts[0], extra: { ...CHALLENGE.accepts[0]!.extra, touchstone: siu("710") } });
+    expect(out.accepts[0]).toEqual({
+      ...CHALLENGE.accepts[0],
+      extra: { ...CHALLENGE.accepts[0]!.extra, touchstone: siu("710") },
+    });
     expect(out.accepts[1].extra.touchstone.price_msiu).toBe("710");
-    expect(out.accepts[2].extra).toEqual({ name: "Bridged USDC (Kite AI)", version: "2", touchstone: siu("3549") });
+    expect(out.accepts[2].extra).toEqual({
+      name: "Bridged USDC (Kite AI)",
+      version: "2",
+      touchstone: siu("3549"),
+    });
   });
 
   it("converts by each offer's own token decimals (Kite Testnet's PYUSD has 18)", () => {
-    const challenge = { ...CHALLENGE, accepts: [{ ...CHALLENGE.accepts[2], network: "eip155:2368", amount: "5000000000000000" }] };
+    const challenge = {
+      ...CHALLENGE,
+      accepts: [{ ...CHALLENGE.accepts[2], network: "eip155:2368", amount: "5000000000000000" }],
+    };
     const { header } = priceChallengeHeader(encode(challenge), COMMODITY, decimalsFor, NOW);
     expect(decode(header).accepts[0].extra.touchstone.price_msiu).toBe("3549");
   });
 
   it("leaves an offer unpriced when its token's decimals are unknown, and says the 402 was not fully priced", () => {
-    const challenge = { ...CHALLENGE, accepts: [CHALLENGE.accepts[0], { ...CHALLENGE.accepts[1], network: "eip155:1" }] };
-    const { header, carried } = priceChallengeHeader(encode(challenge), COMMODITY, decimalsFor, NOW);
+    const challenge = {
+      ...CHALLENGE,
+      accepts: [CHALLENGE.accepts[0], { ...CHALLENGE.accepts[1], network: "eip155:1" }],
+    };
+    const { header, carried } = priceChallengeHeader(
+      encode(challenge),
+      COMMODITY,
+      decimalsFor,
+      NOW,
+    );
     const out = decode(header);
     expect(carried).toBe(false);
     expect(out.accepts[0].extra.touchstone.price_msiu).toBe("710");
@@ -128,7 +175,10 @@ describe("withSiuPrice", () => {
   it("prices the 402 the wrapped paywall sends, and records that it did", async () => {
     const req = { headers: {} } as Request;
     const { res, headers } = fakeRes();
-    await withSiuPrice(challengingInner, pricing(async () => COMMODITY))(req, res, (() => undefined) as NextFunction);
+    await withSiuPrice(
+      challengingInner,
+      pricing(async () => COMMODITY),
+    )(req, res, (() => undefined) as NextFunction);
     expect(decode(headers["PAYMENT-REQUIRED"]!).accepts[0].extra.touchstone.price_msiu).toBe("710");
     expect(siuPricedFrom(req)).toBe(true);
   });
@@ -136,11 +186,10 @@ describe("withSiuPrice", () => {
   it("still serves the plain 402 when the print cannot be loaded", async () => {
     const req = { headers: {} } as Request;
     const { res, headers } = fakeRes();
-    await withSiuPrice(challengingInner, pricing(async () => Promise.reject(new Error("KV down"))))(
-      req,
-      res,
-      (() => undefined) as NextFunction,
-    );
+    await withSiuPrice(
+      challengingInner,
+      pricing(async () => Promise.reject(new Error("KV down"))),
+    )(req, res, (() => undefined) as NextFunction);
     expect(decode(headers["PAYMENT-REQUIRED"]!)).toEqual(CHALLENGE);
     expect(siuPricedFrom(req)).toBe(false);
   });
@@ -149,7 +198,10 @@ describe("withSiuPrice", () => {
     const req = { headers: {} } as Request;
     const { res } = fakeRes();
     let passed = false;
-    await withSiuPrice((_req, _res, next) => next(), pricing(async () => COMMODITY))(req, res, (() => {
+    await withSiuPrice(
+      (_req, _res, next) => next(),
+      pricing(async () => COMMODITY),
+    )(req, res, (() => {
       passed = true;
     }) as NextFunction);
     expect(passed).toBe(true);
@@ -167,7 +219,11 @@ describe("commodityPrintOfRecord", () => {
         superseded_by: { print_id: "2026-11-26b-commodity", reason: "test correction" },
       } as Print,
       "2026-11-26b-commodity": corrected,
-      "2026-11-25-commodity": { ...COMMODITY, print_id: "2026-11-25-commodity", date: "2026-11-25" } as Print,
+      "2026-11-25-commodity": {
+        ...COMMODITY,
+        print_id: "2026-11-25-commodity",
+        date: "2026-11-25",
+      } as Print,
     };
     const source = {
       listPrintIds: async () => [...Object.keys(prints), "2026-11-26", "2026-11-26-frontier"],
@@ -178,7 +234,10 @@ describe("commodityPrintOfRecord", () => {
 
   it("is undefined when there is no Commodity print, or none that loads unsuperseded", async () => {
     expect(
-      await commodityPrintOfRecord({ listPrintIds: async () => ["2026-11-26"], loadPrintByDate: async () => COMMODITY }),
+      await commodityPrintOfRecord({
+        listPrintIds: async () => ["2026-11-26"],
+        loadPrintByDate: async () => COMMODITY,
+      }),
     ).toBeUndefined();
     expect(
       await commodityPrintOfRecord({

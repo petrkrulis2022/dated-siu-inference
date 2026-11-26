@@ -32,7 +32,8 @@ interface Offer {
 }
 
 const encode = (value: unknown): string => Buffer.from(JSON.stringify(value)).toString("base64");
-const decode = (header: string): unknown => JSON.parse(Buffer.from(header, "base64").toString("utf8"));
+const decode = (header: string): unknown =>
+  JSON.parse(Buffer.from(header, "base64").toString("utf8"));
 
 /**
  * The PAYMENT-REQUIRED header with every offer priced in mSIU, and whether every offer got one.
@@ -96,7 +97,12 @@ export function withSiuPrice(inner: ToolMiddleware, pricing: SiuPricing): ToolMi
     const setHeader = res.setHeader.bind(res);
     res.setHeader = ((name: string, value: string | number | readonly string[]) => {
       if (name.toLowerCase() === "payment-required") {
-        const { header, carried } = priceChallengeHeader(String(value), print, pricing.decimalsFor, now);
+        const { header, carried } = priceChallengeHeader(
+          String(value),
+          print,
+          pricing.decimalsFor,
+          now,
+        );
         (req as unknown as Record<string, boolean>)[PRICED] = carried;
         value = header;
       }
