@@ -1,0 +1,24 @@
+{
+  "run_id": "2be9e04e-410a-4c9d-9f83-3a866187e189",
+  "model_id": "mistral-small-3.2-24b-deepinfra",
+  "task_class": "T3",
+  "instance_id": "T3-03",
+  "seed": 1888747021,
+  "attempt": 1,
+  "usage": {
+    "input": 102,
+    "output": 62,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 1695,
+  "gate_passed": true,
+  "raw_response_ref": "2be9e04e-410a-4c9d-9f83-3a866187e189.raw.json",
+  "deviations": [
+    "retry 1: OpenAI-compatible request failed: 429",
+    "retry 2: OpenAI-compatible request failed: 429",
+    "retry 3: OpenAI-compatible request failed: 429"
+  ],
+  "service_tier": "default",
+  "billed_usd": "0.00002005"
+}

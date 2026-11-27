@@ -1,0 +1,39 @@
+{
+  "id": "e28d9a45-f904-4754-a165-22963f476ec7",
+  "object": "chat.completion",
+  "created": 1795740072,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "22E686\n693F72\nCA173C\n1342BB",
+        "reasoning_content": "I am scanning the archive log for access codes.\n\nFour access codes were found: 22E686, 693F72, CA173C, and 1342BB.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 21308,
+    "completion_tokens": 15,
+    "total_tokens": 21674,
+    "prompt_tokens_details": {
+      "text_tokens": 21308,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 512
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 351,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 440440000
+  },
+  "system_fingerprint": "fp_6df9974d3109903b",
+  "service_tier": "default"
+}

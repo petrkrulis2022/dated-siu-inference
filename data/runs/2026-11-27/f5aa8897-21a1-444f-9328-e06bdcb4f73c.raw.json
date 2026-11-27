@@ -1,0 +1,35 @@
+{
+  "id": "chatcmpl-EoeJj2bkInwah3RlHF3AflHdWrhor",
+  "object": "chat.completion",
+  "created": 1795740087,
+  "model": "gpt-5.4-mini-2026-03-17",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"tracking_id\":\"SH-9CB1D2\",\"origin_city\":\"Marseille\",\"destination_city\":\"Denver\",\"weight_kg\":390,\"status\":\"pending\",\"priority\":\"express\"}",
+        "refusal": null,
+        "annotations": []
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 892,
+    "completion_tokens": 40,
+    "total_tokens": 932,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    }
+  },
+  "service_tier": "default",
+  "system_fingerprint": null
+}

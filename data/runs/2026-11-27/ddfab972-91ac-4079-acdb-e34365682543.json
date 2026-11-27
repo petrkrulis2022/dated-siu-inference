@@ -1,0 +1,19 @@
+{
+  "run_id": "ddfab972-91ac-4079-acdb-e34365682543",
+  "model_id": "gpt-5.4-mini",
+  "task_class": "T1",
+  "instance_id": "T1-03",
+  "seed": 103932047,
+  "attempt": 1,
+  "usage": {
+    "input": 924,
+    "output": 40,
+    "cached_input": 0,
+    "reasoning": 0
+  },
+  "latency_ms": 675,
+  "gate_passed": true,
+  "raw_response_ref": "ddfab972-91ac-4079-acdb-e34365682543.raw.json",
+  "deviations": [],
+  "service_tier": "default"
+}
