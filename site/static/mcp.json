@@ -1,6 +1,6 @@
 {
   "name": "io.github.petrkrulis2022/touchstone-mcp",
-  "description": "Dated SIU, the benchmark price of AI inference: free index; paid quotes in USDC on Base and Arc.",
+  "description": "Dated SIU, the daily benchmark price of verified AI work: free index; paid quotes in USDC on Base and Arc mainnet.",
   "remote": {
     "type": "streamable-http",
     "url": "https://mcp.touchstoneassay.com/mcp"

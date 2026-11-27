@@ -23,6 +23,8 @@ The facts every listing states, generated from the same source the server's payw
 
 | Fact | Value |
 | --- | --- |
+| Description | Dated SIU, the daily benchmark price of verified AI work: free index; paid quotes in USDC on Base and Arc mainnet. |
+| Description, MCP registry (100 characters max) | Dated SIU, the daily benchmark price of verified AI work: free index; USDC quotes on Base and Arc. |
 | Payment networks | Base `eip155:8453` (USDC `0x8335…2913`), Arc `eip155:5042` (USDC `0x3600…0000`): mainnet |
 | Payment route | x402 through Circle Gateway (batched nanopayments) |
 | Prices (USDC) | `get_index` free · `get_quote` $0.001 · `convert` $0.001 · `verify_receipt` $0.01 |
@@ -104,7 +106,7 @@ illustrative. **Every version leads with `get_index` being free** — a server w
 paywalled gets skipped.
 
 > **Touchstone Assay — Dated SIU price index**
-> The benchmark price of AI inference work, published as a signed, versioned print.
+> The daily benchmark price of verified AI work, published as a signed, versioned print.
 > **`get_index` is free** and returns the signed print. `get_quote` and `convert` ($0.001 each)
 > price a task or a token count in SIU and USD against the current print, paid per call in real
 > USDC on Base or Arc over x402 through Circle Gateway. Every 402 also states the price in mSIU at
@@ -114,7 +116,9 @@ paywalled gets skipped.
 
 One-line variant (character-limited fields):
 
-> Dated SIU: the benchmark price of AI inference. `get_index` free; `get_quote`/`convert` paid in USDC on Base or Arc via x402 (Circle Gateway).
+> Dated SIU, the daily benchmark price of verified AI work: free index; paid quotes in USDC on Base and Arc mainnet.
+
+For the MCP registry's 100-character description field, use the shorter version in the facts block above.
 
 Positioning line, reused verbatim from `CLAUDE.md`: _"Silicon Data prices the machine-hour; Dated
 SIU prices the completed task."_

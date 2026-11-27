@@ -1,6 +1,6 @@
 # Touchstone Assay — Dated SIU
 
-Dated SIU is the benchmark price of AI inference work: a versioned basket of
+Dated SIU is the daily benchmark price of verified AI work: a versioned basket of
 inference tasks, executed against real provider APIs and priced against a
 signed, dated print — measured by actually buying inference, not by surveying
 list prices. One SIU (Standard Inference Unit) is a fixed quantity of that

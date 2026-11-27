@@ -4,6 +4,8 @@
 // No mSIU figures here: this site is not rebuilt with each day's print, so it states the rule and
 // points at the live figure instead of a number that would go stale.
 
+export const LISTING_DESCRIPTION = "Dated SIU, the daily benchmark price of verified AI work: free index; paid quotes in USDC on Base and Arc mainnet.";
+
 export const PAID_TOOL_PRICES_USD = {
   "get_quote": "0.001",
   "convert": "0.001",

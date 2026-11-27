@@ -1,11 +1,34 @@
 import { describe, expect, it } from "vitest";
 import {
+  LISTING_DESCRIPTION,
   MAINNET_PAYMENT_NETWORKS,
   MAINNET_UNAVAILABLE_TOOLS,
   PAYMENT_ROUTE,
+  REGISTRY_DESCRIPTION,
   SIU_PRICE_DOCS_URL,
   paymentNetworksText,
 } from "./paid-tools.js";
+
+describe("the listing descriptions", () => {
+  it("states the owner's wording in full where length is free", () => {
+    expect(LISTING_DESCRIPTION).toBe(
+      "Dated SIU, the daily benchmark price of verified AI work: free index; paid quotes in USDC on Base and Arc mainnet.",
+    );
+  });
+
+  it("keeps the MCP registry's version within its schema's 100-character limit", () => {
+    // static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json: ServerDetail.description maxLength 100.
+    expect(REGISTRY_DESCRIPTION.length).toBeLessThanOrEqual(100);
+    expect(REGISTRY_DESCRIPTION).toMatch(
+      /^Dated SIU, the daily benchmark price of verified AI work: free index;/,
+    );
+  });
+
+  it("says verified AI work, never AI inference", () => {
+    for (const d of [LISTING_DESCRIPTION, REGISTRY_DESCRIPTION])
+      expect(d).not.toMatch(/AI inference/);
+  });
+});
 
 describe("the paid tools' public facts", () => {
   it("lists exactly the networks live on mainnet: Base and Arc, in USDC, through Circle Gateway", () => {

@@ -33,6 +33,17 @@ export const MAINNET_PAYMENT_NETWORKS: readonly PaymentNetwork[] = [
   },
 ];
 
+/** The one-line description every listing and mcp.json uses (owner's wording, 2026-11-27). */
+export const LISTING_DESCRIPTION =
+  "Dated SIU, the daily benchmark price of verified AI work: free index; paid quotes in USDC on Base and Arc mainnet.";
+
+/**
+ * The same, within the MCP registry's 100-character limit for server.json's description (its schema,
+ * ServerDetail.description maxLength 100): the owner's lead phrase verbatim, "paid" and "mainnet" cut.
+ */
+export const REGISTRY_DESCRIPTION =
+  "Dated SIU, the daily benchmark price of verified AI work: free index; USDC quotes on Base and Arc.";
+
 /** How a payment reaches the treasury on those networks. */
 export const PAYMENT_ROUTE = "x402 through Circle Gateway (batched nanopayments)";
 

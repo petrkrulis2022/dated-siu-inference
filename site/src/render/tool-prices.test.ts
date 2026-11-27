@@ -96,6 +96,13 @@ describe("renderMcpJson", () => {
     expect(out.tools[2].price_usd).toBe("0.01");
   });
 
+  it("takes its description from the shared listing wording, whatever the template says", () => {
+    const out = JSON.parse(renderMcpJson({ ...template, description: "stale words" }, {}));
+    expect(out.description).toBe(
+      "Dated SIU, the daily benchmark price of verified AI work: free index; paid quotes in USDC on Base and Arc mainnet.",
+    );
+  });
+
   it("states payment from the shared facts: Base and Arc mainnet USDC, the route, the SIU price docs", () => {
     const stale = {
       ...template,

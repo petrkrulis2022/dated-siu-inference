@@ -1,4 +1,5 @@
 import {
+  LISTING_DESCRIPTION,
   MAINNET_UNAVAILABLE_NOTES,
   PAID_TOOL_PRICES_USD,
   PAYMENT_NETWORKS,
@@ -63,4 +64,4 @@ export const MCP_TOOLS: McpToolInfo[] = [
 /** One sentence on where payment settles, for pages that state it in prose. */
 export const NETWORK_NOTE = `Paid tools settle in real ${PAYMENT_NETWORKS_TEXT}.`;
 
-export { PAYMENT_NETWORKS, PAYMENT_ROUTE, SIU_PRICE_DOCS_URL, SIU_PRICE_RULE };
+export { LISTING_DESCRIPTION, PAYMENT_NETWORKS, PAYMENT_ROUTE, SIU_PRICE_DOCS_URL, SIU_PRICE_RULE };

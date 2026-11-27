@@ -1,5 +1,6 @@
 import type { Print } from "@touchstone/sdk";
 import {
+  LISTING_DESCRIPTION,
   MAINNET_PAYMENT_NETWORKS,
   MAINNET_UNAVAILABLE_NOTES,
   PAID_TOOL_PRICES_USD,
@@ -110,7 +111,7 @@ export function renderMcpJson(
     }
     return out;
   });
-  return `${JSON.stringify({ ...rest, payment: paymentBlock(), tools }, null, 2)}\n`;
+  return `${JSON.stringify({ ...rest, description: LISTING_DESCRIPTION, payment: paymentBlock(), tools }, null, 2)}\n`;
 }
 
 /**

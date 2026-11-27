@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import {
   FOR_AGENTS_URL,
+  LISTING_DESCRIPTION,
   LIVE_PRICES_URL,
   MCP_SERVER_URL,
   MCP_TOOLS,
@@ -20,8 +21,7 @@ export const prerender = true;
 export const GET: APIRoute = () => {
   const body = {
     name: "io.github.petrkrulis2022/touchstone-mcp",
-    description:
-      "Dated SIU, the benchmark price of AI inference: free index; paid quotes in USDC on Base and Arc.",
+    description: LISTING_DESCRIPTION,
     remote: {
       type: "streamable-http",
       url: MCP_SERVER_URL,
