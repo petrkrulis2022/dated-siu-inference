@@ -176,11 +176,21 @@ The flow follows Circle's docs:
    at, then builds the burn intent.
 3. Your wallet signs it with `eth_signTypedData_v4`.
 4. The server checks the signature came from the treasury, then sends it to Circle's `/v1/transfer`.
-5. Your wallet sends `gatewayMint(attestation, signature)` to the GatewayMinter on that chain.
+5. Within 10 minutes, the treasury itself sends `gatewayMint(attestation, signature)` to the
+   GatewayMinter on that chain, as a plain transaction. Circle's approval expires after 10 minutes;
+   one that expires unused is credited back to the Gateway balance, so nothing is lost.
+6. The server reads the mined transaction from the chain itself and says "Done" only if it was that
+   plain mint.
 
 Each withdrawal Circle attests is written to `data/private/withdrawals/` (gitignored), with what
-the treasury signed, Circle's answer, and the mint transaction the page reports once sent and once
-mined. That's the treasury's record of money moved.
+the treasury signed, Circle's answer, and the mint transaction with the server's verdict on it.
+That's the treasury's record of money moved.
+
+**The treasury must stay a plain account.** On 2026-11-27, MetaMask turned the treasury on Base
+Sepolia into an EIP-7702 smart account during a mint and had its own relayer send it. The funds
+still reached the treasury, but a third party sent the transaction and the account type changed,
+both against the owner's rules. Turn off MetaMask's "Use smart account" and gas sponsorship for the
+treasury, and decline any such prompt.
 
 Circle's fee is taken from the Gateway balance on top of the amount: on 2026-11-27 its estimate
 was up to 0.011 USDC on Base and up to 0.00385 USDC on Arc. The mint needs a little gas: ETH on
@@ -198,6 +208,15 @@ Base; on Arc, gas is paid in USDC.
   before submitting.
 - The server binds 127.0.0.1, answers only its own Host header, refuses a POST from any other
   origin, and serves the page under a policy that runs only its own script.
+- The treasury must have no code on the chain (no EIP-7702 delegation). The server reads this
+  from the chain itself at three points: before anything is signed, before asking Circle, and
+  right before the page sends the mint. If there is code, it stops with a plain warning.
+- After the mint is mined, the server checks the transaction itself: sent by the treasury to the
+  GatewayMinter, with exactly the prepared data and no value, not a type-4 transaction, succeeded,
+  and minted the amount to the treasury. Anything else is reported reason by reason, never as
+  "Done".
+- Right before sending, the page refuses an approval older than Circle's 10 minutes, which would
+  only revert.
 
 **What is never charged for** (the paywall settles before the tool runs, so everything a call can be
 refused for beforehand is checked beforehand and passed through unpaid): arguments that fail the

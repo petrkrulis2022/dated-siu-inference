@@ -9,9 +9,14 @@ import {
   formatUsdc,
   gatewayMintCalldata,
   parseUsdc,
+  plainMintProblems,
   recoverBurnIntentSigner,
+  treasuryCodeProblem,
   withdrawalRefusals,
   type BurnIntentTypedData,
+  type ChainReceipt,
+  type ChainTransaction,
+  type GatewayChain,
   type GatewayEnvironment,
 } from "./gateway-withdrawal.js";
 import { WITHDRAW_PAGE_HTML, WITHDRAW_PAGE_JS } from "./withdraw-page.js";
@@ -50,11 +55,16 @@ export interface WithdrawalRecord {
   signature: Hex;
   circle: { transferId: string | null; attestation: string; signature: string };
   mint: { chainId: number; to: string; data: Hex };
-  mintTx?: { hash: Hex; status: MintStatus; reportedAt: string };
+  /**
+   * "sent" once the wallet returns a hash; once mined, the server's own on-chain check: "plain" (a
+   * plain transaction from the treasury to the GatewayMinter that minted the amount) or "not-plain",
+   * with the reasons.
+   */
+  mintTx?: { hash: Hex; status: "sent" | "plain" | "not-plain"; problems?: string[]; reportedAt: string };
 }
 
-type MintStatus = "sent" | "success" | "failed";
-const MINT_STATUSES: readonly string[] = ["sent", "success", "failed"];
+/** What the page may report: the hash once sent, then that it was mined (the server checks the rest). */
+const PAGE_MINT_REPORTS: readonly string[] = ["sent", "mined"];
 
 export interface WithdrawServerOptions {
   env: GatewayEnvironment;
@@ -65,7 +75,26 @@ export interface WithdrawServerOptions {
   now?: () => number;
   /** Keeps each withdrawal's record; called on attestation and on every mint report. */
   record?: (r: WithdrawalRecord) => Promise<void>;
+  /** Reads the chain itself (JSON-RPC), never through the wallet: the treasury's code, mined transactions. */
+  chainRpc?: (chain: GatewayChain, method: string, params: unknown[]) => Promise<unknown>;
+  sleep?: (ms: number) => Promise<void>;
 }
+
+async function publicRpc(chain: GatewayChain, method: string, params: unknown[]): Promise<unknown> {
+  const res = await fetch(chain.rpcUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const json = (await res.json()) as { result?: unknown; error?: { message?: string } };
+  if (json.error) throw new Error(`${chain.name} RPC ${method}: ${json.error.message ?? "error"}`);
+  return json.result;
+}
+
+/** How long the server keeps looking for a mined mint that the page says is mined. */
+const MINED_LOOKUPS = 10;
+const MINED_LOOKUP_INTERVAL_MS = 3_000;
 
 interface Pending {
   typedData: BurnIntentTypedData;
@@ -76,6 +105,8 @@ interface Pending {
 const PENDING_TTL_MS = 15 * 60 * 1000;
 /** How long the page may report the mint transaction of an attested withdrawal. */
 const ATTESTED_TTL_MS = 24 * 60 * 60 * 1000;
+/** Circle: "Attestations expire after 10 minutes"; one that expires unused is credited back. */
+const ATTESTATION_LIFETIME_MS = 10 * 60 * 1000;
 const MAX_BODY_BYTES = 64 * 1024;
 
 class HttpError extends Error {
@@ -92,6 +123,21 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
   const env = GATEWAY[opts.env];
   const treasury = getAddress(opts.treasury);
   const doFetch = opts.fetch ?? fetch;
+  const chainRpc = opts.chainRpc ?? publicRpc;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+
+  /** Stops unless the treasury is a plain account (no code) on `chain`, read from the chain itself. */
+  async function assertPlainTreasury(chain: GatewayChain): Promise<void> {
+    let code: unknown;
+    try {
+      code = await chainRpc(chain, "eth_getCode", [treasury, "latest"]);
+    } catch (e) {
+      throw new HttpError(502, `Could not read the treasury's account on ${chain.name}, so it could not be checked: ${(e as Error).message}`);
+    }
+    if (typeof code !== "string") throw new HttpError(502, `Could not read the treasury's account on ${chain.name}.`);
+    const problem = treasuryCodeProblem(code, chain.name);
+    if (problem) throw new HttpError(409, problem);
+  }
   const now = opts.now ?? Date.now;
   const pending = new Map<string, Pending>();
   const attested = new Map<string, { record: WithdrawalRecord; expiresAt: number }>();
@@ -175,6 +221,7 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
       throw new HttpError(400, (e as Error).message);
     }
     if (value <= 0n) throw new HttpError(422, "Enter an amount above zero.", { refusals: ["Enter an amount above zero."] });
+    await assertPlainTreasury(chain);
     const balance = (await balances()).get(chain.domain) ?? 0n;
     const salt = `0x${randomBytes(32).toString("hex")}` as Hex;
     const { maxFee, maxBlockHeight } = await estimate(chain.key, value, salt);
@@ -215,6 +262,7 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
     if (signer.toLowerCase() !== treasury.toLowerCase())
       throw new HttpError(400, `Signed by ${signer}, not by the treasury ${treasury}. Nothing was sent to Circle.`);
     const chain = chainFor(opts.env, p.chain);
+    await assertPlainTreasury(chain);
     const value = BigInt(p.typedData.message.spec.value);
     const maxFee = BigInt(p.typedData.message.maxFee);
     const balance = (await balances()).get(chain.domain) ?? 0n;
@@ -263,14 +311,60 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
     };
   }
 
-  async function minted(body: { id?: unknown; txHash?: unknown; status?: unknown }): Promise<unknown> {
-    const a = typeof body.id === "string" ? attested.get(body.id) : undefined;
+  function attestedFor(id: unknown): { record: WithdrawalRecord; expiresAt: number } {
+    const a = typeof id === "string" ? attested.get(id) : undefined;
     if (!a || a.expiresAt < now()) throw new HttpError(404, "No attested withdrawal with that id.");
+    return a;
+  }
+
+  /** Called by the page right before it asks the wallet to send the mint. */
+  async function mintCheck(body: { id?: unknown }): Promise<unknown> {
+    const a = attestedFor(body.id);
+    if (now() - Date.parse(a.record.attestedAt) > ATTESTATION_LIFETIME_MS)
+      throw new HttpError(
+        410,
+        "Circle's approval of this withdrawal has expired (it lasts 10 minutes), so the mint would fail. Nothing is lost: " +
+          "the amount returns to the Gateway balance once Circle sees it unused. Prepare the withdrawal again.",
+      );
+    await assertPlainTreasury(chainFor(opts.env, a.record.chain));
+    return { ok: true };
+  }
+
+  /**
+   * The page reports the mint's hash once the wallet returns it ("sent"), and again once the wallet
+   * sees it mined ("mined"). On "mined" the server reads the transaction and receipt from the chain
+   * itself and decides whether it was the plain mint the treasury was meant to send.
+   */
+  async function minted(body: { id?: unknown; txHash?: unknown; status?: unknown }): Promise<unknown> {
+    const a = attestedFor(body.id);
     if (typeof body.txHash !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(body.txHash)) throw new HttpError(400, "That is not a transaction hash.");
-    if (typeof body.status !== "string" || !MINT_STATUSES.includes(body.status)) throw new HttpError(400, "Status must be sent, success or failed.");
-    a.record.mintTx = { hash: body.txHash as Hex, status: body.status as MintStatus, reportedAt: new Date(now()).toISOString() };
-    console.log(`${a.record.mintTx.reportedAt} mint of ${a.record.id}: ${body.status} ${body.txHash}`);
-    return { recorded: await keep(a.record) };
+    if (typeof body.status !== "string" || !PAGE_MINT_REPORTS.includes(body.status)) throw new HttpError(400, "Status must be sent or mined.");
+    const hash = body.txHash as Hex;
+    const reportedAt = new Date(now()).toISOString();
+    if (body.status === "sent") {
+      a.record.mintTx = { hash, status: "sent", reportedAt };
+      console.log(`${reportedAt} mint of ${a.record.id}: sent ${hash}`);
+      return { recorded: await keep(a.record) };
+    }
+    const chain = chainFor(opts.env, a.record.chain);
+    let tx: ChainTransaction | null = null;
+    let receipt: ChainReceipt | null = null;
+    for (let i = 0; i < MINED_LOOKUPS && !(tx && receipt); i++) {
+      if (i > 0) await sleep(MINED_LOOKUP_INTERVAL_MS);
+      tx = (await chainRpc(chain, "eth_getTransactionByHash", [hash])) as ChainTransaction | null;
+      receipt = (await chainRpc(chain, "eth_getTransactionReceipt", [hash])) as ChainReceipt | null;
+    }
+    const problems = plainMintProblems(tx, receipt, {
+      treasury,
+      minter: env.minter,
+      data: a.record.mint.data,
+      usdc: chain.usdc,
+      value: parseUsdc(a.record.amount),
+    });
+    const verdict = problems.length === 0 ? "plain" : "not-plain";
+    a.record.mintTx = { hash, status: verdict, problems, reportedAt };
+    console.log(`${reportedAt} mint of ${a.record.id}: ${verdict} ${hash}${problems.length ? ` (${problems.join(" ")})` : ""}`);
+    return { verdict, problems, recorded: await keep(a.record) };
   }
 
   async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -294,6 +388,7 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
   const postRoutes = new Map<string, (body: Record<string, unknown>) => Promise<unknown>>([
     ["/api/prepare", prepare],
     ["/api/submit", submit],
+    ["/api/mint-check", mintCheck],
     ["/api/minted", minted],
   ]);
 

@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { decodeFunctionData, parseAbi, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
-import { GATEWAY, type BurnIntentTypedData } from "./gateway-withdrawal.js";
+import { GATEWAY, gatewayMintCalldata, type BurnIntentTypedData } from "./gateway-withdrawal.js";
 import { createWithdrawHandler, type WithdrawalRecord } from "./withdraw-server.js";
 
 // The "treasury" here is a throwaway test key: the real treasury signs on its hardware wallet.
@@ -15,6 +15,26 @@ let circleCalls: { path: string; body: unknown }[];
 let balances: Record<number, string>;
 let clock: number;
 let records: WithdrawalRecord[];
+// The chain, as the server reads it for itself: the treasury's code per chain id, and mined transactions.
+let codes: Record<number, string>;
+let txs: Map<string, unknown>;
+let receipts: Map<string, unknown>;
+
+const DELEGATED = "0xef010063c0c19a282a1b52b07dd5a65b58948a07dae32b";
+const HASH = `0x${"cd".repeat(32)}`;
+const MINT_DATA = gatewayMintCalldata("0x1234", "0xabcd");
+const ARC_USDC = "0x3600000000000000000000000000000000000000";
+const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+const word = (hex: string) => `0x${hex.toLowerCase().replace(/^0x/, "").padStart(64, "0")}`;
+
+/** A mined mint as the chain would show it: plain from the treasury unless overridden. */
+function mined(over: Record<string, unknown> = {}, value = 500_000) {
+  txs.set(HASH, { type: "0x2", from: treasury.address.toLowerCase(), to: GATEWAY.testnet.minter.toLowerCase(), input: MINT_DATA, value: "0x0", ...over });
+  receipts.set(HASH, {
+    status: "0x1",
+    logs: [{ address: ARC_USDC, topics: [TRANSFER_TOPIC, word("0x0"), word(treasury.address)], data: word(value.toString(16)) }],
+  });
+}
 
 function fakeCircle(): typeof fetch {
   return (async (input: string | URL | Request, init?: RequestInit) => {
@@ -42,6 +62,9 @@ beforeEach(async () => {
   clock = 1_000_000;
   allowedHosts = [];
   records = [];
+  codes = {};
+  txs = new Map();
+  receipts = new Map();
   const handler = createWithdrawHandler({
     env: "testnet",
     treasury: treasury.address,
@@ -49,6 +72,13 @@ beforeEach(async () => {
     fetch: fakeCircle(),
     now: () => clock,
     record: async (r) => void records.push(structuredClone(r)),
+    chainRpc: async (chain, method, params) => {
+      if (method === "eth_getCode") return codes[chain.chainId] ?? "0x";
+      if (method === "eth_getTransactionByHash") return txs.get(params[0] as string) ?? null;
+      if (method === "eth_getTransactionReceipt") return receipts.get(params[0] as string) ?? null;
+      throw new Error(`unexpected ${method}`);
+    },
+    sleep: async () => {},
   });
   server = createServer((req, res) => void handler(req, res));
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
@@ -213,15 +243,83 @@ describe("POST /api/submit", () => {
   });
 });
 
-describe("POST /api/minted", () => {
-  const HASH = `0x${"cd".repeat(32)}`;
+describe("guard: the treasury must be a plain account on that chain", () => {
+  it("stops before anything is signed when the treasury has code there", async () => {
+    codes[5042002] = DELEGATED;
+    const { status, body } = await prepare();
+    expect(status).toBe(409);
+    expect((body as unknown as { error: string }).error).toMatch(/^Stop: on Arc Testnet the treasury is not a plain account/);
+    expect(circleCalls).toEqual([]);
+  });
 
-  it("adds the mint transaction the page reports to that withdrawal's record", async () => {
+  it("stops before asking Circle when code appears between preparing and submitting", async () => {
+    const { body } = await prepare();
+    codes[5042002] = DELEGATED;
+    const res = await post("/api/submit", { id: body.id, signature: await sign(body.typedData) });
+    expect(res.status).toBe(409);
+    expect(circleCalls.some((c) => c.path === "/v1/transfer")).toBe(false);
+  });
+
+  it("stops the page from sending the mint when code appears after Circle attested", async () => {
     const { body } = await prepare();
     await post("/api/submit", { id: body.id, signature: await sign(body.typedData) });
-    expect((await post("/api/minted", { id: body.id, txHash: HASH, status: "sent" })).status).toBe(200);
-    expect((await post("/api/minted", { id: body.id, txHash: HASH, status: "success" })).status).toBe(200);
-    expect(records.at(-1)?.mintTx).toMatchObject({ hash: HASH, status: "success" });
+    expect((await post("/api/mint-check", { id: body.id })).status).toBe(200);
+    codes[5042002] = DELEGATED;
+    expect((await post("/api/mint-check", { id: body.id })).status).toBe(409);
+  });
+
+  it("says when Circle's approval has expired (10 minutes) instead of letting the mint revert", async () => {
+    const { body } = await prepare();
+    await post("/api/submit", { id: body.id, signature: await sign(body.typedData) });
+    clock += 10 * 60 * 1000 + 1;
+    const res = await post("/api/mint-check", { id: body.id });
+    expect(res.status).toBe(410);
+    expect(((await res.json()) as { error: string }).error).toMatch(/expired.*returns to the Gateway balance/s);
+  });
+
+  it("checks only the chain of the withdrawal", async () => {
+    codes[84532] = DELEGATED;
+    expect((await prepare("arc-testnet")).status).toBe(200);
+    expect((await prepare("base-sepolia")).status).toBe(409);
+  });
+});
+
+describe("POST /api/minted", () => {
+  async function attested(): Promise<string> {
+    const { body } = await prepare();
+    await post("/api/submit", { id: body.id, signature: await sign(body.typedData) });
+    return body.id;
+  }
+  const report = async (id: string, status: string) => {
+    const res = await post("/api/minted", { id, txHash: HASH, status });
+    return { status: res.status, body: (await res.json()) as { verdict?: string; problems?: string[] } };
+  };
+
+  it("records the hash once sent, then checks the mined transaction on chain itself: plain is Done", async () => {
+    const id = await attested();
+    expect((await report(id, "sent")).status).toBe(200);
+    expect(records.at(-1)?.mintTx).toMatchObject({ hash: HASH, status: "sent" });
+    mined();
+    const { status, body } = await report(id, "mined");
+    expect(status).toBe(200);
+    expect(body).toEqual({ verdict: "plain", problems: [], recorded: true });
+    expect(records.at(-1)?.mintTx).toMatchObject({ hash: HASH, status: "plain", problems: [] });
+  });
+
+  it("reports a relayed type-4 mint as not plain, with the reasons, never as done", async () => {
+    const id = await attested();
+    mined({ type: "0x4", from: "0xb42f812a44c22cc6b861478900401ee759ebead6", to: "0xdb9b1e94b5b69df7e401ddbede43491141047db3", input: "0xcef6d209", authorizationList: [{}] });
+    const { body } = await report(id, "mined");
+    expect(body.verdict).toBe("not-plain");
+    expect(body.problems?.join(" ")).toMatch(/type-4 \(EIP-7702\).*sent by 0xb42f/s);
+    expect(records.at(-1)?.mintTx).toMatchObject({ status: "not-plain" });
+  });
+
+  it("reports a mint it cannot find on chain as not plain, after retrying", async () => {
+    const id = await attested();
+    const { body } = await report(id, "mined");
+    expect(body.verdict).toBe("not-plain");
+    expect(body.problems?.join(" ")).toMatch(/not found on the chain/);
   });
 
   it("accepts it only for a withdrawal Circle attested, with a real transaction hash and status", async () => {

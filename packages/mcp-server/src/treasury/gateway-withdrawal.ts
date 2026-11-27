@@ -263,6 +263,72 @@ export async function recoverBurnIntentSigner(t: BurnIntentTypedData, signature:
   });
 }
 
+/**
+ * Why the treasury must not withdraw on a chain, from its code there (eth_getCode), or undefined for
+ * a plain account. On 2026-11-27 MetaMask turned the treasury into an EIP-7702 smart account on Base
+ * Sepolia during a mint and had its own relayer send it; the owner's rule is that withdrawals come
+ * from a plain account and the treasury sends its own mint.
+ */
+export function treasuryCodeProblem(code: string, chainName: string): string | undefined {
+  if (code === "0x" || code === "") return undefined;
+  const delegate = /^0xef0100([0-9a-fA-F]{40})$/.exec(code)?.[1];
+  return delegate
+    ? `Stop: on ${chainName} the treasury is not a plain account. It delegates to 0x${delegate.toLowerCase()} (an EIP-7702 ` +
+        `smart account, which a wallet's "smart account" setting creates). Switch it back to a standard account in the ` +
+        `wallet, then prepare the withdrawal again.`
+    : `Stop: on ${chainName} the treasury address holds contract code, so it is not a plain account. Do not withdraw there until that is understood.`;
+}
+
+/** A transaction and its receipt as JSON-RPC returns them (only the fields checked here). */
+export interface ChainTransaction {
+  type?: string;
+  from?: string;
+  to?: string | null;
+  input?: string;
+  value?: string;
+  authorizationList?: unknown[];
+}
+export interface ChainReceipt {
+  status?: string;
+  logs?: { address: string; topics: string[]; data: string }[];
+}
+
+const ERC20_TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+const same = (a: string | null | undefined, b: string) => (a ?? "").toLowerCase() === b.toLowerCase();
+
+/**
+ * Everything about a mined mint that makes it other than the plain transaction the treasury was meant
+ * to send: from the treasury, to the GatewayMinter, with exactly the prepared data, no value, not a
+ * type-4 (EIP-7702) transaction, succeeded, and minted the amount to the treasury. Empty when plain.
+ */
+export function plainMintProblems(
+  tx: ChainTransaction | null | undefined,
+  receipt: ChainReceipt | null | undefined,
+  expected: { treasury: string; minter: string; data: string; usdc: string; value: bigint },
+): string[] {
+  if (!tx || !receipt) return ["The transaction was not found on the chain."];
+  const problems: string[] = [];
+  if (receipt.status !== "0x1") problems.push("It failed on chain (reverted).");
+  if (tx.type === "0x4" || (tx.authorizationList?.length ?? 0) > 0)
+    problems.push("It was a type-4 (EIP-7702) transaction: it carried an authorisation that changes what the treasury account is.");
+  if (!same(tx.from, expected.treasury)) problems.push(`It was sent by ${tx.from}, not by the treasury: a relayed call.`);
+  if (!same(tx.to, expected.minter)) problems.push(`It went to ${tx.to}, not to the GatewayMinter ${expected.minter}.`);
+  if (!same(tx.input, expected.data)) problems.push("Its data is not the mint this page prepared.");
+  if (tx.value !== undefined && BigInt(tx.value) !== 0n) problems.push("It carried a value.");
+  if (receipt.status === "0x1") {
+    const minted = (receipt.logs ?? []).some(
+      (l) =>
+        same(l.address, expected.usdc) &&
+        same(l.topics[0], ERC20_TRANSFER) &&
+        BigInt(l.topics[1] ?? "0x1") === 0n &&
+        BigInt(l.topics[2] ?? "0x0") === BigInt(expected.treasury) &&
+        BigInt(l.data) === expected.value,
+    );
+    if (!minted) problems.push(`No mint of ${formatUsdc(expected.value)} USDC to the treasury appears in its logs.`);
+  }
+  return problems;
+}
+
 const GATEWAY_MINTER_ABI = parseAbi(["function gatewayMint(bytes attestationPayload, bytes signature)"]);
 
 /** Calldata for GatewayMinter.gatewayMint, from Circle's /v1/transfer answer. */

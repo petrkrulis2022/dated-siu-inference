@@ -160,7 +160,7 @@ export const WITHDRAW_PAGE_JS = `"use strict";
       const res = await api("/api/submit", { id: prepared.id, signature });
       mint = res.mint;
       say("sign-msg", "Circle attested the withdrawal" + (res.transferId ? " (transfer " + res.transferId + ")" : "") + ".", "ok");
-      say("mint-text", "Last step: the treasury sends the mint transaction on " + mint.chainName + ". It costs a little gas, paid in " + mint.nativeCurrency.symbol + ". If it fails, press the button again: Circle's attestation stays valid.");
+      say("mint-text", "Last step, within 10 minutes: the treasury sends the mint transaction on " + mint.chainName + " itself, as a plain transaction. It costs a little gas, paid in " + mint.nativeCurrency.symbol + ". If the wallet offers a smart account, gas sponsorship or a relayer, decline. Circle's approval expires after 10 minutes; if that happens nothing is lost, the amount returns to the Gateway balance and you prepare again.");
       $("mint-section").hidden = false;
     } catch (e) { say("sign-msg", walletError(e), "bad"); }
   }
@@ -177,28 +177,37 @@ export const WITHDRAW_PAGE_JS = `"use strict";
   }
 
   async function sendMint() {
+    say("mint-msg", "Checking the treasury is a plain account on " + mint.chainName + "…");
+    try {
+      await api("/api/mint-check", { id: prepared.id });
+    } catch (e) { return say("mint-msg", e.message, "bad"); }
     say("mint-msg", "Switching the wallet to " + mint.chainName + "…");
     try {
       await switchChain();
       say("mint-msg", "Waiting for the wallet…");
       const hash = await window.ethereum.request({ method: "eth_sendTransaction", params: [{ from: account, to: mint.to, data: mint.data }] });
-      const report = (status) => api("/api/minted", { id: prepared.id, txHash: hash, status }).catch(() => {});
-      await report("sent");
+      await api("/api/minted", { id: prepared.id, txHash: hash, status: "sent" }).catch(() => {});
       say("mint-msg", "Sent: " + mint.explorer + "/tx/" + hash + "\\nWaiting for it to be mined…");
       for (let i = 0; i < 100; i++) {
         await new Promise((r) => setTimeout(r, 3000));
         const receipt = await window.ethereum.request({ method: "eth_getTransactionReceipt", params: [hash] });
         if (!receipt) continue;
-        if (receipt.status === "0x1") {
-          await report("success");
-          say("mint-msg", "Done. The USDC is in the treasury wallet on " + mint.chainName + ".\\n" + mint.explorer + "/tx/" + hash, "ok");
+        say("mint-msg", "Mined. Checking it on " + mint.chainName + "…");
+        let v;
+        try {
+          v = await api("/api/minted", { id: prepared.id, txHash: hash, status: "mined" });
+        } catch (e) {
+          return say("mint-msg", "Mined, but the check of it failed: " + e.message + "\\nDo not count this as done: check " + mint.explorer + "/tx/" + hash, "bad");
+        }
+        if (v.verdict === "plain") {
+          say("mint-msg", "Done. Checked on chain: a plain transaction from the treasury to the GatewayMinter, which minted " + prepared.summary.amount + " USDC to the treasury on " + mint.chainName + ".\\n" + mint.explorer + "/tx/" + hash, "ok");
           await load();
           return;
         }
-        await report("failed");
-        return say("mint-msg", "The mint transaction failed: " + mint.explorer + "/tx/" + hash + "\\nCircle's attestation is still valid: press the button to send it again.", "bad");
+        await load().catch(() => {});
+        return say("mint-msg", "NOT done as designed. Checked on chain:\\n- " + v.problems.join("\\n- ") + "\\n" + mint.explorer + "/tx/" + hash + "\\nThe USDC may still have reached the treasury: check its balance. Do not withdraw on mainnet until this is understood.", "bad");
       }
-      say("mint-msg", "Not mined after 5 minutes. Check " + mint.explorer + "/tx/" + hash + " before sending again.", "bad");
+      say("mint-msg", "Not mined after 5 minutes. Check " + mint.explorer + "/tx/" + hash + " before doing anything else.", "bad");
     } catch (e) { say("mint-msg", walletError(e), "bad"); }
   }
 

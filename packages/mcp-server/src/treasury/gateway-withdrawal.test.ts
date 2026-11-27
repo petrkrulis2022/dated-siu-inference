@@ -10,7 +10,9 @@ import {
   formatUsdc,
   gatewayMintCalldata,
   parseUsdc,
+  plainMintProblems,
   recoverBurnIntentSigner,
+  treasuryCodeProblem,
   withdrawalRefusals,
   type BurnIntentTypedData,
 } from "./gateway-withdrawal.js";
@@ -157,6 +159,65 @@ describe("recoverBurnIntentSigner", () => {
     expect((await recoverBurnIntentSigner(t, signature)).toLowerCase()).toBe(signer.address.toLowerCase());
     const other = build({ treasury: signer.address, value: 500_001n });
     expect((await recoverBurnIntentSigner(other, signature)).toLowerCase()).not.toBe(signer.address.toLowerCase());
+  });
+});
+
+describe("treasuryCodeProblem", () => {
+  it("passes a plain account, which has no code", () => {
+    expect(treasuryCodeProblem("0x", "Base")).toBeUndefined();
+  });
+
+  it("stops on an EIP-7702 delegation and names the contract it delegates to", () => {
+    // The treasury's code on Base Sepolia after MetaMask's smart-account upgrade, 2026-11-27.
+    const problem = treasuryCodeProblem("0xef010063c0c19a282a1b52b07dd5a65b58948a07dae32b", "Base Sepolia");
+    expect(problem).toMatch(/^Stop: on Base Sepolia the treasury is not a plain account/);
+    expect(problem).toContain("0x63c0c19a282a1b52b07dd5a65b58948a07dae32b");
+  });
+
+  it("stops on any other code too", () => {
+    expect(treasuryCodeProblem("0x6080604052", "Arc")).toMatch(/^Stop: on Arc the treasury address holds contract code/);
+  });
+});
+
+describe("plainMintProblems", () => {
+  const MINTER = GATEWAY.testnet.minter;
+  const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+  const DATA = gatewayMintCalldata("0x1234", "0xabcd");
+  const TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+  const topic = (a: string) => `0x${a.toLowerCase().slice(2).padStart(64, "0")}`;
+  const mintLog = { address: USDC_BASE_SEPOLIA.toLowerCase(), topics: [TRANSFER, topic("0x0000000000000000000000000000000000000000"), topic(TREASURY)], data: `0x${(500_000).toString(16).padStart(64, "0")}` };
+  const expected = { treasury: TREASURY, minter: MINTER, data: DATA, usdc: USDC_BASE_SEPOLIA, value: 500_000n };
+  const plainTx = { type: "0x2", from: TREASURY.toLowerCase(), to: MINTER.toLowerCase(), input: DATA, value: "0x0" };
+  const okReceipt = { status: "0x1", logs: [mintLog] };
+
+  it("finds nothing wrong with a plain transaction from the treasury to the GatewayMinter that minted the amount", () => {
+    expect(plainMintProblems(plainTx, okReceipt, expected)).toEqual([]);
+  });
+
+  it("reports the Base Sepolia mint of 2026-11-27, relayed through MetaMask's Delegation Manager, in plain words", () => {
+    const relayed = {
+      type: "0x4",
+      from: "0xb42f812a44c22cc6b861478900401ee759ebead6",
+      to: "0xdb9b1e94b5b69df7e401ddbede43491141047db3",
+      input: "0xcef6d209" + "00".repeat(64),
+      value: "0x0",
+      authorizationList: [{ address: "0x63c0c19a282a1b52b07dd5a65b58948a07dae32b" }],
+    };
+    const problems = plainMintProblems(relayed, okReceipt, expected);
+    expect(problems.join(" ")).toMatch(/type-4 \(EIP-7702\)/);
+    expect(problems.join(" ")).toMatch(/sent by 0xb42f812a44c22cc6b861478900401ee759ebead6, not by the treasury/);
+    expect(problems.join(" ")).toMatch(/went to 0xdb9b1e94b5b69df7e401ddbede43491141047db3, not to the GatewayMinter/);
+    expect(problems.join(" ")).toMatch(/data is not the mint this page prepared/);
+  });
+
+  it("reports a reverted mint, a missing transaction and a mint that paid the treasury nothing", () => {
+    expect(plainMintProblems(plainTx, { status: "0x0", logs: [] }, expected).join(" ")).toMatch(/failed on chain/);
+    expect(plainMintProblems(undefined, undefined, expected).join(" ")).toMatch(/not found on the chain/);
+    expect(plainMintProblems(plainTx, { status: "0x1", logs: [] }, expected).join(" ")).toMatch(/No mint of 0\.500000 USDC to the treasury/);
+  });
+
+  it("reports value sent along with the call", () => {
+    expect(plainMintProblems({ ...plainTx, value: "0x1" }, okReceipt, expected).join(" ")).toMatch(/carried a value/);
   });
 });
 
