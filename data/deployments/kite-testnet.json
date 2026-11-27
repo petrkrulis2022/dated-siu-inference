@@ -1,0 +1,76 @@
+{
+  "network": {
+    "name": "KiteAI Testnet",
+    "chainId": 2368,
+    "rpcUrl": "https://rpc-testnet.gokite.ai/",
+    "explorer": "https://testnet.kitescan.ai",
+    "note": "Testnet only. Gas token is KITE (18 decimals). Chain id, RPC and explorer from Kite's own network-information page (docs.gokite.ai, Kite Chain > Getting Started > Network Information), chain id confirmed live by eth_chainId on 2026-10-24."
+  },
+  "deployedAt": {
+    "iso": "2026-10-25"
+  },
+  "deployer": "0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a",
+  "paymentToken": {
+    "address": "0x8E04D099b1a8Dd20E6caD4b2Ab2B405B98242ec9",
+    "symbol": "PYUSD",
+    "decimals": 18,
+    "eip712": {
+      "name": "PYUSD",
+      "version": "1"
+    },
+    "source": "https://docs.gokite.ai/kite-chain/9-gasless-integration and https://gasless.gokite.ai/supported_tokens (testnet row)",
+    "verifiedOnChain": "DOMAIN_SEPARATOR() recomputes from (\"PYUSD\", \"1\", 2368, address); contract carries transferWithAuthorization(address,address,uint256,uint256,uint256,bytes32,uint8,bytes32,bytes32) and authorizationState; claimTo(address) mints CLAIM_AMOUNT = 10 PYUSD for testing.",
+    "note": "Test token. Kite MAINNET pays in USDC.e (bridged), 6 decimals, domain (\"Bridged USDC (Kite AI)\", \"2\") \u2014 see packages/mcp-server/src/self-settled.ts."
+  },
+  "contracts": {
+    "TouchstoneAttestationV2": {
+      "address": "0x3FBaB431edE7976453480Ad555BE582888630093",
+      "deploymentTx": "0x15ce6c32b3fb58db3d03f154bbd75abff913149f0d69bf9277b80fc4151eb599",
+      "blockNumber": 22042733,
+      "gasUsed": 578344,
+      "constructorArgs": {
+        "publisher_": "0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a",
+        "admin_": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+      },
+      "constructorArgOrder": ["publisher_", "admin_"],
+      "explorerUrl": "https://testnet.kitescan.ai/address/0x3FBaB431edE7976453480Ad555BE582888630093",
+      "adminNote": "TESTNET VALIDATION ONLY \u2014 Foundry/Anvil's well-known public default test account, not a key generated for this project. A real mainnet deployment must pass the owner's hardware-wallet address as admin_; there is no way to change it afterwards.",
+      "liveValidation": {
+        "description": "One real postPrint signed with `cast wallet sign --data` against standard EIP-712 JSON (independent of the contract's own hashing), dry-run with eth_call, broadcast, and confirmed with isPosted. Same content as the Base Sepolia and Arc Testnet validations.",
+        "bodyHash": "0x8451bbae2102db6210d42f13f8658a9ead7336eb46bec6f72cce8a8bcbaa1ada",
+        "version": "SIU-2026a",
+        "printDate": "2026-10-24",
+        "methodologyVersion": "v0-draft",
+        "postPrintTx": "0x5b30aa7648a34689d29be10ba71db3e61ff5b8ee61713108cf34589a40b0836a",
+        "postPrintGasUsed": 59466,
+        "isPostedConfirmed": true
+      }
+    }
+  },
+  "paidToolSettlement": {
+    "description": "Live test payments on Kite testnet, settled by this repo's own server code (packages/mcp-server/src/self-settled.ts: @x402/evm's reference exact-scheme facilitator, gas paid by a settler key), buyer = the test buyer, payee = the treasury of the time, below (replaced as payTo by 0xB514882859f43DbF3df664C899D707f649E0CF4A on 2026-11-26).",
+    "payTo": "0x470571461B28C371E2D38766505E572350f43B75",
+    "payments": [
+      {
+        "tool": "get_quote",
+        "amountPyusd": "0.001",
+        "tx": "0x58ce0814a52ae043304a316f77078f2f2d736586e13fca4c2ddf5b25b0eea7b6",
+        "gasUsed": 82756
+      },
+      {
+        "tool": "convert",
+        "amountPyusd": "0.001",
+        "tx": "0x463c7d18c9ac783a4467484bf3cf9c8b12daa97574f2cf5012658b733a40706b",
+        "gasUsed": 65656
+      },
+      {
+        "tool": "verify_receipt",
+        "amountPyusd": "0.01",
+        "tx": "0xe5705b4ab1e96c78989184348842363bae79b4eb11a892c85e1bad182498a66d",
+        "gasUsed": 65644
+      }
+    ],
+    "treasuryPyusdAfter": "0.012",
+    "gasNote": "Average 71,352 gas per settlement (the first is higher: first-time balance storage). Testnet gas price was about 27.8 gwei; Kite mainnet read 175 gwei on 2026-10-24, about 0.0125 KITE per settlement."
+  }
+}

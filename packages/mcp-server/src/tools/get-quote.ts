@@ -24,7 +24,7 @@ export interface GetQuoteOutput {
   print_hash: string;
 }
 
-const TASK_CLASSES = new Set<string>(["T1", "T2", "T3"]);
+export const TASK_CLASSES = new Set<string>(["T1", "T2", "T3"]);
 
 /**
  * get_quote(task_class, model) — build1-spec.md §9: "SIU price, exchange rate, index refs."

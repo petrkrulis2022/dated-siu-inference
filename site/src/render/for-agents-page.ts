@@ -1,6 +1,8 @@
 import type { ChainInfo } from "../data.js";
 import { esc } from "../format.js";
 import { EXCLUDED_FIELDS, RAW_PRINT_URL, VERIFY_JSON_URL, VERIFY_SCRIPT_URL, chainName } from "../verify-recipe.js";
+import { toolPriceLabel, type SiuPrices } from "./tool-prices.js";
+import { SIU_PRICE_DOCS_URL, paymentNetworksText } from "@touchstone/print";
 
 const MCP_URL = "https://mcp.touchstoneassay.com/mcp";
 const MCP_JSON_URL = "https://prints.touchstoneassay.com/mcp.json";
@@ -17,14 +19,15 @@ const MCP_CONFIG_JSON = `{
 interface ToolRow {
   name: string;
   args: string;
-  price: string;
 }
 
+// Prices are not written here: they come from the one shared table (./tool-prices.ts), with each
+// paid tool's mSIU figure at the latest Commodity print.
 const TOOLS: ToolRow[] = [
-  { name: "get_index", args: "version?, date?", price: "free" },
-  { name: "get_quote", args: "task_class, model", price: "$0.001" },
-  { name: "convert", args: "model, input_tokens, output_tokens", price: "$0.001" },
-  { name: "verify_receipt", args: "chain, tx_hash", price: "$0.01" },
+  { name: "get_index", args: "version?, date?" },
+  { name: "get_quote", args: "task_class, model" },
+  { name: "convert", args: "model, input_tokens, output_tokens" },
+  { name: "verify_receipt", args: "chain, tx_hash" },
 ];
 
 interface TryItHereTool {
@@ -58,17 +61,16 @@ const TRY_IT_HERE_TOOLS: TryItHereTool[] = [
  * script-count invariant, which this page doesn't affect) powering the "Try it here" section
  * below; every other section here is still plain text meant to be copied, not a live widget.
  */
-export function renderForAgentsPage(chains: ChainInfo[] = []): string {
+export function renderForAgentsPage(chains: ChainInfo[] = [], siu: SiuPrices = {}): string {
   const rows = TOOLS.map(
     (t) =>
-      `<tr><td><code>${esc(t.name)}</code></td><td><code>${esc(t.args)}</code></td><td>${esc(t.price)}</td></tr>`,
+      `<tr><td><code>${esc(t.name)}</code></td><td><code>${esc(t.args)}</code></td><td>${esc(toolPriceLabel(t.name, siu))}</td></tr>`,
   ).join("\n");
 
   return `<div class="headline">
   <div class="label">For agents</div>
-  <p class="note">Touchstone Assay's four MCP tools, live on Base Sepolia — a testbed, not
-  traction. <code>get_index</code> is free; the other three settle in USDC over x402 via Circle
-  Gateway.</p>
+  <p class="note">Touchstone Assay's four MCP tools. <code>get_index</code> is free; the paid tools
+  settle in real ${esc(paymentNetworksText())}.</p>
 </div>
 
 <section class="block">
@@ -89,10 +91,11 @@ export function renderForAgentsPage(chains: ChainInfo[] = []): string {
       <tbody>${rows}</tbody>
     </table>
   </div>
-  <p class="note">Prices settle in USDC on Base Sepolia (<code>eip155:84532</code>) via Circle
-  Gateway nanopayments — an x402 402 challenge, paid, then the tool result. See
-  <a href="https://github.com/petrkrulis2022/dated-siu-inference/blob/main/docs/datum-quote.md">docs/datum-quote.md</a>
-  for the full settlement shape.</p>
+  <p class="note">Prices settle in ${esc(paymentNetworksText())}: an x402 402 challenge, paid, then
+  the tool result. <code>verify_receipt</code> is not available on mainnet yet; a call to it there is
+  answered without charge. Each 402 also states the price in mSIU at the latest Commodity print, in a
+  <code>touchstone</code> block beside the USDC amount
+  (<a href="${esc(SIU_PRICE_DOCS_URL)}">how it is computed</a>).</p>
 </section>
 
 <section class="block">

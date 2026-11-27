@@ -2,11 +2,14 @@ import { Navbar } from "@/components/sections/navbar";
 import { DocumentHeader } from "@/components/ui/document-header";
 import { PUBLICATION_URL } from "@/components/pages/home/content";
 import {
+  LIVE_PRICES_URL,
   LLMS_TXT_URL,
   MCP_CONFIG_JSON,
   MCP_JSON_URL,
   MCP_TOOLS,
   NETWORK_NOTE,
+  SIU_PRICE_DOCS_URL,
+  SIU_PRICE_RULE,
 } from "@/lib/mcp-info";
 import { TryItHerePanel } from "./components/try-it-here-panel";
 
@@ -35,7 +38,7 @@ export function ForAgentsPage() {
         <DocumentHeader
           label="For agents"
           title="A measurement interface for agents."
-          copy="Touchstone Assay's four MCP tools, live on Base Sepolia — a testbed, not traction. get_index is free; the other three settle in USDC over x402 via Circle Gateway."
+          copy={`Touchstone Assay's four MCP tools. get_index is free. ${NETWORK_NOTE}`}
         />
 
         <section className="mt-14 border-t border-ploy-border-primary pt-14" aria-labelledby="mcp-config-title">
@@ -57,14 +60,22 @@ export function ForAgentsPage() {
                 className={`grid gap-3 py-5 md:grid-cols-12 md:items-baseline ${index > 0 ? "border-t border-ploy-border-primary" : ""}`}
               >
                 <code className="font-mono text-sm md:col-span-3">{tool.name}</code>
-                <p className="text-sm leading-6 text-ploy-text-secondary md:col-span-7">{tool.description}</p>
+                <p className="text-sm leading-6 text-ploy-text-secondary md:col-span-7">
+                  {tool.description}
+                  {tool.mainnetNote ? ` ${tool.mainnetNote}` : ""}
+                </p>
                 <span className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-ploy-accent-primary md:col-span-2 md:text-right">
                   {tool.free ? "FREE" : `$${tool.priceUsd}`}
                 </span>
               </div>
             ))}
           </div>
-          <p className="mt-4 max-w-2xl text-sm leading-6 text-ploy-text-secondary">{NETWORK_NOTE} Prices settle in USDC via Circle Gateway nanopayments — an x402 402 challenge, paid, then the tool result.</p>
+          <p className="mt-4 max-w-2xl text-sm leading-6 text-ploy-text-secondary">
+            {NETWORK_NOTE} An x402 402 challenge, paid, then the tool result. {SIU_PRICE_RULE}{" "}
+            <a href={LIVE_PRICES_URL} className="border-b border-current hover:text-ploy-accent-primary">Today&apos;s figures</a>
+            {" · "}
+            <a href={SIU_PRICE_DOCS_URL} className="border-b border-current hover:text-ploy-accent-primary">how it is computed</a>.
+          </p>
         </section>
 
         <section className="mt-14 border-t border-ploy-border-primary pt-14" aria-labelledby="what-this-is-title">

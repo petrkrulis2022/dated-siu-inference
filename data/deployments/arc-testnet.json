@@ -86,6 +86,30 @@
       "feeBpsMeaning": "50 basis points = 0.50%, charged on actualAmount only and deducted from seller proceeds. Contract cap MAX_FEE_BPS = 100 (1%). Same as Base Sepolia's own configuration.",
       "minSettlement": 100,
       "notes": "treasury and feeBps are immutable with no setter. Treasury here is the deployer EOA, acceptable on testnet only — same choice as Base Sepolia."
+    },
+    "TouchstoneAttestationV2": {
+      "address": "0xb36FD134084649bB60c6d0877291F397322d88d0",
+      "deploymentTx": "0xfd43077e1d6a58e0dd2cedef20791089e2ef45ccbb563f0e365f8d0e28f8aff1",
+      "blockNumber": 68901792,
+      "gasUsed": 578344,
+      "constructorArgs": {
+        "publisher_": "0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a",
+        "admin_": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+      },
+      "constructorArgOrder": ["publisher_", "admin_"],
+      "deployer": "0x284ff2F8605Ff8AFeDa6959B856Bb7E6d48f845a",
+      "explorerUrl": "https://testnet.arcscan.app/address/0xb36fd134084649bb60c6d0877291f397322d88d0",
+      "notes": "Mainnet-switch brief §3/§8 (2026-10-24). Does NOT replace TouchstoneAttestation above, which stays live and unmodified — a new, additional contract for testnet validation before any mainnet deployment (owner's decision 3: 'test on testnet first; report before anything goes to mainnet'). Same publisher key as Base Sepolia's TouchstoneAttestationV2 (data/deployments/base-sepolia.json) — but a DIFFERENT domain separator (distinct chainId and verifyingContract), so a signature for one deployment cannot be replayed on the other. postPrint is authorised by an EIP-712 signature from `publisher` (any funded relayer may call it), not by msg.sender; `admin` may call rotatePublisher, which admin itself cannot be rotated.",
+      "adminNote": "TESTNET VALIDATION ONLY — this is Foundry/Anvil's well-known, universally-published default test account (private key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80, printed by every local 'anvil' start), not a key generated for this project. A real mainnet deployment must pass the owner's actual hardware-wallet address as admin_ at construction — there is no way to change it afterwards. Never treat this testnet deployment's admin as holding anything of value.",
+      "liveValidation": {
+        "description": "One real postPrint call, signed with TOUCHSTONE_PUBLISHER_KEY via `cast wallet sign --data` against standard EIP-712 typed JSON — an implementation independent of this contract's own hand-rolled Solidity hashing — then broadcast for real and confirmed via isPosted. Same body hash and fields as the Base Sepolia validation, deliberately: it proves the same signed content is independently verifiable against two differently-domained deployments, not just one.",
+        "bodyHash": "0x8451bbae2102db6210d42f13f8658a9ead7336eb46bec6f72cce8a8bcbaa1ada",
+        "version": "SIU-2026a",
+        "printDate": "2026-10-24",
+        "methodologyVersion": "v0-draft",
+        "postPrintTx": "0x2990b55eb27a7a8274c217577b633f16008e05d565c879e45e8211a805f89067",
+        "isPostedConfirmed": true
+      }
     }
   },
   "mainnetRequirements": [
@@ -93,7 +117,8 @@
     "Generate TOUCHSTONE_PUBLISHER_KEY on an air-gapped machine. The testnet key reused here has passed through repository-adjacent files.",
     "DeployArcTestnet.s.sol is chain-guarded to 5042002; a mainnet deployment needs its own script and its own review.",
     "Arc mainnet's own chain ID and USDC contract address must be independently re-verified against Circle's/Arc's own documentation at deploy time — never copied from this testnet record, even though Arc's testnet USDC happens to sit at a distinctive, memorable address (0x3600...0000).",
-    "Arc's public mainnet launches 2026-09-16 — see packages/contracts/script/DeployArcMainnet.s.sol, prepared but not run, with its chain-id guard deliberately left as an env-var placeholder rather than a guessed constant."
+    "Arc's public mainnet launches 2026-09-16 — see packages/contracts/script/DeployArcMainnet.s.sol, prepared but not run, with its chain-id guard deliberately left as an env-var placeholder rather than a guessed constant.",
+    "TouchstoneAttestationV2: admin_ must be the owner's real hardware-wallet address, generated independently of every other key in this file — it has no rotation path once set."
   ],
   "smokeTests": {
     "1_anchorRealPrint": {
