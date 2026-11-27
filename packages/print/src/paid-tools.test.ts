@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  DATED_SIU_PHRASE,
   LISTING_DESCRIPTION,
   MAINNET_PAYMENT_NETWORKS,
   MAINNET_UNAVAILABLE_TOOLS,
   PAYMENT_ROUTE,
   REGISTRY_DESCRIPTION,
+  SITE_DESCRIPTION,
   SIU_PRICE_DOCS_URL,
   paymentNetworksText,
 } from "./paid-tools.js";
@@ -24,8 +26,20 @@ describe("the listing descriptions", () => {
     );
   });
 
+  it("gives the prints site's every page one meta description, in the same words", () => {
+    expect(SITE_DESCRIPTION).toBe(
+      "Dated SIU, the daily benchmark price of verified AI work, measured by executing a versioned task basket, not by surveying list prices.",
+    );
+  });
+
+  it("builds every description from one phrase, so none can drift from the others", () => {
+    expect(DATED_SIU_PHRASE).toBe("the daily benchmark price of verified AI work");
+    for (const d of [LISTING_DESCRIPTION, REGISTRY_DESCRIPTION, SITE_DESCRIPTION])
+      expect(d).toContain(`Dated SIU, ${DATED_SIU_PHRASE}`);
+  });
+
   it("says verified AI work, never AI inference", () => {
-    for (const d of [LISTING_DESCRIPTION, REGISTRY_DESCRIPTION])
+    for (const d of [LISTING_DESCRIPTION, REGISTRY_DESCRIPTION, SITE_DESCRIPTION])
       expect(d).not.toMatch(/AI inference/);
   });
 });

@@ -1,3 +1,4 @@
+import { SITE_DESCRIPTION } from "@touchstone/print";
 import { esc } from "../format.js";
 
 export interface LayoutOptions {
@@ -25,7 +26,7 @@ export function renderLayout({ title, bodyHtml, basePath, mode = "human" }: Layo
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
-<meta name="description" content="Dated SIU: the benchmark price of AI inference work, measured by executing a versioned task basket, not by surveying list prices.">
+<meta name="description" content="${esc(SITE_DESCRIPTION)}">
 <link rel="icon" type="image/png" href="${basePath}favicon.png">
 <link rel="stylesheet" href="${basePath}styles.css">
 </head>
