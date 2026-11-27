@@ -33,6 +33,29 @@ import { WITHDRAW_PAGE_HTML, WITHDRAW_PAGE_JS } from "./withdraw-page.js";
  *   other site can drive it.
  */
 
+/**
+ * One withdrawal as it happened, for the treasury's books (the CLI writes it under the gitignored
+ * data/private/withdrawals/): what the treasury signed, Circle's answer, and the mint transaction
+ * the page reports once it is sent and again once it is mined.
+ */
+export interface WithdrawalRecord {
+  id: string;
+  network: GatewayEnvironment;
+  chain: string;
+  treasury: string;
+  amount: string;
+  maxFee: string;
+  attestedAt: string;
+  typedData: BurnIntentTypedData;
+  signature: Hex;
+  circle: { transferId: string | null; attestation: string; signature: string };
+  mint: { chainId: number; to: string; data: Hex };
+  mintTx?: { hash: Hex; status: MintStatus; reportedAt: string };
+}
+
+type MintStatus = "sent" | "success" | "failed";
+const MINT_STATUSES: readonly string[] = ["sent", "success", "failed"];
+
 export interface WithdrawServerOptions {
   env: GatewayEnvironment;
   treasury: string;
@@ -40,6 +63,8 @@ export interface WithdrawServerOptions {
   allowedHosts: readonly string[];
   fetch?: typeof fetch;
   now?: () => number;
+  /** Keeps each withdrawal's record; called on attestation and on every mint report. */
+  record?: (r: WithdrawalRecord) => Promise<void>;
 }
 
 interface Pending {
@@ -49,6 +74,8 @@ interface Pending {
 }
 
 const PENDING_TTL_MS = 15 * 60 * 1000;
+/** How long the page may report the mint transaction of an attested withdrawal. */
+const ATTESTED_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 64 * 1024;
 
 class HttpError extends Error {
@@ -67,6 +94,19 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
   const doFetch = opts.fetch ?? fetch;
   const now = opts.now ?? Date.now;
   const pending = new Map<string, Pending>();
+  const attested = new Map<string, { record: WithdrawalRecord; expiresAt: number }>();
+
+  /** Best effort: a record that cannot be written is logged, never allowed to lose the mint. */
+  async function keep(r: WithdrawalRecord): Promise<boolean> {
+    if (!opts.record) return false;
+    try {
+      await opts.record(r);
+      return true;
+    } catch (e) {
+      console.error(`${new Date(now()).toISOString()} could not write the record of ${r.id}:`, (e as Error).message);
+      return false;
+    }
+  }
 
   async function circle(path: string, body: unknown): Promise<unknown> {
     const res = await doFetch(`${env.api}${path}`, {
@@ -187,10 +227,28 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
     };
     if (!answer.attestation || !answer.signature)
       throw new HttpError(502, `Circle did not attest the withdrawal: ${JSON.stringify(answer).slice(0, 300)}`);
-    pending.delete(body.id as string);
-    console.log(`${new Date(now()).toISOString()} attested ${body.id}: ${formatUsdc(value)} USDC on ${chain.name}${answer.transferId ? ` (transfer ${answer.transferId})` : ""}`);
+    const id = body.id as string;
+    pending.delete(id);
+    console.log(`${new Date(now()).toISOString()} attested ${id}: ${formatUsdc(value)} USDC on ${chain.name}${answer.transferId ? ` (transfer ${answer.transferId})` : ""}`);
+    const data = gatewayMintCalldata(answer.attestation, answer.signature);
+    const record: WithdrawalRecord = {
+      id,
+      network: opts.env,
+      chain: chain.key,
+      treasury,
+      amount: formatUsdc(value),
+      maxFee: formatUsdc(maxFee),
+      attestedAt: new Date(now()).toISOString(),
+      typedData: p.typedData,
+      signature,
+      circle: { transferId: answer.transferId ?? null, attestation: answer.attestation, signature: answer.signature },
+      mint: { chainId: chain.chainId, to: env.minter, data },
+    };
+    attested.set(id, { record, expiresAt: now() + ATTESTED_TTL_MS });
+    const recorded = await keep(record);
     return {
       transferId: answer.transferId ?? null,
+      recorded,
       mint: {
         chainId: chain.chainId,
         chainName: chain.name,
@@ -199,9 +257,19 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
         nativeCurrency: chain.nativeCurrency,
         from: treasury,
         to: env.minter,
-        data: gatewayMintCalldata(answer.attestation, answer.signature),
+        data,
       },
     };
+  }
+
+  async function minted(body: { id?: unknown; txHash?: unknown; status?: unknown }): Promise<unknown> {
+    const a = typeof body.id === "string" ? attested.get(body.id) : undefined;
+    if (!a || a.expiresAt < now()) throw new HttpError(404, "No attested withdrawal with that id.");
+    if (typeof body.txHash !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(body.txHash)) throw new HttpError(400, "That is not a transaction hash.");
+    if (typeof body.status !== "string" || !MINT_STATUSES.includes(body.status)) throw new HttpError(400, "Status must be sent, success or failed.");
+    a.record.mintTx = { hash: body.txHash as Hex, status: body.status as MintStatus, reportedAt: new Date(now()).toISOString() };
+    console.log(`${a.record.mintTx.reportedAt} mint of ${a.record.id}: ${body.status} ${body.txHash}`);
+    return { recorded: await keep(a.record) };
   }
 
   async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -221,6 +289,12 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
     }
     throw new HttpError(400, "Send a JSON object.");
   }
+
+  const postRoutes = new Map<string, (body: Record<string, unknown>) => Promise<unknown>>([
+    ["/api/prepare", prepare],
+    ["/api/submit", submit],
+    ["/api/minted", minted],
+  ]);
 
   const SECURITY_HEADERS = {
     "cache-control": "no-store",
@@ -245,12 +319,12 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
         });
       if (req.method === "GET" && url.pathname === "/app.js") return send(res, 200, WITHDRAW_PAGE_JS, "text/javascript; charset=utf-8");
       if (req.method === "GET" && url.pathname === "/api/state") return send(res, 200, JSON.stringify(await state()), "application/json");
-      if (req.method === "POST" && (url.pathname === "/api/prepare" || url.pathname === "/api/submit")) {
+      const post = postRoutes.get(url.pathname);
+      if (req.method === "POST" && post) {
         const origin = req.headers.origin;
         if (origin !== undefined && !opts.allowedHosts.some((h) => origin === `http://${h}`)) throw new HttpError(403, "Wrong origin.");
         const body = await readJson(req);
-        const out = url.pathname === "/api/prepare" ? await prepare(body) : await submit(body);
-        return send(res, 200, JSON.stringify(out), "application/json");
+        return send(res, 200, JSON.stringify(await post(body)), "application/json");
       }
       throw new HttpError(404, "Not found.");
     } catch (e) {

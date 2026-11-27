@@ -178,6 +178,10 @@ The flow follows Circle's docs:
 4. The server checks the signature came from the treasury, then sends it to Circle's `/v1/transfer`.
 5. Your wallet sends `gatewayMint(attestation, signature)` to the GatewayMinter on that chain.
 
+Each withdrawal Circle attests is written to `data/private/withdrawals/` (gitignored), with what
+the treasury signed, Circle's answer, and the mint transaction the page reports once sent and once
+mined. That's the treasury's record of money moved.
+
 Circle's fee is taken from the Gateway balance on top of the amount: on 2026-11-27 its estimate
 was up to 0.011 USDC on Base and up to 0.00385 USDC on Arc. The mint needs a little gas: ETH on
 Base; on Arc, gas is paid in USDC.

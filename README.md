@@ -10,6 +10,18 @@ buying inference against a versioned task basket, not by surveying list prices.
 2. **The escrow contract is non-custodial.** Funds move only to the pre-agreed seller, back to
    the buyer, or to the fee treasury — no admin path to user money exists in any code path.
 
+## Setting up a checkout
+
+After cloning, and after every `git worktree add` (a worktree does not inherit submodules):
+
+```bash
+bash scripts/setup-checkout.sh
+```
+
+It downloads the contract libraries (`forge-std`, `openzeppelin-contracts`, git submodules under
+`packages/contracts/lib`), installs dependencies with the lockfile frozen, and builds every
+package: the same starting point CI checks out.
+
 ## How to run a print
 
 _Placeholder — wired up once `packages/print` exists._

@@ -182,16 +182,20 @@ export const WITHDRAW_PAGE_JS = `"use strict";
       await switchChain();
       say("mint-msg", "Waiting for the wallet…");
       const hash = await window.ethereum.request({ method: "eth_sendTransaction", params: [{ from: account, to: mint.to, data: mint.data }] });
+      const report = (status) => api("/api/minted", { id: prepared.id, txHash: hash, status }).catch(() => {});
+      await report("sent");
       say("mint-msg", "Sent: " + mint.explorer + "/tx/" + hash + "\\nWaiting for it to be mined…");
       for (let i = 0; i < 100; i++) {
         await new Promise((r) => setTimeout(r, 3000));
         const receipt = await window.ethereum.request({ method: "eth_getTransactionReceipt", params: [hash] });
         if (!receipt) continue;
         if (receipt.status === "0x1") {
+          await report("success");
           say("mint-msg", "Done. The USDC is in the treasury wallet on " + mint.chainName + ".\\n" + mint.explorer + "/tx/" + hash, "ok");
           await load();
           return;
         }
+        await report("failed");
         return say("mint-msg", "The mint transaction failed: " + mint.explorer + "/tx/" + hash + "\\nCircle's attestation is still valid: press the button to send it again.", "bad");
       }
       say("mint-msg", "Not mined after 5 minutes. Check " + mint.explorer + "/tx/" + hash + " before sending again.", "bad");

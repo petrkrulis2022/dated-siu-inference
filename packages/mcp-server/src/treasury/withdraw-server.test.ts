@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { decodeFunctionData, parseAbi, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { GATEWAY, type BurnIntentTypedData } from "./gateway-withdrawal.js";
-import { createWithdrawHandler } from "./withdraw-server.js";
+import { createWithdrawHandler, type WithdrawalRecord } from "./withdraw-server.js";
 
 // The "treasury" here is a throwaway test key: the real treasury signs on its hardware wallet.
 let treasury: PrivateKeyAccount;
@@ -14,6 +14,7 @@ let allowedHosts: string[];
 let circleCalls: { path: string; body: unknown }[];
 let balances: Record<number, string>;
 let clock: number;
+let records: WithdrawalRecord[];
 
 function fakeCircle(): typeof fetch {
   return (async (input: string | URL | Request, init?: RequestInit) => {
@@ -40,12 +41,14 @@ beforeEach(async () => {
   balances = { 6: "2.000000", 26: "1.000000" };
   clock = 1_000_000;
   allowedHosts = [];
+  records = [];
   const handler = createWithdrawHandler({
     env: "testnet",
     treasury: treasury.address,
     allowedHosts,
     fetch: fakeCircle(),
     now: () => clock,
+    record: async (r) => void records.push(structuredClone(r)),
   });
   server = createServer((req, res) => void handler(req, res));
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
@@ -174,11 +177,52 @@ describe("POST /api/submit", () => {
     expect((await post("/api/submit", { id: body.id, signature })).status).toBe(404);
   });
 
+  it("records the signed request and Circle's answer once Circle attests", async () => {
+    const { body } = await prepare();
+    const signature = await sign(body.typedData);
+    expect(records).toEqual([]);
+    await post("/api/submit", { id: body.id, signature });
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      id: body.id,
+      network: "testnet",
+      chain: "arc-testnet",
+      treasury: treasury.address,
+      amount: "0.500000",
+      maxFee: "0.003850",
+      typedData: body.typedData,
+      signature,
+      circle: { transferId: "t-1", attestation: "0x1234", signature: "0xabcd" },
+      mint: { chainId: 5042002, to: GATEWAY.testnet.minter },
+    });
+  });
+
   it("checks the balance again before sending, in case it moved since preparing", async () => {
     const { body } = await prepare();
     balances[26] = "0.100000";
     const res = await post("/api/submit", { id: body.id, signature: await sign(body.typedData) });
     expect(res.status).toBe(422);
     expect(circleCalls.some((c) => c.path === "/v1/transfer")).toBe(false);
+  });
+});
+
+describe("POST /api/minted", () => {
+  const HASH = `0x${"cd".repeat(32)}`;
+
+  it("adds the mint transaction the page reports to that withdrawal's record", async () => {
+    const { body } = await prepare();
+    await post("/api/submit", { id: body.id, signature: await sign(body.typedData) });
+    expect((await post("/api/minted", { id: body.id, txHash: HASH, status: "sent" })).status).toBe(200);
+    expect((await post("/api/minted", { id: body.id, txHash: HASH, status: "success" })).status).toBe(200);
+    expect(records.at(-1)?.mintTx).toMatchObject({ hash: HASH, status: "success" });
+  });
+
+  it("accepts it only for a withdrawal Circle attested, with a real transaction hash and status", async () => {
+    const { body } = await prepare();
+    expect((await post("/api/minted", { id: body.id, txHash: HASH, status: "sent" })).status).toBe(404);
+    await post("/api/submit", { id: body.id, signature: await sign(body.typedData) });
+    expect((await post("/api/minted", { id: body.id, txHash: "0x1234", status: "sent" })).status).toBe(400);
+    expect((await post("/api/minted", { id: body.id, txHash: HASH, status: "maybe" })).status).toBe(400);
+    expect((await post("/api/minted", { id: "nope", txHash: HASH, status: "sent" })).status).toBe(404);
   });
 });
