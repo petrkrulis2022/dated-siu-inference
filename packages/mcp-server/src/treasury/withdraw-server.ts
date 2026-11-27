@@ -165,6 +165,7 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
 
   async function prepare(body: { chain?: unknown; amount?: unknown }): Promise<unknown> {
     if (typeof body.chain !== "string" || typeof body.amount !== "string") throw new HttpError(400, "Send a chain and an amount.");
+    if (body.amount.trim() === "") throw new HttpError(400, "Type an amount first: the grey 0.50 in the box is only an example.");
     let chain;
     let value: bigint;
     try {

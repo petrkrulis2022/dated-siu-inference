@@ -133,6 +133,13 @@ describe("POST /api/prepare", () => {
     expect(body.id).toBeUndefined();
   });
 
+  it("asks for an amount when the box is empty, rather than quoting the parser", async () => {
+    const res = await post("/api/prepare", { chain: "arc-testnet", amount: "" });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/^Type an amount first/);
+    expect(circleCalls).toEqual([]);
+  });
+
   it("refuses a chain of the other environment and an amount that is not one", async () => {
     expect((await prepare("arc", "0.5")).status).toBe(400);
     expect((await prepare("arc-testnet", "1e3")).status).toBe(400);
