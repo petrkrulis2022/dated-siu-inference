@@ -33,8 +33,14 @@ export const MAINNET_PAYMENT_NETWORKS: readonly PaymentNetwork[] = [
   },
 ];
 
+/** What a SIU measures, as every description and label below names it. */
+const SUBJECT = "AI work";
+
 /** What Dated SIU is, in the owner's words (2026-11-27). Every description below is built from it. */
-export const DATED_SIU_PHRASE = "the daily benchmark price of verified AI work";
+export const DATED_SIU_PHRASE = `the daily benchmark price of verified ${SUBJECT}`;
+
+/** The short label under the wordmark on touchstoneassay.com (the marketing navbar), 2026-11-27. */
+export const SITE_LABEL = `${SUBJECT} price index`;
 
 /** The one-line description every listing and mcp.json uses (owner's wording, 2026-11-27). */
 export const LISTING_DESCRIPTION = `Dated SIU, ${DATED_SIU_PHRASE}: free index; paid quotes in USDC on Base and Arc mainnet.`;
