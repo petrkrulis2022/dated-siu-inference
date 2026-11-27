@@ -158,6 +158,43 @@ filled in by the next run. The entry, with its output appended to `data/private/
 On WSL, cron needs starting once (`sudo service cron start`). To start it with WSL every time, add
 `[boot]` / `command = "service cron start"` to `/etc/wsl.conf`.
 
+**Treasury withdrawal** (`src/treasury/`): paid calls settle in batches into the treasury's Circle
+Gateway balance, not its wallet. This local page moves that balance to the treasury's own wallet on
+the same chain. The treasury signs on its hardware wallet through the browser's wallet extension;
+nothing here holds or asks for a key.
+
+```bash
+pnpm --filter @touchstone/mcp-server run build
+pnpm --filter @touchstone/mcp-server run treasury:withdraw -- --network testnet --treasury 0xB514882859f43DbF3df664C899D707f649E0CF4A
+# open http://127.0.0.1:4700 where MetaMask holds the treasury account
+```
+
+The flow follows Circle's docs:
+
+1. You pick a chain and an amount.
+2. The server asks Circle's `/v1/estimate` for the maximum fee and the block the signature expires
+   at, then builds the burn intent.
+3. Your wallet signs it with `eth_signTypedData_v4`.
+4. The server checks the signature came from the treasury, then sends it to Circle's `/v1/transfer`.
+5. Your wallet sends `gatewayMint(attestation, signature)` to the GatewayMinter on that chain.
+
+Circle's fee is taken from the Gateway balance on top of the amount: on 2026-11-27 its estimate
+was up to 0.011 USDC on Base and up to 0.00385 USDC on Arc. The mint needs a little gas: ETH on
+Base; on Arc, gas is paid in USDC.
+
+**Guards.** Each one is tested, and each test was checked by breaking the code to make it fail:
+
+- The recipient, depositor and signer are all the treasury, which must be on the wallet list.
+- The source and destination chain are the same, with Circle's own contracts and USDC, no mint
+  caller and no hook data.
+- The amount plus the fee must fit in the balance, and the fee must be smaller than the amount.
+- The signature expires at a block Circle sets.
+- The server sends Circle only the intent it built itself; the browser sends back only a signature.
+  A prepared withdrawal is used once and expires after 15 minutes. The balance is checked again
+  before submitting.
+- The server binds 127.0.0.1, answers only its own Host header, refuses a POST from any other
+  origin, and serves the page under a policy that runs only its own script.
+
 **What is never charged for** (the paywall settles before the tool runs, so everything a call can be
 refused for beforehand is checked beforehand and passed through unpaid): arguments that fail the
 tool's schema or its own first checks (`src/tools/schemas.ts`), a model the print excludes

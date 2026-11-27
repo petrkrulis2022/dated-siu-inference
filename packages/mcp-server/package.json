@@ -11,7 +11,8 @@
     "test": "vitest run",
     "start": "pnpm run build && node dist/cli/serve.js",
     "deploy": "wrangler deploy",
-    "payments:export": "node dist/cli/export-payments.js"
+    "payments:export": "node dist/cli/export-payments.js",
+    "treasury:withdraw": "node dist/cli/treasury-withdraw.js"
   },
   "dependencies": {
     "@circle-fin/x402-batching": "^3.3.0",
