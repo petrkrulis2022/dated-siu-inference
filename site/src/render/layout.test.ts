@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SITE_DESCRIPTION } from "@touchstone/print";
 import { renderLayout } from "./layout.js";
 
 describe("renderLayout", () => {
@@ -45,6 +46,15 @@ describe("renderLayout", () => {
     expect(forAgents).toMatch(/<a href="for-agents\.html" aria-current="page">For agents<\/a>/);
     expect(forAgents).not.toMatch(/<a href="index\.html" aria-current="page">/);
     expect(forAgents).toContain('href="for-agents.html#try-it-here"');
+  });
+
+  it("gives every page the shared site description, which never says AI inference", () => {
+    // From @touchstone/print (paid-tools.ts), the same source as llms.txt, mcp.json and the listings.
+    for (const mode of ["human", "for-agents"] as const) {
+      const html = renderLayout({ title: "t", bodyHtml: "", basePath: "../", mode });
+      expect(html).toContain(`<meta name="description" content="${SITE_DESCRIPTION}">`);
+      expect(html).not.toMatch(/AI inference/);
+    }
   });
 
   it("is mobile-friendly: sets a real viewport meta tag", () => {

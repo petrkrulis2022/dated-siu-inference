@@ -33,16 +33,23 @@ export const MAINNET_PAYMENT_NETWORKS: readonly PaymentNetwork[] = [
   },
 ];
 
+/** What Dated SIU is, in the owner's words (2026-11-27). Every description below is built from it. */
+export const DATED_SIU_PHRASE = "the daily benchmark price of verified AI work";
+
 /** The one-line description every listing and mcp.json uses (owner's wording, 2026-11-27). */
-export const LISTING_DESCRIPTION =
-  "Dated SIU, the daily benchmark price of verified AI work: free index; paid quotes in USDC on Base and Arc mainnet.";
+export const LISTING_DESCRIPTION = `Dated SIU, ${DATED_SIU_PHRASE}: free index; paid quotes in USDC on Base and Arc mainnet.`;
 
 /**
  * The same, within the MCP registry's 100-character limit for server.json's description (its schema,
  * ServerDetail.description maxLength 100): the owner's lead phrase verbatim, "paid" and "mainnet" cut.
  */
-export const REGISTRY_DESCRIPTION =
-  "Dated SIU, the daily benchmark price of verified AI work: free index; USDC quotes on Base and Arc.";
+export const REGISTRY_DESCRIPTION = `Dated SIU, ${DATED_SIU_PHRASE}: free index; USDC quotes on Base and Arc.`;
+
+/**
+ * The prints site's <meta name="description">, on every page (site/src/render/layout.ts): what
+ * search engines and link previews show. The method clause is the one the site carried before.
+ */
+export const SITE_DESCRIPTION = `Dated SIU, ${DATED_SIU_PHRASE}, measured by executing a versioned task basket, not by surveying list prices.`;
 
 /** How a payment reaches the treasury on those networks. */
 export const PAYMENT_ROUTE = "x402 through Circle Gateway (batched nanopayments)";
