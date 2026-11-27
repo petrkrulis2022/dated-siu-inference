@@ -129,6 +129,35 @@ npx wrangler d1 create touchstone-settlements
 npx wrangler d1 execute touchstone-settlements --remote --command "$(node -e 'import("./dist/workers/settlement-log.js").then(m=>process.stdout.write(m.SETTLEMENTS_SCHEMA))')"
 ```
 
+**Payment log export** (bookkeeping): `src/cli/export-payments.ts` writes one CSV per complete UTC
+day to `data/private/payments/YYYY-MM-DD.csv`. `data/private/` is gitignored, and the export refuses
+to write anywhere git doesn't ignore (`src/private-output.ts`). Each row carries:
+
+- the time, tool, chain and network, whether it was mainnet, and the route;
+- the amount, exact, beside the atomic units it was paid in;
+- the payer, the payer's traffic class (`internal`, `campaign` or `organic`, from
+  `src/workers/wallet-labels.ts`) and the settlement reference.
+
+A day with no payments gets a header-only file. `batch_tx` stays empty until reconciliation is
+built. The export reads the live database with `wrangler d1 execute --remote` under your own
+Cloudflare login, so it needs no token of its own and no public endpoint.
+
+```bash
+pnpm --filter @touchstone/mcp-server run build
+./scripts/export-payments.sh                    # every complete day not yet on disk
+./scripts/export-payments.sh --day 2026-11-26   # write one day again
+```
+
+Cron runs it hourly. A run with nothing to do writes nothing, so a day the machine was off is
+filled in by the next run. The entry, with its output appended to `data/private/payments-export.log`:
+
+```
+17 * * * * <repo>/packages/mcp-server/scripts/export-payments.sh >> <repo>/data/private/payments-export.log 2>&1
+```
+
+On WSL, cron needs starting once (`sudo service cron start`). To start it with WSL every time, add
+`[boot]` / `command = "service cron start"` to `/etc/wsl.conf`.
+
 **What is never charged for** (the paywall settles before the tool runs, so everything a call can be
 refused for beforehand is checked beforehand and passed through unpaid): arguments that fail the
 tool's schema or its own first checks (`src/tools/schemas.ts`), a model the print excludes
