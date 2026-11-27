@@ -7,6 +7,7 @@ import {
   PAYMENT_ROUTE,
   REGISTRY_DESCRIPTION,
   SITE_DESCRIPTION,
+  SITE_LABEL,
   SIU_PRICE_DOCS_URL,
   paymentNetworksText,
 } from "./paid-tools.js";
@@ -38,8 +39,13 @@ describe("the listing descriptions", () => {
       expect(d).toContain(`Dated SIU, ${DATED_SIU_PHRASE}`);
   });
 
+  it("labels touchstoneassay.com's wordmark with the same subject as the phrase", () => {
+    expect(SITE_LABEL).toBe("AI work price index");
+    expect(DATED_SIU_PHRASE.endsWith(SITE_LABEL.replace(/ price index$/, ""))).toBe(true);
+  });
+
   it("says verified AI work, never AI inference", () => {
-    for (const d of [LISTING_DESCRIPTION, REGISTRY_DESCRIPTION, SITE_DESCRIPTION])
+    for (const d of [LISTING_DESCRIPTION, REGISTRY_DESCRIPTION, SITE_DESCRIPTION, SITE_LABEL])
       expect(d).not.toMatch(/AI inference/);
   });
 });

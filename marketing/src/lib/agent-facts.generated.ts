@@ -6,6 +6,9 @@
 
 export const LISTING_DESCRIPTION = "Dated SIU, the daily benchmark price of verified AI work: free index; paid quotes in USDC on Base and Arc mainnet.";
 
+/** The label under the wordmark in the navbar. */
+export const SITE_LABEL = "AI work price index";
+
 export const PAID_TOOL_PRICES_USD = {
   "get_quote": "0.001",
   "convert": "0.001",

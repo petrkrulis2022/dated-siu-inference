@@ -1,3 +1,4 @@
+import { SITE_LABEL } from "@/lib/agent-facts.generated";
 import { PUBLICATION_URL } from "../pages/home/content";
 import { AudienceToggle } from "./audience-toggle";
 
@@ -33,7 +34,7 @@ export function Navbar({ activeMode }: NavbarProps) {
           <img src="/logo.png" alt="" width={32} height={32} className="size-8 shrink-0 rounded-md" />
           <span className="min-w-0">
             <span className="block truncate font-heading text-xl tracking-[0.04em] md:text-2xl">TOUCHSTONE ASSAY</span>
-            <span className="block truncate font-mono text-[0.5rem] uppercase tracking-[0.26em] text-ploy-text-secondary">AI inference index &amp; pricing</span>
+            <span className="block truncate font-mono text-[0.5rem] uppercase tracking-[0.26em] text-ploy-text-secondary">{SITE_LABEL}</span>
           </span>
         </a>
         <div className="hidden items-center gap-7 font-mono text-[0.65rem] uppercase tracking-[0.13em] md:flex">
