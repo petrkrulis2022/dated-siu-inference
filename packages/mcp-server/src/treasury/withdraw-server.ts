@@ -9,7 +9,11 @@ import {
   formatUsdc,
   gatewayMintCalldata,
   parseUsdc,
+  RELAY_ACCEPTANCE_PHRASE,
+  mintFacts,
   plainMintProblems,
+  relayNotice,
+  type MintFacts,
   recoverBurnIntentSigner,
   treasuryCodeProblem,
   withdrawalRefusals,
@@ -60,7 +64,18 @@ export interface WithdrawalRecord {
    * plain transaction from the treasury to the GatewayMinter that minted the amount) or "not-plain",
    * with the reasons.
    */
-  mintTx?: { hash: Hex; status: "sent" | "plain" | "not-plain"; problems?: string[]; reportedAt: string };
+  mintTx?: {
+    hash: Hex;
+    status: "sent" | "plain" | "not-plain";
+    problems?: string[];
+    /** Exactly what happened: sender, transaction type, target, data, amount the treasury received. */
+    facts?: MintFacts;
+    /** Whether Peter typed RELAY_ACCEPTANCE_PHRASE before this mint (mainnet only). */
+    accepted?: boolean;
+    reportedAt: string;
+  };
+  /** Mainnet: Peter's typed acceptance of a relayed or smart-account mint, and the treasury's code then. */
+  relayAcceptance?: { phrase: string; at: string; treasuryCode: string };
 }
 
 /** What the page may report: the hash once sent, then that it was mined (the server checks the rest). */
@@ -127,7 +142,8 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
   /** Stops unless the treasury is a plain account (no code) on `chain`, read from the chain itself. */
-  async function assertPlainTreasury(chain: GatewayChain): Promise<void> {
+  /** The treasury's code on `chain`, read from the chain itself ("0x" for a plain account). */
+  async function treasuryCode(chain: GatewayChain): Promise<string> {
     let code: unknown;
     try {
       code = await chainRpc(chain, "eth_getCode", [treasury, "latest"]);
@@ -135,10 +151,23 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
       throw new HttpError(502, `Could not read the treasury's account on ${chain.name}, so it could not be checked: ${(e as Error).message}`);
     }
     if (typeof code !== "string") throw new HttpError(502, `Could not read the treasury's account on ${chain.name}.`);
+    return code;
+  }
+
+  /**
+   * Testnet is strict: any code on the treasury stops the withdrawal. Mainnet, by the owner's decision
+   * of 2026-11-28, does not stop: it returns a plain notice of what will happen, and the mint itself
+   * waits for a typed confirmation (mintCheck).
+   */
+  async function checkTreasury(chain: GatewayChain): Promise<{ code: string; notice?: string }> {
+    const code = await treasuryCode(chain);
     const problem = treasuryCodeProblem(code, chain.name);
-    if (problem) throw new HttpError(409, problem);
+    if (!problem) return { code };
+    if (strict) throw new HttpError(409, problem);
+    return { code, notice: relayNotice(code, chain.name) };
   }
   const now = opts.now ?? Date.now;
+  const strict = opts.env === "testnet";
   const pending = new Map<string, Pending>();
   const attested = new Map<string, { record: WithdrawalRecord; expiresAt: number }>();
 
@@ -221,7 +250,7 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
       throw new HttpError(400, (e as Error).message);
     }
     if (value <= 0n) throw new HttpError(422, "Enter an amount above zero.", { refusals: ["Enter an amount above zero."] });
-    await assertPlainTreasury(chain);
+    const { notice } = await checkTreasury(chain);
     const balance = (await balances()).get(chain.domain) ?? 0n;
     const salt = `0x${randomBytes(32).toString("hex")}` as Hex;
     const { maxFee, maxBlockHeight } = await estimate(chain.key, value, salt);
@@ -245,6 +274,7 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
         balanceAfterAtLeast: formatUsdc(balance - value - maxFee),
         recipient: treasury,
         maxBlockHeight: maxBlockHeight.toString(),
+        ...(notice ? { notice } : {}),
       },
     };
   }
@@ -262,7 +292,7 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
     if (signer.toLowerCase() !== treasury.toLowerCase())
       throw new HttpError(400, `Signed by ${signer}, not by the treasury ${treasury}. Nothing was sent to Circle.`);
     const chain = chainFor(opts.env, p.chain);
-    await assertPlainTreasury(chain);
+    await checkTreasury(chain);
     const value = BigInt(p.typedData.message.spec.value);
     const maxFee = BigInt(p.typedData.message.maxFee);
     const balance = (await balances()).get(chain.domain) ?? 0n;
@@ -317,8 +347,12 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
     return a;
   }
 
-  /** Called by the page right before it asks the wallet to send the mint. */
-  async function mintCheck(body: { id?: unknown }): Promise<unknown> {
+  /**
+   * Called by the page right before it asks the wallet to send the mint. Testnet: stops if the treasury
+   * has code. Mainnet: answers with a plain notice of what the wallet may do and asks for
+   * RELAY_ACCEPTANCE_PHRASE, typed exactly, before every mint; the confirmation goes into the record.
+   */
+  async function mintCheck(body: { id?: unknown; confirmation?: unknown }): Promise<unknown> {
     const a = attestedFor(body.id);
     if (now() - Date.parse(a.record.attestedAt) > ATTESTATION_LIFETIME_MS)
       throw new HttpError(
@@ -326,7 +360,14 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
         "Circle's approval of this withdrawal has expired (it lasts 10 minutes), so the mint would fail. Nothing is lost: " +
           "the amount returns to the Gateway balance once Circle sees it unused. Prepare the withdrawal again.",
       );
-    await assertPlainTreasury(chainFor(opts.env, a.record.chain));
+    const chain = chainFor(opts.env, a.record.chain);
+    const { code } = await checkTreasury(chain);
+    if (strict) return { ok: true };
+    if (body.confirmation !== RELAY_ACCEPTANCE_PHRASE)
+      return { ok: false, needsConfirmation: true, phrase: RELAY_ACCEPTANCE_PHRASE, notice: relayNotice(code, chain.name) };
+    a.record.relayAcceptance = { phrase: RELAY_ACCEPTANCE_PHRASE, at: new Date(now()).toISOString(), treasuryCode: code };
+    console.log(`${a.record.relayAcceptance.at} ${a.record.id}: Peter typed "${RELAY_ACCEPTANCE_PHRASE}" (treasury code on ${chain.name}: ${code})`);
+    await keep(a.record);
     return { ok: true };
   }
 
@@ -361,10 +402,12 @@ export function createWithdrawHandler(opts: WithdrawServerOptions): (req: Incomi
       usdc: chain.usdc,
       value: parseUsdc(a.record.amount),
     });
+    const facts = mintFacts(tx, receipt, { treasury, minter: env.minter, data: a.record.mint.data, usdc: chain.usdc });
     const verdict = problems.length === 0 ? "plain" : "not-plain";
-    a.record.mintTx = { hash, status: verdict, problems, reportedAt };
+    const accepted = a.record.relayAcceptance !== undefined;
+    a.record.mintTx = { hash, status: verdict, problems, facts, accepted, reportedAt };
     console.log(`${reportedAt} mint of ${a.record.id}: ${verdict} ${hash}${problems.length ? ` (${problems.join(" ")})` : ""}`);
-    return { verdict, problems, recorded: await keep(a.record) };
+    return { verdict, problems, facts, accepted, recorded: await keep(a.record) };
   }
 
   async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {

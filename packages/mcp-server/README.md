@@ -158,14 +158,29 @@ filled in by the next run. The entry, with its output appended to `data/private/
 On WSL, cron needs starting once (`sudo service cron start`). To start it with WSL every time, add
 `[boot]` / `command = "service cron start"` to `/etc/wsl.conf`.
 
+Every run also totals the treasury: its wallet USDC plus its Gateway balance, on Base and Arc
+mainnet. Once that is more than $100, the run alerts once per UTC day that it's time to move the
+treasury to a hardware wallet (`src/treasury/treasury-total.ts`). The alert appears three ways:
+
+- a line in the log;
+- `data/private/ALERT-treasury-hardware-wallet.txt`;
+- a Windows message box when running under WSL.
+
+**The treasury** (`0xB514882859f43DbF3df664C899D707f649E0CF4A`, `TREASURY_ADDRESS` in
+`src/workers/wallet-labels.ts`) is a **dedicated hot wallet in MetaMask**. It is not
+hardware-backed. It moves to a hardware wallet once it holds more than $100 in total: wallet plus
+Gateway balances, Base and Arc (owner's decision, 2026-11-28). Until then, the account does nothing
+else: no other sites, no other tokens, and no signing anything you don't recognise. Accounts
+delegated to MetaMask's EIP-7702 contract are what reported phishing has targeted.
+
 **Treasury withdrawal** (`src/treasury/`): paid calls settle in batches into the treasury's Circle
 Gateway balance, not its wallet. This local page moves that balance to the treasury's own wallet on
-the same chain. The treasury signs on its hardware wallet through the browser's wallet extension;
-nothing here holds or asks for a key.
+the same chain. The treasury signs in MetaMask through the browser's wallet extension; nothing here
+holds or asks for a key.
 
 ```bash
 pnpm --filter @touchstone/mcp-server run build
-pnpm --filter @touchstone/mcp-server run treasury:withdraw -- --network testnet --treasury 0xB514882859f43DbF3df664C899D707f649E0CF4A
+pnpm --filter @touchstone/mcp-server run treasury:withdraw -- --network testnet   # or --network mainnet
 # open http://127.0.0.1:4700 where MetaMask holds the treasury account
 ```
 
@@ -176,21 +191,31 @@ The flow follows Circle's docs:
    at, then builds the burn intent.
 3. Your wallet signs it with `eth_signTypedData_v4`.
 4. The server checks the signature came from the treasury, then sends it to Circle's `/v1/transfer`.
-5. Within 10 minutes, the treasury itself sends `gatewayMint(attestation, signature)` to the
-   GatewayMinter on that chain, as a plain transaction. Circle's approval expires after 10 minutes;
-   one that expires unused is credited back to the Gateway balance, so nothing is lost.
-6. The server reads the mined transaction from the chain itself and says "Done" only if it was that
-   plain mint.
+5. Within 10 minutes, the treasury sends `gatewayMint(attestation, signature)` to the GatewayMinter
+   on that chain. `destinationCaller` names the treasury, so no other account can send it: Circle's
+   minter checks `msg.sender`, and on Arc testnet another account's mint reverted. Circle's approval
+   expires after 10 minutes. One that expires unused is credited back to the Gateway balance, so
+   nothing is lost; on Arc testnet the full amount came back about 10 minutes later.
+6. The server reads the mined transaction from the chain itself. It reports exactly what happened:
+   sender, transaction type, target, data, and the amount the treasury received. It says "Done" only
+   for a plain mint from the treasury.
 
-Each withdrawal Circle attests is written to `data/private/withdrawals/` (gitignored), with what
-the treasury signed, Circle's answer, and the mint transaction with the server's verdict on it.
-That's the treasury's record of money moved.
+Each withdrawal Circle attests is written to `data/private/withdrawals/` (gitignored). The record
+holds what the treasury signed, Circle's answer, any typed confirmation, and the mint transaction
+with the server's verdict and facts. That's the treasury's record of money moved.
 
-**The treasury must stay a plain account.** On 2026-11-27, MetaMask turned the treasury on Base
-Sepolia into an EIP-7702 smart account during a mint and had its own relayer send it. The funds
-still reached the treasury, but a third party sent the transaction and the account type changed,
-both against the owner's rules. Turn off MetaMask's "Use smart account" and gas sponsorship for the
-treasury, and decline any such prompt.
+**Relayed and smart-account mints.** MetaMask can turn an account into an EIP-7702 smart account
+during a transaction and have its own relayer send it. Its help pages say gas sponsorship relies on
+this and "you cannot opt out". On 2026-11-27 it did this twice on Base Sepolia, even with "Use
+smart account" off. The funds reached the treasury both times, because Circle's attestation fixes
+the treasury as recipient.
+
+- **Testnet is strict.** A treasury with code is refused, and a relayed mint is reported as a
+  failure.
+- **Mainnet allows it, with confirmation** (owner's decision, 2026-11-28, while balances are
+  small). Before every mint, the page says plainly what the wallet may do and asks Peter to type
+  "I accept a relayed or smart-account mint". That confirmation is logged in the record. After the
+  mint, the page reports exactly what happened; a relayed mint is never shown as a plain "Done".
 
 Circle's fee is taken from the Gateway balance on top of the amount: on 2026-11-27 its estimate
 was up to 0.011 USDC on Base and up to 0.00385 USDC on Arc. The mint needs a little gas: ETH on
@@ -199,8 +224,8 @@ Base; on Arc, gas is paid in USDC.
 **Guards.** Each one is tested, and each test was checked by breaking the code to make it fail:
 
 - The recipient, depositor and signer are all the treasury, which must be on the wallet list.
-- The source and destination chain are the same, with Circle's own contracts and USDC, no mint
-  caller and no hook data.
+- The source and destination chain are the same, with Circle's own contracts and USDC, the
+  treasury as the only allowed mint caller, and no hook data.
 - The amount plus the fee must fit in the balance, and the fee must be smaller than the amount.
 - The signature expires at a block Circle sets.
 - The server sends Circle only the intent it built itself; the browser sends back only a signature.
@@ -208,13 +233,15 @@ Base; on Arc, gas is paid in USDC.
   before submitting.
 - The server binds 127.0.0.1, answers only its own Host header, refuses a POST from any other
   origin, and serves the page under a policy that runs only its own script.
-- The treasury must have no code on the chain (no EIP-7702 delegation). The server reads this
-  from the chain itself at three points: before anything is signed, before asking Circle, and
-  right before the page sends the mint. If there is code, it stops with a plain warning.
+- The server reads the treasury's code from the chain itself at three points: before anything is
+  signed, before asking Circle, and right before the page sends the mint.
+  - On testnet, any code stops the withdrawal with a plain warning.
+  - On mainnet, code produces a plain notice instead.
+- On mainnet, the exact confirmation phrase is required before every mint, and it is logged.
 - After the mint is mined, the server checks the transaction itself: sent by the treasury to the
   GatewayMinter, with exactly the prepared data and no value, not a type-4 transaction, succeeded,
-  and minted the amount to the treasury. Anything else is reported reason by reason, never as
-  "Done".
+  and minted the amount to the treasury. Anything else is reported reason by reason, with the
+  facts, never as "Done".
 - Right before sending, the page refuses an approval older than Circle's 10 minutes, which would
   only revert.
 

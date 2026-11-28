@@ -9,6 +9,7 @@ import {
   chainFor,
   formatUsdc,
   gatewayMintCalldata,
+  mintFacts,
   parseUsdc,
   plainMintProblems,
   recoverBurnIntentSigner,
@@ -89,7 +90,7 @@ describe("buildWithdrawal", () => {
         sourceDepositor: b32(TREASURY),
         destinationRecipient: b32(TREASURY),
         sourceSigner: b32(TREASURY),
-        destinationCaller: b32("0x0000000000000000000000000000000000000000"),
+        destinationCaller: b32(TREASURY),
         value: "500000",
         salt: SALT,
         hookData: "0x",
@@ -115,7 +116,8 @@ describe("assertSafeBurnIntent", () => {
     ["another chain as destination", (t: BurnIntentTypedData) => void (t.message.spec.destinationDomain = 6)],
     ["another minter", (t: BurnIntentTypedData) => void (t.message.spec.destinationContract = b32("0x000000000000000000000000000000000000dEaD"))],
     ["another depositor", (t: BurnIntentTypedData) => void (t.message.spec.sourceDepositor = b32("0x000000000000000000000000000000000000dEaD"))],
-    ["a named mint caller", (t: BurnIntentTypedData) => void (t.message.spec.destinationCaller = b32("0x000000000000000000000000000000000000dEaD"))],
+    ["a mint caller other than the treasury", (t: BurnIntentTypedData) => void (t.message.spec.destinationCaller = b32("0x000000000000000000000000000000000000dEaD"))],
+    ["a mint anyone may send (zero caller)", (t: BurnIntentTypedData) => void (t.message.spec.destinationCaller = b32("0x0000000000000000000000000000000000000000"))],
     ["hook data", (t: BurnIntentTypedData) => void (t.message.spec.hookData = "0x01")],
     ["a signature that never expires", (t: BurnIntentTypedData) => void (t.message.maxBlockHeight = (2n ** 256n - 1n).toString())],
     ["another EIP-712 domain", (t: BurnIntentTypedData) => void (t.domain.name = "Something")],
@@ -218,6 +220,46 @@ describe("plainMintProblems", () => {
 
   it("reports value sent along with the call", () => {
     expect(plainMintProblems({ ...plainTx, value: "0x1" }, okReceipt, expected).join(" ")).toMatch(/carried a value/);
+  });
+});
+
+describe("mintFacts", () => {
+  const MINTER = GATEWAY.testnet.minter;
+  const USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+  const DATA = gatewayMintCalldata("0x1234", "0xabcd");
+  const TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+  const topic = (a: string) => `0x${a.toLowerCase().slice(2).padStart(64, "0")}`;
+  const mintLog = (value: number) => ({ address: USDC.toLowerCase(), topics: [TRANSFER, topic("0x0000000000000000000000000000000000000000"), topic(TREASURY)], data: `0x${value.toString(16).padStart(64, "0")}` });
+  const expected = { treasury: TREASURY, minter: MINTER, data: DATA, usdc: USDC, value: 100_000n };
+
+  it("states exactly what happened in a plain mint", () => {
+    const facts = mintFacts({ type: "0x2", from: TREASURY.toLowerCase(), to: MINTER.toLowerCase(), input: DATA, value: "0x0" }, { status: "0x1", logs: [mintLog(100_000)] }, expected);
+    expect(facts).toEqual({
+      status: "succeeded",
+      sender: `${TREASURY.toLowerCase()} (the treasury)`,
+      type: "0x2 (ordinary)",
+      target: `${MINTER.toLowerCase()} (the GatewayMinter)`,
+      data: "exactly the prepared mint",
+      receivedByTreasury: "0.100000 USDC",
+    });
+  });
+
+  it("states exactly what happened in the relayed Base Sepolia mint of 2026-11-27", () => {
+    const facts = mintFacts(
+      { type: "0x4", from: "0xb01caea8c6c47bbf4f4b4c5080ca642043359c2e", to: "0xdb9b1e94b5b69df7e401ddbede43491141047db3", input: "0xcef6d209", value: "0x0", authorizationList: [{ address: "0x63c0c19a282a1b52b07dd5a65b58948a07dae32b" }] },
+      { status: "0x1", logs: [mintLog(100_000)] },
+      expected,
+    );
+    expect(facts.sender).toBe("0xb01caea8c6c47bbf4f4b4c5080ca642043359c2e (not the treasury: a relayer)");
+    expect(facts.type).toBe("0x4 (EIP-7702, authorising 0x63c0c19a282a1b52b07dd5a65b58948a07dae32b)");
+    expect(facts.target).toBe("0xdb9b1e94b5b69df7e401ddbede43491141047db3 (not the GatewayMinter)");
+    expect(facts.data).toBe("not the prepared mint");
+    expect(facts.receivedByTreasury).toBe("0.100000 USDC");
+  });
+
+  it("says when the transaction was not found or reverted", () => {
+    expect(mintFacts(null, null, expected)).toEqual({ status: "not found on the chain" });
+    expect(mintFacts({ type: "0x2", from: TREASURY, to: MINTER, input: DATA, value: "0x0" }, { status: "0x0", logs: [] }, expected).status).toBe("reverted");
   });
 });
 

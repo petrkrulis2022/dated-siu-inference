@@ -1,8 +1,9 @@
 /**
  * The treasury withdrawal page, served only by withdraw-server.ts on 127.0.0.1. One HTML document
  * and one script (no third-party code; the server's Content-Security-Policy allows only these). The
- * page talks to the browser's wallet extension (window.ethereum: MetaMask with the hardware wallet)
- * and to its own server; it never sees a key. Everything shown is set with textContent.
+ * page talks to the browser's wallet extension (window.ethereum: the treasury's account in MetaMask, a
+ * dedicated hot wallet until the treasury holds more than $100) and to its own server; it never sees
+ * a key. Everything shown is set with textContent.
  */
 
 export const WITHDRAW_PAGE_HTML = `<!doctype html>
@@ -24,7 +25,8 @@ export const WITHDRAW_PAGE_HTML = `<!doctype html>
   code, .mono { font-family: ui-monospace, monospace; word-break: break-all; }
   button { font: inherit; padding: 6px 14px; margin: 4px 8px 4px 0; cursor: pointer; }
   input, select { font: inherit; padding: 4px 6px; }
-  .msg { white-space: pre-line; } .msg.bad { color: var(--bad); } .msg.ok { color: var(--ok); }
+  .msg { white-space: pre-line; } .msg.bad { color: var(--bad); } .msg.ok { color: var(--ok); } .msg.warn { color: var(--warn); }
+  :root { --warn: #8a5a00; } @media (prefers-color-scheme: dark) { :root { --warn: #f0c060; } }
   .muted { color: var(--muted); font-size: .9em; }
   [hidden] { display: none !important; }
   details pre { overflow-x: auto; font-size: .8em; }
@@ -62,6 +64,12 @@ export const WITHDRAW_PAGE_HTML = `<!doctype html>
 <section id="mint-section" hidden>
   <div id="mint-text" class="msg"></div>
   <button id="send-mint">Send the mint transaction</button>
+  <div id="confirm-box" hidden>
+    <div id="confirm-notice" class="msg warn"></div>
+    <p>To go ahead anyway, type exactly: <code id="confirm-phrase"></code></p>
+    <input id="confirm-input" size="44" autocomplete="off" spellcheck="false">
+    <button id="confirm-send">Confirm and send the mint</button>
+  </div>
   <div id="mint-msg" class="msg"></div>
 </section>
 
@@ -117,7 +125,7 @@ export const WITHDRAW_PAGE_JS = `"use strict";
 
   async function connect() {
     say("connect-msg", "");
-    if (!window.ethereum) return say("connect-msg", "No wallet extension in this browser. Open this page where MetaMask holds the treasury account (on the hardware wallet).", "bad");
+    if (!window.ethereum) return say("connect-msg", "No wallet extension in this browser. Open this page where MetaMask holds the treasury account.", "bad");
     try {
       const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
       account = accounts[0];
@@ -146,7 +154,8 @@ export const WITHDRAW_PAGE_JS = `"use strict";
         "  value " + m.spec.value + " (USDC has 6 decimals: " + s.amount + ")\\n" +
         "  maxFee " + m.maxFee + "\\n" +
         "  destinationRecipient ending " + s.recipient.slice(-8).toLowerCase() + "\\n" +
-        "The signature is usable only until block " + s.maxBlockHeight + " on " + s.chain + ".");
+        "The signature is usable only until block " + s.maxBlockHeight + " on " + s.chain + "." +
+        (s.notice ? "\\n\\nNote: " + s.notice : ""));
       $("typed").textContent = JSON.stringify(prepared.typedData, null, 2);
       $("review-section").hidden = false;
     } catch (e) { say("prepare-msg", e.message, "bad"); }
@@ -160,7 +169,11 @@ export const WITHDRAW_PAGE_JS = `"use strict";
       const res = await api("/api/submit", { id: prepared.id, signature });
       mint = res.mint;
       say("sign-msg", "Circle attested the withdrawal" + (res.transferId ? " (transfer " + res.transferId + ")" : "") + ".", "ok");
-      say("mint-text", "Last step, within 10 minutes: the treasury sends the mint transaction on " + mint.chainName + " itself, as a plain transaction. It costs a little gas, paid in " + mint.nativeCurrency.symbol + ". If the wallet offers a smart account, gas sponsorship or a relayer, decline. Circle's approval expires after 10 minutes; if that happens nothing is lost, the amount returns to the Gateway balance and you prepare again.");
+      say("mint-text", "Last step, within 10 minutes: the treasury sends the mint transaction on " + mint.chainName + ". It costs a little gas, paid in " + mint.nativeCurrency.symbol + ". " +
+        (state.network === "mainnet"
+          ? "Your wallet may send it through a smart account and its own relayer; before sending, the page says what may happen and asks you to type a confirmation."
+          : "Testnet is strict: the treasury must send it itself, as a plain transaction; if the wallet offers a smart account, gas sponsorship or a relayer, decline.") +
+        " Circle's approval expires after 10 minutes; if that happens nothing is lost, the amount returns to the Gateway balance and you prepare again.");
       $("mint-section").hidden = false;
     } catch (e) { say("sign-msg", walletError(e), "bad"); }
   }
@@ -176,11 +189,28 @@ export const WITHDRAW_PAGE_JS = `"use strict";
     }
   }
 
-  async function sendMint() {
-    say("mint-msg", "Checking the treasury is a plain account on " + mint.chainName + "…");
+  function factsText(f) {
+    if (!f) return "";
+    const lines = ["status: " + f.status];
+    if (f.sender) lines.push("sender: " + f.sender, "type: " + f.type, "target: " + f.target, "data: " + f.data, "received by the treasury: " + f.receivedByTreasury);
+    return "Exactly what happened:\\n  " + lines.join("\\n  ");
+  }
+
+  // Testnet: the server stops if the treasury is not a plain account. Mainnet (owner's decision,
+  // 2026-11-28): the server says what the wallet may do and asks for a typed phrase before every mint.
+  async function sendMint(confirmation) {
+    say("mint-msg", "Checking the treasury on " + mint.chainName + "…");
+    $("confirm-box").hidden = true;
+    let check;
     try {
-      await api("/api/mint-check", { id: prepared.id });
+      check = await api("/api/mint-check", confirmation === undefined ? { id: prepared.id } : { id: prepared.id, confirmation });
     } catch (e) { return say("mint-msg", e.message, "bad"); }
+    if (!check.ok) {
+      $("confirm-notice").textContent = check.notice;
+      $("confirm-phrase").textContent = check.phrase;
+      $("confirm-box").hidden = false;
+      return say("mint-msg", confirmation === undefined ? "" : "That is not the exact phrase; nothing was sent.", confirmation === undefined ? "" : "bad");
+    }
     say("mint-msg", "Switching the wallet to " + mint.chainName + "…");
     try {
       await switchChain();
@@ -199,13 +229,16 @@ export const WITHDRAW_PAGE_JS = `"use strict";
         } catch (e) {
           return say("mint-msg", "Mined, but the check of it failed: " + e.message + "\\nDo not count this as done: check " + mint.explorer + "/tx/" + hash, "bad");
         }
+        const link = mint.explorer + "/tx/" + hash;
         if (v.verdict === "plain") {
-          say("mint-msg", "Done. Checked on chain: a plain transaction from the treasury to the GatewayMinter, which minted " + prepared.summary.amount + " USDC to the treasury on " + mint.chainName + ".\\n" + mint.explorer + "/tx/" + hash, "ok");
+          say("mint-msg", "Done. Checked on chain: a plain transaction from the treasury to the GatewayMinter, which minted " + prepared.summary.amount + " USDC to the treasury on " + mint.chainName + ".\\n" + factsText(v.facts) + "\\n" + link, "ok");
           await load();
           return;
         }
         await load().catch(() => {});
-        return say("mint-msg", "NOT done as designed. Checked on chain:\\n- " + v.problems.join("\\n- ") + "\\n" + mint.explorer + "/tx/" + hash + "\\nThe USDC may still have reached the treasury: check its balance. Do not withdraw on mainnet until this is understood.", "bad");
+        if (v.accepted)
+          return say("mint-msg", "Completed, but not as a plain mint from the treasury. You accepted this before sending; the record says so.\\n- " + v.problems.join("\\n- ") + "\\n" + factsText(v.facts) + "\\n" + link, "warn");
+        return say("mint-msg", "NOT done as designed. Checked on chain:\\n- " + v.problems.join("\\n- ") + "\\n" + factsText(v.facts) + "\\n" + link + "\\nThe USDC may still have reached the treasury: check its balance. Do not withdraw on mainnet until this is understood.", "bad");
       }
       say("mint-msg", "Not mined after 5 minutes. Check " + mint.explorer + "/tx/" + hash + " before doing anything else.", "bad");
     } catch (e) { say("mint-msg", walletError(e), "bad"); }
@@ -215,7 +248,8 @@ export const WITHDRAW_PAGE_JS = `"use strict";
   $("connect").addEventListener("click", connect);
   $("prepare").addEventListener("click", prepare);
   $("sign").addEventListener("click", sign);
-  $("send-mint").addEventListener("click", sendMint);
+  $("send-mint").addEventListener("click", () => sendMint());
+  $("confirm-send").addEventListener("click", () => sendMint($("confirm-input").value));
   load().catch((e) => say("connect-msg", "Could not read balances: " + e.message, "bad"));
 })();
 `;

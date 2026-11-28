@@ -1,11 +1,14 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { assertGitIgnored } from "../private-output.js";
 import { exportPayments, utcDay, type ClassifiedSettlementRow } from "../settlement-csv.js";
+import { formatUsdc } from "../treasury/gateway-withdrawal.js";
+import { HARDWARE_WALLET_THRESHOLD_USDC, hardwareWalletAlert, readTreasuryTotal } from "../treasury/treasury-total.js";
+import { TREASURY_ADDRESS } from "../workers/wallet-labels.js";
 
 /**
  * Exports the settlement log to one bookkeeping CSV per complete UTC day under data/private/payments/
@@ -16,6 +19,11 @@ import { exportPayments, utcDay, type ClassifiedSettlementRow } from "../settlem
  * --day writes that day again although its file exists. Reads the live D1 database through
  * `wrangler d1 execute --remote` under the operator's own Cloudflare login: no token of its own, and
  * no public endpoint. Wrangler needs Node 22; scripts/export-payments.sh sets that up for cron.
+ *
+ * Every run also totals the treasury (wallet plus Gateway balance, Base and Arc mainnet). Once that is
+ * more than $100, it alerts once per UTC day: a line in the log, data/private/ALERT-treasury-hardware-
+ * wallet.txt, and a Windows message box when running under WSL. The owner's decision of 2026-11-28 is
+ * that the treasury, a dedicated hot wallet in MetaMask today, moves to a hardware wallet then.
  */
 
 const execFileP = promisify(execFile);
@@ -90,15 +98,67 @@ async function main(): Promise<void> {
   const stamp = new Date().toISOString();
   if (result.days.length === 0) {
     console.log(`${stamp} payments export: up to date (${existingDays.size} day file(s) in ${out})`);
-    return;
+  } else {
+    const traffic = Object.entries(result.byTraffic)
+      .map(([k, n]) => `${k} ${n}`)
+      .join(", ");
+    console.log(
+      `${stamp} payments export: wrote ${result.days.length} day(s), ${result.days[0]} to ${result.days.at(-1)}; ` +
+        `${result.rows} payment(s)${traffic ? ` (${traffic})` : ""} -> ${out}`,
+    );
   }
-  const traffic = Object.entries(result.byTraffic)
-    .map(([k, n]) => `${k} ${n}`)
-    .join(", ");
-  console.log(
-    `${stamp} payments export: wrote ${result.days.length} day(s), ${result.days[0]} to ${result.days.at(-1)}; ` +
-      `${result.rows} payment(s)${traffic ? ` (${traffic})` : ""} -> ${out}`,
-  );
+  await checkTreasuryTotal(dirname(out));
+}
+
+/** Totals the treasury and raises the hardware-wallet alert when due. Never fails the export. */
+async function checkTreasuryTotal(privateDir: string): Promise<void> {
+  const stamp = new Date().toISOString();
+  try {
+    const { parts, total } = await readTreasuryTotal({ treasury: TREASURY_ADDRESS });
+    console.log(
+      `${stamp} treasury total ${formatUsdc(total)} USDC (${parts.map((p) => `${p.where} ${formatUsdc(p.amount)}`).join(", ")}); ` +
+        `hardware wallet at more than ${formatUsdc(HARDWARE_WALLET_THRESHOLD_USDC)}`,
+    );
+    const statePath = join(privateDir, "hardware-wallet-alert.json");
+    const alertPath = join(privateDir, "ALERT-treasury-hardware-wallet.txt");
+    assertGitIgnored(statePath);
+    assertGitIgnored(alertPath);
+    let lastAlertDay: string | undefined;
+    try {
+      lastAlertDay = (JSON.parse(await readFile(statePath, "utf-8")) as { lastAlertDay?: string }).lastAlertDay;
+    } catch {
+      lastAlertDay = undefined;
+    }
+    const today = stamp.slice(0, 10);
+    const alert = hardwareWalletAlert({ total, lastAlertDay, today });
+    if (!alert) return;
+    console.log(`${stamp} ${alert}`);
+    await mkdir(privateDir, { recursive: true });
+    await writeFile(alertPath, `${stamp}\n${alert}\n`, "utf-8");
+    await writeFile(statePath, JSON.stringify({ lastAlertDay: today, total: formatUsdc(total) }) + "\n", "utf-8");
+    notifyDesktop(alert);
+  } catch (e) {
+    console.log(`${stamp} treasury total check failed (the export itself is unaffected): ${(e as Error).message}`);
+  }
+}
+
+/** Best effort: a Windows message box when running under WSL; nothing elsewhere. Never blocks. */
+function notifyDesktop(message: string): void {
+  const powershell = "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe";
+  if (!existsSync(powershell)) return;
+  const script =
+    "Add-Type -AssemblyName PresentationFramework; " +
+    `[System.Windows.MessageBox]::Show('${message.replaceAll("'", "''")}', 'Touchstone treasury') | Out-Null`;
+  try {
+    const child = spawn(powershell, ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.on("error", () => undefined);
+    child.unref();
+  } catch {
+    // best effort: the log line and the alert file are the record
+  }
 }
 
 main().catch((err: unknown) => {

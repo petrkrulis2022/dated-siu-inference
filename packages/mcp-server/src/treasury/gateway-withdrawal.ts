@@ -6,11 +6,13 @@ import { encodeFunctionData, getAddress, isHex, parseAbi, recoverTypedDataAddres
  * "transfer" from that balance to the same chain, in three steps (Circle's Gateway technical guide
  * and EVM quickstart, checked against the live docs 2026-11-27):
  *
- *   1. the treasury signs an EIP-712 BurnIntent (domain {name: "GatewayWallet", version: "1"}) on
- *      its hardware wallet;
- *   2. POST /v1/transfer with that signature returns Circle's attestation and signature;
+ *   1. the treasury signs an EIP-712 BurnIntent (domain {name: "GatewayWallet", version: "1"}) in its
+ *      wallet (today a dedicated hot wallet in MetaMask; a hardware wallet once the treasury holds
+ *      more than $100, the owner's decision of 2026-11-28);
+ *   2. POST /v1/transfer with that signature returns Circle's attestation and signature, valid for
+ *      10 minutes (one that expires unused is credited back to the Gateway balance);
  *   3. the treasury sends gatewayMint(attestation, signature) to the GatewayMinter on that chain and
- *      receives the USDC.
+ *      receives the USDC. destinationCaller names the treasury, so no other account can send it.
  *
  * Circle's fee (the source chain's gas fee; a same-chain withdrawal carries no transfer fee) is
  * taken from the Gateway balance on top of the amount, up to the intent's maxFee. This module is
@@ -130,7 +132,6 @@ export interface BurnIntentTypedData {
   message: BurnIntentMessage;
 }
 
-const ZERO_ADDRESS: Address = "0x0000000000000000000000000000000000000000";
 /** A block height this large never comes: a signature carrying it would stay usable forever. */
 const MAX_SANE_BLOCK_HEIGHT = 2n ** 64n;
 
@@ -187,7 +188,9 @@ export function buildWithdrawal(p: WithdrawalParams): BurnIntentTypedData {
         sourceDepositor: treasury,
         destinationRecipient: treasury,
         sourceSigner: treasury,
-        destinationCaller: bytes32(ZERO_ADDRESS),
+        // Only the treasury may send the mint (Circle's minter checks msg.sender; tested live on Arc
+        // testnet 2026-11-27: another account's mint reverts). Owner's decision, 2026-11-28.
+        destinationCaller: treasury,
         value: p.value.toString(),
         salt: p.salt,
         hookData: "0x",
@@ -327,6 +330,71 @@ export function plainMintProblems(
     if (!minted) problems.push(`No mint of ${formatUsdc(expected.value)} USDC to the treasury appears in its logs.`);
   }
   return problems;
+}
+
+/** A mined mint, in plain words: who sent it, what kind it was, where it went, and what arrived. */
+export interface MintFacts {
+  status: string;
+  sender?: string;
+  type?: string;
+  target?: string;
+  data?: string;
+  receivedByTreasury?: string;
+}
+
+const TX_TYPES: Record<string, string> = { "0x0": "legacy", "0x1": "access-list", "0x2": "ordinary", "0x3": "blob" };
+
+export function mintFacts(
+  tx: ChainTransaction | null | undefined,
+  receipt: ChainReceipt | null | undefined,
+  expected: { treasury: string; minter: string; data: string; usdc: string },
+): MintFacts {
+  if (!tx || !receipt) return { status: "not found on the chain" };
+  const from = (tx.from ?? "").toLowerCase();
+  const to = (tx.to ?? "").toLowerCase();
+  const delegate = (tx.authorizationList?.[0] as { address?: string } | undefined)?.address;
+  const type =
+    tx.type === "0x4" || (tx.authorizationList?.length ?? 0) > 0
+      ? `0x4 (EIP-7702${delegate ? `, authorising ${delegate.toLowerCase()}` : ""})`
+      : `${tx.type} (${TX_TYPES[tx.type ?? ""] ?? "unknown type"})`;
+  let received = 0n;
+  for (const l of receipt.logs ?? [])
+    if (same(l.address, expected.usdc) && same(l.topics[0], ERC20_TRANSFER) && BigInt(l.topics[2] ?? "0x0") === BigInt(expected.treasury))
+      received += BigInt(l.data);
+  return {
+    status: receipt.status === "0x1" ? "succeeded" : "reverted",
+    sender: `${from} ${same(from, expected.treasury) ? "(the treasury)" : "(not the treasury: a relayer)"}`,
+    type,
+    target: `${to} ${same(to, expected.minter) ? "(the GatewayMinter)" : "(not the GatewayMinter)"}`,
+    data: same(tx.input, expected.data) ? "exactly the prepared mint" : "not the prepared mint",
+    receivedByTreasury: `${formatUsdc(received)} USDC`,
+  };
+}
+
+/** What Peter types on mainnet before a mint the wallet may relay or run through a smart account. */
+export const RELAY_ACCEPTANCE_PHRASE = "I accept a relayed or smart-account mint";
+
+/**
+ * Mainnet's plain notice before the mint. The owner keeps MetaMask on mainnet while balances are small
+ * (decision of 2026-11-28), and MetaMask may relay a transaction through its EIP-7702 smart account
+ * with its own relayer whatever the page asks, so the page says what may happen and asks for
+ * RELAY_ACCEPTANCE_PHRASE.
+ */
+export function relayNotice(code: string, chainName: string): string {
+  const delegate = /^0xef0100([0-9a-fA-F]{40})$/.exec(code)?.[1];
+  if (delegate)
+    return (
+      `The treasury is a smart account on ${chainName}: it delegates to 0x${delegate.toLowerCase()} (EIP-7702). ` +
+      `The wallet will run the mint through that contract and may have its own relayer send it. The USDC still goes ` +
+      `only to the treasury, and only the treasury's account can complete the mint.`
+    );
+  if (code !== "0x" && code !== "")
+    return `The treasury address holds contract code on ${chainName}, so it is not a plain account there. The USDC still goes only to the treasury.`;
+  return (
+    `Your wallet may send this mint through a smart account and its own relayer: in MetaMask, the network fee would ` +
+    `show "Paid by MetaMask". If it does, the treasury becomes an EIP-7702 smart account on ${chainName}. The USDC still ` +
+    `goes only to the treasury, and the page will report exactly what happened.`
+  );
 }
 
 const GATEWAY_MINTER_ABI = parseAbi(["function gatewayMint(bytes attestationPayload, bytes signature)"]);

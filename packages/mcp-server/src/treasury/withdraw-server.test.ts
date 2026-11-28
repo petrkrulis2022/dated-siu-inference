@@ -6,7 +6,7 @@ import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from 
 import { GATEWAY, gatewayMintCalldata, type BurnIntentTypedData } from "./gateway-withdrawal.js";
 import { createWithdrawHandler, type WithdrawalRecord } from "./withdraw-server.js";
 
-// The "treasury" here is a throwaway test key: the real treasury signs on its hardware wallet.
+// The "treasury" here is a throwaway test key: the real treasury signs in its own wallet.
 let treasury: PrivateKeyAccount;
 let server: Server;
 let base: string;
@@ -28,19 +28,19 @@ const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a
 const word = (hex: string) => `0x${hex.toLowerCase().replace(/^0x/, "").padStart(64, "0")}`;
 
 /** A mined mint as the chain would show it: plain from the treasury unless overridden. */
-function mined(over: Record<string, unknown> = {}, value = 500_000) {
-  txs.set(HASH, { type: "0x2", from: treasury.address.toLowerCase(), to: GATEWAY.testnet.minter.toLowerCase(), input: MINT_DATA, value: "0x0", ...over });
+function mined(over: Record<string, unknown> = {}, value = 500_000, minter: string = GATEWAY.testnet.minter) {
+  txs.set(HASH, { type: "0x2", from: treasury.address.toLowerCase(), to: minter.toLowerCase(), input: MINT_DATA, value: "0x0", ...over });
   receipts.set(HASH, {
     status: "0x1",
     logs: [{ address: ARC_USDC, topics: [TRANSFER_TOPIC, word("0x0"), word(treasury.address)], data: word(value.toString(16)) }],
   });
 }
 
-function fakeCircle(): typeof fetch {
+function fakeCircle(api: string): typeof fetch {
   return (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
-    expect(url.startsWith(GATEWAY.testnet.api)).toBe(true);
-    const path = url.slice(GATEWAY.testnet.api.length);
+    expect(url.startsWith(api)).toBe(true);
+    const path = url.slice(api.length);
     const body = JSON.parse(String(init?.body ?? "null"));
     circleCalls.push({ path, body });
     const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { "content-type": "application/json" } });
@@ -60,16 +60,22 @@ beforeEach(async () => {
   circleCalls = [];
   balances = { 6: "2.000000", 26: "1.000000" };
   clock = 1_000_000;
-  allowedHosts = [];
   records = [];
   codes = {};
   txs = new Map();
   receipts = new Map();
+  await startServer("testnet");
+});
+
+afterEach(() => new Promise<void>((r) => server.close(() => r())));
+
+async function startServer(env: "testnet" | "mainnet"): Promise<void> {
+  allowedHosts = [];
   const handler = createWithdrawHandler({
-    env: "testnet",
+    env,
     treasury: treasury.address,
     allowedHosts,
-    fetch: fakeCircle(),
+    fetch: fakeCircle(GATEWAY[env].api),
     now: () => clock,
     record: async (r) => void records.push(structuredClone(r)),
     chainRpc: async (chain, method, params) => {
@@ -85,9 +91,7 @@ beforeEach(async () => {
   const port = (server.address() as AddressInfo).port;
   allowedHosts.push(`127.0.0.1:${port}`, `localhost:${port}`);
   base = `http://127.0.0.1:${port}`;
-});
-
-afterEach(() => new Promise<void>((r) => server.close(() => r())));
+}
 
 const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
   fetch(base + path, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
@@ -302,7 +306,8 @@ describe("POST /api/minted", () => {
     mined();
     const { status, body } = await report(id, "mined");
     expect(status).toBe(200);
-    expect(body).toEqual({ verdict: "plain", problems: [], recorded: true });
+    expect(body).toMatchObject({ verdict: "plain", problems: [], recorded: true });
+    expect((body as { facts?: { sender: string } }).facts?.sender).toMatch(/\(the treasury\)$/);
     expect(records.at(-1)?.mintTx).toMatchObject({ hash: HASH, status: "plain", problems: [] });
   });
 
@@ -329,5 +334,60 @@ describe("POST /api/minted", () => {
     expect((await post("/api/minted", { id: body.id, txHash: "0x1234", status: "sent" })).status).toBe(400);
     expect((await post("/api/minted", { id: body.id, txHash: HASH, status: "maybe" })).status).toBe(400);
     expect((await post("/api/minted", { id: "nope", txHash: HASH, status: "sent" })).status).toBe(404);
+  });
+});
+
+describe("mainnet: a relayed or smart-account mint is allowed only after a typed confirmation (owner's decision, 2026-11-28)", () => {
+  const MAINNET_MINTER = GATEWAY.mainnet.minter;
+  const PHRASE = "I accept a relayed or smart-account mint";
+
+  beforeEach(async () => {
+    await new Promise<void>((r) => server.close(() => r()));
+    await startServer("mainnet");
+  });
+
+  async function attestedOn(chain = "arc") {
+    const prep = await post("/api/prepare", { chain, amount: "0.5" });
+    const body = (await prep.json()) as { id: string; typedData: BurnIntentTypedData; summary: { notice?: string } };
+    expect(prep.status).toBe(200);
+    expect((await post("/api/submit", { id: body.id, signature: await sign(body.typedData) })).status).toBe(200);
+    return body;
+  }
+
+  it("does not refuse when the treasury already has code: it says so plainly and carries on to Circle", async () => {
+    codes[5042] = DELEGATED;
+    const body = await attestedOn();
+    expect(body.summary.notice).toMatch(/smart account on Arc.*0x63c0c19a282a1b52b07dd5a65b58948a07dae32b/s);
+    expect(circleCalls.some((c) => c.path === "/v1/transfer")).toBe(true);
+  });
+
+  it("asks for the exact phrase before every mint, and accepts nothing else", async () => {
+    const { id } = await attestedOn();
+    const ask = async (confirmation?: string) => (await (await post("/api/mint-check", { id, confirmation })).json()) as Record<string, unknown>;
+    const first = await ask();
+    expect(first).toMatchObject({ ok: false, needsConfirmation: true, phrase: PHRASE });
+    expect(String(first.notice)).toMatch(/may send this mint through a smart account and its own relayer/);
+    expect(await ask("yes")).toMatchObject({ ok: false, needsConfirmation: true });
+    expect(await ask(PHRASE)).toMatchObject({ ok: true });
+  });
+
+  it("logs the confirmation in the withdrawal's record, with the treasury's code at that moment", async () => {
+    codes[5042] = DELEGATED;
+    const { id } = await attestedOn();
+    clock += 1000;
+    await post("/api/mint-check", { id, confirmation: PHRASE });
+    expect(records.at(-1)?.relayAcceptance).toEqual({ phrase: PHRASE, at: new Date(clock).toISOString(), treasuryCode: DELEGATED });
+  });
+
+  it("reports a relayed mint as exactly what happened, marked as accepted, never as a plain Done", async () => {
+    const { id } = await attestedOn();
+    await post("/api/mint-check", { id, confirmation: PHRASE });
+    mined({ type: "0x4", from: "0xb01caea8c6c47bbf4f4b4c5080ca642043359c2e", to: "0xdb9b1e94b5b69df7e401ddbede43491141047db3", input: "0xcef6d209", authorizationList: [{ address: "0x63c0c19a282a1b52b07dd5a65b58948a07dae32b" }] }, 500_000, MAINNET_MINTER);
+    const res = await post("/api/minted", { id, txHash: HASH, status: "mined" });
+    const body = (await res.json()) as { verdict: string; accepted: boolean; facts: Record<string, string> };
+    expect(body.verdict).toBe("not-plain");
+    expect(body.accepted).toBe(true);
+    expect(body.facts).toMatchObject({ sender: expect.stringMatching(/a relayer/), type: expect.stringMatching(/^0x4 \(EIP-7702/), receivedByTreasury: "0.500000 USDC" });
+    expect(records.at(-1)?.mintTx).toMatchObject({ status: "not-plain", accepted: true });
   });
 });
