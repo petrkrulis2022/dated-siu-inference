@@ -24,7 +24,10 @@ describe("verify-print.mjs: the script anyone downloads and runs", () => {
     expect(canonicalJson({ b: 1, a: [true, null, "x"], c: { z: 0.5, y: "é" } })).toBe('{"a":[true,null,"x"],"b":1,"c":{"y":"é","z":0.5}}');
   });
 
-  it("reproduces the body hash of EVERY published print exactly as packages/print computes it", () => {
+  // Every print, hashed by the downloadable script's own pure-JS keccak: about 12 ms each, and three
+  // more prints a day. At 417 prints it took 5.1 s and hit vitest's 5 s default on CI (2026-11-28),
+  // so it gets a budget sized for years of prints instead of the default.
+  it("reproduces the body hash of EVERY published print exactly as packages/print computes it", { timeout: 120_000 }, () => {
     const files = readdirSync(PRINTS).filter((f) => /^\d{4}-\d{2}-\d{2}.*\.json$/.test(f));
     expect(files.length).toBeGreaterThan(100);
     for (const f of files) {
