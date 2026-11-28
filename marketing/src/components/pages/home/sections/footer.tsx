@@ -15,7 +15,7 @@ export function Footer() {
           <p className="font-mono text-xs text-ploy-text-inverse-secondary md:col-span-3">Contact: contact@touchstoneassay.com</p>
           <p className="text-sm leading-6 text-ploy-text-inverse-secondary md:col-span-4">SIU is a measurement standard and data publication. Nothing on this site is an offer of any token, security or investment.</p>
         </div>
-        <p className="mt-12 font-mono text-[0.58rem] uppercase tracking-[0.16em] text-ploy-text-inverse-secondary">© {new Date().getFullYear()} Touchstone Assay</p>
+        <p className="mt-12 font-mono text-[0.58rem] uppercase tracking-[0.16em] text-ploy-text-inverse-secondary">© {new Date().getFullYear()} Touchstone Assay · <a href="/privacy" className="underline hover:text-ploy-text-inverse">Privacy</a></p>
       </div>
     </footer>
   );
