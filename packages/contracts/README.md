@@ -13,7 +13,8 @@ anyone without Foundry installed.
 ## Setup
 
 `lib/` is vendored as git submodules (Foundry's standard `forge install`), which this repo did
-not previously use. After cloning:
+not previously use. After cloning, and after every `git worktree add` (a worktree does not inherit
+submodules), run `bash scripts/setup-checkout.sh` from the repo root, or just:
 
 ```bash
 git submodule update --init --recursive

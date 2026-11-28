@@ -26,6 +26,13 @@ export interface LabelledWallet {
   since: string;
 }
 
+/**
+ * The treasury: payTo on every network since 2026-11-26. A dedicated hot wallet in MetaMask, used for
+ * nothing else, until it holds more than $100 in total; then it moves to a hardware wallet (owner's
+ * decision, 2026-11-28; src/treasury/treasury-total.ts raises the alert).
+ */
+export const TREASURY_ADDRESS = "0xB514882859f43DbF3df664C899D707f649E0CF4A";
+
 export const WALLET_LABELS: readonly LabelledWallet[] = [
   {
     address: "0x22e2F3427FfBf5d453649824C7bfCB6c8F12d743",
@@ -34,9 +41,9 @@ export const WALLET_LABELS: readonly LabelledWallet[] = [
     since: "2026-11-26",
   },
   {
-    address: "0xB514882859f43DbF3df664C899D707f649E0CF4A",
+    address: TREASURY_ADDRESS,
     label: "internal",
-    note: "treasury, payTo on every network since 2026-11-26",
+    note: "treasury, payTo on every network since 2026-11-26; a dedicated hot wallet in MetaMask until it holds over $100",
     since: "2026-11-26",
   },
   {
