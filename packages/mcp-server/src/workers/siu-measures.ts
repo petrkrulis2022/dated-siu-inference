@@ -57,9 +57,11 @@ export function recordChallenge(
   profile: string,
   siuPriced: boolean,
   sessionId: string | undefined,
+  /** The listing that brought the call (./channel.ts), as the last blob. */
+  channel: string = "direct",
 ): void {
   write(env, ctx, sessionId, (tag) => ({
-    blobs: ["challenge", tool, profile, siuPriced ? "siu" : "usdc-only", tag],
+    blobs: ["challenge", tool, profile, siuPriced ? "siu" : "usdc-only", tag, channel],
     doubles: [1],
     indexes: ["challenge"],
   }));
@@ -72,10 +74,11 @@ export function recordPaidInSession(
   tool: string,
   profile: string,
   sessionId: string | undefined,
+  channel: string = "direct",
 ): void {
   if (!sessionId) return;
   write(env, ctx, sessionId, (tag) => ({
-    blobs: ["paid", tool, profile, "", tag],
+    blobs: ["paid", tool, profile, "", tag, channel],
     doubles: [1],
     indexes: ["paid"],
   }));

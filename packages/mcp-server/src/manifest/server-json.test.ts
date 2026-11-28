@@ -20,11 +20,11 @@ describe("server.json (the MCP registry manifest)", () => {
     expect(manifest.description).not.toMatch(/sepolia|testnet|testbed/i);
   });
 
-  it("is version 0.2.0, the first update after the registry's 0.1.0", () => {
-    expect(manifest.version).toBe("0.2.0");
+  it("is version 0.2.1, which adds the registry's ?via= tag to the 0.2.0 published on 2026-11-28", () => {
+    expect(manifest.version).toBe("0.2.1");
   });
 
-  it("points at the live endpoint", () => {
-    expect(manifest.remotes.map((r) => r.url)).toEqual(["https://mcp.touchstoneassay.com/mcp"]);
+  it("points at the live endpoint, tagged as the registry so calls from it and its mirrors are counted", () => {
+    expect(manifest.remotes.map((r) => r.url)).toEqual(["https://mcp.touchstoneassay.com/mcp?via=registry"]);
   });
 });

@@ -25,6 +25,7 @@ const row = (over: Partial<ClassifiedSettlementRow> = {}): ClassifiedSettlementR
   reference: "transfer-1",
   batch_tx: null,
   traffic: "internal",
+  via: null,
   ...over,
 });
 
@@ -98,10 +99,15 @@ describe("toCsv", () => {
     expect(lines[0]).toBe(CSV_HEADER.join(","));
     expect(lines[1]).toBe(
       "1,2026-11-26T17:04:53.812Z,get_quote,Base,eip155:8453,yes,gateway-batched,USDC,0.001000,1000," +
-        "0x22e2f3427ffbf5d453649824c7bfcb6c8f12d743,internal,transfer-1,",
+        "0x22e2f3427ffbf5d453649824c7bfcb6c8f12d743,internal,transfer-1,,",
     );
     expect(lines[2]).toContain(",KiteAI Testnet,eip155:2368,no,self-settled,PYUSD,0.005000000000000000,");
     expect(lines.at(-1)).toBe("");
+  });
+
+  it("ends each row with the listing that brought the payment, blank for payments from before tracking", () => {
+    expect(CSV_HEADER.at(-1)).toBe("via");
+    expect(toCsv([row({ via: "mcprush" })]).split("\r\n")[1]?.endsWith(",transfer-1,,mcprush")).toBe(true);
   });
 
   it("writes a header-only file for a day with no payments", () => {

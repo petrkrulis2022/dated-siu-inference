@@ -165,15 +165,18 @@ export function trafficSummary(
 }
 
 /** D1: the label table and a view that classifies every settlement by its payer. */
+/** Each payment with its payer's traffic class; ad-hoc queries and the CSV export read it. */
+export const SETTLEMENTS_CLASSIFIED_VIEW = `CREATE VIEW settlements_classified AS
+  SELECT s.*, COALESCE((SELECT w.label FROM wallet_labels w WHERE w.address = lower(s.payer)), 'organic') AS traffic
+  FROM settlements s;`;
+
 export const WALLET_LABELS_SCHEMA = `CREATE TABLE IF NOT EXISTS wallet_labels (
   address TEXT PRIMARY KEY,
   label TEXT NOT NULL CHECK (label IN ('internal', 'campaign')),
   note TEXT NOT NULL,
   since TEXT NOT NULL
 );
-CREATE VIEW IF NOT EXISTS settlements_classified AS
-  SELECT s.*, COALESCE((SELECT w.label FROM wallet_labels w WHERE w.address = lower(s.payer)), 'organic') AS traffic
-  FROM settlements s;`;
+${SETTLEMENTS_CLASSIFIED_VIEW.replace("CREATE VIEW ", "CREATE VIEW IF NOT EXISTS ")}`;
 
 const sqlString = (v: string) => `'${v.replace(/'/g, "''")}'`;
 

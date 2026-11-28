@@ -56,7 +56,7 @@ describe("recordCall", () => {
     recordCall(e.env, c.ctx, "get_quote", PAYMENT, ["eip155:2366"]);
     await Promise.all(c.pending);
     expect(e.points).toEqual([
-      { blobs: ["get_quote", "0xBuyer"], doubles: [1], indexes: ["0xBuyer"] },
+      { blobs: ["get_quote", "0xBuyer", "direct"], doubles: [1], indexes: ["0xBuyer"] },
     ]);
     expect(e.rows).toHaveLength(1);
     const row = e.rows[0] ?? [];
@@ -67,7 +67,17 @@ describe("recordCall", () => {
       "1000",
       "0xBuyer",
       "0xTx",
+      "direct",
     ]);
+  });
+
+  it("tags the usage point and the settlement row with the listing that brought the call", async () => {
+    const e = env();
+    const c = ctx();
+    recordCall(e.env, c.ctx, "get_quote", PAYMENT, ["eip155:2366"], "mcprush");
+    await Promise.all(c.pending);
+    expect((e.points[0] as { blobs: string[] }).blobs).toEqual(["get_quote", "0xBuyer", "mcprush"]);
+    expect(e.rows[0]?.at(-1)).toBe("mcprush");
   });
 
   it("routes a network Circle settles as gateway-batched", async () => {

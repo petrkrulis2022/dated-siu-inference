@@ -40,12 +40,12 @@ describe("recordChallenge", () => {
     // Written asynchronously (after the response), so in no particular order.
     expect(u.points).toHaveLength(2);
     expect(u.points).toContainEqual({
-      blobs: ["challenge", "get_quote", "mainnet", "siu", await sessionTag("session-1")],
+      blobs: ["challenge", "get_quote", "mainnet", "siu", await sessionTag("session-1"), "direct"],
       doubles: [1],
       indexes: ["challenge"],
     });
     expect(u.points).toContainEqual({
-      blobs: ["challenge", "convert", "mainnet", "usdc-only", ""],
+      blobs: ["challenge", "convert", "mainnet", "usdc-only", "", "direct"],
       doubles: [1],
       indexes: ["challenge"],
     });
@@ -76,10 +76,21 @@ describe("recordPaidInSession", () => {
     await Promise.all(c.pending);
     expect(u.points).toEqual([
       {
-        blobs: ["paid", "get_quote", "mainnet", "", await sessionTag("session-1")],
+        blobs: ["paid", "get_quote", "mainnet", "", await sessionTag("session-1"), "direct"],
         doubles: [1],
         indexes: ["paid"],
       },
     ]);
+  });
+});
+
+describe("the listing that brought the call", () => {
+  it("rides on every 402 and every paid call as the last blob", async () => {
+    const u = usage();
+    const c = ctx();
+    recordChallenge({ USAGE: u.USAGE as never }, c.ctx, "get_quote", "mainnet", true, undefined, "glama");
+    recordPaidInSession({ USAGE: u.USAGE as never }, c.ctx, "get_quote", "mainnet", "s", "glama");
+    await Promise.all(c.pending);
+    expect(u.points.map((p) => p.blobs.at(-1))).toEqual(["glama", "glama"]);
   });
 });

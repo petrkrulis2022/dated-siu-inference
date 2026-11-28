@@ -30,7 +30,7 @@ const execFileP = promisify(execFile);
 const PACKAGE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const DEFAULT_OUT = resolve(PACKAGE_DIR, "../../data/private/payments");
 const DATABASE = "touchstone-settlements";
-const COLUMNS = "id, at, tool, network, route, amount, payer, reference, batch_tx, traffic";
+const COLUMNS = "id, at, tool, network, route, amount, payer, reference, batch_tx, traffic, via";
 
 function parseArgs(argv: string[]): { out: string; forceDays: string[] } {
   let out = DEFAULT_OUT;
