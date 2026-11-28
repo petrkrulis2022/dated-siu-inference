@@ -1,0 +1,39 @@
+{
+  "id": "d548786e-0c9b-91c8-b68e-a43a60831f8e",
+  "object": "chat.completion",
+  "created": 1795826394,
+  "model": "grok-4.6",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"tracking_id\": \"SH-42BB47\",\n  \"origin_city\": \"Nairobi\",\n  \"destination_city\": \"Perth\",\n  \"weight_kg\": 426,\n  \"status\": \"in_transit\",\n  \"priority\": \"express\"\n}",
+        "reasoning_content": "I need to extract a shipment record from the operations report into a JSON object matching the provided schema.\n\nThe shipment record is SH-42BB47 from Nairobi to Perth. It weighs 426 kg with express priority and is in_transit.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 2135,
+    "completion_tokens": 64,
+    "total_tokens": 2457,
+    "prompt_tokens_details": {
+      "text_tokens": 2135,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 1152
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 258,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0,
+    "cost_in_usd_ticks": 44740000
+  },
+  "system_fingerprint": "fp_6df9974d3109903b",
+  "service_tier": "default"
+}
