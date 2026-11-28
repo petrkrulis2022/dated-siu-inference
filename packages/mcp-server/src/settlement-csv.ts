@@ -25,6 +25,8 @@ export interface ClassifiedSettlementRow {
   reference: string;
   batch_tx: string | null;
   traffic: string;
+  /** The listing that brought the payment (?via=); null for payments from before tracking (2026-11-28). */
+  via?: string | null;
 }
 
 export interface NetworkFacts {
@@ -67,6 +69,7 @@ export const CSV_HEADER = [
   "traffic",
   "reference",
   "batch_tx",
+  "via",
 ] as const;
 
 /** "1000" at 6 decimals -> "0.001000". Every decimal place is kept, so columns line up exactly. */
@@ -129,6 +132,7 @@ export function toCsv(rows: readonly ClassifiedSettlementRow[]): string {
         r.traffic,
         r.reference,
         r.batch_tx,
+        r.via ?? null,
       ]
         .map(csvField)
         .join(","),

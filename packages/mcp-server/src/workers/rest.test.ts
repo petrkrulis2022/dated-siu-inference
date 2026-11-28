@@ -140,6 +140,9 @@ function harness(
     res.end("{}");
   }) as unknown as ReturnType<typeof createToolPaywall>;
   const challenges: { tool: string; profile: NetworkProfile; siuPriced: boolean }[] = [];
+  // The ?via= listing each recorded call and each 402 carried (./channel.ts).
+  const recordChannels: (string | undefined)[] = [];
+  const challengeChannels: (string | undefined)[] = [];
 
   const deps: RestDeps<Record<string, never>> = {
     profileFor: async () => profile,
@@ -149,11 +152,13 @@ function harness(
       settlementReader: reader,
       attestationPrivateKeyHex: `0x${"11".repeat(32)}`,
     }),
-    record: (_env, _ctx, tool, payment, selfSettled) => {
+    record: (_env, _ctx, tool, payment, selfSettled, channel) => {
       recorded.push({ tool, payment, selfSettled });
+      recordChannels.push(channel);
     },
-    recordChallenge: (_env, _ctx, tool, profileSeen, siuPriced) => {
+    recordChallenge: (_env, _ctx, tool, profileSeen, siuPriced, channel) => {
       challenges.push({ tool, profile: profileSeen, siuPriced });
+      challengeChannels.push(channel);
     },
   };
   const app = createRestApp(deps);
@@ -169,7 +174,7 @@ function harness(
     headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
-  return { call, paid, post, paywallCalls, recorded, challenges };
+  return { call, paid, post, paywallCalls, recorded, challenges, recordChannels, challengeChannels };
 }
 
 afterEach(() => vi.useRealTimers());
@@ -250,6 +255,15 @@ describe("a paid route with no payment attached", () => {
 });
 
 describe("get_quote and convert with a payment attached", () => {
+  it("tags each 402 and each paid call with the listing named in ?via=, and calls an untagged one direct", async () => {
+    const h = harness();
+    await h.call("/v1/quote?via=circle");
+    await h.call("/v1/quote?task_class=T1&model=A&via=circle", h.paid());
+    await h.call("/v1/quote?task_class=T1&model=A", h.paid());
+    expect(h.challengeChannels).toEqual(["circle"]);
+    expect(h.recordChannels).toEqual(["circle", "direct"]);
+  });
+
   it("serves the quote, with the receipt header, uncached, and records the settlement", async () => {
     const h = harness();
     const res = await h.call("/v1/quote?task_class=T1&model=A", h.paid());

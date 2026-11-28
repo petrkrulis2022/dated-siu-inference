@@ -7,6 +7,7 @@ import { SUPPORTED_VERIFY_RECEIPT_CHAINS } from "../tools/verify-receipt.js";
 import { runTool, type ToolDeps, type ToolName } from "../tools/run.js";
 import { createNodeShim } from "./node-shim.js";
 import { buildOpenApi } from "./openapi.js";
+import { channelFrom } from "./channel.js";
 import { paymentFrom, type PaymentInfo } from "./record-call.js";
 import { siuPricedFrom } from "../siu-price-402.js";
 
@@ -23,6 +24,8 @@ export interface RestDeps<E> {
     tool: string,
     payment: PaymentInfo | undefined,
     selfSettledNetworks: readonly string[],
+    /** The listing that brought the call, from ?via= (./channel.ts). */
+    channel: string,
   ): void;
   /** One 402 sent, and whether it carried an SIU price (./siu-measures.ts). Optional for tests. */
   recordChallenge?(
@@ -31,6 +34,7 @@ export interface RestDeps<E> {
     tool: string,
     profile: NetworkProfile,
     siuPriced: boolean,
+    channel: string,
   ): void;
 }
 
@@ -130,11 +134,13 @@ async function serve<E extends object>(
 
   const toolDeps = d.toolDepsFor(c.env);
   const selfSettled = config.selfSettled.map((n) => n.network);
+  // REST calls carry no session: the listing comes from this request's own ?via= alone.
+  const channel = channelFrom(c.req.url);
 
   if (!Object.hasOwn(TOOL_PRICES, tool)) {
     try {
       const value = await runTool(tool, args, toolDeps);
-      d.record(c.env, c.executionCtx, tool, undefined, selfSettled);
+      d.record(c.env, c.executionCtx, tool, undefined, selfSettled, channel);
       return c.json(value as object);
     } catch (err) {
       return c.json({ error: message(err), charged: false }, 404);
@@ -175,7 +181,7 @@ async function serve<E extends object>(
     const challenge = shim.getResult();
     const status = challenge?.status ?? 402;
     if (status === 402) {
-      d.recordChallenge?.(c.env, c.executionCtx, tool, profile, siuPricedFrom(shim.req) ?? false);
+      d.recordChallenge?.(c.env, c.executionCtx, tool, profile, siuPricedFrom(shim.req) ?? false, channel);
     }
     return new Response(challenge?.body ?? "", {
       status,
@@ -184,7 +190,7 @@ async function serve<E extends object>(
   }
 
   // The payment has cleared: it is recorded whether or not the tool then succeeds, as on MCP.
-  d.record(c.env, c.executionCtx, tool, paymentFrom(shim.req), selfSettled);
+  d.record(c.env, c.executionCtx, tool, paymentFrom(shim.req), selfSettled, channel);
   const receipt = shim.responseHeaders()["PAYMENT-RESPONSE"];
   if (receipt) c.header("PAYMENT-RESPONSE", receipt);
   c.header("Cache-Control", "no-store");

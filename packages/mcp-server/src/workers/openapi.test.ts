@@ -1,3 +1,4 @@
+import { DATED_SIU_PHRASE } from "@touchstone/print";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { TOOL_PRICES } from "../paywall.js";
@@ -178,6 +179,15 @@ describe("buildOpenApi", () => {
       expect(JSON.stringify(doc(profile))).not.toMatch(
         /backed by|\bpeg\b|invest|real-time|oracle|AIXD/i,
       );
+    }
+  });
+});
+
+describe("the OpenAPI description agents and Circle's reviewers read", () => {
+  it("says verified AI work, from the shared phrase, never AI inference", () => {
+    for (const p of ["mainnet", "testnet"] as const) {
+      expect(doc(p).info.description).toContain(DATED_SIU_PHRASE);
+      expect(doc(p).info.description).not.toMatch(/AI inference/);
     }
   });
 });

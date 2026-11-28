@@ -13,9 +13,11 @@ export function logToolCall(
   usage: AnalyticsEngineDataset,
   tool: string,
   payerAddress?: string,
+  /** The listing that brought the call (./channel.ts); blob3, after the existing two. */
+  channel: string = "direct",
 ): void {
   usage.writeDataPoint({
-    blobs: [tool, payerAddress ?? ""],
+    blobs: [tool, payerAddress ?? "", channel],
     doubles: [1],
     indexes: [payerAddress ?? tool],
   });

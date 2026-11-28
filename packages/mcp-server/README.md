@@ -333,21 +333,39 @@ the same table (`PAID_TOOL_PRICES_USD`), each with the print date it used.
 
 ### Official MCP registry (registry.modelcontextprotocol.io)
 
-`src/manifest/server.json` is a schema-valid manifest (verified against
-`static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json`) with `remotes: [{ type:
-"streamable-http", url }]` — **the URL in it is a placeholder** (`https://mcp.touchstone-assay.example/mcp`,
-the RFC 2606-reserved `.example` domain) and must be replaced with the real deployment URL before
-publishing.
+`src/manifest/server.json` is the registry manifest, with its URL tagged `?via=registry`. Version
+0.1.0 was published on 2026-08-31 and 0.2.0, the mainnet text, on 2026-11-28; 0.2.1 adds the tag.
+Publishing needs the GitHub account that owns the `io.github.petrkrulis2022` namespace:
 
 ```bash
-curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
-mcp-publisher login github
-mcp-publisher publish
+curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+./mcp-publisher login github            # a code to enter at github.com/login/device, as petrkrulis2022
+cd src/manifest && ../../mcp-publisher publish   # run from the directory holding server.json
+curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.petrkrulis2022/touchstone-mcp"
 ```
 
-The manifest's `name` (`io.github.petrkrulis2022/touchstone-mcp`) is namespaced under GitHub-OAuth
-ownership — `mcp-publisher login github` must authenticate as an account matching that namespace,
-or publishing is rejected.
+Each publish needs a new version number. Glama and PulseMCP copy the registry's entry.
+
+### Which listing brought a call: `?via=`
+
+Every listing links the server with its own tag (`src/workers/channel.ts`):
+
+| Listing | Link |
+| --- | --- |
+| Registry (and Glama and PulseMCP, which copy it) | `https://mcp.touchstoneassay.com/mcp?via=registry` |
+| mcprush | `https://mcp.touchstoneassay.com/mcp?via=mcprush` |
+| Circle Agent Marketplace | `https://mcp.touchstoneassay.com/v1/quote?via=circle` |
+
+Only the tags in `CHANNELS` are kept; anything else is recorded as `other`, and no tag as `direct`.
+The tag is recorded in three places:
+
+- on every usage event, as blob3 (blob6 for the 402 and paid-in-session measures);
+- on every paid call's settlement-log row, in the `via` column;
+- in the payment export's last column.
+
+An MCP client that drops the query string after the session opens still counts: the tag is
+remembered for the session for 7 days, under a hash of the session id. Payments from before
+2026-11-28 have `via` empty.
 
 ### Smithery, Glama, PulseMCP, mcp.so
 

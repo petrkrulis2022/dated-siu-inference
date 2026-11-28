@@ -182,11 +182,25 @@ form or a PR against the registry's own repo.
 
 ### Official MCP registry — exact steps
 
+Published by the owner on 2026-11-28 (version 0.2.0, the mainnet text). Version 0.2.1 tags the URL
+`?via=registry`; republish it the same way:
+
 ```bash
-curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
-mcp-publisher login github   # opens a browser — approve as petrkrulis2022
-cd packages/mcp-server && mcp-publisher publish
+cd ~ && curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+~/mcp-publisher login github     # enter the code at github.com/login/device, as petrkrulis2022
+cd <repo>/packages/mcp-server/src/manifest && ~/mcp-publisher publish
 ```
 
-`server.json` is already schema-valid and points at the real live URL (`https://mcp.touchstoneassay.com/mcp`)
-— nothing to edit first.
+### Listing links, one per channel (`?via=`)
+
+| Listing | Link to give it |
+| --- | --- |
+| Official MCP registry (Glama and PulseMCP copy it) | `https://mcp.touchstoneassay.com/mcp?via=registry` |
+| mcprush | `https://mcp.touchstoneassay.com/mcp?via=mcprush` |
+| Circle Agent Marketplace (endpoint) | `https://mcp.touchstoneassay.com/v1/quote?via=circle` |
+
+Glama: claim the copied entry at
+<https://glama.ai/mcp/connectors/io.github.petrkrulis2022/touchstone-mcp> ("claim ownership",
+signed in with GitHub as petrkrulis2022). Every listing names the project "Touchstone Assay" in
+full: the registry also lists an unrelated "Touchstone" (`cv.touchstone/touchstone`, an audit log
+at touchstone.cv).

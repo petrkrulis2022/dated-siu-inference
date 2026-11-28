@@ -1,3 +1,4 @@
+import { DATED_SIU_PHRASE } from "@touchstone/print";
 import { TOOL_PRICES } from "../paywall.js";
 import { PROFILES, type NetworkProfile } from "../networks.js";
 import { TASK_CLASSES } from "../tools/get-quote.js";
@@ -315,7 +316,7 @@ export function buildOpenApi(options: {
       title: "Touchstone Assay: Dated SIU",
       version: "1.0.0",
       description:
-        "Touchstone Assay publishes Dated SIU, the benchmark price of AI inference work, as a signed daily print. " +
+        `Touchstone Assay publishes Dated SIU, ${DATED_SIU_PHRASE}, as a signed daily print. ` +
         "GET /v1/index returns the print and is free. The other routes are paid per call in USDC over x402: until a payment is attached they answer HTTP 402 with the price and the networks accepted. " +
         "The same four tools are also served over MCP at /mcp.",
       "x-touchstone-networks": networks,

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   SETTLEMENTS_SCHEMA,
+  SETTLEMENTS_VIA_MIGRATION,
   logSettlement,
   routeFor,
   type SettlementEntry,
@@ -14,6 +15,7 @@ const ENTRY: SettlementEntry = {
   payer: "0xBuyer",
   reference: "0xTx",
   at: "2026-10-25T10:00:00.000Z",
+  via: "registry",
 };
 
 function fakeDb(fail = false) {
@@ -63,6 +65,7 @@ describe("logSettlement", () => {
       "1000",
       "0xBuyer",
       "0xTx",
+      "registry",
     ]);
   });
 
@@ -81,5 +84,23 @@ describe("logSettlement", () => {
     expect(SETTLEMENTS_SCHEMA).toMatch(/CREATE TABLE IF NOT EXISTS settlements/);
     expect(SETTLEMENTS_SCHEMA).toMatch(/batch_tx TEXT/);
     expect((SETTLEMENTS_SCHEMA.match(/CREATE INDEX IF NOT EXISTS/g) ?? []).length).toBe(2);
+  });
+});
+
+describe("the via column", () => {
+  it("is in the schema for a fresh database, and in the migration for the live one", () => {
+    expect(SETTLEMENTS_SCHEMA).toMatch(/\bvia TEXT\b/);
+    expect(SETTLEMENTS_VIA_MIGRATION).toMatch(/^ALTER TABLE settlements ADD COLUMN via TEXT;/);
+    // settlements_classified selects s.*, so it is recreated to include the new column.
+    expect(SETTLEMENTS_VIA_MIGRATION).toMatch(/DROP VIEW IF EXISTS settlements_classified;/);
+    expect(SETTLEMENTS_VIA_MIGRATION).toMatch(/CREATE VIEW settlements_classified AS/);
+  });
+
+  it("records direct for an entry that names no listing", async () => {
+    const { db, bound } = fakeDb();
+    const { via: _drop, ...noVia } = ENTRY;
+    void _drop;
+    await logSettlement(db, noVia);
+    expect(bound[0]?.at(-1)).toBe("direct");
   });
 });

@@ -10,6 +10,7 @@ import { githubDataSource } from "./data-source.js";
 import { OnChainSettlementReader } from "../settlement/on-chain.js";
 import { paywallFor, restPaywallFor } from "./paywall-factory.js";
 import { singleReplyAsJson } from "./json-response.js";
+import { channelFrom, rememberSessionChannel, sessionChannel } from "./channel.js";
 import { paymentFrom, recordCall } from "./record-call.js";
 import { recordChallenge, recordPaidInSession } from "./siu-measures.js";
 import { siuPricedFrom } from "../siu-price-402.js";
@@ -102,6 +103,14 @@ app.post("/mcp", async (c) => {
     body = undefined;
   }
   const toolName = extractToolCallName(body);
+  // Which listing brought this call (./channel.ts): the URL's ?via= tag, or, for a session whose
+  // client dropped it, the tag remembered when the session began. Read only when a call is recorded.
+  const sessionHeader = c.req.header("mcp-session-id");
+  const urlChannel = channelFrom(c.req.url);
+  const channelFor = async (): Promise<string> =>
+    urlChannel !== "direct" || !sessionHeader
+      ? urlChannel
+      : channelFrom(c.req.url, await sessionChannel(c.env.PRINTS_CACHE, sessionHeader));
 
   // The request's body was consumed by c.req.text() above and a Request's body stream can be read
   // only once, so every hand-off to the MCP agent rebuilds the request around the buffered text.
@@ -184,7 +193,7 @@ app.post("/mcp", async (c) => {
     const status = result?.status ?? 402;
     // The SIU-price measures (./siu-measures.ts): every 402, and whether it carried an SIU price.
     if (toolName && status === 402) {
-      recordChallenge(c.env, c.executionCtx, toolName, profile, siuPricedFrom(req) ?? false, sessionId);
+      recordChallenge(c.env, c.executionCtx, toolName, profile, siuPricedFrom(req) ?? false, sessionId, await channelFor());
     }
     return new Response(result?.body ?? "", {
       status,
@@ -196,19 +205,26 @@ app.post("/mcp", async (c) => {
   // never able to fail the call — see ./record-call.ts.
   if (toolName) {
     const payment = paymentFrom(req);
+    const channel = await channelFor();
     recordCall(
       c.env,
       c.executionCtx,
       toolName,
       payment,
       profileConfig.selfSettled.map((n) => n.network),
+      channel,
     );
-    if (payment?.network) recordPaidInSession(c.env, c.executionCtx, toolName, profile, sessionId);
+    if (payment?.network) recordPaidInSession(c.env, c.executionCtx, toolName, profile, sessionId, channel);
   }
 
   const tMcp0 = Date.now();
   const mcpResponse = await forwardToAgent();
   console.log(`[latency] MCP agent (Durable Object) tool execution: ${Date.now() - tMcp0}ms`);
+  // A tagged client opening a session: remember its listing for the session's later requests.
+  const newSession = mcpResponse.headers.get("mcp-session-id");
+  if (newSession && !sessionHeader && urlChannel !== "direct") {
+    c.executionCtx.waitUntil(rememberSessionChannel(c.env.PRINTS_CACHE, newSession, urlChannel));
+  }
 
   // A cleared payment's PAYMENT-RESPONSE header (the settlement receipt) was set on the shim's
   // throwaway res, not on the real response — carry it across, per the x402 protocol's own
@@ -245,8 +261,8 @@ app.route(
     }),
     record: recordCall,
     // REST calls carry no session, so their 402s count toward coverage only.
-    recordChallenge: (env, ctx, tool, profile, siuPriced) =>
-      recordChallenge(env, ctx, tool, profile, siuPriced, undefined),
+    recordChallenge: (env, ctx, tool, profile, siuPriced, channel) =>
+      recordChallenge(env, ctx, tool, profile, siuPriced, undefined, channel),
   }),
 );
 

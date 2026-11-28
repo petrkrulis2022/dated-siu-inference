@@ -27,9 +27,11 @@ export function recordCall(
   tool: string,
   payment: PaymentInfo | undefined,
   selfSettledNetworks: readonly string[],
+  /** The listing that brought the call, from ?via= (./channel.ts). */
+  channel: string = "direct",
 ): void {
   try {
-    logToolCall(env.USAGE, tool, payment?.payer);
+    logToolCall(env.USAGE, tool, payment?.payer, channel);
   } catch (err) {
     console.error("usage logging failed:", err);
   }
@@ -46,6 +48,7 @@ export function recordCall(
           payer: payment.payer ?? "",
           reference: payment.transaction ?? "",
           at: new Date().toISOString(),
+          via: channel,
         },
         (err) => console.error("settlement log write failed:", err),
       ),
